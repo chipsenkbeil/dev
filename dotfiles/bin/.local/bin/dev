@@ -537,6 +537,16 @@ manifest() {
     done < <(cd "$t/ast-grep" && find rules rule-test -type f | sort)
 }
 
+# lint_project_tail: the project's own checks below the marker in .dev/lint.sh, with
+# a leading newline, so a rendered template keeps them and sync never reports them.
+lint_project_tail() {
+    local marker='# --- project-specific checks below ---' tail
+    [ -f "$ROOT/.dev/lint.sh" ] || return 0
+    tail=$(sed -n "/^${marker}\$/,\$p" "$ROOT/.dev/lint.sh" | sed '1d')
+    [ -n "$tail" ] && printf '\n%s' "$tail"
+    return 0
+}
+
 # render <project path> <template path> <channel>: the project copy of a template.
 render() {
     local dest=$1 src=$2 channel=$3 content cd_old cd_new sg_old sg_new
@@ -555,6 +565,7 @@ render() {
     .dev/lint.sh)
         content=${content/"$cd_old"/"$cd_new"}
         content=${content/"$sg_old"/"$sg_new"}
+        content+=$(lint_project_tail)
         ;;
     .dev/fmt.sh | .dev/test.sh)
         content=${content/"$cd_old"/"$cd_new"}
