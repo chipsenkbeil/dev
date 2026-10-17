@@ -3,9 +3,9 @@
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../pkg/lib.sh
+# shellcheck source=../../scripts/pkg/lib.sh
 # shellcheck disable=SC1091
-source "$DIR/../pkg/lib.sh"
+source "$DIR/../../scripts/pkg/lib.sh"
 
 fails=0
 
@@ -74,7 +74,7 @@ assert_eq "quoted script package (path + args)" "$PC_PACKAGE" "/tmp/x.sh --flag 
 # End-to-end: pkg.sh install --dry-run against the quoted-args fixture must print
 # the script path WITH its args. The fixture carries the quoted cell in every
 # manager column so the lookup succeeds whatever primary manager this OS uses.
-PKG_SH="$(cd "$DIR/.." && pwd)/pkg.sh"
+PKG_SH="$(cd "$DIR/../../scripts" && pwd)/pkg.sh"
 if [ -n "$(detect_primary_manager)" ]; then
     iout="$(bash "$PKG_SH" install --manifest "$DIR/fixtures/script-args.tsv" --dry-run script-args 2>&1)"
     case "$iout" in
@@ -101,9 +101,9 @@ assert_eq "aur channel parses" "$(parse_cell 'aur:jjui-bin')" $'aur\tjjui-bin\t\
 # only the empty channel, so an aur: cell parsed fine and then died at install
 # time as an "unknown pacman channel". A bogus package name keeps this from
 # short-circuiting on "already installed" when the suite runs on real Arch.
-# shellcheck source=../pkg/pacman.sh
+# shellcheck source=../../scripts/pkg/pacman.sh
 # shellcheck disable=SC1091
-aout="$(source "$DIR/../pkg/pacman.sh" && pkg_install jjui zzz-no-such-binary zzz-no-such-aur-pkg aur '' 1 2>&1)"
+aout="$(source "$DIR/../../scripts/pkg/pacman.sh" && pkg_install jjui zzz-no-such-binary zzz-no-such-aur-pkg aur '' 1 2>&1)"
 case "$aout" in
 *"aur.archlinux.org/zzz-no-such-aur-pkg.git"*"makepkg -si"*)
     assert_eq "pacman aur dry-run renders clone + makepkg" "ok" "ok"
@@ -116,9 +116,9 @@ esac
 
 # An unknown channel must still be rejected -- adding aur must not turn the
 # default arm into a catch-all that silently installs the wrong thing.
-# shellcheck source=../pkg/pacman.sh
+# shellcheck source=../../scripts/pkg/pacman.sh
 # shellcheck disable=SC1091
-bout="$(source "$DIR/../pkg/pacman.sh" && pkg_install x zzz-no-such-binary zzz-pkg bogus '' 1 2>&1)"
+bout="$(source "$DIR/../../scripts/pkg/pacman.sh" && pkg_install x zzz-no-such-binary zzz-pkg bogus '' 1 2>&1)"
 case "$bout" in
 *"unknown pacman channel"*)
     assert_eq "pacman rejects unknown channel" "ok" "ok"
