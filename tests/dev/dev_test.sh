@@ -295,7 +295,7 @@ assert_contains "sync --check reports the removed attribute" "$out" "missing: li
 assert_not_contains "sync --check ignores the application crate" "$out" "crates/app"
 if command -v script >/dev/null 2>&1; then
     : >"$TMP/answer"
-    (cd "$reg" && { sleep 1; printf 'y\n'; } | script -q /dev/null env PATH="$STUBS:$PATH" "$DEV" sync >"$TMP/sync.out" 2>&1) || true
+    (cd "$reg" && script -q /dev/null env PATH="$STUBS:$PATH" "$DEV" sync < <(printf 'y\n'; sleep 30) >"$TMP/sync.out" 2>&1) || true
     out="$(run_dev "$reg" sync --check)"
     assert_eq "sync restores the lints block and the attribute" "$out" "up to date"
 fi
