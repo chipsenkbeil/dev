@@ -5,7 +5,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-ROOTS=(scripts tests .dev dotfiles/bin dotfiles/jj/.config/jj/scripts)
+ROOTS=(bootstrap.sh scripts tests .dev dotfiles/bin dotfiles/jj/.config/jj/scripts)
 
 # Every regular file under the roots whose name ends in .sh or whose shebang names bash.
 files=()
