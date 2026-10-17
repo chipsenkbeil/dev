@@ -245,6 +245,52 @@ if command -v jj >/dev/null 2>&1; then
     assert_eq "init rerun leaves Cargo.toml alone" "$(cat "$init/Cargo.toml")" "$before"
 fi
 
+# Library register: the doc lints go to crates without publish = false
+reg="$(project register)"
+mkdir -p "$reg/crates/lib/src" "$reg/crates/app/src" "$reg/crates/bin/src"
+printf '[workspace]\nmembers = ["crates/*"]\nresolver = "3"\n' >"$reg/Cargo.toml"
+printf '[package]\nname = "lib"\nversion = "0.1.0"\nedition = "2024"\n' >"$reg/crates/lib/Cargo.toml"
+printf '[package]\nname = "app"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' >"$reg/crates/app/Cargo.toml"
+printf '[package]\nname = "bin"\nversion = "0.1.0"\nedition = "2024"\n' >"$reg/crates/bin/Cargo.toml"
+printf '//! Lib docs.\n\npub fn f() {}\n' >"$reg/crates/lib/src/lib.rs"
+printf 'pub fn g() {}\n' >"$reg/crates/app/src/lib.rs"
+printf 'fn main() {}\n' >"$reg/crates/bin/src/main.rs"
+attr='#![deny(clippy::missing_errors_doc, clippy::missing_panics_doc)]'
+out="$(run_dev "$reg" init --dry-run --no-gerrit)"
+assert_contains "init --dry-run plans the attribute" "$out" "would create: crates/lib/src/lib.rs library-register attribute"
+assert_not_contains "init --dry-run leaves lib.rs alone" "$(cat "$reg/crates/lib/src/lib.rs")" "missing_errors_doc"
+out="$(run_dev "$reg" init --no-gerrit)"
+assert_contains "init adds the attribute to the library crate" "$out" "created: crates/lib/src/lib.rs library-register attribute"
+assert_contains "init writes the attribute line" "$(cat "$reg/crates/lib/src/lib.rs")" "$attr"
+assert_eq "init puts the attribute after the //! block" "$(sed -n 1p "$reg/crates/lib/src/lib.rs")" "//! Lib docs."
+assert_eq "init leaves a blank line after the //! block" "$(sed -n 2p "$reg/crates/lib/src/lib.rs")" ""
+assert_contains "init lists the publish = false crate" "$out" "application register, no doc lints: crates/app"
+assert_not_contains "init skips the publish = false crate" "$(cat "$reg/crates/app/src/lib.rs")" "missing_errors_doc"
+assert_eq "init leaves the binary crate alone" "$(cat "$reg/crates/bin/src/main.rs")" "fn main() {}"
+assert_not_contains "workspace lints omit the library-only lints" "$(cat "$reg/Cargo.toml")" 'missing_errors_doc = '
+assert_contains "workspace lints keep missing_safety_doc" "$(cat "$reg/Cargo.toml")" 'missing_safety_doc = "deny"'
+out="$(run_dev "$reg" init --no-gerrit)"
+assert_contains "init rerun skips the attribute" "$out" "skipped: crates/lib/src/lib.rs has the library-register attribute"
+assert_not_contains "init rerun creates no attribute" "$out" "library-register attribute
+created"
+assert_eq "init rerun keeps one attribute" "$(grep -c 'missing_errors_doc' "$reg/crates/lib/src/lib.rs")" "1"
+out="$(run_dev "$reg" sync --check)"
+assert_eq "sync --check is clean after init in a workspace" "$out" "up to date"
+
+sd 'missing_safety_doc = "deny"' 'missing_safety_doc = "warn"' "$reg/Cargo.toml"
+sd -F "$attr" '' "$reg/crates/lib/src/lib.rs"
+out="$(run_dev "$reg" sync --check)"
+assert_eq "sync --check exits 1 on a modified lints block" "$?" "1"
+assert_contains "sync --check reports the lints block" "$out" "differs: [workspace.lints] block in Cargo.toml"
+assert_contains "sync --check reports the removed attribute" "$out" "missing: library-register attribute in crates/lib/src/lib.rs"
+assert_not_contains "sync --check ignores the application crate" "$out" "crates/app"
+if command -v script >/dev/null 2>&1; then
+    : >"$TMP/answer"
+    (cd "$reg" && { sleep 1; printf 'y\n'; } | script -q /dev/null env PATH="$STUBS:$PATH" "$DEV" sync >"$TMP/sync.out" 2>&1) || true
+    out="$(run_dev "$reg" sync --check)"
+    assert_eq "sync restores the lints block and the attribute" "$out" "up to date"
+fi
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1

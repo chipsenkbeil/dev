@@ -67,7 +67,7 @@ builtin_desc() {
     run) echo "Run the project" ;;
     deploy) echo "Deploy the project (needs .dev/deploy.sh)" ;;
     push) echo "Push the trunk bookmark to origin and gerrit" ;;
-    sync) echo "Compare copied lint files with the dotfiles templates" ;;
+    sync) echo "Compare copied lint files, the lints block and lib.rs attributes with the dotfiles templates" ;;
     init) echo "Seed a project with lint, CI and remotes" ;;
     help) echo "Show this table, or the details of one verb" ;;
     esac
@@ -573,8 +573,121 @@ install_rendered() {
     case "$1" in *.sh) chmod +x "$ROOT/$1" ;; esac
 }
 
+# lints_template_block <template dir>: the workspace lints without the paste header.
+lints_template_block() {
+    local block
+    block=$(<"$1/workspace-lints.toml")
+    printf '%s\n' "${block#*$'\n\n'}"
+}
+
+# lints_project_block: the [workspace.lints*] tables of the project Cargo.toml, from the
+# first such line to the next other top-level table or the end, without trailing blanks.
+lints_project_block() {
+    local block
+    [ -f "$ROOT/Cargo.toml" ] || return 0
+    block=$(awk '
+        done { next }
+        /^\[/ { if ($0 ~ /^\[workspace\.lints/) { on = 1 } else if (on) { done = 1; next } }
+        on { print }
+    ' "$ROOT/Cargo.toml")
+    [ -n "$block" ] && printf '%s\n' "$block"
+    return 0
+}
+
+# lints_replace <block file>: swap the project block for the file, or append it.
+lints_replace() {
+    local out
+    out=$(mktemp)
+    if grep -q '^\[workspace\.lints' "$ROOT/Cargo.toml"; then
+        awk -v blockfile="$1" '
+            function emit(   l) { while ((getline l < blockfile) > 0) print l; close(blockfile) }
+            done { print; next }
+            /^\[/ {
+                if ($0 ~ /^\[workspace\.lints/) { if (!on) { emit(); on = 1 } next }
+                if (on) { on = 0; done = 1; print ""; print; next }
+            }
+            on { next }
+            { print }
+        ' "$ROOT/Cargo.toml" >"$out"
+    else
+        { cat "$ROOT/Cargo.toml"; printf '\n'; cat "$1"; } >"$out"
+    fi
+    cat "$out" >"$ROOT/Cargo.toml"
+    rm -f "$out"
+}
+
+# crate_dirs: the member crate directories (relative to the root), one per line.
+crate_dirs() {
+    local m d
+    [ -f "$ROOT/Cargo.toml" ] || return 0
+    if [ "$(yq -p toml -oy '.package.name' "$ROOT/Cargo.toml" 2>/dev/null)" != null ]; then
+        echo .
+    fi
+    while IFS= read -r m; do
+        [ -n "$m" ] && [ "$m" != null ] || continue
+        for d in "$ROOT"/$m; do
+            if [ -f "$d/Cargo.toml" ]; then
+                d=${d#"$ROOT"/}
+                echo "$d"
+            fi
+        done
+    done < <(yq -p toml -oy '.workspace.members[]' "$ROOT/Cargo.toml" 2>/dev/null)
+}
+
+# crate_is_app <dir>: succeeds for a crate with publish = false.
+crate_is_app() {
+    grep -Eq '^publish[[:space:]]*=[[:space:]]*false' "$ROOT/$1/Cargo.toml"
+}
+
+# lib_crates: crate directories in library register that have a src/lib.rs.
+lib_crates() {
+    local d
+    while IFS= read -r d; do
+        [ -f "$ROOT/$d/src/lib.rs" ] || continue
+        crate_is_app "$d" || echo "$d"
+    done < <(crate_dirs)
+}
+
+# app_crates: crate directories with publish = false.
+app_crates() {
+    local d
+    while IFS= read -r d; do
+        ! crate_is_app "$d" || echo "$d"
+    done < <(crate_dirs)
+}
+
+# lib_attr_line <template dir>: the attribute line of the lib-lints snippet.
+lib_attr_line() {
+    tail -n 1 "$1/lib-lints.rs.snippet"
+}
+
+# lib_attr_present <template dir> <crate dir>
+lib_attr_present() {
+    grep -Fxq "$(lib_attr_line "$1")" "$ROOT/$2/src/lib.rs"
+}
+
+# lib_attr_insert <template dir> <crate dir>: put the snippet after the leading //! block.
+lib_attr_insert() {
+    local file="$ROOT/$2/src/lib.rs" out
+    out=$(mktemp)
+    awk -v snip="$1/lib-lints.rs.snippet" '
+        { lines[NR] = $0 }
+        END {
+            n = 0
+            while (n < NR && lines[n + 1] ~ /^\/\/!/) n++
+            for (i = 1; i <= n; i++) print lines[i]
+            if (n > 0) print ""
+            while ((getline s < snip) > 0) print s
+            if (n < NR && lines[n + 1] != "") print ""
+            for (i = n + 1; i <= NR; i++) print lines[i]
+        }
+    ' "$file" >"$out"
+    cat "$out" >"$file"
+    rm -f "$out"
+}
+
 cmd_sync() {
-    local check=0 t type channel dest src tmp rc=0 drifted=0 answer
+    local check=0 t type channel dest src tmp rc=0 drifted=0 answer lib missing_libs=""
     case "${1:-}" in
     "") ;;
     --check) check=1 ;;
@@ -606,6 +719,25 @@ cmd_sync() {
         fi
     done < <(manifest "$t")
 
+    if [ -f "$ROOT/Cargo.toml" ]; then
+        lints_template_block "$t" >"$tmp/lints.new"
+        lints_project_block >"$tmp/lints.old"
+        if [ ! -s "$tmp/lints.old" ]; then
+            printf 'missing: [workspace.lints] block in Cargo.toml\n'
+            drifted=1
+        elif ! diff -q "$tmp/lints.old" "$tmp/lints.new" >/dev/null; then
+            printf 'differs: [workspace.lints] block in Cargo.toml\n'
+            drifted=1
+        fi
+    fi
+    while IFS= read -r lib; do
+        if ! lib_attr_present "$t" "$lib"; then
+            printf 'missing: library-register attribute in %s/src/lib.rs\n' "$lib"
+            missing_libs+="$lib"$'\n'
+            drifted=1
+        fi
+    done < <(lib_crates)
+
     if [ "$drifted" -eq 0 ]; then
         echo "up to date"
         return 0
@@ -623,13 +755,25 @@ cmd_sync() {
             diff -u "$ROOT/$dest" "$tmp/$dest" || true
         fi
     done < <(manifest "$t")
-    printf 'Overwrite these files with the templates? [y/N] '
+    if [ -f "$ROOT/Cargo.toml" ] && ! diff -q "$tmp/lints.old" "$tmp/lints.new" >/dev/null; then
+        diff -u "$tmp/lints.old" "$tmp/lints.new" || true
+    fi
+    while IFS= read -r lib; do
+        [ -n "$lib" ] && printf 'would insert into %s/src/lib.rs:\n%s\n' "$lib" "$(<"$t/lib-lints.rs.snippet")"
+    done <<<"$missing_libs"
+    printf 'Overwrite these files, the lints block and the lib.rs attributes with the templates? [y/N] '
     read -r answer
     case "$answer" in
     y | Y | yes)
         while IFS=$'\t' read -r dest src; do
             install_rendered "$dest" "$src" "$channel" || rc=1
         done < <(manifest "$t")
+        if [ -f "$ROOT/Cargo.toml" ] && ! diff -q "$tmp/lints.old" "$tmp/lints.new" >/dev/null; then
+            lints_replace "$tmp/lints.new" || rc=1
+        fi
+        while IFS= read -r lib; do
+            [ -z "$lib" ] || lib_attr_insert "$t" "$lib" || rc=1
+        done <<<"$missing_libs"
         echo "synced"
         ;;
     *) echo "aborted" ;;
@@ -867,6 +1011,24 @@ init_rust_files() {
     printf 'reminder: each member crate needs [lints] with workspace = true\n'
 }
 
+# init_lib_attrs <template dir>: the library-register attribute in each library crate.
+init_lib_attrs() {
+    local t=$1 d
+    while IFS= read -r d; do
+        if lib_attr_present "$t" "$d"; then
+            skipped "$d/src/lib.rs has the library-register attribute"
+            continue
+        fi
+        if [ "$DRY" -eq 0 ]; then
+            lib_attr_insert "$t" "$d"
+        fi
+        created "$d/src/lib.rs library-register attribute"
+    done < <(lib_crates)
+    while IFS= read -r d; do
+        printf 'application register, no doc lints: %s\n' "$d"
+    done < <(app_crates)
+}
+
 init_gerrit() {
     local name=$1 projects
     if [ "$DRY" -eq 1 ]; then
@@ -953,6 +1115,7 @@ cmd_init() {
         t=$(templates_dir)
         channel=$(channel_for_project)
         init_rust_files "$t" "$channel"
+        init_lib_attrs "$t"
         ;;
     love2d)
         put_generated .dev/README.md emit_love2d_readme
