@@ -140,16 +140,46 @@ run_dev "$rust" bogus >/dev/null 2>&1
 assert_eq "unknown verb exits 2" "$?" "2"
 out="$(run_dev "$rust")"
 assert_eq "no verb exits 0" "$?" "0"
-assert_contains "usage marks the override" "$out" "lint      (local override)"
+assert_contains "bare dev names the project type" "$out" "project rust"
+assert_contains "help marks the override" "$out" "(override)"
+assert_not_contains "help hides the hidden verbs" "$out" "__verbs"
 
-# A local-only verb runs, and the usage lists it
-printf '#!/usr/bin/env bash\necho "installed $*"\n' >"$rust/.dev/install.sh"
+# A local-only verb runs, and the listings carry it with its description
+printf '#!/usr/bin/env bash\n# Install the thing.\n# flags: --now --later\necho "installed $*"\n' >"$rust/.dev/install.sh"
 chmod +x "$rust/.dev/install.sh"
 out="$(run_dev "$rust" install --now)"
 assert_eq "local-only verb runs its script" "$out" "installed --now"
-out="$(run_dev "$rust")"
-assert_contains "usage lists local verbs" "$out" "local verbs:
-  install"
+out="$(run_dev "$rust" __verbs)"
+assert_contains "__verbs lists a local verb with its description" "$out" "install	local	Install the thing."
+assert_contains "__verbs lists a built-in" "$out" "fmt	builtin	"
+assert_contains "__verbs marks an override" "$out" "lint	override	"
+assert_not_contains "__verbs hides hidden verbs" "$out" "__"
+out="$(run_dev "$rust" help)"
+assert_contains "help lists local verbs" "$out" "local verbs"
+assert_contains "help shows a local verb description" "$out" "Install the thing."
+out="$(run_dev "$rust" help init)"
+for flag in --type --public --name --dry-run --no-gerrit; do
+    assert_contains "help init lists $flag" "$out" "$flag"
+done
+out="$(run_dev "$rust" __flags install)"
+assert_eq "__flags reads the flags line of a script" "$out" "--now
+--later"
+out="$(run_dev "$rust" __flags sync)"
+assert_eq "__flags sync" "$out" "--check"
+out="$(run_dev "$rust" help install)"
+assert_contains "help <verb> shows the script header" "$out" ".dev/install.sh header"
+out="$(run_dev "$rust" help build)"
+assert_contains "help <verb> shows the built-in command" "$out" "cargo build --release"
+out="$(run_dev "$rust" help)"
+case "$out" in
+*$'\033'*) assert_eq "help is plain when piped" "color escapes" "none" ;;
+*) assert_eq "help is plain when piped" "none" "none" ;;
+esac
+printf '#!/usr/bin/env bash\necho "custom help $*"\n' >"$rust/.dev/help.sh"
+chmod +x "$rust/.dev/help.sh"
+assert_eq "help.sh replaces dev help" "$(run_dev "$rust" help x)" "custom help x"
+assert_eq "help.sh replaces bare dev" "$(run_dev "$rust")" "custom help "
+rm "$rust/.dev/help.sh"
 run_dev "$rust" nothere >/dev/null 2>&1
 assert_eq "verb with no script and no built-in exits 2" "$?" "2"
 

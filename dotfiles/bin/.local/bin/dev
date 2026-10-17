@@ -6,13 +6,15 @@
 # Detection order: Cargo.toml (rust), main.lua and conf.lua (love2d),
 # project.godot (godot), package.json (node), Makefile (make), else none.
 #
+# `dev help` lists the verbs with descriptions (`.dev/help.sh` replaces it), and
+# the hidden `dev __verbs` and `dev __flags <verb>` feed shell completion.
+#
 # `dev sync` compares a project's copied lint files against the templates in
 # the dotfiles repo, unless the project has its own .dev/sync.sh. DOTFILES
 # overrides where that repo is found.
 set -euo pipefail
 
-VERBS="lint fmt test build run deploy push sync init"
-OVERRIDABLE="lint fmt test build run deploy push sync"
+VERBS="lint fmt test build run deploy push sync init help"
 TEMPLATE_SUBDIR="dotfiles/claude/.claude/skills/style/lint/rust"
 
 die() {
@@ -53,29 +55,255 @@ repo_root() {
     pwd -P
 }
 
-usage() {
-    local verb mark
-    printf 'usage: dev <verb> [args]\n\nverbs:\n'
+# --- help ---
+
+# builtin_desc <verb>: the fixed one-line description of a built-in verb.
+builtin_desc() {
+    case "$1" in
+    lint) echo "Check style and formatting for the project type" ;;
+    fmt) echo "Format the source for the project type" ;;
+    test) echo "Run the project's tests" ;;
+    build) echo "Build the project" ;;
+    run) echo "Run the project" ;;
+    deploy) echo "Deploy the project (needs .dev/deploy.sh)" ;;
+    push) echo "Push the trunk bookmark to origin and gerrit" ;;
+    sync) echo "Compare copied lint files with the dotfiles templates" ;;
+    init) echo "Seed a project with lint, CI and remotes" ;;
+    help) echo "Show this table, or the details of one verb" ;;
+    esac
+}
+
+# script_desc <script>: the first comment line after the shebang, without "# ".
+# Shellcheck directives and the flags line do not count.
+script_desc() {
+    awk '
+        NR == 1 { next }
+        /^[[:space:]]*$/ { next }
+        /^# *shellcheck / { next }
+        /^# *flags:/ { next }
+        /^#/ { sub(/^# ?/, ""); print; exit }
+        { exit }
+    ' "$1"
+}
+
+# script_header <script>: the comment block after the shebang, without "# ".
+script_header() {
+    awk '
+        NR == 1 { next }
+        /^# *shellcheck / { next }
+        /^#/ { sub(/^# ?/, ""); print; next }
+        { exit }
+    ' "$1"
+}
+
+# script_flags <script>: the words on the "# flags:" line, one per line.
+script_flags() {
+    awk '
+        /^# *flags:/ { sub(/^# *flags: */, ""); gsub(/,/, " "); n = split($0, w, " ")
+            for (i = 1; i <= n; i++) print w[i]; exit }
+        /^[^#]/ && NR > 1 { exit }
+    ' "$1"
+}
+
+# verbs_table: "name<TAB>origin<TAB>description" per visible verb.
+verbs_table() {
+    local verb script name desc origin
     for verb in $VERBS; do
-        mark=""
-        case " $OVERRIDABLE " in
-        *" $verb "*) if has_override "$verb"; then mark="  (local override)"; fi ;;
-        esac
-        printf '  %-8s%s\n' "$verb" "$mark"
+        origin=builtin
+        desc=$(builtin_desc "$verb")
+        if has_override "$verb"; then
+            origin=override
+            script="$ROOT/.dev/$verb.sh"
+            desc=$(script_desc "$script")
+            : "${desc:=$(builtin_desc "$verb")}"
+        fi
+        printf '%s\t%s\t%s\n' "$verb" "$origin" "$desc"
     done
-    local script name first=1
     for script in "$ROOT"/.dev/*.sh; do
         [ -x "$script" ] || continue
         name=$(basename "$script" .sh)
+        case "$name" in __*) continue ;; esac
         case " $VERBS " in *" $name "*) continue ;; esac
-        if [ "$first" -eq 1 ]; then
-            printf '\nlocal verbs:\n'
-            first=0
-        fi
-        printf '  %s\n' "$name"
+        printf '%s\tlocal\t%s\n' "$name" "$(script_desc "$script")"
     done
-    printf '\nsync takes --check to list drifted files and exit 1.\n'
-    printf 'init takes --type T, --public, --name N, --dry-run and --no-gerrit.\n'
+}
+
+# verb_flags <verb>: the flags a verb accepts, one per line.
+verb_flags() {
+    local script="$ROOT/.dev/$1.sh" flags=""
+    if [ -x "$script" ]; then
+        flags=$(script_flags "$script")
+    fi
+    if [ -n "$flags" ]; then
+        printf '%s\n' "$flags"
+        return
+    fi
+    case "$1" in
+    init) printf '%s\n' --type --public --name --dry-run --no-gerrit ;;
+    sync) printf '%s\n' --check ;;
+    esac
+}
+
+# is_verb <name>: true for a built-in or a script in .dev/.
+is_verb() {
+    case " $VERBS " in *" $1 "*) return 0 ;; esac
+    [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] && has_override "$1"
+}
+
+has_make_target() {
+    [ -f "$ROOT/Makefile" ] && grep -Eq "^$1[[:space:]]*:" "$ROOT/Makefile"
+}
+
+# builtin_commands <verb> <type>: the command lines the built-in runs, one per line.
+builtin_commands() {
+    local verb=$1 type=$2 remote trunk found=0
+    case "$verb" in
+    help)
+        echo "dev help [verb]"
+        return
+        ;;
+    init)
+        echo "dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]"
+        return
+        ;;
+    deploy)
+        echo "(none: add .dev/deploy.sh)"
+        return
+        ;;
+    sync)
+        if [ "$type" = rust ]; then
+            echo "diff the project's lint files against $(dotfiles_root)/$TEMPLATE_SUBDIR"
+        else
+            echo "(none: no lint templates for $type projects)"
+        fi
+        return
+        ;;
+    push)
+        trunk=$(init_trunk)
+        for remote in origin gerrit; do
+            if remote_names | grep -Fxq "$remote"; then
+                echo "jj git push --remote $remote -b $trunk"
+                found=1
+            fi
+        done
+        if [ "$found" -eq 0 ]; then echo "(none: no origin or gerrit remote)"; fi
+        return
+        ;;
+    esac
+    case "$type:$verb" in
+    rust:lint)
+        echo "cargo +nightly fmt --check"
+        echo "cargo clippy --all-targets --all-features -- -D warnings"
+        if [ -f "$ROOT/sgconfig.yml" ]; then echo "ast-grep scan --globs '!target/**'"; fi
+        ;;
+    rust:fmt) echo "cargo +nightly fmt" ;;
+    rust:test)
+        echo "cargo nextest run --all-features"
+        echo "cargo test --doc --all-features"
+        ;;
+    rust:build) echo "cargo build --release" ;;
+    rust:run) echo "cargo run --" ;;
+    love2d:run) echo "love $ROOT" ;;
+    love2d:fmt) echo "stylua $ROOT" ;;
+    love2d:test | love2d:lint | make:*)
+        if has_make_target "$verb"; then
+            echo "make -C $ROOT $verb"
+        else
+            echo "(none: no $verb target in the Makefile)"
+        fi
+        ;;
+    godot:run) echo "godot --path $ROOT" ;;
+    node:*)
+        if command -v jq >/dev/null 2>&1 &&
+            jq -e --arg v "$verb" '.scripts[$v] // empty' "$ROOT/package.json" >/dev/null 2>&1; then
+            echo "npm --prefix $ROOT run $verb"
+        else
+            echo "(none: no $verb script in package.json)"
+        fi
+        ;;
+    *) echo "(none: no built-in $verb for $type projects)" ;;
+    esac
+}
+
+# set_colors <fd>: color escapes when that descriptor is a terminal, else empty.
+set_colors() {
+    if [ -t "$1" ] && [ -z "${NO_COLOR:-}" ]; then
+        BOLD=$'\033[1m' DIM=$'\033[2m' CYAN=$'\033[36m' RESET=$'\033[0m'
+    else
+        BOLD="" DIM="" CYAN="" RESET=""
+    fi
+}
+
+# help_section <title> <rows>: an aligned table of "name<TAB>origin<TAB>description".
+# The marker column appears only when a row is an override.
+help_section() {
+    local title=$1 rows=$2 width=0 name origin desc mark markw=0
+    [ -n "$rows" ] || return 0
+    while IFS=$'\t' read -r name origin desc; do
+        if [ "${#name}" -gt "$width" ]; then width=${#name}; fi
+        if [ "$origin" = override ]; then markw=10; fi
+    done <<<"$rows"
+    printf '\n%s%s%s\n' "$BOLD" "$title" "$RESET"
+    while IFS=$'\t' read -r name origin desc; do
+        mark=""
+        if [ "$origin" = override ]; then mark="(override)"; fi
+        printf '  %s%-*s%s  ' "$CYAN" "$width" "$name" "$RESET"
+        if [ "$markw" -gt 0 ]; then printf '%s%-*s%s  ' "$DIM" "$markw" "$mark" "$RESET"; fi
+        printf '%s\n' "$desc"
+    done <<<"$rows"
+}
+
+# help_overview <fd>: the project line and the two tables.
+help_overview() {
+    local rows builtins locals
+    set_colors "$1"
+    rows=$(verbs_table)
+    builtins=$(printf '%s\n' "$rows" | awk -F'\t' '$2 != "local"')
+    locals=$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "local"')
+    printf '%sdev%s: project %s, root %s\n' "$BOLD" "$RESET" "$(detect_type)" "$ROOT"
+    help_section "built-in verbs" "$builtins"
+    help_section "local verbs" "$locals"
+    # shellcheck disable=SC2016
+    printf '\nRun `dev help <verb>` for flags, the script header and the command a verb runs.\n'
+}
+
+# usage: the overview on stderr, for a bad verb or bad arguments.
+usage() {
+    help_overview 2
+}
+
+help_verb() {
+    local verb=$1 script="$ROOT/.dev/$1.sh" row origin desc flags type
+    is_verb "$verb" || die "unknown verb $verb"
+    set_colors 1
+    row=$(verbs_table | awk -F'\t' -v v="$verb" '$1 == v')
+    origin=$(printf '%s\n' "$row" | cut -f2)
+    desc=$(printf '%s\n' "$row" | cut -f3)
+    printf '%sdev %s%s' "$BOLD" "$verb" "$RESET"
+    if [ "$origin" = override ]; then printf ' (override)'; fi
+    printf '\n  %s\n' "$desc"
+    flags=$(verb_flags "$verb")
+    if [ -n "$flags" ]; then
+        printf '\n%sflags%s\n' "$BOLD" "$RESET"
+        printf '%s\n' "$flags" | sed 's/^/  /'
+    fi
+    if [ -x "$script" ]; then
+        printf '\n%s%s header%s\n' "$BOLD" ".dev/$verb.sh" "$RESET"
+        script_header "$script" | sed 's/^/  /'
+    fi
+    if [ "$origin" != local ]; then
+        type=$(detect_type)
+        printf '\n%sthe built-in runs%s (%s project)\n' "$BOLD" "$RESET" "$type"
+        builtin_commands "$verb" "$type" | sed 's/^/  /'
+    fi
+}
+
+cmd_help() {
+    if [ "$#" -gt 0 ]; then
+        help_verb "$1"
+    else
+        help_overview 1
+    fi
 }
 
 detect_type() {
@@ -787,20 +1015,30 @@ cmd_init() {
 
 main() {
     local verb type
+    ROOT=$(repo_root)
     if [ "$#" -eq 0 ]; then
-        ROOT=$(repo_root)
-        usage
-        return 0
+        set -- help
     fi
     verb=$1
     shift
-    ROOT=$(repo_root)
     case "$verb" in
-    -h | --help | help)
-        usage
+    -h | --help) verb=help ;;
+    __verbs)
+        verbs_table
+        return 0
+        ;;
+    __flags)
+        verb_flags "${1:-}"
         return 0
         ;;
     esac
+    if [ "$verb" = help ]; then
+        if has_override help; then
+            exec "$ROOT/.dev/help.sh" "$@"
+        fi
+        cmd_help "$@"
+        return 0
+    fi
     case " $VERBS " in
     *" $verb "*) ;;
     *)
