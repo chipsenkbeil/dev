@@ -897,18 +897,14 @@ emit_pipeline() {
     local body
     if [ "$1" = rust ]; then
         read -r -d '' body <<'LUA' || true
--- Checks the project on a linux container: .dev/lint.sh, then .dev/test.sh.
+-- Check the project on a linux container with .dev/lint.sh, then .dev/test.sh
 --
 --   ci run --local
---
--- The leg pins its toolchain to the channel in rust-toolchain.toml. The
--- rust-runner-ct image bakes rustup and a recent stable, so the pinned
--- install is usually a no-op.
 
+-- Install the project's pinned channel, which the runner image usually bakes in
 local TOOLCHAIN = "@TOOLCHAIN@"
 
--- Each ci.sh gets a fresh shell, so cargo's directory is a prefix on every
--- command.
+-- Prefix cargo's directory on every command, since each ci.sh gets a fresh shell
 local function run(command)
   return ci.sh("export PATH=$HOME/.cargo/bin:$PATH; " .. command)
 end
@@ -936,8 +932,7 @@ return {
 LUA
     else
         read -r -d '' body <<'LUA' || true
--- Checks the project on a linux container: .dev/lint.sh, then .dev/test.sh,
--- each only when the project has it.
+-- Check the project on a linux container with .dev/lint.sh and .dev/test.sh when present
 --
 --   ci run --local
 
