@@ -1,0 +1,807 @@
+#!/usr/bin/env bash
+# dev: one entry point for lint, fmt, test, build, run, deploy and push.
+#
+# `dev <verb>` runs `.dev/<verb>.sh` at the repo root when it is executable.
+# Otherwise it detects the project type and runs the standard sequence for it.
+# Detection order: Cargo.toml (rust), main.lua and conf.lua (love2d),
+# project.godot (godot), package.json (node), Makefile (make), else none.
+#
+# `dev sync` compares a project's copied lint files against the templates in
+# the dotfiles repo. DOTFILES overrides where that repo is found.
+set -euo pipefail
+
+VERBS="lint fmt test build run deploy push sync init"
+OVERRIDABLE="lint fmt test build run deploy push"
+TEMPLATE_SUBDIR="dotfiles/claude/.claude/skills/style/lint/rust"
+
+die() {
+    printf 'dev: %s\n' "$*" >&2
+    exit 1
+}
+
+# need <binary> <install command>: one WARNING and exit 1 when the binary is missing.
+need() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        printf 'WARNING: %s not found. Install with: %s\n' "$1" "$2" >&2
+        exit 1
+    fi
+}
+
+has_override() {
+    [ -x "$ROOT/.dev/$1.sh" ]
+}
+
+repo_root() {
+    local root dir
+    if command -v jj >/dev/null 2>&1 && root=$(jj root 2>/dev/null); then
+        printf '%s\n' "$root"
+        return
+    fi
+    if root=$(git rev-parse --show-toplevel 2>/dev/null); then
+        printf '%s\n' "$root"
+        return
+    fi
+    dir=$(pwd -P)
+    while [ "$dir" != / ]; do
+        if [ -d "$dir/.dev" ]; then
+            printf '%s\n' "$dir"
+            return
+        fi
+        dir=$(dirname "$dir")
+    done
+    pwd -P
+}
+
+usage() {
+    local verb mark
+    printf 'usage: dev <verb> [args]\n\nverbs:\n'
+    for verb in $VERBS; do
+        mark=""
+        case " $OVERRIDABLE " in
+        *" $verb "*) if has_override "$verb"; then mark="  (local override)"; fi ;;
+        esac
+        printf '  %-8s%s\n' "$verb" "$mark"
+    done
+    local script name first=1
+    for script in "$ROOT"/.dev/*.sh; do
+        [ -x "$script" ] || continue
+        name=$(basename "$script" .sh)
+        case " $VERBS " in *" $name "*) continue ;; esac
+        if [ "$first" -eq 1 ]; then
+            printf '\nlocal verbs:\n'
+            first=0
+        fi
+        printf '  %s\n' "$name"
+    done
+    printf '\nsync takes --check to list drifted files and exit 1.\n'
+    printf 'init takes --type T, --public, --name N, --dry-run and --no-gerrit.\n'
+}
+
+detect_type() {
+    if [ -f "$ROOT/Cargo.toml" ]; then
+        echo rust
+    elif [ -f "$ROOT/main.lua" ] && [ -f "$ROOT/conf.lua" ]; then
+        echo love2d
+    elif [ -f "$ROOT/project.godot" ]; then
+        echo godot
+    elif [ -f "$ROOT/package.json" ]; then
+        echo node
+    elif [ -f "$ROOT/Makefile" ]; then
+        echo make
+    else
+        echo none
+    fi
+}
+
+unsupported() {
+    printf 'dev: no built-in %s for %s projects, add .dev/%s.sh\n' "$1" "$2" "$1" >&2
+    exit 1
+}
+
+# make_target <target> [args...]: run the Makefile target when it exists.
+make_target() {
+    local target=$1
+    if [ -f "$ROOT/Makefile" ] && grep -Eq "^${target}[[:space:]]*:" "$ROOT/Makefile"; then
+        need make "xcode-select --install"
+        make -C "$ROOT" "$@"
+    else
+        return 1
+    fi
+}
+
+builtin_rust() {
+    local verb=$1
+    shift
+    need cargo "brew install rustup"
+    case "$verb" in
+    lint)
+        if ! cargo +nightly fmt --version >/dev/null 2>&1; then
+            printf 'WARNING: nightly rustfmt not found. Install with: rustup toolchain install nightly --component rustfmt\n' >&2
+            exit 1
+        fi
+        cargo +nightly fmt --check
+        cargo clippy --all-targets --all-features -- -D warnings
+        if [ -f "$ROOT/sgconfig.yml" ]; then
+            need ast-grep "brew install ast-grep"
+            (cd "$ROOT" && ast-grep scan --globs '!target/**')
+        fi
+        ;;
+    fmt)
+        cargo +nightly fmt "$@"
+        ;;
+    test)
+        if ! cargo nextest --version >/dev/null 2>&1; then
+            printf 'WARNING: cargo-nextest not found. Install with: cargo install cargo-nextest --locked\n' >&2
+            exit 1
+        fi
+        cargo nextest run --all-features "$@"
+        cargo test --doc --all-features "$@"
+        ;;
+    build)
+        cargo build --release "$@"
+        ;;
+    run)
+        cargo run -- "$@"
+        ;;
+    *) unsupported "$verb" rust ;;
+    esac
+}
+
+builtin_love2d() {
+    local verb=$1
+    shift
+    case "$verb" in
+    run)
+        need love "brew install --cask love"
+        love "$ROOT" "$@"
+        ;;
+    test | lint)
+        make_target "$verb" "$@" || unsupported "$verb" love2d
+        ;;
+    fmt)
+        need stylua "brew install stylua"
+        stylua "$@" "$ROOT"
+        ;;
+    *) unsupported "$verb" love2d ;;
+    esac
+}
+
+builtin_godot() {
+    local verb=$1
+    shift
+    case "$verb" in
+    run)
+        need godot "brew install --cask godot"
+        godot --path "$ROOT" "$@"
+        ;;
+    *) unsupported "$verb" godot ;;
+    esac
+}
+
+builtin_node() {
+    local verb=$1
+    shift
+    need jq "brew install jq"
+    if ! jq -e --arg v "$verb" '.scripts[$v] // empty' "$ROOT/package.json" >/dev/null 2>&1; then
+        unsupported "$verb" node
+    fi
+    need npm "brew install node"
+    if [ "$#" -gt 0 ]; then
+        npm --prefix "$ROOT" run "$verb" -- "$@"
+    else
+        npm --prefix "$ROOT" run "$verb"
+    fi
+}
+
+builtin_make() {
+    local verb=$1
+    shift
+    make_target "$verb" "$@" || unsupported "$verb" make
+}
+
+# trunk_name <bookmark list>: master or main, whichever the list holds.
+trunk_name() {
+    local name
+    for name in master main; do
+        if printf '%s\n' "$1" | grep -Fxq "$name"; then
+            echo "$name"
+            return
+        fi
+    done
+    return 1
+}
+
+cmd_push() {
+    local use_jj=0 remotes bookmarks trunk remote out rc status=0 pushed=0
+    if [ -d "$ROOT/.jj" ] && command -v jj >/dev/null 2>&1; then
+        use_jj=1
+        remotes=$(jj --no-pager --color never -R "$ROOT" git remote list | awk '{print $1}')
+        bookmarks=$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"')
+    else
+        remotes=$(git -C "$ROOT" remote)
+        bookmarks=$(git -C "$ROOT" for-each-ref --format='%(refname:short)' refs/heads)
+    fi
+    trunk=$(trunk_name "$bookmarks") || die "no master or main bookmark in $ROOT"
+
+    for remote in origin gerrit; do
+        if ! printf '%s\n' "$remotes" | grep -Fxq "$remote"; then
+            continue
+        fi
+        pushed=1
+        if [ "$use_jj" -eq 1 ]; then
+            out=$(jj --no-pager --color never -R "$ROOT" git push --remote "$remote" -b "$trunk" 2>&1) && rc=0 || rc=$?
+        else
+            out=$(git -C "$ROOT" push "$remote" "$trunk" 2>&1) && rc=0 || rc=$?
+        fi
+        if [ "$rc" -eq 0 ]; then
+            printf '%s: pushed %s\n' "$remote" "$trunk"
+        else
+            printf '%s: push of %s failed\n' "$remote" "$trunk"
+            status=1
+        fi
+        if [ -n "$out" ]; then
+            printf '%s\n' "$out" | sed 's/^/    /'
+        fi
+    done
+    if [ "$pushed" -eq 0 ]; then
+        die "no origin or gerrit remote"
+    fi
+    return "$status"
+}
+
+# --- templates ---
+
+templates_dir() {
+    local repo self
+    if [ -n "${DOTFILES:-}" ]; then
+        repo=$DOTFILES
+    else
+        self=$(realpath "${BASH_SOURCE[0]}")
+        # <dotfiles>/dotfiles/bin/.local/bin/dev, four levels below the repo.
+        repo=$(cd "$(dirname "$self")/../../../.." && pwd)
+    fi
+    if [ ! -d "$repo/$TEMPLATE_SUBDIR" ]; then
+        die "no lint templates at $repo/$TEMPLATE_SUBDIR (set DOTFILES to the dotfiles repo)"
+    fi
+    printf '%s\n' "$repo/$TEMPLATE_SUBDIR"
+}
+
+stable_channel() {
+    local version
+    version=$(rustc +stable --version 2>/dev/null || rustc --version 2>/dev/null) || return 1
+    version=${version#rustc }
+    printf '%s\n' "${version%% *}"
+}
+
+# The channel a project already pins wins, so a sync never moves the pin.
+channel_for_project() {
+    local line
+    if [ -f "$ROOT/rust-toolchain.toml" ]; then
+        line=$(grep -E '^channel[[:space:]]*=' "$ROOT/rust-toolchain.toml" | head -n1 || true)
+        if [ -n "$line" ]; then
+            line=${line#*=}
+            line=${line//[ \"]/}
+            printf '%s\n' "$line"
+            return
+        fi
+    fi
+    stable_channel || echo stable
+}
+
+# manifest <template dir>: lines of "project path<TAB>template path" for a rust project.
+manifest() {
+    local t=$1 f
+    for f in rustfmt.toml rust-toolchain.toml clippy.toml deny.toml; do
+        printf '%s\t%s\n' "$f" "$t/$f"
+    done
+    printf 'sgconfig.yml\t%s\n' "$t/ast-grep/sgconfig.yml"
+    for f in lint.sh fmt.sh test.sh; do
+        printf '.dev/%s\t%s\n' "$f" "$t/$f"
+    done
+    while IFS= read -r f; do
+        printf '.dev/ast-grep/%s\t%s\n' "$f" "$t/ast-grep/$f"
+    done < <(cd "$t/ast-grep" && find rules rule-test -type f | sort)
+}
+
+# render <project path> <template path> <channel>: the project copy of a template.
+render() {
+    local dest=$1 src=$2 channel=$3 content cd_old cd_new sg_old sg_new
+    sg_old='--config ast-grep/sgconfig.yml'
+    sg_new='--config sgconfig.yml'
+    # shellcheck disable=SC2016
+    cd_old='cd "$(dirname "${BASH_SOURCE[0]}")"'
+    # shellcheck disable=SC2016
+    cd_new='cd "$(dirname "${BASH_SOURCE[0]}")/.."'
+    content=$(<"$src")
+    case "$dest" in
+    sgconfig.yml)
+        content=${content/"  - rules"/"  - .dev/ast-grep/rules"}
+        content=${content/"testDir: rule-test"/"testDir: .dev/ast-grep/rule-test"}
+        ;;
+    .dev/lint.sh)
+        content=${content/"$cd_old"/"$cd_new"}
+        content=${content/"$sg_old"/"$sg_new"}
+        ;;
+    .dev/fmt.sh | .dev/test.sh)
+        content=${content/"$cd_old"/"$cd_new"}
+        ;;
+    rust-toolchain.toml)
+        content=$(printf '%s\n' "$content" | sed "s/^channel = .*/channel = \"$channel\"/")
+        ;;
+    esac
+    printf '%s\n' "$content"
+}
+
+# install_rendered <project path> <template path> <channel>
+install_rendered() {
+    mkdir -p "$(dirname "$ROOT/$1")"
+    render "$1" "$2" "$3" >"$ROOT/$1"
+    case "$1" in *.sh) chmod +x "$ROOT/$1" ;; esac
+}
+
+cmd_sync() {
+    local check=0 t type channel dest src tmp rc=0 drifted=0 answer
+    case "${1:-}" in
+    "") ;;
+    --check) check=1 ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+    esac
+    type=$(detect_type)
+    if [ "$type" != rust ]; then
+        echo "dev: no lint templates for $type projects"
+        return 0
+    fi
+    t=$(templates_dir)
+    channel=$(channel_for_project)
+    SYNC_TMP=$(mktemp -d)
+    tmp=$SYNC_TMP
+    trap 'rm -rf "$SYNC_TMP"' EXIT
+
+    while IFS=$'\t' read -r dest src; do
+        mkdir -p "$(dirname "$tmp/$dest")"
+        render "$dest" "$src" "$channel" >"$tmp/$dest"
+        if [ ! -f "$ROOT/$dest" ]; then
+            printf 'missing: %s\n' "$dest"
+            drifted=1
+        elif ! diff -q "$ROOT/$dest" "$tmp/$dest" >/dev/null; then
+            printf 'differs: %s\n' "$dest"
+            drifted=1
+        fi
+    done < <(manifest "$t")
+
+    if [ "$drifted" -eq 0 ]; then
+        echo "up to date"
+        return 0
+    fi
+    if [ "$check" -eq 1 ]; then
+        return 1
+    fi
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        die "sync overwrites files and needs a terminal to confirm, use --check to list drift"
+    fi
+    while IFS=$'\t' read -r dest src; do
+        if [ ! -f "$ROOT/$dest" ]; then
+            diff -u /dev/null "$tmp/$dest" || true
+        else
+            diff -u "$ROOT/$dest" "$tmp/$dest" || true
+        fi
+    done < <(manifest "$t")
+    printf 'Overwrite these files with the templates? [y/N] '
+    read -r answer
+    case "$answer" in
+    y | Y | yes)
+        while IFS=$'\t' read -r dest src; do
+            install_rendered "$dest" "$src" "$channel" || rc=1
+        done < <(manifest "$t")
+        echo "synced"
+        ;;
+    *) echo "aborted" ;;
+    esac
+    return "$rc"
+}
+
+# --- init ---
+
+CREATED=""
+SKIPPED=""
+HUMAN=""
+DRY=0
+
+created() {
+    CREATED+="$1"$'\n'
+    if [ "$DRY" -eq 1 ]; then
+        printf 'would create: %s\n' "$1"
+    else
+        printf 'created: %s\n' "$1"
+    fi
+}
+
+skipped() {
+    SKIPPED+="$1"$'\n'
+    printf 'skipped: %s\n' "$1"
+}
+
+human() {
+    HUMAN+="$1"$'\n'
+}
+
+# remote_names: the remotes the project already has, one per line.
+remote_names() {
+    if [ -d "$ROOT/.jj" ] && command -v jj >/dev/null 2>&1; then
+        jj --no-pager --color never -R "$ROOT" git remote list | awk '{print $1}'
+    elif [ -e "$ROOT/.git" ]; then
+        git -C "$ROOT" remote
+    fi
+}
+
+# init_trunk: the trunk branch name for a project, master when nothing says otherwise.
+init_trunk() {
+    local names=""
+    if [ -d "$ROOT/.jj" ]; then
+        names=$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"' 2>/dev/null || true)
+    elif [ -e "$ROOT/.git" ]; then
+        names=$(git -C "$ROOT" for-each-ref --format='%(refname:short)' refs/heads)
+    fi
+    trunk_name "$names" 2>/dev/null ||
+        git -C "$ROOT" symbolic-ref --short HEAD 2>/dev/null ||
+        echo master
+}
+
+# put_template <project path> <template path> <channel>
+put_template() {
+    if [ -e "$ROOT/$1" ]; then
+        skipped "$1 exists"
+        return
+    fi
+    if [ "$DRY" -eq 0 ]; then
+        install_rendered "$1" "$2" "$3"
+    fi
+    created "$1"
+}
+
+# put_generated <project path> <generator function> [generator args...]
+put_generated() {
+    local dest=$1
+    shift
+    if [ -e "$ROOT/$dest" ]; then
+        skipped "$dest exists"
+        return
+    fi
+    if [ "$DRY" -eq 0 ]; then
+        mkdir -p "$(dirname "$ROOT/$dest")"
+        "$@" >"$ROOT/$dest"
+    fi
+    created "$dest"
+}
+
+emit_love2d_readme() {
+    echo "The Lua lint set is pending. \`dev init\` will copy it here once it exists."
+}
+
+# emit_pipeline <type> <toolchain>
+emit_pipeline() {
+    local body
+    if [ "$1" = rust ]; then
+        read -r -d '' body <<'LUA' || true
+-- Checks the project on a linux container: .dev/lint.sh, then .dev/test.sh.
+--
+--   ci run --local
+--
+-- The leg pins its toolchain to the channel in rust-toolchain.toml. The
+-- rust-runner-ct image bakes rustup and a recent stable, so the pinned
+-- install is usually a no-op.
+
+local TOOLCHAIN = "@TOOLCHAIN@"
+
+-- Each ci.sh gets a fresh shell, so cargo's directory is a prefix on every
+-- command.
+local function run(command)
+  return ci.sh("export PATH=$HOME/.cargo/bin:$PATH; " .. command)
+end
+
+local function install_rust()
+  ci.group("install rust " .. TOOLCHAIN, function()
+    run("rustup toolchain install " .. TOOLCHAIN .. " --component clippy,rustfmt")
+    run("rustup toolchain install nightly --profile minimal --component rustfmt")
+    run("command -v cargo-nextest >/dev/null || curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C $HOME/.cargo/bin")
+  end)
+end
+
+return {
+  jobs = {
+    check = {
+      matrix = { { os = "linux-ct", image = "rust-runner-ct" } },
+      run = function()
+        install_rust()
+        run(".dev/lint.sh")
+        run(".dev/test.sh")
+      end,
+    },
+  },
+}
+LUA
+    else
+        read -r -d '' body <<'LUA' || true
+-- Checks the project on a linux container: .dev/lint.sh, then .dev/test.sh,
+-- each only when the project has it.
+--
+--   ci run --local
+
+return {
+  jobs = {
+    check = {
+      matrix = { { os = "linux-ct" } },
+      run = function()
+        ci.sh("if [ -x .dev/lint.sh ]; then .dev/lint.sh; fi")
+        ci.sh("if [ -x .dev/test.sh ]; then .dev/test.sh; fi")
+      end,
+    },
+  },
+}
+LUA
+    fi
+    printf '%s\n' "${body/@TOOLCHAIN@/$2}"
+}
+
+# emit_workflow <trunk>
+emit_workflow() {
+    local body
+    read -r -d '' body <<'YAML' || true
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [@TRUNK@]
+    tags: ["*"]
+
+jobs:
+  check:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nightly rustfmt
+        run: rustup toolchain install nightly --profile minimal --component rustfmt
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Lint
+        run: .dev/lint.sh
+        shell: bash
+      - name: Test
+        run: .dev/test.sh
+        shell: bash
+YAML
+    printf '%s\n' "${body/@TRUNK@/$1}"
+}
+
+init_rust_files() {
+    local t=$1 channel=$2 dest src block
+    while IFS=$'\t' read -r dest src; do
+        put_template "$dest" "$src" "$channel"
+    done < <(manifest "$t")
+
+    if [ ! -f "$ROOT/Cargo.toml" ]; then
+        skipped "workspace lints: no Cargo.toml"
+        return
+    fi
+    if grep -q '^\[workspace\.lints' "$ROOT/Cargo.toml"; then
+        skipped "workspace lints in Cargo.toml exist"
+        return
+    fi
+    if [ "$DRY" -eq 0 ]; then
+        block=$(<"$t/workspace-lints.toml")
+        # Drop the template's leading comment header, which ends at the first blank line.
+        block=${block#*$'\n\n'}
+        printf '\n%s\n' "$block" >>"$ROOT/Cargo.toml"
+        # cargo-sort wants [workspace.*] tables ahead of [dependencies].
+        if command -v cargo-sort >/dev/null 2>&1; then
+            (cd "$ROOT" && cargo sort --workspace >/dev/null 2>&1) || true
+        fi
+    fi
+    created "[workspace.lints] block in Cargo.toml"
+    human 'add "[lints]" with "workspace = true" to each member crate Cargo.toml'
+    printf 'reminder: each member crate needs [lints] with workspace = true\n'
+}
+
+init_gerrit() {
+    local name=$1 projects
+    if [ "$DRY" -eq 1 ]; then
+        created "gerrit project $name (create-project when absent) and remote gerrit gr:$name"
+        return
+    fi
+    if ! projects=$(ssh -p 29418 user@gerrit.example.com gerrit ls-projects 2>&1); then
+        printf 'warning: gerrit ls-projects failed: %s\n' "$projects" >&2
+        human "create the Gerrit project and remote: ssh -p 29418 user@gerrit.example.com gerrit create-project $name, then jj git remote add gerrit gr:$name"
+        return
+    fi
+    if printf '%s\n' "$projects" | grep -Fxq "$name"; then
+        skipped "gerrit project $name exists"
+    elif ssh -p 29418 user@gerrit.example.com gerrit create-project "$name"; then
+        created "gerrit project $name"
+    else
+        human "create the Gerrit project: ssh -p 29418 user@gerrit.example.com gerrit create-project $name"
+        return
+    fi
+    jj --no-pager -R "$ROOT" git remote add gerrit "gr:$name"
+    created "remote gerrit gr:$name"
+}
+
+cmd_init() {
+    local type="" name="" public=0 gerrit=1 remotes t channel trunk
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        --type)
+            type=${2:-}
+            shift 2 || true
+            ;;
+        --name)
+            name=${2:-}
+            shift 2 || true
+            ;;
+        --public)
+            public=1
+            shift
+            ;;
+        --dry-run)
+            DRY=1
+            shift
+            ;;
+        --no-gerrit)
+            gerrit=0
+            shift
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+        esac
+    done
+    case "$type" in
+    "") type=$(detect_type) ;;
+    rust | love2d | godot | node) ;;
+    *) die "--type takes rust, love2d, godot or node" ;;
+    esac
+    : "${name:=$(basename "$ROOT")}"
+    printf 'init %s: type %s, public %s, dry run %s\n' "$name" "$type" "$public" "$DRY"
+
+    # VCS
+    if [ -d "$ROOT/.jj" ]; then
+        skipped ".jj exists"
+    else
+        if [ -e "$ROOT/.git" ]; then
+            skipped ".git exists"
+        else
+            if [ "$DRY" -eq 0 ]; then
+                git -C "$ROOT" init -q
+            fi
+            created ".git (git init)"
+        fi
+        need jj "brew install jj"
+        if [ "$DRY" -eq 0 ]; then
+            (cd "$ROOT" && jj git init --colocate >/dev/null 2>&1)
+        fi
+        created ".jj (jj git init --colocate)"
+    fi
+
+    # Lint set
+    case "$type" in
+    rust)
+        t=$(templates_dir)
+        channel=$(channel_for_project)
+        init_rust_files "$t" "$channel"
+        ;;
+    love2d)
+        put_generated .dev/README.md emit_love2d_readme
+        ;;
+    *)
+        skipped "lint set: none yet for $type projects"
+        ;;
+    esac
+
+    # CI pipeline
+    channel=$(channel_for_project)
+    put_generated .ci/pipeline.lua emit_pipeline "$type" "$channel"
+
+    # GitHub workflow
+    if [ "$public" -eq 1 ]; then
+        if [ "$type" = rust ]; then
+            trunk=$(init_trunk)
+            put_generated .github/workflows/ci.yml emit_workflow "$trunk"
+        else
+            skipped ".github/workflows/ci.yml: no workflow for $type projects"
+        fi
+    else
+        skipped ".github/workflows/ci.yml: project is not public"
+    fi
+
+    # Remotes
+    remotes=$(remote_names)
+    if printf '%s\n' "$remotes" | grep -Fxq origin; then
+        skipped "remote origin exists"
+    else
+        printf 'remote origin is missing, create the GitHub repo and run: jj git remote add origin hub:%s\n' "$name"
+        human "create the GitHub repo, then run: jj git remote add origin hub:$name"
+    fi
+    if [ "$gerrit" -eq 0 ]; then
+        skipped "gerrit: --no-gerrit"
+    elif printf '%s\n' "$remotes" | grep -Fxq gerrit; then
+        skipped "remote gerrit exists"
+    else
+        init_gerrit "$name"
+    fi
+
+    # Summary
+    printf '\nSummary%s\n' "$([ "$DRY" -eq 1 ] && echo ' (dry run, nothing written)')"
+    printf 'Created:\n'
+    printf '%s' "$CREATED" | sed 's/^/  /'
+    printf 'Skipped:\n'
+    printf '%s' "$SKIPPED" | sed 's/^/  /'
+    if [ -n "$HUMAN" ]; then
+        printf 'Left for you:\n'
+        printf '%s' "$HUMAN" | sed 's/^/  /'
+    fi
+}
+
+main() {
+    local verb type
+    if [ "$#" -eq 0 ]; then
+        ROOT=$(repo_root)
+        usage
+        return 0
+    fi
+    verb=$1
+    shift
+    ROOT=$(repo_root)
+    case "$verb" in
+    -h | --help | help)
+        usage
+        return 0
+        ;;
+    esac
+    case " $VERBS " in
+    *" $verb "*) ;;
+    *)
+        if [[ "$verb" =~ ^[A-Za-z0-9_-]+$ ]] && has_override "$verb"; then
+            exec "$ROOT/.dev/$verb.sh" "$@"
+        fi
+        printf 'dev: unknown verb %s\n\n' "$verb" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+
+    if [ "$verb" = sync ]; then
+        cmd_sync "$@"
+        return
+    fi
+    if [ "$verb" = init ]; then
+        cmd_init "$@"
+        return
+    fi
+    if has_override "$verb"; then
+        exec "$ROOT/.dev/$verb.sh" "$@"
+    fi
+    if [ "$verb" = push ]; then
+        cmd_push
+        return
+    fi
+    if [ "$verb" = deploy ]; then
+        die "deploy has no built-in, add .dev/deploy.sh"
+    fi
+
+    type=$(detect_type)
+    case "$type" in
+    rust | love2d | godot | node | make) "builtin_$type" "$verb" "$@" ;;
+    *) unsupported "$verb" undetected ;;
+    esac
+}
+
+main "$@"

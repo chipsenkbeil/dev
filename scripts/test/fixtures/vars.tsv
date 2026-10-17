@@ -1,0 +1,15 @@
+# fixture for manifest variable expansion tests (scripts/pkg/lib.sh).
+# @env lines declare defaults; cells below reference them. These `# @env`
+# comments must be skipped by manifest_column_index and parsed by manifest_rows.
+# @env FOO bar_value
+# @env SP "asdf asdf"
+name         binary  brew
+bare-foo     x       $FOO
+braced-foo   x       ${FOO}
+quoted-sp    x       "$SP"
+braced-sp    x       "${SP}"
+mid-script   x       script:${FOO}
+mid-copr     x       copr:p,repo:${FOO}
+quoted-lit   x       "/x --y"
+escape       x       price$$5
+escape-name  x       $$FOO

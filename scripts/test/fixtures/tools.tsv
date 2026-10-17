@@ -1,0 +1,4 @@
+# fixture manifest for dispatcher integration tests
+name	binary	brew	pacman	dnf
+bash	bash	bash	bash	bash
+definitely-absent	zzznope	zzznope-formula	zzznope	zzznope

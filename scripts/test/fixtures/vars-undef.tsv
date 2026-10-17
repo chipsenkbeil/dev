@@ -1,0 +1,4 @@
+# fixture: a cell references ${NOPE}, which has no @env default and no env var.
+# manifest_rows must abort (exit 1, message on stderr) without printing rows.
+name      binary  brew
+nope-row  x       ${NOPE}

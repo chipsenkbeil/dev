@@ -1,0 +1,8 @@
+# fixture for install dispatch dry-run tests
+name	binary	brew
+formula-x	fx	fx-formula
+cask-y	-	cask:cask-y
+tap-z	tz	tap:tz,repo:owner/tap
+crate-w	cw	cargo:crate-w
+bare-bin	bb	bb-formula,bin:bbcmd
+skip-me	-	-

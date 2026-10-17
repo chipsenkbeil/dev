@@ -1,0 +1,6 @@
+# fixture for quoted-args script: cell tests (Part B).
+# The script: cell is double-quoted so its space-separated args survive the
+# whitespace-delimited tokenizer. Same cell in every manager column so the
+# install dry-run test works whatever primary manager the host OS uses.
+name         binary   brew                                     pacman                                   dnf
+script-args  zzznope  "script:/tmp/echo-args.sh --flag value"  "script:/tmp/echo-args.sh --flag value"  "script:/tmp/echo-args.sh --flag value"
