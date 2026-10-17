@@ -252,15 +252,20 @@ cmd_push() {
 
 # --- templates ---
 
-templates_dir() {
-    local repo self
+dotfiles_root() {
+    local self
     if [ -n "${DOTFILES:-}" ]; then
-        repo=$DOTFILES
+        printf '%s\n' "$DOTFILES"
     else
         self=$(realpath "${BASH_SOURCE[0]}")
         # <dotfiles>/dotfiles/bin/.local/bin/dev, four levels below the repo.
-        repo=$(cd "$(dirname "$self")/../../../.." && pwd)
+        (cd "$(dirname "$self")/../../../.." && pwd)
     fi
+}
+
+templates_dir() {
+    local repo
+    repo=$(dotfiles_root)
     if [ ! -d "$repo/$TEMPLATE_SUBDIR" ]; then
         die "no lint templates at $repo/$TEMPLATE_SUBDIR (set DOTFILES to the dotfiles repo)"
     fi
@@ -476,6 +481,28 @@ put_generated() {
         "$@" >"$ROOT/$dest"
     fi
     created "$dest"
+}
+
+# put_style_guide <language>: seed docs/STYLE.md from the dotfiles repo's guide.
+put_style_guide() {
+    local guide
+    guide="$(dotfiles_root)/docs/style/$1.md"
+    if [ -e "$ROOT/docs/STYLE.md" ]; then
+        skipped "docs/STYLE.md exists"
+        return
+    fi
+    if [ ! -f "$guide" ]; then
+        skipped "docs/STYLE.md: no $1 guide at $guide"
+        return
+    fi
+    if [ "$DRY" -eq 0 ]; then
+        mkdir -p "$ROOT/docs"
+        {
+            cat "$guide"
+            printf '\n## This project\n\nRules that apply only to this project go here.\n'
+        } >"$ROOT/docs/STYLE.md"
+    fi
+    created "docs/STYLE.md"
 }
 
 emit_love2d_readme() {
@@ -705,6 +732,13 @@ cmd_init() {
     *)
         skipped "lint set: none yet for $type projects"
         ;;
+    esac
+
+    # Style guide
+    case "$type" in
+    rust) put_style_guide rust ;;
+    love2d) put_style_guide lua ;;
+    *) skipped "docs/STYLE.md: no style guide for $type projects" ;;
     esac
 
     # CI pipeline

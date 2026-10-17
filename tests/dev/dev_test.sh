@@ -186,6 +186,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.sh"
     assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/pipeline.lua"
     assert_contains "init --dry-run plans the workflow" "$out" "would create: .github/workflows/ci.yml"
+    assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
     assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin hub:init"
     assert_eq "init --dry-run writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 
@@ -199,6 +200,9 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
     assert_contains "init writes the pipeline" "$(cat "$init/.ci/pipeline.lua")" ".dev/lint.sh"
     assert_contains "init writes the workflow for windows" "$(cat "$init/.github/workflows/ci.yml")" "windows-latest"
+    assert_contains "init seeds docs/STYLE.md from the rust guide" "$out" "created: docs/STYLE.md"
+    assert_contains "init copies the rust guide" "$(cat "$init/docs/STYLE.md")" "# Rust style"
+    assert_contains "init ends docs/STYLE.md with a project section" "$(tail -n 3 "$init/docs/STYLE.md")" "Rules that apply only to this project"
     assert_eq "init creates .jj" "$([ -d "$init/.jj" ] && echo yes)" "yes"
     out="$(run_dev "$init" sync --check)"
     assert_eq "sync --check is clean after init" "$out" "up to date"
@@ -206,6 +210,7 @@ if command -v jj >/dev/null 2>&1; then
     before="$(cat "$init/Cargo.toml")"
     out="$(run_dev "$init" init --no-gerrit --public)"
     assert_not_contains "init rerun creates nothing" "$out" "created:"
+    assert_contains "init rerun skips an existing docs/STYLE.md" "$out" "skipped: docs/STYLE.md exists"
     assert_contains "init rerun skips existing files" "$out" "skipped: .dev/lint.sh exists"
     assert_eq "init rerun leaves Cargo.toml alone" "$(cat "$init/Cargo.toml")" "$before"
 fi
