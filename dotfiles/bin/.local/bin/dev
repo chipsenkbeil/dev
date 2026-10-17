@@ -7,11 +7,12 @@
 # project.godot (godot), package.json (node), Makefile (make), else none.
 #
 # `dev sync` compares a project's copied lint files against the templates in
-# the dotfiles repo. DOTFILES overrides where that repo is found.
+# the dotfiles repo, unless the project has its own .dev/sync.sh. DOTFILES
+# overrides where that repo is found.
 set -euo pipefail
 
 VERBS="lint fmt test build run deploy push sync init"
-OVERRIDABLE="lint fmt test build run deploy push"
+OVERRIDABLE="lint fmt test build run deploy push sync"
 TEMPLATE_SUBDIR="dotfiles/claude/.claude/skills/style/lint/rust"
 
 die() {
@@ -778,7 +779,7 @@ main() {
         ;;
     esac
 
-    if [ "$verb" = sync ]; then
+    if [ "$verb" = sync ] && ! has_override sync; then
         cmd_sync "$@"
         return
     fi

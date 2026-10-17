@@ -129,6 +129,12 @@ out="$(run_dev "$rust" lint --flag)"
 assert_eq "override runs with args" "$out" "override --flag"
 assert_eq "override skips the built-in" "$(log)" ""
 
+printf '#!/usr/bin/env bash\necho "sync override $*"\n' >"$rust/.dev/sync.sh"
+chmod +x "$rust/.dev/sync.sh"
+out="$(run_dev "$rust" sync SYNC_DST=host)"
+assert_eq "local sync.sh wins over the template sync" "$out" "sync override SYNC_DST=host"
+rm "$rust/.dev/sync.sh"
+
 # Usage
 run_dev "$rust" bogus >/dev/null 2>&1
 assert_eq "unknown verb exits 2" "$?" "2"
