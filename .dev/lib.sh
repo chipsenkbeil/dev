@@ -105,12 +105,22 @@ install_pkg() {
     ssh) install_ssh ;;
     antinote) install_antinote ;;
     pi) install_pi ;;
+    jj) install_jj ;;
     *)
         printf '> Installing %s... ' "$pkg"
         stow_run -S "$pkg"
         printf 'DONE\n'
         ;;
     esac
+}
+
+install_jj() {
+    local dir="$SRC_DIR/jj/.config/jj/conf.d"
+    mkdir -p "$dir"
+    printf 'git.executable-path = "%s"\n' "$SRC_DIR/bin/.local/bin/commit-guard" >"$dir/git-guard.toml"
+    printf '> Installing jj... '
+    stow_run -S jj
+    printf 'DONE\n'
 }
 
 restow_pkg() {
