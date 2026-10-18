@@ -28,10 +28,13 @@ print_banner() {
 }
 
 verbose_printf() {
-    if [ "$VERBOSE" = "yes" ]; then
+    case "${VERBOSE:-}" in
+    "" | 0 | no | false) ;;
+    *)
         # shellcheck disable=SC2059  # callers pass printf format strings with \n escapes to interpret
         printf "$@"
-    fi
+        ;;
+    esac
 }
 
 is_dry_run() {

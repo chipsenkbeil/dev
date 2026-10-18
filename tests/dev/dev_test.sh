@@ -7,6 +7,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
 export DOTFILES="$REPO"
+unset VERBOSE
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -157,6 +158,58 @@ out="$(run_dev "$rust" init --dry-run)"
 assert_eq "local init.sh wins over the built-in init" "$out" "init override --dry-run"
 rm "$rust/.dev/init.sh"
 
+# Global verbosity flags
+vp="$(project verbose)"
+mkdir -p "$vp/.dev"
+
+# shellcheck disable=SC2016  # $* and ${VERBOSE} expand in the generated script
+printf '#!/usr/bin/env bash\necho "args=$* verbose=${VERBOSE:-unset}"\nbash inner.sh\n' >"$vp/.dev/lint.sh"
+chmod +x "$vp/.dev/lint.sh"
+printf 'true\n' >"$vp/inner.sh"
+assert_eq "-v before the verb sets VERBOSE=1" "$(run_dev "$vp" -v lint 2>/dev/null)" "args= verbose=1"
+assert_eq "-v after the verb sets VERBOSE=1" "$(run_dev "$vp" lint -v 2>/dev/null)" "args= verbose=1"
+assert_eq "--verbose sets VERBOSE=1" "$(run_dev "$vp" lint --verbose 2>/dev/null)" "args= verbose=1"
+assert_eq "lint --flag -v passes only --flag" "$(run_dev "$vp" lint --flag -v 2>/dev/null)" "args=--flag verbose=1"
+assert_eq "-- passes -v through untouched" "$(run_dev "$vp" lint -- -v 2>/dev/null)" "args=-v verbose=unset"
+assert_eq "-vv sets VERBOSE=2" "$(run_dev "$vp" -vv lint 2>/dev/null)" "args= verbose=2"
+assert_eq "-v -v equals -vv" "$(run_dev "$vp" -v lint -v 2>/dev/null)" "args= verbose=2"
+assert_eq "-vvv clamps to 2" "$(run_dev "$vp" -vvv lint 2>/dev/null)" "args= verbose=2"
+assert_eq "VERBOSE=yes from the environment is level 1" "$(VERBOSE=yes run_dev "$vp" lint 2>/dev/null)" "args= verbose=1"
+assert_eq "VERBOSE=0 from the environment is not exported" "$(VERBOSE=0 run_dev "$vp" lint 2>/dev/null)" "args= verbose=unset"
+assert_eq "-v wins over VERBOSE from the environment" "$(VERBOSE=2 run_dev "$vp" -v lint 2>/dev/null)" "args= verbose=1"
+err="$(run_dev "$vp" -vv lint 2>&1 >/dev/null)"
+assert_contains "-vv traces the override script" "$err" "+ lint.sh:2: echo"
+assert_contains "-vv traces a bash script the override runs through BASH_ENV" "$err" "+ inner.sh:1: true"
+printf '#!/usr/bin/env bash\nset -euo pipefail\nbash child.sh\n' >"$vp/.dev/chain.sh"
+chmod +x "$vp/.dev/chain.sh"
+printf 'set -euo pipefail\nbash grandchild.sh\n' >"$vp/child.sh"
+printf 'false\necho survived\n' >"$vp/grandchild.sh"
+assert_eq "-vv leaks no errexit into a grandchild script" "$(run_dev "$vp" -vv chain 2>/dev/null)" "survived"
+mkdir -p "$TMP/bare"
+cp "$DEV" "$TMP/bare/dev"
+out="$(cd "$vp" && "$TMP/bare/dev" -vv lint 2>"$TMP/err")"
+assert_eq "-vv without the trace file falls back to level 1" "$out" "args= verbose=1"
+assert_contains "-vv without the trace file says so" "$(cat "$TMP/err")" "trace file"
+out="$(VERBOSE=2 run_dev "$vp" lint 2>"$TMP/err")"
+assert_eq "VERBOSE=2 from the environment equals -vv" "$out" "args= verbose=2"
+assert_contains "VERBOSE=2 from the environment traces" "$(cat "$TMP/err")" "+ lint.sh:2: echo"
+assert_eq "-v prints the override command on stderr" "$(run_dev "$vp" -v lint --flag 2>&1 >/dev/null)" "+ .dev/lint.sh --flag"
+assert_eq "no flag prints nothing on stderr" "$(run_dev "$vp" lint --flag 2>&1 >/dev/null)" ""
+assert_contains "-v prints the built-in command on stderr" "$(run_dev "$rust" -v build 2>&1 >/dev/null)" "+ cargo build --release"
+assert_contains "-vv exports the trace to the built-in's bash children" "$(run_dev "$rust" -vv build 2>&1 >/dev/null)" "+ cargo:2: echo"
+assert_contains "__flags lint includes --verbose" "$(run_dev "$vp" __flags lint)" "--verbose"
+assert_contains "help lists the global flags" "$(run_dev "$vp" help)" "global flags"
+assert_eq "verbose_printf prints for VERBOSE=1" "$(
+    # shellcheck source=../../scripts/helpers.sh
+    source "$REPO/scripts/helpers.sh"
+    VERBOSE=1 verbose_printf 'seen'
+)" "seen"
+assert_eq "verbose_printf prints for VERBOSE=yes" "$(
+    # shellcheck source=../../scripts/helpers.sh
+    source "$REPO/scripts/helpers.sh"
+    VERBOSE=yes verbose_printf 'seen'
+)" "seen"
+
 # Usage
 run_dev "$rust" bogus >/dev/null 2>&1
 assert_eq "unknown verb exits 2" "$?" "2"
@@ -184,10 +237,21 @@ for flag in --type --public --name --dry-run --no-gerrit; do
     assert_contains "help init lists $flag" "$out" "$flag"
 done
 out="$(run_dev "$rust" __flags install)"
-assert_eq "__flags reads the flags line of a script" "$out" "--now
---later"
+assert_eq "__flags reads the flags line of a script and adds the global flags" "$out" "--now
+--later
+-v
+--verbose
+-vv"
 out="$(run_dev "$rust" __flags sync)"
-assert_eq "__flags sync" "$out" "--check"
+assert_eq "__flags sync" "$out" "--check
+--yes
+-y
+-v
+--verbose
+-vv"
+out="$(run_dev "$rust" help sync)"
+assert_contains "help sync lists --yes" "$out" "--yes"
+assert_contains "help <verb> mentions the global flags" "$out" "-v and -vv work anywhere"
 out="$(run_dev "$rust" help install)"
 assert_contains "help <verb> shows the script header" "$out" ".dev/install.sh header"
 out="$(run_dev "$rust" help build)"
@@ -227,6 +291,9 @@ assert_contains "sync --check reports a missing file" "$out" "missing: deny.toml
 assert_not_contains "sync --check ignores a matching file" "$out" "rustfmt.toml"
 out="$(run_dev "$sync" sync 2>&1 </dev/null)"
 assert_contains "sync refuses without a terminal" "$out" "needs a terminal"
+assert_contains "the sync refusal names --yes" "$out" "pass --yes to apply without asking"
+run_dev "$sync" sync --yes --check >/dev/null 2>&1
+assert_eq "sync --yes --check exits 2" "$?" "2"
 
 # init
 if command -v jj >/dev/null 2>&1; then
@@ -241,6 +308,9 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
     assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin hub:init"
     assert_eq "init --dry-run writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
+    out="$(run_dev "$init" init --dry-run -v --no-gerrit --public 2>/dev/null)"
+    assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.sh"
+    assert_eq "init --dry-run -v writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 
     out="$(run_dev "$init" init --no-gerrit --public)"
     assert_contains "init creates the lint script" "$out" "created: .dev/lint.sh"
@@ -388,16 +458,25 @@ assert_eq "sync --check exits 1 on a modified lints block" "$?" "1"
 assert_contains "sync --check reports the lints block" "$out" "differs: [workspace.lints] block in Cargo.toml"
 assert_contains "sync --check reports the removed attribute" "$out" "missing: library-register attribute in crates/lib/src/lib.rs"
 assert_not_contains "sync --check ignores the application crate" "$out" "crates/app"
+printf '\ncheck "project extra" true\n' >>"$reg/.dev/lint.sh"
+printf '# drifted guide\n' | cat - "$reg/docs/STYLE.md" >"$reg/docs/STYLE.md.new"
+mv "$reg/docs/STYLE.md.new" "$reg/docs/STYLE.md"
+out="$(run_dev "$reg" sync --yes </dev/null 2>&1)"
+assert_eq "sync --yes without a terminal exits 0" "$?" "0"
+assert_contains "sync --yes prints the diffs it applies" "$out" "would insert into crates/lib/src/lib.rs"
+assert_contains "sync --yes applies without asking" "$out" "synced"
+out="$(run_dev "$reg" sync --check)"
+assert_eq "sync --yes restores the lints block, the attribute and the guide" "$out" "up to date"
+assert_contains "sync --yes keeps the project checks below the lint.sh marker" "$(cat "$reg/.dev/lint.sh")" 'check "project extra" true'
 if command -v script >/dev/null 2>&1; then
-    : >"$TMP/answer"
-    printf '\ncheck "project extra" true\n' >>"$reg/.dev/lint.sh"
+    sd 'missing_safety_doc = "deny"' 'missing_safety_doc = "warn"' "$reg/Cargo.toml"
     (cd "$reg" && script -q /dev/null env PATH="$STUBS:$PATH" "$DEV" sync < <(
         printf 'y\n'
         sleep 30
     ) >"$TMP/sync.out" 2>&1) || true
+    assert_contains "sync asks on a terminal" "$(cat "$TMP/sync.out")" "[y/N]"
     out="$(run_dev "$reg" sync --check)"
-    assert_eq "sync restores the lints block and the attribute" "$out" "up to date"
-    assert_contains "sync keeps the project checks below the lint.sh marker" "$(cat "$reg/.dev/lint.sh")" 'check "project extra" true'
+    assert_eq "sync on a terminal applies a y answer" "$out" "up to date"
 fi
 
 wtmain="$(project wtmain)"

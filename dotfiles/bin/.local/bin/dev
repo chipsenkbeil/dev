@@ -32,6 +32,43 @@ need() {
     fi
 }
 
+# verbose_level <value>: 0, 1 or 2 for a VERBOSE value, where empty, no and false are 0 and any other word is 1.
+verbose_level() {
+    case "$1" in
+    "" | no | false) echo 0 ;;
+    *[!0-9]*) echo 1 ;;
+    *) echo $((10#$1 > 2 ? 2 : 10#$1)) ;;
+    esac
+}
+
+# show <command...>: print "+ command" on stderr when VERBOSE is 1 or more.
+show() {
+    if [ "$VERBOSE" -ge 1 ]; then
+        printf '+ %s\n' "$*" >&2
+    fi
+}
+
+# run_cmd <command...>: show the command and run it.
+run_cmd() {
+    show "$@"
+    "$@"
+}
+
+# run_script <verb> [args...]: show and exec .dev/<verb>.sh.
+run_script() {
+    local script="$ROOT/.dev/$1.sh"
+    show ".dev/$1.sh" "${@:2}"
+    shift
+    exec "$script" "$@"
+}
+
+# trace_file: the BASH_ENV file that turns on xtrace, beside dev in the stow package.
+trace_file() {
+    local self
+    self=$(realpath "${BASH_SOURCE[0]}")
+    printf '%s\n' "$(dirname "$self")/../share/dev/xtrace.bash"
+}
+
 has_override() {
     [ -x "$ROOT/.dev/$1.sh" ]
 }
@@ -142,7 +179,7 @@ verb_flags() {
     fi
     case "$1" in
     init) printf '%s\n' --type --public --name --dry-run --no-gerrit ;;
-    sync) printf '%s\n' --check ;;
+    sync) printf '%s\n' --check --yes -y ;;
     esac
 }
 
@@ -265,6 +302,8 @@ help_overview() {
     printf '%sdev%s: project %s, root %s\n' "$BOLD" "$RESET" "$(detect_type)" "$ROOT"
     help_section "built-in verbs" "$builtins"
     help_section "local verbs" "$locals"
+    help_section "global flags" "-v, --verbose	global	Print each command before it runs, and export VERBOSE=1 to it
+-vv	global	Also trace every line of dev and of each bash script it runs, VERBOSE=2"
 
     # shellcheck disable=SC2016
     printf '\nRun `dev help <verb>` for flags, the script header and the command a verb runs.\n'
@@ -299,6 +338,9 @@ help_verb() {
         printf '\n%sthe built-in runs%s (%s project)\n' "$BOLD" "$RESET" "$type"
         builtin_commands "$verb" "$type" | sed 's/^/  /'
     fi
+
+    # shellcheck disable=SC2016  # the backticks are literal help text
+    printf '\n-v and -vv work anywhere on the line for every verb, see `dev help`.\n'
 }
 
 cmd_help() {
@@ -346,7 +388,7 @@ make_target() {
     local target=$1
     if [ -f "$ROOT/Makefile" ] && grep -Eq "^${target}[[:space:]]*:" "$ROOT/Makefile"; then
         need make "xcode-select --install"
-        make -C "$ROOT" "$@"
+        run_cmd make -C "$ROOT" "$@"
     else
         return 1
     fi
@@ -362,29 +404,29 @@ builtin_rust() {
             printf 'WARNING: nightly rustfmt not found. Install with: rustup toolchain install nightly --component rustfmt\n' >&2
             exit 1
         fi
-        cargo +nightly fmt --check
-        cargo clippy --all-targets --all-features -- -D warnings
+        run_cmd cargo +nightly fmt --check
+        run_cmd cargo clippy --all-targets --all-features -- -D warnings
         if [ -f "$ROOT/sgconfig.yml" ]; then
             need ast-grep "brew install ast-grep"
-            (cd "$ROOT" && ast-grep scan --globs '!target/**')
+            (cd "$ROOT" && run_cmd ast-grep scan --globs '!target/**')
         fi
         ;;
     fmt)
-        cargo +nightly fmt "$@"
+        run_cmd cargo +nightly fmt "$@"
         ;;
     test)
         if ! cargo nextest --version >/dev/null 2>&1; then
             printf 'WARNING: cargo-nextest not found. Install with: cargo install cargo-nextest --locked\n' >&2
             exit 1
         fi
-        cargo nextest run --all-features "$@"
-        cargo test --doc --all-features "$@"
+        run_cmd cargo nextest run --all-features "$@"
+        run_cmd cargo test --doc --all-features "$@"
         ;;
     build)
-        cargo build --release "$@"
+        run_cmd cargo build --release "$@"
         ;;
     run)
-        cargo run -- "$@"
+        run_cmd cargo run -- "$@"
         ;;
     *) unsupported "$verb" rust ;;
     esac
@@ -396,14 +438,14 @@ builtin_love2d() {
     case "$verb" in
     run)
         need love "brew install --cask love"
-        love "$ROOT" "$@"
+        run_cmd love "$ROOT" "$@"
         ;;
     test | lint)
         make_target "$verb" "$@" || unsupported "$verb" love2d
         ;;
     fmt)
         need stylua "brew install stylua"
-        stylua "$@" "$ROOT"
+        run_cmd stylua "$@" "$ROOT"
         ;;
     *) unsupported "$verb" love2d ;;
     esac
@@ -415,7 +457,7 @@ builtin_lua() {
     case "$verb" in
     fmt)
         need stylua "brew install stylua"
-        stylua "$@" "$ROOT"
+        run_cmd stylua "$@" "$ROOT"
         ;;
     *)
         make_target "$verb" "$@" || unsupported "$verb" lua
@@ -429,7 +471,7 @@ builtin_godot() {
     case "$verb" in
     run)
         need godot "brew install --cask godot"
-        godot --path "$ROOT" "$@"
+        run_cmd godot --path "$ROOT" "$@"
         ;;
     *) unsupported "$verb" godot ;;
     esac
@@ -444,9 +486,9 @@ builtin_node() {
     fi
     need npm "brew install node"
     if [ "$#" -gt 0 ]; then
-        npm --prefix "$ROOT" run "$verb" -- "$@"
+        run_cmd npm --prefix "$ROOT" run "$verb" -- "$@"
     else
-        npm --prefix "$ROOT" run "$verb"
+        run_cmd npm --prefix "$ROOT" run "$verb"
     fi
 }
 
@@ -469,7 +511,7 @@ trunk_name() {
 }
 
 cmd_push() {
-    local use_jj=0 remotes bookmarks trunk remote out rc status=0 pushed=0
+    local use_jj=0 remotes bookmarks trunk remote out rc status=0 pushed=0 cmd
     if [ -d "$ROOT/.jj" ] && command -v jj >/dev/null 2>&1; then
         use_jj=1
         remotes=$(jj --no-pager --color never -R "$ROOT" git remote list | awk '{print $1}')
@@ -486,10 +528,12 @@ cmd_push() {
         fi
         pushed=1
         if [ "$use_jj" -eq 1 ]; then
-            out=$(jj --no-pager --color never -R "$ROOT" git push --remote "$remote" -b "$trunk" 2>&1) && rc=0 || rc=$?
+            cmd=(jj --no-pager --color never -R "$ROOT" git push --remote "$remote" -b "$trunk")
         else
-            out=$(git -C "$ROOT" push "$remote" "$trunk" 2>&1) && rc=0 || rc=$?
+            cmd=(git -C "$ROOT" push "$remote" "$trunk")
         fi
+        show "${cmd[@]}"
+        out=$("${cmd[@]}" 2>&1) && rc=0 || rc=$?
         if [ "$rc" -eq 0 ]; then
             printf '%s: pushed %s\n' "$remote" "$trunk"
         else
@@ -754,15 +798,23 @@ lib_attr_insert() {
 }
 
 cmd_sync() {
-    local check=0 t type channel dest src tmp rc=0 drifted=0 answer lib missing_libs="" guide style_drift=0
-    case "${1:-}" in
-    "") ;;
-    --check) check=1 ;;
-    *)
+    local check=0 yes=0 t type channel dest src tmp rc=0 drifted=0 answer lib missing_libs="" guide style_drift=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        --check) check=1 ;;
+        -y | --yes) yes=1 ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+        esac
+        shift
+    done
+    if [ "$check" -eq 1 ] && [ "$yes" -eq 1 ]; then
+        printf 'dev: sync takes --check or --yes, not both\n\n' >&2
         usage >&2
         exit 2
-        ;;
-    esac
+    fi
     type=$(detect_type)
     if ! lint_set_for "$type" >/dev/null; then
         echo "dev: no lint templates for $type projects"
@@ -822,8 +874,8 @@ cmd_sync() {
     if [ "$check" -eq 1 ]; then
         return 1
     fi
-    if [ ! -t 0 ] || [ ! -t 1 ]; then
-        die "sync overwrites files and needs a terminal to confirm, use --check to list drift"
+    if [ "$yes" -eq 0 ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
+        die "sync overwrites files and needs a terminal to confirm, pass --yes to apply without asking, or --check to list drift"
     fi
     while IFS=$'\t' read -r dest src; do
         if [ ! -f "$ROOT/$dest" ]; then
@@ -839,8 +891,12 @@ cmd_sync() {
         [ -n "$lib" ] && printf 'would insert into %s/src/lib.rs:\n%s\n' "$lib" "$(<"$t/lib-lints.rs.snippet")"
     done <<<"$missing_libs"
     [ "$style_drift" -eq 0 ] || diff -u "$ROOT/docs/STYLE.md" "$tmp/STYLE.md" || true
-    printf 'Overwrite these files, the lints block, the lib.rs attributes and the guide part of docs/STYLE.md with the templates? [y/N] '
-    read -r answer
+    if [ "$yes" -eq 1 ]; then
+        answer=y
+    else
+        printf 'Overwrite these files, the lints block, the lib.rs attributes and the guide part of docs/STYLE.md with the templates? [y/N] '
+        read -r answer
+    fi
     case "$answer" in
     y | Y | yes)
         while IFS=$'\t' read -r dest src; do
@@ -1098,6 +1154,7 @@ init_workspace_lints() {
 
         # cargo-sort wants [workspace.*] tables ahead of [dependencies].
         if command -v cargo-sort >/dev/null 2>&1; then
+            show cargo sort --workspace
             (cd "$ROOT" && cargo sort --workspace >/dev/null 2>&1) || true
         fi
     fi
@@ -1130,6 +1187,7 @@ init_gerrit() {
         created "gerrit project $name (create-project when absent) and remote gerrit gr:$name"
         return
     fi
+    show ssh -p 29418 user@gerrit.example.com gerrit ls-projects
     if ! projects=$(ssh -p 29418 user@gerrit.example.com gerrit ls-projects 2>&1); then
         printf 'warning: gerrit ls-projects failed: %s\n' "$projects" >&2
         human "create the Gerrit project and remote: ssh -p 29418 user@gerrit.example.com gerrit create-project $name, then jj git remote add gerrit gr:$name"
@@ -1137,13 +1195,13 @@ init_gerrit() {
     fi
     if printf '%s\n' "$projects" | grep -Fxq "$name"; then
         skipped "gerrit project $name exists"
-    elif ssh -p 29418 user@gerrit.example.com gerrit create-project "$name"; then
+    elif run_cmd ssh -p 29418 user@gerrit.example.com gerrit create-project "$name"; then
         created "gerrit project $name"
     else
         human "create the Gerrit project: ssh -p 29418 user@gerrit.example.com gerrit create-project $name"
         return
     fi
-    jj --no-pager -R "$ROOT" git remote add gerrit "gr:$name"
+    run_cmd jj --no-pager -R "$ROOT" git remote add gerrit "gr:$name"
     created "remote gerrit gr:$name"
 }
 
@@ -1196,12 +1254,13 @@ cmd_init() {
             skipped ".git exists"
         else
             if [ "$DRY" -eq 0 ]; then
-                git -C "$ROOT" init -q
+                run_cmd git -C "$ROOT" init -q
             fi
             created ".git (git init)"
         fi
         need jj "brew install jj"
         if [ "$DRY" -eq 0 ]; then
+            show jj git init --colocate
             (cd "$ROOT" && jj git init --colocate >/dev/null 2>&1)
         fi
         created ".jj (jj git init --colocate)"
@@ -1277,7 +1336,49 @@ cmd_init() {
 }
 
 main() {
-    local verb type
+    local verb type trace count=0
+    local -a args=()
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        --)
+            shift
+            args+=("$@")
+            break
+            ;;
+        --verbose) count=$((count + 1)) ;;
+        -v*)
+            if [[ "$1" =~ ^-v+$ ]]; then
+                count=$((count + ${#1} - 1))
+            else
+                args+=("$1")
+            fi
+            ;;
+        *) args+=("$1") ;;
+        esac
+        shift
+    done
+    set -- ${args[@]+"${args[@]}"}
+    if [ "$count" -gt 0 ]; then
+        VERBOSE=$(verbose_level "$count")
+    else
+        VERBOSE=$(verbose_level "${VERBOSE:-}")
+    fi
+    if [ "$VERBOSE" -ge 1 ]; then
+        export VERBOSE
+    else
+        export -n VERBOSE
+    fi
+    if [ "$VERBOSE" -ge 2 ]; then
+        trace=$(trace_file)
+        if [ -f "$trace" ]; then
+            export BASH_ENV=$trace PS4='+ ${BASH_SOURCE##*/}:${LINENO}: '
+            set -x
+        else
+            printf 'dev: trace file %s is missing, showing commands only\n' "$trace" >&2
+            VERBOSE=1
+        fi
+    fi
+
     ROOT=$(repo_root)
     if [ "$#" -eq 0 ]; then
         set -- help
@@ -1292,12 +1393,13 @@ main() {
         ;;
     __flags)
         verb_flags "${1:-}"
+        printf '%s\n' -v --verbose -vv
         return 0
         ;;
     esac
     if [ "$verb" = help ]; then
         if has_override help; then
-            exec "$ROOT/.dev/help.sh" "$@"
+            run_script help "$@"
         fi
         cmd_help "$@"
         return 0
@@ -1306,7 +1408,7 @@ main() {
     *" $verb "*) ;;
     *)
         if [[ "$verb" =~ ^[A-Za-z0-9_-]+$ ]] && has_override "$verb"; then
-            exec "$ROOT/.dev/$verb.sh" "$@"
+            run_script "$verb" "$@"
         fi
         printf 'dev: unknown verb %s\n\n' "$verb" >&2
         usage >&2
@@ -1319,7 +1421,7 @@ main() {
         return
     fi
     if has_override "$verb"; then
-        exec "$ROOT/.dev/$verb.sh" "$@"
+        run_script "$verb" "$@"
     fi
     if [ "$verb" = init ]; then
         cmd_init "$@"
