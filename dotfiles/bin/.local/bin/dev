@@ -625,8 +625,10 @@ render() {
 
 # install_rendered <project path> <template path> <channel>
 install_rendered() {
+    local content
     mkdir -p "$(dirname "$ROOT/$1")"
-    render "$1" "$2" "$3" >"$ROOT/$1"
+    content=$(render "$1" "$2" "$3")
+    printf '%s\n' "$content" >"$ROOT/$1"
     case "$1" in *.sh) chmod +x "$ROOT/$1" ;; esac
 }
 
