@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pure-bash tests for .dev/lint.sh: shfmt drift and a comment under code both fail the lint.
-# The script is copied into a temp tree with scratch shell files, so the repo is never linted.
+# Pure-bash tests for .dev/lint.sh and the style skill's Rust and Lua lint.sh, each run on scratch files.
+# Each script is copied into a temp tree, so the repo is never linted, and the style sets run on stubbed tools.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +36,17 @@ assert_contains() {
     esac
 }
 
+assert_not_contains() {
+    local desc="$1" haystack="$2" needle="$3"
+    case "$haystack" in
+    *"$needle"*)
+        printf 'FAIL - %s\n       unexpected: %q\n' "$desc" "$needle"
+        fails=$((fails + 1))
+        ;;
+    *) printf 'ok   - %s\n' "$desc" ;;
+    esac
+}
+
 # lint: run the copied lint script, capturing stdout and stderr together.
 lint() {
     bash "$TMP/.dev/lint.sh" 2>&1
@@ -57,6 +68,185 @@ out="$(lint)"
 rc=$?
 assert_eq "a comment under code exits non-zero" "$((rc != 0))" "1"
 assert_contains "a comment under code names file and line" "$out" "scripts/spacing.sh:5: full-line comment directly after code"
+
+printf '#!/usr/bin/env bash\nset -euo pipefail\n\necho a \\\n    b\n# explains the next line\necho done\n' >"$TMP/scripts/deeper.sh"
+printf '#!/usr/bin/env bash\nset -euo pipefail\n\ncase b in\na)\n    echo a\n    ;;\n# The b arm\nb)\n    echo b\n    ;;\nesac\n' >"$TMP/scripts/arms.sh"
+out="$(lint)"
+assert_contains "a comment under deeper code fails" "$out" "scripts/deeper.sh:6: full-line comment directly after code"
+assert_not_contains "a comment heading the next case arm passes" "$out" "scripts/arms.sh:"
+rm "$TMP/scripts/deeper.sh" "$TMP/scripts/arms.sh"
+
+STYLE="$REPO/dotfiles/claude/.claude/skills/style/lint"
+STUBS="$TMP/stubs"
+BARE="$TMP/bare"
+mkdir -p "$STUBS" "$BARE"
+for tool in cargo-sort cargo-deny ast-grep stylua selene; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$STUBS/$tool"
+done
+
+# shellcheck disable=SC2016  # $1 and NO_NIGHTLY expand in the generated stub
+printf '#!/usr/bin/env bash\nif [ -n "${NO_NIGHTLY:-}" ] && [ "$1" = +nightly ]; then exit 1; fi\nexit 0\n' >"$STUBS/cargo"
+chmod +x "$STUBS"/*
+cp "$STUBS/cargo" "$BARE/cargo"
+
+style_lint() {
+    local project=$1 path=$2
+    shift 2
+    env -u CI PATH="$path" "$@" bash "$project/lint.sh" 2>&1
+}
+
+missing_tools=""
+for tool in rg yq; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        ln -s "$(command -v "$tool")" "$BARE/$tool"
+    else
+        missing_tools="$missing_tools $tool"
+    fi
+done
+
+if [ -n "$missing_tools" ]; then
+    printf 'SKIP style lint set tests (needs%s on PATH)\n' "$missing_tools"
+else
+    full_path="$STUBS:$BARE:/usr/bin:/bin"
+    bare_path="$BARE:/usr/bin:/bin"
+
+    rust="$TMP/rust"
+    mkdir -p "$rust/src" "$rust/scripts"
+    cp "$STYLE/rust/lint.sh" "$rust/lint.sh"
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' >"$rust/Cargo.toml"
+    printf 'pub fn noop() {}\n' >"$rust/src/lib.rs"
+
+    out="$(style_lint "$rust" "$full_path")"
+    assert_eq "the rust set passes a clean project" "$?" "0"
+    assert_not_contains "the rust set warns about no tool when all are present" "$out" "WARNING"
+
+    printf 'pub fn names(map: &mut Map) {\n    map.entries\n        .remove(&name);\n    // Drop the stale entry\n    map.flush();\n}\n' >"$rust/src/chain.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a comment after the end of a method chain fails" "$out" "src/chain.rs:4: full-line comment directly after code"
+    printf 'pub fn names(map: &mut Map) {\n    map.entries\n        .remove(&name);\n\n    // Drop the stale entry\n    map.flush();\n}\n' >"$rust/src/chain.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a blank line after the end of a method chain passes" "$out" "src/chain.rs"
+    printf 'pub fn names(map: &mut Map) {\n    map.entries\n        .iter()\n        // Keep live entries\n        .filter(|e| e.live);\n    let list = vec![\n        1,\n        // The second\n        2,\n    ];\n}\n' >"$rust/src/chain.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a comment inside a method chain or a literal still passes" "$out" "src/chain.rs"
+    printf 'pub fn pick(x: u8) -> u8 {\n    match x {\n        0 => 1,\n        // The rest\n        _ => 2,\n    }\n}\n' >"$rust/src/chain.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a comment between match arms fails" "$out" "src/chain.rs:4: full-line comment directly after code"
+    printf 'pub fn pick(x: u8) -> u8 {\n    match x {\n        0 => 1,\n\n        // The rest\n        _ => 2,\n    }\n}\n' >"$rust/src/chain.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a blank line before a comment between match arms passes" "$out" "src/chain.rs"
+    rm "$rust/src/chain.rs"
+
+    printf 'use std::io;\n#[cfg(windows)]\nuse std::os::windows::process::CommandExt;\nuse std::process::Command;\n' >"$rust/src/gated.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a top-level cfg-gated use fails" "$out" "src/gated.rs:2: a #[cfg]-gated use sits at the top level of the file"
+    printf 'use std::io;\n#[cfg(unix)]\n#[expect(unused_imports, reason = "only some targets")]\nuse std::os::unix::process::CommandExt;\n' >"$rust/src/gated.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a cfg-gated attribute run above a top-level use fails" "$out" "src/gated.rs:2: a #[cfg]-gated use"
+    printf '#[cfg(windows)]\nfn detach() {\n    use std::os::windows::process::CommandExt;\n}\n\n#[cfg(unix)]\nmod unix {\n    use std::os::unix::process::CommandExt;\n}\n' >"$rust/src/gated.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a cfg-gated use inside its function or mod passes" "$out" "src/gated.rs"
+    printf '#[cfg(feature = "x")]\npub use crate::x::Thing;\n#[cfg(unix)]\npub(crate) use crate::unix::detach;\n' >"$rust/src/gated.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a cfg-gated pub use re-export passes" "$out" "src/gated.rs"
+    rm "$rust/src/gated.rs"
+
+    printf '#!/usr/bin/env bash\ncase b in\na)\n    echo a\n    ;;\n# The b arm\nb)\n    echo b\n    ;;\nesac\n' >"$rust/scripts/arms.sh"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a shell comment heading the next case arm passes" "$out" "scripts/arms.sh:"
+    printf '#!/usr/bin/env bash\nrun \\\n    --flag\n# Then finish\nfinish\n' >"$rust/scripts/arms.sh"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a shell comment after a deeper continuation line fails" "$out" "scripts/arms.sh:4: full-line comment directly after code"
+    rm "$rust/scripts/arms.sh"
+
+    out="$(style_lint "$rust" "$bare_path")"
+    rc=$?
+    assert_eq "a missing tool outside CI only warns" "$rc" "0"
+    assert_contains "the warning names the check a missing tool skips" "$out" "WARNING: cargo-sort not found, skipping the cargo sort check"
+    out="$(style_lint "$rust" "$bare_path" CI=1 NO_NIGHTLY=1)"
+    assert_contains "a missing cargo-sort fails under CI" "$out" "cargo-sort not found, so the cargo sort check cannot run"
+    assert_contains "a missing cargo-deny fails under CI" "$out" "cargo-deny not found, so the cargo deny check cannot run"
+    assert_contains "a missing nightly rustfmt fails under CI" "$out" "nightly rustfmt not found, so the cargo fmt check cannot run"
+    assert_contains "the CI failure lists each skipped check" "$out" "FAILED: cargo fmt ast-grep scan cargo sort cargo deny"
+
+    if [ -e "$BARE/sd" ] || [ -x /usr/bin/sd ] || [ -x /bin/sd ]; then
+        printf 'SKIP manifests without sd (sd is on the bare PATH)\n'
+    else
+        printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\npublish = false\n' >"$rust/Cargo.toml"
+        out="$(style_lint "$rust" "$bare_path")"
+        assert_contains "the manifests check runs without sd" "$out" "Cargo.toml: edition is '2021', want 2024"
+        assert_contains "the run reaches the later checks without sd" "$out" "> comment spacing"
+    fi
+
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\n' >"$rust/Cargo.toml"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a crate with no publish key needs rust-version" "$out" "Cargo.toml: declares no rust-version, but the crate is published"
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\nrust-version = "1.85"\n' >"$rust/Cargo.toml"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a crate with no publish key and a rust-version passes" "$out" "rust-version"
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\npublish = false\nrust-version = "1.85"\n' >"$rust/Cargo.toml"
+    printf '[toolchain]\nchannel = "1.85.0"\n' >"$rust/rust-toolchain.toml"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "an unpublished crate with a pin and a rust-version fails" "$out" "Cargo.toml: declares rust-version 1.85, but the crate sets publish = false"
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' >"$rust/Cargo.toml"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "an unpublished crate with a pin and no rust-version passes" "$out" "rust-version"
+    rm "$rust/rust-toolchain.toml"
+
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n\n[dependencies]\nonce_cell = "1"\n' >"$rust/Cargo.toml"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a once_cell dependency fails" "$out" "Cargo.toml: depends on once_cell, use std::sync::LazyLock"
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n\n[dependencies]\nserde = "1"\n' >"$rust/Cargo.toml"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "an allowed dependency passes" "$out" "depends on"
+
+    mkdir -p "$rust/crates/core/src" "$rust/crates/app/src"
+    printf '[package]\nname = "core"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' >"$rust/crates/core/Cargo.toml"
+    printf '[package]\nname = "app"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' >"$rust/crates/app/Cargo.toml"
+    printf '#[expect(unsafe_code, reason = "a transparent cast")]\npub fn cast() {}\n' >"$rust/crates/core/src/lib.rs"
+    printf '#![allow(clippy::all, unsafe_code)]\n' >"$rust/crates/app/src/lib.rs"
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n\n[workspace.metadata.style]\nallow-unsafe = ["./crates/core/"]\n' >"$rust/Cargo.toml"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "an expect(unsafe_code) in a listed crate passes" "$out" "crates/core/src/lib.rs"
+    assert_contains "an allow(unsafe_code) in an unlisted crate fails" "$out" "crates/app/src/lib.rs:1: allows unsafe_code, but [workspace.metadata.style] allow-unsafe in Cargo.toml does not list the crate at 'crates/app'"
+    printf '#[expect(unsafe_code, reason = "root")]\npub fn noop() {}\n' >"$rust/src/lib.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "an expect(unsafe_code) in the unlisted root crate fails" "$out" "src/lib.rs:1: allows unsafe_code, but [workspace.metadata.style] allow-unsafe in Cargo.toml does not list the crate at '.'"
+    rm -r "$rust/crates"
+    printf 'pub fn noop() {}\n' >"$rust/src/lib.rs"
+
+    lua="$TMP/lua"
+    mkdir -p "$lua/src"
+    cp "$STYLE/lua/lint.sh" "$lua/lint.sh"
+    printf 'local M = {}\n\nreturn M\n' >"$lua/src/mod.lua"
+    out="$(style_lint "$lua" "$full_path")"
+    assert_eq "the lua set passes a clean project" "$?" "0"
+
+    printf 'local list = items\n    :filter(live)\n    :map(name)\n-- Hand the names back\nreturn list\n' >"$lua/src/chain.lua"
+    out="$(style_lint "$lua" "$full_path")"
+    assert_contains "a lua comment after the end of a method chain fails" "$out" "src/chain.lua:4: full-line comment directly after code"
+    printf 'local list = items\n    :filter(live)\n    :map(name)\n\n-- Hand the names back\nreturn list\n' >"$lua/src/chain.lua"
+    out="$(style_lint "$lua" "$full_path")"
+    assert_not_contains "a blank line after a lua method chain passes" "$out" "src/chain.lua"
+    printf 'local list = items\n    :filter(live)\n    -- Keep the names\n    :map(name)\nreturn list\n' >"$lua/src/chain.lua"
+    out="$(style_lint "$lua" "$full_path")"
+    assert_not_contains "a comment inside a lua method chain still passes" "$out" "src/chain.lua"
+    rm "$lua/src/chain.lua"
+
+    printf '#!/usr/bin/env bash\ncase b in\na)\n    echo a\n    ;;\n# The b arm\nb)\n    echo b\n    ;;\nesac\n' >"$lua/arms.sh"
+    out="$(style_lint "$lua" "$full_path")"
+    assert_not_contains "the lua set passes a shell comment heading a case arm" "$out" "arms.sh"
+    printf '#!/usr/bin/env bash\nif true; then\n    echo a\n# Then b\nfi\n' >"$lua/arms.sh"
+    out="$(style_lint "$lua" "$full_path")"
+    assert_contains "the lua set fails a shell comment after deeper code" "$out" "arms.sh:4: full-line comment directly after code"
+    rm "$lua/arms.sh"
+
+    out="$(style_lint "$lua" "$bare_path")"
+    assert_contains "the lua warning names the check a missing tool skips" "$out" "WARNING: stylua not found, skipping the stylua check"
+    out="$(style_lint "$lua" "$bare_path" CI=1)"
+    assert_contains "a missing lua tool fails under CI" "$out" "stylua not found, so the stylua check cannot run"
+    assert_contains "the lua CI failure lists each skipped check" "$out" "FAILED: stylua selene ast-grep"
+fi
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

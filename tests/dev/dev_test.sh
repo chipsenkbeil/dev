@@ -371,6 +371,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init seeds docs/STYLE.md from the rust guide" "$out" "created: docs/STYLE.md"
     assert_contains "init copies the rust guide" "$(cat "$init/docs/STYLE.md")" "# Rust style"
     assert_contains "init ends docs/STYLE.md with a project section" "$(tail -n 3 "$init/docs/STYLE.md")" "Rules that apply only to this project"
+    assert_contains "init tells project authors to number their rules with a P prefix" "$(tail -n 3 "$init/docs/STYLE.md")" "Number them P1, P2"
     assert_eq "init creates .jj" "$([ -d "$init/.jj" ] && echo yes)" "yes"
     out="$(run_dev "$init" sync --check)"
     assert_eq "sync --check is clean after init" "$out" "up to date"

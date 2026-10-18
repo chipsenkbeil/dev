@@ -13,11 +13,12 @@ ROOTS=(bootstrap.sh scripts tests .dev dotfiles/bin dotfiles/jj/.config/jj/scrip
 status=0
 
 # comment_spacing <file>: fail on a full-line comment that directly follows a
-# line of code at the same indentation. A blank line, another comment line, an
-# opening brace line or the top of the file before it passes.
+# line of code at the same or a deeper indentation. A blank line, another comment
+# line, an opening brace line or the top of the file before it passes, and so does
+# a comment after a `;;` that heads the next case arm.
 comment_spacing() {
-    local file=$1 number=0 kind=none prev_indent=""
-    local line text indent
+    local file=$1 number=0 kind=none prev_indent="" prev_text=""
+    local line text indent arm
     while IFS= read -r line || [ -n "$line" ]; do
         number=$((number + 1))
         text=${line#"${line%%[![:space:]]*}"}
@@ -32,19 +33,27 @@ comment_spacing() {
             continue
             ;;
         '#'*)
-            if [ "$kind" = code ] && [ "$indent" = "$prev_indent" ]; then
-                printf '%s:%s: full-line comment directly after code, add a blank line before it\n' "$file" "$number" >&2
-                status=1
+            if [ "$kind" = code ] && [ "${#indent}" -le "${#prev_indent}" ]; then
+                case "$prev_text" in
+                ';;' | ';&' | ';;&') arm=1 ;;
+                *) arm=0 ;;
+                esac
+                if [ "$arm" -eq 0 ] || [ "$indent" = "$prev_indent" ]; then
+                    printf '%s:%s: full-line comment directly after code, add a blank line before it\n' "$file" "$number" >&2
+                    status=1
+                fi
             fi
             kind=comment
             ;;
         *'{')
             kind=open
             prev_indent=$indent
+            prev_text=$text
             ;;
         *)
             kind=code
             prev_indent=$indent
+            prev_text=$text
             ;;
         esac
     done <"$file"

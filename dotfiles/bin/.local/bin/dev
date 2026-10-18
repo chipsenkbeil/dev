@@ -1171,7 +1171,7 @@ put_style_guide() {
         mkdir -p "$ROOT/docs"
         {
             cat "$guide"
-            printf '\n%s\n\nRules that apply only to this project go here.\n' "$STYLE_MARKER"
+            printf '\n%s\n\nRules that apply only to this project go here. Number them P1, P2, and so on. The numbers above only grow, so a project rule never shares a number with a guide rule.\n' "$STYLE_MARKER"
         } >"$ROOT/docs/STYLE.md"
     fi
     created "docs/STYLE.md"
