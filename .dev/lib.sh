@@ -95,6 +95,19 @@ stow_run() {
     stow -t "$TARGET_DIR" -d "$SRC_DIR" "$@"
 }
 
+stow_flags() {
+    case "$1" in
+    gpg | ssh) STOW_FLAGS=(--no-folding) ;;
+    pi) STOW_FLAGS=(--no-folding --ignore='settings\.json') ;;
+    *) STOW_FLAGS=() ;;
+    esac
+}
+
+stow_pkg() {
+    stow_flags "$2"
+    stow_run ${STOW_FLAGS[@]+"${STOW_FLAGS[@]}"} "$1" "$2"
+}
+
 install_pkg() {
     local pkg=$1
     ensure_stow
@@ -108,7 +121,7 @@ install_pkg() {
     jj) install_jj ;;
     *)
         printf '> Installing %s... ' "$pkg"
-        stow_run -S "$pkg"
+        stow_pkg -S "$pkg"
         printf 'DONE\n'
         ;;
     esac
@@ -119,21 +132,21 @@ install_jj() {
     mkdir -p "$dir"
     printf 'git.executable-path = "%s"\n' "$SRC_DIR/bin/.local/bin/commit-guard" >"$dir/git-guard.toml"
     printf '> Installing jj... '
-    stow_run -S jj
+    stow_pkg -S jj
     printf 'DONE\n'
 }
 
 restow_pkg() {
     ensure_stow
     printf '> Restowing %s... ' "$1"
-    stow_run -R "$1"
+    stow_pkg -R "$1"
     printf 'DONE\n'
 }
 
 uninstall_pkg() {
     ensure_stow
     printf '> Uninstalling %s... ' "$1"
-    stow_run -D "$1"
+    stow_pkg -D "$1"
     printf 'DONE\n'
 }
 
@@ -180,7 +193,7 @@ purge_pkg() {
 install_work() {
     uninstall_pkg git
     printf '> Installing work... '
-    stow_run -S work
+    stow_pkg -S work
     printf 'DONE\n'
 }
 
@@ -188,7 +201,7 @@ install_work() {
 # .config there.
 install_lazygit() {
     printf '> Installing lazygit... '
-    stow_run -S lazygit
+    stow_pkg -S lazygit
     printf 'DONE\n'
     if [ "$HOST_OS" = Darwin ]; then
         printf '> Symlinking lazygit Unix config -> MacOS config\n'
@@ -203,7 +216,7 @@ install_gpg() {
     printf '> Installing gpg... '
     mkdir -p "$TARGET_DIR/.gnupg"
     chmod 700 "$TARGET_DIR/.gnupg"
-    stow_run --no-folding -S gpg
+    stow_pkg -S gpg
     printf 'DONE\n'
 }
 
@@ -215,7 +228,7 @@ install_ssh() {
     printf '> Installing ssh... '
     mkdir -p "$TARGET_DIR/.ssh/config.d"
     chmod 700 "$TARGET_DIR/.ssh"
-    stow_run --no-folding -S ssh
+    stow_pkg -S ssh
     printf 'DONE\n'
     grep -qs 'config.d/\*.conf' "$TARGET_DIR/.ssh/config" ||
         printf '>> Add near the TOP of ~/.ssh/config: Include ~/.ssh/config.d/*.conf\n'
@@ -228,7 +241,7 @@ install_ssh() {
 # merges key by key and so leaves the app's runtime state alone.
 install_antinote() {
     printf '> Installing antinote... '
-    stow_run -S antinote
+    stow_pkg -S antinote
     printf 'DONE\n'
     bash scripts/antinote.sh import --skip-if-running
 }
@@ -241,7 +254,7 @@ install_antinote() {
 install_pi() {
     printf '> Installing pi... '
     mkdir -p "$TARGET_DIR/.pi/agent"
-    stow_run --no-folding --ignore='settings\.json' -S pi
+    stow_pkg -S pi
     printf 'DONE\n'
     bash scripts/pi-settings.sh install
 }
