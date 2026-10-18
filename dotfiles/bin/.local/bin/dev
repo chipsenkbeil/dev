@@ -18,6 +18,8 @@ set -euo pipefail
 VERBS="lint fmt test build run deploy push pull sync init help"
 TEMPLATE_BASE="dotfiles/claude/.claude/skills/style/lint"
 PROJECT_TYPE=""
+PUSH_BACKEND="" PUSH_REF="" PUSH_SHA="" PUSH_GUARD="" PUSH_REMOTES="" PUSH_ERROR=""
+PULL_BACKEND="" PULL_SYNC=0 PULL_BRANCH="" PULL_ERROR=""
 
 die() {
     printf 'dev: %s\n' "$*" >&2
@@ -208,7 +210,7 @@ has_make_target() {
 
 # builtin_commands <verb> <type>: the command lines the built-in runs, one per line.
 builtin_commands() {
-    local verb=$1 type=$2 remote trunk backend found=0
+    local verb=$1 type=$2 remote step
     case "$verb" in
     help)
         echo "dev help [verb]"
@@ -231,41 +233,26 @@ builtin_commands() {
         return
         ;;
     push)
-        backend=$(vcs_backend 2>/dev/null) || {
-            echo "(none: neither .jj nor .git found)"
+        if ! push_resolve; then
+            echo "(none: $PUSH_ERROR)"
             return
-        }
-        if [ "$backend" = jj ]; then
-            trunk=$(init_trunk)
-        else
-            trunk=$(git -C "$ROOT" symbolic-ref --short -q HEAD || echo "<branch>")
         fi
-        for remote in origin gerrit; do
-            if remote_names | grep -Fxq "$remote"; then
-                if [ "$backend" = jj ]; then
-                    echo "jj git push --remote $remote -b $trunk"
-                else
-                    echo "commit-guard push -- $remote <HEAD sha>:refs/heads/$trunk"
-                fi
-                found=1
-            fi
+        for remote in $PUSH_REMOTES; do
+            push_cmd "$remote"
+            echo "${PUSH_CMD[*]}"
         done
-        if [ "$found" -eq 0 ]; then echo "(none: no origin or gerrit remote)"; fi
         return
         ;;
     pull)
-        backend=$(vcs_backend 2>/dev/null) || {
-            echo "(none: neither .jj nor .git found)"
+        if ! pull_resolve; then
+            echo "(none: $PULL_ERROR)"
             return
-        }
-        if [ "$backend" = git ]; then
-            echo "git pull --rebase origin $(git -C "$ROOT" symbolic-ref --short -q HEAD || echo "<branch>")"
-        elif jj --no-pager -R "$ROOT" config get aliases.sync >/dev/null 2>&1; then
-            echo "jj sync"
-        else
-            echo "jj git fetch --all-remotes"
-            echo "jj rebase -o 'trunk()' --skip-emptied"
         fi
+        step=1
+        while pull_cmd "$step"; do
+            echo "${PULL_CMD[*]}"
+            step=$((step + 1))
+        done
         return
         ;;
     esac
@@ -550,71 +537,121 @@ trunk_name() {
     return 1
 }
 
-cmd_push() {
-    local backend remotes ref sha guard remote out rc status=0 pushed=0 cmd
-    backend=$(vcs_backend) || exit 1
-    if [ "$backend" = jj ]; then
-        need jj "brew install jj"
-        ref=$(trunk_name "$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"')") ||
-            die "no master or main bookmark in $ROOT"
+# push_resolve: set PUSH_BACKEND, PUSH_REF, PUSH_SHA, PUSH_GUARD and PUSH_REMOTES, or set PUSH_ERROR and fail.
+push_resolve() {
+    local remotes remote
+    PUSH_BACKEND=$(vcs_backend 2>/dev/null) || {
+        PUSH_ERROR="neither .jj nor .git found in $ROOT"
+        return 1
+    }
+    if [ "$PUSH_BACKEND" = jj ]; then
+        if ! command -v jj >/dev/null 2>&1; then
+            PUSH_ERROR="jj not found, install with: brew install jj"
+            return 1
+        fi
+        PUSH_REF=$(trunk_name "$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"')") || {
+            PUSH_ERROR="no master or main bookmark in $ROOT"
+            return 1
+        }
     else
-        ref=$(git -C "$ROOT" symbolic-ref --short -q HEAD) ||
-            die "HEAD is detached in $ROOT, check out a branch to push"
-        sha=$(git -C "$ROOT" rev-parse HEAD)
-        guard="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/commit-guard"
-        if [ ! -x "$guard" ]; then
-            die "commit-guard is missing at $guard, refusing to push without the attribution check"
+        PUSH_REF=$(git -C "$ROOT" symbolic-ref --short -q HEAD) || {
+            PUSH_ERROR="HEAD is detached in $ROOT, check out a branch to push"
+            return 1
+        }
+        PUSH_SHA=$(git -C "$ROOT" rev-parse HEAD)
+        PUSH_GUARD="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/commit-guard"
+        if [ ! -x "$PUSH_GUARD" ]; then
+            PUSH_ERROR="commit-guard is missing at $PUSH_GUARD, refusing to push without the attribution check"
+            return 1
         fi
     fi
     remotes=$(remote_names)
-
+    PUSH_REMOTES=""
     for remote in origin gerrit; do
-        if ! printf '%s\n' "$remotes" | grep -Fxq "$remote"; then
-            continue
+        if printf '%s\n' "$remotes" | grep -Fxq "$remote"; then
+            PUSH_REMOTES+="$remote "
         fi
-        pushed=1
-        if [ "$backend" = jj ]; then
-            cmd=(jj --no-pager --color never -R "$ROOT" git push --remote "$remote" -b "$ref")
-        else
-            cmd=("$guard" push -- "$remote" "$sha:refs/heads/$ref")
-        fi
-        show "${cmd[@]}"
-        out=$(cd "$ROOT" && "${cmd[@]}" 2>&1) && rc=0 || rc=$?
+    done
+    if [ -z "$PUSH_REMOTES" ]; then
+        PUSH_ERROR="no origin or gerrit remote"
+        return 1
+    fi
+}
+
+# push_cmd <remote>: set PUSH_CMD to the command that pushes to that remote, after push_resolve.
+push_cmd() {
+    if [ "$PUSH_BACKEND" = jj ]; then
+        PUSH_CMD=(jj --no-pager --color never -R "$ROOT" git push --remote "$1" -b "$PUSH_REF")
+    else
+        PUSH_CMD=("$PUSH_GUARD" push -- "$1" "$PUSH_SHA:refs/heads/$PUSH_REF")
+    fi
+}
+
+cmd_push() {
+    local remote out rc status=0
+    push_resolve || die "$PUSH_ERROR"
+    for remote in $PUSH_REMOTES; do
+        push_cmd "$remote"
+        show "${PUSH_CMD[@]}"
+        out=$(cd "$ROOT" && "${PUSH_CMD[@]}" 2>&1) && rc=0 || rc=$?
         if [ "$rc" -eq 0 ]; then
-            printf '%s: pushed %s\n' "$remote" "$ref"
+            printf '%s: pushed %s\n' "$remote" "$PUSH_REF"
         else
-            printf '%s: push of %s failed\n' "$remote" "$ref"
+            printf '%s: push of %s failed\n' "$remote" "$PUSH_REF"
             status=1
         fi
         if [ -n "$out" ]; then
             printf '%s\n' "$out" | sed 's/^/    /'
         fi
     done
-    if [ "$pushed" -eq 0 ]; then
-        die "no origin or gerrit remote"
-    fi
     return "$status"
 }
 
-cmd_pull() {
-    local backend branch
-    backend=$(vcs_backend) || exit 1
-    if [ "$backend" = jj ]; then
-        need jj "brew install jj"
-        if jj --no-pager -R "$ROOT" config get aliases.sync >/dev/null 2>&1; then
-            run_cmd jj --no-pager -R "$ROOT" sync
-        else
-            run_cmd jj --no-pager -R "$ROOT" git fetch --all-remotes
-            run_cmd jj --no-pager -R "$ROOT" rebase -o 'trunk()' --skip-emptied
+# pull_resolve: set PULL_BACKEND, PULL_SYNC and PULL_BRANCH, or set PULL_ERROR and fail.
+pull_resolve() {
+    PULL_BACKEND=$(vcs_backend 2>/dev/null) || {
+        PULL_ERROR="neither .jj nor .git found in $ROOT"
+        return 1
+    }
+    if [ "$PULL_BACKEND" = jj ]; then
+        if ! command -v jj >/dev/null 2>&1; then
+            PULL_ERROR="jj not found, install with: brew install jj"
+            return 1
         fi
-        return
+        PULL_SYNC=0
+        if jj --no-pager -R "$ROOT" config get aliases.sync >/dev/null 2>&1; then
+            PULL_SYNC=1
+        fi
+        return 0
     fi
-    branch=$(git -C "$ROOT" symbolic-ref --short -q HEAD) ||
-        die "HEAD is detached in $ROOT, check out a branch to pull"
+    PULL_BRANCH=$(git -C "$ROOT" symbolic-ref --short -q HEAD) || {
+        PULL_ERROR="HEAD is detached in $ROOT, check out a branch to pull"
+        return 1
+    }
     if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]; then
-        die "$ROOT has uncommitted changes, commit or stash them before pulling"
+        PULL_ERROR="$ROOT has uncommitted changes, commit or stash them before pulling"
+        return 1
     fi
-    run_cmd git -C "$ROOT" pull --rebase origin "$branch"
+}
+
+# pull_cmd <step>: set PULL_CMD to that step of the pull, after pull_resolve, or fail past the last step.
+pull_cmd() {
+    case "$PULL_BACKEND:$PULL_SYNC:$1" in
+    jj:1:1) PULL_CMD=(jj --no-pager -R "$ROOT" sync) ;;
+    jj:0:1) PULL_CMD=(jj --no-pager -R "$ROOT" git fetch --all-remotes) ;;
+    jj:0:2) PULL_CMD=(jj --no-pager -R "$ROOT" rebase -o 'trunk()' --skip-emptied) ;;
+    git:*:1) PULL_CMD=(git -C "$ROOT" pull --rebase origin "$PULL_BRANCH") ;;
+    *) return 1 ;;
+    esac
+}
+
+cmd_pull() {
+    local step=1
+    pull_resolve || die "$PULL_ERROR"
+    while pull_cmd "$step"; do
+        run_cmd "${PULL_CMD[@]}"
+        step=$((step + 1))
+    done
 }
 
 # --- templates ---

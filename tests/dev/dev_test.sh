@@ -537,6 +537,7 @@ git -C "$gp" checkout -q --detach
 out="$(run_dev "$gp" push 2>&1)"
 assert_eq "git push on a detached HEAD exits 1" "$?" "1"
 assert_contains "git push explains a detached HEAD" "$out" "HEAD is detached"
+assert_contains "help push gives the detached HEAD reason" "$(run_dev "$gp" help push)" "(none: HEAD is detached"
 out="$(run_dev "$gp" pull 2>&1)"
 assert_eq "git pull on a detached HEAD exits 1" "$?" "1"
 git -C "$gp" checkout -q main
@@ -555,8 +556,13 @@ assert_eq "git pull on a dirty tree exits 1" "$?" "1"
 assert_contains "git pull explains a dirty tree" "$out" "uncommitted changes"
 git -C "$gp" checkout -q -- a
 assert_eq "push and pull never create .jj" "$([ -e "$gp/.jj" ] || echo absent)" "absent"
-assert_contains "help push shows the git command" "$(run_dev "$gp" help push)" "commit-guard push -- origin"
-assert_contains "help pull shows the git command" "$(run_dev "$gp" help pull)" "git pull --rebase origin main"
+preview="$(run_dev "$gp" help push | grep 'commit-guard push' | sed 's/^ *//')"
+shown="$(run_dev "$gp" -v push 2>&1 | grep '^+ ' | sed 's/^+ //')"
+assert_eq "help push previews the command push runs" "$preview" "$shown"
+assert_contains "help pull shows the git command" "$(run_dev "$gp" help pull)" "pull --rebase origin main"
+echo dirty >>"$gp/a"
+assert_contains "help pull gives the dirty tree reason" "$(run_dev "$gp" help pull)" "(none: $gp has uncommitted changes"
+git -C "$gp" checkout -q -- a
 
 if command -v jj >/dev/null 2>&1; then
     export JJ_CONFIG="$TMP/jj.toml"
@@ -574,6 +580,14 @@ if command -v jj >/dev/null 2>&1; then
     printf 'aliases.sync = ["git", "fetch"]\n' >>"$JJ_CONFIG"
     out="$(run_dev "$jp" -v pull 2>&1)"
     assert_contains "jj pull runs the sync alias when the config has one" "$out" "-R $jp sync"
+    notrunk="$(project notrunk)"
+    jj git init "$notrunk" >/dev/null 2>&1
+    jj --no-pager -R "$notrunk" git remote add origin "$gremote"
+    help_out="$(run_dev "$notrunk" help push)"
+    out="$(run_dev "$notrunk" push 2>&1)"
+    assert_eq "jj push without a trunk bookmark exits 1" "$?" "1"
+    assert_contains "jj push without a trunk bookmark explains" "$out" "no master or main bookmark"
+    assert_contains "help push gives the same reason push dies with" "$help_out" "(none: ${out#dev: })"
     unset JJ_CONFIG
 fi
 
