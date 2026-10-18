@@ -391,7 +391,10 @@ assert_not_contains "sync --check ignores the application crate" "$out" "crates/
 if command -v script >/dev/null 2>&1; then
     : >"$TMP/answer"
     printf '\ncheck "project extra" true\n' >>"$reg/.dev/lint.sh"
-    (cd "$reg" && script -q /dev/null env PATH="$STUBS:$PATH" "$DEV" sync < <(printf 'y\n'; sleep 30) >"$TMP/sync.out" 2>&1) || true
+    (cd "$reg" && script -q /dev/null env PATH="$STUBS:$PATH" "$DEV" sync < <(
+        printf 'y\n'
+        sleep 30
+    ) >"$TMP/sync.out" 2>&1) || true
     out="$(run_dev "$reg" sync --check)"
     assert_eq "sync restores the lints block and the attribute" "$out" "up to date"
     assert_contains "sync keeps the project checks below the lint.sh marker" "$(cat "$reg/.dev/lint.sh")" 'check "project extra" true'

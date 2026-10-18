@@ -669,7 +669,11 @@ lints_replace() {
             { print }
         ' "$ROOT/Cargo.toml" >"$out"
     else
-        { cat "$ROOT/Cargo.toml"; printf '\n'; cat "$1"; } >"$out"
+        {
+            cat "$ROOT/Cargo.toml"
+            printf '\n'
+            cat "$1"
+        } >"$out"
     fi
     cat "$out" >"$ROOT/Cargo.toml"
     rm -f "$out"
