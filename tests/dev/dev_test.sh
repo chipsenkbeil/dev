@@ -397,6 +397,15 @@ if command -v script >/dev/null 2>&1; then
     assert_contains "sync keeps the project checks below the lint.sh marker" "$(cat "$reg/.dev/lint.sh")" 'check "project extra" true'
 fi
 
+wtmain="$(project wtmain)"
+git -C "$wtmain" init -q
+git -C "$wtmain" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+git -C "$wtmain" worktree add -q "$TMP/wt" 2>/dev/null
+printf '[package]\nname = "wt"\nversion = "0.1.0"\nedition = "2024"\n' >"$TMP/wt/Cargo.toml"
+out="$(run_dev "$TMP/wt" init --dry-run --no-gerrit)"
+assert_contains "init skips jj in a git worktree" "$out" "this is a git worktree"
+assert_not_contains "init plans no jj colocate in a git worktree" "$out" "jj git init --colocate"
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1

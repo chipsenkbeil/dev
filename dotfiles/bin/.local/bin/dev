@@ -1179,6 +1179,8 @@ cmd_init() {
     # VCS
     if [ -d "$ROOT/.jj" ]; then
         skipped ".jj exists"
+    elif [ -f "$ROOT/.git" ]; then
+        skipped ".jj: this is a git worktree, colocate jj in the main checkout"
     else
         if [ -e "$ROOT/.git" ]; then
             skipped ".git exists"
