@@ -116,10 +116,26 @@ printf 'build:\n\ttrue\n' >"$mk/Makefile"
 run_dev "$mk" build >/dev/null
 assert_contains "make build uses the target" "$(log)" "make -C $mk build"
 
+plain="$(project plain)"
+mkdir -p "$plain/src"
+printf 'local M = {}\n\nreturn M\n' >"$plain/src/mod.lua"
+run_dev "$plain" fmt >/dev/null
+assert_contains "lua fmt runs stylua" "$(log)" "stylua $plain"
+out="$(run_dev "$plain" lint 2>&1)"
+assert_contains "lua lint without a target explains" "$out" "no built-in lint for lua"
+printf 'test:\n\ttrue\n' >"$plain/Makefile"
+run_dev "$plain" test >/dev/null
+assert_contains "lua test uses the Makefile target" "$(log)" "make -C $plain test"
+assert_contains "lua wins over make" "$(run_dev "$plain")" "project lua"
+rm "$plain/Makefile"
+
 none="$(project none)"
+mkdir -p "$none/.ci"
+printf 'return {}\n' >"$none/.ci/pipeline.lua"
 out="$(run_dev "$none" lint 2>&1)"
 assert_eq "undetected project exits 1" "$?" "1"
 assert_contains "undetected project explains" "$out" "no built-in lint for undetected"
+assert_contains "a .lua file in a dot directory does not make a lua project" "$(run_dev "$none")" "project none"
 
 # A local override wins over the built-in
 mkdir -p "$rust/.dev"
@@ -258,6 +274,66 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init rerun skips an existing docs/STYLE.md" "$out" "skipped: docs/STYLE.md exists"
     assert_contains "init rerun skips existing files" "$out" "skipped: .dev/lint.sh exists"
     assert_eq "init rerun leaves Cargo.toml alone" "$(cat "$init/Cargo.toml")" "$before"
+
+    # love2d gets the Lua lint set with the love std
+    game="$(project game)"
+    mkdir -p "$game/src"
+    printf 'function love.load() end\n' >"$game/main.lua"
+    printf 'function love.conf(t)\n    t.window.title = "game"\nend\n' >"$game/conf.lua"
+    printf 'local M = {}\n\nreturn M\n' >"$game/src/mod.lua"
+    git -C "$game" init -q
+    out="$(run_dev "$game" init --dry-run --no-gerrit)"
+    assert_contains "love2d init --dry-run plans the lint script" "$out" "would create: .dev/lint.sh"
+    assert_contains "love2d init --dry-run plans selene.toml" "$out" "would create: selene.toml"
+    assert_eq "love2d init --dry-run writes nothing" "$(find "$game" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "4"
+    out="$(run_dev "$game" init --no-gerrit)"
+    for f in .dev/lint.sh .dev/fmt.sh selene.toml stylua.toml luajit.yml love.yml sgconfig.yml .dev/ast-grep/rules/comment-period.yml; do
+        assert_contains "love2d init creates $f" "$out" "created: $f"
+        assert_eq "love2d init writes $f" "$([ -f "$game/$f" ] && echo yes)" "yes"
+    done
+    assert_not_contains "love2d init writes no pending README" "$out" ".dev/README.md"
+    assert_eq "love2d init makes the lint script executable" "$([ -x "$game/.dev/lint.sh" ] && echo yes)" "yes"
+    assert_contains "love2d init points the lint script cd at the root" "$(cat "$game/.dev/lint.sh")" 'BASH_SOURCE[0]}")/.."'
+    assert_not_contains "love2d init repoints every ast-grep config path" "$(cat "$game/.dev/lint.sh")" "ast-grep/sgconfig.yml"
+    assert_contains "love2d init relocates the ast-grep rules" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rules"
+    assert_contains "love2d init relocates the ast-grep rule tests" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rule-test"
+    assert_contains "love2d init picks the love std" "$(cat "$game/selene.toml")" 'std = "love"'
+    assert_contains "love2d init seeds docs/STYLE.md from the lua guide" "$(cat "$game/docs/STYLE.md")" "# Lua style"
+    out="$(run_dev "$game" sync --check)"
+    assert_eq "love2d sync --check is clean after init" "$out" "up to date"
+    printf 'column_width = 80\n' >>"$game/stylua.toml"
+    out="$(run_dev "$game" sync --check)"
+    assert_eq "love2d sync --check exits 1 on a drifted stylua.toml" "$?" "1"
+    assert_contains "love2d sync --check reports the drifted stylua.toml" "$out" "differs: stylua.toml"
+    assert_not_contains "love2d sync --check ignores a matching file" "$out" "selene.toml"
+    cp "$REPO/dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml" "$game/stylua.toml"
+    out="$(run_dev "$game" init --no-gerrit)"
+    assert_not_contains "love2d init rerun creates nothing" "$out" "created:"
+    assert_contains "love2d init rerun skips an existing lint script" "$out" "skipped: .dev/lint.sh exists"
+
+    if command -v stylua >/dev/null 2>&1 && command -v selene >/dev/null 2>&1 && command -v ast-grep >/dev/null 2>&1; then
+        out="$(cd "$game" && .dev/lint.sh 2>&1)"
+        assert_eq "installed lint.sh passes on a clean love2d project" "$?" "0"
+        printf -- '-- Advance generation to invalidate handles.\nlocal M = {}\n\nreturn M\n' >"$game/src/mod.lua"
+        out="$(cd "$game" && .dev/lint.sh 2>&1)"
+        assert_eq "installed lint.sh exits 1 on a violation" "$?" "1"
+        assert_contains "installed lint.sh names the ast-grep rule" "$out" "error[comment-period]"
+        assert_contains "installed lint.sh lists the failed check" "$out" "FAILED: ast-grep scan"
+    fi
+
+    # Plain lua gets the same set with the luajit std and no love.yml
+    lib="$(project lib)"
+    mkdir -p "$lib/src"
+    printf 'local M = {}\n\nreturn M\n' >"$lib/src/mod.lua"
+    git -C "$lib" init -q
+    out="$(run_dev "$lib" init --no-gerrit)"
+    assert_contains "lua init reports the type" "$out" "type lua"
+    assert_contains "lua init creates the lint script" "$out" "created: .dev/lint.sh"
+    assert_contains "lua init picks the luajit std" "$(cat "$lib/selene.toml")" 'std = "luajit"'
+    assert_eq "lua init ships no love.yml" "$([ -e "$lib/love.yml" ] || echo absent)" "absent"
+    assert_eq "lua init ships luajit.yml" "$([ -f "$lib/luajit.yml" ] && echo yes)" "yes"
+    out="$(run_dev "$lib" sync --check)"
+    assert_eq "lua sync --check is clean after init" "$out" "up to date"
 fi
 
 # Library register: the doc lints go to crates without publish = false

@@ -4,7 +4,8 @@
 # `dev <verb>` runs `.dev/<verb>.sh` at the repo root when it is executable.
 # Otherwise it detects the project type and runs the standard sequence for it.
 # Detection order: Cargo.toml (rust), main.lua and conf.lua (love2d),
-# project.godot (godot), package.json (node), Makefile (make), else none.
+# project.godot (godot), package.json (node), any .lua file outside dot
+# directories (lua), Makefile (make), else none.
 #
 # `dev help` lists the verbs with descriptions (`.dev/help.sh` replaces it), and
 # the hidden `dev __verbs` and `dev __flags <verb>` feed shell completion.
@@ -15,7 +16,8 @@
 set -euo pipefail
 
 VERBS="lint fmt test build run deploy push sync init help"
-TEMPLATE_SUBDIR="dotfiles/claude/.claude/skills/style/lint/rust"
+TEMPLATE_BASE="dotfiles/claude/.claude/skills/style/lint"
+PROJECT_TYPE=""
 
 die() {
     printf 'dev: %s\n' "$*" >&2
@@ -171,8 +173,8 @@ builtin_commands() {
         return
         ;;
     sync)
-        if [ "$type" = rust ]; then
-            echo "diff the project's lint files against $(dotfiles_root)/$TEMPLATE_SUBDIR"
+        if lint_set_for "$type" >/dev/null; then
+            echo "diff the project's lint files against $(dotfiles_root)/$TEMPLATE_BASE/$(lint_set_for "$type")"
         else
             echo "(none: no lint templates for $type projects)"
         fi
@@ -204,8 +206,8 @@ builtin_commands() {
     rust:build) echo "cargo build --release" ;;
     rust:run) echo "cargo run --" ;;
     love2d:run) echo "love $ROOT" ;;
-    love2d:fmt) echo "stylua $ROOT" ;;
-    love2d:test | love2d:lint | make:*)
+    love2d:fmt | lua:fmt) echo "stylua $ROOT" ;;
+    love2d:test | love2d:lint | lua:* | make:*)
         if has_make_target "$verb"; then
             echo "make -C $ROOT $verb"
         else
@@ -315,11 +317,22 @@ detect_type() {
         echo godot
     elif [ -f "$ROOT/package.json" ]; then
         echo node
+    elif [ -n "$(find "$ROOT" -mindepth 1 \( -name '.*' -o -name node_modules -o -name target \) -prune -o -type f -name '*.lua' -print -quit)" ]; then
+        echo lua
     elif [ -f "$ROOT/Makefile" ]; then
         echo make
     else
         echo none
     fi
+}
+
+# lint_set_for <type>: the lint set directory under TEMPLATE_BASE, or failure.
+lint_set_for() {
+    case "$1" in
+    rust) echo rust ;;
+    love2d | lua) echo lua ;;
+    *) return 1 ;;
+    esac
 }
 
 unsupported() {
@@ -392,6 +405,20 @@ builtin_love2d() {
         stylua "$@" "$ROOT"
         ;;
     *) unsupported "$verb" love2d ;;
+    esac
+}
+
+builtin_lua() {
+    local verb=$1
+    shift
+    case "$verb" in
+    fmt)
+        need stylua "brew install stylua"
+        stylua "$@" "$ROOT"
+        ;;
+    *)
+        make_target "$verb" "$@" || unsupported "$verb" lua
+        ;;
     esac
 }
 
@@ -491,13 +518,15 @@ dotfiles_root() {
     fi
 }
 
+# templates_dir <type>: the lint set directory for a project type.
 templates_dir() {
-    local repo
+    local repo set
     repo=$(dotfiles_root)
-    if [ ! -d "$repo/$TEMPLATE_SUBDIR" ]; then
-        die "no lint templates at $repo/$TEMPLATE_SUBDIR (set DOTFILES to the dotfiles repo)"
+    set=$(lint_set_for "$1") || die "no lint templates for $1 projects"
+    if [ ! -d "$repo/$TEMPLATE_BASE/$set" ]; then
+        die "no lint templates at $repo/$TEMPLATE_BASE/$set (set DOTFILES to the dotfiles repo)"
     fi
-    printf '%s\n' "$repo/$TEMPLATE_SUBDIR"
+    printf '%s\n' "$repo/$TEMPLATE_BASE/$set"
 }
 
 stable_channel() {
@@ -522,14 +551,26 @@ channel_for_project() {
     stable_channel || echo stable
 }
 
-# manifest <template dir>: lines of "project path<TAB>template path" for a rust project.
+# manifest <template dir>: lines of "project path<TAB>template path". The set is
+# named by the template directory, and the Lua set ships love.yml to love2d only.
 manifest() {
-    local t=$1 f
-    for f in rustfmt.toml rust-toolchain.toml clippy.toml deny.toml; do
+    local t=$1 f roots scripts
+    case "$(basename "$t")" in
+    rust)
+        roots="rustfmt.toml rust-toolchain.toml clippy.toml deny.toml"
+        scripts="lint.sh fmt.sh test.sh"
+        ;;
+    lua)
+        roots="stylua.toml selene.toml luajit.yml"
+        if [ "$PROJECT_TYPE" = love2d ]; then roots+=" love.yml"; fi
+        scripts="lint.sh fmt.sh"
+        ;;
+    esac
+    for f in $roots; do
         printf '%s\t%s\n' "$f" "$t/$f"
     done
     printf 'sgconfig.yml\t%s\n' "$t/ast-grep/sgconfig.yml"
-    for f in lint.sh fmt.sh test.sh; do
+    for f in $scripts; do
         printf '.dev/%s\t%s\n' "$f" "$t/$f"
     done
     while IFS= read -r f; do
@@ -564,7 +605,7 @@ render() {
         ;;
     .dev/lint.sh)
         content=${content/"$cd_old"/"$cd_new"}
-        content=${content/"$sg_old"/"$sg_new"}
+        content=${content//"$sg_old"/"$sg_new"}
         content+=$(lint_project_tail)
         ;;
     .dev/fmt.sh | .dev/test.sh)
@@ -572,6 +613,11 @@ render() {
         ;;
     rust-toolchain.toml)
         content=$(printf '%s\n' "$content" | sed "s/^channel = .*/channel = \"$channel\"/")
+        ;;
+    selene.toml)
+        if [ "$PROJECT_TYPE" = lua ]; then
+            content=${content/'std = "love"'/'std = "luajit"'}
+        fi
         ;;
     esac
     printf '%s\n' "$content"
@@ -708,11 +754,12 @@ cmd_sync() {
         ;;
     esac
     type=$(detect_type)
-    if [ "$type" != rust ]; then
+    if ! lint_set_for "$type" >/dev/null; then
         echo "dev: no lint templates for $type projects"
         return 0
     fi
-    t=$(templates_dir)
+    PROJECT_TYPE=$type
+    t=$(templates_dir "$type")
     channel=$(channel_for_project)
     SYNC_TMP=$(mktemp -d)
     tmp=$SYNC_TMP
@@ -888,10 +935,6 @@ put_style_guide() {
     created "docs/STYLE.md"
 }
 
-emit_love2d_readme() {
-    echo "The Lua lint set is pending. \`dev init\` will copy it here once it exists."
-}
-
 # emit_pipeline <type> <toolchain>
 emit_pipeline() {
     local body
@@ -988,12 +1031,17 @@ YAML
     printf '%s\n' "${body/@TRUNK@/$1}"
 }
 
-init_rust_files() {
-    local t=$1 channel=$2 dest src block
+# init_lint_files <template dir> <channel>: every file of the manifest that is not there yet.
+init_lint_files() {
+    local t=$1 channel=$2 dest src
     while IFS=$'\t' read -r dest src; do
         put_template "$dest" "$src" "$channel"
     done < <(manifest "$t")
+}
 
+# init_workspace_lints <template dir>: the [workspace.lints] block of a rust project.
+init_workspace_lints() {
+    local t=$1 block
     if [ ! -f "$ROOT/Cargo.toml" ]; then
         skipped "workspace lints: no Cargo.toml"
         return
@@ -1090,9 +1138,10 @@ cmd_init() {
     done
     case "$type" in
     "") type=$(detect_type) ;;
-    rust | love2d | godot | node) ;;
-    *) die "--type takes rust, love2d, godot or node" ;;
+    rust | love2d | lua | godot | node) ;;
+    *) die "--type takes rust, love2d, lua, godot or node" ;;
     esac
+    PROJECT_TYPE=$type
     : "${name:=$(basename "$ROOT")}"
     printf 'init %s: type %s, public %s, dry run %s\n' "$name" "$type" "$public" "$DRY"
 
@@ -1118,13 +1167,15 @@ cmd_init() {
     # Lint set
     case "$type" in
     rust)
-        t=$(templates_dir)
+        t=$(templates_dir rust)
         channel=$(channel_for_project)
-        init_rust_files "$t" "$channel"
+        init_lint_files "$t" "$channel"
+        init_workspace_lints "$t"
         init_lib_attrs "$t"
         ;;
-    love2d)
-        put_generated .dev/README.md emit_love2d_readme
+    love2d | lua)
+        t=$(templates_dir "$type")
+        init_lint_files "$t" ""
         ;;
     *)
         skipped "lint set: none yet for $type projects"
@@ -1134,7 +1185,7 @@ cmd_init() {
     # Style guide
     case "$type" in
     rust) put_style_guide rust ;;
-    love2d) put_style_guide lua ;;
+    love2d | lua) put_style_guide lua ;;
     *) skipped "docs/STYLE.md: no style guide for $type projects" ;;
     esac
 
@@ -1241,7 +1292,7 @@ main() {
 
     type=$(detect_type)
     case "$type" in
-    rust | love2d | godot | node | make) "builtin_$type" "$verb" "$@" ;;
+    rust | love2d | lua | godot | node | make) "builtin_$type" "$verb" "$@" ;;
     *) unsupported "$verb" undetected ;;
     esac
 }
