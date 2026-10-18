@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dev: one entry point for lint, fmt, test, build, run, deploy and push.
+# dev: one entry point for lint, fmt, test, build, run, deploy, push and pull.
 #
 # `dev <verb>` runs `.dev/<verb>.sh` at the repo root when it is executable.
 # Otherwise it detects the project type and runs the standard sequence for it.
@@ -15,7 +15,7 @@
 # overrides where that repo is found.
 set -euo pipefail
 
-VERBS="lint fmt test build run deploy push sync init help"
+VERBS="lint fmt test build run deploy push pull sync init help"
 TEMPLATE_BASE="dotfiles/claude/.claude/skills/style/lint"
 PROJECT_TYPE=""
 
@@ -94,6 +94,18 @@ repo_root() {
     pwd -P
 }
 
+# vcs_backend: jj when the repo has .jj, git when it has .git, else an error and failure.
+vcs_backend() {
+    if [ -d "$ROOT/.jj" ]; then
+        echo jj
+    elif [ -e "$ROOT/.git" ]; then
+        echo git
+    else
+        printf 'dev: neither .jj nor .git found in %s\n' "$ROOT" >&2
+        return 1
+    fi
+}
+
 # --- help ---
 
 # builtin_desc <verb>: the fixed one-line description of a built-in verb.
@@ -105,7 +117,8 @@ builtin_desc() {
     build) echo "Build the project" ;;
     run) echo "Run the project" ;;
     deploy) echo "Deploy the project (needs .dev/deploy.sh)" ;;
-    push) echo "Push the trunk bookmark to origin and gerrit" ;;
+    push) echo "Push the trunk bookmark (jj) or the current branch (git) to origin and gerrit" ;;
+    pull) echo "Fetch the remote and rebase local work onto it" ;;
     sync) echo "Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates" ;;
     init) echo "Seed a project with lint, CI and remotes" ;;
     help) echo "Show this table, or the details of one verb" ;;
@@ -195,7 +208,7 @@ has_make_target() {
 
 # builtin_commands <verb> <type>: the command lines the built-in runs, one per line.
 builtin_commands() {
-    local verb=$1 type=$2 remote trunk found=0
+    local verb=$1 type=$2 remote trunk backend found=0
     case "$verb" in
     help)
         echo "dev help [verb]"
@@ -218,14 +231,41 @@ builtin_commands() {
         return
         ;;
     push)
-        trunk=$(init_trunk)
+        backend=$(vcs_backend 2>/dev/null) || {
+            echo "(none: neither .jj nor .git found)"
+            return
+        }
+        if [ "$backend" = jj ]; then
+            trunk=$(init_trunk)
+        else
+            trunk=$(git -C "$ROOT" symbolic-ref --short -q HEAD || echo "<branch>")
+        fi
         for remote in origin gerrit; do
             if remote_names | grep -Fxq "$remote"; then
-                echo "jj git push --remote $remote -b $trunk"
+                if [ "$backend" = jj ]; then
+                    echo "jj git push --remote $remote -b $trunk"
+                else
+                    echo "commit-guard push -- $remote <HEAD sha>:refs/heads/$trunk"
+                fi
                 found=1
             fi
         done
         if [ "$found" -eq 0 ]; then echo "(none: no origin or gerrit remote)"; fi
+        return
+        ;;
+    pull)
+        backend=$(vcs_backend 2>/dev/null) || {
+            echo "(none: neither .jj nor .git found)"
+            return
+        }
+        if [ "$backend" = git ]; then
+            echo "git pull --rebase origin $(git -C "$ROOT" symbolic-ref --short -q HEAD || echo "<branch>")"
+        elif jj --no-pager -R "$ROOT" config get aliases.sync >/dev/null 2>&1; then
+            echo "jj sync"
+        else
+            echo "jj git fetch --all-remotes"
+            echo "jj rebase -o 'trunk()' --skip-emptied"
+        fi
         return
         ;;
     esac
@@ -511,33 +551,39 @@ trunk_name() {
 }
 
 cmd_push() {
-    local use_jj=0 remotes bookmarks trunk remote out rc status=0 pushed=0 cmd
-    if [ -d "$ROOT/.jj" ] && command -v jj >/dev/null 2>&1; then
-        use_jj=1
-        remotes=$(jj --no-pager --color never -R "$ROOT" git remote list | awk '{print $1}')
-        bookmarks=$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"')
+    local backend remotes ref sha guard remote out rc status=0 pushed=0 cmd
+    backend=$(vcs_backend) || exit 1
+    if [ "$backend" = jj ]; then
+        need jj "brew install jj"
+        ref=$(trunk_name "$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"')") ||
+            die "no master or main bookmark in $ROOT"
     else
-        remotes=$(git -C "$ROOT" remote)
-        bookmarks=$(git -C "$ROOT" for-each-ref --format='%(refname:short)' refs/heads)
+        ref=$(git -C "$ROOT" symbolic-ref --short -q HEAD) ||
+            die "HEAD is detached in $ROOT, check out a branch to push"
+        sha=$(git -C "$ROOT" rev-parse HEAD)
+        guard="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/commit-guard"
+        if [ ! -x "$guard" ]; then
+            die "commit-guard is missing at $guard, refusing to push without the attribution check"
+        fi
     fi
-    trunk=$(trunk_name "$bookmarks") || die "no master or main bookmark in $ROOT"
+    remotes=$(remote_names)
 
     for remote in origin gerrit; do
         if ! printf '%s\n' "$remotes" | grep -Fxq "$remote"; then
             continue
         fi
         pushed=1
-        if [ "$use_jj" -eq 1 ]; then
-            cmd=(jj --no-pager --color never -R "$ROOT" git push --remote "$remote" -b "$trunk")
+        if [ "$backend" = jj ]; then
+            cmd=(jj --no-pager --color never -R "$ROOT" git push --remote "$remote" -b "$ref")
         else
-            cmd=(git -C "$ROOT" push "$remote" "$trunk")
+            cmd=("$guard" push -- "$remote" "$sha:refs/heads/$ref")
         fi
         show "${cmd[@]}"
-        out=$("${cmd[@]}" 2>&1) && rc=0 || rc=$?
+        out=$(cd "$ROOT" && "${cmd[@]}" 2>&1) && rc=0 || rc=$?
         if [ "$rc" -eq 0 ]; then
-            printf '%s: pushed %s\n' "$remote" "$trunk"
+            printf '%s: pushed %s\n' "$remote" "$ref"
         else
-            printf '%s: push of %s failed\n' "$remote" "$trunk"
+            printf '%s: push of %s failed\n' "$remote" "$ref"
             status=1
         fi
         if [ -n "$out" ]; then
@@ -548,6 +594,27 @@ cmd_push() {
         die "no origin or gerrit remote"
     fi
     return "$status"
+}
+
+cmd_pull() {
+    local backend branch
+    backend=$(vcs_backend) || exit 1
+    if [ "$backend" = jj ]; then
+        need jj "brew install jj"
+        if jj --no-pager -R "$ROOT" config get aliases.sync >/dev/null 2>&1; then
+            run_cmd jj --no-pager -R "$ROOT" sync
+        else
+            run_cmd jj --no-pager -R "$ROOT" git fetch --all-remotes
+            run_cmd jj --no-pager -R "$ROOT" rebase -o 'trunk()' --skip-emptied
+        fi
+        return
+    fi
+    branch=$(git -C "$ROOT" symbolic-ref --short -q HEAD) ||
+        die "HEAD is detached in $ROOT, check out a branch to pull"
+    if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]; then
+        die "$ROOT has uncommitted changes, commit or stash them before pulling"
+    fi
+    run_cmd git -C "$ROOT" pull --rebase origin "$branch"
 }
 
 # --- templates ---
@@ -945,19 +1012,32 @@ human() {
 
 # remote_names: the remotes the project already has, one per line.
 remote_names() {
-    if [ -d "$ROOT/.jj" ] && command -v jj >/dev/null 2>&1; then
+    local backend
+    backend=$(vcs_backend 2>/dev/null) || return 0
+    if [ "$backend" = jj ]; then
+        need jj "brew install jj"
         jj --no-pager --color never -R "$ROOT" git remote list | awk '{print $1}'
-    elif [ -e "$ROOT/.git" ]; then
+    else
         git -C "$ROOT" remote
+    fi
+}
+
+# remote_add_hint <backend>: the command a person runs to add a remote with that backend.
+remote_add_hint() {
+    if [ "$1" = jj ]; then
+        echo "jj git remote add"
+    else
+        echo "git remote add"
     fi
 }
 
 # init_trunk: the trunk branch name for a project, master when nothing says otherwise.
 init_trunk() {
-    local names=""
-    if [ -d "$ROOT/.jj" ]; then
+    local names="" backend
+    backend=$(vcs_backend 2>/dev/null) || backend=""
+    if [ "$backend" = jj ]; then
         names=$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"' 2>/dev/null || true)
-    elif [ -e "$ROOT/.git" ]; then
+    elif [ "$backend" = git ]; then
         names=$(git -C "$ROOT" for-each-ref --format='%(refname:short)' refs/heads)
     fi
     trunk_name "$names" 2>/dev/null ||
@@ -1185,7 +1265,7 @@ init_lib_attrs() {
 }
 
 init_gerrit() {
-    local name=$1 projects
+    local name=$1 backend=$2 projects
     if [ "$DRY" -eq 1 ]; then
         created "gerrit project $name (create-project when absent) and remote gerrit gr:$name"
         return
@@ -1193,7 +1273,7 @@ init_gerrit() {
     show ssh -p 29418 user@gerrit.example.com gerrit ls-projects
     if ! projects=$(ssh -p 29418 user@gerrit.example.com gerrit ls-projects 2>&1); then
         printf 'warning: gerrit ls-projects failed: %s\n' "$projects" >&2
-        human "create the Gerrit project and remote: ssh -p 29418 user@gerrit.example.com gerrit create-project $name, then jj git remote add gerrit gr:$name"
+        human "create the Gerrit project and remote: ssh -p 29418 user@gerrit.example.com gerrit create-project $name, then $(remote_add_hint "$backend") gerrit gr:$name"
         return
     fi
     if printf '%s\n' "$projects" | grep -Fxq "$name"; then
@@ -1204,12 +1284,16 @@ init_gerrit() {
         human "create the Gerrit project: ssh -p 29418 user@gerrit.example.com gerrit create-project $name"
         return
     fi
-    run_cmd jj --no-pager -R "$ROOT" git remote add gerrit "gr:$name"
+    if [ "$backend" = jj ]; then
+        run_cmd jj --no-pager -R "$ROOT" git remote add gerrit "gr:$name"
+    else
+        run_cmd git -C "$ROOT" remote add gerrit "gr:$name"
+    fi
     created "remote gerrit gr:$name"
 }
 
 cmd_init() {
-    local type="" name="" public=0 gerrit=1 remotes t channel trunk
+    local type="" name="" public=0 gerrit=1 remotes t channel trunk backend
     while [ "$#" -gt 0 ]; do
         case "$1" in
         --type)
@@ -1249,8 +1333,10 @@ cmd_init() {
 
     # VCS
     if [ -d "$ROOT/.jj" ]; then
+        backend=jj
         skipped ".jj exists"
     elif [ -f "$ROOT/.git" ]; then
+        backend=git
         skipped ".jj: this is a git worktree, colocate jj in the main checkout"
     else
         if [ -e "$ROOT/.git" ]; then
@@ -1261,12 +1347,17 @@ cmd_init() {
             fi
             created ".git (git init)"
         fi
-        need jj "brew install jj"
-        if [ "$DRY" -eq 0 ]; then
-            show jj git init --colocate
-            (cd "$ROOT" && jj git init --colocate >/dev/null 2>&1)
+        if command -v jj >/dev/null 2>&1; then
+            backend=jj
+            if [ "$DRY" -eq 0 ]; then
+                show jj git init --colocate
+                (cd "$ROOT" && jj git init --colocate >/dev/null 2>&1)
+            fi
+            created ".jj (jj git init --colocate)"
+        else
+            backend=git
+            skipped ".jj (jj not installed, git only)"
         fi
-        created ".jj (jj git init --colocate)"
     fi
 
     # Lint set
@@ -1315,15 +1406,15 @@ cmd_init() {
     if printf '%s\n' "$remotes" | grep -Fxq origin; then
         skipped "remote origin exists"
     else
-        printf 'remote origin is missing, create the GitHub repo and run: jj git remote add origin hub:%s\n' "$name"
-        human "create the GitHub repo, then run: jj git remote add origin hub:$name"
+        printf 'remote origin is missing, create the GitHub repo and run: %s origin hub:%s\n' "$(remote_add_hint "$backend")" "$name"
+        human "create the GitHub repo, then run: $(remote_add_hint "$backend") origin hub:$name"
     fi
     if [ "$gerrit" -eq 0 ]; then
         skipped "gerrit: --no-gerrit"
     elif printf '%s\n' "$remotes" | grep -Fxq gerrit; then
         skipped "remote gerrit exists"
     else
-        init_gerrit "$name"
+        init_gerrit "$name" "$backend"
     fi
 
     # Summary
@@ -1432,6 +1523,10 @@ main() {
     fi
     if [ "$verb" = push ]; then
         cmd_push
+        return
+    fi
+    if [ "$verb" = pull ]; then
+        cmd_pull
         return
     fi
     if [ "$verb" = deploy ]; then

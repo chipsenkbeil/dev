@@ -488,6 +488,95 @@ out="$(run_dev "$TMP/wt" init --dry-run --no-gerrit)"
 assert_contains "init skips jj in a git worktree" "$out" "this is a git worktree"
 assert_not_contains "init plans no jj colocate in a git worktree" "$out" "jj git init --colocate"
 
+if ! PATH=/usr/bin:/bin command -v jj >/dev/null 2>&1; then
+    nojj="$(project nojj)"
+    git -C "$nojj" init -q
+    out="$(cd "$nojj" && env PATH=/usr/bin:/bin bash "$DEV" init --no-gerrit 2>&1)"
+    assert_eq "init without jj exits 0" "$?" "0"
+    assert_contains "init without jj skips jj and says why" "$out" "skipped: .jj (jj not installed, git only)"
+    assert_contains "init without jj prints the git remote command" "$out" "run: git remote add origin hub:nojj"
+    assert_eq "init without jj creates no .jj" "$([ -e "$nojj/.jj" ] || echo absent)" "absent"
+fi
+
+# gitc <args...>: git with a fixed identity and no signing.
+gitc() {
+    git -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"
+}
+
+gremote="$TMP/gremote.git"
+git init -q --bare -b main "$gremote"
+gp="$(project gitpush)"
+git -C "$gp" init -q -b main
+git -C "$gp" remote add origin "$gremote"
+echo a >"$gp/a"
+git -C "$gp" add a
+gitc -C "$gp" commit -q -m "feat: clean"
+out="$(run_dev "$gp" -v push 2>&1)"
+assert_eq "git push exits 0" "$?" "0"
+assert_contains "git push names the remote and branch" "$out" "origin: pushed main"
+assert_contains "git push -v shows the guarded command" "$out" "commit-guard push -- origin $(git -C "$gp" rev-parse HEAD):refs/heads/main"
+assert_eq "git push puts the commit on the remote" "$(git -C "$gremote" rev-parse main)" "$(git -C "$gp" rev-parse HEAD)"
+clean="$(git -C "$gp" rev-parse HEAD)"
+
+echo b >"$gp/b"
+git -C "$gp" add b
+gitc -C "$gp" commit -q -m "fix: tagged" -m "Claude-Session: https://claude.ai/code/session_x"
+out="$(run_dev "$gp" push 2>&1)"
+assert_eq "git push of an attributed commit exits 1" "$?" "1"
+assert_contains "git push names the guard refusal" "$out" "commit-guard: refusing to push to origin"
+assert_eq "git push leaves the remote unchanged on a refusal" "$(git -C "$gremote" rev-parse main)" "$clean"
+git -C "$gp" reset -q --hard "$clean"
+
+mkdir -p "$TMP/lonely"
+cp "$DEV" "$TMP/lonely/dev"
+out="$(cd "$gp" && PATH="$STUBS:$PATH" "$TMP/lonely/dev" push 2>&1)"
+assert_eq "git push without the guard exits 1" "$?" "1"
+assert_contains "git push without the guard says so" "$out" "commit-guard is missing"
+
+git -C "$gp" checkout -q --detach
+out="$(run_dev "$gp" push 2>&1)"
+assert_eq "git push on a detached HEAD exits 1" "$?" "1"
+assert_contains "git push explains a detached HEAD" "$out" "HEAD is detached"
+out="$(run_dev "$gp" pull 2>&1)"
+assert_eq "git pull on a detached HEAD exits 1" "$?" "1"
+git -C "$gp" checkout -q main
+
+git clone -q "$gremote" "$TMP/second"
+echo c >"$TMP/second/c"
+git -C "$TMP/second" add c
+gitc -C "$TMP/second" commit -q -m "feat: from the second clone"
+git -C "$TMP/second" push -q origin main
+out="$(run_dev "$gp" pull 2>&1)"
+assert_eq "git pull exits 0" "$?" "0"
+assert_eq "git pull brings the second clone's commit" "$(git -C "$gp" log -1 --format=%s)" "feat: from the second clone"
+echo dirty >>"$gp/a"
+out="$(run_dev "$gp" pull 2>&1)"
+assert_eq "git pull on a dirty tree exits 1" "$?" "1"
+assert_contains "git pull explains a dirty tree" "$out" "uncommitted changes"
+git -C "$gp" checkout -q -- a
+assert_eq "push and pull never create .jj" "$([ -e "$gp/.jj" ] || echo absent)" "absent"
+assert_contains "help push shows the git command" "$(run_dev "$gp" help push)" "commit-guard push -- origin"
+assert_contains "help pull shows the git command" "$(run_dev "$gp" help pull)" "git pull --rebase origin main"
+
+if command -v jj >/dev/null 2>&1; then
+    export JJ_CONFIG="$TMP/jj.toml"
+    printf 'user.name = "t"\nuser.email = "t@t"\nsigning.behavior = "drop"\ngit.sign-on-push = false\n' >"$JJ_CONFIG"
+    jj git clone -q "$gremote" "$TMP/jjpull" >/dev/null 2>&1 || jj git clone "$gremote" "$TMP/jjpull" >/dev/null 2>&1
+    jp="$(cd "$TMP/jjpull" && pwd -P)"
+    echo d >"$TMP/second/d"
+    git -C "$TMP/second" add d
+    gitc -C "$TMP/second" commit -q -m "feat: for the jj clone"
+    git -C "$TMP/second" push -q origin main
+    out="$(run_dev "$jp" -v pull 2>&1)"
+    assert_eq "jj pull exits 0" "$?" "0"
+    assert_contains "jj pull fetches every remote" "$out" "git fetch --all-remotes"
+    assert_eq "jj pull rebases the working copy onto the fetched commit" "$(jj --no-pager -R "$jp" log --no-graph -r @- -T 'description.first_line()')" "feat: for the jj clone"
+    printf 'aliases.sync = ["git", "fetch"]\n' >>"$JJ_CONFIG"
+    out="$(run_dev "$jp" -v pull 2>&1)"
+    assert_contains "jj pull runs the sync alias when the config has one" "$out" "-R $jp sync"
+    unset JJ_CONFIG
+fi
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1
