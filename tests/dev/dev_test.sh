@@ -135,6 +135,12 @@ out="$(run_dev "$rust" sync SYNC_DST=host)"
 assert_eq "local sync.sh wins over the template sync" "$out" "sync override SYNC_DST=host"
 rm "$rust/.dev/sync.sh"
 
+printf '#!/usr/bin/env bash\necho "init override $*"\n' >"$rust/.dev/init.sh"
+chmod +x "$rust/.dev/init.sh"
+out="$(run_dev "$rust" init --dry-run)"
+assert_eq "local init.sh wins over the built-in init" "$out" "init override --dry-run"
+rm "$rust/.dev/init.sh"
+
 # Usage
 run_dev "$rust" bogus >/dev/null 2>&1
 assert_eq "unknown verb exits 2" "$?" "2"

@@ -1224,12 +1224,12 @@ main() {
         cmd_sync "$@"
         return
     fi
+    if has_override "$verb"; then
+        exec "$ROOT/.dev/$verb.sh" "$@"
+    fi
     if [ "$verb" = init ]; then
         cmd_init "$@"
         return
-    fi
-    if has_override "$verb"; then
-        exec "$ROOT/.dev/$verb.sh" "$@"
     fi
     if [ "$verb" = push ]; then
         cmd_push
