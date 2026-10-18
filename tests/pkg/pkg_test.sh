@@ -3,6 +3,7 @@
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # shellcheck source=../../scripts/pkg/lib.sh
 # shellcheck disable=SC1091
 source "$DIR/../../scripts/pkg/lib.sh"
@@ -148,6 +149,7 @@ cell_for() {
 }
 
 vfx="$DIR/fixtures/vars.tsv"
+
 # manifest_column_index must skip `# @env` lines like ordinary comments.
 vcol="$(manifest_column_index "$vfx" brew)"
 assert_eq "column index past @env comments" "$vcol" "3"
@@ -155,14 +157,18 @@ assert_eq "column index past @env comments" "$vcol" "3"
 # @env unquoted value: both $FOO and ${FOO} expand to it.
 assert_eq "bare \$FOO expands" "$(cell_for "$vfx" "$vcol" bare-foo)" "bar_value"
 assert_eq "braced \${FOO} expands" "$(cell_for "$vfx" "$vcol" braced-foo)" "bar_value"
+
 # @env quoted value with spaces: expands, spaces preserved.
 assert_eq "quoted \"\$SP\" expands (spaces kept)" "$(cell_for "$vfx" "$vcol" quoted-sp)" "asdf asdf"
 assert_eq "quoted \"\${SP}\" expands (spaces kept)" "$(cell_for "$vfx" "$vcol" braced-sp)" "asdf asdf"
+
 # Quoted literal, no var: unchanged.
 assert_eq "quoted literal unchanged" "$(cell_for "$vfx" "$vcol" quoted-lit)" "/x --y"
+
 # Mid-cell, in-place expansion.
 assert_eq "mid-cell script:\${FOO}" "$(cell_for "$vfx" "$vcol" mid-script)" "script:bar_value"
 assert_eq "mid-cell copr repo:\${FOO}" "$(cell_for "$vfx" "$vcol" mid-copr)" "copr:p,repo:bar_value"
+
 # Escape: \$\$ -> literal \$; \$\$FOO -> literal \$FOO (not a reference).
 assert_eq "\$\$ escapes to literal \$" "$(cell_for "$vfx" "$vcol" escape)" "price\$5"
 assert_eq "\$\$FOO is literal, not a ref" "$(cell_for "$vfx" "$vcol" escape-name)" "\$FOO"

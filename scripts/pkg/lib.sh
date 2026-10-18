@@ -43,14 +43,18 @@ parse_cell() {
 #   fields on bash 3.2, corrupting bare and bare+bin cells.
 split_cell() {
     local p="$1"
+
     # shellcheck disable=SC2034
     PC_CHANNEL="${p%%$'\t'*}"
     p="${p#*$'\t'}"
+
     # shellcheck disable=SC2034
     PC_PACKAGE="${p%%$'\t'*}"
     p="${p#*$'\t'}"
+
     # shellcheck disable=SC2034
     PC_REPO="${p%%$'\t'*}"
+
     # shellcheck disable=SC2034
     PC_BIN="${p#*$'\t'}"
 }

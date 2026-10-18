@@ -5,6 +5,7 @@
 set -o pipefail
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # shellcheck source=pkg/lib.sh
 # shellcheck disable=SC1091
 source "$PKG_DIR/pkg/lib.sh"
@@ -19,6 +20,7 @@ load_driver() {
         printf 'error: no driver %s (add it in a later slice)\n' "$d" >&2
         return 1
     fi
+
     # shellcheck disable=SC1090,SC1091
     source "$d"
     PKG_LOADED_DRIVER="$1"
@@ -70,6 +72,7 @@ cmd_check() {
         printf 'error: no driver %s (added in a later slice)\n' "$driver" >&2
         return 1
     fi
+
     # shellcheck source=/dev/null
     source "$driver"
 
@@ -90,6 +93,7 @@ cmd_check() {
     [ -n "$rows" ] || return 0
 
     local name binary cell parsed effbin
+
     # Safe: manifest_rows' first field (name) is never empty, so the leading-empty
     # -field collapse that breaks cell parsing cannot occur here.
     while IFS=$'\t' read -r name binary cell; do
@@ -152,6 +156,7 @@ cmd_install() {
     [ -n "$rows" ] || return 0
 
     local name binary cell parsed channel pkg repo binover effbin handler
+
     # Safe: manifest_rows' first field (name) is never empty, so the leading-empty
     # -field collapse that breaks cell parsing cannot occur here.
     while IFS=$'\t' read -r name binary cell; do

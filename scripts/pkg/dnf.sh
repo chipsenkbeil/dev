@@ -17,6 +17,7 @@ _dnf_ensure_copr_plugin() {
     if dnf copr --help >/dev/null 2>&1; then
         return 0
     fi
+
     # shellcheck disable=SC2086  # $SUDO is intentionally word-split (empty or "sudo")
     $SUDO dnf install -y dnf-plugins-core
 }

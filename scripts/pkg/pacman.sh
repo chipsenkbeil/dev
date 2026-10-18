@@ -111,6 +111,7 @@ _aur_install() {
             _aur_teardown
             return 1
         fi
+
         # cd in a subshell, NOT inside the pkg_run string: pkg_run word-splits
         # and runs a SIMPLE command, so a `&&` there lands as an argv entry
         # ("cd: too many arguments") instead of a shell operator.
@@ -130,6 +131,7 @@ _aur_install() {
             rm -rf "$tmp"
             return 1
         fi
+
         # makepkg calls sudo itself for dependency syncing and the final -U.
         # cd in a subshell -- see the note on the root branch above.
         if ! (

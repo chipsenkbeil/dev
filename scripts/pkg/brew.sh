@@ -29,6 +29,7 @@ pkg_status() {
         fi
         return 0
     fi
+
     # Not tracked by brew — a cask may still be present as an app bundle.
     if [ "$channel" = "cask" ]; then
         local app d
