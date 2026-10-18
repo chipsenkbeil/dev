@@ -137,13 +137,39 @@ uninstall_pkg() {
     printf 'DONE\n'
 }
 
-# Removes every file the package would link, whether or not it is a symlink.
+# purge_path <physical-src> <relative-path>: remove one target path. A symlinked
+# parent is a folded stow directory: unlink that link alone when it points into
+# the source tree, and never touch anything beneath it.
+purge_path() {
+    local src=$1 rest=$2 cur=${TARGET_DIR:?} part real
+    while [[ $rest == */* ]]; do
+        part=${rest%%/*}
+        rest=${rest#*/}
+        cur=$cur/$part
+        if [ -L "$cur" ]; then
+            real=$(cd -P "$cur" 2>/dev/null && pwd) || return 0
+            case "$real/" in
+            "$src"/*) rm -f "$cur" ;;
+            esac
+            return 0
+        fi
+        [ -d "$cur" ] || return 0
+    done
+    cur=$cur/$rest
+    if [ -L "$cur" ] || [ -f "$cur" ]; then
+        rm -f "$cur"
+    fi
+}
+
+# Removes the regular files and per-file symlinks the package would link, and
+# the folded directory links that stow made for it.
 purge_pkg() {
-    local pkg=$1 file
+    local pkg=$1 file src
     printf '> Purging %s... ' "$pkg"
     if [ -d "$SRC_DIR/$pkg" ]; then
+        src=$(cd -P "$SRC_DIR" && pwd)
         while IFS= read -r file; do
-            rm -f "${TARGET_DIR:?}/${file#./}"
+            purge_path "$src" "${file#./}"
         done < <(cd "$SRC_DIR/$pkg" && find . -type f)
     fi
     printf 'DONE\n'
