@@ -1163,6 +1163,7 @@ init_workspace_lints() {
     created "[workspace.lints] block in Cargo.toml"
     human 'add "[lints]" with "workspace = true" to each member crate Cargo.toml'
     printf 'reminder: each member crate needs [lints] with workspace = true\n'
+    printf 'note: the lints deny warnings, so fix every finding in the same change that adds this block\n'
 }
 
 # init_lib_attrs <template dir>: the library-register attribute in each library crate.
