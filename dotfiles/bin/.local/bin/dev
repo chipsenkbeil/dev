@@ -69,7 +69,7 @@ builtin_desc() {
     run) echo "Run the project" ;;
     deploy) echo "Deploy the project (needs .dev/deploy.sh)" ;;
     push) echo "Push the trunk bookmark to origin and gerrit" ;;
-    sync) echo "Compare copied lint files, the lints block and lib.rs attributes with the dotfiles templates" ;;
+    sync) echo "Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates" ;;
     init) echo "Seed a project with lint, CI and remotes" ;;
     help) echo "Show this table, or the details of one verb" ;;
     esac
@@ -744,7 +744,7 @@ lib_attr_insert() {
 }
 
 cmd_sync() {
-    local check=0 t type channel dest src tmp rc=0 drifted=0 answer lib missing_libs=""
+    local check=0 t type channel dest src tmp rc=0 drifted=0 answer lib missing_libs="" guide style_drift=0
     case "${1:-}" in
     "") ;;
     --check) check=1 ;;
@@ -795,6 +795,15 @@ cmd_sync() {
             drifted=1
         fi
     done < <(lib_crates)
+    if [ -f "$ROOT/docs/STYLE.md" ] && grep -qx "$STYLE_MARKER" "$ROOT/docs/STYLE.md" &&
+        guide=$(style_guide_for "$type") && [ -f "$guide" ]; then
+        render_style "$guide" >"$tmp/STYLE.md"
+        if ! diff -q "$ROOT/docs/STYLE.md" "$tmp/STYLE.md" >/dev/null; then
+            printf 'differs: docs/STYLE.md above "%s"\n' "$STYLE_MARKER"
+            style_drift=1
+            drifted=1
+        fi
+    fi
 
     if [ "$drifted" -eq 0 ]; then
         echo "up to date"
@@ -819,7 +828,8 @@ cmd_sync() {
     while IFS= read -r lib; do
         [ -n "$lib" ] && printf 'would insert into %s/src/lib.rs:\n%s\n' "$lib" "$(<"$t/lib-lints.rs.snippet")"
     done <<<"$missing_libs"
-    printf 'Overwrite these files, the lints block and the lib.rs attributes with the templates? [y/N] '
+    [ "$style_drift" -eq 0 ] || diff -u "$ROOT/docs/STYLE.md" "$tmp/STYLE.md" || true
+    printf 'Overwrite these files, the lints block, the lib.rs attributes and the guide part of docs/STYLE.md with the templates? [y/N] '
     read -r answer
     case "$answer" in
     y | Y | yes)
@@ -832,6 +842,7 @@ cmd_sync() {
         while IFS= read -r lib; do
             [ -z "$lib" ] || lib_attr_insert "$t" "$lib" || rc=1
         done <<<"$missing_libs"
+        [ "$style_drift" -eq 0 ] || cat "$tmp/STYLE.md" >"$ROOT/docs/STYLE.md" || rc=1
         echo "synced"
         ;;
     *) echo "aborted" ;;
@@ -913,6 +924,24 @@ put_generated() {
     created "$dest"
 }
 
+STYLE_MARKER='## This project'
+
+# style_guide_for <type>: the dotfiles guide a project of this type copies into docs/STYLE.md.
+style_guide_for() {
+    case "$1" in
+    rust) printf '%s\n' "$(dotfiles_root)/docs/style/rust.md" ;;
+    love2d | lua) printf '%s\n' "$(dotfiles_root)/docs/style/lua.md" ;;
+    *) return 1 ;;
+    esac
+}
+
+# render_style <guide>: the guide followed by the project's own section of docs/STYLE.md.
+render_style() {
+    cat "$1"
+    printf '\n'
+    sed -n "/^${STYLE_MARKER}\$/,\$p" "$ROOT/docs/STYLE.md"
+}
+
 # put_style_guide <language>: seed docs/STYLE.md from the dotfiles repo's guide.
 put_style_guide() {
     local guide
@@ -929,7 +958,7 @@ put_style_guide() {
         mkdir -p "$ROOT/docs"
         {
             cat "$guide"
-            printf '\n## This project\n\nRules that apply only to this project go here.\n'
+            printf '\n%s\n\nRules that apply only to this project go here.\n' "$STYLE_MARKER"
         } >"$ROOT/docs/STYLE.md"
     fi
     created "docs/STYLE.md"

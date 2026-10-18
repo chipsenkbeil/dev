@@ -268,6 +268,19 @@ if command -v jj >/dev/null 2>&1; then
     tail -n +2 "$init/.dev/lint.sh" >"$init/.dev/lint.sh.new"
     mv "$init/.dev/lint.sh.new" "$init/.dev/lint.sh"
 
+    cp "$init/docs/STYLE.md" "$TMP/STYLE.md.orig"
+    printf 'Name every lock after what it guards.\n' >>"$init/docs/STYLE.md"
+    out="$(run_dev "$init" sync --check)"
+    assert_eq "sync --check keeps the project rules in docs/STYLE.md" "$out" "up to date"
+    printf '# drifted guide\n' | cat - "$init/docs/STYLE.md" >"$init/docs/STYLE.md.new"
+    mv "$init/docs/STYLE.md.new" "$init/docs/STYLE.md"
+    out="$(run_dev "$init" sync --check)"
+    assert_contains "sync --check reports a drifted guide in docs/STYLE.md" "$out" 'differs: docs/STYLE.md above "## This project"'
+    printf '# Our own style\n\nA ratified project guide.\n' >"$init/docs/STYLE.md"
+    out="$(run_dev "$init" sync --check)"
+    assert_eq "sync --check ignores a docs/STYLE.md the project wrote itself" "$out" "up to date"
+    cp "$TMP/STYLE.md.orig" "$init/docs/STYLE.md"
+
     before="$(cat "$init/Cargo.toml")"
     out="$(run_dev "$init" init --no-gerrit --public)"
     assert_not_contains "init rerun creates nothing" "$out" "created:"
