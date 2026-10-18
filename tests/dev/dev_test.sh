@@ -15,7 +15,7 @@ STUBS="$TMP/stubs"
 export STUB_LOG="$TMP/stub.log"
 mkdir -p "$STUBS"
 for tool in cargo love godot npm make stylua ast-grep; do
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016  # $* and $STUB_LOG expand in the generated stub
     printf '#!/usr/bin/env bash\necho "%s $*" >> "$STUB_LOG"\n' "$tool" >"$STUBS/$tool"
     chmod +x "$STUBS/$tool"
 done

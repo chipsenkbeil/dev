@@ -204,7 +204,7 @@ check_progs_and_select() {
 #              which is used to output progress and results to the specified
 #              file.
 #
-#              Will not perform installation if VERBOSE set to "yes".
+#              Will not run the install commands if DRY_RUN is "yes", and counts each as a success.
 ###############################################################################
 
 #
@@ -402,7 +402,7 @@ check_expr_and_chain_install() {
 #              meaning 0 indicates full success of chain.
 #
 # Note:        Will print label and evaluation to LOG_FILE.
-#              Will not perform commands if VERBOSE set to "yes"
+#              Will not run the commands if DRY_RUN is "yes", and counts each as a success.
 #
 chain_install_and_log() {
     LABEL=$1
@@ -431,7 +431,7 @@ chain_install_and_log() {
 #              full success of all individual commands.
 #
 # Note:        Will print label and evaluation to LOG_FILE.
-#              Will not perform commands if VERBOSE set to "yes"
+#              Will not run the commands if DRY_RUN is "yes", and counts each as a success.
 #
 install_and_log() {
     LABEL="$1"

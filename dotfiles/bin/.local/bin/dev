@@ -305,7 +305,7 @@ help_overview() {
     help_section "global flags" "-v, --verbose	global	Print each command before it runs, and export VERBOSE=1 to it
 -vv	global	Also trace every line of dev and of each bash script it runs, VERBOSE=2"
 
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016  # the backticks are literal help text
     printf '\nRun `dev help <verb>` for flags, the script header and the command a verb runs.\n'
 }
 
@@ -600,7 +600,8 @@ channel_for_project() {
 # manifest <template dir>: lines of "project path<TAB>template path". The set is
 # named by the template directory, and the Lua set ships love.yml to love2d only.
 manifest() {
-    local t=$1 f roots scripts
+    local t=$1 f roots scripts rules
+    rules=$(cd "$t/ast-grep" && find rules rule-test -type f | sort)
     case "$(basename "$t")" in
     rust)
         roots="rustfmt.toml rust-toolchain.toml clippy.toml deny.toml"
@@ -620,8 +621,9 @@ manifest() {
         printf '.dev/%s\t%s\n' "$f" "$t/$f"
     done
     while IFS= read -r f; do
+        [ -n "$f" ] || continue
         printf '.dev/ast-grep/%s\t%s\n' "$f" "$t/ast-grep/$f"
-    done < <(cd "$t/ast-grep" && find rules rule-test -type f | sort)
+    done <<<"$rules"
 }
 
 # lint_project_tail: the project's own checks below the marker in .dev/lint.sh, with
@@ -640,10 +642,10 @@ render() {
     sg_old='--config ast-grep/sgconfig.yml'
     sg_new='--config sgconfig.yml'
 
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016  # the template line is matched literally, not expanded
     cd_old='cd "$(dirname "${BASH_SOURCE[0]}")"'
 
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016  # the replacement line is written literally, not expanded
     cd_new='cd "$(dirname "${BASH_SOURCE[0]}")/.."'
     content=$(<"$src")
     case "$dest" in
