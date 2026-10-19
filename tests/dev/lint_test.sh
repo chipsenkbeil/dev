@@ -219,6 +219,19 @@ src/new.rs"
     assert_not_contains "a period-free one-liner, a two-line comment, a trailing comment and a doc line pass" "$out" "src/period.rs"
     rm "$rust/src/period.rs"
 
+    cp "$STYLE/rust/fmt.sh" "$rust/fmt.sh"
+    fixture='pub fn run() {\n    // Drop the stale entry.\n    flush();\n\n    // Keep the first.\n    // Drop the second.\n    flush();\n\n    // Wait for more...\n    flush();\n}\n\n/// Runs once.\npub fn other() {}\n'
+    printf '%b' "$fixture" >"$rust/src/period.rs"
+    expected=$(printf '%b' "$fixture" | sed 's/stale entry\.$/stale entry/')
+    env PATH="$full_path" bash "$rust/fmt.sh" >/dev/null 2>&1
+    assert_eq "dev fmt drops the period from the one-liner only" "$(cat "$rust/src/period.rs")" "$expected"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "the comment periods check passes after dev fmt" "$out" "src/period.rs"
+    before=$(cat "$rust/src/period.rs")
+    env PATH="$full_path" bash "$rust/fmt.sh" >/dev/null 2>&1
+    assert_eq "a second dev fmt changes nothing" "$(cat "$rust/src/period.rs")" "$before"
+    rm "$rust/src/period.rs" "$rust/fmt.sh"
+
     printf 'pub fn run() {\n    // First line\n    // second line\n    // third line\n    flush();\n}\n' >"$rust/src/runs.rs"
     out="$(style_lint "$rust" "$full_path")"
     assert_contains "three consecutive // lines fail" "$out" "src/runs.rs:2: 3 consecutive comment lines"

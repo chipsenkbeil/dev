@@ -385,6 +385,12 @@ if command -v jj >/dev/null 2>&1; then
     # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
     assert_contains "init sources the lint library from beside the lint script" "$(cat "$init/.dev/lint.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
     assert_not_contains "init leaves no path above .dev for the lint library" "$(cat "$init/.dev/lint.sh")" "/../lint-lib.sh"
+    assert_contains "init copies the rust fmt script" "$out" "created: .dev/fmt.sh"
+
+    # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
+    assert_contains "init sources the lint library from beside the fmt script" "$(cat "$init/.dev/fmt.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
+    assert_not_contains "init leaves no path above .dev in the fmt script" "$(cat "$init/.dev/fmt.sh")" "/../lint-lib.sh"
+    assert_contains "init points the fmt script cd at the root" "$(cat "$init/.dev/fmt.sh")" 'BASH_SOURCE[0]}")/.."'
     assert_contains "init relocates the ast-grep rules" "$(cat "$init/sgconfig.yml")" ".dev/ast-grep/rules"
     assert_contains "init pins the stable channel" "$(cat "$init/rust-toolchain.toml")" "channel = \"$(rustc +stable --version | cut -d' ' -f2)\""
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"

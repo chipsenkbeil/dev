@@ -821,7 +821,11 @@ render() {
         content=${content//"$sg_old"/"$sg_new"}
         content+=$(lint_project_tail)
         ;;
-    .dev/fmt.sh | .dev/test.sh)
+    .dev/fmt.sh)
+        content=${content/"$cd_old"/"$cd_new"}
+        content=${content/"$lib_old"/"$lib_new"}
+        ;;
+    .dev/test.sh)
         content=${content/"$cd_old"/"$cd_new"}
         ;;
     rust-toolchain.toml)
