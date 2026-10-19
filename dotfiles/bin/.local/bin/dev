@@ -778,6 +778,7 @@ manifest() {
     for f in $scripts; do
         printf '.dev/%s\t%s\n' "$f" "$t/$f"
     done
+    printf '.dev/lint-lib.sh\t%s\n' "$t/../lint-lib.sh"
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         printf '.dev/ast-grep/%s\t%s\n' "$f" "$t/ast-grep/$f"
@@ -796,7 +797,9 @@ lint_project_tail() {
 
 # render <project path> <template path> <channel>: the project copy of a template.
 render() {
-    local dest=$1 src=$2 channel=$3 content cd_old cd_new sg_old sg_new
+    local dest=$1 src=$2 channel=$3 content cd_old cd_new sg_old sg_new lib_old lib_new
+    lib_old='/../lint-lib.sh'
+    lib_new='/lint-lib.sh'
     sg_old='--config ast-grep/sgconfig.yml'
     sg_new='--config sgconfig.yml'
 
@@ -813,6 +816,7 @@ render() {
         ;;
     .dev/lint.sh)
         content=${content/"$cd_old"/"$cd_new"}
+        content=${content/"$lib_old"/"$lib_new"}
         content=${content//"$sg_old"/"$sg_new"}
         content+=$(lint_project_tail)
         ;;

@@ -332,6 +332,7 @@ out="$(run_dev "$sync" sync --check)"
 assert_eq "sync --check exits 1 on drift" "$?" "1"
 assert_contains "sync --check reports a drifted file" "$out" "differs: clippy.toml"
 assert_contains "sync --check reports a missing file" "$out" "missing: deny.toml"
+assert_contains "sync --check reports the missing shared lint library" "$out" "missing: .dev/lint-lib.sh"
 assert_not_contains "sync --check ignores a matching file" "$out" "rustfmt.toml"
 out="$(run_dev "$sync" sync 2>&1 </dev/null)"
 assert_contains "sync refuses without a terminal" "$out" "needs a terminal"
@@ -371,6 +372,12 @@ if command -v jj >/dev/null 2>&1; then
     assert_eq "init makes the lint script executable" "$([ -x "$init/.dev/lint.sh" ] && echo yes)" "yes"
     assert_contains "init points the lint script cd at the root" "$(cat "$init/.dev/lint.sh")" 'BASH_SOURCE[0]}")/.."'
     assert_contains "init points ast-grep at the root sgconfig.yml" "$(cat "$init/.dev/lint.sh")" "--config sgconfig.yml"
+    assert_contains "init copies the shared lint library" "$out" "created: .dev/lint-lib.sh"
+    assert_eq "init writes the shared lint library" "$([ -f "$init/.dev/lint-lib.sh" ] && echo yes)" "yes"
+
+    # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
+    assert_contains "init sources the lint library from beside the lint script" "$(cat "$init/.dev/lint.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
+    assert_not_contains "init leaves no path above .dev for the lint library" "$(cat "$init/.dev/lint.sh")" "/../lint-lib.sh"
     assert_contains "init relocates the ast-grep rules" "$(cat "$init/sgconfig.yml")" ".dev/ast-grep/rules"
     assert_contains "init pins the stable channel" "$(cat "$init/rust-toolchain.toml")" "channel = \"$(rustc +stable --version | cut -d' ' -f2)\""
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
@@ -433,6 +440,10 @@ if command -v jj >/dev/null 2>&1; then
     assert_not_contains "love2d init writes no pending README" "$out" ".dev/README.md"
     assert_eq "love2d init makes the lint script executable" "$([ -x "$game/.dev/lint.sh" ] && echo yes)" "yes"
     assert_contains "love2d init points the lint script cd at the root" "$(cat "$game/.dev/lint.sh")" 'BASH_SOURCE[0]}")/.."'
+    assert_eq "love2d init writes the shared lint library" "$([ -f "$game/.dev/lint-lib.sh" ] && echo yes)" "yes"
+
+    # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
+    assert_contains "love2d init sources the lint library from beside the lint script" "$(cat "$game/.dev/lint.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
     assert_not_contains "love2d init repoints every ast-grep config path" "$(cat "$game/.dev/lint.sh")" "ast-grep/sgconfig.yml"
     assert_contains "love2d init relocates the ast-grep rules" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rules"
     assert_contains "love2d init relocates the ast-grep rule tests" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rule-test"
