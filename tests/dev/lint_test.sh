@@ -68,6 +68,7 @@ out="$(lint)"
 rc=$?
 assert_eq "a comment under code exits non-zero" "$((rc != 0))" "1"
 assert_contains "a comment under code names file and line" "$out" "scripts/spacing.sh:5: full-line comment directly after code"
+rm "$TMP/scripts/spacing.sh"
 
 printf '#!/usr/bin/env bash\nset -euo pipefail\n\necho a \\\n    b\n# explains the next line\necho done\n' >"$TMP/scripts/deeper.sh"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n\ncase b in\na)\n    echo a\n    ;;\n# The b arm\nb)\n    echo b\n    ;;\nesac\n' >"$TMP/scripts/arms.sh"
@@ -75,6 +76,18 @@ out="$(lint)"
 assert_contains "a comment under deeper code fails" "$out" "scripts/deeper.sh:6: full-line comment directly after code"
 assert_not_contains "a comment heading the next case arm passes" "$out" "scripts/arms.sh:"
 rm "$TMP/scripts/deeper.sh" "$TMP/scripts/arms.sh"
+
+printf '@test "bare" {\n    true\n    [[ hi == *hi* ]]\n    true\n}\n' >"$TMP/tests/bare.bats"
+out="$(lint)"
+rc=$?
+assert_eq "a bare [[ ]] assertion in a bats file exits non-zero" "$((rc != 0))" "1"
+assert_contains "a bare [[ ]] assertion names file and line" "$out" "tests/bare.bats:3: a bare [[ ]] assertion never fails a test under bash 3.2"
+printf '@test "guarded" {\n    [[ hi == *hi* ]] || false\n    run zsh -c "[[ -n x ]] && print ok"\n}\n' >"$TMP/tests/bare.bats"
+out="$(lint)"
+rc=$?
+assert_eq "a [[ ]] assertion ending in || false passes" "$rc" "0"
+assert_not_contains "a [[ ]] inside a command string passes" "$out" "tests/bare.bats"
+rm "$TMP/tests/bare.bats"
 
 STYLE="$REPO/dotfiles/claude/.claude/skills/style/lint"
 STUBS="$TMP/stubs"

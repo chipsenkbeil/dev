@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run shellcheck, shfmt and the comment-spacing check on every bash script under the shell roots.
+# Run shellcheck, shfmt and the comment-spacing check on every bash script under the shell roots, and the bare-assertion check on every .bats file.
 # Exit non-zero when any of them reports a finding.
 set -euo pipefail
 
@@ -59,6 +59,21 @@ comment_spacing() {
     done <"$file"
 }
 
+bare_assertions() {
+    local file=$1 number=0 line text
+    while IFS= read -r line || [ -n "$line" ]; do
+        number=$((number + 1))
+        text=${line#"${line%%[![:space:]]*}"}
+        text=${text%"${text##*[![:space:]]}"}
+        case "$text" in
+        '[['*']]')
+            printf '%s:%s: a bare [[ ]] assertion never fails a test under bash 3.2, append || false\n' "$file" "$number" >&2
+            status=1
+            ;;
+        esac
+    done <"$file"
+}
+
 # Every regular file under the roots whose name ends in .sh or whose shebang names bash.
 files=()
 while IFS= read -r f; do
@@ -89,6 +104,10 @@ for f in "${files[@]}"; do
     fi
     comment_spacing "$f"
 done
+
+while IFS= read -r f; do
+    bare_assertions "$f"
+done < <(find tests -type f -name '*.bats' | sort)
 
 if [ "${#fmt_dirty[@]}" -gt 0 ]; then
     printf '\nshfmt -i 4 would change:\n' >&2
