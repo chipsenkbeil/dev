@@ -367,6 +367,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init pins the stable channel" "$(cat "$init/rust-toolchain.toml")" "channel = \"$(rustc +stable --version | cut -d' ' -f2)\""
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
     assert_contains "init writes the pipeline" "$(cat "$init/.ci/pipeline.lua")" ".dev/lint.sh"
+    assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/pipeline.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
     assert_contains "init writes the workflow for windows" "$(cat "$init/.github/workflows/ci.yml")" "windows-latest"
     assert_contains "init seeds docs/STYLE.md from the rust guide" "$out" "created: docs/STYLE.md"
     assert_contains "init copies the rust guide" "$(cat "$init/docs/STYLE.md")" "# Rust style"
