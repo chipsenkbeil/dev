@@ -285,17 +285,19 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 --later
 -v
 --verbose
--vv"
+-vv
+--ci"
 out="$(run_dev "$rust" __flags sync)"
 assert_eq "__flags sync" "$out" "--check
 --yes
 -y
 -v
 --verbose
--vv"
+-vv
+--ci"
 out="$(run_dev "$rust" help sync)"
 assert_contains "help sync lists --yes" "$out" "--yes"
-assert_contains "help <verb> mentions the global flags" "$out" "-v and -vv work anywhere"
+assert_contains "help <verb> mentions the global flags" "$out" "-v, -vv and --ci work anywhere"
 out="$(run_dev "$rust" help install)"
 assert_contains "help <verb> shows the script header" "$out" ".dev/install.sh header"
 out="$(run_dev "$rust" help build)"
@@ -382,7 +384,11 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init pins the stable channel" "$(cat "$init/rust-toolchain.toml")" "channel = \"$(rustc +stable --version | cut -d' ' -f2)\""
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
     assert_contains "init writes the pipeline" "$(cat "$init/.ci/pipeline.lua")" ".dev/lint.sh"
+    assert_contains "init seeds a lint job" "$(cat "$init/.ci/pipeline.lua")" "    lint = {"
+    assert_contains "init seeds a test job" "$(cat "$init/.ci/pipeline.lua")" "    test = {"
+    assert_contains "init runs the jobs on the rust runner image" "$(cat "$init/.ci/pipeline.lua")" "local LINUX = { os = \"linux-ct\", image = \"rust-runner-ct\" }"
     assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/pipeline.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
+    assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/pipeline.lua")" 'io.open("rust-toolchain.toml")'
     assert_contains "init writes the workflow for windows" "$(cat "$init/.github/workflows/ci.yml")" "windows-latest"
     assert_contains "init seeds docs/STYLE.md from the rust guide" "$out" "created: docs/STYLE.md"
     assert_contains "init copies the rust guide" "$(cat "$init/docs/STYLE.md")" "# Rust style"
@@ -682,6 +688,71 @@ if command -v jj >/dev/null 2>&1; then
     unset JJ_CONFIG
 else
     printf 'skip - jj pull and jj push (needs jj)\n'
+fi
+
+# --ci
+if command -v jq >/dev/null 2>&1; then
+    cistubs="$TMP/cistubs"
+    mkdir -p "$cistubs"
+    cat >"$cistubs/ci" <<'STUB'
+#!/usr/bin/env bash
+if [ "$1" = -C ]; then shift 2; fi
+case "$1" in
+jobs) printf '{"jobs":[{"name":"lint","oses":["linux-ct"]},{"name":"test","oses":["linux-ct"]}]}\n' ;;
+run)
+    echo "ci $* (in $PWD)" >>"$STUB_LOG"
+    exit "${CI_STUB_RC:-0}"
+    ;;
+esac
+STUB
+    chmod +x "$cistubs/ci"
+    cirun() {
+        local dir="$1"
+        shift
+        : >"$STUB_LOG"
+        (cd "$dir" && PATH="$cistubs:$STUBS:$PATH" "$DEV" "$@")
+    }
+    cip="$(project ci)"
+    sub="$cip/sub"
+    mkdir -p "$cip/.ci" "$sub"
+    printf 'return {}\n' >"$cip/.ci/pipeline.lua"
+    git -C "$cip" init -q
+
+    out="$(cirun "$sub" --ci lint 2>&1)"
+    assert_eq "--ci runs the job through ci from the project root" "$out" ""
+    assert_eq "--ci passes the pipeline, job and follow flags" "$(log)" "ci run pipeline --local --job lint -f (in $cip)"
+    cirun "$cip" lint --ci >/dev/null 2>&1
+    assert_contains "--ci works after the verb" "$(log)" "ci run pipeline --local --job lint -f"
+    DEV_CI=1 cirun "$cip" test >/dev/null 2>&1
+    assert_contains "DEV_CI=1 counts as --ci" "$(log)" "ci run pipeline --local --job test -f"
+    DEV_CI=0 cirun "$cip" lint >/dev/null 2>&1
+    assert_not_contains "DEV_CI=0 runs locally" "$(log)" "ci run"
+    CI_STUB_RC=7 cirun "$cip" --ci test >/dev/null 2>&1
+    assert_eq "--ci exits with ci's status" "$?" "7"
+
+    out="$(cirun "$cip" --ci build 2>&1)"
+    assert_eq "--ci with no such job exits 1" "$?" "1"
+    assert_contains "--ci with no such job hints at the pipeline" "$out" "no job named build in .ci/pipeline.lua, add one"
+    assert_eq "--ci with no such job runs nothing" "$(log)" ""
+    out="$(cirun "$cip" --ci lint --extra 2>&1)"
+    assert_eq "--ci refuses extra arguments with 2" "$?" "2"
+    assert_contains "--ci names the extra argument" "$out" "passes no arguments to the job, got --extra"
+
+    for verb in install uninstall restow sync setup fmt help init push pull; do
+        out="$(cirun "$cip" --ci "$verb" 2>&1)"
+        assert_eq "--ci refuses $verb with 2" "$?" "2"
+        assert_contains "--ci names the refused verb $verb" "$out" "dev $verb: --ci cannot run this verb"
+    done
+    for flag in -h --help; do
+        out="$(cirun "$cip" --ci "$flag" 2>&1)"
+        assert_eq "--ci $flag is refused like help" "$?" "2"
+        assert_contains "--ci $flag names help" "$out" "dev help: --ci cannot run this verb"
+    done
+    assert_eq "a refused verb runs nothing" "$(log)" ""
+    out="$(cirun "$cip" help)"
+    assert_contains "help mentions --ci" "$out" "--ci"
+else
+    printf 'skip - dev --ci (needs jq)\n'
 fi
 
 if [ "$fails" -gt 0 ]; then

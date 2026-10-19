@@ -374,7 +374,8 @@ help_overview() {
     help_section "built-in verbs" "$builtins"
     help_section "local verbs" "$locals"
     help_section "global flags" "-v, --verbose	global	Print each command before it runs, and export VERBOSE=1 to it
--vv	global	Also trace every line of dev and of each bash script it runs, VERBOSE=2"
+-vv	global	Also trace every line of dev and of each bash script it runs, VERBOSE=2
+--ci	global	Run the verb's job from .ci/pipeline.lua on example-box through ci, DEV_CI=1"
 
     # shellcheck disable=SC2016  # the backticks are literal help text
     printf '\nRun `dev help <verb>` for flags, the script header and the command a verb runs.\n'
@@ -411,7 +412,7 @@ help_verb() {
     fi
 
     # shellcheck disable=SC2016  # the backticks are literal help text
-    printf '\n-v and -vv work anywhere on the line for every verb, see `dev help`.\n'
+    printf '\n-v, -vv and --ci work anywhere on the line, see `dev help`.\n'
 }
 
 cmd_deploy() {
@@ -1192,26 +1193,36 @@ put_style_guide() {
     created "docs/STYLE.md"
 }
 
-# emit_pipeline <type> <toolchain>
+# emit_pipeline <type>
 emit_pipeline() {
     local body
     if [ "$1" = rust ]; then
         read -r -d '' body <<'LUA' || true
--- Check the project on a linux container with .dev/lint.sh, then .dev/test.sh
+-- Lint and test on a linux container with .dev/lint.sh and .dev/test.sh
 --
 --   ci run --local
+--   ci run --local --job test
 
--- Install the project's pinned channel, which the runner image usually bakes in
-local TOOLCHAIN = "@TOOLCHAIN@"
+-- Run the lint and test jobs on an image that bakes the toolchain
+local LINUX = { os = "linux-ct", image = "rust-runner-ct" }
+
+local function toolchain()
+  local file = assert(io.open("rust-toolchain.toml"), "rust-toolchain.toml is missing")
+  local text = file:read("*a")
+  file:close()
+  return assert(text:match('channel%s*=%s*"([^"]+)"'), "rust-toolchain.toml names no channel")
+end
 
 -- Prefix cargo's directory on every command, since each ci.sh gets a fresh shell
 local function run(command)
   return ci.sh("export PATH=$HOME/.cargo/bin:$PATH; " .. command)
 end
 
+-- Install the project's pinned channel, which the runner image usually bakes in
 local function install_rust()
-  ci.group("install rust " .. TOOLCHAIN, function()
-    run("rustup toolchain install " .. TOOLCHAIN .. " --component clippy,rustfmt")
+  local channel = toolchain()
+  ci.group("install rust " .. channel, function()
+    run("rustup toolchain install " .. channel .. " --component clippy,rustfmt")
     run("rustup toolchain install nightly --profile minimal --component rustfmt")
     run("command -v cargo-nextest >/dev/null || { mkdir -p $HOME/.cargo/bin && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C $HOME/.cargo/bin; }")
   end)
@@ -1219,11 +1230,17 @@ end
 
 return {
   jobs = {
-    check = {
-      matrix = { { os = "linux-ct", image = "rust-runner-ct" } },
+    lint = {
+      matrix = { LINUX },
       run = function()
         install_rust()
         run(".dev/lint.sh")
+      end,
+    },
+    test = {
+      matrix = { LINUX },
+      run = function()
+        install_rust()
         run(".dev/test.sh")
       end,
     },
@@ -1232,16 +1249,24 @@ return {
 LUA
     else
         read -r -d '' body <<'LUA' || true
--- Check the project on a linux container with .dev/lint.sh and .dev/test.sh when present
+-- Lint and test on a linux container with .dev/lint.sh and .dev/test.sh when present
 --
 --   ci run --local
+--   ci run --local --job test
+
+local LINUX = { os = "linux-ct" }
 
 return {
   jobs = {
-    check = {
-      matrix = { { os = "linux-ct" } },
+    lint = {
+      matrix = { LINUX },
       run = function()
         ci.sh("if [ -x .dev/lint.sh ]; then .dev/lint.sh; fi")
+      end,
+    },
+    test = {
+      matrix = { LINUX },
+      run = function()
         ci.sh("if [ -x .dev/test.sh ]; then .dev/test.sh; fi")
       end,
     },
@@ -1249,7 +1274,7 @@ return {
 }
 LUA
     fi
-    printf '%s\n' "${body/@TOOLCHAIN@/$2}"
+    printf '%s\n' "$body"
 }
 
 # emit_workflow <trunk>
@@ -1465,7 +1490,7 @@ cmd_init() {
 
     # CI pipeline
     channel=$(channel_for_project)
-    put_generated .ci/pipeline.lua emit_pipeline "$type" "$channel"
+    put_generated .ci/pipeline.lua emit_pipeline "$type"
 
     # GitHub workflow
     if [ "$public" -eq 1 ]; then
@@ -1507,8 +1532,38 @@ cmd_init() {
     fi
 }
 
+CI_LOCAL_VERBS=" install uninstall restow sync setup fmt help init push pull "
+
+# ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.
+ci_enabled() {
+    case "$1" in
+    "" | 0 | no | false) return 1 ;;
+    *) return 0 ;;
+    esac
+}
+
+# cmd_ci <verb> [args...]: run the verb's job from .ci/pipeline.lua on the fleet and exit with its status.
+cmd_ci() {
+    local verb=$1
+    case "$verb" in -h | --help) verb=help ;; esac
+    case "$CI_LOCAL_VERBS" in
+    *" $verb "*) usage_error "$verb" "--ci cannot run this verb, it works on this machine" ;;
+    esac
+    [[ "$verb" =~ ^[A-Za-z0-9_-]+$ ]] || usage_error "$verb" "--ci needs a job name, not $verb"
+    [ "$#" -le 1 ] || usage_error "$verb" "--ci passes no arguments to the job, got $2"
+    need ci "dev install from the ci repo"
+    need jq "brew install jq"
+    if ! ci -C "$ROOT" jobs pipeline --json 2>/dev/null |
+        jq -e --arg v "$verb" '.jobs[] | select(.name == $v)' >/dev/null 2>&1; then
+        die "no job named $verb in .ci/pipeline.lua, add one to run it with --ci"
+    fi
+    cd "$ROOT"
+    show ci run pipeline --local --job "$verb" -f
+    exec ci run pipeline --local --job "$verb" -f
+}
+
 main() {
-    local verb type trace handler count=0
+    local verb type trace handler count=0 use_ci=0
     local -a args=()
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -1518,6 +1573,7 @@ main() {
             break
             ;;
         --verbose) count=$((count + 1)) ;;
+        --ci) use_ci=1 ;;
         -v*)
             if [[ "$1" =~ ^-v+$ ]]; then
                 count=$((count + ${#1} - 1))
@@ -1530,6 +1586,7 @@ main() {
         shift
     done
     set -- ${args[@]+"${args[@]}"}
+    if ci_enabled "${DEV_CI:-}"; then use_ci=1; fi
     if [ "$count" -gt 0 ]; then
         VERBOSE=$(verbose_level "$count")
     else
@@ -1565,10 +1622,13 @@ main() {
         ;;
     __flags)
         verb_flags "${1:-}"
-        printf '%s\n' -v --verbose -vv
+        printf '%s\n' -v --verbose -vv --ci
         return 0
         ;;
     esac
+    if [ "$use_ci" -eq 1 ]; then
+        cmd_ci "$verb" "$@"
+    fi
     case " $VERBS " in
     *" $verb "*) ;;
     *)
