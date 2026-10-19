@@ -139,6 +139,8 @@ else
     out="$(style_lint "$rust" "$full_path" CARGO_LOG="$calls")"
     assert_contains "the debug clippy pass always runs" "$(cat "$calls")" "clippy --all-targets --all-features -- -D warnings"
     assert_not_contains "a project without debug_assertions gets no release clippy pass" "$(cat "$calls")" "--release"
+    assert_contains "cargo deny checks every section and only warns on unmaintained" "$(cat "$calls")" "deny check -W unmaintained"
+    assert_not_contains "cargo deny is not limited to the bans section" "$(cat "$calls")" "deny check bans"
     printf '#[cfg(not(debug_assertions))]\nfn release_only() {}\n' >"$rust/src/release.rs"
     : >"$calls"
     out="$(style_lint "$rust" "$full_path" CARGO_LOG="$calls")"
