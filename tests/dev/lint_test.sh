@@ -163,6 +163,38 @@ else
     assert_not_contains "a blank line before a comment between match arms passes" "$out" "src/chain.rs"
     rm "$rust/src/chain.rs"
 
+    mkdir -p "$rust/.dev/evidence"
+    printf 'pub fn names(map: &mut Map) {\n    map.entries\n        .remove(&name);\n    // Drop the stale entry\n    map.flush();\n}\n' >"$rust/.dev/evidence/old.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a violation under .dev/evidence fails with no lint-ignore" "$out" ".dev/evidence/old.rs:4: full-line comment directly after code"
+    printf '# Snapshots of old code\n\n.dev/evidence/**\n' >"$rust/.dev/lint-ignore"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a path matched by lint-ignore is not linted, comments and blank lines skipped" "$out" ".dev/evidence/old.rs"
+    printf '# Snapshots of old code\n\nother/**\n' >"$rust/.dev/lint-ignore"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "the file is linted again once its pattern is removed" "$out" ".dev/evidence/old.rs:4: full-line comment directly after code"
+    rm "$rust/.dev/lint-ignore"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_contains "a missing lint-ignore changes nothing" "$out" ".dev/evidence/old.rs:4: full-line comment directly after code"
+
+    gitfix="$TMP/gitfix"
+    mkdir -p "$gitfix/.dev/evidence" "$gitfix/src"
+    : >"$gitfix/.dev/evidence/old.rs"
+    : >"$gitfix/src/new.rs"
+    git -C "$gitfix" init -q
+    printf '# comment\n\n.dev/evidence/**\n' >"$gitfix/.dev/lint-ignore"
+
+    # shellcheck disable=SC1091  # the library path is only known at run time
+    out="$(cd "$gitfix" && . "$TMP/lint-lib.sh" && lint_files '*.rs' | sort)"
+    assert_eq "the git walk leaves lint-ignore paths out" "$out" "src/new.rs"
+    rm "$gitfix/.dev/lint-ignore"
+
+    # shellcheck disable=SC1091  # the library path is only known at run time
+    out="$(cd "$gitfix" && . "$TMP/lint-lib.sh" && lint_files '*.rs' | sort)"
+    assert_eq "the git walk keeps every path without a lint-ignore" "$out" ".dev/evidence/old.rs
+src/new.rs"
+    rm -rf "$rust/.dev"
+
     printf 'use std::io;\n#[cfg(windows)]\nuse std::os::windows::process::CommandExt;\nuse std::process::Command;\n' >"$rust/src/gated.rs"
     out="$(style_lint "$rust" "$full_path")"
     assert_contains "a top-level cfg-gated use fails" "$out" "src/gated.rs:2: a #[cfg]-gated use sits at the top level of the file"

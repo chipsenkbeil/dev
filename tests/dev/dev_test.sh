@@ -336,6 +336,10 @@ assert_contains "sync --check reports a drifted file" "$out" "differs: clippy.to
 assert_contains "sync --check reports a missing file" "$out" "missing: deny.toml"
 assert_contains "sync --check reports the missing shared lint library" "$out" "missing: .dev/lint-lib.sh"
 assert_not_contains "sync --check ignores a matching file" "$out" "rustfmt.toml"
+mkdir -p "$sync/.dev"
+printf '.dev/evidence/**\n' >"$sync/.dev/lint-ignore"
+out="$(run_dev "$sync" sync --check)"
+assert_not_contains "sync --check leaves a project-owned lint-ignore alone" "$out" "lint-ignore"
 out="$(run_dev "$sync" sync 2>&1 </dev/null)"
 assert_contains "sync refuses without a terminal" "$out" "needs a terminal"
 assert_contains "the sync refusal names --yes" "$out" "pass --yes to apply without asking"
@@ -376,6 +380,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init points ast-grep at the root sgconfig.yml" "$(cat "$init/.dev/lint.sh")" "--config sgconfig.yml"
     assert_contains "init copies the shared lint library" "$out" "created: .dev/lint-lib.sh"
     assert_eq "init writes the shared lint library" "$([ -f "$init/.dev/lint-lib.sh" ] && echo yes)" "yes"
+    assert_eq "init does not create .dev/lint-ignore" "$([ -e "$init/.dev/lint-ignore" ] && echo yes)" ""
 
     # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
     assert_contains "init sources the lint library from beside the lint script" "$(cat "$init/.dev/lint.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
