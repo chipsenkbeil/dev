@@ -8,8 +8,30 @@
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# shellcheck source=../scripts/helpers.sh
+source "$ROOT/scripts/helpers.sh"
+
+VERB="$(basename "$0" .sh)"
+
+# ARGS and PKGS are read by the scripts that source this file.
+# shellcheck disable=SC2034
+# split_vars <args...>: export each NAME=value argument (the form `dev sync
+# SYNC_DST=host` takes) and leave the rest in ARGS.
+split_vars() {
+    ARGS=()
+    local a
+    for a in "$@"; do
+        case "$a" in
+        [[:upper:]]*=*) export "${a?}" ;;
+        *) ARGS+=("$a") ;;
+        esac
+    done
+}
+
+split_vars "$@"
 SRC_DIR="${SRC_DIR:-$ROOT/dotfiles}"
 TARGET_DIR="${TARGET_DIR:-$HOME}"
+export SRC_DIR TARGET_DIR
 
 STOW_WEB_BIN=https://ftp.gnu.org/gnu/stow/stow-2.4.1.tar.gz
 STOW_ARCHIVE=stow.tar.gz
@@ -26,12 +48,27 @@ die() {
     exit 1
 }
 
+usage_error() {
+    printf 'dev %s: %s\n' "$VERB" "$*" >&2
+    exit 2
+}
+
+no_args() {
+    local a
+    for a in ${ARGS[@]+"${ARGS[@]}"}; do
+        case "$a" in
+        -*) usage_error "unknown flag $a" ;;
+        *) usage_error "unknown argument $a, $VERB takes only KEY=value arguments" ;;
+        esac
+    done
+}
+
 # `mail` needs no overloaded installer: the maildir and the client's notmuch
 # config are both created by `muchsync --init` at first sync, not by stow. There
 # is deliberately nothing to pre-create -- ~/mail must be EMPTY before the first
 # init, because muchsync's BUGS section is explicit that a replica built by
 # another tool produces artifacts including deleted files reappearing.
-DEFAULT_DEPS=(bin cargo ci claude git jj mail aide neomutt pi ripgrep scribe ssh zsh nvim tmux readline gpg ghostty lazygit)
+DEFAULT_DEPS=(bin cargo ci claude git jj mail aide neomutt pi ripgrep scribe ssh zsh nvim tmux readline gpg ghostty)
 if [ "$HOST_OS" = Darwin ]; then
     DEFAULT_DEPS+=(antinote hammerspoon)
 fi
@@ -42,26 +79,22 @@ done < <(printf '%s\n' "${DEFAULT_DEPS[@]}" | LC_ALL=C sort -u)
 DEFAULT_DEPS=("${_sorted[@]}")
 unset _sorted _dep
 
-# ARGS and PKGS are read by the scripts that source this file.
-# shellcheck disable=SC2034
-# split_vars <args...>: export each NAME=value argument (the form `dev sync
-# SYNC_DST=host` takes) and leave the rest in ARGS.
-split_vars() {
-    ARGS=()
-    local a
-    for a in "$@"; do
-        case "$a" in
-        [A-Z]*=*) export "${a?}" ;;
-        *) ARGS+=("$a") ;;
-        esac
-    done
-}
-
-# set_pkgs <pkg...>: PKGS becomes the arguments, or DEFAULT_DEPS when none.
+# set_pkgs: PKGS becomes the package names left in ARGS, or DEFAULT_DEPS when
+# there are none. A flag, or a name with no directory under SRC_DIR, is a usage
+# error.
 # shellcheck disable=SC2034  # PKGS is read by the scripts that source this file
 set_pkgs() {
-    if [ "$#" -gt 0 ]; then
-        PKGS=("$@")
+    local pkg
+    for pkg in ${ARGS[@]+"${ARGS[@]}"}; do
+        case "$pkg" in
+        -*) usage_error "unknown flag $pkg" ;;
+        "" | */* | . | ..) ;;
+        *) [ ! -d "$SRC_DIR/$pkg" ] || continue ;;
+        esac
+        usage_error "no package $pkg in $SRC_DIR"
+    done
+    if [ "${#ARGS[@]}" -gt 0 ]; then
+        PKGS=("${ARGS[@]}")
     else
         PKGS=("${DEFAULT_DEPS[@]}")
     fi
@@ -112,8 +145,6 @@ install_pkg() {
     local pkg=$1
     ensure_stow
     case "$pkg" in
-    work) install_work ;;
-    lazygit) install_lazygit ;;
     gpg) install_gpg ;;
     ssh) install_ssh ;;
     antinote) install_antinote ;;
@@ -188,28 +219,6 @@ purge_pkg() {
     printf 'DONE\n'
 }
 
-# Overloaded installer to ensure no conflicts: work replaces git, so git is
-# uninstalled first.
-install_work() {
-    uninstall_pkg git
-    printf '> Installing work... '
-    stow_pkg -S work
-    printf 'DONE\n'
-}
-
-# lazygit reads ~/Library/Application Support on macOS, so symlink the stowed
-# .config there.
-install_lazygit() {
-    printf '> Installing lazygit... '
-    stow_pkg -S lazygit
-    printf 'DONE\n'
-    if [ "$HOST_OS" = Darwin ]; then
-        printf '> Symlinking lazygit Unix config -> MacOS config\n'
-        mkdir -p "$TARGET_DIR/Library/Application Support/lazygit"
-        ln -sf "$TARGET_DIR/.config/lazygit/config.yml" "$TARGET_DIR/Library/Application Support/lazygit/config.yml"
-    fi
-}
-
 # Keep ~/.gnupg a real 0700 dir so only the configs are symlinked (keyring and
 # runtime files stay out of the repo).
 install_gpg() {
@@ -243,6 +252,10 @@ install_antinote() {
     printf '> Installing antinote... '
     stow_pkg -S antinote
     printf 'DONE\n'
+    if [ "$(cd "$TARGET_DIR" && pwd -P)" != "$(cd "$HOME" && pwd -P)" ]; then
+        printf '> Skipping the Antinote settings import, which writes the real prefs domain and not TARGET_DIR %s\n' "$TARGET_DIR"
+        return 0
+    fi
     bash scripts/antinote.sh import --skip-if-running
 }
 

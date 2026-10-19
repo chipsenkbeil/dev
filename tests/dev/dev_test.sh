@@ -150,6 +150,7 @@ printf '#!/usr/bin/env bash\necho "sync override $*"\n' >"$rust/.dev/sync.sh"
 chmod +x "$rust/.dev/sync.sh"
 out="$(run_dev "$rust" sync SYNC_DST=host)"
 assert_eq "local sync.sh wins over the template sync" "$out" "sync override SYNC_DST=host"
+assert_eq "an overridden sync without a flags line offers no flags" "$(run_dev "$rust" __flags sync | grep -c '^--check$')" "0"
 rm "$rust/.dev/sync.sh"
 
 printf '#!/usr/bin/env bash\necho "init override $*"\n' >"$rust/.dev/init.sh"
@@ -213,6 +214,41 @@ assert_eq "verbose_printf prints for VERBOSE=yes" "$(
 # Usage
 run_dev "$rust" bogus >/dev/null 2>&1
 assert_eq "unknown verb exits 2" "$?" "2"
+out="$(run_dev "$rust" help nosuch 2>&1)"
+assert_eq "help of an unknown verb exits 2" "$?" "2"
+assert_contains "help names the unknown verb" "$out" "dev help: unknown verb nosuch"
+
+BOUNDED_TIMEOUT_SECS=10
+bounded_dev() {
+    local dir=$1 pid _
+    shift
+    (cd "$dir" && PATH="$STUBS:$PATH" exec "$DEV" "$@") >"$TMP/bounded.out" 2>&1 &
+    pid=$!
+    for _ in $(seq "$BOUNDED_TIMEOUT_SECS"); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill "$pid"
+        wait "$pid" 2>/dev/null
+        BOUNDED_RC=hung
+    else
+        wait "$pid"
+        BOUNDED_RC=$?
+    fi
+    BOUNDED_OUT=$(cat "$TMP/bounded.out")
+}
+bounded_dev "$rust" init --type
+assert_eq "init --type with no value exits 2" "$BOUNDED_RC" "2"
+assert_contains "init names the --type with no value" "$BOUNDED_OUT" "dev init: --type needs a value"
+bounded_dev "$rust" init --name
+assert_eq "init --name with no value exits 2" "$BOUNDED_RC" "2"
+assert_contains "init names the --name with no value" "$BOUNDED_OUT" "dev init: --name needs a value"
+out="$(run_dev "$rust" init --bogus 2>&1)"
+assert_eq "init with an unknown flag exits 2" "$?" "2"
+assert_contains "init names the unknown flag" "$out" "dev init: unknown flag --bogus"
+out="$(run_dev "$rust" init --type cobol 2>&1)"
+assert_eq "init with an unknown type exits 2" "$?" "2"
 out="$(run_dev "$rust")"
 assert_eq "no verb exits 0" "$?" "0"
 assert_contains "bare dev names the project type" "$out" "project rust"
@@ -294,6 +330,16 @@ assert_contains "sync refuses without a terminal" "$out" "needs a terminal"
 assert_contains "the sync refusal names --yes" "$out" "pass --yes to apply without asking"
 run_dev "$sync" sync --yes --check >/dev/null 2>&1
 assert_eq "sync --yes --check exits 2" "$?" "2"
+out="$(run_dev "$sync" sync --bogus 2>&1)"
+assert_eq "sync with an unknown flag exits 2" "$?" "2"
+assert_contains "sync names the unknown flag" "$out" "dev sync: unknown flag --bogus"
+if [ -x /usr/bin/yq ] || [ -x /bin/yq ]; then
+    printf 'skip - rust sync without yq (yq is in /usr/bin or /bin)\n'
+else
+    out="$(cd "$sync" && env PATH="$STUBS:/usr/bin:/bin" bash "$DEV" sync --check 2>&1)"
+    assert_eq "rust sync without yq exits 1" "$?" "1"
+    assert_contains "rust sync without yq names it" "$out" "yq not found"
+fi
 
 # init
 if command -v jj >/dev/null 2>&1; then
@@ -402,6 +448,8 @@ if command -v jj >/dev/null 2>&1; then
         assert_eq "installed lint.sh exits 1 on a violation" "$?" "1"
         assert_contains "installed lint.sh names the ast-grep rule" "$out" "error[comment-period]"
         assert_contains "installed lint.sh lists the failed check" "$out" "FAILED: ast-grep scan"
+    else
+        printf 'skip - installed lua lint.sh on a love2d project (needs stylua, selene and ast-grep)\n'
     fi
 
     # Plain lua gets the same set with the luajit std and no love.yml
@@ -417,6 +465,8 @@ if command -v jj >/dev/null 2>&1; then
     assert_eq "lua init ships luajit.yml" "$([ -f "$lib/luajit.yml" ] && echo yes)" "yes"
     out="$(run_dev "$lib" sync --check)"
     assert_eq "lua sync --check is clean after init" "$out" "up to date"
+else
+    printf 'skip - rust, love2d and lua init (needs jj)\n'
 fi
 
 # Library register: the doc lints go to crates without publish = false
@@ -477,6 +527,8 @@ if command -v script >/dev/null 2>&1; then
     assert_contains "sync asks on a terminal" "$(cat "$TMP/sync.out")" "[y/N]"
     out="$(run_dev "$reg" sync --check)"
     assert_eq "sync on a terminal applies a y answer" "$out" "up to date"
+else
+    printf 'skip - sync on a terminal (needs script)\n'
 fi
 
 wtmain="$(project wtmain)"
@@ -496,6 +548,8 @@ if ! PATH=/usr/bin:/bin command -v jj >/dev/null 2>&1; then
     assert_contains "init without jj skips jj and says why" "$out" "skipped: .jj (jj not installed, git only)"
     assert_contains "init without jj prints the git remote command" "$out" "run: git remote add origin hub:nojj"
     assert_eq "init without jj creates no .jj" "$([ -e "$nojj/.jj" ] || echo absent)" "absent"
+else
+    printf 'skip - init without jj (jj is in /usr/bin or /bin)\n'
 fi
 
 # gitc <args...>: git with a fixed identity and no signing.
@@ -517,6 +571,22 @@ assert_contains "git push names the remote and branch" "$out" "origin: pushed ma
 assert_contains "git push -v shows the guarded command" "$out" "commit-guard push -- origin $(git -C "$gp" rev-parse HEAD):refs/heads/main"
 assert_eq "git push puts the commit on the remote" "$(git -C "$gremote" rev-parse main)" "$(git -C "$gp" rev-parse HEAD)"
 clean="$(git -C "$gp" rev-parse HEAD)"
+git init -q --bare -b main "$TMP/gerrit.git"
+git -C "$gp" remote add gerrit "$TMP/gerrit.git"
+out="$(run_dev "$gp" push gerrit 2>&1)"
+assert_eq "push gerrit exits 0" "$?" "0"
+assert_contains "push gerrit pushes to gerrit" "$out" "gerrit: pushed main"
+assert_not_contains "push gerrit leaves origin alone" "$out" "origin:"
+git -C "$gp" remote remove gerrit
+out="$(run_dev "$gp" push nosuch 2>&1)"
+assert_eq "push to a remote the project lacks exits 2" "$?" "2"
+assert_contains "push names the missing remote" "$out" "no remote nosuch"
+out="$(run_dev "$gp" push --force 2>&1)"
+assert_eq "push with an unknown flag exits 2" "$?" "2"
+assert_contains "push names the unknown flag" "$out" "dev push: unknown flag --force"
+out="$(run_dev "$gp" pull extra 2>&1)"
+assert_eq "pull with an argument exits 2" "$?" "2"
+assert_contains "pull names the argument" "$out" "dev pull: unknown argument extra"
 
 echo b >"$gp/b"
 git -C "$gp" add b
@@ -589,6 +659,8 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "jj push without a trunk bookmark explains" "$out" "no master or main bookmark"
     assert_contains "help push gives the same reason push dies with" "$help_out" "(none: ${out#dev: })"
     unset JJ_CONFIG
+else
+    printf 'skip - jj pull and jj push (needs jj)\n'
 fi
 
 if [ "$fails" -gt 0 ]; then

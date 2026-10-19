@@ -26,6 +26,23 @@ die() {
     exit 1
 }
 
+usage_error() {
+    printf 'dev %s: %s\n' "$1" "${*:2}" >&2
+    exit 2
+}
+
+bad_arg() {
+    local kind=argument
+    case "$2" in -*) kind=flag ;; esac
+    printf 'dev %s: unknown %s %s\n\n' "$1" "$kind" "$2" >&2
+    usage >&2
+    exit 2
+}
+
+no_more_args() {
+    [ "$#" -le 1 ] || bad_arg "$1" "$2"
+}
+
 # need <binary> <install command>: one WARNING and exit 1 when the binary is missing.
 need() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -119,7 +136,7 @@ builtin_desc() {
     build) echo "Build the project" ;;
     run) echo "Run the project" ;;
     deploy) echo "Deploy the project (needs .dev/deploy.sh)" ;;
-    push) echo "Push the trunk bookmark (jj) or the current branch (git) to origin and gerrit" ;;
+    push) echo "Push the trunk bookmark (jj) or the current branch (git) to origin and gerrit, or to the remotes named" ;;
     pull) echo "Fetch the remote and rebase local work onto it" ;;
     sync) echo "Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates" ;;
     init) echo "Seed a project with lint, CI and remotes" ;;
@@ -184,12 +201,9 @@ verbs_table() {
 
 # verb_flags <verb>: the flags a verb accepts, one per line.
 verb_flags() {
-    local script="$ROOT/.dev/$1.sh" flags=""
+    local script="$ROOT/.dev/$1.sh"
     if [ -x "$script" ]; then
-        flags=$(script_flags "$script")
-    fi
-    if [ -n "$flags" ]; then
-        printf '%s\n' "$flags"
+        script_flags "$script"
         return
     fi
     case "$1" in
@@ -343,7 +357,7 @@ usage() {
 
 help_verb() {
     local verb=$1 script="$ROOT/.dev/$1.sh" row origin desc flags type
-    is_verb "$verb" || die "unknown verb $verb"
+    is_verb "$verb" || usage_error help "unknown verb $verb"
     set_colors 1
     row=$(verbs_table | awk -F'\t' -v v="$verb" '$1 == v')
     origin=$(printf '%s\n' "$row" | cut -f2)
@@ -588,9 +602,22 @@ push_cmd() {
 }
 
 cmd_push() {
-    local remote out rc status=0
+    local remote out rc status=0 remotes
+    for remote in "$@"; do
+        case "$remote" in -*) bad_arg push "$remote" ;; esac
+    done
     push_resolve || die "$PUSH_ERROR"
-    for remote in $PUSH_REMOTES; do
+    remotes=$PUSH_REMOTES
+    if [ "$#" -gt 0 ]; then
+        remotes=""
+        for remote in "$@"; do
+            case " $PUSH_REMOTES" in
+            *" $remote "*) remotes+="$remote " ;;
+            *) usage_error push "no remote $remote to push to, the project has: $PUSH_REMOTES" ;;
+            esac
+        done
+    fi
+    for remote in $remotes; do
         push_cmd "$remote"
         show "${PUSH_CMD[@]}"
         out=$(cd "$ROOT" && "${PUSH_CMD[@]}" 2>&1) && rc=0 || rc=$?
@@ -647,6 +674,7 @@ pull_cmd() {
 
 cmd_pull() {
     local step=1
+    no_more_args pull "$@"
     pull_resolve || die "$PULL_ERROR"
     while pull_cmd "$step"; do
         run_cmd "${PULL_CMD[@]}"
@@ -909,10 +937,7 @@ cmd_sync() {
         case "$1" in
         --check) check=1 ;;
         -y | --yes) yes=1 ;;
-        *)
-            usage >&2
-            exit 2
-            ;;
+        *) bad_arg sync "$1" ;;
         esac
         shift
     done
@@ -928,6 +953,9 @@ cmd_sync() {
     fi
     PROJECT_TYPE=$type
     t=$(templates_dir "$type")
+    if [ -f "$ROOT/Cargo.toml" ]; then
+        need yq "brew install yq"
+    fi
     channel=$(channel_for_project)
     SYNC_TMP=$(mktemp -d)
     tmp=$SYNC_TMP
@@ -1334,12 +1362,14 @@ cmd_init() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
         --type)
-            type=${2:-}
-            shift 2 || true
+            [ "$#" -ge 2 ] || usage_error init "--type needs a value"
+            type=$2
+            shift 2
             ;;
         --name)
-            name=${2:-}
-            shift 2 || true
+            [ "$#" -ge 2 ] || usage_error init "--name needs a value"
+            name=$2
+            shift 2
             ;;
         --public)
             public=1
@@ -1353,17 +1383,17 @@ cmd_init() {
             gerrit=0
             shift
             ;;
-        *)
-            usage >&2
-            exit 2
-            ;;
+        *) bad_arg init "$1" ;;
         esac
     done
     case "$type" in
     "") type=$(detect_type) ;;
     rust | love2d | lua | godot | node) ;;
-    *) die "--type takes rust, love2d, lua, godot or node" ;;
+    *) usage_error init "--type takes rust, love2d, lua, godot or node" ;;
     esac
+    if [ "$type" = rust ] && [ -f "$ROOT/Cargo.toml" ]; then
+        need yq "brew install yq"
+    fi
     PROJECT_TYPE=$type
     : "${name:=$(basename "$ROOT")}"
     printf 'init %s: type %s, public %s, dry run %s\n' "$name" "$type" "$public" "$DRY"
@@ -1559,11 +1589,11 @@ main() {
         return
     fi
     if [ "$verb" = push ]; then
-        cmd_push
+        cmd_push "$@"
         return
     fi
     if [ "$verb" = pull ]; then
-        cmd_pull
+        cmd_pull "$@"
         return
     fi
     if [ "$verb" = deploy ]; then

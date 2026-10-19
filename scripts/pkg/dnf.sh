@@ -48,6 +48,7 @@ pkg_status() {
         return 0
     fi
     printf '[ ] %s\n' "$name"
+    return 1
 }
 
 # pkg_install <name> <binary> <package> <channel> <repo> <dry_run>

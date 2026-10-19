@@ -3,7 +3,10 @@
 # Exit non-zero when any of them reports a finding.
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+no_args
 
 ROOTS=(bootstrap.sh scripts tests .dev dotfiles/bin dotfiles/jj/.config/jj/scripts)
 

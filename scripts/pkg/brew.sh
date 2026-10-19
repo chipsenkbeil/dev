@@ -44,6 +44,7 @@ pkg_status() {
         fi
     fi
     printf '[ ] %s\n' "$name"
+    return 1
 }
 
 # _brew_cask_app <cask> -> prints the .app bundle name a cask installs (or nothing).

@@ -9,7 +9,8 @@ REPO="$(cd "$DIR/../.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/.dev" "$TMP/scripts" "$TMP/tests" "$TMP/dotfiles/bin" "$TMP/dotfiles/jj/.config/jj/scripts"
-cp "$REPO/.dev/lint.sh" "$TMP/.dev/lint.sh"
+cp "$REPO/.dev/lint.sh" "$REPO/.dev/lib.sh" "$TMP/.dev/"
+cp "$REPO/scripts/helpers.sh" "$TMP/scripts/helpers.sh"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n    echo ok\nfi\n' >"$TMP/scripts/clean.sh"
 
 fails=0

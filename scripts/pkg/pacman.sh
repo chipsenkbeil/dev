@@ -50,6 +50,7 @@ pkg_status() {
         return 0
     fi
     printf '[ ] %s\n' "$name"
+    return 1
 }
 
 # _aur_teardown

@@ -45,11 +45,19 @@ usage() {
 # so they see the global directly.
 PKG_LOG_FILE=""
 
+need_value() {
+    if [ $# -lt 2 ]; then
+        printf '%s needs a value\n' "$1" >&2
+        return 1
+    fi
+}
+
 cmd_check() {
     local manifest="$MANIFEST"
     while [ $# -gt 0 ]; do
         case "$1" in
         --manifest)
+            need_value "$@" || return 2
             manifest="$2"
             shift 2
             ;;
@@ -92,7 +100,7 @@ cmd_check() {
 
     [ -n "$rows" ] || return 0
 
-    local name binary cell parsed effbin
+    local name binary cell parsed effbin missing=0
 
     # Safe: manifest_rows' first field (name) is never empty, so the leading-empty
     # -field collapse that breaks cell parsing cannot occur here.
@@ -100,8 +108,9 @@ cmd_check() {
         parsed="$(parse_cell "$cell")" || continue
         split_cell "$parsed"
         effbin="$(resolve_binary "$binary" "$PC_BIN")"
-        pkg_status "$name" "$effbin" "$PC_PACKAGE" "$PC_CHANNEL"
+        pkg_status "$name" "$effbin" "$PC_PACKAGE" "$PC_CHANNEL" || missing=1
     done <<<"$rows"
+    return "$missing"
 }
 
 cmd_install() {
@@ -110,6 +119,7 @@ cmd_install() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --manifest)
+            need_value "$@" || return 2
             manifest="$2"
             shift 2
             ;;
@@ -118,6 +128,8 @@ cmd_install() {
             shift
             ;;
         --log-file)
+            need_value "$@" || return 2
+
             # shellcheck disable=SC2034  # consumed by pkg_run() in the
             # dynamically-sourced pkg/lib.sh and pkg/*.sh drivers
             PKG_LOG_FILE="$2"
@@ -156,6 +168,12 @@ cmd_install() {
     [ -n "$rows" ] || return 0
 
     local name binary cell parsed channel pkg repo binover effbin handler
+    for name in ${names[@]+"${names[@]}"}; do
+        if ! printf '%s\n' "$rows" | cut -f1 | grep -Fxq -- "$name"; then
+            printf 'unknown tool: %s\n' "$name" >&2
+            return 2
+        fi
+    done
 
     # Safe: manifest_rows' first field (name) is never empty, so the leading-empty
     # -field collapse that breaks cell parsing cannot occur here.

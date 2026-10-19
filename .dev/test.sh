@@ -4,7 +4,10 @@
 # neomutt scripts (only when neomutt and tmux are both on PATH).
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+no_args
 
 if ! command -v bats >/dev/null 2>&1; then
     printf 'WARNING: bats not found. Install with: brew install bats-core\n' >&2
@@ -41,6 +44,7 @@ if command -v neomutt >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
     for f in tests/neomutt/filter-bytes.sh tests/neomutt/pager-passthrough.sh; do
         run_suite "$f" bash "$f"
     done
+    run_suite tests/neomutt/parse-check.sh bash tests/neomutt/parse-check.sh dotfiles/neomutt/.config/neomutt/colors.mutt
 else
     printf 'SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)\n'
 fi

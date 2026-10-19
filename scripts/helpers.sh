@@ -27,14 +27,18 @@ print_banner() {
     printf "\n"
 }
 
-verbose_printf() {
-    case "${VERBOSE:-}" in
-    "" | 0 | no | false) ;;
-    *)
-        # shellcheck disable=SC2059  # callers pass printf format strings with \n escapes to interpret
-        printf "$@"
-        ;;
+truthy() {
+    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    "" | 0 | no | false | off) return 1 ;;
+    *) return 0 ;;
     esac
+}
+
+verbose_printf() {
+    truthy "${VERBOSE:-}" || return 0
+
+    # shellcheck disable=SC2059  # callers pass printf format strings with \n escapes to interpret
+    printf "$@"
 }
 
 is_dry_run() {
