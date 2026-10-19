@@ -15,11 +15,11 @@
 # overrides where that repo is found.
 set -euo pipefail
 
-VERBS="lint fmt test build run deploy push pull sync init help"
 TEMPLATE_BASE="dotfiles/claude/.claude/skills/style/lint"
 PROJECT_TYPE=""
-PUSH_BACKEND="" PUSH_REF="" PUSH_SHA="" PUSH_GUARD="" PUSH_REMOTES="" PUSH_ERROR=""
-PULL_BACKEND="" PULL_SYNC=0 PULL_BRANCH="" PULL_ERROR=""
+VCS_BACKEND="" VCS_ERROR=""
+PUSH_REF="" PUSH_SHA="" PUSH_GUARD="" PUSH_REMOTES="" PUSH_ERROR=""
+PULL_SYNC=0 PULL_BRANCH="" PULL_ERROR=""
 
 die() {
     printf 'dev: %s\n' "$*" >&2
@@ -113,35 +113,75 @@ repo_root() {
     pwd -P
 }
 
-# vcs_backend: jj when the repo has .jj, git when it has .git, else an error and failure.
+# vcs_backend: set VCS_BACKEND to jj when the repo has .jj, git when it has .git, else set VCS_ERROR and fail.
 vcs_backend() {
     if [ -d "$ROOT/.jj" ]; then
-        echo jj
+        VCS_BACKEND=jj
     elif [ -e "$ROOT/.git" ]; then
-        echo git
+        VCS_BACKEND=git
     else
-        printf 'dev: neither .jj nor .git found in %s\n' "$ROOT" >&2
+        VCS_BACKEND=""
+        VCS_ERROR="neither .jj nor .git found in $ROOT"
         return 1
     fi
 }
 
+# vcs_require: vcs_backend, plus jj installed when the backend is jj. Sets VCS_ERROR on failure.
+vcs_require() {
+    vcs_backend || return 1
+    if [ "$VCS_BACKEND" = jj ] && ! command -v jj >/dev/null 2>&1; then
+        VCS_ERROR="jj not found, install with: brew install jj"
+        return 1
+    fi
+}
+
+# vcs <op> [args]: an operation both backends offer, run on the backend vcs_backend set.
+# Ops: remotes, branches, remote-add NAME URL, remote-add-hint.
+vcs() {
+    local op=$1
+    shift
+    case "$VCS_BACKEND:$op" in
+    jj:remotes) jj --no-pager --color never -R "$ROOT" git remote list | awk '{print $1}' ;;
+    git:remotes) git -C "$ROOT" remote ;;
+    jj:branches) jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"' ;;
+    git:branches) git -C "$ROOT" for-each-ref --format='%(refname:short)' refs/heads ;;
+    jj:remote-add) run_cmd jj --no-pager -R "$ROOT" git remote add "$@" ;;
+    git:remote-add) run_cmd git -C "$ROOT" remote add "$@" ;;
+    jj:remote-add-hint) echo "jj git remote add" ;;
+    git:remote-add-hint) echo "git remote add" ;;
+    esac
+}
+
 # --- help ---
 
-# builtin_desc <verb>: the fixed one-line description of a built-in verb.
+# builtin_table: one row per built-in verb, "name|handler|flags|usage|description".
+# The handler runs when no .dev script overrides the verb, and is empty for a verb that
+# runs the project type's builtin_<type>. Usage is the fixed command line `dev help <verb>` shows.
+builtin_table() {
+    cat <<'TABLE'
+lint||||Check style and formatting for the project type
+fmt||||Format the source for the project type
+test||||Run the project's tests
+build||||Build the project
+run||||Run the project
+deploy|cmd_deploy||(none: add .dev/deploy.sh)|Deploy the project (needs .dev/deploy.sh)
+push|cmd_push|||Push the trunk bookmark (jj) or the current branch (git) to origin and gerrit, or to the remotes named
+pull|cmd_pull|||Fetch the remote and rebase local work onto it
+sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
+init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]|Seed a project with lint, CI and remotes
+help|cmd_help||dev help [verb]|Show this table, or the details of one verb
+TABLE
+}
+
+VERBS=$(builtin_table | cut -d'|' -f1 | tr '\n' ' ')
+
+# builtin_field <verb> <column>: that column of the verb's row, 2 handler, 3 flags, 4 usage, 5 description.
+builtin_field() {
+    builtin_table | awk -F'|' -v v="$1" -v n="$2" '$1 == v { print $n }'
+}
+
 builtin_desc() {
-    case "$1" in
-    lint) echo "Check style and formatting for the project type" ;;
-    fmt) echo "Format the source for the project type" ;;
-    test) echo "Run the project's tests" ;;
-    build) echo "Build the project" ;;
-    run) echo "Run the project" ;;
-    deploy) echo "Deploy the project (needs .dev/deploy.sh)" ;;
-    push) echo "Push the trunk bookmark (jj) or the current branch (git) to origin and gerrit, or to the remotes named" ;;
-    pull) echo "Fetch the remote and rebase local work onto it" ;;
-    sync) echo "Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates" ;;
-    init) echo "Seed a project with lint, CI and remotes" ;;
-    help) echo "Show this table, or the details of one verb" ;;
-    esac
+    builtin_field "$1" 5
 }
 
 # script_desc <script>: the first comment line after the shebang, without "# ".
@@ -206,10 +246,7 @@ verb_flags() {
         script_flags "$script"
         return
     fi
-    case "$1" in
-    init) printf '%s\n' --type --public --name --dry-run --no-gerrit ;;
-    sync) printf '%s\n' --check --yes -y ;;
-    esac
+    builtin_field "$1" 3 | tr ' ' '\n' | grep -v '^$' || true
 }
 
 # is_verb <name>: true for a built-in or a script in .dev/.
@@ -224,20 +261,13 @@ has_make_target() {
 
 # builtin_commands <verb> <type>: the command lines the built-in runs, one per line.
 builtin_commands() {
-    local verb=$1 type=$2 remote step
+    local verb=$1 type=$2 remote step usage
+    usage=$(builtin_field "$verb" 4)
+    if [ -n "$usage" ]; then
+        echo "$usage"
+        return
+    fi
     case "$verb" in
-    help)
-        echo "dev help [verb]"
-        return
-        ;;
-    init)
-        echo "dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]"
-        return
-        ;;
-    deploy)
-        echo "(none: add .dev/deploy.sh)"
-        return
-        ;;
     sync)
         if lint_set_for "$type" >/dev/null; then
             echo "diff the project's lint files against $(dotfiles_root)/$TEMPLATE_BASE/$(lint_set_for "$type")"
@@ -382,6 +412,10 @@ help_verb() {
 
     # shellcheck disable=SC2016  # the backticks are literal help text
     printf '\n-v and -vv work anywhere on the line for every verb, see `dev help`.\n'
+}
+
+cmd_deploy() {
+    die "deploy has no built-in, add .dev/deploy.sh"
 }
 
 cmd_help() {
@@ -551,18 +585,14 @@ trunk_name() {
     return 1
 }
 
-# push_resolve: set PUSH_BACKEND, PUSH_REF, PUSH_SHA, PUSH_GUARD and PUSH_REMOTES, or set PUSH_ERROR and fail.
+# push_resolve: set VCS_BACKEND, PUSH_REF, PUSH_SHA, PUSH_GUARD and PUSH_REMOTES, or set PUSH_ERROR and fail.
 push_resolve() {
     local remotes remote
-    PUSH_BACKEND=$(vcs_backend 2>/dev/null) || {
-        PUSH_ERROR="neither .jj nor .git found in $ROOT"
+    vcs_require || {
+        PUSH_ERROR=$VCS_ERROR
         return 1
     }
-    if [ "$PUSH_BACKEND" = jj ]; then
-        if ! command -v jj >/dev/null 2>&1; then
-            PUSH_ERROR="jj not found, install with: brew install jj"
-            return 1
-        fi
+    if [ "$VCS_BACKEND" = jj ]; then
         PUSH_REF=$(trunk_name "$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"')") || {
             PUSH_ERROR="no master or main bookmark in $ROOT"
             return 1
@@ -594,7 +624,7 @@ push_resolve() {
 
 # push_cmd <remote>: set PUSH_CMD to the command that pushes to that remote, after push_resolve.
 push_cmd() {
-    if [ "$PUSH_BACKEND" = jj ]; then
+    if [ "$VCS_BACKEND" = jj ]; then
         PUSH_CMD=(jj --no-pager --color never -R "$ROOT" git push --remote "$1" -b "$PUSH_REF")
     else
         PUSH_CMD=("$PUSH_GUARD" push -- "$1" "$PUSH_SHA:refs/heads/$PUSH_REF")
@@ -634,17 +664,13 @@ cmd_push() {
     return "$status"
 }
 
-# pull_resolve: set PULL_BACKEND, PULL_SYNC and PULL_BRANCH, or set PULL_ERROR and fail.
+# pull_resolve: set VCS_BACKEND, PULL_SYNC and PULL_BRANCH, or set PULL_ERROR and fail.
 pull_resolve() {
-    PULL_BACKEND=$(vcs_backend 2>/dev/null) || {
-        PULL_ERROR="neither .jj nor .git found in $ROOT"
+    vcs_require || {
+        PULL_ERROR=$VCS_ERROR
         return 1
     }
-    if [ "$PULL_BACKEND" = jj ]; then
-        if ! command -v jj >/dev/null 2>&1; then
-            PULL_ERROR="jj not found, install with: brew install jj"
-            return 1
-        fi
+    if [ "$VCS_BACKEND" = jj ]; then
         PULL_SYNC=0
         if jj --no-pager -R "$ROOT" config get aliases.sync >/dev/null 2>&1; then
             PULL_SYNC=1
@@ -663,7 +689,7 @@ pull_resolve() {
 
 # pull_cmd <step>: set PULL_CMD to that step of the pull, after pull_resolve, or fail past the last step.
 pull_cmd() {
-    case "$PULL_BACKEND:$PULL_SYNC:$1" in
+    case "$VCS_BACKEND:$PULL_SYNC:$1" in
     jj:1:1) PULL_CMD=(jj --no-pager -R "$ROOT" sync) ;;
     jj:0:1) PULL_CMD=(jj --no-pager -R "$ROOT" git fetch --all-remotes) ;;
     jj:0:2) PULL_CMD=(jj --no-pager -R "$ROOT" rebase -o 'trunk()' --skip-emptied) ;;
@@ -1077,33 +1103,18 @@ human() {
 
 # remote_names: the remotes the project already has, one per line.
 remote_names() {
-    local backend
-    backend=$(vcs_backend 2>/dev/null) || return 0
-    if [ "$backend" = jj ]; then
+    vcs_backend 2>/dev/null || return 0
+    if [ "$VCS_BACKEND" = jj ]; then
         need jj "brew install jj"
-        jj --no-pager --color never -R "$ROOT" git remote list | awk '{print $1}'
-    else
-        git -C "$ROOT" remote
     fi
-}
-
-# remote_add_hint <backend>: the command a person runs to add a remote with that backend.
-remote_add_hint() {
-    if [ "$1" = jj ]; then
-        echo "jj git remote add"
-    else
-        echo "git remote add"
-    fi
+    vcs remotes
 }
 
 # init_trunk: the trunk branch name for a project, master when nothing says otherwise.
 init_trunk() {
-    local names="" backend
-    backend=$(vcs_backend 2>/dev/null) || backend=""
-    if [ "$backend" = jj ]; then
-        names=$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"' 2>/dev/null || true)
-    elif [ "$backend" = git ]; then
-        names=$(git -C "$ROOT" for-each-ref --format='%(refname:short)' refs/heads)
+    local names=""
+    if vcs_backend 2>/dev/null; then
+        names=$(vcs branches 2>/dev/null || true)
     fi
     trunk_name "$names" 2>/dev/null ||
         git -C "$ROOT" symbolic-ref --short HEAD 2>/dev/null ||
@@ -1330,7 +1341,7 @@ init_lib_attrs() {
 }
 
 init_gerrit() {
-    local name=$1 backend=$2 projects
+    local name=$1 projects
     if [ "$DRY" -eq 1 ]; then
         created "gerrit project $name (create-project when absent) and remote gerrit gr:$name"
         return
@@ -1338,7 +1349,7 @@ init_gerrit() {
     show ssh -p 29418 user@gerrit.example.com gerrit ls-projects
     if ! projects=$(ssh -p 29418 user@gerrit.example.com gerrit ls-projects 2>&1); then
         printf 'warning: gerrit ls-projects failed: %s\n' "$projects" >&2
-        human "create the Gerrit project and remote: ssh -p 29418 user@gerrit.example.com gerrit create-project $name, then $(remote_add_hint "$backend") gerrit gr:$name"
+        human "create the Gerrit project and remote: ssh -p 29418 user@gerrit.example.com gerrit create-project $name, then $(vcs remote-add-hint) gerrit gr:$name"
         return
     fi
     if printf '%s\n' "$projects" | grep -Fxq "$name"; then
@@ -1349,16 +1360,12 @@ init_gerrit() {
         human "create the Gerrit project: ssh -p 29418 user@gerrit.example.com gerrit create-project $name"
         return
     fi
-    if [ "$backend" = jj ]; then
-        run_cmd jj --no-pager -R "$ROOT" git remote add gerrit "gr:$name"
-    else
-        run_cmd git -C "$ROOT" remote add gerrit "gr:$name"
-    fi
+    vcs remote-add gerrit "gr:$name"
     created "remote gerrit gr:$name"
 }
 
 cmd_init() {
-    local type="" name="" public=0 gerrit=1 remotes t channel trunk backend
+    local type="" name="" public=0 gerrit=1 remotes t channel trunk
     while [ "$#" -gt 0 ]; do
         case "$1" in
         --type)
@@ -1400,10 +1407,10 @@ cmd_init() {
 
     # VCS
     if [ -d "$ROOT/.jj" ]; then
-        backend=jj
+        VCS_BACKEND=jj
         skipped ".jj exists"
     elif [ -f "$ROOT/.git" ]; then
-        backend=git
+        VCS_BACKEND=git
         skipped ".jj: this is a git worktree, colocate jj in the main checkout"
     else
         if [ -e "$ROOT/.git" ]; then
@@ -1415,14 +1422,14 @@ cmd_init() {
             created ".git (git init)"
         fi
         if command -v jj >/dev/null 2>&1; then
-            backend=jj
+            VCS_BACKEND=jj
             if [ "$DRY" -eq 0 ]; then
                 show jj git init --colocate
                 (cd "$ROOT" && jj git init --colocate >/dev/null 2>&1)
             fi
             created ".jj (jj git init --colocate)"
         else
-            backend=git
+            VCS_BACKEND=git
             skipped ".jj (jj not installed, git only)"
         fi
     fi
@@ -1473,15 +1480,15 @@ cmd_init() {
     if printf '%s\n' "$remotes" | grep -Fxq origin; then
         skipped "remote origin exists"
     else
-        printf 'remote origin is missing, create the GitHub repo and run: %s origin hub:%s\n' "$(remote_add_hint "$backend")" "$name"
-        human "create the GitHub repo, then run: $(remote_add_hint "$backend") origin hub:$name"
+        printf 'remote origin is missing, create the GitHub repo and run: %s origin hub:%s\n' "$(vcs remote-add-hint)" "$name"
+        human "create the GitHub repo, then run: $(vcs remote-add-hint) origin hub:$name"
     fi
     if [ "$gerrit" -eq 0 ]; then
         skipped "gerrit: --no-gerrit"
     elif printf '%s\n' "$remotes" | grep -Fxq gerrit; then
         skipped "remote gerrit exists"
     else
-        init_gerrit "$name" "$backend"
+        init_gerrit ""
     fi
 
     # Summary
@@ -1497,7 +1504,7 @@ cmd_init() {
 }
 
 main() {
-    local verb type trace count=0
+    local verb type trace handler count=0
     local -a args=()
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -1558,13 +1565,6 @@ main() {
         return 0
         ;;
     esac
-    if [ "$verb" = help ]; then
-        if has_override help; then
-            run_script help "$@"
-        fi
-        cmd_help "$@"
-        return 0
-    fi
     case " $VERBS " in
     *" $verb "*) ;;
     *)
@@ -1577,27 +1577,13 @@ main() {
         ;;
     esac
 
-    if [ "$verb" = sync ] && ! has_override sync; then
-        cmd_sync "$@"
-        return
-    fi
     if has_override "$verb"; then
         run_script "$verb" "$@"
     fi
-    if [ "$verb" = init ]; then
-        cmd_init "$@"
+    handler=$(builtin_field "$verb" 2)
+    if [ -n "$handler" ]; then
+        "$handler" "$@"
         return
-    fi
-    if [ "$verb" = push ]; then
-        cmd_push "$@"
-        return
-    fi
-    if [ "$verb" = pull ]; then
-        cmd_pull "$@"
-        return
-    fi
-    if [ "$verb" = deploy ]; then
-        die "deploy has no built-in, add .dev/deploy.sh"
     fi
 
     type=$(detect_type)
