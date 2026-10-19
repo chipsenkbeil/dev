@@ -97,8 +97,8 @@ for tool in cargo-sort cargo-deny ast-grep stylua selene; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$STUBS/$tool"
 done
 
-# shellcheck disable=SC2016  # $1 and NO_NIGHTLY expand in the generated stub
-printf '#!/usr/bin/env bash\nif [ -n "${NO_NIGHTLY:-}" ] && [ "$1" = +nightly ]; then exit 1; fi\nexit 0\n' >"$STUBS/cargo"
+# shellcheck disable=SC2016  # $1, CARGO_LOG and NO_NIGHTLY expand in the generated stub
+printf '#!/usr/bin/env bash\nif [ -n "${CARGO_LOG:-}" ]; then echo "$*" >>"$CARGO_LOG"; fi\nif [ -n "${NO_NIGHTLY:-}" ] && [ "$1" = +nightly ]; then exit 1; fi\nexit 0\n' >"$STUBS/cargo"
 chmod +x "$STUBS"/*
 cp "$STUBS/cargo" "$BARE/cargo"
 
@@ -132,6 +132,18 @@ else
     out="$(style_lint "$rust" "$full_path")"
     assert_eq "the rust set passes a clean project" "$?" "0"
     assert_not_contains "the rust set warns about no tool when all are present" "$out" "WARNING"
+
+    calls="$TMP/cargo-calls"
+    : >"$calls"
+    out="$(style_lint "$rust" "$full_path" CARGO_LOG="$calls")"
+    assert_contains "the debug clippy pass always runs" "$(cat "$calls")" "clippy --all-targets --all-features -- -D warnings"
+    assert_not_contains "a project without debug_assertions gets no release clippy pass" "$(cat "$calls")" "--release"
+    printf '#[cfg(not(debug_assertions))]\nfn release_only() {}\n' >"$rust/src/release.rs"
+    : >"$calls"
+    out="$(style_lint "$rust" "$full_path" CARGO_LOG="$calls")"
+    assert_contains "a project with debug_assertions gets the release clippy pass" "$(cat "$calls")" "clippy --release --all-targets --all-features -- -D warnings"
+    assert_contains "the release clippy pass is announced" "$out" "> cargo clippy release"
+    rm "$rust/src/release.rs"
 
     printf 'pub fn names(map: &mut Map) {\n    map.entries\n        .remove(&name);\n    // Drop the stale entry\n    map.flush();\n}\n' >"$rust/src/chain.rs"
     out="$(style_lint "$rust" "$full_path")"
