@@ -68,7 +68,7 @@ no_args() {
 # is deliberately nothing to pre-create -- ~/mail must be EMPTY before the first
 # init, because muchsync's BUGS section is explicit that a replica built by
 # another tool produces artifacts including deleted files reappearing.
-DEFAULT_DEPS=(bin cargo ci claude git jj mail aide neomutt pi ripgrep scribe ssh zsh nvim tmux readline gpg ghostty)
+DEFAULT_DEPS=(agents bin cargo ci claude git jj mail aide neomutt pi ripgrep scribe ssh zsh nvim tmux readline gpg ghostty)
 if [ "$HOST_OS" = Darwin ]; then
     DEFAULT_DEPS+=(antinote hammerspoon)
 fi
