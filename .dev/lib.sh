@@ -70,7 +70,7 @@ no_args() {
 # another tool produces artifacts including deleted files reappearing.
 DEFAULT_DEPS=(agents bin cargo ci claude git jj mail aide neomutt pi ripgrep scribe ssh zsh nvim tmux readline gpg ghostty)
 if [ "$HOST_OS" = Darwin ]; then
-    DEFAULT_DEPS+=(antinote hammerspoon)
+    DEFAULT_DEPS+=(antinote)
 fi
 _sorted=()
 while IFS= read -r _dep; do
