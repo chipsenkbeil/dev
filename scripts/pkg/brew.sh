@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# scripts/pkg/brew.sh — Homebrew driver. Defines pkg_status now; pkg_install
-# lands in Slice 2. Source this file, do not execute it.
+# scripts/pkg/brew.sh — Homebrew driver. Defines pkg_status and pkg_install.
+# Source this file, do not execute it.
 
 # pkg_status <name> <binary> <package> <channel>
 #   [x] name (/path)      -> binary on PATH
@@ -69,35 +69,41 @@ _brew_clear_quarantine() {
 }
 
 # pkg_install <name> <binary> <package> <channel> <repo> <dry_run>
-#   Install <package> via Homebrew unless already present. <channel>: "" (formula),
-#   "cask", or "tap" (<repo>=owner/tap). <dry_run>=1 prints the commands only.
+#   Install <package> via Homebrew unless already present (PKG_FORCE=1
+#   reinstalls). <channel>: "" (formula), "cask", or "tap" (<repo>=owner/tap).
+#   <dry_run>=1 prints the commands only.
 pkg_install() {
     local name="$1" binary="$2" package="$3" channel="$4" repo="$5" dry_run="$6"
 
     # Already present? PATH (source-agnostic) -> brew registry -> cask app bundle.
-    if [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
-        printf '  = %s already on PATH, skipping\n' "$name"
-        return 0
-    fi
-    if brew list "$package" >/dev/null 2>&1; then
-        printf '  = %s already installed via brew, skipping\n' "$name"
-        return 0
-    fi
-    if [ "$channel" = "cask" ]; then
-        local app
-        app="$(_brew_cask_app "$package")"
-        if [ -n "$app" ] && { [ -d "/Applications/$app" ] || [ -d "$HOME/Applications/$app" ]; }; then
-            printf '  = %s already installed as app, skipping\n' "$name"
+    local verb=install
+    if [ "${PKG_FORCE:-0}" = 1 ]; then
+        brew list "$package" >/dev/null 2>&1 && verb=reinstall
+    else
+        if [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
+            printf '  = %s already on PATH, skipping\n' "$name"
             return 0
+        fi
+        if brew list "$package" >/dev/null 2>&1; then
+            printf '  = %s already installed via brew, skipping\n' "$name"
+            return 0
+        fi
+        if [ "$channel" = "cask" ]; then
+            local app
+            app="$(_brew_cask_app "$package")"
+            if [ -n "$app" ] && { [ -d "/Applications/$app" ] || [ -d "$HOME/Applications/$app" ]; }; then
+                printf '  = %s already installed as app, skipping\n' "$name"
+                return 0
+            fi
         fi
     fi
 
     # Build the install command(s).
     local -a cmds=()
     case "$channel" in
-    cask) cmds=("brew install --cask $package") ;;
-    tap) cmds=("brew tap $repo" "brew install $package") ;;
-    "") cmds=("brew install $package") ;;
+    cask) cmds=("brew $verb --cask $package") ;;
+    tap) cmds=("brew tap $repo" "brew $verb $package") ;;
+    "") cmds=("brew $verb $package") ;;
     *)
         printf '  ! %s: unknown brew channel "%s", skipping\n' "$name" "$channel" >&2
         return 1

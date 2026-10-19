@@ -20,13 +20,14 @@
 #   passed through to the script (`bash <script> <args>`).
 
 # pkg_install <name> <binary> <package> <channel> <repo> <dry_run>
-#   Run <package> unless <binary> is already on PATH. <package> is a local
+#   Run <package> unless <binary> is already on PATH and PKG_FORCE is not 1.
+#   PKG_FORCE stays exported to the script. <package> is a local
 #   script path or an http(s):// URL, optionally followed by space-separated
 #   arguments (see ARGUMENTS). <channel>/<repo> are unused (uniform signature).
 pkg_install() {
     local name="$1" binary="$2" package="$3" dry_run="$6"
 
-    if [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
+    if [ "${PKG_FORCE:-0}" != 1 ] && [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
         printf '  = %s already on PATH, skipping\n' "$name"
         return 0
     fi

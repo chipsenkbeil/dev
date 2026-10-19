@@ -150,7 +150,8 @@ _aur_install() {
 }
 
 # pkg_install <name> <binary> <package> <channel> <repo> <dry_run>
-#   Install <package> unless already present. Supported channels:
+#   Install <package> unless already present (PKG_FORCE=1 reinstalls, without
+#   --needed). Supported channels:
 #     ""     bare official package: pacman -S --needed --noconfirm <package>
 #     aur    clone https://aur.archlinux.org/<package>.git and makepkg -si
 #   Any other channel is an error (cargo:/script: cells never reach this driver
@@ -160,18 +161,20 @@ pkg_install() {
     local name="$1" binary="$2" package="$3" channel="$4" repo="$5" dry_run="$6"
 
     # Already present? PATH (source-agnostic) -> pacman registry.
-    if [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
+    local needed=" --needed"
+    if [ "${PKG_FORCE:-0}" = 1 ]; then
+        needed=""
+    elif [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
         printf '  = %s already on PATH, skipping\n' "$name"
         return 0
-    fi
-    if pacman -Q "$package" >/dev/null 2>&1; then
+    elif pacman -Q "$package" >/dev/null 2>&1; then
         printf '  = %s already installed via pacman, skipping\n' "$name"
         return 0
     fi
 
     case "$channel" in
     "")
-        local cmd="$SUDO pacman -S --needed --noconfirm $package"
+        local cmd="$SUDO pacman -S$needed --noconfirm $package"
         if [ "$dry_run" = "1" ]; then
             printf '  + %s (dry-run):\n      %s\n' "$name" "$cmd"
             return 0

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/pkg.sh — package dispatch over tools.tsv.
-#   pkg.sh check [--manifest FILE]   report tool availability (Slice 1)
-#   pkg.sh install ...               (Slice 2)
+#   pkg.sh check [--manifest FILE]   report tool availability
+#   pkg.sh install ...               install tools
 set -o pipefail
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +17,7 @@ load_driver() {
     [ "$1" = "$PKG_LOADED_DRIVER" ] && return 0
     local d="$PKG_DIR/pkg/$1.sh"
     if [ ! -f "$d" ]; then
-        printf 'error: no driver %s (add it in a later slice)\n' "$d" >&2
+        printf 'error: no driver %s\n' "$d" >&2
         return 1
     fi
 
@@ -36,7 +36,7 @@ _in_list() {
 
 usage() {
     printf 'usage: pkg.sh check [--manifest FILE]\n'
-    printf '       pkg.sh install [--manifest FILE] [--dry-run] [--log-file FILE] [name...]\n'
+    printf '       pkg.sh install [--manifest FILE] [--dry-run] [--force] [--log-file FILE] [name...]\n'
 }
 
 # PKG_LOG_FILE — when non-empty, drivers route the real install command's
@@ -44,6 +44,8 @@ usage() {
 # by cmd_install's --log-file option; drivers are sourced into this process
 # so they see the global directly.
 PKG_LOG_FILE=""
+
+export PKG_FORCE=0
 
 need_value() {
     if [ $# -lt 2 ]; then
@@ -77,7 +79,7 @@ cmd_check() {
 
     local driver="$PKG_DIR/pkg/$mgr.sh"
     if [ ! -f "$driver" ]; then
-        printf 'error: no driver %s (added in a later slice)\n' "$driver" >&2
+        printf 'error: no driver %s\n' "$driver" >&2
         return 1
     fi
 
@@ -127,6 +129,10 @@ cmd_install() {
             dry_run=1
             shift
             ;;
+        --force)
+            PKG_FORCE=1
+            shift
+            ;;
         --log-file)
             need_value "$@" || return 2
 
@@ -145,6 +151,10 @@ cmd_install() {
             ;;
         esac
     done
+    if [ "$PKG_FORCE" = 1 ] && [ "${#names[@]}" -eq 0 ]; then
+        printf -- '--force needs at least one tool name\n' >&2
+        return 2
+    fi
 
     local mgr
     mgr="$(detect_primary_manager)"

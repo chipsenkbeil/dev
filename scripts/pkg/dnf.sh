@@ -52,7 +52,8 @@ pkg_status() {
 }
 
 # pkg_install <name> <binary> <package> <channel> <repo> <dry_run>
-#   Install <package> via dnf unless already present. Supported channels:
+#   Install <package> via dnf unless already present (PKG_FORCE=1 reinstalls).
+#   Supported channels:
 #     ""     bare official package: dnf install -y <package>
 #     copr   enable <repo> COPR then install: dnf copr enable -y <repo>
 #            followed by dnf install -y <package>
@@ -62,11 +63,13 @@ pkg_install() {
     local name="$1" binary="$2" package="$3" channel="$4" repo="$5" dry_run="$6"
 
     # Already present? PATH (source-agnostic) -> rpm registry.
-    if [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
+    local verb=install
+    if [ "${PKG_FORCE:-0}" = 1 ]; then
+        rpm -q "$package" >/dev/null 2>&1 && verb=reinstall
+    elif [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
         printf '  = %s already on PATH, skipping\n' "$name"
         return 0
-    fi
-    if rpm -q "$package" >/dev/null 2>&1; then
+    elif rpm -q "$package" >/dev/null 2>&1; then
         printf '  = %s already installed via dnf, skipping\n' "$name"
         return 0
     fi
@@ -74,8 +77,8 @@ pkg_install() {
     # Build the install command(s).
     local -a cmds=()
     case "$channel" in
-    "") cmds=("$SUDO dnf install -y $package") ;;
-    copr) cmds=("$SUDO dnf copr enable -y $repo" "$SUDO dnf install -y $package") ;;
+    "") cmds=("$SUDO dnf $verb -y $package") ;;
+    copr) cmds=("$SUDO dnf copr enable -y $repo" "$SUDO dnf $verb -y $package") ;;
     *)
         printf '  ! %s: unknown dnf channel "%s", skipping\n' "$name" "$channel" >&2
         return 1

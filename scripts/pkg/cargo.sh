@@ -5,15 +5,17 @@
 # pkg_install <name> <binary> <package> <channel> <repo> <dry_run>
 #   Install <package> as a crate. Prefers `cargo-binstall` (fetches prebuilt
 #   binaries instead of compiling from source — much faster) when available,
-#   falling back to `cargo install --locked`. Skips if already present.
+#   falling back to `cargo install --locked`. Skips if already present, unless
+#   PKG_FORCE=1.
 #   <channel>/<repo> are unused (kept for a uniform driver signature).
 pkg_install() {
-    local name="$1" binary="$2" package="$3" dry_run="$6"
-    if [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
+    local name="$1" binary="$2" package="$3" dry_run="$6" force=""
+    if [ "${PKG_FORCE:-0}" = 1 ]; then
+        force=" --force"
+    elif [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
         printf '  = %s already on PATH, skipping\n' "$name"
         return 0
-    fi
-    if cargo install --list 2>/dev/null | grep -q "^${package} "; then
+    elif cargo install --list 2>/dev/null | grep -q "^${package} "; then
         printf '  = %s already installed via cargo, skipping\n' "$name"
         return 0
     fi
@@ -34,9 +36,9 @@ pkg_install() {
         # positional arg. Flags (verified against `cargo-binstall --help`):
         #   --no-confirm         non-interactive (no y/N prompt)
         #   --disable-telemetry  opt out of anonymous usage reporting
-        cmd="$binstall --no-confirm --disable-telemetry $package"
+        cmd="$binstall --no-confirm --disable-telemetry$force $package"
     else
-        cmd="cargo install --locked $package"
+        cmd="cargo install --locked$force $package"
     fi
 
     if [ "$dry_run" = "1" ]; then
