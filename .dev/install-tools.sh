@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install all manifest tools via the OS package manager. DRY_RUN=1 for dry-run.
 # FORCE=1 reinstalls the named tools even when they are already present.
+# It tries every row, then exits 1 and names the failed tools when any row failed.
 # flags: --manifest --log-file --dry-run --force
 # usage: install-tools.sh [DRY_RUN=1] [FORCE=1] [name...]
 set -eo pipefail

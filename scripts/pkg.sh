@@ -178,6 +178,7 @@ cmd_install() {
     [ -n "$rows" ] || return 0
 
     local name binary cell parsed channel pkg repo binover effbin handler
+    local -a failed=()
     for name in ${names[@]+"${names[@]}"}; do
         if ! printf '%s\n' "$rows" | cut -f1 | grep -Fxq -- "$name"; then
             printf 'unknown tool: %s\n' "$name" >&2
@@ -199,9 +200,14 @@ cmd_install() {
         binover="$PC_BIN"
         effbin="$(resolve_binary "$binary" "$binover")"
         handler="$(channel_handler "$channel" "$mgr")"
-        load_driver "$handler" || continue
-        pkg_install "$name" "$effbin" "$pkg" "$channel" "$repo" "$dry_run"
+        if ! load_driver "$handler" || ! pkg_install "$name" "$effbin" "$pkg" "$channel" "$repo" "$dry_run"; then
+            failed+=("$name")
+        fi
     done <<<"$rows"
+    if [ "${#failed[@]}" -gt 0 ]; then
+        printf 'install failed: %s\n' "${failed[*]}" >&2
+        return 1
+    fi
 }
 
 main() {
