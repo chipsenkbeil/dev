@@ -45,6 +45,10 @@ pkg_install() {
         printf '  + %s (dry-run):\n      %s\n' "$name" "$cmd"
         return 0
     fi
+    if command -v rustup >/dev/null 2>&1 && ! rustup show active-toolchain >/dev/null 2>&1; then
+        printf '  + rustup has no default toolchain, installing stable\n'
+        pkg_run "rustup default stable" || return 1
+    fi
     printf '  + installing %s (cargo)...\n' "$name"
     pkg_run "$cmd"
 }
