@@ -5,7 +5,7 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-
+export RIPGREP_CONFIG_PATH=/dev/null
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/.dev" "$TMP/scripts" "$TMP/tests" "$TMP/dotfiles/bin" "$TMP/dotfiles/jj/.config/jj/scripts"
@@ -92,7 +92,16 @@ rm "$TMP/tests/bare.bats"
 STYLE="$REPO/dotfiles/claude/.claude/skills/style/lint"
 STUBS="$TMP/stubs"
 BARE="$TMP/bare"
-mkdir -p "$STUBS" "$BARE"
+CORE="$TMP/core"
+mkdir -p "$STUBS" "$BARE" "$CORE"
+for dir in /usr/bin /bin; do
+    for exe in "$dir"/*; do
+        case "${exe##*/}" in
+        cargo | cargo-sort | cargo-deny | ast-grep | sg | stylua | selene | sd) continue ;;
+        esac
+        [ -x "$exe" ] && [ ! -e "$CORE/${exe##*/}" ] && ln -s "$exe" "$CORE/${exe##*/}"
+    done
+done
 for tool in cargo-sort cargo-deny ast-grep stylua selene; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$STUBS/$tool"
 done
@@ -120,8 +129,8 @@ done
 if [ -n "$missing_tools" ]; then
     printf 'SKIP style lint set tests (needs%s on PATH)\n' "$missing_tools"
 else
-    full_path="$STUBS:$BARE:/usr/bin:/bin"
-    bare_path="$BARE:/usr/bin:/bin"
+    full_path="$STUBS:$BARE:$CORE"
+    bare_path="$BARE:$CORE"
 
     rust="$TMP/rust"
     mkdir -p "$rust/src" "$rust/scripts"
@@ -276,14 +285,10 @@ src/new.rs"
     assert_contains "a missing nightly rustfmt fails under CI" "$out" "nightly rustfmt not found, so the cargo fmt check cannot run"
     assert_contains "the CI failure lists each skipped check" "$out" "FAILED: cargo fmt ast-grep scan cargo sort cargo deny"
 
-    if [ -e "$BARE/sd" ] || [ -x /usr/bin/sd ] || [ -x /bin/sd ]; then
-        printf 'SKIP manifests without sd (sd is on the bare PATH)\n'
-    else
-        printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\npublish = false\n' >"$rust/Cargo.toml"
-        out="$(style_lint "$rust" "$bare_path")"
-        assert_contains "the manifests check runs without sd" "$out" "Cargo.toml: edition is '2021', want 2024"
-        assert_contains "the run reaches the later checks without sd" "$out" "> comment spacing"
-    fi
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\npublish = false\n' >"$rust/Cargo.toml"
+    out="$(style_lint "$rust" "$bare_path")"
+    assert_contains "the manifests check runs without sd" "$out" "Cargo.toml: edition is '2021', want 2024"
+    assert_contains "the run reaches the later checks without sd" "$out" "> comment spacing"
 
     printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\n' >"$rust/Cargo.toml"
     out="$(style_lint "$rust" "$full_path")"
