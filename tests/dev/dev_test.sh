@@ -448,6 +448,21 @@ if command -v jj >/dev/null 2>&1; then
     tail -n +2 "$init/.dev/lint.sh" >"$init/.dev/lint.sh.new"
     mv "$init/.dev/lint.sh.new" "$init/.dev/lint.sh"
 
+    marker='# --- project-specific entries below (dev sync keeps them) ---'
+    assert_contains "init writes the deny.toml marker" "$(cat "$init/deny.toml")" "$marker"
+    assert_eq "init writes no tail below the deny.toml marker" "$(sed -n "/^${marker}\$/,\$p" "$init/deny.toml" | wc -l | tr -d ' ')" "1"
+    printf '\n[[licenses.exceptions]]\nname = "webpki-roots"\nallow = ["CDLA-Permissive-2.0"]\n' >>"$init/deny.toml"
+    out="$(run_dev "$init" sync --check)"
+    assert_eq "sync --check ignores a tail below the deny.toml marker" "$out" "up to date"
+    sd 'allow-git = \[\]' 'allow-git = ["x"]' "$init/deny.toml"
+    out="$(run_dev "$init" sync --check)"
+    assert_contains "sync --check reports drift above the deny.toml marker" "$out" "differs: deny.toml"
+    run_dev "$init" sync --yes >/dev/null
+    assert_contains "sync keeps the deny.toml tail" "$(cat "$init/deny.toml")" 'name = "webpki-roots"'
+    assert_contains "sync restores the template above the deny.toml marker" "$(cat "$init/deny.toml")" "allow-git = []"
+    out="$(run_dev "$init" sync --check)"
+    assert_eq "sync --check is clean after keeping the deny.toml tail" "$out" "up to date"
+
     cp "$init/docs/STYLE.md" "$TMP/STYLE.md.orig"
     printf 'Name every lock after what it guards.\n' >>"$init/docs/STYLE.md"
     out="$(run_dev "$init" sync --check)"

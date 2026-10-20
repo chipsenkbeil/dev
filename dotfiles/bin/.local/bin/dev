@@ -796,6 +796,18 @@ lint_project_tail() {
     return 0
 }
 
+# deny_with_project_tail <template text>: the template with the project's own text below the
+# deny.toml marker kept as it is, or the template alone when the project has no marker.
+deny_with_project_tail() {
+    local content=$1 marker='# --- project-specific entries below (dev sync keeps them) ---' tail
+    if [ -f "$ROOT/deny.toml" ] && grep -qxF "$marker" "$ROOT/deny.toml"; then
+        tail=$(sed -n "/^${marker}\$/,\$p" "$ROOT/deny.toml" | sed '1d')
+        printf '%s\n%s' "${content%%"$marker"*}$marker" "$tail"
+    else
+        printf '%s' "$content"
+    fi
+}
+
 # render <project path> <template path> <channel>: the project copy of a template.
 render() {
     local dest=$1 src=$2 channel=$3 content cd_old cd_new sg_old sg_new lib_old lib_new
@@ -827,6 +839,9 @@ render() {
         ;;
     .dev/test.sh)
         content=${content/"$cd_old"/"$cd_new"}
+        ;;
+    deny.toml)
+        content=$(deny_with_project_tail "$content")
         ;;
     rust-toolchain.toml)
         content=$(printf '%s\n' "$content" | sed "s/^channel = .*/channel = \"$channel\"/")
