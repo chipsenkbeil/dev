@@ -14,6 +14,10 @@ trap 'rm -rf "$TMP"' EXIT
 STUBS="$TMP/stubs"
 export STUB_LOG="$TMP/stub.log"
 mkdir -p "$STUBS"
+export GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_SYSTEM=/dev/null JJ_CONFIG="$TMP/jj.toml"
+printf '[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n' >"$GIT_CONFIG_GLOBAL"
+printf 'user.name = "t"\nuser.email = "t@t"\nsigning.behavior = "drop"\ngit.sign-on-push = false\n' >"$JJ_CONFIG"
+cp "$JJ_CONFIG" "$TMP/jj.base.toml"
 for tool in cargo love godot npm make stylua ast-grep; do
     # shellcheck disable=SC2016  # $* and $STUB_LOG expand in the generated stub
     printf '#!/usr/bin/env bash\necho "%s $*" >> "$STUB_LOG"\n' "$tool" >"$STUBS/$tool"
@@ -601,9 +605,16 @@ assert_contains "sync --yes applies without asking" "$out" "synced"
 out="$(run_dev "$reg" sync --check)"
 assert_eq "sync --yes restores the lints block, the attribute and the guide" "$out" "up to date"
 assert_contains "sync --yes keeps the project checks below the lint.sh marker" "$(cat "$reg/.dev/lint.sh")" 'check "project extra" true'
+on_tty() {
+    if script --version 2>&1 | grep -q util-linux; then
+        script -qec "$(printf '%q ' "$@")" /dev/null
+    else
+        script -q /dev/null "$@"
+    fi
+}
 if command -v script >/dev/null 2>&1; then
     sd 'missing_safety_doc = "deny"' 'missing_safety_doc = "warn"' "$reg/Cargo.toml"
-    (cd "$reg" && script -q /dev/null env PATH="$STUBS:$PATH" "$DEV" sync < <(
+    (cd "$reg" && on_tty env PATH="$STUBS:$PATH" "$DEV" sync < <(
         printf 'y\n'
         sleep 30
     ) >"$TMP/sync.out" 2>&1) || true
@@ -718,8 +729,6 @@ assert_contains "help pull gives the dirty tree reason" "$(run_dev "$gp" help pu
 git -C "$gp" checkout -q -- a
 
 if command -v jj >/dev/null 2>&1; then
-    export JJ_CONFIG="$TMP/jj.toml"
-    printf 'user.name = "t"\nuser.email = "t@t"\nsigning.behavior = "drop"\ngit.sign-on-push = false\n' >"$JJ_CONFIG"
     jj git clone -q "$gremote" "$TMP/jjpull" >/dev/null 2>&1 || jj git clone "$gremote" "$TMP/jjpull" >/dev/null 2>&1
     jp="$(cd "$TMP/jjpull" && pwd -P)"
     echo d >"$TMP/second/d"
@@ -741,7 +750,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_eq "jj push without a trunk bookmark exits 1" "$?" "1"
     assert_contains "jj push without a trunk bookmark explains" "$out" "no master or main bookmark"
     assert_contains "help push gives the same reason push dies with" "$help_out" "(none: ${out#dev: })"
-    unset JJ_CONFIG
+    cp "$TMP/jj.base.toml" "$JJ_CONFIG"
 else
     printf 'skip - jj pull and jj push (needs jj)\n'
 fi
