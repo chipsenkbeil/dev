@@ -149,6 +149,7 @@ install_pkg() {
     ssh) install_ssh ;;
     antinote) install_antinote ;;
     pi) install_pi ;;
+    claude) install_claude ;;
     jj) install_jj ;;
     *)
         printf '> Installing %s... ' "$pkg"
@@ -270,4 +271,29 @@ install_pi() {
     stow_pkg -S pi
     printf 'DONE\n'
     bash scripts/pi-settings.sh install
+}
+
+# The boardflow skill is served by the board, so it is fetched into the
+# gitignored skills/boardflow and never vendored. A fetch that fails (no
+# tailscale, server down) warns and leaves any earlier copy in place. Like the
+# antinote import, it writes only when TARGET_DIR is the real home, since
+# SRC_DIR is then the repo being installed from.
+install_claude() {
+    printf '> Installing claude... '
+    stow_pkg -S claude
+    printf 'DONE\n'
+    if [ "$(cd "$TARGET_DIR" && pwd -P)" != "$(cd "$HOME" && pwd -P)" ]; then
+        printf '> Skipping the boardflow skill fetch, which writes into SRC_DIR %s and not TARGET_DIR %s\n' "$SRC_DIR" "$TARGET_DIR"
+        return 0
+    fi
+    local url=https://boardflow.example.com/skill.md
+    local dir="$SRC_DIR/claude/.claude/skills/boardflow" tmp
+    mkdir -p "$dir"
+    tmp="$(mktemp "$dir/SKILL.md.XXXXXX")"
+    if curl -fsS --max-time 10 "$url" -o "$tmp" 2>/dev/null; then
+        mv "$tmp" "$dir/SKILL.md"
+    else
+        rm -f "$tmp"
+        printf '> Warning: could not fetch %s (no tailscale?), keeping the boardflow skill as it was\n' "$url"
+    fi
 }
