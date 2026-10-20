@@ -130,7 +130,7 @@ stow_run() {
 
 stow_flags() {
     case "$1" in
-    gpg | ssh) STOW_FLAGS=(--no-folding) ;;
+    gpg | ssh | bin) STOW_FLAGS=(--no-folding) ;;
     pi) STOW_FLAGS=(--no-folding --ignore='settings\.json') ;;
     *) STOW_FLAGS=() ;;
     esac
