@@ -12,6 +12,10 @@ cd "$ROOT" || exit 1
 source "$ROOT/scripts/helpers.sh"
 
 VERB="$(basename "$0" .sh)"
+NOUN="$(cd "$(dirname "$0")" && basename "$PWD")"
+if [ "$NOUN" != .dev ]; then
+    VERB="$NOUN $VERB"
+fi
 
 # ARGS and PKGS are read by the scripts that source this file.
 # shellcheck disable=SC2034

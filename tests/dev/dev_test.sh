@@ -755,6 +755,77 @@ else
     printf 'skip - jj pull and jj push (needs jj)\n'
 fi
 
+# Nouns: .dev/<noun>/<sub>.sh beside flat verbs
+nn="$(project noun)"
+mkdir -p "$nn/.dev/widget"
+printf '#!/usr/bin/env bash\n# Save the widget.\n# flags: --now --later\necho "save $*"\n' >"$nn/.dev/widget/save.sh"
+printf '#!/usr/bin/env bash\n# Diff the widget.\necho "diff $*"\n' >"$nn/.dev/widget/diff.sh"
+printf '#!/usr/bin/env bash\n# Hidden helper.\necho helper\n' >"$nn/.dev/widget/__helper.sh"
+printf '#!/usr/bin/env bash\n# Not executable.\n' >"$nn/.dev/widget/skipped.sh"
+printf '#!/usr/bin/env bash\n# Verify prod.\n# flags: --fast\necho "verify $*"\n' >"$nn/.dev/verify-prod.sh"
+chmod +x "$nn/.dev/widget/save.sh" "$nn/.dev/widget/diff.sh" "$nn/.dev/widget/__helper.sh" "$nn/.dev/verify-prod.sh"
+out="$(run_dev "$nn" widget save a b)"
+assert_eq "a subcommand runs its script with the arguments" "$out" "save a b"
+out="$(run_dev "$nn" verify-prod x)"
+assert_eq "a flat hyphenated project verb still dispatches" "$out" "verify x"
+out="$(run_dev "$nn" help)"
+assert_contains "help lists a flat hyphenated verb" "$out" "verify-prod  Verify prod."
+assert_contains "help lists the noun once, with its subcommands" "$out" "widget       diff, save"
+assert_eq "help lists the noun on one line" "$(printf '%s\n' "$out" | grep -c '^  widget ')" "1"
+assert_not_contains "help does not list subcommands as verbs" "$out" "  save "
+printf 'Manage the widget.\nmore\n' >"$nn/.dev/widget/DESCRIPTION"
+assert_contains "a DESCRIPTION file describes the noun in help" "$(run_dev "$nn" help)" "Manage the widget."
+out="$(run_dev "$nn" help widget)"
+assert_contains "help <noun> shows the description" "$out" "Manage the widget."
+assert_contains "help <noun> lists a subcommand with its description" "$out" "save  Save the widget."
+assert_contains "help <noun> lists the other subcommand" "$out" "diff  Diff the widget."
+assert_not_contains "help <noun> hides hidden scripts" "$out" "helper"
+assert_not_contains "help <noun> hides a script that is not executable" "$out" "skipped"
+out="$(run_dev "$nn" help widget save)"
+assert_contains "help <noun> <sub> shows the flags" "$out" "--now"
+assert_contains "help <noun> <sub> shows the header" "$out" ".dev/widget/save.sh header"
+out="$(run_dev "$nn" help widget zap 2>&1)"
+assert_eq "help <noun> <unknown> exits 2" "$?" "2"
+assert_contains "help <noun> <unknown> names it" "$out" "unknown subcommand zap of widget"
+out="$(run_dev "$nn" widget zap 2>&1)"
+assert_eq "an unknown subcommand exits 2" "$?" "2"
+assert_contains "an unknown subcommand names it" "$out" "dev widget: unknown subcommand zap"
+assert_contains "an unknown subcommand lists the choices" "$out" "save  Save the widget."
+out="$(run_dev "$nn" widget 2>&1)"
+assert_eq "a noun with no subcommand exits 2" "$?" "2"
+assert_contains "a noun with no subcommand says so" "$out" "dev widget: needs a subcommand"
+out="$(run_dev "$nn" widget --help)"
+assert_eq "noun --help exits 0" "$?" "0"
+assert_contains "noun --help lists the subcommands" "$out" "diff  Diff the widget."
+out="$(run_dev "$nn" widget __helper 2>&1)"
+assert_eq "a hidden script is not a subcommand" "$?" "2"
+out="$(run_dev "$nn" __verbs)"
+assert_contains "__verbs lists a noun" "$out" "widget	local	Manage the widget."
+assert_contains "__verbs lists a flat hyphenated verb" "$out" "verify-prod	local	Verify prod."
+out="$(run_dev "$nn" __subs widget)"
+assert_eq "__subs lists the subcommands with descriptions" "$out" "diff	local	Diff the widget.
+save	local	Save the widget."
+assert_eq "__subs of a plain verb is empty" "$(run_dev "$nn" __subs verify-prod)" ""
+out="$(run_dev "$nn" __flags widget save)"
+assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
+--later
+-v
+--verbose
+-vv
+--ci"
+assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
+printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/widget.sh"
+chmod +x "$nn/.dev/widget.sh"
+assert_eq "a flat script takes the whole noun name" "$(run_dev "$nn" widget save)" "flat save"
+rm "$nn/.dev/widget.sh"
+nn_none="$(project nonoun)"
+mkdir -p "$nn_none/.dev/lint" "$nn_none/.dev/empty"
+printf '#!/usr/bin/env bash\necho x\n' >"$nn_none/.dev/lint/x.sh"
+chmod +x "$nn_none/.dev/lint/x.sh"
+out="$(run_dev "$nn_none" help)"
+assert_not_contains "a directory named like a built-in verb is not a noun" "$out" "  x "
+assert_not_contains "a directory with no scripts is not a noun" "$out" "empty"
+
 # --ci
 if command -v jq >/dev/null 2>&1; then
     cistubs="$TMP/cistubs"
@@ -763,7 +834,7 @@ if command -v jq >/dev/null 2>&1; then
 #!/usr/bin/env bash
 if [ "$1" = -C ]; then shift 2; fi
 case "$1" in
-jobs) printf '{"jobs":[{"name":"lint","oses":["linux-ct"]},{"name":"test","oses":["linux-ct"]}]}\n' ;;
+jobs) printf '{"jobs":[{"name":"lint","oses":["linux-ct"]},{"name":"test","oses":["linux-ct"]},{"name":"widget-save","oses":["linux-ct"]}]}\n' ;;
 run)
     echo "ci $* (in $PWD)" >>"$STUB_LOG"
     exit "${CI_STUB_RC:-0}"
@@ -803,6 +874,14 @@ STUB
     assert_eq "--ci refuses extra arguments with 2" "$?" "2"
     assert_contains "--ci names the extra argument" "$out" "passes no arguments to the job, got --extra"
 
+    mkdir -p "$cip/.dev/widget"
+    printf '#!/usr/bin/env bash\necho x\n' >"$cip/.dev/widget/save.sh"
+    chmod +x "$cip/.dev/widget/save.sh"
+    cirun "$cip" --ci widget save >/dev/null 2>&1
+    assert_contains "--ci maps a subcommand to the job noun-sub" "$(log)" "ci run pipeline --local --job widget-save -f"
+    out="$(cirun "$cip" widget --ci zap 2>&1)"
+    assert_eq "--ci with an unknown subcommand exits 2" "$?" "2"
+    assert_contains "--ci with an unknown subcommand names it" "$out" "unknown subcommand zap"
     for verb in install uninstall restow sync setup fmt help init push pull; do
         out="$(cirun "$cip" --ci "$verb" 2>&1)"
         assert_eq "--ci refuses $verb with 2" "$?" "2"

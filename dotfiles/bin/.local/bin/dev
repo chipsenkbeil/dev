@@ -2,6 +2,9 @@
 # dev: one entry point for lint, fmt, test, build, run, deploy, push and pull.
 #
 # `dev <verb>` runs `.dev/<verb>.sh` at the repo root when it is executable.
+# `dev <noun> <sub>` runs `.dev/<noun>/<sub>.sh` the same way, and built-in nouns
+# sit beside the flat verbs. `dev help` lists a noun once and `dev help <noun>`
+# lists its subcommands.
 # Otherwise it detects the project type and runs the standard sequence for it.
 # Detection order: Cargo.toml (rust), main.lua and conf.lua (love2d),
 # project.godot (godot), package.json (node), any .lua file outside dot
@@ -73,10 +76,17 @@ run_cmd() {
     "$@"
 }
 
-# run_script <verb> [args...]: show and exec .dev/<verb>.sh.
+# script_path <verb>: the .dev script for a verb, where "noun sub" maps to .dev/noun/sub.sh.
+script_path() {
+    printf '%s/.dev/%s.sh\n' "$ROOT" "${1// //}"
+}
+
+# run_script <verb> [args...]: show and exec the verb's .dev script.
 run_script() {
-    local script="$ROOT/.dev/$1.sh"
-    show ".dev/$1.sh" "${@:2}"
+    local script
+    script=$(script_path "$1")
+    [ "$(id -u)" -ne 0 ] || die "refusing to run ${script#"$ROOT"/} as root"
+    show "${script#"$ROOT"/}" "${@:2}"
     shift
     exec "$script" "$@"
 }
@@ -89,7 +99,13 @@ trace_file() {
 }
 
 has_override() {
-    [ -x "$ROOT/.dev/$1.sh" ]
+    case "$1" in
+    *" "*)
+        case " $(builtin_subs "${1% *}" | tr '\n' ' ')" in *" ${1#* } "*) return 1 ;; esac
+        ;;
+    *) [ "$(builtin_field "$1" 2)" = noun ] && return 1 ;;
+    esac
+    [ -x "$(script_path "$1")" ]
 }
 
 repo_root() {
@@ -157,6 +173,7 @@ vcs() {
 # builtin_table: one row per built-in verb, "name|handler|flags|usage|description".
 # The handler runs when no .dev script overrides the verb, and is empty for a verb that
 # runs the project type's builtin_<type>. Usage is the fixed command line `dev help <verb>` shows.
+# A noun has a row with the handler `noun`, and each of its subcommands a row named "noun sub".
 builtin_table() {
     cat <<'TABLE'
 lint||||Check style and formatting for the project type
@@ -173,7 +190,7 @@ help|cmd_help||dev help [verb]|Show this table, or the details of one verb
 TABLE
 }
 
-VERBS=$(builtin_table | cut -d'|' -f1 | tr '\n' ' ')
+VERBS=$(builtin_table | cut -d'|' -f1 | grep -v ' ' | tr '\n' ' ')
 
 # builtin_field <verb> <column>: that column of the verb's row, 2 handler, 3 flags, 4 usage, 5 description.
 builtin_field() {
@@ -237,11 +254,86 @@ verbs_table() {
         case " $VERBS " in *" $name "*) continue ;; esac
         printf '%s\tlocal\t%s\n' "$name" "$(script_desc "$script")"
     done
+    for script in "$ROOT"/.dev/*/; do
+        [ -d "$script" ] || continue
+        name=$(basename "$script")
+        case "$name" in __*) continue ;; esac
+        case " $VERBS " in *" $name "*) continue ;; esac
+        [ -x "$ROOT/.dev/$name.sh" ] && continue
+        [ -n "$(project_subs "$name")" ] || continue
+        printf '%s\tlocal\t%s\n' "$name" "$(noun_desc "$name")"
+    done
 }
 
-# verb_flags <verb>: the flags a verb accepts, one per line.
+# project_subs <noun>: the names of the executable scripts in .dev/<noun>/, one per line.
+project_subs() {
+    local script name
+    for script in "$ROOT/.dev/$1"/*.sh; do
+        [ -x "$script" ] || continue
+        name=$(basename "$script" .sh)
+        case "$name" in __*) continue ;; esac
+        printf '%s\n' "$name"
+    done
+}
+
+# builtin_subs <noun>: the subcommand names of a built-in noun, one per line.
+builtin_subs() {
+    builtin_table | awk -F'|' -v n="$1 " 'index($1, n) == 1 { print substr($1, length(n) + 1) }'
+}
+
+# is_noun <name>: true for a built-in noun or a .dev/<name>/ directory of scripts,
+# unless a flat .dev/<name>.sh takes the whole name.
+is_noun() {
+    [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] || return 1
+    has_override "$1" && return 1
+    [ "$(builtin_field "$1" 2)" = noun ] && return 0
+    case " $VERBS " in *" $1 "*) return 1 ;; esac
+    [ -n "$(project_subs "$1")" ]
+}
+
+# noun_desc <noun>: the built-in description, else the first line of .dev/<noun>/DESCRIPTION,
+# else the subcommand names.
+noun_desc() {
+    local desc
+    desc=$(builtin_desc "$1")
+    if [ -z "$desc" ] && [ -f "$ROOT/.dev/$1/DESCRIPTION" ]; then
+        desc=$(head -n1 "$ROOT/.dev/$1/DESCRIPTION")
+    fi
+    if [ -z "$desc" ]; then
+        desc=$(noun_subs_table "$1" | cut -f1 | paste -sd, - | sed 's/,/, /g')
+    fi
+    printf '%s\n' "$desc"
+}
+
+# noun_subs_table <noun>: "sub<TAB>origin<TAB>description" per subcommand, built-ins first.
+noun_subs_table() {
+    local noun=$1 sub script desc origin
+    for sub in $(builtin_subs "$noun"); do
+        origin=builtin
+        desc=$(builtin_desc "$noun $sub")
+        if has_override "$noun $sub"; then
+            origin=override
+            desc=$(script_desc "$(script_path "$noun $sub")")
+            : "${desc:=$(builtin_desc "$noun $sub")}"
+        fi
+        printf '%s\t%s\t%s\n' "$sub" "$origin" "$desc"
+    done
+    for sub in $(project_subs "$noun"); do
+        case " $(builtin_subs "$noun" | tr '\n' ' ')" in *" $sub "*) continue ;; esac
+        script=$(script_path "$noun $sub")
+        printf '%s\tlocal\t%s\n' "$sub" "$(script_desc "$script")"
+    done
+}
+
+# noun_has_sub <noun> <sub>: true when the noun has that subcommand.
+noun_has_sub() {
+    noun_subs_table "$1" | awk -F'\t' -v s="$2" '$1 == s { found = 1 } END { exit !found }'
+}
+
+# verb_flags <verb>: the flags a verb accepts, one per line. A subcommand is "noun sub".
 verb_flags() {
-    local script="$ROOT/.dev/$1.sh"
+    local script
+    script=$(script_path "$1")
     if [ -x "$script" ]; then
         script_flags "$script"
         return
@@ -378,7 +470,7 @@ help_overview() {
 --ci	global	Run the verb's job from .ci/pipeline.lua on example-box through ci, DEV_CI=1"
 
     # shellcheck disable=SC2016  # the backticks are literal help text
-    printf '\nRun `dev help <verb>` for flags, the script header and the command a verb runs.\n'
+    printf '\nRun `dev help <verb>` for flags, the script header and the command a verb runs.\nRun `dev help <noun>` for the subcommands of a noun.\n'
 }
 
 # usage: the overview on stderr, for a bad verb or bad arguments.
@@ -386,11 +478,29 @@ usage() {
     help_overview 2
 }
 
-help_verb() {
-    local verb=$1 script="$ROOT/.dev/$1.sh" row origin desc flags type
-    is_verb "$verb" || usage_error help "unknown verb $verb"
+# help_noun <noun>: the noun's description and its subcommands.
+help_noun() {
+    local noun=$1
     set_colors 1
-    row=$(verbs_table | awk -F'\t' -v v="$verb" '$1 == v')
+    printf '%sdev %s%s\n  %s\n' "$BOLD" "$noun" "$RESET" "$(noun_desc "$noun")"
+    help_section "subcommands" "$(noun_subs_table "$noun")"
+
+    # shellcheck disable=SC2016  # the backticks are literal help text
+    printf '\nRun `dev help %s <sub>` for a subcommand'"'"'s flags and header.\n' "$noun"
+}
+
+# help_verb <verb>: the details of one verb, where a subcommand is "noun sub".
+help_verb() {
+    local verb=$1 script row origin desc flags type
+    script=$(script_path "$verb")
+    case "$verb" in
+    *" "*) row=$(noun_subs_table "${verb% *}" | awk -F'\t' -v v="${verb#* }" '$1 == v') ;;
+    *)
+        is_verb "$verb" || usage_error help "unknown verb $verb"
+        row=$(verbs_table | awk -F'\t' -v v="$verb" '$1 == v')
+        ;;
+    esac
+    set_colors 1
     origin=$(printf '%s\n' "$row" | cut -f2)
     desc=$(printf '%s\n' "$row" | cut -f3)
     printf '%sdev %s%s' "$BOLD" "$verb" "$RESET"
@@ -402,7 +512,7 @@ help_verb() {
         printf '%s\n' "$flags" | sed 's/^/  /'
     fi
     if [ -x "$script" ]; then
-        printf '\n%s%s header%s\n' "$BOLD" ".dev/$verb.sh" "$RESET"
+        printf '\n%s%s header%s\n' "$BOLD" "${script#"$ROOT"/}" "$RESET"
         script_header "$script" | sed 's/^/  /'
     fi
     if [ "$origin" != local ]; then
@@ -420,11 +530,18 @@ cmd_deploy() {
 }
 
 cmd_help() {
-    if [ "$#" -gt 0 ]; then
-        help_verb "$1"
-    else
-        help_overview 1
-    fi
+    case "$#" in
+    0) help_overview 1 ;;
+    1)
+        if is_noun "$1"; then help_noun "$1"; else help_verb "$1"; fi
+        ;;
+    2)
+        is_noun "$1" || usage_error help "$1 has no subcommands"
+        noun_has_sub "$1" "$2" || usage_error help "unknown subcommand $2 of $1"
+        help_verb "$1 $2"
+        ;;
+    *) usage_error help "too many arguments, got $3" ;;
+    esac
 }
 
 detect_type() {
@@ -1567,6 +1684,7 @@ cmd_init() {
 }
 
 CI_LOCAL_VERBS=" install uninstall restow sync setup fmt help init push pull "
+CI_LOCAL_NOUNS=" tools pi antinote "
 
 # ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.
 ci_enabled() {
@@ -1577,27 +1695,32 @@ ci_enabled() {
 }
 
 # cmd_ci <verb> [args...]: run the verb's job from .ci/pipeline.lua on the fleet and exit with its status.
+# The job of a subcommand ("noun sub") is named noun-sub.
 cmd_ci() {
-    local verb=$1
+    local verb=$1 job
     case "$verb" in -h | --help) verb=help ;; esac
     case "$CI_LOCAL_VERBS" in
     *" $verb "*) usage_error "$verb" "--ci cannot run this verb, it works on this machine" ;;
     esac
-    [[ "$verb" =~ ^[A-Za-z0-9_-]+$ ]] || usage_error "$verb" "--ci needs a job name, not $verb"
+    case "$CI_LOCAL_NOUNS" in
+    *" ${verb%% *} "*) usage_error "$verb" "--ci cannot run this verb, it works on this machine" ;;
+    esac
+    job=${verb// /-}
+    [[ "$job" =~ ^[A-Za-z0-9_-]+$ ]] || usage_error "$verb" "--ci needs a job name, not $verb"
     [ "$#" -le 1 ] || usage_error "$verb" "--ci passes no arguments to the job, got $2"
     need ci "dev install from the ci repo"
     need jq "brew install jq"
     if ! ci -C "$ROOT" jobs pipeline --json 2>/dev/null |
-        jq -e --arg v "$verb" '.jobs[] | select(.name == $v)' >/dev/null 2>&1; then
-        die "no job named $verb in .ci/pipeline.lua, add one to run it with --ci"
+        jq -e --arg v "$job" '.jobs[] | select(.name == $v)' >/dev/null 2>&1; then
+        die "no job named $job in .ci/pipeline.lua, add one to run it with --ci"
     fi
     cd "$ROOT"
-    show ci run pipeline --local --job "$verb" -f
-    exec ci run pipeline --local --job "$verb" -f
+    show ci run pipeline --local --job "$job" -f
+    exec ci run pipeline --local --job "$job" -f
 }
 
 main() {
-    local verb type trace handler count=0 use_ci=0
+    local verb sub type trace handler count=0 use_ci=0
     local -a args=()
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -1654,15 +1777,49 @@ main() {
         verbs_table
         return 0
         ;;
+    __subs)
+        if is_noun "${1:-}"; then noun_subs_table "$1"; fi
+        return 0
+        ;;
     __flags)
-        verb_flags "${1:-}"
+        verb_flags "${1:-}${2:+ $2}"
         printf '%s\n' -v --verbose -vv --ci
         return 0
         ;;
     esac
+    if is_noun "$verb"; then
+        sub=${1:-}
+        case "$sub" in
+        "")
+            printf 'dev %s: needs a subcommand\n\n' "$verb" >&2
+            help_noun "$verb" >&2
+            exit 2
+            ;;
+        -h | --help | help)
+            help_noun "$verb"
+            return 0
+            ;;
+        esac
+        if ! noun_has_sub "$verb" "$sub"; then
+            printf 'dev %s: unknown subcommand %s\n\n' "$verb" "$sub" >&2
+            help_noun "$verb" >&2
+            exit 2
+        fi
+        shift
+        verb="$verb $sub"
+    fi
     if [ "$use_ci" -eq 1 ]; then
         cmd_ci "$verb" "$@"
     fi
+    case "$verb" in
+    *" "*)
+        if has_override "$verb"; then
+            run_script "$verb" "$@"
+        fi
+        "$(builtin_field "$verb" 2)" "$@"
+        return
+        ;;
+    esac
     case " $VERBS " in
     *" $verb "*) ;;
     *)
