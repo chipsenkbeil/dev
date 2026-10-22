@@ -1773,11 +1773,8 @@ ci_enabled() {
 cmd_ci() {
     local verb=$1 job
     case "$verb" in -h | --help) verb=help ;; esac
-    case "$CI_LOCAL_VERBS" in
-    *" $verb "*) usage_error "$verb" "--ci cannot run this verb, it works on this machine" ;;
-    esac
-    case "$CI_LOCAL_NOUNS" in
-    *" ${verb%% *} "*) usage_error "$verb" "--ci cannot run this verb, it works on this machine" ;;
+    case "$CI_LOCAL_VERBS:$CI_LOCAL_NOUNS" in
+    *" $verb "*:* | *:*" ${verb%% *} "*) usage_error "$verb" "--ci cannot run this verb, it works on this machine" ;;
     esac
     job=${verb// /-}
     [[ "$job" =~ ^[A-Za-z0-9_-]+$ ]] || usage_error "$verb" "--ci needs a job name, not $verb"
