@@ -1,0 +1,9 @@
+dev test
+  Run the project's tests
+
+the built-in runs (rust project)
+  cargo nextest run --all-features
+  cargo test --doc --all-features
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

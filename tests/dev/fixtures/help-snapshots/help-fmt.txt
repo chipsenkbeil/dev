@@ -1,0 +1,8 @@
+dev fmt
+  Format the source for the project type
+
+the built-in runs (rust project)
+  cargo +nightly fmt
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

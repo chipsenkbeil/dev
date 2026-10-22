@@ -1,0 +1,8 @@
+dev deploy
+  Deploy the project (needs .dev/deploy.sh)
+
+the built-in runs (rust project)
+  (none: add .dev/deploy.sh)
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

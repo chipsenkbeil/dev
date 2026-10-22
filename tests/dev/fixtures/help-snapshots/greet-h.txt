@@ -1,0 +1,12 @@
+dev greet
+  Say hello.
+
+usage
+  dev greet [flags]
+
+flags
+  --loud
+  --name
+
+Run `dev greet --help` for the script header and the command it runs.
+exit 0

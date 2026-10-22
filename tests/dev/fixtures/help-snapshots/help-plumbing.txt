@@ -1,0 +1,8 @@
+dev plumbing
+  Internal helper for the other verbs.
+
+.dev/plumbing.sh header
+  Internal helper for the other verbs.
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

@@ -1,0 +1,13 @@
+dev help
+  Show the commands, the details of one verb or a topic
+
+usage
+  dev help [-a] [--topics] [-k topic] [verb or topic]
+
+flags
+  -a
+  -k
+  --topics
+
+Run `dev help --help` for the script header and the command it runs.
+exit 0

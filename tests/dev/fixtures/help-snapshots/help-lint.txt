@@ -1,0 +1,16 @@
+dev lint (override)
+  Lint the fixture.
+
+flags
+  --fix
+
+.dev/lint.sh header
+  Lint the fixture.
+  flags: --fix
+
+the built-in runs (rust project)
+  cargo +nightly fmt --check
+  cargo clippy --all-targets --all-features -- -D warnings
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

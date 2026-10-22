@@ -1,0 +1,8 @@
+dev push
+  Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named
+
+usage
+  dev push
+
+Run `dev push --help` for the script header and the command it runs.
+exit 0

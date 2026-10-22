@@ -1,0 +1,9 @@
+dev tools
+  Install and check the tools in .dev/tools.tsv
+
+subcommands
+  install  Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
+  check    Report which of the manifest's tools are on PATH, exit 1 when one is missing
+
+Run `dev help tools <sub>` for a subcommand's flags and header.
+exit 0

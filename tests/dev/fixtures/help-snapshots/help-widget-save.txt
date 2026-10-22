@@ -1,0 +1,12 @@
+dev widget save
+  Save the widget.
+
+flags
+  --now
+
+.dev/widget/save.sh header
+  Save the widget.
+  flags: --now
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

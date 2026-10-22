@@ -1,0 +1,8 @@
+dev plumbing
+  Internal helper for the other verbs.
+
+usage
+  dev plumbing
+
+Run `dev plumbing --help` for the script header and the command it runs.
+exit 0

@@ -1,0 +1,8 @@
+dev run
+  Run the project
+
+the built-in runs (rust project)
+  cargo run --
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

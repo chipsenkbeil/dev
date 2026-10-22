@@ -1,0 +1,14 @@
+dev tools install
+  Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
+
+usage
+  dev tools install [--system or --user] [--dry-run] [--force] [tool...]
+
+flags
+  --dry-run
+  --force
+  --system
+  --user
+
+Run `dev tools install --help` for the script header and the command it runs.
+exit 0

@@ -1,0 +1,15 @@
+dev init
+  Seed a project with lint, CI and remotes
+
+flags
+  --type
+  --public
+  --name
+  --dry-run
+  --no-gerrit
+
+the built-in runs (rust project)
+  dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

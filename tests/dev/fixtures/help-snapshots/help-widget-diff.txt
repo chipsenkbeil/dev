@@ -1,0 +1,8 @@
+dev widget diff
+  Diff the widget.
+
+.dev/widget/diff.sh header
+  Diff the widget.
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

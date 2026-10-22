@@ -1,0 +1,14 @@
+dev tools install
+  Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
+
+flags
+  --dry-run
+  --force
+  --system
+  --user
+
+the built-in runs (rust project)
+  dev tools install [--system or --user] [--dry-run] [--force] [tool...]
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

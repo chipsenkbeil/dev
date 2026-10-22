@@ -131,7 +131,7 @@ assert_contains "lua lint without a target explains" "$out" "no built-in lint fo
 printf 'test:\n\ttrue\n' >"$plain/Makefile"
 run_dev "$plain" test >/dev/null
 assert_contains "lua test uses the Makefile target" "$(log)" "make -C $plain test"
-assert_contains "lua wins over make" "$(run_dev "$plain")" "project lua"
+assert_contains "lua wins over make" "$(run_dev "$plain")" "lua project at"
 rm "$plain/Makefile"
 
 none="$(project none)"
@@ -140,7 +140,7 @@ printf 'return {}\n' >"$none/.ci/pipeline.lua"
 out="$(run_dev "$none" lint 2>&1)"
 assert_eq "undetected project exits 1" "$?" "1"
 assert_contains "undetected project explains" "$out" "no built-in lint for undetected"
-assert_contains "a .lua file in a dot directory does not make a lua project" "$(run_dev "$none")" "project none"
+assert_contains "a .lua file in a dot directory does not make a lua project" "$(run_dev "$none")" "dev: project at"
 
 # A local override wins over the built-in
 mkdir -p "$rust/.dev"
@@ -285,7 +285,7 @@ out="$(run_dev "$rust" init --type cobol 2>&1)"
 assert_eq "init with an unknown type exits 2" "$?" "2"
 out="$(run_dev "$rust")"
 assert_eq "no verb exits 0" "$?" "0"
-assert_contains "bare dev names the project type" "$out" "project rust"
+assert_contains "bare dev names the project type" "$out" "rust project at"
 assert_contains "help marks the override" "$out" "(override)"
 assert_not_contains "help hides the hidden verbs" "$out" "__verbs"
 
@@ -294,19 +294,22 @@ printf '#!/usr/bin/env bash\n# Install the thing.\n# flags: --now --later\necho 
 chmod +x "$rust/.dev/install.sh"
 out="$(run_dev "$rust" install --now)"
 assert_eq "local-only verb runs its script" "$out" "installed --now"
+assert_contains "-h on a script verb gives help" "$(run_dev "$rust" install -h)" "dev install"
+assert_eq "-- lets -h through to a script verb" "$(run_dev "$rust" install -- -h)" "installed -h"
+assert_eq "-h after the -- of a built-in reaches its command" "$(run_dev "$rust" run -- -h >/dev/null && log)" "cargo run -- -h"
 out="$(run_dev "$rust" __verbs)"
 assert_contains "__verbs lists a local verb with its description" "$out" "install	local	Install the thing."
 assert_contains "__verbs lists a built-in" "$out" "fmt	builtin	"
 assert_contains "__verbs marks an override" "$out" "lint	override	"
 assert_not_contains "__verbs hides hidden verbs" "$out" "__"
 out="$(run_dev "$rust" help)"
-assert_contains "help lists local verbs" "$out" "local verbs"
+assert_contains "help lists a local verb under the project's group" "$out" "$(printf '\nrust\n  install')"
 assert_contains "help shows a local verb description" "$out" "Install the thing."
 out="$(run_dev "$rust" help init)"
 for flag in --type --public --name --dry-run --no-gerrit; do
     assert_contains "help init lists $flag" "$out" "$flag"
 done
-help_out="$(run_dev "$rust" help)"
+help_out="$(run_dev "$rust" help -a)"
 verbs_out="$(run_dev "$rust" __verbs)"
 for verb in lint fmt test build run deploy push pull sync init help; do
     assert_contains "help lists built-in $verb" "$help_out" "  $verb "

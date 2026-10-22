@@ -1,0 +1,43 @@
+dev: rust project at <root>
+
+Check your work
+  lint            (override)  Lint the fixture.
+  fmt                         Format the source for the project type
+  test                        Run the project's tests
+  build                       Build the project
+  run                         Run the project
+
+Share it
+  deploy                      Deploy the project (needs .dev/deploy.sh)
+  push                        Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named
+  pull                        Fetch the remote and rebase local work onto it
+
+Set up a machine or project
+  sync                        Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
+  init                        Seed a project with lint, CI and remotes
+  tools                       Install and check the tools in .dev/tools.tsv
+
+Greeting
+  greet                       Say hello.
+
+help-project
+  seed                        Seed the fixture data.
+
+Widgets
+  widget                      Manage the widget.
+
+Hidden
+  help                        Show the commands, the details of one verb or a topic
+  plumbing                    Internal helper for the other verbs.
+  __verbs                     List the verbs with their descriptions, for shell completion
+  __subs                      List the subcommands of a noun, for shell completion
+  __flags                     List the flags of a verb, for shell completion
+  __check-topics              Check the built-in and project topics against the real verbs and flags
+
+Topics
+  flags                       The global flags of the fixture
+  nouns                       How the fixture nouns work
+  overview                    What the fixture project is for and where to start
+
+Run `dev help <verb>` for one command and `dev help <topic>` for a topic.
+exit 0

@@ -1,0 +1,3 @@
+# flags: The global flags of the fixture
+
+Use `dev -v lint` to see each command.

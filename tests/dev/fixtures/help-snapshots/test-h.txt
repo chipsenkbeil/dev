@@ -1,0 +1,8 @@
+dev test
+  Run the project's tests
+
+usage
+  dev test
+
+Run `dev test --help` for the script header and the command it runs.
+exit 0

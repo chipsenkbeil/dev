@@ -1,0 +1,13 @@
+dev greet
+  Say hello.
+
+flags
+  --loud
+  --name
+
+.dev/greet.sh header
+  Say hello.
+  flags: --loud --name
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

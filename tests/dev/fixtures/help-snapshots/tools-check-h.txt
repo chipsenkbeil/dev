@@ -1,0 +1,8 @@
+dev tools check
+  Report which of the manifest's tools are on PATH, exit 1 when one is missing
+
+usage
+  dev tools check
+
+Run `dev tools check --help` for the script header and the command it runs.
+exit 0

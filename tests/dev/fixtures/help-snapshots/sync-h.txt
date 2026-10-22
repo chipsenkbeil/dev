@@ -1,0 +1,13 @@
+dev sync
+  Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
+
+usage
+  dev sync [flags]
+
+flags
+  --check
+  --yes
+  -y
+
+Run `dev sync --help` for the script header and the command it runs.
+exit 0

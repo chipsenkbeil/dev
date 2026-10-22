@@ -1,0 +1,8 @@
+dev tools check
+  Report which of the manifest's tools are on PATH, exit 1 when one is missing
+
+the built-in runs (rust project)
+  (none: no built-in tools check for rust projects)
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

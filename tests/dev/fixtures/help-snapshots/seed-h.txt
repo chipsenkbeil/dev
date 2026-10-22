@@ -1,0 +1,8 @@
+dev seed
+  Seed the fixture data.
+
+usage
+  dev seed
+
+Run `dev seed --help` for the script header and the command it runs.
+exit 0

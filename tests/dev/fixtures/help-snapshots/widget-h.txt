@@ -1,0 +1,9 @@
+dev widget
+  Manage the widget.
+
+subcommands
+  diff  Diff the widget.
+  save  Save the widget.
+
+Run `dev help widget <sub>` for a subcommand's flags and header.
+exit 0

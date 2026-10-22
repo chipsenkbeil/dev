@@ -1,0 +1,8 @@
+dev seed
+  Seed the fixture data.
+
+.dev/seed.sh header
+  Seed the fixture data.
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

@@ -1,0 +1,8 @@
+dev run
+  Run the project
+
+usage
+  dev run
+
+Run `dev run --help` for the script header and the command it runs.
+exit 0

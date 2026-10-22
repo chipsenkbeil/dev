@@ -1,0 +1,8 @@
+dev fmt
+  Format the source for the project type
+
+usage
+  dev fmt
+
+Run `dev fmt --help` for the script header and the command it runs.
+exit 0

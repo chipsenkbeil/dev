@@ -1,0 +1,8 @@
+dev pull
+  Fetch the remote and rebase local work onto it
+
+the built-in runs (rust project)
+  (none: neither .jj nor .git found in <root>)
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

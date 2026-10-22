@@ -1,0 +1,11 @@
+dev widget save
+  Save the widget.
+
+usage
+  dev widget save [flags]
+
+flags
+  --now
+
+Run `dev widget save --help` for the script header and the command it runs.
+exit 0

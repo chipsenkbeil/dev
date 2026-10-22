@@ -1,0 +1,8 @@
+dev pull
+  Fetch the remote and rebase local work onto it
+
+usage
+  dev pull
+
+Run `dev pull --help` for the script header and the command it runs.
+exit 0

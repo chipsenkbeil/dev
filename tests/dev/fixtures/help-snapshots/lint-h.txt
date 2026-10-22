@@ -1,0 +1,11 @@
+dev lint (override)
+  Lint the fixture.
+
+usage
+  dev lint [flags]
+
+flags
+  --fix
+
+Run `dev lint --help` for the script header and the command it runs.
+exit 0

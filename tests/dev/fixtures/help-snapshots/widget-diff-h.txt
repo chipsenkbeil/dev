@@ -1,0 +1,8 @@
+dev widget diff
+  Diff the widget.
+
+usage
+  dev widget diff
+
+Run `dev widget diff --help` for the script header and the command it runs.
+exit 0

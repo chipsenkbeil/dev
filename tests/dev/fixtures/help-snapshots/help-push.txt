@@ -1,0 +1,8 @@
+dev push
+  Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named
+
+the built-in runs (rust project)
+  (none: neither .jj nor .git found in <root>)
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

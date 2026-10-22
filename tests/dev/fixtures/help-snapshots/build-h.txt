@@ -1,0 +1,8 @@
+dev build
+  Build the project
+
+usage
+  dev build
+
+Run `dev build --help` for the script header and the command it runs.
+exit 0

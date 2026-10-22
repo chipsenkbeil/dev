@@ -1,0 +1,13 @@
+dev sync
+  Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
+
+flags
+  --check
+  --yes
+  -y
+
+the built-in runs (rust project)
+  diff the project's lint files against <dotfiles>/dotfiles/claude/.claude/skills/style/lint/rust
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

@@ -1,0 +1,8 @@
+dev build
+  Build the project
+
+the built-in runs (rust project)
+  cargo build --release
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0

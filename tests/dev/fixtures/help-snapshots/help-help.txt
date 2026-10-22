@@ -1,0 +1,13 @@
+dev help
+  Show the commands, the details of one verb or a topic
+
+flags
+  -a
+  -k
+  --topics
+
+the built-in runs (rust project)
+  dev help [-a] [--topics] [-k topic] [verb or topic]
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0
