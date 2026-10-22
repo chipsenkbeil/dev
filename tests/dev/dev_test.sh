@@ -606,7 +606,7 @@ out="$(run_dev "$reg" sync --check)"
 assert_eq "sync --yes restores the lints block, the attribute and the guide" "$out" "up to date"
 assert_contains "sync --yes keeps the project checks below the lint.sh marker" "$(cat "$reg/.dev/lint.sh")" 'check "project extra" true'
 on_tty() {
-    if script --version 2>&1 | grep -q util-linux; then
+    if sv=$(script --version 2>&1) && grep -q util-linux <<<"$sv"; then
         script -qec "$(printf '%q ' "$@")" /dev/null
     else
         script -q /dev/null "$@"

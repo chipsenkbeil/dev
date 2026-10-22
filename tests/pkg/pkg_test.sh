@@ -89,7 +89,7 @@ qtmp="$(mktemp)"
 printf 'name\tbinary\tbrew\nplain\tpl\tripgrep\nscript-args\tzzznope\t"script:/tmp/x.sh --flag value"\n' >"$qtmp"
 qcol="$(manifest_column_index "$qtmp" brew)"
 assert_eq "quoted-cell column index" "$qcol" "3"
-assert_eq "unquoted row still tokenizes" "$(manifest_rows "$qtmp" "$qcol" | head -n1)" $'plain\tpl\tripgrep'
+assert_eq "unquoted row still tokenizes" "$(manifest_rows "$qtmp" "$qcol" | sed -n 1p)" $'plain\tpl\tripgrep'
 assert_eq "quoted row yields full cell" "$(manifest_rows "$qtmp" "$qcol" | tail -n1)" $'script-args\tzzznope\tscript:/tmp/x.sh --flag value'
 rm -f "$qtmp"
 
