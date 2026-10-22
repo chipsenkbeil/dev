@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 no_args
 
-ROOTS=(bootstrap.sh scripts tests .dev dotfiles/bin dotfiles/jj/.config/jj/scripts)
+ROOTS=(bootstrap.sh scripts tests .dev dotfiles/bin dotfiles/guide/.local/bin dotfiles/jj/.config/jj/scripts)
 
 status=0
 
