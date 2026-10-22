@@ -46,3 +46,16 @@ setup() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"install failed: bad-tool" ]] || false
 }
+
+@test "a bin: override that is an absolute path counts as present for check and install" {
+    printf '#!/bin/sh\nexit 0\n' >"$BATS_TEST_TMPDIR/app-cli"
+    chmod +x "$BATS_TEST_TMPDIR/app-cli"
+    printf 'name binary brew\napp-tool - cask:app-cask,bin:%s\n' "$BATS_TEST_TMPDIR/app-cli" >"$MANIFEST"
+    run bash "$PKG" check --manifest "$MANIFEST"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[x] app-tool"*"$BATS_TEST_TMPDIR/app-cli"* ]] || false
+    run bash "$PKG" install --manifest "$MANIFEST"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"app-tool already on PATH, skipping"* ]] || false
+    ! grep -q '^install' "$LOG"
+}
