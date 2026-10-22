@@ -114,7 +114,7 @@ cp "$STUBS/cargo" "$BARE/cargo"
 style_lint() {
     local project=$1 path=$2
     shift 2
-    env -u CI PATH="$path" "$@" bash "$project/lint.sh" 2>&1
+    env -u CI -u CARGO_NET_OFFLINE PATH="$path" "$@" bash "$project/lint.sh" 2>&1
 }
 
 missing_tools=""
@@ -150,6 +150,10 @@ else
     assert_not_contains "a project without debug_assertions gets no release clippy pass" "$(cat "$calls")" "--release"
     assert_contains "cargo deny checks every section and only warns on unmaintained" "$(cat "$calls")" "deny check -W unmaintained"
     assert_not_contains "cargo deny is not limited to the bans section" "$(cat "$calls")" "deny check bans"
+    assert_not_contains "cargo deny fetches the advisory database when the network is on" "$(cat "$calls")" "deny --offline"
+    : >"$calls"
+    out="$(style_lint "$rust" "$full_path" CARGO_LOG="$calls" CARGO_NET_OFFLINE=true)"
+    assert_contains "cargo deny runs offline when CARGO_NET_OFFLINE=true" "$(cat "$calls")" "deny --offline check -W unmaintained"
     printf '#[cfg(not(debug_assertions))]\nfn release_only() {}\n' >"$rust/src/release.rs"
     : >"$calls"
     out="$(style_lint "$rust" "$full_path" CARGO_LOG="$calls")"
