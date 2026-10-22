@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Pure-bash tests for `dev box`. ci is a stub first on PATH that logs its arguments, one per
-# line, and answers from fixture files in $FX.
+# Pure-bash tests for `dev box` and `dev connect`. ci, mosh and ssh are stubs first on PATH that
+# log their arguments, one per line, and ci answers from fixture files in $FX. A fake dotfiles
+# clone in DOTFILES holds a stub scripts/select-items.sh that records the items and picks FAKE_PICK.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,8 +13,9 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP:?}"' EXIT
 STUBS="$TMP/stubs"
 FX="$TMP/fx"
-export LOG="$TMP/log" FX
-mkdir -p "$STUBS" "$FX"
+FAKE_DOTFILES="$TMP/dotfiles"
+export LOG="$TMP/log" ITEMS="$TMP/items" FX
+mkdir -p "$STUBS" "$FX" "$FAKE_DOTFILES/scripts"
 
 cat >"$STUBS/ci" <<'STUB'
 #!/bin/sh
@@ -23,7 +25,19 @@ sub=$2
 [ ! -f "$FX/$sub.json" ] || cat "$FX/$sub.json"
 exit "$(cat "$FX/$sub.rc" 2>/dev/null || echo 0)"
 STUB
-chmod +x "$STUBS"/*
+for tool in mosh ssh; do
+    cat >"$STUBS/$tool" <<STUB
+#!/bin/sh
+{ echo $tool; printf '%s\n' "\$@"; echo '#'; } >>"\$LOG"
+STUB
+done
+cat >"$FAKE_DOTFILES/scripts/select-items.sh" <<'STUB'
+#!/bin/sh
+{ echo "picker $*"; cat; } >"$ITEMS"
+[ "$FAKE_PICK" != CANCEL ] || exit 1
+echo "$FAKE_PICK"
+STUB
+chmod +x "$STUBS"/* "$FAKE_DOTFILES/scripts/select-items.sh"
 
 BASE_PATH="/usr/bin:/bin:/usr/sbin:/sbin:$(dirname "$(command -v jq)")"
 fails=0
@@ -72,7 +86,7 @@ fx() {
 }
 
 reset() {
-    rm -f "${FX:?}"/* "$LOG"
+    rm -f "${FX:?}"/* "$LOG" "$ITEMS"
     : >"$LOG"
 }
 
@@ -80,19 +94,19 @@ reset() {
 NOPROJ="$TMP/noproj"
 mkdir -p "$NOPROJ"
 box() {
-    (cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" "$DEV" "$@")
+    (cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" "$@")
 }
 
 PROJ="$TMP/myproject"
 mkdir -p "$PROJ/.git"
 inproj() {
-    (cd "$PROJ" && PATH="$STUBS:$BASE_PATH" "$DEV" "$@")
+    (cd "$PROJ" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" "$@")
 }
 
 # mkbox <name> <state> <projects json> <expires offset s|null> <delete offset s|null>
 mkbox() {
     jq -nc --arg name "$1" --arg state "$2" --argjson names "$3" --argjson exp "$4" --argjson del "$5" '{
-        name: $name, state: $state, profile: "medium", cpu: 8, memory_gib: 16, projects: ($names | map({name: ., path: "/home/user/projects/\(.)"})),
+        name: $name, state: $state, profile: "medium", cpu: 8, memory_gib: 16, projects: ($names | map({name: ., path: "/srv/projects/\(.)"})),
         tailnet_name: "box-\($name)", created_at: "2026-10-19T14:03:11Z", ttl_hours: 4,
         expires_at: (if $exp == null then null else now + $exp | floor | todate end),
         stopped_at: null,
@@ -118,6 +132,7 @@ lsdoc() {
 }
 
 CAP='{"running":2,"running_max":3,"memory_gib":24,"memory_max_gib":32}'
+PROJECTS_DIR=/srv/projects
 RUN_OFF=12600
 NEW_OFF=16200
 STOP_OFF=561600
@@ -345,24 +360,174 @@ out="$(cd "$NOPROJ" && PATH="$BASE_PATH" "$DEV" box ls 2>&1)"
 assert_eq "a missing ci is an error" "$?" "1"
 assert_contains "the missing ci is named" "$out" "ci not found"
 
+# --- connect ---
+
+reset
+fx ls "$(lsdoc "$RUNNING")"
+box connect myproject-k3x
+assert_eq "connect to a running box runs mosh" "$(calls)" "ci box ls --json
+mosh box-myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+box box connect myproject-k3x --ssh
+assert_eq "--ssh runs ssh" "$(calls)" "ci box ls --json
+ssh -t box-myproject-k3x tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+reset
+fx ls "$(lsdoc "$KEPT")"
+box connect scratch-a1b --ssh
+assert_contains "a box with no project uses its name as the session" "$(calls)" "tmux new -A -s scratch-a1b -c $PROJECTS_DIR"
+reset
+fx ls "$(lsdoc "$STOPPED")"
+fx resume "$(doc "$(mkbox ci-abc running '["ci","dotfiles"]' "$NEW_OFF" null)")"
+out="$(box connect ci-abc)"
+assert_eq "connect to a stopped box resumes then runs mosh" "$(calls)" "ci box ls --json
+ci box resume ci-abc --json
+mosh box-ci-abc -- tmux new -A -s ci -c $PROJECTS_DIR/ci"
+assert_eq "connect prints the resume line" "$out" "resumed ci-abc (medium, ci,dotfiles), $NEW_LEFT, host box-ci-abc"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+mkdir -p "$TMP/nomosh"
+ln -sf "$STUBS/ci" "$STUBS/ssh" "$TMP/nomosh/"
+for tool in bash jq awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname; do
+    found="$(PATH="$BASE_PATH" command -v "$tool")" && ln -sf "$found" "$TMP/nomosh/$tool"
+done
+if PATH="$TMP/nomosh" command -v mosh >/dev/null 2>&1; then
+    echo "FAIL - the no-mosh PATH still finds mosh"
+    fails=$((fails + 1))
+fi
+out="$(cd "$NOPROJ" && PATH="$TMP/nomosh" "$DEV" connect myproject-k3x 2>&1)"
+assert_contains "a missing mosh warns once" "$out" "mosh not found, using ssh"
+assert_eq "a missing mosh falls back to ssh" "$(calls)" "ci box ls --json
+ssh -t box-myproject-k3x tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+reset
+fx ls "$(lsdoc "$CREATING")"
+out="$(box connect new-111 2>&1)"
+assert_eq "connect to a box in another state exits 6" "$?" "6"
+assert_contains "the bad state is named" "$out" "new-111 is creating"
+assert_not_contains "no mosh for a bad state" "$(calls)" "mosh"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+out="$(box connect nope 2>&1)"
+assert_eq "connect to an unknown box exits 3" "$?" "3"
+
+reset
+fx ls "$(lsdoc)"
+out="$(box connect 2>&1)"
+assert_eq "connect with no boxes outside a project exits 1" "$?" "1"
+assert_eq "connect with no boxes says how to create one" "$out" "no boxes; create one with dev box create"
+
+reset
+fx ls "$(lsdoc "$KEPT" "$STOPPED" "$RUNNING")"
+FAKE_PICK=myproject-k3x inproj connect
+assert_eq "the picker lists the project's boxes first, with a new-box item last" "$(cat "$ITEMS")" "picker --title Connect to a box
+myproject-k3x	myproject-k3x  running  medium  myproject    $RUN_LEFT
+scratch-a1b	scratch-a1b    running  medium  -            kept
+ci-abc	ci-abc         stopped  medium  ci,dotfiles  $STOP_LEFT
+__new__	new box for myproject"
+assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
+mosh box-myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+reset
+fx ls "$(lsdoc "$KEPT")"
+FAKE_PICK=scratch-a1b box connect
+assert_not_contains "outside a project the picker has no new-box item" "$(cat "$ITEMS")" "__new__"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+fx create "$(doc "$(mkbox myproject-n3w running '["myproject"]' "$NEW_OFF" null)")"
+out="$(FAKE_PICK=__new__ inproj connect)"
+assert_eq "the new-box item creates for the project then attaches" "$(calls)" "ci box ls --json
+ci box create --project myproject --json
+mosh box-myproject-n3w -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+assert_contains "the new box is reported" "$out" "created myproject-n3w"
+reset
+fx ls "$(lsdoc)"
+fx create "$(doc "$RUNNING")"
+FAKE_PICK=__new__ inproj connect >/dev/null
+assert_contains "inside a project with no boxes the picker still asks" "$(cat "$ITEMS")" "picker --title Connect to a box --no-auto"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+FAKE_PICK=CANCEL box connect >/dev/null 2>&1
+assert_eq "cancelling the picker exits 1" "$?" "1"
+assert_eq "cancelling the picker calls ci only for ls" "$(calls)" "ci box ls --json"
+reset
+out="$(box connect __new__ 2>&1)"
+assert_eq "connect refuses the new-box sentinel as a name" "$?" "2"
+assert_contains "the sentinel is named" "$out" "bad box name __new__"
+assert_eq "ci is not called for the sentinel" "$(calls)" ""
+reset
+fx ls "$(lsdoc "$(jq -c '.tailnet_name = null' <<<"$RUNNING")")"
+out="$(box connect myproject-k3x 2>&1)"
+assert_eq "connect to a box with no tailnet name exits 6" "$?" "6"
+assert_eq "connect names the missing tailnet name" "$out" "dev box connect: myproject-k3x has no tailnet name yet (state running)"
+assert_eq "no mosh or ssh for a box with no tailnet name" "$(calls)" "ci box ls --json"
+reset
+fx ls "$(lsdoc "$STOPPED")"
+fx resume "$(doc "$(jq -c '.tailnet_name = null | .state = "running"' <<<"$STOPPED")")"
+out="$(box connect ci-abc --ssh 2>&1)"
+assert_eq "a resumed box with no tailnet name exits 6" "$?" "6"
+assert_contains "the resumed box is named" "$out" "ci-abc has no tailnet name yet (state running)"
+assert_not_contains "no ssh after a resume without a tailnet name" "$(calls)" "ssh"
+reset
+fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
+box connect myproject-k3x
+assert_eq "connect starts tmux in the first project's path" "$(calls)" "ci box ls --json
+mosh box-myproject-k3x -- tmux new -A -s myproject -c /srv/projects/dotfiles"
+reset
+fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
+box connect myproject-k3x --ssh
+assert_eq "ssh starts tmux in the first project's path" "$(calls)" "ci box ls --json
+ssh -t box-myproject-k3x tmux new -A -s myproject -c /srv/projects/dotfiles"
+LONG65="$(printf '%065d' 0 | tr 0 a)"
+for bad in '/srv/projects/x; rm -rf ~' '/srv' '/home/user/projects' '/home/user/projects/myproject' '/srv/projects/a/b' "/srv/projects/\$(id)" '/srv/projects/.hidden' '/srv/projects/-x' '/srv/projects/..' "/srv/projects/$LONG65"; do
+    reset
+    fx ls "$(lsdoc "$(jq -c --arg p "$bad" '.projects[0].path = $p' <<<"$RUNNING")")"
+    out="$(box connect myproject-k3x 2>&1)"
+    assert_eq "connect refuses the project path $bad" "$?" "1"
+    assert_contains "the refused path is named" "$out" "refusing the project path"
+    assert_eq "nothing is run for the path $bad" "$(calls)" "ci box ls --json"
+done
+reset
+fx ls "$(lsdoc "$(jq -c '.projects[0].path = null' <<<"$RUNNING")")"
+out="$(box connect myproject-k3x 2>&1)"
+assert_eq "connect to a box with a null project path exits 6" "$?" "6"
+assert_eq "connect names the missing project path" "$out" "dev box connect: myproject-k3x has no project path yet (state running)"
+assert_eq "no mosh or ssh for a null project path" "$(calls)" "ci box ls --json"
+reset
+fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/MyProject"' <<<"$RUNNING")")"
+box connect myproject-k3x
+assert_contains "connect accepts a capitalised project path" "$(calls)" "-c /srv/projects/MyProject"
+reset
+fx ls "$(lsdoc "$(jq -c --arg p "/srv/projects/$(printf '%064d' 0 | tr 0 a)" '.projects[0].path = $p' <<<"$RUNNING")")"
+box connect myproject-k3x
+assert_contains "connect accepts a 64-character project path" "$(calls)" "-c /srv/projects/aaaaaaaa"
+reset
+fx ls "$(lsdoc "$(jq -c '.projects[0].name = "my.proj" | .projects[0].path = "/srv/projects/my.proj"' <<<"$RUNNING")")"
+box connect myproject-k3x
+assert_eq "a dot in the project name becomes an underscore in the tmux session" "$(calls)" "ci box ls --json
+mosh box-myproject-k3x -- tmux new -A -s my_proj -c /srv/projects/my.proj"
+
 # --- dispatch ---
 
 out="$(box --ci box ls 2>&1)"
 assert_eq "--ci refuses box ls" "$?" "2"
 assert_contains "--ci names the refused subcommand" "$out" "dev box ls: --ci cannot run this verb"
+out="$(box --ci connect 2>&1)"
+assert_eq "--ci refuses connect" "$?" "2"
+assert_contains "--ci names connect" "$out" "dev connect: --ci cannot run this verb"
 out="$(box help)"
 assert_contains "dev help lists box" "$out" "box "
+assert_contains "dev help lists connect" "$out" "connect "
 out="$(box help box)"
-for sub in ls create show stop resume extend delete; do
+for sub in ls create show stop resume extend delete connect; do
     assert_contains "dev help box lists $sub" "$out" "  $sub "
 done
 out="$(box help box create)"
 assert_contains "create help states the default lifetime" "$out" "4 hours"
 assert_contains "create help states the default profile" "$out" "profile medium"
 assert_contains "create help lists --keep" "$out" "--keep"
-assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend delete"
+assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend delete connect"
 assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--profile --project --ttl --keep -v --verbose -vv --ci"
 assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
+assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"
 assert_eq "__flags box ls" "$(box __flags box ls | sed -n 1p)" "--all"
 TOPICPROJ="$TMP/topicproj"
 mkdir -p "$TOPICPROJ/.dev/topics" "$TOPICPROJ/.git"

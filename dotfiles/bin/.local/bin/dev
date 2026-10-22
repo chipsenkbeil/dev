@@ -223,7 +223,8 @@ tools|noun|||Install and check the tools in .dev/tools.tsv|Set up a machine or p
 tools install|cmd_tools_install|--dry-run --force --group --system --user|dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
 tools check|cmd_tools_check|--group|dev tools check [--group NAME]|Report which of the manifest's tools are on PATH, exit 1 when one is missing
 guide|cmd_guide||dev guide [question...]|Show this repo's overview, or ask guide a question about its commands and topics|Set up a machine or project
-box|noun|||List, create, show, stop, resume, extend and delete dev boxes through ci box|Boxes
+connect|cmd_box_connect|--ssh|dev connect [<box>] [--ssh]|Attach to a box over mosh in a tmux session, picking, resuming or creating one first|Boxes
+box|noun|||List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box|Boxes
 box ls|cmd_box_ls|--all|dev box ls [--all]|List the boxes with state, profile, projects and time left, then the cap
 box create|cmd_box_create|--profile --project --ttl --keep|dev box create [--profile small, medium or large] [--project NAME]... [--ttl HOURS or --keep]|Create a box and wait until it runs, profile medium and 4 hours unless told otherwise, with the current project by default
 box show|cmd_box_show||dev box show BOX|Show one box as key: value lines
@@ -231,6 +232,7 @@ box stop|cmd_box_stop||dev box stop BOX|Stop a box, which ci deletes later unles
 box resume|cmd_box_resume|--ttl --keep|dev box resume BOX [--ttl HOURS or --keep]|Start a stopped box again, keeping its lifetime unless told otherwise
 box extend|cmd_box_extend|--ttl --keep|dev box extend BOX (--ttl HOURS or --keep)|Replace a running box's lifetime, counted from now
 box delete|cmd_box_delete|--yes -y|dev box delete BOX [-y or --yes]|Archive a box's projects and delete it, after asking unless -y
+box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
 help|cmd_help|-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
 TABLE
 }
@@ -1430,6 +1432,8 @@ cmd_tools_check() {
 
 # --- box ---
 
+BOX_PROJECTS_DIR=/srv/projects
+
 # shellcheck disable=SC2016  # jq programs, not shell expansions
 BOX_JQ='
 def span($s):
@@ -1458,11 +1462,11 @@ box_need() {
     command -v jq >/dev/null 2>&1 || die "jq not found on PATH, install it with: brew install jq"
 }
 
-# box_parse <sub> <allowed flags> [args...]: set B_PROFILE, B_PROJECTS, B_TTL, B_KEEP, B_YES, B_ALL and B_POS.
+# box_parse <sub> <allowed flags> [args...]: set B_PROFILE, B_PROJECTS, B_TTL, B_KEEP, B_YES, B_ALL, B_SSH and B_POS.
 box_parse() {
     local sub=$1 allowed=" $2 " arg value
     shift 2
-    B_PROFILE="" B_TTL="" B_KEEP=0 B_YES=0 B_ALL=0
+    B_PROFILE="" B_TTL="" B_KEEP=0 B_YES=0 B_ALL=0 B_SSH=0
     B_PROJECTS=() B_POS=()
     while [ "$#" -gt 0 ]; do
         arg=$1
@@ -1497,6 +1501,7 @@ box_parse() {
         --keep) B_KEEP=1 ;;
         -y | --yes) B_YES=1 ;;
         --all) B_ALL=1 ;;
+        --ssh) B_SSH=1 ;;
         *) B_POS+=("$arg") ;;
         esac
     done
@@ -1669,6 +1674,96 @@ cmd_box_delete() {
     box_need
     box_call delete delete "$BOX_NAME" --json
     echo "deleted $(box_field "$BOX_OUT" .box.name), archive $(box_field "$BOX_OUT" '.box.archive.path // "-"')"
+}
+
+# box_items <ls document> <project>: "name<TAB>label" per box, the project's boxes first, then the new-box item inside a project.
+box_items() {
+    local names rows
+    names=$(printf '%s' "$1" | jq -r --arg p "$2" "$BOX_JQ"'.boxes | sort_by(if (any(.projects[]; .name == $p)) then 0 else 1 end)[] | .name')
+    rows=$(printf '%s' "$1" | jq -r --arg p "$2" "$BOX_JQ"'.boxes | sort_by(if (any(.projects[]; .name == $p)) then 0 else 1 end)[] | row' | box_table)
+    if [ -n "$names" ]; then paste -d '\t' <(printf '%s\n' "$names") <(printf '%s\n' "$rows"); fi
+    if [ -n "$2" ]; then printf '__new__\tnew box for %s\n' "$2"; fi
+}
+
+# box_attach <box object>: exec mosh into the box's tmux session, or ssh when asked or mosh is missing.
+box_attach() {
+    local host session dir
+    host=$(box_field "$1" '.tailnet_name // empty')
+    if [ -z "$host" ]; then
+        printf 'dev box connect: %s has no tailnet name yet (state %s)\n' "$(box_field "$1" .name)" "$(box_field "$1" .state)" >&2
+        exit 6
+    fi
+    if [ "$(box_field "$1" '(.projects | length) > 0 and .projects[0].path == null')" = true ]; then
+        printf 'dev box connect: %s has no project path yet (state %s)\n' "$(box_field "$1" .name)" "$(box_field "$1" .state)" >&2
+        exit 6
+    fi
+    dir=$(printf '%s' "$1" | jq -r --arg d "$BOX_PROJECTS_DIR" '.projects[0].path // $d')
+    if ! [[ "$dir" =~ ^/srv/projects(/[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$ ]]; then
+        printf 'dev box connect: refusing the project path %q of %s\n' "$dir" "$(box_field "$1" .name)" >&2
+        exit 1
+    fi
+    session=$(box_field "$1" '(.projects[0].name // .name) | gsub("[^A-Za-z0-9_-]"; "_")')
+    if [ "$B_SSH" -eq 0 ] && ! command -v mosh >/dev/null 2>&1; then
+        echo "dev box connect: mosh not found, using ssh" >&2
+        B_SSH=1
+    fi
+    if [ "$B_SSH" -eq 1 ]; then
+        show ssh -t "$host" tmux new -A -s "$session" -c "$dir"
+        exec ssh -t "$host" tmux new -A -s "$session" -c "$dir"
+    fi
+    show mosh "$host" -- tmux new -A -s "$session" -c "$dir"
+    exec mosh "$host" -- tmux new -A -s "$session" -c "$dir"
+}
+
+cmd_box_connect() {
+    local project="" ls items picker choice="" box state noauto=()
+    box_parse connect "--ssh" "$@"
+    [ "${#B_POS[@]}" -le 1 ] || usage_error "box connect" "unexpected argument ${B_POS[1]}"
+    [ "${#B_POS[@]}" -eq 0 ] || box_one connect
+    box_need
+    project=$(box_project) || project=""
+    box_call connect ls --json
+    ls=$BOX_OUT
+    if [ "${#B_POS[@]}" -eq 1 ]; then
+        choice=$BOX_NAME
+    else
+        items=$(box_items "$ls" "$project")
+        if [ -z "$items" ]; then
+            echo "no boxes; create one with dev box create" >&2
+            exit 1
+        fi
+        if [ "$(printf '%s\n' "$items" | wc -l)" -eq 1 ] && [ -n "$project" ]; then noauto=(--no-auto); fi
+        picker="$(dotfiles_root)/scripts/select-items.sh"
+        [ -f "$picker" ] || die "no $picker (set DOTFILES to the dotfiles repo)"
+        choice=$(printf '%s\n' "$items" | bash "$picker" --title "Connect to a box" ${noauto[@]+"${noauto[@]}"}) || exit 1
+        [ -n "$choice" ] || exit 1
+    fi
+    if [ "$choice" = __new__ ]; then
+        B_PROFILE="" B_TTL="" B_KEEP=0 B_PROJECTS=()
+        [ -z "$project" ] || B_PROJECTS=("$project")
+        box_create_call
+        box=$(printf '%s' "$BOX_OUT" | jq -c .box)
+    else
+        box=$(printf '%s' "$ls" | jq -c --arg n "$choice" '.boxes[] | select(.name == $n)')
+        if [ -z "$box" ]; then
+            printf 'dev box connect: no box named %s\n' "$choice" >&2
+            exit 3
+        fi
+        state=$(box_field "$box" .state)
+        case "$state" in
+        running) ;;
+        stopped)
+            box_call connect resume "$choice" --json
+            box_summary resumed "$BOX_OUT"
+            box=$(printf '%s' "$BOX_OUT" | jq -c .box)
+            ;;
+        *)
+            printf 'dev box connect: %s is %s, it must be running or stopped to connect\n' "$choice" "$state" >&2
+            exit 6
+            ;;
+        esac
+    fi
+    box_attach "$box"
 }
 
 # --- templates ---
@@ -2528,7 +2623,7 @@ cmd_init() {
     fi
 }
 
-CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull guide "
+CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull guide connect "
 CI_LOCAL_NOUNS=" tools box pi antinote "
 
 # ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.

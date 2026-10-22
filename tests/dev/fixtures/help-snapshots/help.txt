@@ -20,7 +20,8 @@ Set up a machine or project
   guide                 Show this repo's overview, or ask guide a question about its commands and topics
 
 Boxes
-  box                   List, create, show, stop, resume, extend and delete dev boxes through ci box
+  connect               Attach to a box over mosh in a tmux session, picking, resuming or creating one first
+  box                   List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box
 
 Greeting
   greet                 Say hello.
