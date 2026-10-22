@@ -617,7 +617,7 @@ if command -v script >/dev/null 2>&1; then
     (cd "$reg" && on_tty env PATH="$STUBS:$PATH" "$DEV" sync < <(
         printf 'y\n'
         sleep 30
-    ) >"$TMP/sync.out" 2>&1) || true
+    ) >"$TMP/sync.out" 2>&1)
     assert_contains "sync asks on a terminal" "$(cat "$TMP/sync.out")" "[y/N]"
     out="$(run_dev "$reg" sync --check)"
     assert_eq "sync on a terminal applies a y answer" "$out" "up to date"
@@ -671,6 +671,42 @@ out="$(run_dev "$gp" push gerrit 2>&1)"
 assert_eq "push gerrit exits 0" "$?" "0"
 assert_contains "push gerrit pushes to gerrit" "$out" "gerrit: pushed main"
 assert_not_contains "push gerrit leaves origin alone" "$out" "origin:"
+echo g >"$gp/g"
+git -C "$gp" add g
+gitc -C "$gp" commit -q -m "feat: only for the remote of record"
+second="$(git -C "$gp" rev-parse HEAD)"
+out="$(run_dev "$gp" push 2>&1)"
+assert_eq "push in a gerrit project exits 0" "$?" "0"
+assert_contains "push in a gerrit project names the forge" "$out" "forge gerrit, remote of record gerrit (detected: the project has a gerrit remote)"
+assert_contains "push in a gerrit project pushes to gerrit" "$out" "gerrit: pushed main"
+assert_not_contains "push in a gerrit project leaves origin alone" "$out" "origin:"
+assert_eq "gerrit gets the new commit" "$(git -C "$TMP/gerrit.git" rev-parse main)" "$second"
+assert_eq "origin keeps the old commit" "$(git -C "$gremote" rev-parse main)" "$clean"
+git -C "$gp" config forge.kind github
+out="$(run_dev "$gp" push 2>&1)"
+assert_contains "forge.kind github pushes to origin" "$out" "forge github, remote of record origin (git config forge.kind=github)"
+assert_contains "forge.kind github reports the origin push" "$out" "origin: pushed main"
+assert_not_contains "forge.kind github leaves gerrit out" "$out" "gerrit:"
+git -C "$gremote" update-ref refs/heads/main "$clean"
+git -C "$gp" config forge.kind plain
+git -C "$gp" config forge.remote origin
+out="$(run_dev "$gp" push 2>&1)"
+assert_contains "forge.remote names the remote of record" "$out" "forge plain, remote of record origin (git config forge.kind=plain; remote from git config forge.remote)"
+git -C "$gremote" update-ref refs/heads/main "$clean"
+git -C "$gp" config forge.remote nosuch
+out="$(run_dev "$gp" push 2>&1)"
+assert_eq "a remote of record the project lacks exits 1" "$?" "1"
+assert_contains "push names the missing remote of record" "$out" "the remote of record nosuch is not a remote of this project"
+assert_contains "help push gives the same reason" "$(run_dev "$gp" help push)" "(none: the remote of record nosuch is not a remote"
+git -C "$gp" config forge.kind bogus
+out="$(run_dev "$gp" push 2>&1)"
+assert_eq "an unknown forge exits 1" "$?" "1"
+assert_contains "push names the unknown forge" "$out" "forge must be gerrit, github or plain (got: bogus"
+out="$(JJ_FORGE=github run_dev "$gp" push 2>&1)"
+assert_contains "JJ_FORGE wins over the setting" "$out" "(JJ_FORGE=github; remote from git config forge.remote)"
+git -C "$gp" config --unset forge.kind
+git -C "$gp" config --unset forge.remote
+git -C "$gp" reset -q --hard "$clean"
 git -C "$gp" remote remove gerrit
 out="$(run_dev "$gp" push nosuch 2>&1)"
 assert_eq "push to a remote the project lacks exits 2" "$?" "2"
@@ -750,6 +786,21 @@ if command -v jj >/dev/null 2>&1; then
     assert_eq "jj push without a trunk bookmark exits 1" "$?" "1"
     assert_contains "jj push without a trunk bookmark explains" "$out" "no master or main bookmark"
     assert_contains "help push gives the same reason push dies with" "$help_out" "(none: ${out#dev: })"
+    git init -q --bare -b main "$TMP/jgerrit.git"
+    git -C "$gremote" push -q "$TMP/jgerrit.git" main
+    jj --no-pager -R "$jp" git remote add gerrit "$TMP/jgerrit.git"
+    jj --no-pager -R "$jp" git fetch --remote gerrit >/dev/null 2>&1
+    jj --no-pager -R "$jp" bookmark track main --remote gerrit >/dev/null 2>&1
+    jj --no-pager -R "$jp" new main -m "feat: jj gerrit push" >/dev/null 2>&1
+    jj --no-pager -R "$jp" bookmark set main -r @ >/dev/null 2>&1
+    jtip="$(jj --no-pager -R "$jp" log --no-graph -r main -T 'commit_id')"
+    assert_contains "jj help push previews only the remote of record" "$(run_dev "$jp" help push)" "git push --remote gerrit -b main"
+    assert_not_contains "jj help push leaves origin out" "$(run_dev "$jp" help push)" "--remote origin"
+    out="$(run_dev "$jp" push 2>&1)"
+    assert_eq "jj push in a gerrit project exits 0" "$?" "0"
+    assert_contains "jj push in a gerrit project names the forge" "$out" "forge gerrit, remote of record gerrit"
+    assert_eq "jj push puts the bookmark on gerrit" "$(git -C "$TMP/jgerrit.git" rev-parse main)" "$jtip"
+    assert_eq "jj push leaves origin alone" "$(git -C "$gremote" rev-parse main)" "$(git -C "$TMP/second" rev-parse main)"
     cp "$TMP/jj.base.toml" "$JJ_CONFIG"
 else
     printf 'skip - jj pull and jj push (needs jj)\n'

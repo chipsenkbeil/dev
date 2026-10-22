@@ -21,7 +21,8 @@ set -euo pipefail
 TEMPLATE_BASE="dotfiles/claude/.claude/skills/style/lint"
 PROJECT_TYPE=""
 VCS_BACKEND="" VCS_ERROR=""
-PUSH_REF="" PUSH_SHA="" PUSH_GUARD="" PUSH_REMOTES="" PUSH_ERROR=""
+PUSH_REF="" PUSH_SHA="" PUSH_GUARD="" PUSH_REMOTES="" PUSH_NAMED="" PUSH_ERROR=""
+FORGE_KIND="" FORGE_REMOTE="" FORGE_WHY=""
 PULL_SYNC=0 PULL_BRANCH="" PULL_ERROR=""
 
 die() {
@@ -182,7 +183,7 @@ test||||Run the project's tests
 build||||Build the project
 run||||Run the project
 deploy|cmd_deploy||(none: add .dev/deploy.sh)|Deploy the project (needs .dev/deploy.sh)
-push|cmd_push|||Push the trunk bookmark (jj) or the current branch (git) to origin and gerrit, or to the remotes named
+push|cmd_push|||Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named
 pull|cmd_pull|||Fetch the remote and rebase local work onto it
 sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
 init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]|Seed a project with lint, CI and remotes
@@ -706,7 +707,69 @@ trunk_name() {
     return 1
 }
 
-# push_resolve: set VCS_BACKEND, PUSH_REF, PUSH_SHA, PUSH_GUARD and PUSH_REMOTES, or set PUSH_ERROR and fail.
+# forge_store <args>: git config against the repo's own store, where the forge setting lives.
+forge_store() {
+    if [ "$VCS_BACKEND" = jj ]; then
+        git --git-dir="$(jj --no-pager -R "$ROOT" git root)" config "$@"
+    else
+        git -C "$ROOT" config "$@"
+    fi
+}
+
+# origin_on_github: true when the origin URL names github.com.
+origin_on_github() {
+    case "$(forge_store --get remote.origin.url 2>/dev/null || true)" in
+    *github.com*) return 0 ;;
+    esac
+    return 1
+}
+
+# forge_resolve: set FORGE_KIND (gerrit, github or plain), FORGE_REMOTE and FORGE_WHY after vcs_require, or set PUSH_ERROR and fail.
+# The order matches the jj scripts: JJ_FORGE, then git config forge.kind, then detection.
+forge_resolve() {
+    local remotes kind="${JJ_FORGE:-}" remote why=""
+    remotes=$(remote_names)
+    if [ -n "$kind" ]; then
+        why="JJ_FORGE=$kind"
+    else
+        kind=$(forge_store --get forge.kind 2>/dev/null || true)
+        if [ -n "$kind" ]; then why="git config forge.kind=$kind"; fi
+    fi
+    if [ -z "$kind" ]; then
+        if printf '%s\n' "$remotes" | grep -Fxq gerrit; then
+            kind=gerrit
+            why="detected: the project has a gerrit remote"
+        elif origin_on_github; then
+            kind=github
+            why="detected: origin is on github.com"
+        else
+            kind=plain
+            why="detected: no gerrit remote and origin is not on github.com"
+        fi
+    fi
+    case "$kind" in
+    gerrit | github | plain) ;;
+    *)
+        PUSH_ERROR="forge must be gerrit, github or plain (got: $kind, from $why)"
+        return 1
+        ;;
+    esac
+    remote=$(forge_store --get forge.remote 2>/dev/null || true)
+    if [ -n "$remote" ]; then
+        why="$why; remote from git config forge.remote"
+    elif [ "$kind" = gerrit ]; then
+        remote=gerrit
+    else
+        remote=origin
+    fi
+    if ! printf '%s\n' "$remotes" | grep -Fxq "$remote"; then
+        PUSH_ERROR="the remote of record $remote is not a remote of this project ($why)"
+        return 1
+    fi
+    FORGE_KIND=$kind FORGE_REMOTE=$remote FORGE_WHY=$why
+}
+
+# push_resolve: set VCS_BACKEND, PUSH_REF, PUSH_SHA, PUSH_GUARD, PUSH_REMOTES (the default target) and PUSH_NAMED (every remote push accepts by name), or set PUSH_ERROR and fail.
 push_resolve() {
     local remotes remote
     vcs_require || {
@@ -731,16 +794,22 @@ push_resolve() {
         fi
     fi
     remotes=$(remote_names)
-    PUSH_REMOTES=""
+    PUSH_NAMED=""
     for remote in origin gerrit; do
         if printf '%s\n' "$remotes" | grep -Fxq "$remote"; then
-            PUSH_REMOTES+="$remote "
+            PUSH_NAMED+="$remote "
         fi
     done
-    if [ -z "$PUSH_REMOTES" ]; then
+    if [ -z "$PUSH_NAMED" ]; then
         PUSH_ERROR="no origin or gerrit remote"
         return 1
     fi
+    forge_resolve || return 1
+    PUSH_REMOTES="$FORGE_REMOTE "
+    case " $PUSH_NAMED" in
+    *" $FORGE_REMOTE "*) ;;
+    *) PUSH_NAMED+="$FORGE_REMOTE " ;;
+    esac
 }
 
 # push_cmd <remote>: set PUSH_CMD to the command that pushes to that remote, after push_resolve.
@@ -762,12 +831,13 @@ cmd_push() {
     if [ "$#" -gt 0 ]; then
         remotes=""
         for remote in "$@"; do
-            case " $PUSH_REMOTES" in
+            case " $PUSH_NAMED" in
             *" $remote "*) remotes+="$remote " ;;
-            *) usage_error push "no remote $remote to push to, the project has: $PUSH_REMOTES" ;;
+            *) usage_error push "no remote $remote to push to, the project has: $PUSH_NAMED" ;;
             esac
         done
     fi
+    printf 'forge %s, remote of record %s (%s)\n' "$FORGE_KIND" "$FORGE_REMOTE" "$FORGE_WHY"
     for remote in $remotes; do
         push_cmd "$remote"
         show "${PUSH_CMD[@]}"
