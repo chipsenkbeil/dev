@@ -110,6 +110,25 @@ cmd_check() {
         parsed="$(parse_cell "$cell")" || continue
         split_cell "$parsed"
         effbin="$(resolve_binary "$binary" "$PC_BIN")"
+        if [ "$PC_CHANNEL" = script ] && [ "$effbin" = "-" ]; then
+            case "$PC_PACKAGE" in
+            http://* | https://*)
+                printf '[?] %s\t(remote script, no probe)\n' "$name"
+                ;;
+            *)
+                # shellcheck disable=SC2086  # the cell is "path [args]", split as the install path does
+                if [ "$(id -u)" -eq 0 ]; then
+                    printf '[?] %s\t(script row, never run as root)\n' "$name"
+                elif bash $PC_PACKAGE --check </dev/null >/dev/null 2>&1; then
+                    printf '[x] %s\t(script --check)\n' "$name"
+                else
+                    printf '[ ] %s\n' "$name"
+                    missing=1
+                fi
+                ;;
+            esac
+            continue
+        fi
         pkg_status "$name" "$effbin" "$PC_PACKAGE" "$PC_CHANNEL" || missing=1
     done <<<"$rows"
     return "$missing"
