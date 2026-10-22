@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# pkg.sh install --force, and FORCE=1 through dev install-tools. uname reports
+# pkg.sh install --force, and --force through dev tools install. uname reports
 # Darwin so the brew driver runs, and every package manager is a stub that
 # records its arguments.
 
@@ -63,13 +63,13 @@ stub() {
     [ ! -s "$LOG" ]
 }
 
-@test "dev install-tools FORCE=1 plans the muchsync rebuild even when muchsync is on PATH" {
+@test "dev tools install --force plans the muchsync rebuild even when muchsync is on PATH" {
     stub muchsync 'exit 0'
     cd "$REPO"
-    run "$REPO/dotfiles/bin/.local/bin/dev" install-tools DRY_RUN=1 muchsync
+    run "$REPO/dotfiles/bin/.local/bin/dev" tools install --dry-run muchsync
     [ "$status" -eq 0 ]
     [[ "$output" == *"muchsync already on PATH, skipping"* ]] || false
-    run "$REPO/dotfiles/bin/.local/bin/dev" install-tools FORCE=1 DRY_RUN=1 muchsync
+    run "$REPO/dotfiles/bin/.local/bin/dev" tools install --force --dry-run muchsync
     [ "$status" -eq 0 ]
     [[ "$output" == *"bash scripts/install-muchsync.sh"* ]] || false
     [[ "$output" != *"skipping"* ]] || false
@@ -87,8 +87,8 @@ stub() {
         (source "$dir/cargo.sh" && pkg_install c fx c-crate "" "" 1)
         (source "$dir/luarocks.sh" && pkg_install l fx rock "" "" 1)
     ' _ "$REPO/scripts/pkg" 2>&1)"
-    [[ "$out" == *"pacman -S --noconfirm p-pkg"* ]] || false
-    [[ "$out" == *"dnf reinstall -y d-pkg"* ]] || false
+    [[ "$out" == *"pacman -S --noconfirm -- p-pkg"* ]] || false
+    [[ "$out" == *"dnf reinstall -y -- d-pkg"* ]] || false
     [[ "$out" == *"--force c-crate"* ]] || false
     [[ "$out" == *"luarocks install --force rock"* ]] || false
     [[ "$out" != *"skipping"* ]] || false

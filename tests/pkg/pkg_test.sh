@@ -38,6 +38,32 @@ assert_eq "tap with repo" "$(parse_cell 'tap:browserpass,repo:amar1729/formulae'
 assert_eq "copr with repo" "$(parse_cell 'copr:ghostty,repo:pgdev/ghostty')" $'copr\tghostty\tpgdev/ghostty\t'
 assert_unavailable "dash is unavailable" '-'
 
+# channel_scope
+assert_eq "bare package is system" "$(channel_scope '')" "system"
+assert_eq "cask is system" "$(channel_scope cask)" "system"
+assert_eq "tap is system" "$(channel_scope tap)" "system"
+assert_eq "luarocks is third party" "$(channel_scope luarocks)" "third_party"
+assert_eq "script is user" "$(channel_scope script)" "user"
+assert_eq "cargo is user" "$(channel_scope cargo)" "user"
+assert_eq "aur is third party" "$(channel_scope aur)" "third_party"
+assert_eq "copr is third party" "$(channel_scope copr)" "third_party"
+
+# valid_package
+for ok in ripgrep fd-find 'c++' python3.12 @scope.pkg a_b; do
+    valid_package '' "$ok" '' && r=ok || r=bad
+    assert_eq "valid_package accepts $ok" "$r" "ok"
+done
+for bad in '-U' '--config=/x' 'a b' '-U http://evil/x' 'a;b' "\$(x)" '' 'a/b'; do
+    valid_package '' "$bad" '' && r=ok || r=bad
+    assert_eq "valid_package rejects '$bad'" "$r" "bad"
+done
+valid_package copr ok 'pgdev/ghostty' && r=ok || r=bad
+assert_eq "valid_package accepts owner/project repo" "$r" "ok"
+valid_package copr ok 'a/b/c' && r=ok || r=bad
+assert_eq "valid_package rejects a deep repo" "$r" "bad"
+valid_package script '/x/y.sh --flag' '' && r=ok || r=bad
+assert_eq "valid_package leaves script: cells alone" "$r" "ok"
+
 # resolve_binary
 assert_eq "resolve default" "$(resolve_binary 'fd' '')" "fd"
 assert_eq "resolve override" "$(resolve_binary 'fd' 'fdfind')" "fdfind"

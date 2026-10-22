@@ -174,7 +174,7 @@ pkg_install() {
 
     case "$channel" in
     "")
-        local cmd="$SUDO pacman -S$needed --noconfirm $package"
+        local cmd="$SUDO pacman -S$needed --noconfirm -- $package"
         if [ "$dry_run" = "1" ]; then
             printf '  + %s (dry-run):\n      %s\n' "$name" "$cmd"
             return 0

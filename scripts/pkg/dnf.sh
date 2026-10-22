@@ -77,8 +77,8 @@ pkg_install() {
     # Build the install command(s).
     local -a cmds=()
     case "$channel" in
-    "") cmds=("$SUDO dnf $verb -y $package") ;;
-    copr) cmds=("$SUDO dnf copr enable -y $repo" "$SUDO dnf $verb -y $package") ;;
+    "") cmds=("$SUDO dnf $verb -y -- $package") ;;
+    copr) cmds=("$SUDO dnf copr enable -y $repo" "$SUDO dnf $verb -y -- $package") ;;
     *)
         printf '  ! %s: unknown dnf channel "%s", skipping\n' "$name" "$channel" >&2
         return 1

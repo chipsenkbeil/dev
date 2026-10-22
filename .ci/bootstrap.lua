@@ -6,7 +6,7 @@
 -- The linux target is the arch-runner VM: the job runs as root with sudo, and
 -- stow and zsh are absent. So the job creates the user the image build uses,
 -- gives it passwordless sudo for the run, and does everything else as that user.
--- A full run installs every tools.tsv row, AUR builds included, so it is long
+-- A full run installs every .dev/tools.tsv row, AUR builds included, so it is long
 -- and never part of a default run.
 local USER = "user"
 local HOME = "/home/" .. USER

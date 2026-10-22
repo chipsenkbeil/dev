@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/pkg.sh — package dispatch over tools.tsv.
+# scripts/pkg.sh — package dispatch over a tools.tsv manifest (default .dev/tools.tsv).
 #   pkg.sh check [--manifest FILE]   report tool availability
 #   pkg.sh install ...               install tools
 set -o pipefail
@@ -10,7 +10,7 @@ PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$PKG_DIR/pkg/lib.sh"
 
-MANIFEST="$PKG_DIR/../tools.tsv"
+MANIFEST="$PKG_DIR/../.dev/tools.tsv"
 
 PKG_LOADED_DRIVER=""
 load_driver() {
@@ -36,7 +36,7 @@ _in_list() {
 
 usage() {
     printf 'usage: pkg.sh check [--manifest FILE]\n'
-    printf '       pkg.sh install [--manifest FILE] [--dry-run] [--force] [--log-file FILE] [name...]\n'
+    printf '       pkg.sh install [--manifest FILE] [--dry-run] [--force] [--scope system|user] [--log-file FILE] [name...]\n'
 }
 
 # PKG_LOG_FILE — when non-empty, drivers route the real install command's
@@ -116,7 +116,7 @@ cmd_check() {
 }
 
 cmd_install() {
-    local manifest="$MANIFEST" dry_run=0
+    local manifest="$MANIFEST" dry_run=0 scope=""
     local -a names=()
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -132,6 +132,17 @@ cmd_install() {
         --force)
             PKG_FORCE=1
             shift
+            ;;
+        --scope)
+            need_value "$@" || return 2
+            case "$2" in
+            system | user) scope="$2" ;;
+            *)
+                printf -- '--scope takes system or user, got %s\n' "$2" >&2
+                return 2
+                ;;
+            esac
+            shift 2
             ;;
         --log-file)
             need_value "$@" || return 2
@@ -177,8 +188,8 @@ cmd_install() {
     fi
     [ -n "$rows" ] || return 0
 
-    local name binary cell parsed channel pkg repo binover effbin handler
-    local -a failed=()
+    local name binary cell parsed channel pkg repo binover effbin handler row_scope
+    local -a failed=() third_party=()
     for name in ${names[@]+"${names[@]}"}; do
         if ! printf '%s\n' "$rows" | cut -f1 | grep -Fxq -- "$name"; then
             printf 'unknown tool: %s\n' "$name" >&2
@@ -195,8 +206,21 @@ cmd_install() {
         parsed="$(parse_cell "$cell")" || continue
         split_cell "$parsed"
         channel="$PC_CHANNEL"
+        row_scope="$(channel_scope "$channel")"
+        case "$scope:$row_scope" in
+        system:user | user:system | user:third_party) continue ;;
+        system:third_party)
+            third_party+=("$name ($channel:)")
+            continue
+            ;;
+        esac
         pkg="$PC_PACKAGE"
         repo="$PC_REPO"
+        if ! valid_package "$channel" "$pkg" "$repo"; then
+            printf '  ! %s: refusing the package or repo %q in the manifest\n' "$name" "$pkg ${repo}" >&2
+            failed+=("$name")
+            continue
+        fi
         binover="$PC_BIN"
         effbin="$(resolve_binary "$binary" "$binover")"
         handler="$(channel_handler "$channel" "$mgr")"
@@ -204,6 +228,9 @@ cmd_install() {
             failed+=("$name")
         fi
     done <<<"$rows"
+    if [ "${#third_party[@]}" -gt 0 ]; then
+        printf 'skipped third-party rows (built into the image, not installed with root): %s\n' "${third_party[*]}"
+    fi
     if [ "${#failed[@]}" -gt 0 ]; then
         printf 'install failed: %s\n' "${failed[*]}" >&2
         return 1

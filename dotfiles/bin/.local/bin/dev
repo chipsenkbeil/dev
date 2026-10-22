@@ -186,6 +186,9 @@ push|cmd_push|||Push the trunk bookmark (jj) or the current branch (git) to orig
 pull|cmd_pull|||Fetch the remote and rebase local work onto it
 sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
 init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]|Seed a project with lint, CI and remotes
+tools|noun|||Install and check the tools in .dev/tools.tsv
+tools install|cmd_tools_install|--dry-run --force --system --user|dev tools install [--system or --user] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
+tools check|cmd_tools_check|||Report which of the manifest's tools are on PATH, exit 1 when one is missing
 help|cmd_help||dev help [verb]|Show this table, or the details of one verb
 TABLE
 }
@@ -824,6 +827,77 @@ cmd_pull() {
         run_cmd "${PULL_CMD[@]}"
         step=$((step + 1))
     done
+}
+
+# --- tools ---
+
+# tools_manifest: print the project's .dev/tools.tsv path, or say there is none and fail.
+tools_manifest() {
+    local manifest="$ROOT/.dev/tools.tsv"
+    if [ ! -f "$manifest" ]; then
+        echo "no .dev/tools.tsv"
+        return 1
+    fi
+    printf '%s\n' "$manifest"
+}
+
+# tools_pkg <args...>: scripts/pkg.sh from the dotfiles clone, so the project needs no copy.
+# It runs from the project root, where a manifest's script: paths are relative to.
+tools_pkg() {
+    local pkg
+    pkg="$(dotfiles_root)/scripts/pkg.sh"
+    [ -f "$pkg" ] || die "no $pkg (set DOTFILES to the dotfiles repo)"
+    cd "$ROOT"
+    show bash "$pkg" "$@"
+    exec bash "$pkg" "$@"
+}
+
+cmd_tools_install() {
+    local manifest scope="" uid arg
+    local -a opts=() tools=()
+    for arg in "$@"; do
+        case "$arg" in
+        --dry-run | --force) opts+=("$arg") ;;
+        --system | --user)
+            [ -z "$scope" ] || [ "$scope" = "${arg#--}" ] || usage_error "tools install" "--system and --user cannot be combined"
+            scope=${arg#--}
+            ;;
+        -*) usage_error "tools install" "unknown flag $arg" ;;
+        *) tools+=("$arg") ;;
+        esac
+    done
+    manifest=$(tools_manifest) || {
+        echo "$manifest"
+        return 0
+    }
+    uid=$(id -u)
+    if [ -z "$scope" ] && [ "$uid" -eq 0 ]; then
+        usage_error "tools install" "as root, pass --system"
+    fi
+    case "$scope" in
+    system)
+        if [ "$uid" -ne 0 ] && [ "$(uname)" != Darwin ]; then
+            die "tools install --system installs packages and needs root, run it as root"
+        fi
+        ;;
+    user)
+        if [ "$uid" -eq 0 ]; then
+            die "tools install --user installs into the user's home and refuses to run as root"
+        fi
+        ;;
+    esac
+    if [ -n "$scope" ]; then opts+=(--scope "$scope"); fi
+    tools_pkg install --manifest "$manifest" ${opts[@]+"${opts[@]}"} ${tools[@]+"${tools[@]}"}
+}
+
+cmd_tools_check() {
+    local manifest
+    [ "$#" -eq 0 ] || bad_arg "tools check" "$1"
+    manifest=$(tools_manifest) || {
+        echo "$manifest"
+        return 0
+    }
+    tools_pkg check --manifest "$manifest"
 }
 
 # --- templates ---

@@ -241,6 +241,29 @@ pkg_run() {
     fi
 }
 
+# channel_scope <channel>
+#   Who installs a cell: system (the official package manager, run as root),
+#   user (script:, cargo: and flatpak:, which write into the running user's
+#   home), or third_party (aur:, copr: and luarocks: run code from a repo that is
+#   not the distribution's own, so a box never installs them as root).
+channel_scope() {
+    case "$1" in
+    cargo | flatpak | script) printf 'user\n' ;;
+    aur | copr | luarocks) printf 'third_party\n' ;;
+    *) printf 'system\n' ;;
+    esac
+}
+
+# valid_package <channel> <package> <repo>
+#   Succeed when the package name (and repo, when set) is a plain word, so a
+#   manifest cell can never inject an option or a second argument into the
+#   command a driver builds. A script: cell is a path or URL and is exempt.
+valid_package() {
+    [ "$1" = script ] && return 0
+    [[ "$2" =~ ^[A-Za-z0-9@._+][A-Za-z0-9@._+-]*$ ]] || return 1
+    [ -z "$3" ] || [[ "$3" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]
+}
+
 # channel_handler <channel> <primary_manager>
 #   Which driver handles a cell. Cross-OS channels (cargo, flatpak, luarocks,
 #   script) use their own handler regardless of OS; everything else (bare, cask,
