@@ -191,7 +191,7 @@ cmd_install() {
     local name binary cell parsed channel pkg repo binover effbin handler row_scope
     local -a failed=() third_party=()
     for name in ${names[@]+"${names[@]}"}; do
-        if ! printf '%s\n' "$rows" | cut -f1 | grep -Fxq -- "$name"; then
+        if ! grep -Fxq -- "$name" <<<"$(cut -f1 <<<"$rows")"; then
             printf 'unknown tool: %s\n' "$name" >&2
             return 2
         fi

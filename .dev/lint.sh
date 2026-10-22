@@ -77,7 +77,7 @@ bare_assertions() {
 # Every regular file under the roots whose name ends in .sh or whose shebang names bash.
 files=()
 while IFS= read -r f; do
-    if [[ $f == *.sh ]] || head -n1 "$f" | grep -q 'bash'; then
+    if [[ $f == *.sh ]] || [[ $(head -n1 "$f") == *bash* ]]; then
         files+=("$f")
     fi
 done < <(find "${ROOTS[@]}" -type f ! -name '*.bats' | sort)
@@ -91,9 +91,9 @@ fi
 fmt_dirty=()
 for f in "${files[@]}"; do
     printf '> Linting %s\n' "$f"
-    if head -n1 "$f" | grep -q 'bash'; then
+    if [[ $(head -n1 "$f") == *bash* ]]; then
         shellcheck -x -P SCRIPTDIR "$f" || status=1
-    elif head -n1 "$f" | grep -q 'zsh'; then
+    elif [[ $(head -n1 "$f") == *zsh* ]]; then
         printf '  skip (zsh)\n'
         continue
     else

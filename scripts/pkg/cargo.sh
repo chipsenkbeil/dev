@@ -15,7 +15,7 @@ pkg_install() {
     elif [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
         printf '  = %s already on PATH, skipping\n' "$name"
         return 0
-    elif cargo install --list 2>/dev/null | grep -q "^${package} "; then
+    elif installed=$(cargo install --list 2>/dev/null) && grep -q "^${package} " <<<"$installed"; then
         printf '  = %s already installed via cargo, skipping\n' "$name"
         return 0
     fi

@@ -18,7 +18,7 @@ pkg_install() {
     elif [ "$binary" != "-" ] && command -v "$binary" >/dev/null 2>&1; then
         printf '  = %s already on PATH, skipping\n' "$name"
         return 0
-    elif luarocks list "$package" 2>/dev/null | grep -q "^$package$"; then
+    elif installed=$(luarocks list "$package" 2>/dev/null) && grep -q "^$package$" <<<"$installed"; then
         printf '  = %s already installed via luarocks, skipping\n' "$name"
         return 0
     fi
