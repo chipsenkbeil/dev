@@ -111,8 +111,36 @@ has_override() {
     [ -x "$(script_path "$1")" ]
 }
 
+# root_project_dir: the first directory from the cwd up holding .jj, .git or .dev, else the cwd. It only tests that they exist and reads nothing in them.
+root_project_dir() {
+    local dir
+    dir=$(pwd -P)
+    while [ "$dir" != / ]; do
+        if [ -e "$dir/.jj" ] || [ -e "$dir/.git" ] || [ -e "$dir/.dev" ]; then
+            printf '%s\n' "$dir"
+            return
+        fi
+        dir=$(dirname "$dir")
+    done
+    pwd -P
+}
+
+# root_allowed <verb> [sub]: whether dev may run this as root, which is tools install and tools check only.
+root_allowed() {
+    case "$1" in
+    tools)
+        case "${2:-}" in install | check) return 0 ;; esac
+        ;;
+    esac
+    return 1
+}
+
 repo_root() {
     local root dir
+    if [ "$(id -u)" -eq 0 ]; then
+        root_project_dir
+        return
+    fi
     if command -v jj >/dev/null 2>&1 && root=$(jj root 2>/dev/null); then
         printf '%s\n' "$root"
         return
@@ -1214,15 +1242,81 @@ tools_manifest() {
     printf '%s\n' "$manifest"
 }
 
-# tools_pkg <args...>: scripts/pkg.sh from the dotfiles clone, so the project needs no copy.
+# root_trusted <manifest> <path> <strict>: die unless path is a non-symlink owned by uid 0 and not group or other writable. A sticky directory may be other-writable unless strict.
+root_trusted() {
+    local uid mode bits
+    if [ -L "$2" ] || ! read -r uid mode < <(stat -c '%u %a' -- "$2" 2>/dev/null) || [ "$uid" != 0 ]; then
+        die "refusing $1 as root: $2 must be owned by root and not writable by others"
+    fi
+    bits=$((8#$mode))
+    if [ "$((bits & 8#022))" -ne 0 ]; then
+        if [ "$3" = strict ] || [ "$((bits & 8#1000))" -eq 0 ]; then
+            die "refusing $1 as root: $2 must be owned by root and not writable by others"
+        fi
+    fi
+}
+
+# root_manifest_copy <manifest>: require a root-owned chain, open the manifest once on fd 3, check that the opened file is a regular file inside the project, and copy it to a root-owned temp file. Sets MANIFEST_COPY.
+root_manifest_copy() {
+    local opened inside size dir
+    [ -d /proc/$$/fd ] || die "as root, dev needs /proc to read $1"
+    [ ! -e /proc/$$/fd/3 ] || die "fd 3 is already open, cannot read $1"
+    root_trusted "$1" "$1" strict
+    root_trusted "$1" "$ROOT/.dev" strict
+    root_trusted "$1" "$ROOT" strict
+    dir=$(dirname "$ROOT")
+    while [ "$dir" != / ]; do
+        root_trusted "$1" "$dir" ancestor
+        dir=$(dirname "$dir")
+    done
+    root_trusted "$1" / ancestor
+    exec 3<"$1" || die "cannot open $1"
+    opened=$(readlink /proc/$$/fd/3) || die "cannot resolve $1"
+    inside=$(realpath "$ROOT")
+    if [ ! -f /proc/$$/fd/3 ]; then
+        die "refusing $1 as root, it is not a regular file"
+    fi
+    case "$opened" in
+    "$inside"/*) ;;
+    *) die "refusing $1 as root, it resolves outside the project" ;;
+    esac
+    MANIFEST_COPY=$(mktemp /tmp/dev-tools.XXXXXX) || die "cannot make a temp file"
+    trap 'rm -f "$MANIFEST_COPY"' EXIT
+    head -c 262145 <&3 >"$MANIFEST_COPY"
+    exec 3<&-
+    size=$(wc -c <"$MANIFEST_COPY")
+    if [ "$((size))" -gt 262144 ]; then
+        die "refusing $1 as root: larger than 256 KiB"
+    fi
+    if LC_ALL=C awk 'length > 4096 { bad = 1 } END { exit !bad }' "$MANIFEST_COPY"; then
+        die "refusing $1 as root: a line is longer than 4096 bytes"
+    fi
+}
+
+# tools_pkg <sub> <manifest> <args...>: scripts/pkg.sh from the dotfiles clone, so the project needs no copy.
 # It runs from the project root, where a manifest's script: paths are relative to.
+# As root it reads a copy of the manifest and runs with a scrubbed environment.
 tools_pkg() {
-    local pkg
+    local pkg sub=$1 manifest=$2 status
+    local -a envv
+    shift 2
     pkg="$(dotfiles_root)/scripts/pkg.sh"
     [ -f "$pkg" ] || die "no $pkg (set DOTFILES to the dotfiles repo)"
     cd "$ROOT"
-    show bash "$pkg" "$@"
-    exec bash "$pkg" "$@"
+    if [ "$(id -u)" -ne 0 ]; then
+        show bash "$pkg" "$sub" --manifest "$manifest" "$@"
+        exec bash "$pkg" "$sub" --manifest "$manifest" "$@"
+    fi
+    root_manifest_copy "$manifest"
+    envv=(PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8)
+    if [ "$VERBOSE" -ge 1 ]; then envv+=("VERBOSE=$VERBOSE"); fi
+
+    # shellcheck disable=SC2016  # PS4 is expanded by the traced shell
+    if [ "$VERBOSE" -ge 2 ]; then envv+=("BASH_ENV=$(trace_file)" 'PS4=+ ${BASH_SOURCE##*/}:${LINENO}: '); fi
+    show env -i "${envv[@]}" bash "$pkg" "$sub" --manifest "$MANIFEST_COPY" "$@"
+    status=0
+    env -i "${envv[@]}" bash "$pkg" "$sub" --manifest "$MANIFEST_COPY" "$@" || status=$?
+    return "$status"
 }
 
 cmd_tools_install() {
@@ -1260,7 +1354,7 @@ cmd_tools_install() {
         ;;
     esac
     if [ -n "$scope" ]; then opts+=(--scope "$scope"); fi
-    tools_pkg install --manifest "$manifest" ${opts[@]+"${opts[@]}"} ${tools[@]+"${tools[@]}"}
+    tools_pkg install "$manifest" ${opts[@]+"${opts[@]}"} ${tools[@]+"${tools[@]}"}
 }
 
 cmd_tools_check() {
@@ -1270,14 +1364,14 @@ cmd_tools_check() {
         echo "$manifest"
         return 0
     }
-    tools_pkg check --manifest "$manifest"
+    tools_pkg check "$manifest"
 }
 
 # --- templates ---
 
 dotfiles_root() {
     local self
-    if [ -n "${DOTFILES:-}" ]; then
+    if [ -n "${DOTFILES:-}" ] && [ "$(id -u)" -ne 0 ]; then
         printf '%s\n' "$DOTFILES"
     else
         self=$(realpath "${BASH_SOURCE[0]}")
@@ -2210,6 +2304,16 @@ main() {
         fi
     fi
 
+    if [ "$(id -u)" -eq 0 ]; then
+        if ! root_allowed "${1:-help}" "${2:-}"; then
+            printf 'dev: as root, dev runs only tools install and tools check\n' >&2
+            exit 2
+        fi
+        if [ "$(uname)" != Linux ]; then
+            printf 'dev: as root, dev runs only on Linux\n' >&2
+            exit 2
+        fi
+    fi
     ROOT=$(repo_root)
     if [ "$#" -eq 0 ]; then
         set -- help

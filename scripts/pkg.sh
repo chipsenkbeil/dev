@@ -129,6 +129,11 @@ cmd_check() {
             esac
             continue
         fi
+        if ! valid_package "$PC_CHANNEL" "$PC_PACKAGE" "$PC_REPO"; then
+            printf '[ ] %s\t(refusing the package or repo %q in the manifest)\n' "$name" "$PC_PACKAGE ${PC_REPO}"
+            missing=1
+            continue
+        fi
         pkg_status "$name" "$effbin" "$PC_PACKAGE" "$PC_CHANNEL" || missing=1
     done <<<"$rows"
     return "$missing"

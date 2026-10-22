@@ -39,7 +39,7 @@ pkg_status() {
             return 0
         fi
     fi
-    if pacman -Q "$package" >/dev/null 2>&1; then
+    if pacman -Q -- "$package" >/dev/null 2>&1; then
         # binary "-" = a package with no CLI (shell plugin etc.): "not on PATH"
         # would be misleading, so just report it installed.
         if [ "$binary" = "-" ]; then

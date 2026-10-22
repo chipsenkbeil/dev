@@ -35,6 +35,7 @@ return {
           as_user("zsh -ic \"command -v mosh jj nvim\"")
           as_user("./dotfiles/bin/.local/bin/dev test")
           as_user("./dotfiles/bin/.local/bin/dev lint")
+          ci.sh("cd " .. CLONE .. " && bash tests/dev/root_test.sh </dev/null")
         end)
         ci.sh("rm -f /etc/sudoers.d/90-" .. USER .. "-bootstrap")
       end,

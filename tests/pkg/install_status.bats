@@ -59,3 +59,20 @@ setup() {
     [[ "$output" == *"app-tool already on PATH, skipping"* ]] || false
     ! grep -q '^install' "$LOG"
 }
+
+@test "check refuses an option-like package name without querying the package manager" {
+    printf 'name binary brew\nevil-tool zzz-evil -U\n' >"$MANIFEST"
+    run bash "$PKG" check --manifest "$MANIFEST"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"[ ] evil-tool"*"refusing the package"* ]] || false
+    ! grep -q '^list' "$LOG"
+}
+
+@test "check puts -- before the package name in pacman -Q" {
+    printf '#!/bin/sh\necho Linux\n' >"$STUBS/uname"
+    printf '#!/bin/sh\necho "pacman $*" >>"%s"\nexit 1\n' "$LOG" >"$STUBS/pacman"
+    chmod +x "$STUBS/uname" "$STUBS/pacman"
+    printf 'name binary pacman\nfirst-tool zzz-first first-pkg\n' >"$MANIFEST"
+    run bash "$PKG" check --manifest "$MANIFEST"
+    grep -qx 'pacman -Q -- first-pkg' "$LOG"
+}

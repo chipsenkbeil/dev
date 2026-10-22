@@ -94,14 +94,18 @@ assert_contains "no scope plans a script row" "$out" "bash $TMP/installer.sh"
 assert_contains "no scope plans a cargo row" "$out" "crg-d"
 assert_not_contains "no scope skips nothing" "$out" "skipped third-party"
 
-out="$(FAKE_UID=0 tools "$proj" install --system --dry-run)"
-assert_eq "--system as root exits 0" "$?" "0"
-assert_contains "--system plans a package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
-assert_not_contains "--system skips a script row" "$out" "installer.sh"
-assert_not_contains "--system skips a cargo row" "$out" "crg-d"
-assert_not_contains "--system does not plan the AUR build" "$out" "makepkg"
-assert_contains "--system names the skipped AUR row in one line" "$out" "skipped third-party rows (built into the image, not installed with root): aur-b (aur:)"
-assert_eq "--system prints the skip line once" "$(printf '%s\n' "$out" | grep -c 'skipped third-party')" "1"
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+    out="$(FAKE_UID=0 tools "$proj" install --system --dry-run)"
+    assert_eq "--system as root exits 0" "$?" "0"
+    assert_contains "--system plans a package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
+    assert_not_contains "--system skips a script row" "$out" "installer.sh"
+    assert_not_contains "--system skips a cargo row" "$out" "crg-d"
+    assert_not_contains "--system does not plan the AUR build" "$out" "makepkg"
+    assert_contains "--system names the skipped AUR row in one line" "$out" "skipped third-party rows (built into the image, not installed with root): aur-b (aur:)"
+    assert_eq "--system prints the skip line once" "$(printf '%s\n' "$out" | grep -c 'skipped third-party')" "1"
+else
+    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+fi
 
 out="$(FAKE_UID=1000 tools "$proj" install --user --dry-run)"
 assert_eq "--user as a user exits 0" "$?" "0"
@@ -114,9 +118,6 @@ assert_not_contains "--user does not mention the skipped rows" "$out" "skipped"
 : >"$RECORD"
 FAKE_UID=1000 tools "$proj" install --user scr-c >/dev/null
 assert_eq "--user really runs the script row" "$(cat "$RECORD")" "ran "
-FAKE_UID=0 tools "$proj" install --system pkg-a >/dev/null
-assert_contains "--system really runs the package manager" "$(cat "$CALLS")" "pacman -S --needed --noconfirm -- pkg-a"
-assert_eq "--system did not run the script row" "$(cat "$RECORD")" "ran "
 
 out="$(FAKE_UID=1000 tools "$proj" install --system --dry-run 2>&1)"
 assert_eq "--system as a user exits 1" "$?" "1"
@@ -169,9 +170,13 @@ assert_contains "a bad repo is refused" "$out" "repo-d: refusing the package"
 assert_contains "the failed rows are named" "$out" "install failed: opt-a spc-b dash-c repo-d"
 assert_contains "a good row still plans" "$out" "pacman -S --needed --noconfirm -- good-e"
 assert_not_contains "no refused row reaches pacman" "$out" "pacman -S --needed --noconfirm -- -U"
-out="$(FAKE_UID=0 tools "$badproj" install --system --dry-run 2>&1)"
-assert_contains "--system skips luarocks like aur and copr" "$out" "rock-f (luarocks:)"
-assert_not_contains "--system does not plan the rock" "$out" "luarocks install"
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+    out="$(FAKE_UID=0 tools "$badproj" install --system --dry-run 2>&1)"
+    assert_contains "--system skips luarocks like aur and copr" "$out" "rock-f (luarocks:)"
+    assert_not_contains "--system does not plan the rock" "$out" "luarocks install"
+else
+    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+fi
 out="$(tools "$badproj" install --dry-run rock-f 2>&1)"
 assert_contains "no scope still plans luarocks" "$out" "luarocks install rock-f"
 
@@ -204,9 +209,13 @@ assert_eq "a script: path is relative to the project root" "$(cat "$RECORD")" "r
 out="$(tools "$REPO" install --dry-run 2>&1)"
 assert_eq "dotfiles' own .dev/tools.tsv installs" "$?" "0"
 assert_contains "dotfiles' manifest plans its muchsync row" "$out" "muchsync"
-out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run 2>&1)"
-assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.sh"
-assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+    out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run 2>&1)"
+    assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.sh"
+    assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
+else
+    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+fi
 assert_eq "the old manifest path is gone" "$([ -e "$REPO/tools.tsv" ] && echo present || echo gone)" "gone"
 
 copy="$TMP/image/usr-local-lib-dotfiles"
@@ -234,9 +243,13 @@ cat >"$proj/.dev/tools.sh" <<'STUB'
 echo "FLAT OVERRIDE RAN $*"
 STUB
 chmod +x "$proj/.dev/tools/install.sh" "$proj/.dev/tools/extra.sh" "$proj/.dev/tools.sh"
-out="$(FAKE_UID=0 tools "$proj" install --system --dry-run 2>&1)"
-assert_not_contains "a project script cannot replace a built-in tools subcommand" "$out" "OVERRIDE RAN"
-assert_contains "the built-in still runs" "$out" "pacman -S --needed --noconfirm -- pkg-a"
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+    out="$(FAKE_UID=0 tools "$proj" install --system --dry-run 2>&1)"
+    assert_not_contains "a project script cannot replace a built-in tools subcommand" "$out" "OVERRIDE RAN"
+    assert_contains "the built-in still runs" "$out" "pacman -S --needed --noconfirm -- pkg-a"
+else
+    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+fi
 out="$(tools "$proj" --help)"
 assert_not_contains "a built-in subcommand is not marked as an override" "$out" "(override)"
 out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
@@ -246,15 +259,15 @@ assert_not_contains "dev help tools install is not an override" "$out" "(overrid
 out="$(FAKE_UID=1000 tools "$proj" extra 2>&1)"
 assert_eq "a project-only tools subcommand runs as a user" "$out" "extra ran"
 out="$(FAKE_UID=0 tools "$proj" extra 2>&1)"
-assert_eq "dev refuses to run a project script as root" "$?" "1"
-assert_contains "the root refusal names the script" "$out" "refusing to run .dev/tools/extra.sh as root"
+assert_eq "dev refuses a project tools subcommand as root" "$?" "2"
+assert_contains "the root refusal says what root may run" "$out" "as root, dev runs only tools install and tools check"
 assert_not_contains "the root refusal runs nothing" "$out" "extra ran"
 printf '#!/bin/sh\necho flat ran\n' >"$proj/.dev/verify-prod.sh"
 chmod +x "$proj/.dev/verify-prod.sh"
 assert_eq "a flat project verb runs as a user" "$(cd "$proj" && FAKE_UID=1000 PATH="$STUBS:$PATH" "$DEV" verify-prod)" "flat ran"
 out="$(cd "$proj" && FAKE_UID=0 PATH="$STUBS:$PATH" "$DEV" verify-prod 2>&1)"
-assert_eq "dev refuses a flat project verb as root" "$?" "1"
-assert_contains "the flat refusal names the script" "$out" "refusing to run .dev/verify-prod.sh as root"
+assert_eq "dev refuses a flat project verb as root" "$?" "2"
+assert_contains "the flat refusal says what root may run" "$out" "as root, dev runs only tools install and tools check"
 out="$(FAKE_UID=0 tools "$proj" check 2>&1)"
 assert_not_contains "the built-in tools check ignores .dev/tools.sh" "$out" "FLAT OVERRIDE"
 rm -f "$proj/.dev/tools.sh" "$proj/.dev/tools/install.sh"
