@@ -262,6 +262,26 @@ out="$(box box extend myproject-k3x --ttl 2 --keep 2>&1)"
 assert_eq "extend refuses --ttl with --keep" "$?" "2"
 
 reset
+fx install-tools "$(jq -c '. + {installed: [{project: "myproject", manifest: true}, {project: "dotfiles", manifest: false}]}' <<<"$(doc "$RUNNING")")"
+out="$(box box install-tools myproject-k3x)"
+assert_eq "install-tools argv" "$(calls)" "ci box install-tools myproject-k3x --json"
+assert_eq "install-tools output" "$out" "myproject: tools installed
+dotfiles: no .dev/tools.tsv, nothing installed"
+reset
+fx install-tools "$(doc "$RUNNING")"
+box box install-tools myproject-k3x --project myproject --project dotfiles >/dev/null 2>&1
+assert_eq "install-tools --project argv" "$(calls)" "ci box install-tools myproject-k3x --project myproject --project dotfiles --json"
+reset
+fx install-tools '{"ok":false,"error":{"code":"bad_state","message":"Box ci-abc is stopped, and only a running box can have its tools installed","state":"stopped"}}' 6
+out="$(box box install-tools ci-abc 2>&1)"
+assert_eq "install-tools on a stopped box exits with ci's 6" "$?" "6"
+assert_eq "install-tools passes ci's message on" "$out" "dev box install-tools: Box ci-abc is stopped, and only a running box can have its tools installed"
+reset
+out="$(box box install-tools 2>&1)"
+assert_eq "install-tools needs a box name" "$?" "2"
+assert_eq "ci is not called for install-tools without a name" "$(calls)" ""
+
+reset
 fx delete "$(doc "$(jq -c '.state = "deleted" | .archive = {path: "/var/lib/devbox-archive/x.tar.gz", bytes: 5, created_at: "2026-10-20T00:00:00Z"}' <<<"$STOPPED")")"
 if { : </dev/tty; } 2>/dev/null; then
     echo "SKIP - delete without a terminal (this shell has a controlling tty and no way to drop it)"
@@ -517,14 +537,14 @@ out="$(box help)"
 assert_contains "dev help lists box" "$out" "box "
 assert_contains "dev help lists connect" "$out" "connect "
 out="$(box help box)"
-for sub in ls create show stop resume extend delete connect; do
+for sub in ls create show stop resume extend install-tools delete connect; do
     assert_contains "dev help box lists $sub" "$out" "  $sub "
 done
 out="$(box help box create)"
 assert_contains "create help states the default lifetime" "$out" "4 hours"
 assert_contains "create help states the default profile" "$out" "profile medium"
 assert_contains "create help lists --keep" "$out" "--keep"
-assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend delete connect"
+assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend install-tools delete connect"
 assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--profile --project --ttl --keep -v --verbose -vv --ci"
 assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
 assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"

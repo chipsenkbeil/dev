@@ -9,6 +9,7 @@ dev box create --profile large --ttl 8
 dev box stop myproject-k3x
 dev box resume myproject-k3x --keep
 dev box extend myproject-k3x --ttl 2
+dev box install-tools myproject-k3x --project myproject
 dev box delete myproject-k3x -y
 ```
 
@@ -25,6 +26,10 @@ the project root's directory name.
 
 A box name is 1 to 40 of `a-z`, `0-9` and `-`, else exit 2. A null
 `tailnet_name` prints as `-`.
+
+`dev box install-tools` reinstalls a running box's tools, for every project or
+the ones `--project` names, and prints one line per project. A box that is
+not running exits 6.
 
 ## Connecting
 

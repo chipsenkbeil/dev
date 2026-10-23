@@ -231,6 +231,7 @@ box show|cmd_box_show||dev box show BOX|Show one box as key: value lines
 box stop|cmd_box_stop||dev box stop BOX|Stop a box, which ci deletes later unless it is resumed
 box resume|cmd_box_resume|--ttl --keep|dev box resume BOX [--ttl HOURS or --keep]|Start a stopped box again, keeping its lifetime unless told otherwise
 box extend|cmd_box_extend|--ttl --keep|dev box extend BOX (--ttl HOURS or --keep)|Replace a running box's lifetime, counted from now
+box install-tools|cmd_box_install_tools|--project|dev box install-tools BOX [--project NAME]...|Reinstall a running box's tools, for every project unless --project names some
 box delete|cmd_box_delete|--yes -y|dev box delete BOX [-y or --yes]|Archive a box's projects and delete it, after asking unless -y
 box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
 help|cmd_help|-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
@@ -1653,6 +1654,18 @@ cmd_box_extend() {
     [ "$B_KEEP" -eq 0 ] || args+=(--keep)
     box_call extend extend "$BOX_NAME" "${args[@]}" --json
     box_summary extended "$BOX_OUT"
+}
+
+cmd_box_install_tools() {
+    local -a args=()
+    local project
+    box_parse install-tools "--project" "$@"
+    box_one install-tools
+    box_need
+    for project in ${B_PROJECTS[@]+"${B_PROJECTS[@]}"}; do args+=(--project "$project"); done
+    box_call install-tools install-tools "$BOX_NAME" ${args[@]+"${args[@]}"} --json
+    printf '%s' "$BOX_OUT" | jq -r 'if (.installed | length) == 0 then "no projects" else .installed[]
+        | if .manifest then "\(.project): tools installed" else "\(.project): no .dev/tools.tsv, nothing installed" end end'
 }
 
 cmd_box_delete() {
