@@ -287,7 +287,7 @@ install_claude() {
     stow_pkg -S claude
     printf 'DONE\n'
     if [ "$(cd "$TARGET_DIR" && pwd -P)" != "$(cd "$HOME" && pwd -P)" ]; then
-        printf '> Skipping the boardflow skill fetch, which writes into SRC_DIR %s and not TARGET_DIR %s\n' "$SRC_DIR" "$TARGET_DIR"
+        printf '> Skipping the boardflow skills, which write into SRC_DIR %s and not TARGET_DIR %s\n' "$SRC_DIR" "$TARGET_DIR"
         return 0
     fi
     local url=https://boardflow.example.com/skill.md
@@ -299,5 +299,16 @@ install_claude() {
     else
         rm -f "$tmp"
         printf '> Warning: could not fetch %s (no tailscale?), keeping the boardflow skill as it was\n' "$url"
+    fi
+    if command -v dev >/dev/null 2>&1; then
+        dir="$SRC_DIR/claude/.claude/skills/dev"
+        mkdir -p "$dir"
+        tmp="$(mktemp "$dir/SKILL.md.XXXXXX")"
+        if dev skill </dev/null >"$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+            mv "$tmp" "$dir/SKILL.md"
+        else
+            rm -f "$tmp"
+            printf '> Warning: dev skill failed, keeping the dev skill as it was\n'
+        fi
     fi
 }
