@@ -18,6 +18,14 @@ end
 
 return {
   jobs = {
+    ["root-tests"] = {
+      matrix = { { os = "linux-base" } },
+      run = function()
+        ci.sh("[ \"$(id -u)\" -eq 0 ] || { echo 'root-tests must run as root' >&2; exit 1; }")
+        ci.sh("bash tests/dev/root_test.sh </dev/null")
+        ci.sh("bash tests/dev/tools_test.sh </dev/null")
+      end,
+    },
     ["bootstrap-arch"] = {
       matrix = { { os = "linux-vm" } },
       run = function()
