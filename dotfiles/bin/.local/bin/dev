@@ -222,6 +222,7 @@ init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [
 tools|noun|||Install and check the tools in .dev/tools.tsv|Set up a machine or project
 tools install|cmd_tools_install|--dry-run --force --group --system --user|dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
 tools check|cmd_tools_check|--group|dev tools check [--group NAME]|Report which of the manifest's tools are on PATH, exit 1 when one is missing
+guide|cmd_guide||dev guide [question...]|Show this repo's overview, or ask guide a question about its commands and topics|Set up a machine or project
 help|cmd_help|-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
 TABLE
 }
@@ -722,6 +723,26 @@ help_verb() {
 
 cmd_deploy() {
     die "deploy has no built-in, add .dev/deploy.sh"
+}
+
+# cmd_guide [question...]: show the overview topic and the curated help, or ask guide about this repo with the repo's topics read first.
+cmd_guide() {
+    local question="$*" topics="$ROOT/.dev/topics"
+    [ "$(id -u)" -ne 0 ] || die "refusing to run guide as root"
+    if [ -z "$question" ]; then
+        if topic_path overview >/dev/null; then
+            help_topic overview
+            printf '\n'
+        fi
+        help_overview 1
+        return
+    fi
+    need guide "dev install guide"
+    cd "$ROOT"
+    if [ -d "$topics" ]; then
+        exec guide dev --context-dir "$topics" -- "$question"
+    fi
+    exec guide dev -- "$question"
 }
 
 cmd_help() {
@@ -2256,7 +2277,7 @@ cmd_init() {
     fi
 }
 
-CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull "
+CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull guide "
 CI_LOCAL_NOUNS=" tools pi antinote "
 
 # ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.

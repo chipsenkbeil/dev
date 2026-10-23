@@ -1,0 +1,8 @@
+dev guide
+  Show this repo's overview, or ask guide a question about its commands and topics
+
+usage
+  dev guide [question...]
+
+Run `dev guide --help` for the script header and the command it runs.
+exit 0

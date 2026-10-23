@@ -17,6 +17,7 @@ Set up a machine or project
   sync                        Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
   init                        Seed a project with lint, CI and remotes
   tools                       Install and check the tools in .dev/tools.tsv
+  guide                       Show this repo's overview, or ask guide a question about its commands and topics
 
 Greeting
   greet                       Say hello.

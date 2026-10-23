@@ -1,0 +1,8 @@
+dev guide
+  Show this repo's overview, or ask guide a question about its commands and topics
+
+the built-in runs (rust project)
+  dev guide [question...]
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0
