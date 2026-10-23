@@ -163,6 +163,23 @@ assert_eq "__check-topics fails on a script that declares -h" "$?" "1"
 assert_contains "__check-topics names the script" "$out" ".dev/reserved.sh:1:"
 assert_contains "dev help warns about a reserved flag" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help reserved 2>&1)" "declares -h"
 rm "$PROJ/.dev/reserved.sh"
+check_topic subcheck $'# subcheck: Quotes noun subcommands\n\nRun `dev tools install --dry-run`.'
+assert_eq "__check-topics accepts a real noun subcommand with its flag" "$rc" "0"
+check_topic badsub $'# badsub: Quotes a subcommand the noun lacks\n\nRun `dev tools frob`.\n\n```\ndev tools frob\n```'
+assert_eq "__check-topics fails on a made-up subcommand of a built-in noun" "$rc" "1"
+assert_contains "__check-topics names the line and the bad subcommand" "$out" ".dev/topics/badsub.md:3: \`dev tools frob\`: dev tools has no subcommand frob"
+assert_contains "__check-topics checks a fenced subcommand too" "$out" ".dev/topics/badsub.md:6:"
+check_topic subflag $'# subflag: Quotes a flag the subcommand lacks\n\nRun `dev tools check --no-such-flag`.'
+assert_eq "__check-topics fails on a flag the subcommand lacks" "$rc" "1"
+assert_contains "__check-topics names the subcommand's missing flag" "$out" "dev tools check takes no flag --no-such-flag"
+printf '#!/usr/bin/env bash\n# group: Elsewhere\n# hidden\n# Ordered header lines.\n# flags: --late\n' >"$PROJ/.dev/ordered.sh"
+chmod +x "$PROJ/.dev/ordered.sh"
+listing="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help -a)"
+assert_contains "a hidden line after a group line still hides the verb" " $(hidden_names "$listing" | tr '\n' ' ')" " ordered "
+assert_eq "the hidden verb is not in its group" "$(group_count "$listing" ordered)" "0"
+assert_eq "the curated view omits it" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help | grep -c '^  ordered ' || true)" "0"
+assert_eq "a flags line after group and hidden lines is read" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __flags ordered | sed -n 1p)" "--late"
+rm "$PROJ/.dev/ordered.sh"
 check_topic badnoun $'# badnoun: Quotes a subcommand that does not exist\n\nRun `dev widget zap`.'
 assert_eq "__check-topics fails on a made-up subcommand" "$rc" "1"
 check_topic badhead 'No heading here'

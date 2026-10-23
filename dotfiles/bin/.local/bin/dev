@@ -291,7 +291,7 @@ script_group() {
 # script_place <script>: the "# group:" name (possibly empty) on one line, then 1 when the header has a "# hidden" line, else 0.
 script_place() {
     awk '
-        /^# *group:/ && !group { sub(/^# *group: */, ""); group = $0 }
+        /^# *group:/ && !group { sub(/^# *group: */, ""); group = $0; next }
         /^# *hidden *$/ { hidden = 1 }
         /^[^#]/ && NR > 1 { exit }
         END { print group; print hidden + 0 }
