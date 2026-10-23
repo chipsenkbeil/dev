@@ -9,11 +9,23 @@ dev tools check
 dev tools install --dry-run
 dev tools install --system
 dev tools install --user ripgrep
+dev tools install --group base --dry-run
+dev tools check --group rust
 ```
 
 `check` reports which tools are on PATH and exits 1 when one is missing.
 `install` takes tool names (an unknown one exits 2), `--dry-run`, `--force`
-(which needs a name) and one scope.
+(which needs a name), `--group NAME` and one scope.
+
+## Groups
+
+The last column of the manifest, `groups`, holds a comma-separated list of
+group names, or `-` for none. `--group NAME` on `install` and on `check` keeps
+only the rows whose list holds NAME, and combines with every scope, `--dry-run`,
+`--force` and tool names. The groups today are `base` (the lint and VCS tools)
+and `rust` (the Rust toolchain and its lint set). An unknown group, or a tool
+named outside the group, exits 2 and names it. A manifest with no `groups`
+column has no groups, so `--group` on it is an unknown group.
 
 ## Scopes
 

@@ -191,26 +191,40 @@ manifest_column_index() {
     awk -v m="$manager" "$_MANIFEST_AWK_TOKENIZER"'
         /^[[:space:]]*#/ { next }
         /^[[:space:]]*$/ { next }
-        { n = tok($0, f); for (i = 3; i <= n; i++) if (f[i] == m) print i; exit }
+        { n = tok($0, f); for (i = 3; i <= n; i++) if (f[i] == m && m != "groups") print i; exit }
     ' "$manifest"
 }
 
-# manifest_rows <manifest> <col>
+# manifest_rows <manifest> <col> [group]
 #   Print each data row as: name<TAB>binary<TAB>cell (cell = field <col>),
 #   skipping comments, blanks, and the header row. `# @env NAME value` header
 #   comments define variable defaults; cell $NAME / ${NAME} references are then
 #   expanded (ENVIRON override -> @env default -> error). Rows are buffered and
 #   expanded in END so an undefined reference aborts (exit 1, message on stderr)
-#   BEFORE any row is printed — never partial output.
+#   BEFORE any row is printed — never partial output. With <group>, only rows
+#   whose `groups` column lists it are printed, so a manifest with no such
+#   column prints nothing.
 manifest_rows() {
-    local manifest="$1" col="$2"
-    awk -v c="$col" "$_MANIFEST_AWK_TOKENIZER$_MANIFEST_AWK_EXPAND"'
+    local manifest="$1" col="$2" group="${3:-}"
+    awk -v c="$col" -v g="$group" "$_MANIFEST_AWK_TOKENIZER$_MANIFEST_AWK_EXPAND"'
         /^[[:space:]]*#[[:space:]]*@env[[:space:]]/ { parse_env($0); next }
         /^[[:space:]]*#/ { next }
         /^[[:space:]]*$/ { next }
-        !seen_header { seen_header = 1; next }
+        !seen_header {
+            seen_header = 1
+            n = tok($0, f)
+            for (i = 3; i <= n; i++) if (f[i] == "groups") gi = i
+            next
+        }
         {
             n = tok($0, f)
+            if (g != "") {
+                if (!gi) next
+                ng = split(f[gi], gl, ",")
+                hit = 0
+                for (k = 1; k <= ng; k++) if (gl[k] == g) hit = 1
+                if (!hit) next
+            }
             nrows++
             b1[nrows] = f[1]; b2[nrows] = f[2]; b3[nrows] = f[c]
         }

@@ -219,8 +219,8 @@ pull|cmd_pull|||Fetch the remote and rebase local work onto it|Share it
 sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates|Set up a machine or project
 init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]|Seed a project with lint, CI and remotes|Set up a machine or project
 tools|noun|||Install and check the tools in .dev/tools.tsv|Set up a machine or project
-tools install|cmd_tools_install|--dry-run --force --system --user|dev tools install [--system or --user] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
-tools check|cmd_tools_check|||Report which of the manifest's tools are on PATH, exit 1 when one is missing
+tools install|cmd_tools_install|--dry-run --force --group --system --user|dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
+tools check|cmd_tools_check|--group|dev tools check [--group NAME]|Report which of the manifest's tools are on PATH, exit 1 when one is missing
 help|cmd_help|-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
 TABLE
 }
@@ -1322,9 +1322,16 @@ tools_pkg() {
 cmd_tools_install() {
     local manifest scope="" uid arg
     local -a opts=() tools=()
-    for arg in "$@"; do
+    while [ "$#" -gt 0 ]; do
+        arg=$1
+        shift
         case "$arg" in
         --dry-run | --force) opts+=("$arg") ;;
+        --group)
+            [ "$#" -gt 0 ] || usage_error "tools install" "--group needs a name"
+            opts+=(--group "$1")
+            shift
+            ;;
         --system | --user)
             [ -z "$scope" ] || [ "$scope" = "${arg#--}" ] || usage_error "tools install" "--system and --user cannot be combined"
             scope=${arg#--}
@@ -1359,12 +1366,22 @@ cmd_tools_install() {
 
 cmd_tools_check() {
     local manifest
-    [ "$#" -eq 0 ] || bad_arg "tools check" "$1"
+    local -a opts=()
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        --group)
+            [ "$#" -gt 1 ] || usage_error "tools check" "--group needs a name"
+            opts+=(--group "$2")
+            shift 2
+            ;;
+        *) bad_arg "tools check" "$1" ;;
+        esac
+    done
     manifest=$(tools_manifest) || {
         echo "$manifest"
         return 0
     }
-    tools_pkg check "$manifest"
+    tools_pkg check "$manifest" ${opts[@]+"${opts[@]}"}
 }
 
 # --- templates ---

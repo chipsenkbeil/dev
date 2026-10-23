@@ -2,11 +2,12 @@ dev tools install
   Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
 
 usage
-  dev tools install [--system or --user] [--dry-run] [--force] [tool...]
+  dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]
 
 flags
   --dry-run
   --force
+  --group
   --system
   --user
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/pkg.sh — package dispatch over a tools.tsv manifest (default .dev/tools.tsv).
-#   pkg.sh check [--manifest FILE]   report tool availability
+#   pkg.sh check [--manifest FILE] [--group NAME]   report tool availability
 #   pkg.sh install ...               install tools
 set -o pipefail
 
@@ -35,8 +35,8 @@ _in_list() {
 }
 
 usage() {
-    printf 'usage: pkg.sh check [--manifest FILE]\n'
-    printf '       pkg.sh install [--manifest FILE] [--dry-run] [--force] [--scope system|user] [--log-file FILE] [name...]\n'
+    printf 'usage: pkg.sh check [--manifest FILE] [--group NAME]\n'
+    printf '       pkg.sh install [--manifest FILE] [--dry-run] [--force] [--group NAME] [--scope system|user] [--log-file FILE] [name...]\n'
 }
 
 # PKG_LOG_FILE — when non-empty, drivers route the real install command's
@@ -55,12 +55,18 @@ need_value() {
 }
 
 cmd_check() {
-    local manifest="$MANIFEST"
+    local manifest="$MANIFEST" group="" group_set=0
     while [ $# -gt 0 ]; do
         case "$1" in
         --manifest)
             need_value "$@" || return 2
             manifest="$2"
+            shift 2
+            ;;
+        --group)
+            need_value "$@" || return 2
+            group="$2"
+            group_set=1
             shift 2
             ;;
         *)
@@ -96,8 +102,12 @@ cmd_check() {
     # Capture (not process-substitute) so an undefined-variable failure in
     # manifest_rows propagates: process substitution would swallow its exit code.
     local rows
-    if ! rows="$(manifest_rows "$manifest" "$col")"; then
+    if ! rows="$(manifest_rows "$manifest" "$col" "$group")"; then
         return 1 # error already printed to stderr by manifest_rows
+    fi
+    if [ "$group_set" = 1 ] && { [ -z "$group" ] || [ -z "$rows" ]; }; then
+        printf 'unknown group: %s\n' "$group" >&2
+        return 2
     fi
 
     [ -n "$rows" ] || return 0
@@ -140,7 +150,7 @@ cmd_check() {
 }
 
 cmd_install() {
-    local manifest="$MANIFEST" dry_run=0 scope=""
+    local manifest="$MANIFEST" dry_run=0 scope="" group="" group_set=0
     local -a names=()
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -156,6 +166,12 @@ cmd_install() {
         --force)
             PKG_FORCE=1
             shift
+            ;;
+        --group)
+            need_value "$@" || return 2
+            group="$2"
+            group_set=1
+            shift 2
             ;;
         --scope)
             need_value "$@" || return 2
@@ -206,9 +222,18 @@ cmd_install() {
 
     # Capture (not process-substitute) so an undefined-variable failure in
     # manifest_rows propagates: process substitution would swallow its exit code.
-    local rows
-    if ! rows="$(manifest_rows "$manifest" "$col")"; then
+    local rows allrows
+    if ! allrows="$(manifest_rows "$manifest" "$col")"; then
         return 1 # error already printed to stderr by manifest_rows
+    fi
+    rows="$allrows"
+    if [ "$group_set" = 1 ]; then
+        rows=""
+        [ -z "$group" ] || rows="$(manifest_rows "$manifest" "$col" "$group")"
+        if [ -z "$rows" ]; then
+            printf 'unknown group: %s\n' "$group" >&2
+            return 2
+        fi
     fi
     [ -n "$rows" ] || return 0
 
@@ -216,7 +241,11 @@ cmd_install() {
     local -a failed=() third_party=()
     for name in ${names[@]+"${names[@]}"}; do
         if ! grep -Fxq -- "$name" <<<"$(cut -f1 <<<"$rows")"; then
-            printf 'unknown tool: %s\n' "$name" >&2
+            if grep -Fxq -- "$name" <<<"$(cut -f1 <<<"$allrows")"; then
+                printf 'tool %s is not in group %s\n' "$name" "$group" >&2
+            else
+                printf 'unknown tool: %s\n' "$name" >&2
+            fi
             return 2
         fi
     done

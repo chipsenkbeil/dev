@@ -323,6 +323,19 @@ if [ "$HAVE_PROC" = 1 ] && [ "$REAL_ROOT" = 1 ]; then
         out="$(dev "$nojj" tools install --system --force --dry-run zzz-tool 2>&1)"
         assert_contains "--force reaches pkg.sh as root" "$out" "pacman -S --noconfirm -- zzz-tool"
         assert_not_contains "--force drops --needed" "$out" "--needed"
+        grp="$TMP/grp"
+        mkdir -p "$grp/.dev"
+        printf 'name binary pacman groups\nzzz-in zzz-in-not-here zzz-in base\nzzz-out zzz-out-not-here zzz-out -\n' >"$grp/.dev/tools.tsv"
+        out="$(dev "$grp" tools install --system --group base --dry-run 2>&1)"
+        assert_eq "--group reaches pkg.sh as root" "$?" "0"
+        assert_contains "--group base as root plans the group row" "$out" "pacman -S --needed --noconfirm -- zzz-in"
+        assert_not_contains "--group base as root leaves out the other row" "$out" "zzz-out"
+        out="$(dev "$grp" tools install --system --group nope --dry-run 2>&1)"
+        assert_eq "an unknown --group as root exits 2" "$?" "2"
+        assert_contains "an unknown --group as root is named" "$out" "unknown group: nope"
+        out="$(dev "$grp" tools check --group base 2>&1)"
+        assert_contains "check --group reaches pkg.sh as root" "$out" "zzz-in"
+        assert_not_contains "check --group as root leaves out the other row" "$out" "zzz-out"
     else
         printf 'SKIP - the --force test needs the real /usr/bin/pacman\n'
     fi

@@ -284,6 +284,71 @@ assert_eq "--ci refuses tools install" "$?" "2"
 assert_contains "--ci names the refused subcommand" "$out" "dev tools install: --ci cannot run this verb"
 out="$(cd "$proj" && "$DEV" --ci tools check 2>&1)"
 assert_eq "--ci refuses tools check" "$?" "2"
+gproj="$TMP/gproj"
+mkdir -p "$gproj/.dev"
+cat >"$gproj/.dev/tools.tsv" <<TSV
+name       binary          brew    pacman              dnf                    groups
+pkg-a      pkg-a-zzz       pkg-a   pkg-a               pkg-a                  base
+aur-b      aur-b-zzz       aur-b   aur:aur-b           copr:copr-b,repo:o/p   base
+scr-c      scr-c-zzz       -       script:$TMP/installer.sh   -               rust
+crg-d      crg-d-zzz       -       cargo:crg-d         -                      base,rust
+oth-e      oth-e-zzz       oth-e   oth-e               oth-e                  -
+TSV
+
+out="$(tools "$gproj" install --dry-run --group base)"
+assert_eq "--group base exits 0" "$?" "0"
+assert_contains "--group base plans a base row" "$out" "pkg-a"
+assert_contains "--group base plans a base,rust row" "$out" "crg-d"
+assert_not_contains "--group base skips a rust row" "$out" "installer.sh"
+assert_not_contains "--group base skips an ungrouped row" "$out" "oth-e"
+out="$(tools "$gproj" install --dry-run --group rust)"
+assert_contains "--group rust plans a rust row" "$out" "installer.sh"
+assert_contains "--group rust plans a base,rust row" "$out" "crg-d"
+assert_not_contains "--group rust skips a base row" "$out" "pkg-a"
+out="$(tools "$gproj" check --group rust 2>&1)"
+assert_contains "check --group rust reports a rust row" "$out" "scr-c"
+assert_contains "check --group rust reports a base,rust row" "$out" "crg-d"
+assert_not_contains "check --group rust skips a base row" "$out" "pkg-a"
+assert_not_contains "check --group rust skips an ungrouped row" "$out" "oth-e"
+out="$(tools "$gproj" check --group nope 2>&1)"
+assert_eq "check with an unknown group exits 2" "$?" "2"
+assert_contains "check names the unknown group" "$out" "unknown group: nope"
+out="$(tools "$gproj" install --dry-run --group nope 2>&1)"
+assert_eq "install with an unknown group exits 2" "$?" "2"
+assert_contains "install names the unknown group" "$out" "unknown group: nope"
+out="$(tools "$gproj" install --dry-run --group base oth-e 2>&1)"
+assert_eq "a named tool outside the group exits 2" "$?" "2"
+assert_contains "the usage error names the tool" "$out" "tool oth-e is not in group base"
+out="$(tools "$gproj" install --dry-run --group 2>&1)"
+assert_eq "--group without a name exits 2" "$?" "2"
+out="$(FAKE_UID=1000 tools "$gproj" install --user --dry-run --group base)"
+assert_contains "--user --group plans the cargo row" "$out" "crg-d"
+assert_not_contains "--user --group skips a package row" "$out" "pacman -S"
+assert_not_contains "--user --group skips a rust-only script row" "$out" "installer.sh"
+
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+    out="$(FAKE_UID=0 tools "$gproj" install --system --dry-run --group base)"
+    assert_eq "--system --group base as root exits 0" "$?" "0"
+    assert_contains "--system --group plans the package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
+    assert_not_contains "--system --group skips a cargo row" "$out" "crg-d"
+    assert_not_contains "--system --group skips an ungrouped row" "$out" "oth-e"
+    assert_contains "--system --group names the skipped AUR row" "$out" "skipped third-party rows (built into the image, not installed with root): aur-b (aur:)"
+    out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run --group base 2>&1)"
+    assert_eq "dotfiles' manifest --system --group base exits 0" "$?" "0"
+    assert_not_contains "dotfiles' --group base leaves out a rust row" "$out" "cargo-nextest"
+    out="$(FAKE_UID=0 tools "$gproj" install --system --group rust 2>&1)"
+    assert_eq "--system --group rust with only user-scope rows exits 0" "$?" "0"
+    assert_not_contains "--system --group rust installs nothing" "$out" "pacman -S"
+    assert_eq "--system --group rust ran no package manager" "$(grep -c 'pacman -S' "$CALLS")" "0"
+    assert_not_contains "--system --group rust skips no third-party row" "$out" "skipped"
+else
+    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+fi
+out="$(tools "$gproj" install --dry-run --group "" 2>&1)"
+assert_eq "an empty --group name exits 2" "$?" "2"
+assert_contains "an empty --group name is an unknown group" "$out" "unknown group: "
+out="$(tools "$gproj" check --group "" 2>&1)"
+assert_eq "check with an empty --group name exits 2" "$?" "2"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

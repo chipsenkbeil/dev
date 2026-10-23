@@ -4,11 +4,12 @@ dev tools install
 flags
   --dry-run
   --force
+  --group
   --system
   --user
 
 the built-in runs (rust project)
-  dev tools install [--system or --user] [--dry-run] [--force] [tool...]
+  dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]
 
 -v, -vv and --ci work anywhere on the line, see `dev help flags`.
 exit 0
