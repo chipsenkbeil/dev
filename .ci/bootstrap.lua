@@ -40,7 +40,7 @@ return {
           as_user("bash bootstrap.sh --no-login")
         end)
         ci.group("check the result", function()
-          as_user("zsh -ic \"command -v mosh jj nvim\"")
+          as_user("zsh -ic \"command -v jj nvim\"")
           as_user("./dotfiles/bin/.local/bin/dev test")
           as_user("./dotfiles/bin/.local/bin/dev lint")
           ci.sh("cd " .. CLONE .. " && bash tests/dev/root_test.sh </dev/null")

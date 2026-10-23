@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pure-bash tests for `dev box` and `dev connect`. ci, mosh and ssh are stubs first on PATH that
+# Pure-bash tests for `dev box` and `dev connect`. ci, et and ssh are stubs first on PATH that
 # log their arguments, one per line, and ci answers from fixture files in $FX. A fake dotfiles
 # clone in DOTFILES holds a stub scripts/select-items.sh that records the items and picks FAKE_PICK.
 set -o pipefail
@@ -25,7 +25,7 @@ sub=$2
 [ ! -f "$FX/$sub.json" ] || cat "$FX/$sub.json"
 exit "$(cat "$FX/$sub.rc" 2>/dev/null || echo 0)"
 STUB
-for tool in mosh ssh; do
+for tool in et ssh; do
     cat >"$STUBS/$tool" <<STUB
 #!/bin/sh
 { echo $tool; printf '%s\n' "\$@"; echo '#'; } >>"\$LOG"
@@ -385,8 +385,8 @@ assert_contains "the missing ci is named" "$out" "ci not found"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 box connect myproject-k3x
-assert_eq "connect to a running box runs mosh" "$(calls)" "ci box ls --json
-mosh box-myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+assert_eq "connect to a running box runs et" "$(calls)" "ci box ls --json
+et -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject box-myproject-k3x"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 box box connect myproject-k3x --ssh
@@ -400,31 +400,31 @@ reset
 fx ls "$(lsdoc "$STOPPED")"
 fx resume "$(doc "$(mkbox ci-abc running '["ci","dotfiles"]' "$NEW_OFF" null)")"
 out="$(box connect ci-abc)"
-assert_eq "connect to a stopped box resumes then runs mosh" "$(calls)" "ci box ls --json
+assert_eq "connect to a stopped box resumes then runs et" "$(calls)" "ci box ls --json
 ci box resume ci-abc --json
-mosh box-ci-abc -- tmux new -A -s ci -c $PROJECTS_DIR/ci"
+et -c tmux new -A -s ci -c $PROJECTS_DIR/ci box-ci-abc"
 assert_eq "connect prints the resume line" "$out" "resumed ci-abc (medium, ci,dotfiles), $NEW_LEFT, host box-ci-abc"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-mkdir -p "$TMP/nomosh"
-ln -sf "$STUBS/ci" "$STUBS/ssh" "$TMP/nomosh/"
+mkdir -p "$TMP/noet"
+ln -sf "$STUBS/ci" "$STUBS/ssh" "$TMP/noet/"
 for tool in bash jq awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname; do
-    found="$(PATH="$BASE_PATH" command -v "$tool")" && ln -sf "$found" "$TMP/nomosh/$tool"
+    found="$(PATH="$BASE_PATH" command -v "$tool")" && ln -sf "$found" "$TMP/noet/$tool"
 done
-if PATH="$TMP/nomosh" command -v mosh >/dev/null 2>&1; then
-    echo "FAIL - the no-mosh PATH still finds mosh"
+if PATH="$TMP/noet" command -v et >/dev/null 2>&1; then
+    echo "FAIL - the no-et PATH still finds et"
     fails=$((fails + 1))
 fi
-out="$(cd "$NOPROJ" && PATH="$TMP/nomosh" "$DEV" connect myproject-k3x 2>&1)"
-assert_contains "a missing mosh warns once" "$out" "mosh not found, using ssh"
-assert_eq "a missing mosh falls back to ssh" "$(calls)" "ci box ls --json
+out="$(cd "$NOPROJ" && PATH="$TMP/noet" "$DEV" connect myproject-k3x 2>&1)"
+assert_contains "a missing et warns once" "$out" "et not found, using ssh"
+assert_eq "a missing et falls back to ssh" "$(calls)" "ci box ls --json
 ssh -t box-myproject-k3x tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
 reset
 fx ls "$(lsdoc "$CREATING")"
 out="$(box connect new-111 2>&1)"
 assert_eq "connect to a box in another state exits 6" "$?" "6"
 assert_contains "the bad state is named" "$out" "new-111 is creating"
-assert_not_contains "no mosh for a bad state" "$(calls)" "mosh"
+assert_not_contains "no et for a bad state" "$(calls)" "et -c"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 out="$(box connect nope 2>&1)"
@@ -445,7 +445,7 @@ scratch-a1b	scratch-a1b    running  medium  -            kept
 ci-abc	ci-abc         stopped  medium  ci,dotfiles  $STOP_LEFT
 __new__	new box for myproject"
 assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
-mosh box-myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+et -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject box-myproject-k3x"
 reset
 fx ls "$(lsdoc "$KEPT")"
 FAKE_PICK=scratch-a1b box connect
@@ -456,7 +456,7 @@ fx create "$(doc "$(mkbox myproject-n3w running '["myproject"]' "$NEW_OFF" null)
 out="$(FAKE_PICK=__new__ inproj connect)"
 assert_eq "the new-box item creates for the project then attaches" "$(calls)" "ci box ls --json
 ci box create --project myproject --json
-mosh box-myproject-n3w -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+et -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject box-myproject-n3w"
 assert_contains "the new box is reported" "$out" "created myproject-n3w"
 reset
 fx ls "$(lsdoc)"
@@ -478,7 +478,7 @@ fx ls "$(lsdoc "$(jq -c '.tailnet_name = null' <<<"$RUNNING")")"
 out="$(box connect myproject-k3x 2>&1)"
 assert_eq "connect to a box with no tailnet name exits 6" "$?" "6"
 assert_eq "connect names the missing tailnet name" "$out" "dev box connect: myproject-k3x has no tailnet name yet (state running)"
-assert_eq "no mosh or ssh for a box with no tailnet name" "$(calls)" "ci box ls --json"
+assert_eq "no et or ssh for a box with no tailnet name" "$(calls)" "ci box ls --json"
 reset
 fx ls "$(lsdoc "$STOPPED")"
 fx resume "$(doc "$(jq -c '.tailnet_name = null | .state = "running"' <<<"$STOPPED")")"
@@ -490,7 +490,7 @@ reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
 box connect myproject-k3x
 assert_eq "connect starts tmux in the first project's path" "$(calls)" "ci box ls --json
-mosh box-myproject-k3x -- tmux new -A -s myproject -c /srv/projects/dotfiles"
+et -c tmux new -A -s myproject -c /srv/projects/dotfiles box-myproject-k3x"
 reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
 box connect myproject-k3x --ssh
@@ -510,7 +510,7 @@ fx ls "$(lsdoc "$(jq -c '.projects[0].path = null' <<<"$RUNNING")")"
 out="$(box connect myproject-k3x 2>&1)"
 assert_eq "connect to a box with a null project path exits 6" "$?" "6"
 assert_eq "connect names the missing project path" "$out" "dev box connect: myproject-k3x has no project path yet (state running)"
-assert_eq "no mosh or ssh for a null project path" "$(calls)" "ci box ls --json"
+assert_eq "no et or ssh for a null project path" "$(calls)" "ci box ls --json"
 reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/MyProject"' <<<"$RUNNING")")"
 box connect myproject-k3x
@@ -523,7 +523,7 @@ reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].name = "my.proj" | .projects[0].path = "/srv/projects/my.proj"' <<<"$RUNNING")")"
 box connect myproject-k3x
 assert_eq "a dot in the project name becomes an underscore in the tmux session" "$(calls)" "ci box ls --json
-mosh box-myproject-k3x -- tmux new -A -s my_proj -c /srv/projects/my.proj"
+et -c tmux new -A -s my_proj -c /srv/projects/my.proj box-myproject-k3x"
 
 # --- dispatch ---
 

@@ -44,11 +44,11 @@ project the last item, `new box for <project>`, creates a box and attaches. A
 stopped box is resumed first. Any other state than running exits 6, as does a
 box with no `tailnet_name` or no project path yet.
 
-dev then replaces itself with `mosh <tailnet_name> -- tmux new -A -s <session>
--c <dir>`. The session is the first project's name or the box name, with `.` and `:` turned into `_`. The
+dev then replaces itself with `et -c "tmux new -A -s <session> -c <dir>"
+<tailnet_name>`. The session is the first project's name or the box name, with `.` and `:` turned into `_`. The
 directory is the first project's `path`, or `/srv/projects` with no
 project, so a session never starts in `$HOME`. A path outside
-`/srv/projects[/<name>]` exits 1. `--ssh`, or a mosh missing from PATH
+`/srv/projects[/<name>]` exits 1. `--ssh`, or an `et` missing from PATH
 (with one warning), runs `ssh -t` with the same tmux command.
 
 ## Errors

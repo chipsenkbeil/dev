@@ -223,7 +223,7 @@ tools|noun|||Install and check the tools in .dev/tools.tsv|Set up a machine or p
 tools install|cmd_tools_install|--dry-run --force --group --system --user|dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
 tools check|cmd_tools_check|--group|dev tools check [--group NAME]|Report which of the manifest's tools are on PATH, exit 1 when one is missing
 guide|cmd_guide||dev guide [question...]|Show this repo's overview, or ask guide a question about its commands and topics|Set up a machine or project
-connect|cmd_box_connect|--ssh|dev connect [<box>] [--ssh]|Attach to a box over mosh in a tmux session, picking, resuming or creating one first|Boxes
+connect|cmd_box_connect|--ssh|dev connect [<box>] [--ssh]|Attach to a box over Eternal Terminal in a tmux session, picking, resuming or creating one first|Boxes
 box|noun|||List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box|Boxes
 box ls|cmd_box_ls|--all|dev box ls [--all]|List the boxes with state, profile, projects and time left, then the cap
 box create|cmd_box_create|--profile --project --ttl --keep|dev box create [--profile small, medium or large] [--project NAME]... [--ttl HOURS or --keep]|Create a box and wait until it runs, profile medium and 4 hours unless told otherwise, with the current project by default
@@ -1698,7 +1698,7 @@ box_items() {
     if [ -n "$2" ]; then printf '__new__\tnew box for %s\n' "$2"; fi
 }
 
-# box_attach <box object>: exec mosh into the box's tmux session, or ssh when asked or mosh is missing.
+# box_attach <box object>: exec et into the box's tmux session, or ssh when asked or et is missing.
 box_attach() {
     local host session dir
     host=$(box_field "$1" '.tailnet_name // empty')
@@ -1716,16 +1716,16 @@ box_attach() {
         exit 1
     fi
     session=$(box_field "$1" '(.projects[0].name // .name) | gsub("[^A-Za-z0-9_-]"; "_")')
-    if [ "$B_SSH" -eq 0 ] && ! command -v mosh >/dev/null 2>&1; then
-        echo "dev box connect: mosh not found, using ssh" >&2
+    if [ "$B_SSH" -eq 0 ] && ! command -v et >/dev/null 2>&1; then
+        echo "dev box connect: et not found, using ssh" >&2
         B_SSH=1
     fi
     if [ "$B_SSH" -eq 1 ]; then
         show ssh -t "$host" tmux new -A -s "$session" -c "$dir"
         exec ssh -t "$host" tmux new -A -s "$session" -c "$dir"
     fi
-    show mosh "$host" -- tmux new -A -s "$session" -c "$dir"
-    exec mosh "$host" -- tmux new -A -s "$session" -c "$dir"
+    show et -c "tmux new -A -s $session -c $dir" "$host"
+    exec et -c "tmux new -A -s $session -c $dir" "$host"
 }
 
 cmd_box_connect() {
