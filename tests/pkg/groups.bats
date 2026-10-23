@@ -102,7 +102,7 @@ TSV
     base="$(manifest_rows "$REPO/.dev/tools.tsv" 1 base | cut -f1 | sort | tr '\n' ' ')"
     rust="$(manifest_rows "$REPO/.dev/tools.tsv" 1 rust | cut -f1 | sort | tr '\n' ' ')"
     [ "$base" = "ast-grep bats difftastic fd gh git hyperfine jq jujutsu luajit ripgrep sd selene shellcheck shfmt stylua tokei watchexec yq " ]
-    [ "$rust" = "cargo-binstall cargo-deny cargo-nextest cargo-sort rustfmt-nightly rustup " ]
+    [ "$rust" = "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort rustfmt-nightly rustup sccache " ]
 }
 
 @test "an empty --group name is an unknown group on install and on check" {
