@@ -3,7 +3,7 @@
 --
 --   ci run bootstrap --local --job bootstrap-arch -f
 --
--- The linux target is the arch-runner VM: the job runs as root with sudo, and
+-- The linux-vm target is an Arch VM: the job runs as root with sudo, and
 -- stow and zsh are absent. So the job creates the user the image build uses,
 -- gives it passwordless sudo for the run, and does everything else as that user.
 -- A full run installs every .dev/tools.tsv row, AUR builds included, so it is long
@@ -19,7 +19,7 @@ end
 return {
   jobs = {
     ["bootstrap-arch"] = {
-      matrix = { { os = "linux" } },
+      matrix = { { os = "linux-vm" } },
       run = function()
         ci.group("create " .. USER, function()
           ci.sh("id " .. USER .. " >/dev/null 2>&1 || useradd -m -s /bin/bash " .. USER)

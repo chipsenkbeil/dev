@@ -434,7 +434,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init writes the pipeline" "$(cat "$init/.ci/pipeline.lua")" ".dev/lint.sh"
     assert_contains "init seeds a lint job" "$(cat "$init/.ci/pipeline.lua")" "    lint = {"
     assert_contains "init seeds a test job" "$(cat "$init/.ci/pipeline.lua")" "    test = {"
-    assert_contains "init runs the jobs on the rust runner image" "$(cat "$init/.ci/pipeline.lua")" "local LINUX = { os = \"linux-ct\", image = \"rust-runner-ct\" }"
+    assert_contains "init runs the jobs on the rust runner image" "$(cat "$init/.ci/pipeline.lua")" "local LINUX = { os = \"linux-base\", image = \"linux-rust\" }"
     assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/pipeline.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
     assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/pipeline.lua")" 'io.open("rust-toolchain.toml")'
     assert_contains "init writes the workflow for windows" "$(cat "$init/.github/workflows/ci.yml")" "windows-latest"
@@ -888,7 +888,7 @@ if command -v jq >/dev/null 2>&1; then
 #!/usr/bin/env bash
 if [ "$1" = -C ]; then shift 2; fi
 case "$1" in
-jobs) printf '{"jobs":[{"name":"lint","oses":["linux-ct"]},{"name":"test","oses":["linux-ct"]},{"name":"widget-save","oses":["linux-ct"]}]}\n' ;;
+jobs) printf '{"jobs":[{"name":"lint","oses":["linux-base"]},{"name":"test","oses":["linux-base"]},{"name":"widget-save","oses":["linux-base"]}]}\n' ;;
 run)
     echo "ci $* (in $PWD)" >>"$STUB_LOG"
     exit "${CI_STUB_RC:-0}"
