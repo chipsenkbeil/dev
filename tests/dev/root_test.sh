@@ -106,7 +106,7 @@ ln -s "$outside/dir" "$proj/.dev/linked"
 printf '#!/bin/sh\n' >"$proj/.dev/n/sub.sh"
 chmod +x "$proj/.dev/n/sub.sh"
 
-for verb in push lint init foo test tools "tools frobnicate" help -h --help "" __verbs __subs __flags "__subs n" "help n"; do
+for verb in push lint fetch init foo test tools "tools frobnicate" help -h --help "" __verbs __subs __flags "__subs n" "help n"; do
     # shellcheck disable=SC2086
     out="$(dev "$proj/a" $verb 2>&1)"
     status=$?

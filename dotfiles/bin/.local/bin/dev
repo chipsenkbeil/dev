@@ -213,6 +213,7 @@ fmt||||Format the source for the project type|Check your work
 test||||Run the project's tests|Check your work
 build||||Build the project|Check your work
 run||||Run the project|Check your work
+fetch||||Download the crates and advisory database an offline lint and test need|Check your work
 deploy|cmd_deploy||(none: add .dev/deploy.sh)|Deploy the project (needs .dev/deploy.sh)|Share it
 push|cmd_push|||Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named|Share it
 pull|cmd_pull|||Fetch the remote and rebase local work onto it|Share it
@@ -470,6 +471,10 @@ builtin_commands() {
         ;;
     rust:build) echo "cargo build --release" ;;
     rust:run) echo "cargo run --" ;;
+    rust:fetch)
+        echo "env CARGO_NET_OFFLINE=false cargo fetch --locked"
+        if [ -f "$ROOT/deny.toml" ]; then echo "env CARGO_NET_OFFLINE=false cargo deny fetch"; fi
+        ;;
     love2d:run) echo "love $ROOT" ;;
     love2d:fmt | lua:fmt) echo "stylua $ROOT" ;;
     love2d:test | love2d:lint | lua:* | make:*)
@@ -955,6 +960,16 @@ builtin_rust() {
         ;;
     run)
         run_cmd cargo run -- "$@"
+        ;;
+    fetch)
+        (cd "$ROOT" && run_cmd env CARGO_NET_OFFLINE=false cargo fetch --locked) || exit $?
+        if [ -f "$ROOT/deny.toml" ]; then
+            if ! cargo deny --version >/dev/null 2>&1; then
+                printf 'WARNING: cargo-deny not found. Install with: cargo install cargo-deny --locked\n' >&2
+                exit 1
+            fi
+            (cd "$ROOT" && run_cmd env CARGO_NET_OFFLINE=false cargo deny fetch) || exit $?
+        fi
         ;;
     *) unsupported "$verb" rust ;;
     esac
@@ -2241,7 +2256,7 @@ cmd_init() {
     fi
 }
 
-CI_LOCAL_VERBS=" install uninstall restow sync setup fmt help init push pull "
+CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull "
 CI_LOCAL_NOUNS=" tools pi antinote "
 
 # ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.

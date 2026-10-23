@@ -936,7 +936,7 @@ STUB
     out="$(cirun "$cip" widget --ci zap 2>&1)"
     assert_eq "--ci with an unknown subcommand exits 2" "$?" "2"
     assert_contains "--ci with an unknown subcommand names it" "$out" "unknown subcommand zap"
-    for verb in install uninstall restow sync setup fmt help init push pull; do
+    for verb in install uninstall restow sync setup fmt fetch help init push pull; do
         out="$(cirun "$cip" --ci "$verb" 2>&1)"
         assert_eq "--ci refuses $verb with 2" "$?" "2"
         assert_contains "--ci names the refused verb $verb" "$out" "dev $verb: --ci cannot run this verb"

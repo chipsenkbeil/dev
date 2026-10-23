@@ -1,0 +1,8 @@
+dev fetch
+  Download the crates and advisory database an offline lint and test need
+
+usage
+  dev fetch
+
+Run `dev fetch --help` for the script header and the command it runs.
+exit 0

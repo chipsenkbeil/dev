@@ -24,7 +24,7 @@ dev --ci test
 `--ci` exits with the job's status and never falls back to a local run. It
 refuses a verb with no job of that name and any extra argument. It also
 refuses the machine-local verbs install, uninstall, restow, sync, setup, fmt,
-help, init, push and pull, and the nouns tools, pi and antinote. A
+fetch, help, init, push and pull, and the nouns tools, pi and antinote. A
 subcommand `dev --ci <noun> <sub>` runs the job named `<noun>-<sub>`.
 `DEV_CI=1` in the environment is the same as the flag.
 

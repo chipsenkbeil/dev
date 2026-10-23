@@ -6,6 +6,7 @@ Check your work
   test                  Run the project's tests
   build                 Build the project
   run                   Run the project
+  fetch                 Download the crates and advisory database an offline lint and test need
 
 Share it
   deploy                Deploy the project (needs .dev/deploy.sh)

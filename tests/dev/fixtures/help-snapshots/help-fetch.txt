@@ -1,0 +1,8 @@
+dev fetch
+  Download the crates and advisory database an offline lint and test need
+
+the built-in runs (rust project)
+  env CARGO_NET_OFFLINE=false cargo fetch --locked
+
+-v, -vv and --ci work anywhere on the line, see `dev help flags`.
+exit 0
