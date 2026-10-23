@@ -29,7 +29,7 @@ install_crate() {
     run install_crate
     [ "$status" -eq 0 ]
     [ "$(sed -n 2p "$LOG")" = "rustup default stable" ]
-    [ "$(sed -n 3p "$LOG")" = "binstall --no-confirm --disable-telemetry zzz-crate" ]
+    [ "$(sed -n 3p "$LOG")" = "binstall --no-confirm --disable-telemetry --locked zzz-crate" ]
 }
 
 @test "a rustup that already has a default toolchain is left alone" {

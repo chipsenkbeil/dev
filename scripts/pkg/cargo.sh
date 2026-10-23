@@ -36,7 +36,9 @@ pkg_install() {
         # positional arg. Flags (verified against `cargo-binstall --help`):
         #   --no-confirm         non-interactive (no y/N prompt)
         #   --disable-telemetry  opt out of anonymous usage reporting
-        cmd="$binstall --no-confirm --disable-telemetry$force $package"
+        #   --locked             passed to cargo install when binstall falls
+        #                        back to a source build
+        cmd="$binstall --no-confirm --disable-telemetry --locked$force $package"
     else
         cmd="cargo install --locked$force $package"
     fi
