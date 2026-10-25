@@ -58,6 +58,14 @@ local MARKS = {
     [Mark.OK] = { "✓", Style.GREEN },
     [Mark.FAIL] = { "✗", Style.RED },
 }
+local FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local ERASE_LINE = "\r\27[K"
+local HIDE_CURSOR = "\27[?25l"
+local SHOW_CURSOR = "\27[?25h"
+local POLL_INTERVAL_SECS = 0.1
+local POLL_DONE, POLL_RUNNING, POLL_GONE = 0, 1, 2
+local SIGINT = 2
+local INTERRUPTED = devos.SIGNAL_EXIT_BASE + SIGINT
 local stderr = io.stderr
 
 ---@class dev.ui.Context
@@ -65,6 +73,7 @@ local stderr = io.stderr
 ---@field stderr_color boolean whether standard error takes color
 ---@field interactive boolean whether standard input and output are terminals
 ---@field width integer columns a line may fill
+---@field getenv fun(name: string): string? environment lookup
 local Context = {}
 Context.__index = Context
 
@@ -106,6 +115,7 @@ function M.context(opts)
         stderr_color = stderr_color,
         interactive = interactive,
         width = width,
+        getenv = getenv,
     }, Context)
 end
 
@@ -244,6 +254,224 @@ function M.require_terminal(ctx, opts)
         "\n"
     )
     os.exit(2)
+end
+
+---Ask a yes or no question on the controlling terminal, where no is the default.
+---
+---Exits with status 2 and a message on standard error when no user is at the terminal. Ctrl-C
+---ends the line, closes the terminal and exits with status 130.
+---@param ctx dev.ui.Context drawing settings
+---@param question string the question, drawn in yellow
+---@param consequence string what saying yes does
+---@return boolean yes true for y or yes in any case, false for anything else
+function M.confirm(ctx, question, consequence)
+    M.require_terminal(ctx, { command = "dev", missing = "confirmation", hint = "-y" })
+    local out = assert(io.open(term.TTY_PATH, "w"))
+    local into, open_err = io.open(term.TTY_PATH, "r")
+    if not into then
+        out:close()
+        error(open_err, 0)
+    end
+    out:write(
+        M.paint(ctx, question, Style.YELLOW),
+        " ",
+        consequence,
+        " [y/",
+        M.paint(ctx, "N", Style.BOLD),
+        "] "
+    )
+    out:flush()
+    local ok, answer = pcall(function()
+        local line = into:read("*l")
+        return line
+    end)
+    if not ok then
+        out:write("\n")
+    end
+    out:close()
+    into:close()
+    if not ok then
+        if tostring(answer):find("interrupted!", 1, true) then
+            os.exit(INTERRUPTED)
+        end
+        error(answer, 0)
+    end
+    answer = answer and answer:lower():match("^%s*(.-)%s*$")
+    return answer == "y" or answer == "yes"
+end
+
+---@class dev.ui.SpinnerLineOpts
+---@field frame integer which frame of the spinner to draw, counting from 1
+---@field label string what is running
+---@field detail string extra dim text after the label, or an empty string
+---@field seconds integer time elapsed
+
+---Draw one line of the spinner: glyph, label, detail and elapsed time.
+---@param ctx dev.ui.Context drawing settings
+---@param opts dev.ui.SpinnerLineOpts what the line shows
+---@return string line the painted line
+function M.spinner_line(ctx, opts)
+    local glyph = FRAMES[(opts.frame - 1) % #FRAMES + 1]
+    local parts = { M.paint(ctx, glyph, Style.GREEN), " ", opts.label }
+    if opts.detail ~= "" then
+        parts[#parts + 1] = " " .. M.paint(ctx, "· " .. opts.detail, Style.DIM)
+    end
+    local clock = string.format("%d:%02d", math.floor(opts.seconds / 60), opts.seconds % 60)
+    parts[#parts + 1] = " " .. M.paint(ctx, clock, Style.DIM)
+    return table.concat(parts)
+end
+
+local function read_all(path)
+    local file = io.open(path, "r")
+    if not file then
+        return ""
+    end
+    local body = file:read("*a")
+    file:close()
+    return body
+end
+
+local function start_job(argv, dir)
+    local launch = {
+        "sh",
+        "-c",
+        'set -m; dir=$1; shift; ( "$@" >"$dir/out" 2>&1 </dev/null; echo $? >"$dir/rc" ) >/dev/null 2>&1 & echo $! >"$dir/pid"; echo $!',
+        "sh",
+        dir,
+    }
+    for _, word in ipairs(argv) do
+        launch[#launch + 1] = word
+    end
+    local pid, code = devos.capture(launch)
+    return code == 0 and tonumber(pid) or nil
+end
+
+local function stop_job(pid)
+    devos.run({
+        "sh",
+        "-c",
+        'kill -s TERM -- "-$1" 2>/dev/null; true',
+        "sh",
+        tostring(pid),
+    })
+end
+
+local function finished_code(rc_path)
+    return tonumber(read_all(rc_path):match("^%d+"))
+end
+
+local POLL = string.format(
+    'sleep %g; [ -s "$1" ] && exit %d; kill -0 "$2" 2>/dev/null || exit %d; exit %d',
+    POLL_INTERVAL_SECS,
+    POLL_DONE,
+    POLL_GONE,
+    POLL_RUNNING
+)
+
+local function poll(rc_path, pid)
+    return devos.run({ "sh", "-c", POLL, "sh", rc_path, tostring(pid) })
+end
+
+---@class dev.ui.Job
+---@field err dev.ui.Context settings for drawing on standard error
+---@field label string what is running
+---@field pid integer process group leader of the command
+---@field rc_path string file the command's exit status is written to
+
+local function watch(job)
+    local started, frame = os.time(), 0
+    while true do
+        frame = frame + 1
+        stderr:write(
+            ERASE_LINE,
+            M.spinner_line(
+                job.err,
+                { frame = frame, label = job.label, detail = "", seconds = os.time() - started }
+            )
+        )
+        stderr:flush()
+        local state = poll(job.rc_path, job.pid)
+        if state > devos.SIGNAL_EXIT_BASE then
+            return INTERRUPTED
+        end
+        if state == POLL_DONE or state == POLL_GONE then
+            return finished_code(job.rc_path) or 1
+        end
+        if state ~= POLL_RUNNING then
+            error("spinner poll failed with status " .. state, 0)
+        end
+    end
+end
+
+local function make_workdir(ctx)
+    local base = (ctx.getenv("TMPDIR") or ""):gsub("/+$", "")
+    if base == "" then
+        base = "/tmp"
+    end
+    local dir, made = devos.capture({ "mktemp", "-d", base .. "/dev-spin.XXXXXX" })
+    dir = dir:gsub("\n$", "")
+    if made ~= 0 or dir == "" then
+        error("spin could not create a temp directory", 0)
+    end
+    return dir
+end
+
+local function report(err, label, code, captured)
+    if code == 0 then
+        stderr:write(M.mark(err, Mark.OK), " ", label, "\n")
+        return
+    end
+    stderr:write(M.mark(err, Mark.FAIL), " ", label, "\n", captured)
+    if captured ~= "" and captured:sub(-1) ~= "\n" then
+        stderr:write("\n")
+    end
+end
+
+---Run `argv` with a spinner on standard error, then show a check or a cross and its output.
+---
+---Without a terminal on both ends, or when TERM is dumb, the command just runs with the
+---terminal's streams. Otherwise its output is held back and shown only when it fails. Ctrl-C
+---stops the command and every process it started.
+---@param ctx dev.ui.Context drawing settings
+---@param label string what is running
+---@param argv string[] command and its arguments, with at least one word
+---@return integer code exit status of the command, or 130 when the user interrupted it
+function M.spin(ctx, label, argv)
+    if not (ctx.interactive and devos.isatty(2) and ctx.getenv("TERM") ~= "dumb") then
+        return devos.run(argv)
+    end
+    local err = ctx:stderr()
+    local dir, pid
+    stderr:write(HIDE_CURSOR)
+    local ok, code = pcall(function()
+        dir = make_workdir(ctx)
+        pid = start_job(argv, dir)
+        if not pid then
+            return 1
+        end
+        return watch({ err = err, label = label, pid = pid, rc_path = dir .. "/rc" })
+    end)
+    stderr:write(ERASE_LINE, SHOW_CURSOR)
+    local captured = ""
+    if dir then
+        captured = read_all(dir .. "/out")
+        pid = pid or tonumber(read_all(dir .. "/pid"):match("^%d+"))
+        if pid and (not ok or code == INTERRUPTED) then
+            stop_job(pid)
+        end
+        devos.run({ "rm", "-rf", "--", dir })
+    end
+    if not ok then
+        if tostring(code):find("interrupted!", 1, true) then
+            return INTERRUPTED
+        end
+        error(code, 0)
+    end
+    if code == INTERRUPTED then
+        return code
+    end
+    report(err, label, code, captured)
+    return code
 end
 
 return M
