@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run shellcheck, shfmt and the comment-spacing check on every bash script under the shell roots, and the bare-assertion check on every .bats file.
+# Run shellcheck, shfmt and the comment-spacing check on every bash script under the shell roots, the bare-assertion check on every .bats file, and stylua, selene, ast-grep and the comment checks on the Lua roots.
 # Exit non-zero when any of them reports a finding.
 set -euo pipefail
 
@@ -114,4 +114,37 @@ if [ "${#fmt_dirty[@]}" -gt 0 ]; then
     printf '  %s\n' "${fmt_dirty[@]}" >&2
     status=1
 fi
+
+collect_lua_files
+
+if [ "${#LUA_FILES[@]}" -gt 0 ]; then
+    if command -v stylua >/dev/null 2>&1; then
+        printf '> Linting lua with stylua\n'
+        stylua --config-path "$LUA_LINT_DIR/stylua.toml" --check "${LUA_FILES[@]}" || status=1
+    else
+        printf 'WARNING: stylua not found, skipping. Install with: brew install stylua\n' >&2
+    fi
+    if command -v selene >/dev/null 2>&1; then
+        printf '> Linting lua with selene\n'
+        selene --config "$LUA_LINT_DIR/selene.toml" "${LUA_FILES[@]}" || status=1
+    else
+        printf 'WARNING: selene not found, skipping. Install with: brew install selene\n' >&2
+    fi
+    if command -v ast-grep >/dev/null 2>&1; then
+        printf '> Linting lua with ast-grep\n'
+        ast-grep scan --config "$LUA_LINT_DIR/ast-grep/sgconfig.yml" "${LUA_FILES[@]}" || status=1
+    else
+        printf 'WARNING: ast-grep not found, skipping. Install with: brew install ast-grep\n' >&2
+    fi
+    printf '> Linting lua comments\n'
+    (
+        # shellcheck source=/dev/null
+        source "$LUA_LINT_DIR/../lint-lib.sh"
+        for f in "${LUA_FILES[@]}"; do
+            comment_spacing "$f" '--'
+            comment_runs "$f" '--'
+        done
+    ) || status=1
+fi
+
 exit "$status"
