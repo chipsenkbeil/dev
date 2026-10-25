@@ -1698,21 +1698,32 @@ box_items() {
     if [ -n "$2" ]; then printf '__new__\tnew box for %s\n' "$2"; fi
 }
 
-# box_attach <box object>: exec et into the box's tmux session, or ssh when asked or et is missing.
+# ci_known_hosts: the known_hosts file where ci keeps the host keys of the boxes it shows.
+ci_known_hosts() {
+    local state=${XDG_STATE_HOME:-}
+    case "$state" in
+    /*) ;;
+    *) state=$HOME/.local/state ;;
+    esac
+    printf '%s/ci/known_hosts\n' "$state"
+}
+
+# box_attach <box object>: exec et into the box's tmux session, or ci box ssh when asked or et is missing.
 box_attach() {
-    local host session dir
+    local name host session dir user
+    name=$(box_field "$1" .name)
     host=$(box_field "$1" '.tailnet_name // empty')
     if [ -z "$host" ]; then
-        printf 'dev box connect: %s has no tailnet name yet (state %s)\n' "$(box_field "$1" .name)" "$(box_field "$1" .state)" >&2
+        printf 'dev box connect: %s has no tailnet name yet (state %s)\n' "$name" "$(box_field "$1" .state)" >&2
         exit 6
     fi
     if [ "$(box_field "$1" '(.projects | length) > 0 and .projects[0].path == null')" = true ]; then
-        printf 'dev box connect: %s has no project path yet (state %s)\n' "$(box_field "$1" .name)" "$(box_field "$1" .state)" >&2
+        printf 'dev box connect: %s has no project path yet (state %s)\n' "$name" "$(box_field "$1" .state)" >&2
         exit 6
     fi
     dir=$(printf '%s' "$1" | jq -r --arg d "$BOX_PROJECTS_DIR" '.projects[0].path // $d')
     if ! [[ "$dir" =~ ^/srv/projects(/[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$ ]]; then
-        printf 'dev box connect: refusing the project path %q of %s\n' "$dir" "$(box_field "$1" .name)" >&2
+        printf 'dev box connect: refusing the project path %q of %s\n' "$dir" "$name" >&2
         exit 1
     fi
     session=$(box_field "$1" '(.projects[0].name // .name) | gsub("[^A-Za-z0-9_-]"; "_")')
@@ -1721,11 +1732,20 @@ box_attach() {
         B_SSH=1
     fi
     if [ "$B_SSH" -eq 1 ]; then
-        show ssh -t "$host" tmux new -A -s "$session" -c "$dir"
-        exec ssh -t "$host" tmux new -A -s "$session" -c "$dir"
+        show ci box ssh "$name" -- tmux new -A -s "$session" -c "$dir"
+        exec ci box ssh "$name" -- tmux new -A -s "$session" -c "$dir"
     fi
-    show et -c "tmux new -A -s $session -c $dir" "$host"
-    exec et -c "tmux new -A -s $session -c $dir" "$host"
+    box_call connect show "$name" --json
+    host=$(box_field "$BOX_OUT" '.box.tailnet_name // empty')
+    user=$(box_field "$BOX_OUT" '.box.ssh_user // empty')
+    if [ -z "$host" ] || [ -z "$user" ]; then
+        printf 'dev box connect: %s has no tailnet name or ssh user (state %s)\n' "$name" "$(box_field "$BOX_OUT" .box.state)" >&2
+        exit 6
+    fi
+    show et --ssh-option "UserKnownHostsFile=$(ci_known_hosts)" --ssh-option StrictHostKeyChecking=yes \
+        -c "tmux new -A -s $session -c $dir" "$user@$host"
+    exec et --ssh-option "UserKnownHostsFile=$(ci_known_hosts)" --ssh-option StrictHostKeyChecking=yes \
+        -c "tmux new -A -s $session -c $dir" "$user@$host"
 }
 
 cmd_box_connect() {

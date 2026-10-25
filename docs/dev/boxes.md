@@ -44,12 +44,16 @@ project the last item, `new box for <project>`, creates a box and attaches. A
 stopped box is resumed first. Any other state than running exits 6, as does a
 box with no `tailnet_name` or no project path yet.
 
-dev then replaces itself with `et -c "tmux new -A -s <session> -c <dir>"
-<tailnet_name>`. The session is the first project's name or the box name, with `.` and `:` turned into `_`. The
-directory is the first project's `path`, or `/srv/projects` with no
-project, so a session never starts in `$HOME`. A path outside
-`/srv/projects[/<name>]` exits 1. `--ssh`, or an `et` missing from PATH
-(with one warning), runs `ssh -t` with the same tmux command.
+dev then runs `ci box show <box>`, which writes the box's host keys to ci's
+known_hosts, and replaces itself with
+`et -c "tmux new -A -s <session> -c <dir>" <ssh_user>@<tailnet_name>`, told
+to trust only that file, so a box's host key is never accepted on first use.
+The session is the first project's name or the box name, with `.` and `:`
+turned into `_`. The directory is the first project's `path`, or
+`/srv/projects` with no project, so a session never starts in `$HOME`. A path
+outside `/srv/projects[/<name>]` exits 1. `--ssh`, or an `et` missing from
+PATH (with one warning), runs `ci box ssh <box> -- tmux ...` with the same
+tmux command, which checks the same host keys.
 
 ## Errors
 

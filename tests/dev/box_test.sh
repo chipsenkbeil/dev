@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pure-bash tests for `dev box` and `dev connect`. ci, et and ssh are stubs first on PATH that
+# Pure-bash tests for `dev box` and `dev connect`. ci and et are stubs first on PATH that
 # log their arguments, one per line, and ci answers from fixture files in $FX. A fake dotfiles
 # clone in DOTFILES holds a stub scripts/select-items.sh that records the items and picks FAKE_PICK.
 set -o pipefail
@@ -15,12 +15,24 @@ STUBS="$TMP/stubs"
 FX="$TMP/fx"
 FAKE_DOTFILES="$TMP/dotfiles"
 export LOG="$TMP/log" ITEMS="$TMP/items" FX
+export XDG_STATE_HOME="$TMP/state"
+KH="$TMP/state/ci/known_hosts"
 mkdir -p "$STUBS" "$FX" "$FAKE_DOTFILES/scripts"
 
 cat >"$STUBS/ci" <<'STUB'
 #!/bin/sh
 { echo ci; printf '%s\n' "$@"; echo '#'; } >>"$LOG"
 sub=$2
+if [ "$sub" = show ] && [ ! -f "$FX/show.json" ]; then
+    for src in resume create; do
+        if [ -f "$FX/$src.json" ]; then
+            jq -c '.box.ssh_user = "user"' "$FX/$src.json"
+            exit 0
+        fi
+    done
+    jq -c --arg n "$3" '{ok: true, box: (.boxes[] | select(.name == $n) | .ssh_user = "user")}' "$FX/ls.json"
+    exit 0
+fi
 [ ! -f "$FX/$sub.err" ] || cat "$FX/$sub.err" >&2
 [ ! -f "$FX/$sub.json" ] || cat "$FX/$sub.json"
 exit "$(cat "$FX/$sub.rc" 2>/dev/null || echo 0)"
@@ -386,12 +398,13 @@ reset
 fx ls "$(lsdoc "$RUNNING")"
 box connect myproject-k3x
 assert_eq "connect to a running box runs et" "$(calls)" "ci box ls --json
-et -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject box-myproject-k3x"
+ci box show myproject-k3x --json
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@box-myproject-k3x"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 box box connect myproject-k3x --ssh
 assert_eq "--ssh runs ssh" "$(calls)" "ci box ls --json
-ssh -t box-myproject-k3x tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+ci box ssh myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
 reset
 fx ls "$(lsdoc "$KEPT")"
 box connect scratch-a1b --ssh
@@ -402,7 +415,8 @@ fx resume "$(doc "$(mkbox ci-abc running '["ci","dotfiles"]' "$NEW_OFF" null)")"
 out="$(box connect ci-abc)"
 assert_eq "connect to a stopped box resumes then runs et" "$(calls)" "ci box ls --json
 ci box resume ci-abc --json
-et -c tmux new -A -s ci -c $PROJECTS_DIR/ci box-ci-abc"
+ci box show ci-abc --json
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s ci -c $PROJECTS_DIR/ci user@box-ci-abc"
 assert_eq "connect prints the resume line" "$out" "resumed ci-abc (medium, ci,dotfiles), $NEW_LEFT, host box-ci-abc"
 reset
 fx ls "$(lsdoc "$RUNNING")"
@@ -418,7 +432,7 @@ fi
 out="$(cd "$NOPROJ" && PATH="$TMP/noet" "$DEV" connect myproject-k3x 2>&1)"
 assert_contains "a missing et warns once" "$out" "et not found, using ssh"
 assert_eq "a missing et falls back to ssh" "$(calls)" "ci box ls --json
-ssh -t box-myproject-k3x tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+ci box ssh myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
 reset
 fx ls "$(lsdoc "$CREATING")"
 out="$(box connect new-111 2>&1)"
@@ -445,7 +459,8 @@ scratch-a1b	scratch-a1b    running  medium  -            kept
 ci-abc	ci-abc         stopped  medium  ci,dotfiles  $STOP_LEFT
 __new__	new box for myproject"
 assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
-et -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject box-myproject-k3x"
+ci box show myproject-k3x --json
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@box-myproject-k3x"
 reset
 fx ls "$(lsdoc "$KEPT")"
 FAKE_PICK=scratch-a1b box connect
@@ -456,7 +471,8 @@ fx create "$(doc "$(mkbox myproject-n3w running '["myproject"]' "$NEW_OFF" null)
 out="$(FAKE_PICK=__new__ inproj connect)"
 assert_eq "the new-box item creates for the project then attaches" "$(calls)" "ci box ls --json
 ci box create --project myproject --json
-et -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject box-myproject-n3w"
+ci box show myproject-n3w --json
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@box-myproject-n3w"
 assert_contains "the new box is reported" "$out" "created myproject-n3w"
 reset
 fx ls "$(lsdoc)"
@@ -490,12 +506,13 @@ reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
 box connect myproject-k3x
 assert_eq "connect starts tmux in the first project's path" "$(calls)" "ci box ls --json
-et -c tmux new -A -s myproject -c /srv/projects/dotfiles box-myproject-k3x"
+ci box show myproject-k3x --json
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c /srv/projects/dotfiles user@box-myproject-k3x"
 reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
 box connect myproject-k3x --ssh
 assert_eq "ssh starts tmux in the first project's path" "$(calls)" "ci box ls --json
-ssh -t box-myproject-k3x tmux new -A -s myproject -c /srv/projects/dotfiles"
+ci box ssh myproject-k3x -- tmux new -A -s myproject -c /srv/projects/dotfiles"
 LONG65="$(printf '%065d' 0 | tr 0 a)"
 for bad in '/srv/projects/x; rm -rf ~' '/srv' '/home/user/projects' '/home/user/projects/myproject' '/srv/projects/a/b' "/srv/projects/\$(id)" '/srv/projects/.hidden' '/srv/projects/-x' '/srv/projects/..' "/srv/projects/$LONG65"; do
     reset
@@ -523,7 +540,19 @@ reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].name = "my.proj" | .projects[0].path = "/srv/projects/my.proj"' <<<"$RUNNING")")"
 box connect myproject-k3x
 assert_eq "a dot in the project name becomes an underscore in the tmux session" "$(calls)" "ci box ls --json
-et -c tmux new -A -s my_proj -c /srv/projects/my.proj box-myproject-k3x"
+ci box show myproject-k3x --json
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s my_proj -c /srv/projects/my.proj user@box-myproject-k3x"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+(cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" XDG_STATE_HOME=relative/state HOME="$TMP/home" "$DEV" connect myproject-k3x)
+assert_contains "a relative XDG_STATE_HOME falls back to ~/.local/state" "$(calls)" "UserKnownHostsFile=$TMP/home/.local/state/ci/known_hosts "
+reset
+fx ls "$(lsdoc "$RUNNING")"
+fx show "$(doc "$(jq -c '.ssh_user = null' <<<"$RUNNING")")"
+out="$(box connect myproject-k3x 2>&1)"
+assert_eq "a shown box with no ssh user exits 6" "$?" "6"
+assert_contains "the missing ssh user is named" "$out" "has no tailnet name or ssh user"
+assert_not_contains "no et without an ssh user" "$(calls)" "et --ssh-option"
 
 # --- dispatch ---
 
