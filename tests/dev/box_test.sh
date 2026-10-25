@@ -306,6 +306,11 @@ fi
 out="$(box box delete ci-abc -y)"
 assert_eq "delete -y argv" "$(calls)" "ci box delete ci-abc --json"
 assert_eq "delete -y output" "$out" "deleted ci-abc, archive /var/lib/devbox-archive/x.tar.gz"
+reset
+fx delete "$(doc "$(jq -c '.state = "deleted"' <<<"$STOPPED")")"
+out="$(box box delete ci-abc -y --no-archive)"
+assert_eq "delete --no-archive argv" "$(calls)" "ci box delete ci-abc --no-archive --json"
+assert_eq "delete --no-archive output" "$out" "deleted ci-abc, no archive"
 
 if script -q /dev/null true </dev/null >/dev/null 2>&1; then
     PTY=bsd

@@ -232,7 +232,7 @@ box stop|cmd_box_stop||dev box stop BOX|Stop a box, which ci deletes later unles
 box resume|cmd_box_resume|--ttl --keep|dev box resume BOX [--ttl HOURS or --keep]|Start a stopped box again, keeping its lifetime unless told otherwise
 box extend|cmd_box_extend|--ttl --keep|dev box extend BOX (--ttl HOURS or --keep)|Replace a running box's lifetime, counted from now
 box install-tools|cmd_box_install_tools|--project|dev box install-tools BOX [--project NAME]...|Reinstall a running box's tools, for every project unless --project names some
-box delete|cmd_box_delete|--yes -y|dev box delete BOX [-y or --yes]|Archive a box's projects and delete it, after asking unless -y
+box delete|cmd_box_delete|--yes -y --no-archive|dev box delete BOX [-y or --yes] [--no-archive]|Archive a box's projects and delete it, or delete it with no archive under --no-archive, after asking unless -y
 box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
 help|cmd_help|-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
 TABLE
@@ -1463,11 +1463,11 @@ box_need() {
     command -v jq >/dev/null 2>&1 || die "jq not found on PATH, install it with: brew install jq"
 }
 
-# box_parse <sub> <allowed flags> [args...]: set B_PROFILE, B_PROJECTS, B_TTL, B_KEEP, B_YES, B_ALL, B_SSH and B_POS.
+# box_parse <sub> <allowed flags> [args...]: set B_PROFILE, B_PROJECTS, B_TTL, B_KEEP, B_YES, B_ALL, B_SSH, B_NOARCH and B_POS.
 box_parse() {
     local sub=$1 allowed=" $2 " arg value
     shift 2
-    B_PROFILE="" B_TTL="" B_KEEP=0 B_YES=0 B_ALL=0 B_SSH=0
+    B_PROFILE="" B_TTL="" B_KEEP=0 B_YES=0 B_ALL=0 B_SSH=0 B_NOARCH=0
     B_PROJECTS=() B_POS=()
     while [ "$#" -gt 0 ]; do
         arg=$1
@@ -1501,6 +1501,7 @@ box_parse() {
             ;;
         --keep) B_KEEP=1 ;;
         -y | --yes) B_YES=1 ;;
+        --no-archive) B_NOARCH=1 ;;
         --all) B_ALL=1 ;;
         --ssh) B_SSH=1 ;;
         *) B_POS+=("$arg") ;;
@@ -1669,12 +1670,17 @@ cmd_box_install_tools() {
 }
 
 cmd_box_delete() {
-    local answer
-    box_parse delete "--yes -y" "$@"
+    local answer question args=()
+    box_parse delete "--yes -y --no-archive" "$@"
     box_one delete
+    question="Delete $BOX_NAME? Its projects are archived first."
+    if [ "$B_NOARCH" -eq 1 ]; then
+        question="Delete $BOX_NAME without an archive? Anything not pushed is lost."
+        args=(--no-archive)
+    fi
     if [ "$B_YES" -eq 0 ]; then
         { : </dev/tty; } 2>/dev/null || usage_error "box delete" "no terminal to ask on, pass -y to delete $BOX_NAME"
-        printf 'Delete %s? Its projects are archived first. [y/N] ' "$BOX_NAME" >/dev/tty
+        printf '%s [y/N] ' "$question" >/dev/tty
         read -r answer </dev/tty || answer=""
         case "$answer" in
         y | Y | yes | YES) ;;
@@ -1685,8 +1691,8 @@ cmd_box_delete() {
         esac
     fi
     box_need
-    box_call delete delete "$BOX_NAME" --json
-    echo "deleted $(box_field "$BOX_OUT" .box.name), archive $(box_field "$BOX_OUT" '.box.archive.path // "-"')"
+    box_call delete delete "$BOX_NAME" ${args[@]+"${args[@]}"} --json
+    printf '%s' "$BOX_OUT" | jq -r '.box | "deleted \(.name), " + (if .archive == null then "no archive" else "archive \(.archive.path)" end)'
 }
 
 # box_items <ls document> <project>: "name<TAB>label" per box, the project's boxes first, then the new-box item inside a project.

@@ -11,6 +11,7 @@ dev box resume myproject-k3x --keep
 dev box extend myproject-k3x --ttl 2
 dev box install-tools myproject-k3x --project myproject
 dev box delete myproject-k3x -y
+dev box delete myproject-k3x -y --no-archive
 ```
 
 ## Listing and creating
@@ -61,3 +62,6 @@ When ci exits non-zero with an `{"ok":false}` document, dev prints
 `dev box <sub>: <message>` to stderr and exits with ci's code (2 to 11).
 Other output passes through. `dev box delete` asks on `/dev/tty` unless you
 pass `-y`, and exits 2 with no terminal. `dev --ci` refuses `box` and `connect`.
+
+`dev box delete --no-archive` deletes the box without archiving its projects,
+so anything not pushed is lost, and its question says so.
