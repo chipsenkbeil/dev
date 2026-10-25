@@ -173,20 +173,20 @@ if command -v jq >/dev/null 2>&1; then
     initdir="$(project boardinit)"
     export BOARDS_JSON='[{"id":"b1","name":"General"}]'
     out="$(run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
-    assert_contains "init suggests a board when none is named after the project" "$out" "No BoardFlow board for proj"
-    assert_contains "init asks the board with a read-only GET" "$(log)" "curl -fsS --max-time 5 -K - https://boardflow.example.com/api/boards"
-    assert_contains "init reads the worker token" "$(log)" "pass show secrets/worker/token/boardflow.example.com"
+    assert_contains "init suggests a board when none is named after the project" "$out" "No Pomb board for proj"
+    assert_contains "init asks the board with a read-only GET" "$(log)" "curl -fsS --max-time 5 -K - https://pomb.example.com/api/boards"
+    assert_contains "init reads the worker token" "$(log)" "pass show secrets/worker/token/pomb.example.com"
     assert_not_contains "init keeps the token off the command line" "$(log | grep '^curl')" "cf_secret"
     export BOARDS_JSON='[{"id":"b1","name":"General"},{"id":"b2","name":"proj"}]'
     out="$(run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
-    assert_not_contains "init stays quiet when the board exists" "$out" "No BoardFlow board"
+    assert_not_contains "init stays quiet when the board exists" "$out" "No Pomb board"
     out="$(CURL_FAIL=1 run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
     assert_eq "init survives an unreachable board" "$?" "0"
-    assert_not_contains "init skips the hint when the board is unreachable" "$out" "No BoardFlow board"
+    assert_not_contains "init skips the hint when the board is unreachable" "$out" "No Pomb board"
     printf '#!/usr/bin/env bash\nexit 1\n' >"$STUBS/pass"
     export BOARDS_JSON='[]'
     out="$(run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
-    assert_not_contains "init skips the hint when pass has no token" "$out" "No BoardFlow board"
+    assert_not_contains "init skips the hint when pass has no token" "$out" "No Pomb board"
     unset BOARDS_JSON
     rm -f "$STUBS/pass" "$STUBS/curl"
 else

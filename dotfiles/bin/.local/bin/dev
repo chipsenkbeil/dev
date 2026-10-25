@@ -2508,16 +2508,16 @@ init_gerrit() {
     created "remote gerrit gr:$name"
 }
 
-# init_board_hint <name>: when the BoardFlow board answers a read-only GET and has no board named after the project,
+# init_board_hint <name>: when the Pomb board answers a read-only GET and has no board named after the project,
 # leaves a line for the owner. Anything missing (pass entry, tailscale, tools) skips it silently.
 init_board_hint() {
-    local url=${BOARDFLOW_URL:-https://boardflow.example.com} token boards has
+    local url=${POMB_URL:-https://pomb.example.com} token boards has
     command -v pass >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
-    token=$(pass show secrets/worker/token/boardflow.example.com 2>/dev/null) && [ -n "$token" ] || return 0
+    token=$(pass show secrets/worker/token/pomb.example.com 2>/dev/null) && [ -n "$token" ] || return 0
     boards=$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -fsS --max-time 5 -K - "$url/api/boards" 2>/dev/null) || return 0
     has=$(jq -r --arg n "$1" 'if any(.[]; .name == $n) then "yes" else "no" end' <<<"$boards" 2>/dev/null)
     if [ "$has" = no ]; then
-        human "No BoardFlow board for $1, create one in $url or tell agents to use General"
+        human "No Pomb board for $1, create one in $url or tell agents to use General"
     fi
 }
 
