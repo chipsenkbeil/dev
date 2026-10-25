@@ -136,7 +136,7 @@ rm "$plain/Makefile"
 
 none="$(project none)"
 mkdir -p "$none/.ci"
-printf 'return {}\n' >"$none/.ci/pipeline.lua"
+printf 'return {}\n' >"$none/.ci/jobs.lua"
 out="$(run_dev "$none" lint 2>&1)"
 assert_eq "undetected project exits 1" "$?" "1"
 assert_contains "undetected project explains" "$out" "no built-in lint for undetected"
@@ -401,7 +401,7 @@ if command -v jj >/dev/null 2>&1; then
 
     out="$(run_dev "$init" init --dry-run --no-gerrit --public)"
     assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.sh"
-    assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/pipeline.lua"
+    assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/jobs.lua"
     assert_contains "init --dry-run plans the workflow" "$out" "would create: .github/workflows/ci.yml"
     assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
     assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin hub:init"
@@ -431,12 +431,12 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init relocates the ast-grep rules" "$(cat "$init/sgconfig.yml")" ".dev/ast-grep/rules"
     assert_contains "init pins the stable channel" "$(cat "$init/rust-toolchain.toml")" "channel = \"$(rustc +stable --version | cut -d' ' -f2)\""
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
-    assert_contains "init writes the pipeline" "$(cat "$init/.ci/pipeline.lua")" ".dev/lint.sh"
-    assert_contains "init seeds a lint job" "$(cat "$init/.ci/pipeline.lua")" "    lint = {"
-    assert_contains "init seeds a test job" "$(cat "$init/.ci/pipeline.lua")" "    test = {"
-    assert_contains "init runs the jobs on the rust runner image" "$(cat "$init/.ci/pipeline.lua")" "local LINUX = { os = \"linux-base\", image = \"linux-rust\" }"
-    assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/pipeline.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
-    assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/pipeline.lua")" 'io.open("rust-toolchain.toml")'
+    assert_contains "init writes the pipeline" "$(cat "$init/.ci/jobs.lua")" ".dev/lint.sh"
+    assert_contains "init seeds a lint job" "$(cat "$init/.ci/jobs.lua")" "    lint = {"
+    assert_contains "init seeds a test job" "$(cat "$init/.ci/jobs.lua")" "    test = {"
+    assert_contains "init runs the jobs on the rust runner image" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { os = \"linux-base\", image = \"linux-rust\" }"
+    assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/jobs.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
+    assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/jobs.lua")" 'io.open("rust-toolchain.toml")'
     assert_contains "init writes the workflow for windows" "$(cat "$init/.github/workflows/ci.yml")" "windows-latest"
     assert_contains "init seeds docs/STYLE.md from the rust guide" "$out" "created: docs/STYLE.md"
     assert_contains "init copies the rust guide" "$(cat "$init/docs/STYLE.md")" "# Rust style"
@@ -905,16 +905,16 @@ STUB
     cip="$(project ci)"
     sub="$cip/sub"
     mkdir -p "$cip/.ci" "$sub"
-    printf 'return {}\n' >"$cip/.ci/pipeline.lua"
+    printf 'return {}\n' >"$cip/.ci/jobs.lua"
     git -C "$cip" init -q
 
     out="$(cirun "$sub" --ci lint 2>&1)"
     assert_eq "--ci runs the job through ci from the project root" "$out" ""
-    assert_eq "--ci passes the pipeline, job and follow flags" "$(log)" "ci run pipeline --local --job lint -f (in $cip)"
+    assert_eq "--ci passes the pipeline, job and follow flags" "$(log)" "ci run --local --job lint -f (in $cip)"
     cirun "$cip" lint --ci >/dev/null 2>&1
-    assert_contains "--ci works after the verb" "$(log)" "ci run pipeline --local --job lint -f"
+    assert_contains "--ci works after the verb" "$(log)" "ci run --local --job lint -f"
     DEV_CI=1 cirun "$cip" test >/dev/null 2>&1
-    assert_contains "DEV_CI=1 counts as --ci" "$(log)" "ci run pipeline --local --job test -f"
+    assert_contains "DEV_CI=1 counts as --ci" "$(log)" "ci run --local --job test -f"
     DEV_CI=0 cirun "$cip" lint >/dev/null 2>&1
     assert_not_contains "DEV_CI=0 runs locally" "$(log)" "ci run"
     CI_STUB_RC=7 cirun "$cip" --ci test >/dev/null 2>&1
@@ -922,7 +922,7 @@ STUB
 
     out="$(cirun "$cip" --ci build 2>&1)"
     assert_eq "--ci with no such job exits 1" "$?" "1"
-    assert_contains "--ci with no such job hints at the pipeline" "$out" "no job named build in .ci/pipeline.lua, add one"
+    assert_contains "--ci with no such job hints at the pipeline" "$out" "no job named build in the project's default pipeline (.ci/jobs.lua), add one"
     assert_eq "--ci with no such job runs nothing" "$(log)" ""
     out="$(cirun "$cip" --ci lint --extra 2>&1)"
     assert_eq "--ci refuses extra arguments with 2" "$?" "2"
@@ -932,7 +932,7 @@ STUB
     printf '#!/usr/bin/env bash\necho x\n' >"$cip/.dev/widget/save.sh"
     chmod +x "$cip/.dev/widget/save.sh"
     cirun "$cip" --ci widget save >/dev/null 2>&1
-    assert_contains "--ci maps a subcommand to the job noun-sub" "$(log)" "ci run pipeline --local --job widget-save -f"
+    assert_contains "--ci maps a subcommand to the job noun-sub" "$(log)" "ci run --local --job widget-save -f"
     out="$(cirun "$cip" widget --ci zap 2>&1)"
     assert_eq "--ci with an unknown subcommand exits 2" "$?" "2"
     assert_contains "--ci with an unknown subcommand names it" "$out" "unknown subcommand zap"

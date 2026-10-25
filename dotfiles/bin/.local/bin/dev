@@ -2618,7 +2618,7 @@ cmd_init() {
 
     # CI pipeline
     channel=$(channel_for_project)
-    put_generated .ci/pipeline.lua emit_pipeline "$type"
+    put_generated .ci/jobs.lua emit_pipeline "$type"
 
     # GitHub workflow
     if [ "$public" -eq 1 ]; then
@@ -2673,7 +2673,7 @@ ci_enabled() {
     esac
 }
 
-# cmd_ci <verb> [args...]: run the verb's job from .ci/pipeline.lua on the fleet and exit with its status.
+# cmd_ci <verb> [args...]: run the verb's job from the project's default pipeline (.ci/jobs.lua) on the fleet and exit with its status.
 # The job of a subcommand ("noun sub") is named noun-sub.
 cmd_ci() {
     local verb=$1 job
@@ -2686,13 +2686,13 @@ cmd_ci() {
     [ "$#" -le 1 ] || usage_error "$verb" "--ci passes no arguments to the job, got $2"
     need ci "dev install from the ci repo"
     need jq "brew install jq"
-    if ! ci -C "$ROOT" jobs pipeline --json 2>/dev/null |
+    if ! ci -C "$ROOT" jobs --json 2>/dev/null |
         jq -e --arg v "$job" '.jobs[] | select(.name == $v)' >/dev/null 2>&1; then
-        die "no job named $job in .ci/pipeline.lua, add one to run it with --ci"
+        die "no job named $job in the project's default pipeline (.ci/jobs.lua), add one to run it with --ci"
     fi
     cd "$ROOT"
-    show ci run pipeline --local --job "$job" -f
-    exec ci run pipeline --local --job "$job" -f
+    show ci run --local --job "$job" -f
+    exec ci run --local --job "$job" -f
 }
 
 main() {

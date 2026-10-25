@@ -6,8 +6,9 @@ Three flags work anywhere before a `--` on the line, whatever the verb.
   `VERBOSE=1` to it.
 - `-vv`: also trace every line of dev and of each bash script it runs, which
   exports `VERBOSE=2`.
-- `--ci`: run the verb's job of the same name from `.ci/pipeline.lua` on
-  example-box, through `ci run pipeline --local --job <verb> -f`.
+- `--ci`: run the verb's job of the same name from the project's default
+  pipeline (`.ci/jobs.lua`) on example-box, through
+  `ci run --local --job <verb> -f`.
 
 `-v` and `-vv` also stack as `-vvv` (the count is capped at 2). Setting
 `VERBOSE` in the environment counts the same, where empty, `no` and `false`
