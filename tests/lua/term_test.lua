@@ -1,0 +1,41 @@
+local t = require("testing")
+local term = require("dev.term")
+
+local Key = term.Key
+
+t.test("decode names the arrow keys from both escape forms and the vi keys", function()
+    t.eq(term.decode("\27[A"), { Key.UP })
+    t.eq(term.decode("\27OA"), { Key.UP })
+    t.eq(term.decode("k"), { Key.UP })
+    t.eq(term.decode("\16"), { Key.UP })
+    t.eq(term.decode("\27[B"), { Key.DOWN })
+    t.eq(term.decode("\27OB"), { Key.DOWN })
+    t.eq(term.decode("j"), { Key.DOWN })
+    t.eq(term.decode("\14"), { Key.DOWN })
+end)
+
+t.test("decode names enter, esc, ctrl-c and space", function()
+    t.eq(term.decode("\r"), { Key.ENTER })
+    t.eq(term.decode("\n"), { Key.ENTER })
+    t.eq(term.decode("\27"), { Key.ESC })
+    t.eq(term.decode("\3"), { Key.CTRL_C })
+    t.eq(term.decode(" "), { Key.SPACE })
+end)
+
+t.test("decode passes any other printable byte through", function()
+    t.eq(term.decode("q"), { "q" })
+    t.eq(term.decode("7"), { "7" })
+end)
+
+t.test("decode reads a run of keys in order", function()
+    t.eq(term.decode("\27[A\27[Bq"), { Key.UP, Key.DOWN, "q" })
+end)
+
+t.test("decode skips an escape sequence it does not know", function()
+    t.eq(term.decode("\27[3~q"), { "q" })
+end)
+
+t.test("size returns a positive row and column count", function()
+    local rows, cols = term.size()
+    t.ok(rows > 0 and cols > 0)
+end)
