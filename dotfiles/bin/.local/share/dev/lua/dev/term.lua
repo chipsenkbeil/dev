@@ -2,12 +2,13 @@ local ffi = require("ffi")
 local devos = require("dev.os")
 
 local TCSANOW = 0
+local O_RDWR = 2
 local DEFAULT_ROWS, DEFAULT_COLS = 24, 80
 local ESC_TIMEOUT_TENTHS = 1
 local EINTR = 4
 local CSI_FINAL_MIN, CSI_FINAL_MAX = 0x40, 0x7e
 
-local ICANON, ECHO, ISIG, VMIN, VTIME
+local ICANON, ECHO, ISIG, VMIN, VTIME, O_CLOEXEC
 if ffi.os == "OSX" then
     ffi.cdef([[
 typedef unsigned long tcflag_t;
@@ -24,6 +25,7 @@ struct termios {
 };
 ]])
     ICANON, ECHO, ISIG, VMIN, VTIME = 0x100, 0x8, 0x80, 16, 17
+    O_CLOEXEC = 0x1000000
 elseif ffi.os == "Linux" then
     ffi.cdef([[
 typedef unsigned int tcflag_t;
@@ -41,6 +43,7 @@ struct termios {
 };
 ]])
     ICANON, ECHO, ISIG, VMIN, VTIME = 0x2, 0x8, 0x1, 6, 5
+    O_CLOEXEC = 0x80000
 else
     error("dev.term has no termios layout for " .. ffi.os)
 end
@@ -49,6 +52,8 @@ ffi.cdef([[
 int tcgetattr(int fd, struct termios *termios_p);
 int tcsetattr(int fd, int optional_actions, const struct termios *termios_p);
 long read(int fd, void *buf, unsigned long count);
+int open(const char *path, int flags, ...);
+int close(int fd);
 ]])
 
 ---@class dev.term.Key
@@ -135,6 +140,25 @@ function M.raw(fd)
         restored = true
         set_attr(fd, saved)
     end
+end
+
+---Open the controlling terminal for reading and writing.
+---
+---The descriptor is not inherited by child processes.
+---@return integer? fd descriptor, or nil when there is no controlling terminal
+---@return string? message why the open failed, set only when `fd` is nil
+function M.open_tty()
+    local fd = ffi.C.open(M.TTY_PATH, bit.bor(O_RDWR, O_CLOEXEC))
+    if fd < 0 then
+        return nil, devos.strerror()
+    end
+    return fd
+end
+
+---Close a descriptor from `open_tty`.
+---@param fd integer descriptor to close
+function M.close(fd)
+    ffi.C.close(fd)
 end
 
 ---Measure the controlling terminal.
