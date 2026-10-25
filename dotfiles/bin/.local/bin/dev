@@ -234,6 +234,7 @@ box extend|cmd_box_extend|--ttl --keep|dev box extend BOX (--ttl HOURS or --keep
 box install-tools|cmd_box_install_tools|--project|dev box install-tools BOX [--project NAME]...|Reinstall a running box's tools, for every project unless --project names some
 box delete|cmd_box_delete|--yes -y --no-archive|dev box delete BOX [-y or --yes] [--no-archive]|Archive a box's projects and delete it, or delete it with no archive under --no-archive, after asking unless -y
 box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
+bootstrap|cmd_bootstrap|--dry-run --no-login|dev bootstrap [--dry-run] [--no-login]|Run bootstrap.sh from the dotfiles clone: the package manager and luajit first, then stow, tailscale, the default packages and the manifest tools|hidden
 help|cmd_help|-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
 TABLE
 }
@@ -1275,6 +1276,14 @@ cmd_pull() {
         run_cmd "${PULL_CMD[@]}"
         step=$((step + 1))
     done
+}
+
+# cmd_bootstrap [args...]: run bootstrap.sh from the dotfiles root.
+cmd_bootstrap() {
+    local root
+    root=$(dotfiles_root)
+    cd "$root"
+    exec bash "$root/bootstrap.sh" "$@"
 }
 
 # --- tools ---
@@ -2662,7 +2671,7 @@ cmd_init() {
     fi
 }
 
-CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull guide connect "
+CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull guide connect bootstrap "
 CI_LOCAL_NOUNS=" tools box pi antinote "
 
 # ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.
