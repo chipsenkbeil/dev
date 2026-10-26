@@ -235,13 +235,13 @@ tools check|cmd_tools_check|--group|dev tools check [--group NAME]|Report which 
 guide|cmd_guide||dev guide [question...]|Show this repo's overview, or ask guide a question about its commands and topics|Set up a machine or project
 connect|cmd_box_connect|--ssh|dev connect [<box>] [--ssh]|Attach to a box over Eternal Terminal in a tmux session, picking, resuming or creating one first|Boxes
 box|noun|||List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box|Boxes
-box ls|cmd_box_ls|--all|dev box ls [--all]|List the boxes with state, profile, projects and time left, then the cap
-box create|cmd_box_create|--profile --project --ttl --keep|dev box create [--profile small, medium or large] [--project NAME]... [--ttl HOURS or --keep]|Create a box and wait until it runs, profile medium and 4 hours unless told otherwise, with the current project by default
+box ls|cmd_box_ls|--all|dev box ls [--all]|List the boxes with state, target, projects and time left, then the cap
+box create|cmd_box_create|--target --shape --by --ttl --keep|dev box create [--target T] [--shape S] [--by LABEL] [--ttl HOURS or --keep] [PROJECT...]|Create a box and wait until it runs, with the hub's default target and shape, 4 hours unless told otherwise, and the current project by default
 box show|cmd_box_show||dev box show BOX|Show one box as key: value lines
 box stop|cmd_box_stop||dev box stop BOX|Stop a box, which ci deletes later unless it is resumed
 box resume|cmd_box_resume|--ttl --keep|dev box resume BOX [--ttl HOURS or --keep]|Start a stopped box again, keeping its lifetime unless told otherwise
 box extend|cmd_box_extend|--ttl --keep|dev box extend BOX (--ttl HOURS or --keep)|Replace a running box's lifetime, counted from now
-box install-tools|cmd_box_install_tools|--project|dev box install-tools BOX [--project NAME]...|Reinstall a running box's tools, for every project unless --project names some
+box install-tools|cmd_box_install_tools||dev box install-tools BOX [PROJECT...]|Reinstall a running box's tools, for every project unless some are named
 box delete|cmd_box_delete|--yes -y --no-archive|dev box delete BOX [-y or --yes] [--no-archive]|Archive a box's projects and delete it, or delete it with no archive under --no-archive, after asking unless -y
 box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
 bootstrap|cmd_bootstrap|--dry-run --no-login|dev bootstrap [--dry-run] [--no-login]|Run bootstrap.sh from the dotfiles clone: the package manager and luajit first, then stow, tailscale, the default packages and the manifest tools|hidden
@@ -1481,7 +1481,11 @@ def left:
             | if $s <= 0 then "deleted soon" else "deleted in \(span($s))" end
     else "" end;
 def projs: if (.projects | length) == 0 then "-" else [.projects[].name] | join(",") end;
-def row: [.name, .state, .profile, projs, left] | @tsv;
+def tmux:
+    if .tmux_sessions == null then "unknown"
+    elif (.tmux_sessions | length) == 0 then "none"
+    else [.tmux_sessions[] | "\(.name) (\(if .attached then "attached" else "idle \(span(.idle_seconds))" end))"] | join(", ") end;
+def row: [.name, .state, .target, projs, left] | @tsv;
 '
 
 # box_need: die unless ci and jq are on PATH.
@@ -1490,12 +1494,12 @@ box_need() {
     command -v jq >/dev/null 2>&1 || die "jq not found on PATH, install it with: brew install jq"
 }
 
-# box_parse <sub> <allowed flags> [args...]: set B_PROFILE, B_PROJECTS, B_TTL, B_KEEP, B_YES, B_ALL, B_SSH, B_NOARCH and B_POS.
+# box_parse <sub> <allowed flags> [args...]: set B_TARGET, B_SHAPE, B_BY, B_TTL, B_KEEP, B_YES, B_ALL, B_SSH, B_NOARCH and B_POS.
 box_parse() {
     local sub=$1 allowed=" $2 " arg value
     shift 2
-    B_PROFILE="" B_TTL="" B_KEEP=0 B_YES=0 B_ALL=0 B_SSH=0 B_NOARCH=0
-    B_PROJECTS=() B_POS=()
+    B_TARGET="" B_SHAPE="" B_BY="" B_TTL="" B_KEEP=0 B_YES=0 B_ALL=0 B_SSH=0 B_NOARCH=0
+    B_POS=()
     while [ "$#" -gt 0 ]; do
         arg=$1
         shift
@@ -1508,18 +1512,14 @@ box_parse() {
             ;;
         esac
         case "$arg" in
-        --profile | --project | --ttl)
+        --target | --shape | --by | --ttl)
             [ "$#" -gt 0 ] || usage_error "box $sub" "$arg needs a value"
             value=$1
             shift
             case "$arg" in
-            --profile)
-                case "$value" in
-                small | medium | large) B_PROFILE=$value ;;
-                *) usage_error "box $sub" "--profile is small, medium or large, not $value" ;;
-                esac
-                ;;
-            --project) B_PROJECTS+=("$value") ;;
+            --target) B_TARGET=$value ;;
+            --shape) B_SHAPE=$value ;;
+            --by) B_BY=$value ;;
             --ttl)
                 [[ "$value" =~ ^[1-9][0-9]*$ ]] || usage_error "box $sub" "--ttl is a whole number of hours, not $value"
                 B_TTL=$value
@@ -1572,13 +1572,19 @@ box_field() {
 # box_project: the basename of the project root, failing outside a project.
 box_project() {
     [ -d "$ROOT/.jj" ] || [ -e "$ROOT/.git" ] || [ -d "$ROOT/.dev" ] || return 1
+    case "$(basename "$ROOT")" in
+    -*)
+        echo "dev box: not using $(basename "$ROOT") as the default project, a project name cannot start with -" >&2
+        return 1
+        ;;
+    esac
     basename "$ROOT"
 }
 
-# box_summary <verb> <document>: "<verb> <name> (<profile>, <projects>), <time left>, host <tailnet_name>".
+# box_summary <verb> <document>: "<verb> <name> (<target>, <shape>, <projects>), <time left>, host <tailnet_name>".
 box_summary() {
     printf '%s' "$2" | jq -r --arg v "$1" "$BOX_JQ"'.box
-        | "\($v) \(.name) (\(.profile), \(projs)), \(if left == "" then .state else left end), host \(.tailnet_name // "-")"'
+        | "\($v) \(.name) (\(.target), \(.shape), \(projs)), \(if left == "" then .state else left end), host \(.tailnet_name // "-")"'
 }
 
 # box_table: pad tab-separated rows from stdin into aligned columns.
@@ -1597,7 +1603,7 @@ box_table() {
 
 # box_cap <ls document>: the cap line.
 box_cap() {
-    box_field "$1" '.cap | "\(.running) of \(.running_max) running, \(.memory_gib) of \(.memory_max_gib) GiB"'
+    box_field "$1" '.cap | "\(.running) of \(.running_max) running, \(.memory_limits_gib) of \(.memory_max_gib) GiB"'
 }
 
 cmd_box_ls() {
@@ -1613,24 +1619,29 @@ cmd_box_ls() {
     box_cap "$BOX_OUT"
 }
 
-# box_create_call: ci box create from B_PROFILE, B_PROJECTS, B_TTL and B_KEEP, then the summary line.
+# box_create_call: ci box create from B_TARGET, B_SHAPE, B_BY, B_POS (the projects), B_TTL and B_KEEP, then the summary line.
 box_create_call() {
-    local project
+    local by=$B_BY
     local -a args=(create)
-    [ -z "$B_PROFILE" ] || args+=(--profile "$B_PROFILE")
-    for project in ${B_PROJECTS[@]+"${B_PROJECTS[@]}"}; do args+=(--project "$project"); done
+    [ -n "$by" ] || by=${USER:+human:$USER}
+    [ -n "$by" ] || by=${LOGNAME:+human:$LOGNAME}
+    [ -n "$by" ] || die "dev box create: neither USER nor LOGNAME is set, pass --by LABEL"
+    [ -z "$B_TARGET" ] || args+=(--target "$B_TARGET")
+    [ -z "$B_SHAPE" ] || args+=(--shape "$B_SHAPE")
+    args+=(--by "$by")
     [ -z "$B_TTL" ] || args+=(--ttl "$B_TTL")
     [ "$B_KEEP" -eq 0 ] || args+=(--keep)
-    box_call create "${args[@]}" --json
+    args+=(--json)
+    [ "${#B_POS[@]}" -eq 0 ] || args+=(-- "${B_POS[@]}")
+    box_call create "${args[@]}"
     box_summary created "$BOX_OUT"
 }
 
 cmd_box_create() {
     local project
-    box_parse create "--profile --project --ttl --keep" "$@"
-    [ "${#B_POS[@]}" -eq 0 ] || usage_error "box create" "unexpected argument ${B_POS[0]}"
+    box_parse create "--target --shape --by --ttl --keep" "$@"
     box_need
-    if [ "${#B_PROJECTS[@]}" -eq 0 ] && project=$(box_project); then B_PROJECTS=("$project"); fi
+    if [ "${#B_POS[@]}" -eq 0 ] && project=$(box_project); then B_POS=("$project"); fi
     box_create_call
 }
 
@@ -1640,14 +1651,14 @@ cmd_box_show() {
     box_need
     box_call show show "$BOX_NAME" --json
     printf '%s' "$BOX_OUT" | jq -r "$BOX_JQ"'.box
-        | "name: \(.name)", "state: \(.state)", "profile: \(.profile)", "cpu: \(.cpu)", "memory_gib: \(.memory_gib)",
+        | "name: \(.name)", "state: \(.state)", "target: \(.target)", "shape: \(.shape)", "cpu: \(.cpu)", "memory_gib: \(.memory_gib)",
           "projects: \(projs)",
-          "tailnet_name: \(.tailnet_name // "-")", "created_at: \(.created_at)",
+          "tailnet_name: \(.tailnet_name // "-")", "created_by: \(.created_by)",
           "ttl_hours: \(.ttl_hours // "kept")",
           (if .expires_at != null then "expires_at: \(.expires_at)" else empty end),
           (if .stopped_at != null then "stopped_at: \(.stopped_at)" else empty end),
           (if .delete_after != null then "delete_after: \(.delete_after)" else empty end),
-          (if .tmux_sessions != null then "tmux_sessions: \(.tmux_sessions | join(","))" else empty end),
+          (if .state == "running" then "tmux_sessions: \(tmux)" else empty end),
           (if .archive != null then "archive: \(.archive.path)" else empty end),
           (if .error != null then "error: \(.error)" else empty end)'
 }
@@ -1686,12 +1697,13 @@ cmd_box_extend() {
 
 cmd_box_install_tools() {
     local -a args=()
-    local project
-    box_parse install-tools "--project" "$@"
-    box_one install-tools
+    box_parse install-tools "" "$@"
+    [ "${#B_POS[@]}" -gt 0 ] || usage_error "box install-tools" "needs a box name"
+    BOX_NAME=${B_POS[0]}
+    [[ "$BOX_NAME" =~ ^[a-z0-9-]{1,40}$ ]] || usage_error "box install-tools" "bad box name $BOX_NAME, a name is 1 to 40 of a-z, 0-9 and -"
+    [ "${#B_POS[@]}" -eq 1 ] || args=(-- "${B_POS[@]:1}")
     box_need
-    for project in ${B_PROJECTS[@]+"${B_PROJECTS[@]}"}; do args+=(--project "$project"); done
-    box_call install-tools install-tools "$BOX_NAME" ${args[@]+"${args[@]}"} --json
+    box_call install-tools install-tools "$BOX_NAME" --json ${args[@]+"${args[@]}"}
     printf '%s' "$BOX_OUT" | jq -r 'if (.installed | length) == 0 then "no projects" else .installed[]
         | if .manifest then "\(.project): tools installed" else "\(.project): no .dev/tools.tsv, nothing installed" end end'
 }
@@ -1805,8 +1817,8 @@ cmd_box_connect() {
         [ -n "$choice" ] || exit 1
     fi
     if [ "$choice" = __new__ ]; then
-        B_PROFILE="" B_TTL="" B_KEEP=0 B_PROJECTS=()
-        [ -z "$project" ] || B_PROJECTS=("$project")
+        B_TARGET="" B_SHAPE="" B_BY="" B_TTL="" B_KEEP=0 B_POS=()
+        [ -z "$project" ] || B_POS=("$project")
         box_create_call
         box=$(printf '%s' "$BOX_OUT" | jq -c .box)
     else

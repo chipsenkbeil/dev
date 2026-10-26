@@ -263,6 +263,8 @@ install_ssh() {
     printf 'DONE\n'
     grep -qs 'config.d/\*.conf' "$TARGET_DIR/.ssh/config" ||
         printf '>> Add near the TOP of ~/.ssh/config: Include ~/.ssh/config.d/*.conf\n'
+    grep -qs 'ci/ssh_config' "$TARGET_DIR/.ssh/config" ||
+        printf '>> Add as the FIRST line of ~/.ssh/config, for ssh to reach a dev box: Include ~/.local/state/ci/ssh_config\n'
 }
 
 # Antinote keeps every setting in one sandboxed plist that cfprefsd rewrites in

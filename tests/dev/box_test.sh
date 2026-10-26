@@ -7,7 +7,8 @@ set -o pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
-unset DOTFILES VERBOSE DEV_CI
+unset DOTFILES VERBOSE DEV_CI LOGNAME
+export USER=tester
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP:?}"' EXIT
@@ -59,6 +60,8 @@ fails=0
 
 assert_eq() {
     local desc="$1" got="$2" want="$3"
+    got=$(printf '%s' "$got" | sed -E 's/[0-9]+h[0-9]+m left/NhNm left/g')
+    want=$(printf '%s' "$want" | sed -E 's/[0-9]+h[0-9]+m left/NhNm left/g')
     if [ "$got" = "$want" ]; then
         printf 'ok   - %s\n' "$desc"
     else
@@ -69,6 +72,8 @@ assert_eq() {
 
 assert_contains() {
     local desc="$1" haystack="$2" needle="$3"
+    haystack=$(printf '%s' "$haystack" | sed -E 's/[0-9]+h[0-9]+m left/NhNm left/g')
+    needle=$(printf '%s' "$needle" | sed -E 's/[0-9]+h[0-9]+m left/NhNm left/g')
     case "$haystack" in
     *"$needle"*) printf 'ok   - %s\n' "$desc" ;;
     *)
@@ -121,8 +126,9 @@ inproj() {
 # mkbox <name> <state> <projects json> <expires offset s|null> <delete offset s|null>
 mkbox() {
     jq -nc --arg name "$1" --arg state "$2" --argjson names "$3" --argjson exp "$4" --argjson del "$5" '{
-        name: $name, state: $state, profile: "medium", cpu: 8, memory_gib: 16, projects: ($names | map({name: ., path: "/srv/projects/\(.)"})),
-        tailnet_name: "box-\($name)", created_at: "2026-10-19T14:03:11Z", ttl_hours: 4,
+        name: $name, state: $state, target: "linux-dev", shape: "medium", machine: "example-box", created_by: "human:tester", cpu: 8, memory_gib: 16,
+        projects: ($names | map({name: ., path: "/srv/projects/\(.)"})),
+        tailnet_name: $name, ttl_hours: 4,
         expires_at: (if $exp == null then null else now + $exp | floor | todate end),
         stopped_at: null,
         delete_after: (if $del == null then null else now + $del | floor | todate end),
@@ -143,10 +149,10 @@ doc() {
 }
 
 lsdoc() {
-    jq -nc --argjson cap "$CAP" '{ok: true, boxes: $ARGS.positional | map(fromjson), cap: $cap}' --args "$@"
+    jq -nc --argjson cap "$CAP" '{ok: true, boxes: $ARGS.positional | map(fromjson), cap: $cap, machines: []}' --args "$@"
 }
 
-CAP='{"running":2,"running_max":3,"memory_gib":24,"memory_max_gib":32}'
+CAP='{"running":2,"running_max":3,"memory_limits_gib":24,"memory_max_gib":32}'
 PROJECTS_DIR=/srv/projects
 RUN_OFF=12600
 NEW_OFF=16200
@@ -164,11 +170,12 @@ CREATING="$(mkbox new-111 creating '[]' null null)"
 reset
 fx ls "$(lsdoc "$RUNNING" "$STOPPED" "$KEPT" "$CREATING")"
 out="$(box box ls)"
-assert_eq "ls renders a row per box and the cap line" "$out" "myproject-k3x  running   medium  myproject    $RUN_LEFT
-ci-abc         stopped   medium  ci,dotfiles  $STOP_LEFT
-scratch-a1b    running   medium  -            kept
-new-111        creating  medium  -
+assert_eq "ls renders a row per box and the cap line" "$out" "myproject-k3x  running   linux-dev  myproject    $RUN_LEFT
+ci-abc         stopped   linux-dev  ci,dotfiles  $STOP_LEFT
+scratch-a1b    running   linux-dev  -            kept
+new-111        creating  linux-dev  -
 2 of 3 running, 24 of 32 GiB"
+assert_eq "ls reads memory_limits_gib for the cap line" "$(printf '%s\n' "$out" | tail -n 1)" "2 of 3 running, 24 of 32 GiB"
 assert_eq "ls asks ci for json" "$(calls)" "ci box ls --json"
 reset
 fx ls "$(lsdoc)"
@@ -184,50 +191,81 @@ assert_eq "ls rejects an argument" "$?" "2"
 reset
 fx create "$(doc "$(mkbox myproject-k3x running '["myproject"]' "$NEW_OFF" null)")"
 out="$(inproj box create)"
-assert_eq "create prints the summary" "$out" "created myproject-k3x (medium, myproject), $NEW_LEFT, host box-myproject-k3x"
-assert_eq "create inside a project defaults --project to its basename" "$(calls)" "ci box create --project myproject --json"
+assert_eq "create prints the summary" "$out" "created myproject-k3x (linux-dev, medium, myproject), $NEW_LEFT, host myproject-k3x"
+assert_eq "create inside a project defaults --project to its basename" "$(calls)" "ci box create --by human:tester --json -- myproject"
 reset
 fx create "$(doc "$KEPT")"
-out="$(inproj box create --profile large --project a --project b --keep)"
-assert_eq "create with explicit projects skips the default" "$(calls)" "ci box create --profile large --project a --project b --keep --json"
-assert_contains "create shows kept and no projects" "$out" "created scratch-a1b (medium, -), kept, host box-scratch-a1b"
+out="$(inproj box create --target win-dev --shape large --by agent:s1 --keep a b)"
+assert_eq "create with explicit projects skips the default" "$(calls)" "ci box create --target win-dev --shape large --by agent:s1 --keep --json -- a b"
+assert_contains "create shows kept and no projects" "$out" "created scratch-a1b (linux-dev, medium, -), kept, host scratch-a1b"
 reset
 box box create >/dev/null 2>&1
-assert_eq "create outside a project passes no project" "$(calls)" "ci box create --json"
+assert_eq "create outside a project passes no project" "$(calls)" "ci box create --by human:tester --json"
 reset
 box box create --ttl 6 >/dev/null 2>&1
-assert_eq "create passes --ttl" "$(calls)" "ci box create --ttl 6 --json"
+assert_eq "create passes --ttl" "$(calls)" "ci box create --by human:tester --ttl 6 --json"
+reset
+(
+    unset USER
+    LOGNAME=lg box box create >/dev/null 2>&1
+)
+assert_eq "create falls back to LOGNAME for --by" "$(calls)" "ci box create --by human:lg --json"
+reset
+out="$(
+    unset USER
+    box box create 2>&1
+)"
+assert_eq "create with no USER or LOGNAME fails" "$?" "1"
+assert_eq "ci is not called without an identity" "$(calls)" ""
 reset
 out="$(box box create --ttl 3 --keep 2>&1)"
 assert_eq "create refuses --ttl with --keep" "$?" "2"
 assert_contains "the --ttl and --keep refusal says why" "$out" "--ttl and --keep cannot be combined"
 assert_eq "ci is not called for --ttl with --keep" "$(calls)" ""
-out="$(box box create --profile huge 2>&1)"
-assert_eq "create refuses an unknown profile" "$?" "2"
+out="$(box box create --profile large 2>&1)"
+assert_eq "create refuses the removed --profile" "$?" "2"
+out="$(box box create --project x 2>&1)"
+assert_eq "create refuses the removed --project" "$?" "2"
 out="$(box box create --nope 2>&1)"
 assert_contains "create names an unknown flag" "$out" "dev box create: unknown flag --nope"
 
 # --- show, stop, resume, extend, delete ---
 
 reset
-fx show "$(doc "$(jq -c '.tmux_sessions = ["myproject", "main"] | .expires_at = "2026-10-20T02:03:11Z"' <<<"$RUNNING")")"
+fx show "$(doc "$(jq -c '.tmux_sessions = [{name: "main", attached: true, idle_seconds: 0}, {name: "build", attached: false, idle_seconds: 300}] | .expires_at = "2026-10-20T02:03:11Z"' <<<"$RUNNING")")"
 out="$(box box show myproject-k3x)"
 assert_eq "show argv" "$(calls)" "ci box show myproject-k3x --json"
 assert_eq "show renders key: value lines" "$out" "name: myproject-k3x
 state: running
-profile: medium
+target: linux-dev
+shape: medium
 cpu: 8
 memory_gib: 16
 projects: myproject
-tailnet_name: box-myproject-k3x
-created_at: 2026-10-19T14:03:11Z
+tailnet_name: myproject-k3x
+created_by: human:tester
 ttl_hours: 4
 expires_at: 2026-10-20T02:03:11Z
-tmux_sessions: myproject,main"
+tmux_sessions: main (attached), build (idle 5m)"
 reset
 fx show "$(doc "$KEPT")"
 out="$(box box show scratch-a1b)"
-assert_not_contains "show leaves out a null tmux_sessions" "$out" "tmux_sessions"
+assert_contains "show prints unknown for a null tmux_sessions" "$out" "tmux_sessions: unknown"
+reset
+fx show "$(doc "$(jq -c '.tmux_sessions = []' <<<"$KEPT")")"
+out="$(box box show scratch-a1b)"
+assert_contains "show prints none for an empty tmux_sessions" "$out" "tmux_sessions: none"
+reset
+fx show "$(doc "$STOPPED")"
+out="$(box box show ci-abc)"
+assert_not_contains "show leaves tmux_sessions out for a stopped box" "$out" "tmux_sessions"
+reset
+DASH="$TMP/-dash"
+mkdir -p "$DASH/.git"
+fx create "$(doc "$KEPT")"
+out="$(cd "$DASH" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" box create 2>&1)"
+assert_eq "create skips a default project that starts with a dash" "$(calls)" "ci box create --by human:tester --json"
+assert_contains "the skipped default is warned about" "$out" "not using -dash as the default project"
 reset
 NOHOST="$(jq -c '.tailnet_name = null | .state = "creating" | .expires_at = null' <<<"$RUNNING")"
 fx show "$(doc "$NOHOST")"
@@ -236,7 +274,7 @@ assert_contains "show prints - for a null tailnet_name" "$out" "tailnet_name: -"
 reset
 fx create "$(doc "$NOHOST")"
 out="$(box box create)"
-assert_eq "create prints host - for a null tailnet_name" "$out" "created myproject-k3x (medium, myproject), creating, host -"
+assert_eq "create prints host - for a null tailnet_name" "$out" "created myproject-k3x (linux-dev, medium, myproject), creating, host -"
 reset
 fx resume "$(doc "$NOHOST")"
 out="$(box box resume myproject-k3x)"
@@ -259,7 +297,7 @@ reset
 fx resume "$(doc "$RUNNING")"
 out="$(box box resume myproject-k3x --ttl 2)"
 assert_eq "resume argv" "$(calls)" "ci box resume myproject-k3x --ttl 2 --json"
-assert_eq "resume output" "$out" "resumed myproject-k3x (medium, myproject), $RUN_LEFT, host box-myproject-k3x"
+assert_eq "resume output" "$out" "resumed myproject-k3x (linux-dev, medium, myproject), $RUN_LEFT, host myproject-k3x"
 
 reset
 fx extend "$(doc "$RUNNING")"
@@ -284,8 +322,10 @@ assert_eq "install-tools output" "$out" "myproject: tools installed
 dotfiles: no .dev/tools.tsv, nothing installed"
 reset
 fx install-tools "$(doc "$RUNNING")"
-box box install-tools myproject-k3x --project myproject --project dotfiles >/dev/null 2>&1
-assert_eq "install-tools --project argv" "$(calls)" "ci box install-tools myproject-k3x --project myproject --project dotfiles --json"
+box box install-tools myproject-k3x myproject dotfiles >/dev/null 2>&1
+assert_eq "install-tools sends projects after --" "$(calls)" "ci box install-tools myproject-k3x --json -- myproject dotfiles"
+out="$(box box install-tools myproject-k3x --project x 2>&1)"
+assert_eq "install-tools refuses the removed --project" "$?" "2"
 reset
 fx install-tools '{"ok":false,"error":{"code":"bad_state","message":"Box ci-abc is stopped, and only a running box can have its tools installed","state":"stopped"}}' 6
 out="$(box box install-tools ci-abc 2>&1)"
@@ -407,7 +447,7 @@ fx ls "$(lsdoc "$RUNNING")"
 box connect myproject-k3x
 assert_eq "connect to a running box runs et" "$(calls)" "ci box ls --json
 ci box show myproject-k3x --json
-et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@box-myproject-k3x"
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 box box connect myproject-k3x --ssh
@@ -424,8 +464,8 @@ out="$(box connect ci-abc)"
 assert_eq "connect to a stopped box resumes then runs et" "$(calls)" "ci box ls --json
 ci box resume ci-abc --json
 ci box show ci-abc --json
-et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s ci -c $PROJECTS_DIR/ci user@box-ci-abc"
-assert_eq "connect prints the resume line" "$out" "resumed ci-abc (medium, ci,dotfiles), $NEW_LEFT, host box-ci-abc"
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s ci -c $PROJECTS_DIR/ci user@ci-abc"
+assert_eq "connect prints the resume line" "$out" "resumed ci-abc (linux-dev, medium, ci,dotfiles), $NEW_LEFT, host ci-abc"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 mkdir -p "$TMP/noet"
@@ -462,13 +502,13 @@ reset
 fx ls "$(lsdoc "$KEPT" "$STOPPED" "$RUNNING")"
 FAKE_PICK=myproject-k3x inproj connect
 assert_eq "the picker lists the project's boxes first, with a new-box item last" "$(cat "$ITEMS")" "picker --title Connect to a box
-myproject-k3x	myproject-k3x  running  medium  myproject    $RUN_LEFT
-scratch-a1b	scratch-a1b    running  medium  -            kept
-ci-abc	ci-abc         stopped  medium  ci,dotfiles  $STOP_LEFT
+myproject-k3x	myproject-k3x  running  linux-dev  myproject    $RUN_LEFT
+scratch-a1b	scratch-a1b    running  linux-dev  -            kept
+ci-abc	ci-abc         stopped  linux-dev  ci,dotfiles  $STOP_LEFT
 __new__	new box for myproject"
 assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
 ci box show myproject-k3x --json
-et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@box-myproject-k3x"
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
 reset
 fx ls "$(lsdoc "$KEPT")"
 FAKE_PICK=scratch-a1b box connect
@@ -478,9 +518,9 @@ fx ls "$(lsdoc "$RUNNING")"
 fx create "$(doc "$(mkbox myproject-n3w running '["myproject"]' "$NEW_OFF" null)")"
 out="$(FAKE_PICK=__new__ inproj connect)"
 assert_eq "the new-box item creates for the project then attaches" "$(calls)" "ci box ls --json
-ci box create --project myproject --json
+ci box create --by human:tester --json -- myproject
 ci box show myproject-n3w --json
-et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@box-myproject-n3w"
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-n3w"
 assert_contains "the new box is reported" "$out" "created myproject-n3w"
 reset
 fx ls "$(lsdoc)"
@@ -515,7 +555,7 @@ fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNN
 box connect myproject-k3x
 assert_eq "connect starts tmux in the first project's path" "$(calls)" "ci box ls --json
 ci box show myproject-k3x --json
-et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c /srv/projects/dotfiles user@box-myproject-k3x"
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c /srv/projects/dotfiles user@myproject-k3x"
 reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
 box connect myproject-k3x --ssh
@@ -549,7 +589,7 @@ fx ls "$(lsdoc "$(jq -c '.projects[0].name = "my.proj" | .projects[0].path = "/s
 box connect myproject-k3x
 assert_eq "a dot in the project name becomes an underscore in the tmux session" "$(calls)" "ci box ls --json
 ci box show myproject-k3x --json
-et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s my_proj -c /srv/projects/my.proj user@box-myproject-k3x"
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s my_proj -c /srv/projects/my.proj user@myproject-k3x"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 (cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" XDG_STATE_HOME=relative/state HOME="$TMP/home" "$DEV" connect myproject-k3x)
@@ -579,10 +619,10 @@ for sub in ls create show stop resume extend install-tools delete connect; do
 done
 out="$(box help box create)"
 assert_contains "create help states the default lifetime" "$out" "4 hours"
-assert_contains "create help states the default profile" "$out" "profile medium"
+assert_contains "create help names the target and shape" "$out" "--target T] [--shape S]"
 assert_contains "create help lists --keep" "$out" "--keep"
 assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend install-tools delete connect"
-assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--profile --project --ttl --keep -v --verbose -vv --ci"
+assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --by --ttl --keep -v --verbose -vv --ci"
 assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
 assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"
 assert_eq "__flags box ls" "$(box __flags box ls | sed -n 1p)" "--all"
