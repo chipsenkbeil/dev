@@ -62,6 +62,11 @@ with no project named, dev passes the project root's directory name. `--by`
 defaults to `human:$USER`, else `human:$LOGNAME`, and dev always passes it.
 The last line is `Created <name> · <target> @ <machine> · <shape> · <time left> · dev connect <name>`.
 
+An agent creates a box with `--ttl HOURS`, and with `--keep` only when the
+owner asks for a kept box, and deletes the box when its work ends. On a box an
+agent writes scratch files only under `~/scratch/<session>/` and removes that
+folder when the work ends. Projects live under `/srv/projects`.
+
 Leave the box out of `show`, `stop`, `resume`, `extend`, `tools install` or
 `delete` and a terminal gets the same box picker `dev connect` uses, with only
 the boxes the verb can act on: running ones for `stop`, `extend` and
