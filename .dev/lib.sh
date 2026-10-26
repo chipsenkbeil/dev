@@ -38,7 +38,7 @@ SRC_DIR="${SRC_DIR:-$ROOT/dotfiles}"
 TARGET_DIR="${TARGET_DIR:-$HOME}"
 export SRC_DIR TARGET_DIR
 
-LUA_ROOTS=(dotfiles/bin/.local/share/dev/lua tests/lua)
+LUA_ROOTS=(dotfiles/bin/.local/share/dev/lua dotfiles/bin/.local/share/dev/main.lua tests/lua)
 
 # shellcheck disable=SC2034
 LUA_LINT_DIR=dotfiles/claude/.claude/skills/style/lint/lua
@@ -47,7 +47,7 @@ collect_lua_files() {
     LUA_FILES=()
     local root f
     for root in "${LUA_ROOTS[@]}"; do
-        [ -d "$root" ] || continue
+        [ -e "$root" ] || continue
         while IFS= read -r f; do
             LUA_FILES+=("$f")
         done < <(find "$root" -type f -name '*.lua' | sort)

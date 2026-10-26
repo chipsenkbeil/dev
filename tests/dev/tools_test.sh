@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pure-bash tests for `dev tools install` and `dev tools check`. A fake project holds
-# .dev/tools.tsv, and uname, id and pacman are stubs first on PATH (uname says Linux,
-# id says the uid in FAKE_UID, pacman records every call and reports nothing installed).
+# .dev/tools.tsv, LUA_INIT loads tests/lua/fake_env.lua so FAKE_UID and FAKE_OS (Linux) set the uid and system
+# name, and uname (for pkg.sh, which still reads it) and pacman are stubs first on PATH, pacman recording every call and reporting nothing installed.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,15 +12,17 @@ unset DOTFILES VERBOSE
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 STUBS="$TMP/stubs"
+export LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=1000 FAKE_OS=Linux
 export CALLS="$TMP/calls" RECORD="$TMP/record"
+if [ "$EUID" -eq 0 ]; then REAL_ROOT=1; else REAL_ROOT=0; fi
+
+skip_user() {
+    printf 'SKIP - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
+}
 mkdir -p "$STUBS"
 cat >"$STUBS/uname" <<'STUB'
 #!/bin/sh
 echo Linux
-STUB
-cat >"$STUBS/id" <<'STUB'
-#!/bin/sh
-echo "${FAKE_UID:-1000}"
 STUB
 cat >"$STUBS/pacman" <<'STUB'
 #!/bin/sh
@@ -86,15 +88,19 @@ scr-c      scr-c-zzz       -       script:$TMP/installer.sh   -
 crg-d      crg-d-zzz       -       cargo:crg-d         -
 TSV
 
-out="$(tools "$proj" install --dry-run)"
-assert_eq "install with no scope exits 0" "$?" "0"
-assert_contains "no scope plans a package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
-assert_contains "no scope plans an AUR row" "$out" "aur-b"
-assert_contains "no scope plans a script row" "$out" "bash $TMP/installer.sh"
-assert_contains "no scope plans a cargo row" "$out" "crg-d"
-assert_not_contains "no scope skips nothing" "$out" "skipped third-party"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$proj" install --dry-run)"
+    assert_eq "install with no scope exits 0" "$?" "0"
+    assert_contains "no scope plans a package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
+    assert_contains "no scope plans an AUR row" "$out" "aur-b"
+    assert_contains "no scope plans a script row" "$out" "bash $TMP/installer.sh"
+    assert_contains "no scope plans a cargo row" "$out" "crg-d"
+    assert_not_contains "no scope skips nothing" "$out" "skipped third-party"
+else
+    skip_user
+fi
 
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$proj" install --system --dry-run)"
     assert_eq "--system as root exits 0" "$?" "0"
     assert_contains "--system plans a package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
@@ -107,22 +113,26 @@ else
     printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 
-out="$(FAKE_UID=1000 tools "$proj" install --user --dry-run)"
-assert_eq "--user as a user exits 0" "$?" "0"
-assert_not_contains "--user skips a package row" "$out" "pacman -S"
-assert_not_contains "--user skips an AUR row" "$out" "aur-b"
-assert_contains "--user plans a script row" "$out" "bash $TMP/installer.sh"
-assert_contains "--user plans a cargo row" "$out" "crg-d"
-assert_not_contains "--user does not mention the skipped rows" "$out" "skipped"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(FAKE_UID=1000 tools "$proj" install --user --dry-run)"
+    assert_eq "--user as a user exits 0" "$?" "0"
+    assert_not_contains "--user skips a package row" "$out" "pacman -S"
+    assert_not_contains "--user skips an AUR row" "$out" "aur-b"
+    assert_contains "--user plans a script row" "$out" "bash $TMP/installer.sh"
+    assert_contains "--user plans a cargo row" "$out" "crg-d"
+    assert_not_contains "--user does not mention the skipped rows" "$out" "skipped"
 
-: >"$RECORD"
-FAKE_UID=1000 tools "$proj" install --user scr-c >/dev/null
-assert_eq "--user really runs the script row" "$(cat "$RECORD")" "ran "
+    : >"$RECORD"
+    FAKE_UID=1000 tools "$proj" install --user scr-c >/dev/null
+    assert_eq "--user really runs the script row" "$(cat "$RECORD")" "ran "
 
-out="$(FAKE_UID=1000 tools "$proj" install --system --dry-run 2>&1)"
-assert_eq "--system as a user exits 1" "$?" "1"
-assert_contains "--system as a user says it needs root" "$out" "needs root"
-assert_not_contains "--system as a user plans nothing" "$out" "pacman -S"
+    out="$(FAKE_UID=1000 tools "$proj" install --system --dry-run 2>&1)"
+    assert_eq "--system as a user exits 1" "$?" "1"
+    assert_contains "--system as a user says it needs root" "$out" "needs root"
+    assert_not_contains "--system as a user plans nothing" "$out" "pacman -S"
+else
+    skip_user
+fi
 out="$(FAKE_UID=0 tools "$proj" install --user --dry-run 2>&1)"
 assert_eq "--user as root exits 1" "$?" "1"
 assert_contains "--user as root refuses" "$out" "refuses to run as root"
@@ -135,18 +145,22 @@ assert_contains "root with no scope says to pass --system" "$out" "as root, pass
 assert_not_contains "root with no scope plans nothing" "$out" "pacman -S"
 out="$(FAKE_UID=0 tools "$proj" install --force pkg-a 2>&1)"
 assert_eq "root with no scope and a tool name exits 2" "$?" "2"
-out="$(tools "$proj" install --bogus 2>&1)"
-assert_eq "an unknown flag exits 2" "$?" "2"
-assert_contains "an unknown flag is named" "$out" "unknown flag --bogus"
-out="$(tools "$proj" install --dry-run no-such-tool-zzz 2>&1)"
-assert_eq "an unknown tool exits 2" "$?" "2"
-assert_contains "an unknown tool is named" "$out" "unknown tool: no-such-tool-zzz"
-out="$(tools "$proj" install --force 2>&1)"
-assert_eq "--force without a tool exits 2" "$?" "2"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$proj" install --bogus 2>&1)"
+    assert_eq "an unknown flag exits 2" "$?" "2"
+    assert_contains "an unknown flag is named" "$out" "unknown flag --bogus"
+    out="$(tools "$proj" install --dry-run no-such-tool-zzz 2>&1)"
+    assert_eq "an unknown tool exits 2" "$?" "2"
+    assert_contains "an unknown tool is named" "$out" "unknown tool: no-such-tool-zzz"
+    out="$(tools "$proj" install --force 2>&1)"
+    assert_eq "--force without a tool exits 2" "$?" "2"
 
-out="$(FAKE_UID=1000 tools "$proj" install --dry-run pkg-a)"
-assert_contains "naming a tool installs only that tool" "$out" "pkg-a"
-assert_not_contains "naming a tool leaves the others" "$out" "crg-d"
+    out="$(FAKE_UID=1000 tools "$proj" install --dry-run pkg-a)"
+    assert_contains "naming a tool installs only that tool" "$out" "pkg-a"
+    assert_not_contains "naming a tool leaves the others" "$out" "crg-d"
+else
+    skip_user
+fi
 
 cat >"$proj/.dev/tools.tsv.bad" <<TSV
 name       binary          brew    pacman              dnf
@@ -161,55 +175,63 @@ badproj="$TMP/badproj"
 mkdir -p "$badproj/.dev"
 cp "$proj/.dev/tools.tsv.bad" "$badproj/.dev/tools.tsv"
 rm "$proj/.dev/tools.tsv.bad"
-out="$(tools "$badproj" install --dry-run 2>&1)"
-assert_eq "bad package cells fail the install" "$?" "1"
-assert_contains "an option-like cell is refused" "$out" "opt-a: refusing the package"
-assert_contains "a cell with a space is refused" "$out" "spc-b: refusing the package"
-assert_contains "a leading dash is refused" "$out" "dash-c: refusing the package"
-assert_contains "a bad repo is refused" "$out" "repo-d: refusing the package"
-assert_contains "the failed rows are named" "$out" "install failed: opt-a spc-b dash-c repo-d"
-assert_contains "a good row still plans" "$out" "pacman -S --needed --noconfirm -- good-e"
-assert_not_contains "no refused row reaches pacman" "$out" "pacman -S --needed --noconfirm -- -U"
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$badproj" install --dry-run 2>&1)"
+    assert_eq "bad package cells fail the install" "$?" "1"
+    assert_contains "an option-like cell is refused" "$out" "opt-a: refusing the package"
+    assert_contains "a cell with a space is refused" "$out" "spc-b: refusing the package"
+    assert_contains "a leading dash is refused" "$out" "dash-c: refusing the package"
+    assert_contains "a bad repo is refused" "$out" "repo-d: refusing the package"
+    assert_contains "the failed rows are named" "$out" "install failed: opt-a spc-b dash-c repo-d"
+    assert_contains "a good row still plans" "$out" "pacman -S --needed --noconfirm -- good-e"
+    assert_not_contains "no refused row reaches pacman" "$out" "pacman -S --needed --noconfirm -- -U"
+else
+    skip_user
+fi
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$badproj" install --system --dry-run 2>&1)"
     assert_contains "--system skips luarocks like aur and copr" "$out" "rock-f (luarocks:)"
     assert_not_contains "--system does not plan the rock" "$out" "luarocks install"
 else
     printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
-out="$(tools "$badproj" install --dry-run rock-f 2>&1)"
-assert_contains "no scope still plans luarocks" "$out" "luarocks install rock-f"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$badproj" install --dry-run rock-f 2>&1)"
+    assert_contains "no scope still plans luarocks" "$out" "luarocks install rock-f"
 
-out="$(tools "$proj" check 2>&1)"
-assert_eq "check exits 1 when a tool is missing" "$?" "1"
-assert_contains "check reports the missing tool" "$out" "[ ] pkg-a"
+    out="$(tools "$proj" check 2>&1)"
+    assert_eq "check exits 1 when a tool is missing" "$?" "1"
+    assert_contains "check reports the missing tool" "$out" "[ ] pkg-a"
 
-empty="$TMP/empty"
-mkdir -p "$empty/.dev"
-out="$(tools "$empty" install)"
-assert_eq "install without a manifest exits 0" "$?" "0"
-assert_eq "install without a manifest says so" "$out" "no .dev/tools.tsv"
-out="$(tools "$empty" check)"
-assert_eq "check without a manifest exits 0" "$?" "0"
-assert_eq "check without a manifest says so" "$out" "no .dev/tools.tsv"
-out="$(FAKE_UID=1000 tools "$empty" install --system 2>&1)"
-assert_eq "install --system without a manifest needs no root" "$?" "0"
+    empty="$TMP/empty"
+    mkdir -p "$empty/.dev"
+    out="$(tools "$empty" install)"
+    assert_eq "install without a manifest exits 0" "$?" "0"
+    assert_eq "install without a manifest says so" "$out" "no .dev/tools.tsv"
+    out="$(tools "$empty" check)"
+    assert_eq "check without a manifest exits 0" "$?" "0"
+    assert_eq "check without a manifest says so" "$out" "no .dev/tools.tsv"
+    out="$(FAKE_UID=1000 tools "$empty" install --system 2>&1)"
+    assert_eq "install --system without a manifest needs no root" "$?" "0"
 
-relproj="$TMP/relproj"
-mkdir -p "$relproj/.dev" "$relproj/sub"
-printf 'name binary pacman\nrel rel-zzz script:rel.sh\n' >"$relproj/.dev/tools.tsv"
-cat >"$relproj/rel.sh" <<'STUB'
+    relproj="$TMP/relproj"
+    mkdir -p "$relproj/.dev" "$relproj/sub"
+    printf 'name binary pacman\nrel rel-zzz script:rel.sh\n' >"$relproj/.dev/tools.tsv"
+    cat >"$relproj/rel.sh" <<'STUB'
 #!/bin/sh
 echo "ran from $PWD" >>"$RECORD"
 STUB
-: >"$RECORD"
-FAKE_UID=1000 tools "$relproj/sub" install --user rel >/dev/null
-assert_eq "a script: path is relative to the project root" "$(cat "$RECORD")" "ran from $(cd "$relproj" && pwd -P)"
+    : >"$RECORD"
+    FAKE_UID=1000 tools "$relproj/sub" install --user rel >/dev/null
+    assert_eq "a script: path is relative to the project root" "$(cat "$RECORD")" "ran from $(cd "$relproj" && pwd -P)"
 
-out="$(tools "$REPO" install --dry-run 2>&1)"
-assert_eq "dotfiles' own .dev/tools.tsv installs" "$?" "0"
-assert_contains "dotfiles' manifest plans its muchsync row" "$out" "muchsync"
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+    out="$(tools "$REPO" install --dry-run 2>&1)"
+    assert_eq "dotfiles' own .dev/tools.tsv installs" "$?" "0"
+    assert_contains "dotfiles' manifest plans its muchsync row" "$out" "muchsync"
+else
+    skip_user
+fi
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run 2>&1)"
     assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.sh"
     assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
@@ -222,6 +244,8 @@ copy="$TMP/image/usr-local-lib-dotfiles"
 mkdir -p "$copy/dotfiles/bin/.local/bin"
 cp -R "$REPO/scripts" "$copy/scripts"
 cp "$DEV" "$copy/dotfiles/bin/.local/bin/dev"
+mkdir -p "$copy/dotfiles/bin/.local/share"
+cp -R "$REPO/dotfiles/bin/.local/share/dev" "$copy/dotfiles/bin/.local/share/dev"
 chmod -R a-w "$copy"
 out="$(FAKE_UID=0 HOME="$TMP/nohome" tools "$proj" install --system --dry-run 2>&1)"
 out_copy="$(cd "$proj" && FAKE_UID=0 HOME="$TMP/nohome" PATH="$STUBS:$PATH" "$copy/dotfiles/bin/.local/bin/dev" tools install --system --dry-run 2>&1)"
@@ -243,47 +267,65 @@ cat >"$proj/.dev/tools.sh" <<'STUB'
 echo "FLAT OVERRIDE RAN $*"
 STUB
 chmod +x "$proj/.dev/tools/install.sh" "$proj/.dev/tools/extra.sh" "$proj/.dev/tools.sh"
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$proj" install --system --dry-run 2>&1)"
     assert_not_contains "a project script cannot replace a built-in tools subcommand" "$out" "OVERRIDE RAN"
     assert_contains "the built-in still runs" "$out" "pacman -S --needed --noconfirm -- pkg-a"
 else
     printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
-out="$(tools "$proj" --help)"
-assert_not_contains "a built-in subcommand is not marked as an override" "$out" "(override)"
-out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
-assert_not_contains "dev help does not mark the noun as an override" "$out" "(override)"
-out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help tools install)"
-assert_not_contains "dev help tools install is not an override" "$out" "(override)"
-out="$(FAKE_UID=1000 tools "$proj" extra 2>&1)"
-assert_eq "a project-only tools subcommand runs as a user" "$out" "extra ran"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$proj" --help)"
+    assert_not_contains "a built-in subcommand is not marked as an override" "$out" "(override)"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
+    assert_not_contains "dev help does not mark the noun as an override" "$out" "(override)"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help tools install)"
+    assert_not_contains "dev help tools install is not an override" "$out" "(override)"
+    out="$(FAKE_UID=1000 tools "$proj" extra 2>&1)"
+    assert_eq "a project-only tools subcommand runs as a user" "$out" "extra ran"
+else
+    skip_user
+fi
+if [ "$REAL_ROOT" = 1 ]; then
+    out="$(FAKE_UID=1000 FAKE_OS=Darwin tools "$proj" extra 2>&1)"
+    assert_eq "at real root the seam is inert and a project subcommand is refused" "$?" "2"
+    assert_contains "at real root a fake user uid still gets the root refusal" "$out" "as root, dev runs only tools install and tools check"
+    assert_not_contains "at real root the fake user runs nothing" "$out" "extra ran"
+fi
 out="$(FAKE_UID=0 tools "$proj" extra 2>&1)"
 assert_eq "dev refuses a project tools subcommand as root" "$?" "2"
 assert_contains "the root refusal says what root may run" "$out" "as root, dev runs only tools install and tools check"
 assert_not_contains "the root refusal runs nothing" "$out" "extra ran"
 printf '#!/bin/sh\necho flat ran\n' >"$proj/.dev/verify-prod.sh"
 chmod +x "$proj/.dev/verify-prod.sh"
-assert_eq "a flat project verb runs as a user" "$(cd "$proj" && FAKE_UID=1000 PATH="$STUBS:$PATH" "$DEV" verify-prod)" "flat ran"
+if [ "$REAL_ROOT" = 0 ]; then
+    assert_eq "a flat project verb runs as a user" "$(cd "$proj" && FAKE_UID=1000 PATH="$STUBS:$PATH" "$DEV" verify-prod)" "flat ran"
+else
+    skip_user
+fi
 out="$(cd "$proj" && FAKE_UID=0 PATH="$STUBS:$PATH" "$DEV" verify-prod 2>&1)"
 assert_eq "dev refuses a flat project verb as root" "$?" "2"
 assert_contains "the flat refusal says what root may run" "$out" "as root, dev runs only tools install and tools check"
 out="$(FAKE_UID=0 tools "$proj" check 2>&1)"
 assert_not_contains "the built-in tools check ignores .dev/tools.sh" "$out" "FLAT OVERRIDE"
 rm -f "$proj/.dev/tools.sh" "$proj/.dev/tools/install.sh"
-out="$(tools "$proj" --help)"
-assert_contains "dev tools --help lists install" "$out" "install"
-assert_contains "dev tools --help lists check" "$out" "check"
-out="$(tools "$proj" frobnicate 2>&1)"
-assert_eq "an unknown tools subcommand exits 2" "$?" "2"
-assert_contains "an unknown tools subcommand is named" "$out" "dev tools: unknown subcommand frobnicate"
-out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
-assert_contains "dev help lists the tools noun" "$out" "tools"
-out="$(cd "$proj" && "$DEV" --ci tools install 2>&1)"
-assert_eq "--ci refuses tools install" "$?" "2"
-assert_contains "--ci names the refused subcommand" "$out" "dev tools install: --ci cannot run this verb"
-out="$(cd "$proj" && "$DEV" --ci tools check 2>&1)"
-assert_eq "--ci refuses tools check" "$?" "2"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$proj" --help)"
+    assert_contains "dev tools --help lists install" "$out" "install"
+    assert_contains "dev tools --help lists check" "$out" "check"
+    out="$(tools "$proj" frobnicate 2>&1)"
+    assert_eq "an unknown tools subcommand exits 2" "$?" "2"
+    assert_contains "an unknown tools subcommand is named" "$out" "dev tools: unknown subcommand frobnicate"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
+    assert_contains "dev help lists the tools noun" "$out" "tools"
+    out="$(cd "$proj" && "$DEV" --ci tools install 2>&1)"
+    assert_eq "--ci refuses tools install" "$?" "2"
+    assert_contains "--ci names the refused subcommand" "$out" "dev tools install: --ci cannot run this verb"
+    out="$(cd "$proj" && "$DEV" --ci tools check 2>&1)"
+    assert_eq "--ci refuses tools check" "$?" "2"
+else
+    skip_user
+fi
 gproj="$TMP/gproj"
 mkdir -p "$gproj/.dev"
 cat >"$gproj/.dev/tools.tsv" <<TSV
@@ -295,38 +337,42 @@ crg-d      crg-d-zzz       -       cargo:crg-d         -                      ba
 oth-e      oth-e-zzz       oth-e   oth-e               oth-e                  -
 TSV
 
-out="$(tools "$gproj" install --dry-run --group base)"
-assert_eq "--group base exits 0" "$?" "0"
-assert_contains "--group base plans a base row" "$out" "pkg-a"
-assert_contains "--group base plans a base,rust row" "$out" "crg-d"
-assert_not_contains "--group base skips a rust row" "$out" "installer.sh"
-assert_not_contains "--group base skips an ungrouped row" "$out" "oth-e"
-out="$(tools "$gproj" install --dry-run --group rust)"
-assert_contains "--group rust plans a rust row" "$out" "installer.sh"
-assert_contains "--group rust plans a base,rust row" "$out" "crg-d"
-assert_not_contains "--group rust skips a base row" "$out" "pkg-a"
-out="$(tools "$gproj" check --group rust 2>&1)"
-assert_contains "check --group rust reports a rust row" "$out" "scr-c"
-assert_contains "check --group rust reports a base,rust row" "$out" "crg-d"
-assert_not_contains "check --group rust skips a base row" "$out" "pkg-a"
-assert_not_contains "check --group rust skips an ungrouped row" "$out" "oth-e"
-out="$(tools "$gproj" check --group nope 2>&1)"
-assert_eq "check with an unknown group exits 2" "$?" "2"
-assert_contains "check names the unknown group" "$out" "unknown group: nope"
-out="$(tools "$gproj" install --dry-run --group nope 2>&1)"
-assert_eq "install with an unknown group exits 2" "$?" "2"
-assert_contains "install names the unknown group" "$out" "unknown group: nope"
-out="$(tools "$gproj" install --dry-run --group base oth-e 2>&1)"
-assert_eq "a named tool outside the group exits 2" "$?" "2"
-assert_contains "the usage error names the tool" "$out" "tool oth-e is not in group base"
-out="$(tools "$gproj" install --dry-run --group 2>&1)"
-assert_eq "--group without a name exits 2" "$?" "2"
-out="$(FAKE_UID=1000 tools "$gproj" install --user --dry-run --group base)"
-assert_contains "--user --group plans the cargo row" "$out" "crg-d"
-assert_not_contains "--user --group skips a package row" "$out" "pacman -S"
-assert_not_contains "--user --group skips a rust-only script row" "$out" "installer.sh"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$gproj" install --dry-run --group base)"
+    assert_eq "--group base exits 0" "$?" "0"
+    assert_contains "--group base plans a base row" "$out" "pkg-a"
+    assert_contains "--group base plans a base,rust row" "$out" "crg-d"
+    assert_not_contains "--group base skips a rust row" "$out" "installer.sh"
+    assert_not_contains "--group base skips an ungrouped row" "$out" "oth-e"
+    out="$(tools "$gproj" install --dry-run --group rust)"
+    assert_contains "--group rust plans a rust row" "$out" "installer.sh"
+    assert_contains "--group rust plans a base,rust row" "$out" "crg-d"
+    assert_not_contains "--group rust skips a base row" "$out" "pkg-a"
+    out="$(tools "$gproj" check --group rust 2>&1)"
+    assert_contains "check --group rust reports a rust row" "$out" "scr-c"
+    assert_contains "check --group rust reports a base,rust row" "$out" "crg-d"
+    assert_not_contains "check --group rust skips a base row" "$out" "pkg-a"
+    assert_not_contains "check --group rust skips an ungrouped row" "$out" "oth-e"
+    out="$(tools "$gproj" check --group nope 2>&1)"
+    assert_eq "check with an unknown group exits 2" "$?" "2"
+    assert_contains "check names the unknown group" "$out" "unknown group: nope"
+    out="$(tools "$gproj" install --dry-run --group nope 2>&1)"
+    assert_eq "install with an unknown group exits 2" "$?" "2"
+    assert_contains "install names the unknown group" "$out" "unknown group: nope"
+    out="$(tools "$gproj" install --dry-run --group base oth-e 2>&1)"
+    assert_eq "a named tool outside the group exits 2" "$?" "2"
+    assert_contains "the usage error names the tool" "$out" "tool oth-e is not in group base"
+    out="$(tools "$gproj" install --dry-run --group 2>&1)"
+    assert_eq "--group without a name exits 2" "$?" "2"
+    out="$(FAKE_UID=1000 tools "$gproj" install --user --dry-run --group base)"
+    assert_contains "--user --group plans the cargo row" "$out" "crg-d"
+    assert_not_contains "--user --group skips a package row" "$out" "pacman -S"
+    assert_not_contains "--user --group skips a rust-only script row" "$out" "installer.sh"
+else
+    skip_user
+fi
 
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
+if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$gproj" install --system --dry-run --group base)"
     assert_eq "--system --group base as root exits 0" "$?" "0"
     assert_contains "--system --group plans the package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
@@ -344,12 +390,16 @@ if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$(id -u)" -eq 0 ]; then
 else
     printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
-out="$(tools "$gproj" install --dry-run --group "" 2>&1)"
-assert_eq "an empty --group name exits 2" "$?" "2"
-assert_contains "an empty --group name is an unknown group" "$out" "unknown group: "
-out="$(tools "$gproj" check --group "" 2>&1)"
-assert_eq "check with an empty --group name exits 2" "$?" "2"
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(tools "$gproj" install --dry-run --group "" 2>&1)"
+    assert_eq "an empty --group name exits 2" "$?" "2"
+    assert_contains "an empty --group name is an unknown group" "$out" "unknown group: "
+    out="$(tools "$gproj" check --group "" 2>&1)"
+    assert_eq "check with an empty --group name exits 2" "$?" "2"
 
+else
+    skip_user
+fi
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1

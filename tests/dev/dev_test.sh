@@ -11,6 +11,9 @@ unset VERBOSE
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+LUABIN="$TMP/luabin"
+mkdir -p "$LUABIN"
+ln -s "$(command -v luajit)" "$LUABIN/luajit"
 STUBS="$TMP/stubs"
 export STUB_LOG="$TMP/stub.log"
 mkdir -p "$STUBS"
@@ -222,6 +225,9 @@ printf 'false\necho survived\n' >"$vp/grandchild.sh"
 assert_eq "-vv leaks no errexit into a grandchild script" "$(run_dev "$vp" -vv chain 2>/dev/null)" "survived"
 mkdir -p "$TMP/bare"
 cp "$DEV" "$TMP/bare/dev"
+mkdir -p "$TMP/share"
+cp -R "$REPO/dotfiles/bin/.local/share/dev" "$TMP/share/dev"
+rm "$TMP/share/dev/xtrace.bash"
 out="$(cd "$vp" && "$TMP/bare/dev" -vv lint 2>"$TMP/err")"
 assert_eq "-vv without the trace file falls back to level 1" "$out" "args= verbose=1"
 assert_contains "-vv without the trace file says so" "$(cat "$TMP/err")" "trace file"
@@ -356,7 +362,7 @@ assert_eq "verb with no script and no built-in exits 2" "$?" "2"
 if ! PATH=/usr/bin:/bin command -v cargo >/dev/null 2>&1; then
     touch "$rust/.dev/skip"
     rm "$rust/.dev/lint.sh"
-    out="$(cd "$rust" && env PATH=/usr/bin:/bin bash "$DEV" lint 2>&1)"
+    out="$(cd "$rust" && env PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" lint 2>&1)"
     assert_eq "missing cargo exits 1" "$?" "1"
     assert_contains "missing cargo prints one WARNING" "$out" "WARNING: cargo not found. Install with:"
 fi
@@ -388,7 +394,7 @@ assert_contains "sync names the unknown flag" "$out" "dev sync: unknown flag --b
 if [ -x /usr/bin/yq ] || [ -x /bin/yq ]; then
     printf 'skip - rust sync without yq (yq is in /usr/bin or /bin)\n'
 else
-    out="$(cd "$sync" && env PATH="$STUBS:/usr/bin:/bin" bash "$DEV" sync --check 2>&1)"
+    out="$(cd "$sync" && env PATH="$STUBS:$LUABIN:/usr/bin:/bin" bash "$DEV" sync --check 2>&1)"
     assert_eq "rust sync without yq exits 1" "$?" "1"
     assert_contains "rust sync without yq names it" "$out" "yq not found"
 fi
@@ -640,7 +646,7 @@ assert_not_contains "init plans no jj colocate in a git worktree" "$out" "jj git
 if ! PATH=/usr/bin:/bin command -v jj >/dev/null 2>&1; then
     nojj="$(project nojj)"
     git -C "$nojj" init -q
-    out="$(cd "$nojj" && env PATH=/usr/bin:/bin bash "$DEV" init --no-gerrit 2>&1)"
+    out="$(cd "$nojj" && env PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" init --no-gerrit 2>&1)"
     assert_eq "init without jj exits 0" "$?" "0"
     assert_contains "init without jj skips jj and says why" "$out" "skipped: .jj (jj not installed, git only)"
     assert_contains "init without jj prints the git remote command" "$out" "run: git remote add origin hub:nojj"

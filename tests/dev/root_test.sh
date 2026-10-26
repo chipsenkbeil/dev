@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Pure-bash tests for dev as root. id says 0 for -u, and jj and git are stubs that log every call and fail,
+# Pure-bash tests for dev as root. LUA_INIT loads tests/lua/fake_env.lua, so FAKE_UID says 0 and FAKE_OS says Linux, and jj and git are stubs
+# that log every call and fail,
 # so a log line means dev ran a VCS command with a project it must treat as data.
 set -o pipefail
 
@@ -10,15 +11,12 @@ unset DOTFILES VERBOSE
 
 TMP="$(mktemp -d)"
 chmod 755 "$TMP"
-if [ "$(id -u)" -eq 0 ]; then REAL_ROOT=1; else REAL_ROOT=0; fi
+if [ "$EUID" -eq 0 ]; then REAL_ROOT=1; else REAL_ROOT=0; fi
 trap 'rm -rf "$TMP"' EXIT
 STUBS="$TMP/stubs"
+export LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0 FAKE_OS=Linux
 export VCSLOG="$TMP/vcs.log" RECORD="$TMP/record"
 mkdir -p "$STUBS"
-cat >"$STUBS/id" <<'STUB'
-#!/bin/sh
-echo "${FAKE_UID:-0}"
-STUB
 for tool in jj git; do
     cat >"$STUBS/$tool" <<STUB
 #!/bin/sh
@@ -26,10 +24,6 @@ echo "$tool \$*" >>"\$VCSLOG"
 exit 1
 STUB
 done
-cat >"$STUBS/uname" <<'STUB'
-#!/bin/sh
-echo "${FAKE_OS:-Linux}"
-STUB
 cat >"$STUBS/pacman" <<'STUB'
 #!/bin/sh
 [ "$1" != -Q ]
@@ -117,10 +111,14 @@ for verb in push lint fetch init foo test tools "tools frobnicate" help -h --hel
     assert_eq "root dev '$verb' runs no jj or git" "$(cat "$VCSLOG")" ""
 done
 
-out="$(FAKE_OS=Darwin dev "$proj/a" tools check 2>&1)"
-assert_eq "root on another OS exits 2" "$?" "2"
-assert_contains "root on another OS says Linux only" "$out" "dev: as root, dev runs only on Linux"
-assert_eq "root on another OS runs no jj or git" "$(cat "$VCSLOG")" ""
+if [ "$REAL_ROOT" = 0 ]; then
+    out="$(FAKE_OS=Darwin dev "$proj/a" tools check 2>&1)"
+    assert_eq "root on another OS exits 2" "$?" "2"
+    assert_contains "root on another OS says Linux only" "$out" "dev: as root, dev runs only on Linux"
+    assert_eq "root on another OS runs no jj or git" "$(cat "$VCSLOG")" ""
+else
+    printf 'SKIP - runs on another OS through FAKE_OS, which a real uid 0 never loads\n'
+fi
 
 out="$(dev "$proj/a" tools install 2>&1)"
 assert_eq "root tools install with no scope exits 2" "$?" "2"
@@ -188,7 +186,12 @@ die() {
     exit 1
 }
 RUN
-    sed -n '/^root_trusted() {/,/^}/p;/^root_manifest_copy() {/,/^}/p' "$DEV" >>"$TMP/fifo-run.sh"
+    LEGACY="$REPO/dotfiles/bin/.local/share/dev/legacy.bash"
+    sed -n '/^root_trusted() {/,/^}/p;/^root_manifest_copy() {/,/^}/p' "$LEGACY" >>"$TMP/fifo-run.sh"
+    if [ "$(grep -c "^root_trusted() {\|^root_manifest_copy() {" "$TMP/fifo-run.sh")" -ne 2 ]; then
+        printf 'FAIL - the FIFO helper found no root_trusted or root_manifest_copy in %s\n' "$LEGACY"
+        exit 1
+    fi
     cat >>"$TMP/fifo-run.sh" <<'RUN'
 root_manifest_copy "$1"
 RUN
@@ -344,8 +347,16 @@ elif [ "$HAVE_PROC" = 1 ]; then
 fi
 
 : >"$VCSLOG"
-(cd "$proj/a" && FAKE_UID=1000 PATH="$STUBS:$PATH" "$DEV" tools check >/dev/null 2>&1)
-assert_contains "a normal user's repo_root still runs jj root" "$(cat "$VCSLOG")" "jj root"
+if [ "$REAL_ROOT" = 0 ]; then
+    (cd "$proj/a" && FAKE_UID=1000 PATH="$STUBS:$PATH" "$DEV" tools check >/dev/null 2>&1)
+    assert_contains "a normal user's repo_root still runs jj root" "$(cat "$VCSLOG")" "jj root"
+else
+    printf 'SKIP - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
+    out="$(FAKE_UID=1000 FAKE_OS=Darwin dev "$proj/a" foo 2>&1)"
+    assert_eq "at real root the seam is inert and a fake user is refused" "$?" "2"
+    assert_contains "at real root a fake user uid still gets the root refusal" "$out" "$MSG"
+    assert_not_contains "at real root the fake user runs no project script" "$out" "foo ran"
+fi
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

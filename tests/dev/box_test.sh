@@ -11,6 +11,9 @@ unset DOTFILES VERBOSE DEV_CI
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP:?}"' EXIT
+LUABIN="$TMP/luabin"
+mkdir -p "$LUABIN"
+ln -s "$(command -v luajit)" "$LUABIN/luajit"
 STUBS="$TMP/stubs"
 FX="$TMP/fx"
 FAKE_DOTFILES="$TMP/dotfiles"
@@ -51,7 +54,7 @@ echo "$FAKE_PICK"
 STUB
 chmod +x "$STUBS"/* "$FAKE_DOTFILES/scripts/select-items.sh"
 
-BASE_PATH="/usr/bin:/bin:/usr/sbin:/sbin:$(dirname "$(command -v jq)")"
+BASE_PATH="$LUABIN:/usr/bin:/bin:/usr/sbin:/sbin:$(dirname "$(command -v jq)")"
 fails=0
 
 assert_eq() {
@@ -427,7 +430,7 @@ reset
 fx ls "$(lsdoc "$RUNNING")"
 mkdir -p "$TMP/noet"
 ln -sf "$STUBS/ci" "$STUBS/ssh" "$TMP/noet/"
-for tool in bash jq awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname; do
+for tool in bash jq awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname luajit env; do
     found="$(PATH="$BASE_PATH" command -v "$tool")" && ln -sf "$found" "$TMP/noet/$tool"
 done
 if PATH="$TMP/noet" command -v et >/dev/null 2>&1; then
