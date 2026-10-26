@@ -2701,41 +2701,8 @@ cmd_init() {
     fi
 }
 
-CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull guide connect bootstrap "
-CI_LOCAL_NOUNS=" tools box cargo pi antinote "
-
-# ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.
-ci_enabled() {
-    case "$1" in
-    "" | 0 | no | false) return 1 ;;
-    *) return 0 ;;
-    esac
-}
-
-# cmd_ci <verb> [args...]: run the verb's job from the project's default pipeline (.ci/jobs.lua) on the fleet and exit with its status.
-# The job of a subcommand ("noun sub") is named noun-sub.
-cmd_ci() {
-    local verb=$1 job
-    case "$verb" in -h | --help) verb=help ;; esac
-    case "$CI_LOCAL_VERBS:$CI_LOCAL_NOUNS" in
-    *" $verb "*:* | *:*" ${verb%% *} "*) usage_error "$verb" "--ci cannot run this verb, it works on this machine" ;;
-    esac
-    job=${verb// /-}
-    [[ "$job" =~ ^[A-Za-z0-9_-]+$ ]] || usage_error "$verb" "--ci needs a job name, not $verb"
-    [ "$#" -le 1 ] || usage_error "$verb" "--ci passes no arguments to the job, got $2"
-    need ci "dev install from the ci repo"
-    need jq "brew install jq"
-    if ! ci -C "$ROOT" jobs --json 2>/dev/null |
-        jq -e --arg v "$job" '.jobs[] | select(.name == $v)' >/dev/null 2>&1; then
-        die "no job named $job in the project's default pipeline (.ci/jobs.lua), add one to run it with --ci"
-    fi
-    cd "$ROOT"
-    show ci run --local --job "$job" -f
-    exec ci run --local --job "$job" -f
-}
-
 main() {
-    local verb sub type trace handler count=0 use_ci=0 after=0
+    local verb sub type trace handler count=0 after=0
     local -a args=()
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -2746,7 +2713,7 @@ main() {
             break
             ;;
         --verbose) count=$((count + 1)) ;;
-        --ci) use_ci=1 ;;
+        --ci) ;;
         -v*)
             if [[ "$1" =~ ^-v+$ ]]; then
                 count=$((count + ${#1} - 1))
@@ -2759,7 +2726,6 @@ main() {
         shift
     done
     set -- ${args[@]+"${args[@]}"}
-    if ci_enabled "${DEV_CI:-}"; then use_ci=1; fi
     if [ "$count" -gt 0 ]; then
         VERBOSE=$(verbose_level "$count")
     else
@@ -2849,9 +2815,6 @@ main() {
             return 0
             ;;
         esac
-    fi
-    if [ "$use_ci" -eq 1 ]; then
-        cmd_ci "$verb" "$@"
     fi
     case "$verb" in
     *" "*)

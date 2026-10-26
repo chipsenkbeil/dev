@@ -1,5 +1,6 @@
 local t = require("testing")
 local devos = require("dev.os")
+local fs = require("dev.fs")
 local support = require("support")
 
 t.test("quote wraps in single quotes and escapes embedded ones", function()
@@ -213,9 +214,18 @@ t.test("a command word that looks like an env option or assignment is safe", fun
     local out, code = devos.capture({ "-i" }, { env = { X = "1" }, stderr = "null" })
     t.eq(out, "")
     t.eq(code, 127)
-    t.raises(function()
-        devos.capture({ "A=b" }, { env = { X = "1" } })
-    end, "contains =")
+    local _, assignment = devos.capture({ "A=b" }, { env = { X = "1" }, stderr = "null" })
+    t.eq(assignment, 127)
+end)
+
+t.test("a command path with = in it runs through env, exec included", function()
+    local dir = assert(fs.mktemp({ dir = true }))
+    local script = dir .. "/a=b"
+    assert(fs.write(script, "#!/bin/sh\nprintf '%s' \"$X\"\n"))
+    assert(devos.run({ "chmod", "755", script }) == 0, "chmod failed")
+    t.eq(devos.capture({ script }, { env = { X = "1" } }), "1")
+    t.eq(child(("o.exec({ %q }, { env = { X = '2' } })"):format(script)), "2")
+    fs.remove(dir, { recursive = true })
 end)
 
 t.test("a bad env name reports the variable-name error from run, capture and exec", function()
@@ -256,4 +266,13 @@ end)
 t.test("exec merges stderr into stdout", function()
     local out = child("o.exec({'sh', '-c', 'echo out; echo err >&2'}, {stderr = 'stdout'})")
     t.eq(out, "out\nerr\n")
+end)
+
+t.test("unset removes a variable from the child, over the defaults too", function()
+    local probe = { "sh", "-c", 'printf %s "${A-unset}${B-unset}"' }
+    t.eq(devos.capture(probe, { env = { A = "a", B = "b" }, unset = { "A" } }), "unsetb")
+    devos.defaults.unset = { "B" }
+    local out = devos.capture(probe, { env = { A = "a" } })
+    devos.defaults.unset = {}
+    t.eq(out, "aunset")
 end)

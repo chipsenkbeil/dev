@@ -108,14 +108,14 @@ return {
         handler = "legacy",
         flags = "--all",
         usage = "dev box ls [--all]",
-        desc = "List the boxes with state, profile, projects and time left, then the cap",
+        desc = "List the boxes with state, target, projects and time left, then the cap",
     },
     {
         words = { "box", "create" },
         handler = "legacy",
-        flags = "--profile --project --ttl --keep",
-        usage = "dev box create [--profile small, medium or large] [--project NAME]... [--ttl HOURS or --keep]",
-        desc = "Create a box and wait until it runs, profile medium and 4 hours unless told otherwise, with the current project by default",
+        flags = "--target --shape --by --ttl --keep",
+        usage = "dev box create [--target T] [--shape S] [--by LABEL] [--ttl HOURS or --keep] [PROJECT...]",
+        desc = "Create a box and wait until it runs, with the hub's default target and shape, 4 hours unless told otherwise, and the current project by default",
     },
     {
         words = { "box", "show" },
@@ -146,9 +146,8 @@ return {
     {
         words = { "box", "install-tools" },
         handler = "legacy",
-        flags = "--project",
-        usage = "dev box install-tools BOX [--project NAME]...",
-        desc = "Reinstall a running box's tools, for every project unless --project names some",
+        usage = "dev box install-tools BOX [PROJECT...]",
+        desc = "Reinstall a running box's tools, for every project unless some are named",
     },
     {
         words = { "box", "delete" },

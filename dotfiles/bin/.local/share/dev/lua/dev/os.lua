@@ -45,6 +45,7 @@ end
 
 ---@class dev.os.Opts
 ---@field env table<string,string>? variables set for the command, over `os.defaults.env`
+---@field unset string[]? variables removed from the command's environment, besides `os.defaults.unset`
 ---@field cwd string? directory to run in
 ---@field stdin "null"? read from /dev/null
 ---@field stdout string? "null", or a file path to append to, resolved against the caller's directory, not `cwd`
@@ -52,8 +53,9 @@ end
 
 ---@class dev.os.Defaults
 ---@field env table<string,string> variables set for every command
+---@field unset string[] variables removed from every command's environment
 ---@field show boolean write each command to standard error before it runs
-M.defaults = { env = {}, show = false }
+M.defaults = { env = {}, unset = {}, show = false }
 
 ---Name the operating system.
 ---@return "Darwin"|"Linux"|"Windows" name the system name
@@ -65,13 +67,19 @@ end
 local ENV_NAME = "^[A-Za-z_][A-Za-z0-9_]*$"
 local CHECK_LEVEL = 3
 
-local function check(argv, opts)
+local function check(opts)
     local merged = {}
     for name, value in pairs(M.defaults.env) do
         merged[name] = value
     end
+    for _, name in ipairs(M.defaults.unset) do
+        merged[name] = nil
+    end
     for name, value in pairs(opts.env or {}) do
         merged[name] = value
+    end
+    for _, name in ipairs(opts.unset or {}) do
+        merged[name] = nil
     end
     local names = {}
     for name in pairs(merged) do
@@ -82,11 +90,25 @@ local function check(argv, opts)
     end
     table.sort(names)
     local words = {}
-    for i, name in ipairs(names) do
-        words[i] = name .. "=" .. merged[name]
+    local unset = {}
+    for _, list in ipairs({ M.defaults.unset, opts.unset or {} }) do
+        for _, name in ipairs(list) do
+            if not name:match(ENV_NAME) then
+                error("env name " .. tostring(name) .. " is not a valid variable name", CHECK_LEVEL)
+            end
+            unset[#unset + 1] = name
+        end
     end
-    if #words > 0 and type(argv[1]) == "string" and argv[1]:find("=", 1, true) then
-        error("env cannot run a command word that contains =", CHECK_LEVEL)
+    table.sort(unset)
+    for _, name in ipairs(unset) do
+        words[#words + 1] = "-u"
+        words[#words + 1] = name
+    end
+    if #names > 0 or #words > 0 then
+        words[#words + 1] = "--"
+    end
+    for _, name in ipairs(names) do
+        words[#words + 1] = name .. "=" .. merged[name]
     end
     if opts.stdin ~= nil and opts.stdin ~= "null" then
         error('stdin must be "null" or unset', CHECK_LEVEL)
@@ -130,14 +152,21 @@ local function announce(argv)
     end
 end
 
+local function past_env(argv, words)
+    if #words == 0 or not argv[1]:find("=", 1, true) then
+        return argv
+    end
+    return { "sh", "-c", 'exec "$@"', "sh", unpack(argv) }
+end
+
 local function shell_line(argv, opts, words)
-    local command = M.command(argv)
+    local command = M.command(past_env(argv, words))
     if #words > 0 then
         local quoted = {}
         for i, word in ipairs(words) do
             quoted[i] = M.quote(word)
         end
-        command = "env -- " .. table.concat(quoted, " ") .. " " .. command
+        command = "env " .. table.concat(quoted, " ") .. " " .. command
     end
     if opts.cwd then
         command = "( cd -- " .. M.quote(directory(opts.cwd)) .. " && " .. command .. " )"
@@ -177,7 +206,7 @@ end
 ---@return integer? code exit status, or the signal exit base plus the signal when killed
 function M.run(argv, opts)
     opts = opts or {}
-    local command = shell_line(argv, opts, check(argv, opts))
+    local command = shell_line(argv, opts, check(opts))
     announce(argv)
     flush_output()
     local ok, kind, code = os.execute(command)
@@ -197,7 +226,7 @@ end
 ---@return integer? code exit status of the command
 function M.capture(argv, opts)
     opts = opts or {}
-    local command = shell_line(argv, opts, check(argv, opts))
+    local command = shell_line(argv, opts, check(opts))
     announce(argv)
     flush_output()
     local pipe = assert(io.popen(command .. [[; printf '\n%d' "$?"]], "r"))
@@ -250,7 +279,7 @@ function M.exec(argv, opts)
         error("exec expects a non-empty argv list", 2)
     end
     opts = opts or {}
-    local words = check(argv, opts)
+    local words = check(opts)
     announce(argv)
     local streams = redirects(opts)
     if opts.cwd or streams ~= "" then
@@ -270,8 +299,9 @@ function M.exec(argv, opts)
         end
         argv = wrapped
     end
+    argv = past_env(argv, words)
     if #words > 0 then
-        local prefixed = { "env", "--" }
+        local prefixed = { "env" }
         for _, word in ipairs(words) do
             prefixed[#prefixed + 1] = word
         end
