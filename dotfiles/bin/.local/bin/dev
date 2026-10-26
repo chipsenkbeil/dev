@@ -544,7 +544,7 @@ HELP_HIDDEN=Hidden
 
 # verb_place <name> <origin>: set PLACE_GROUP and PLACE_HIDDEN (0 or 1) for a verb from its header lines.
 # A verb with none takes its built-in row, and a local verb with no group takes the project directory's name.
-# A noun takes the group of its first subcommand script that has one.
+# A noun takes the group, and the hidden flag, of its first subcommand script that has a group.
 verb_place() {
     local name=$1 origin=$2 script meta=""
     PLACE_GROUP="" PLACE_HIDDEN=0
@@ -556,8 +556,12 @@ verb_place() {
         else
             for script in "$ROOT/.dev/$name"/*.sh; do
                 [ -x "$script" ] || continue
-                PLACE_GROUP=$(script_group "$script")
-                if [ -n "$PLACE_GROUP" ]; then break; fi
+                meta=$(script_place "$script")
+                if [ -n "${meta%%$'\n'*}" ]; then
+                    PLACE_GROUP=${meta%%$'\n'*}
+                    PLACE_HIDDEN=${meta##*$'\n'}
+                    break
+                fi
             done
         fi
     fi
@@ -2672,7 +2676,7 @@ cmd_init() {
 }
 
 CI_LOCAL_VERBS=" install uninstall restow sync setup fmt fetch help init push pull guide connect bootstrap "
-CI_LOCAL_NOUNS=" tools box pi antinote "
+CI_LOCAL_NOUNS=" tools box cargo pi antinote "
 
 # ci_enabled <value>: succeeds for a DEV_CI value, where empty, 0, no and false are off.
 ci_enabled() {
