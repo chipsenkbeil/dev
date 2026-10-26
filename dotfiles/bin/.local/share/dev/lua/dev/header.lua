@@ -1,0 +1,137 @@
+---@class dev.Header
+---@field desc string first comment line, empty when there is none
+---@field group string? heading named by the `group:` line
+---@field hidden boolean whether a `hidden` line is present
+---@field flags string[] words of the `flags:` line, with `-h` and `--help` dropped
+---@field long string[] the whole comment block, without the group and hidden lines
+---@field warnings string[] one message per reserved flag the `flags:` line declared
+
+---@class dev.header
+local M = {}
+
+local RESERVED_FLAGS = { ["-h"] = true, ["--help"] = true }
+
+local function skipped(line)
+    return line:find("^# *shellcheck ") or line:find("^# *group:") or line:find("^# *hidden *$")
+end
+
+local function ends_header(line, number)
+    return number > 1 and line ~= "" and line:sub(1, 1) ~= "#"
+end
+
+local function first_comment(lines)
+    for number = 2, #lines do
+        local line = lines[number]
+        if not (line:find("^%s*$") or skipped(line) or line:find("^# *flags:")) then
+            if line:sub(1, 1) ~= "#" then
+                return ""
+            end
+            return (line:gsub("^# ?", ""))
+        end
+    end
+    return ""
+end
+
+local function comment_block(lines)
+    local block = {}
+    for number = 2, #lines do
+        local line = lines[number]
+        if not line:find("^# *shellcheck ") then
+            if line:sub(1, 1) ~= "#" then
+                break
+            end
+            if not (line:find("^# *group:") or line:find("^# *hidden *$")) then
+                block[#block + 1] = (line:gsub("^# ?", ""))
+            end
+        end
+    end
+    return block
+end
+
+local function flag_words(lines, name)
+    local flags, warnings = {}, {}
+    for number, line in ipairs(lines) do
+        if line:find("^# *flags:") then
+            local rest = line:gsub("^# *flags: *", ""):gsub(",", " ")
+            for word in rest:gmatch("%S+") do
+                if RESERVED_FLAGS[word] then
+                    warnings[#warnings + 1] = string.format(
+                        "dev: %s: the flags line declares %s, which dev reserves before --",
+                        name,
+                        word
+                    )
+                else
+                    flags[#flags + 1] = word
+                end
+            end
+            break
+        end
+        if ends_header(line, number) then
+            break
+        end
+    end
+    return flags, warnings
+end
+
+local function placement(lines)
+    local group, hidden = "", false
+    for number, line in ipairs(lines) do
+        local value = line:match("^# *group: *(.*)$")
+        if value and group == "" then
+            group = value
+        elseif line:find("^# *hidden *$") then
+            hidden = true
+        elseif ends_header(line, number) then
+            break
+        end
+    end
+    return group, hidden
+end
+
+local function split_lines(text)
+    local lines = {}
+    for line in text:gmatch("([^\n]*)\n") do
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
+local function lua_block(text)
+    local lines = split_lines((text:gsub("\r", "")) .. "\n")
+    local converted = { "#!lua" }
+    if lines[1] ~= "--[[" then
+        return converted
+    end
+    for number = 2, #lines do
+        if lines[number]:find("^%]%] *$") then
+            break
+        end
+        converted[#converted + 1] = "# " .. lines[number]
+    end
+    return converted
+end
+
+---Parse the header of a verb script.
+---
+---A shell header is the comment block after the shebang. A Lua header is one
+---leading `--[[ ... ]]` block holding the same lines. The first comment line
+---is the description, and the `group:`, `hidden` and `flags:` lines set the rest.
+---@param text string contents of the script
+---@param kind "sh"|"lua" language of the script
+---@param name string? script path, named in warnings
+---@return dev.Header header the parsed metadata
+function M.parse(text, kind, name)
+    local lines = kind == "lua" and lua_block(text) or split_lines(text .. "\n")
+    local flags, warnings = flag_words(lines, name or "script")
+    local group, hidden = placement(lines)
+    return {
+        desc = first_comment(lines),
+        group = group ~= "" and group or nil,
+        hidden = hidden,
+        flags = flags,
+        long = comment_block(lines),
+        warnings = warnings,
+    }
+end
+
+return M
