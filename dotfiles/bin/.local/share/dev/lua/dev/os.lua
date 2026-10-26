@@ -43,6 +43,108 @@ function M.command(argv)
     return table.concat(words, " ")
 end
 
+---@class dev.os.Opts
+---@field env table<string,string>? variables set for the command, over `os.defaults.env`
+---@field cwd string? directory to run in
+---@field stdin "null"? read from /dev/null
+---@field stdout string? "null", or a file path to append to, resolved against the caller's directory, not `cwd`
+---@field stderr string? "null", a file path to append to (resolved like `stdout`), or "stdout" to merge into standard output
+
+---@class dev.os.Defaults
+---@field env table<string,string> variables set for every command
+---@field show boolean write each command to standard error before it runs
+M.defaults = { env = {}, show = false }
+
+---Name the operating system.
+---@return "Darwin"|"Linux"|"Windows" name the system name
+function M.name()
+    local names = { OSX = "Darwin", Linux = "Linux", Windows = "Windows" }
+    return names[ffi.os] or ffi.os
+end
+
+local ENV_NAME = "^[A-Za-z_][A-Za-z0-9_]*$"
+local CHECK_LEVEL = 3
+
+local function check(argv, opts)
+    local merged = {}
+    for name, value in pairs(M.defaults.env) do
+        merged[name] = value
+    end
+    for name, value in pairs(opts.env or {}) do
+        merged[name] = value
+    end
+    local names = {}
+    for name in pairs(merged) do
+        if type(name) ~= "string" or not name:match(ENV_NAME) then
+            error("env name " .. tostring(name) .. " is not a valid variable name", CHECK_LEVEL)
+        end
+        names[#names + 1] = name
+    end
+    table.sort(names)
+    local words = {}
+    for i, name in ipairs(names) do
+        words[i] = name .. "=" .. merged[name]
+    end
+    if #words > 0 and type(argv[1]) == "string" and argv[1]:find("=", 1, true) then
+        error("env cannot run a command word that contains =", CHECK_LEVEL)
+    end
+    if opts.stdin ~= nil and opts.stdin ~= "null" then
+        error('stdin must be "null" or unset', CHECK_LEVEL)
+    end
+    if opts.stdout == "stdout" or opts.stdout == "stderr" or opts.stderr == "stderr" then
+        error("only stderr can merge, and only into stdout", CHECK_LEVEL)
+    end
+    return words
+end
+
+local function redirect(fd, target)
+    if target == nil then
+        return ""
+    end
+    if target == "null" then
+        return " " .. fd .. ">/dev/null"
+    end
+    if target == "stdout" then
+        return " 2>&1"
+    end
+    return " " .. fd .. ">>" .. M.quote(target)
+end
+
+local function redirects(opts)
+    return (opts.stdin and " </dev/null" or "")
+        .. redirect(1, opts.stdout)
+        .. redirect(2, opts.stderr)
+end
+
+local function directory(cwd)
+    if cwd:sub(1, 1) == "/" then
+        return cwd
+    end
+    return "./" .. cwd
+end
+
+local function announce(argv)
+    if M.defaults.show then
+        local stderr = io.stderr
+        stderr:write("+ ", M.command(argv), "\n")
+    end
+end
+
+local function shell_line(argv, opts, words)
+    local command = M.command(argv)
+    if #words > 0 then
+        local quoted = {}
+        for i, word in ipairs(words) do
+            quoted[i] = M.quote(word)
+        end
+        command = "env -- " .. table.concat(quoted, " ") .. " " .. command
+    end
+    if opts.cwd then
+        command = "( cd -- " .. M.quote(directory(opts.cwd)) .. " && " .. command .. " )"
+    end
+    return command .. redirects(opts)
+end
+
 ---Describe the current errno.
 ---@return string message the system's text for the last failed call
 function M.strerror()
@@ -71,9 +173,12 @@ end
 
 ---Run `argv` with the terminal's streams and wait for it.
 ---@param argv string[] command and its arguments, with at least one word
+---@param opts dev.os.Opts? environment, directory and stream options
 ---@return integer? code exit status, or the signal exit base plus the signal when killed
-function M.run(argv)
-    local command = M.command(argv)
+function M.run(argv, opts)
+    opts = opts or {}
+    local command = shell_line(argv, opts, check(argv, opts))
+    announce(argv)
     flush_output()
     local ok, kind, code = os.execute(command)
     if type(ok) == "number" then
@@ -87,10 +192,13 @@ end
 
 ---Run `argv` and collect its standard output.
 ---@param argv string[] command and its arguments, with at least one word
+---@param opts dev.os.Opts? environment, directory and stream options
 ---@return string output everything the command wrote to standard output
 ---@return integer? code exit status of the command
-function M.capture(argv)
-    local command = M.command(argv)
+function M.capture(argv, opts)
+    opts = opts or {}
+    local command = shell_line(argv, opts, check(argv, opts))
+    announce(argv)
     flush_output()
     local pipe = assert(io.popen(command .. [[; printf '\n%d' "$?"]], "r"))
     local text = pipe:read("*a")
@@ -134,11 +242,43 @@ end
 ---
 ---Only returns when the exec fails.
 ---@param argv string[] command and its arguments, with at least one word
+---@param opts dev.os.Opts? environment, directory and stream options
 ---@return nil
 ---@return string message why the exec failed
-function M.exec(argv)
+function M.exec(argv, opts)
     if type(argv) ~= "table" or #argv == 0 then
         error("exec expects a non-empty argv list", 2)
+    end
+    opts = opts or {}
+    local words = check(argv, opts)
+    announce(argv)
+    local streams = redirects(opts)
+    if opts.cwd or streams ~= "" then
+        local wrapped = {
+            "sh",
+            "-c",
+            (streams ~= "" and "exec" .. streams .. "; " or "")
+                .. (opts.cwd and 'cd -- "$1" && shift && ' or "")
+                .. 'exec "$@"',
+            "sh",
+        }
+        if opts.cwd then
+            wrapped[#wrapped + 1] = directory(opts.cwd)
+        end
+        for _, arg in ipairs(argv) do
+            wrapped[#wrapped + 1] = arg
+        end
+        argv = wrapped
+    end
+    if #words > 0 then
+        local prefixed = { "env", "--" }
+        for _, word in ipairs(words) do
+            prefixed[#prefixed + 1] = word
+        end
+        for _, arg in ipairs(argv) do
+            prefixed[#prefixed + 1] = arg
+        end
+        argv = prefixed
     end
     local count = #argv
     local cargs = ffi.new("char *[?]", count + 1)

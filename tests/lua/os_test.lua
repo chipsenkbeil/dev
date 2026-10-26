@@ -1,5 +1,6 @@
 local t = require("testing")
 local devos = require("dev.os")
+local support = require("support")
 
 t.test("quote wraps in single quotes and escapes embedded ones", function()
     t.eq(devos.quote("it's"), [['it'\''s']])
@@ -79,4 +80,180 @@ t.test("run and capture flush Lua output before the child writes", function()
         .. "local out = o.capture({'printf', 'd'}); io.write(out)"
     local out = devos.capture({ "sh", "-c", [[luajit -e "$1" | cat]], "sh", snippet })
     t.eq(out, "abcd")
+end)
+
+t.test("env passes hostile text to the child unchanged", function()
+    local out = devos.capture({ "sh", "-c", [[printf %s "$X"]] }, { env = { X = "a b;$(id)" } })
+    t.eq(out, "a b;$(id)")
+end)
+
+t.test("env refuses a name that is not a variable name", function()
+    t.raises(function()
+        devos.run({ "true" }, { env = { ["A B"] = "x" } })
+    end, "variable name")
+end)
+
+t.test("defaults.env sits under opts.env", function()
+    devos.defaults.env = { A = "default", B = "default" }
+    local out = devos.capture({ "sh", "-c", [[printf %s-%s "$A" "$B"]] }, { env = { B = "own" } })
+    devos.defaults.env = {}
+    t.eq(out, "default-own")
+end)
+
+t.test("cwd runs the command in a directory with a quote and a space", function()
+    local dir = support.tempdir() .. "/os test's"
+    t.eq(devos.run({ "mkdir", "--", dir }), 0)
+    local out = devos.capture({ "sh", "-c", [[cd -P . && pwd -P]] }, { cwd = dir })
+    local real = devos.capture({ "sh", "-c", [[cd -P "$1" && pwd -P]], "sh", dir })
+    devos.run({ "rm", "-rf", "--", dir })
+    t.eq(out, real)
+    t.ok(out:find("os test's", 1, true), "the directory should be the one asked for")
+end)
+
+t.test("stdin null gives the child an empty input", function()
+    local out = devos.capture({ "sh", "-c", [[cat; printf end]] }, { stdin = "null" })
+    t.eq(out, "end")
+end)
+
+t.test("stdin refuses any other value", function()
+    t.raises(function()
+        devos.run({ "true" }, { stdin = "tty" })
+    end, "stdin")
+end)
+
+t.test("stderr stdout merges the streams into capture", function()
+    local out = devos.capture({ "sh", "-c", "echo out; echo err >&2" }, { stderr = "stdout" })
+    t.eq(out, "out\nerr\n")
+end)
+
+t.test("stdout and stderr null drop the streams", function()
+    local out = devos.capture(
+        { "sh", "-c", "echo out; echo err >&2" },
+        { stdout = "null", stderr = "null" }
+    )
+    t.eq(out, "")
+end)
+
+t.test("stdout and stderr append to a file", function()
+    local file = assert(require("dev.fs").mktemp({ prefix = "os-log" }))
+    devos.run({ "sh", "-c", "echo out; echo err >&2" }, { stdout = file, stderr = file })
+    devos.run({ "sh", "-c", "echo more" }, { stdout = file })
+    local text = io.open(file):read("*a")
+    devos.run({ "rm", "-f", "--", file })
+    t.eq(text, "out\nerr\nmore\n")
+end)
+
+t.test("show writes the quoted command to stderr first", function()
+    local snippet = ("package.path = %q; local o = require('dev.os'); "):format(package.path)
+        .. "o.defaults.show = true; o.run({'printf', '%s', 'x'}); o.capture({'true'})"
+    local out = devos.capture({ "sh", "-c", [[luajit -e "$1" 2>&1]], "sh", snippet })
+    t.eq(out, "+ 'printf' '%s' 'x'\nx+ 'true'\n")
+end)
+
+t.test("exec honours env, cwd and stdin null", function()
+    local snippet = ("package.path = %q; "):format(package.path)
+        .. [[require('dev.os').exec({'sh', '-c', 'printf "%s|%s|" "$X" "$(pwd -P)"; cat'}, ]]
+        .. [[{env = {X = 'a b'}, cwd = '/', stdin = 'null'})]]
+    local out = devos.capture({ "sh", "-c", [[luajit -e "$1"]], "sh", snippet })
+    t.eq(out, "a b|/|")
+end)
+
+t.test("exec appends output to a file", function()
+    local file = assert(require("dev.fs").mktemp({ prefix = "os-log" }))
+    local snippet = ("package.path = %q; "):format(package.path)
+        .. ("require('dev.os').exec({'printf', 'hi'}, {stdout = %q})"):format(file)
+    devos.run({ "luajit", "-e", snippet })
+    local text = io.open(file):read("*a")
+    devos.run({ "rm", "-f", "--", file })
+    t.eq(text, "hi")
+end)
+
+t.test("name is Darwin, Linux or Windows", function()
+    local name = devos.name()
+    t.ok(name == "Darwin" or name == "Linux" or name == "Windows", "unexpected name " .. name)
+end)
+
+t.test("fake_env fakes the uid and the OS from the environment", function()
+    local root = arg[0]:match("^(.*)/tests/lua/") or "."
+    local FAKE_ENV = root .. "/tests/lua/fake_env.lua"
+    local out = devos.capture(
+        { "luajit", "-e", 'io.write(require("dev.os").getuid(), require("dev.os").name())' },
+        {
+            env = {
+                LUA_INIT = "@" .. FAKE_ENV,
+                FAKE_UID = "0",
+                FAKE_OS = "Linux",
+            },
+        }
+    )
+    t.eq(out, "0Linux")
+end)
+
+local function child(snippet, opts)
+    local code = ("package.path = %q; local o = require('dev.os'); "):format(
+        support.absolute_path()
+    ) .. snippet
+    return devos.capture({ "luajit", "-e", code }, opts)
+end
+
+t.test("cwd may start with a dash, and a lone dash is a directory name", function()
+    local dir = support.tempdir()
+    t.eq(devos.run({ "mkdir", "--", dir .. "/-x", dir .. "/-" }), 0)
+    local out = child(
+        "io.write((o.capture({'basename', '.'}, {cwd = '-x'})), (o.capture({'sh', '-c', 'basename \"$(pwd)\"'}, {cwd = '-'})))",
+        { cwd = dir }
+    )
+    t.eq(out, ".\n-\n")
+    out = child("o.exec({'sh','-c','basename \"$(pwd)\"'}, {cwd = '-x'})", { cwd = dir })
+    t.eq(out, "-x\n")
+    devos.run({ "rm", "-rf", "--", dir })
+end)
+
+t.test("a command word that looks like an env option or assignment is safe", function()
+    local out, code = devos.capture({ "-i" }, { env = { X = "1" }, stderr = "null" })
+    t.eq(out, "")
+    t.eq(code, 127)
+    t.raises(function()
+        devos.capture({ "A=b" }, { env = { X = "1" } })
+    end, "contains =")
+end)
+
+t.test("a bad env name reports the variable-name error from run, capture and exec", function()
+    for _, call in ipairs({ devos.run, devos.capture, devos.exec }) do
+        local ok, err = pcall(function()
+            call({ "true" }, { env = { ["A B"] = "x" } })
+        end)
+        t.ok(
+            not ok and err:find("variable name", 1, true) and err:find("os_test.lua", 1, true),
+            tostring(err)
+        )
+    end
+    t.raises(function()
+        devos.run({ "true" }, { env = { [1] = "a" } })
+    end, "variable name")
+end)
+
+t.test("a relative stdout path resolves against the caller, not cwd", function()
+    local dir = support.tempdir()
+    t.eq(devos.run({ "mkdir", "--", dir .. "/sub" }), 0)
+    child("o.run({'echo', 'hi'}, {cwd = 'sub', stdout = 'out.txt'})", { cwd = dir })
+    t.eq(io.open(dir .. "/out.txt"):read("*a"), "hi\n")
+    t.ok(not io.open(dir .. "/sub/out.txt"), "the file must not land in cwd")
+    child("o.exec({'echo', 'yo'}, {cwd = 'sub', stdout = 'out2.txt'})", { cwd = dir })
+    t.eq(io.open(dir .. "/out2.txt"):read("*a"), "yo\n")
+    devos.run({ "rm", "-rf", "--", dir })
+end)
+
+t.test("a stdout path with spaces and quotes is appended to", function()
+    local dir = support.tempdir()
+    local file = dir .. "/it's a log"
+    devos.run({ "echo", "a" }, { stdout = file })
+    devos.run({ "echo", "b" }, { stdout = file })
+    t.eq(io.open(file):read("*a"), "a\nb\n")
+    devos.run({ "rm", "-rf", "--", dir })
+end)
+
+t.test("exec merges stderr into stdout", function()
+    local out = child("o.exec({'sh', '-c', 'echo out; echo err >&2'}, {stderr = 'stdout'})")
+    t.eq(out, "out\nerr\n")
 end)
