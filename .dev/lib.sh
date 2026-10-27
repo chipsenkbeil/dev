@@ -89,7 +89,7 @@ no_args() {
 # is deliberately nothing to pre-create -- ~/mail must be EMPTY before the first
 # init, because muchsync's BUGS section is explicit that a replica built by
 # another tool produces artifacts including deleted files reappearing.
-DEFAULT_DEPS=(agents bin cargo ci claude git jj mail aide neomutt pi ripgrep scribe guide ssh zsh nvim tmux readline gpg ghostty)
+DEFAULT_DEPS=(agents bin ci claude git jj mail aide neomutt pi ripgrep scribe guide ssh zsh nvim tmux readline gpg ghostty)
 if [ "$HOST_OS" = Darwin ]; then
     DEFAULT_DEPS+=(antinote)
 fi
@@ -151,7 +151,7 @@ stow_run() {
 
 stow_flags() {
     case "$1" in
-    gpg | ssh | bin | cargo) STOW_FLAGS=(--no-folding) ;;
+    gpg | ssh | bin) STOW_FLAGS=(--no-folding) ;;
     pi) STOW_FLAGS=(--no-folding --ignore='settings\.json') ;;
     *) STOW_FLAGS=() ;;
     esac
