@@ -259,36 +259,8 @@ t.test("-v prints the ci argv to stderr", function()
     t.ok(out:find("+ ci -C " .. root .. " run --local --follow --job test -- a\n", 1, true), out)
 end)
 
-t.test("the retired --ci and DEV_CI are refused with a hint and nothing runs", function()
-    local root, base = setup({
-        ["mark.lua"] = 'io.open(os.getenv("MARKER"), "w"):close()\n',
-        ["lint.sh"] = '#!/usr/bin/env bash\ntouch "$MARKER"\n',
-    })
-    local marker = base .. "/marker"
-    local cases = {
-        { args = { "lint", "--ci" } },
-        { args = { "--ci", "lint" } },
-        { args = { "box", "ls", "--ci" } },
-        { args = { "mark", "--ci" } },
-        { args = { "lint" }, env = { DEV_CI = "1" } },
-    }
-    for _, case in ipairs(cases) do
-        local env = { MARKER = marker }
-        for key, value in pairs(case.env or {}) do
-            env[key] = value
-        end
-        local out, code, log = dev(root, base, case.args, env)
-        local want = case.env and "dev: DEV_CI was renamed DEV_REMOTE\n"
-            or "dev: --ci was renamed --remote\n"
-        t.eq(code, 2, table.concat(case.args, " "))
-        t.eq(out, want)
-        t.eq(log, "")
-        t.ok(not fs.is_file(marker), "marker written")
-    end
-end)
-
-t.test("arguments after -- are untouched by the --ci refusal", function()
+t.test("arguments after -- reach the job untouched", function()
     local root, base = setup()
-    local _, _, log = dev(root, base, { "--remote", "test", "--", "--ci" })
-    t.ok(log:find("[--] [--ci]", 1, true), log)
+    local _, _, log = dev(root, base, { "--remote", "test", "--", "--anything" })
+    t.ok(log:find("[--] [--anything]", 1, true), log)
 end)

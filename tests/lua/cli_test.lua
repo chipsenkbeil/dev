@@ -39,7 +39,7 @@ t.test("-vvv gives level 2 and a bare -v after -- stays an argument", function()
 end)
 
 t.test("a .lua verb gets positional args and KEY=value vars", function()
-    local out = dev(project({ ["v.lua"] = "@v.lua" }), { "v", "a", "B=1", "--x" })
+    local out = dev(project({ ["v.lua"] = "@v.lua" }), { "v", "a", "B=1", "--", "--x" })
     t.ok(out:find("args\ta,--x", 1, true), out)
     t.ok(out:find("vars\tB=1", 1, true), out)
 end)
@@ -169,4 +169,98 @@ t.test("a .lua verb that cannot be read is an error", function()
     local out, code = dev(root, { "locked" })
     t.eq(code, 1)
     t.ok(out:find("dev locked: cannot read ", 1, true), out)
+end)
+
+local REFUSAL = "; pass it after -- to reach the script, or add it to the script's # flags: line\n"
+
+local function marked(root)
+    return fs.is_file(root .. "/marker")
+end
+
+local function touching(flags)
+    local header = flags and ("# flags: " .. flags .. "\n") or ""
+    return "#!/usr/bin/env bash\n# Touch.\n" .. header .. 'touch "$MARKER"\necho "sh $*"\n'
+end
+
+local function undeclared_project()
+    local root = project({
+        ["s.sh"] = touching("--days"),
+        ["l.lua"] = '--[[\nTouch.\nflags: --days\n]]\nio.open(os.getenv("MARKER"), "w"):close()\nprint("lua", table.concat((...).args, ","))\n',
+        ["n/x.sh"] = touching("--days"),
+        ["n/y.lua"] = '--[[\nTouch.\n]]\nio.open(os.getenv("MARKER"), "w"):close()\n',
+    })
+    return root, { MARKER = root .. "/marker" }
+end
+
+t.test("an undeclared flag is refused before a .sh verb runs", function()
+    local root, env = undeclared_project()
+    local out, code = dev(root, { "s", "--nope" }, env)
+    t.eq(code, 2)
+    t.eq(out, "dev s: unknown flag --nope" .. REFUSAL)
+    t.ok(not marked(root), "script ran")
+end)
+
+t.test("an undeclared flag is refused before a .lua verb runs", function()
+    local root, env = undeclared_project()
+    local out, code = dev(root, { "l", "a", "--nope=1" }, env)
+    t.eq(code, 2)
+    t.eq(out, "dev l: unknown flag --nope" .. REFUSAL)
+    t.ok(not marked(root), "script ran")
+end)
+
+t.test("an undeclared flag of a noun subcommand names both words", function()
+    local root, env = undeclared_project()
+    for _, sub in ipairs({ "x", "y" }) do
+        local out, code = dev(root, { "n", sub, "-z" }, env)
+        t.eq(code, 2)
+        t.eq(out, "dev n " .. sub .. ": unknown flag -z" .. REFUSAL)
+        t.ok(not marked(root), "script ran")
+    end
+end)
+
+t.test("a declared flag reaches the script, with a separate or an = value", function()
+    local root, env = undeclared_project()
+    t.eq(dev(root, { "s", "--days", "7" }, env), "sh --days 7\n")
+    t.eq(dev(root, { "s", "--days=7" }, env), "sh --days=7\n")
+    t.eq(dev(root, { "l", "--days", "7" }, env), "lua\t--days,7\n")
+    t.eq(dev(root, { "n", "x", "--days=7" }, env), "sh --days=7\n")
+end)
+
+t.test("a separate value that starts with a dash is a flag, so it goes after =", function()
+    local root, env = undeclared_project()
+    local out, code = dev(root, { "s", "--days", "-1" }, env)
+    t.eq(code, 2)
+    t.eq(out, "dev s: unknown flag -1" .. REFUSAL)
+    t.eq(dev(root, { "s", "--days=-1" }, env), "sh --days=-1\n")
+end)
+
+t.test("everything after -- reaches the script untouched", function()
+    local root, env = undeclared_project()
+    t.eq(dev(root, { "s", "--", "--anything", "x" }, env), "sh --anything x\n")
+    t.eq(dev(root, { "l", "--", "-q", "--anything" }, env), "lua\t-q,--anything\n")
+end)
+
+t.test("plain words and a lone dash are not flags", function()
+    local root, env = undeclared_project()
+    t.eq(dev(root, { "s", "word", "-", "K=v" }, env), "sh word - K=v\n")
+end)
+
+t.test("the verbose flags work in any position", function()
+    local root, env = undeclared_project()
+    t.ok(dev(root, { "-v", "s" }, env):find("+ .dev/s.sh", 1, true))
+    t.ok(dev(root, { "s", "-v" }, env):find("+ .dev/s.sh", 1, true))
+    t.ok(dev(root, { "s", "--verbose" }, env):find("+ .dev/s.sh", 1, true))
+end)
+
+t.test("-h after a verb is help and never runs the script", function()
+    local root, env = undeclared_project()
+    local _, code = dev(root, { "s", "-h" }, env)
+    t.eq(code, 0)
+    t.ok(not marked(root), "help ran the script")
+end)
+
+t.test("--remote is never an unknown flag", function()
+    local root, env = undeclared_project()
+    local out = dev(root, { "s", "--remote" }, env)
+    t.ok(not out:find("unknown flag", 1, true), out)
 end)

@@ -26,10 +26,6 @@ DEV_SELF=$(realpath "${BASH_SOURCE[0]}")
 export DEV_SELF
 share=$(dirname "$DEV_SELF")/../share/dev
 
-if [ -n "${DEV_CI:-}" ]; then
-    printf 'dev: DEV_CI was renamed DEV_REMOTE\n' >&2
-    exit 2
-fi
 remote_flag=0
 case "${DEV_REMOTE:-}" in
 "" | 0 | no | false) ;;
@@ -37,10 +33,6 @@ case "${DEV_REMOTE:-}" in
 esac
 for arg in "$@"; do
     case "$arg" in
-    --ci)
-        printf 'dev: --ci was renamed --remote\n' >&2
-        exit 2
-        ;;
     --remote | --detach) remote_flag=1 ;;
     --) break ;;
     esac

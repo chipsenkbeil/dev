@@ -39,3 +39,27 @@ after a `--` reaches the verb verbatim, so `dev run -- -h` runs
 - `dev help --topics` lists the topics, and `dev help -k <topic>` prints one.
 
 Color is on only when the output is a terminal and `NO_COLOR` is unset.
+
+## Flags a script declares
+
+A project script gets a flag only when its `# flags:` line declares it. Before
+a `--`, a word that starts with `-` (and is not the lone word `-`) must be a
+global flag, `-h` or `--help`, or listed on the line. Anything else stops dev
+before the script runs, with exit 2 and:
+
+```
+dev <verb>: unknown flag <flag>; pass it after -- to reach the script, or add it to the script's # flags: line
+```
+
+`<verb>` is the command words, a noun and its subcommand included.
+`--name=value` is checked as `--name`, a declared flag's separate value
+(`--days 7`) is a plain word, and words that do not start with `-` are never
+refused. A value that starts with `-` is checked as a flag, so write it as
+`--days=-1`.
+
+Everything after the first `--` reaches the script untouched, so flags meant
+for another tool go there: `dev test -- <args>` runs the test suites with
+`<args>`.
+
+Built-in verbs check their own flags. With `--remote`, any argument before the
+`--` is refused, as the `remote` topic describes.

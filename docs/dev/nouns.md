@@ -26,7 +26,8 @@ dev reads the comment block under the shebang of each script.
 
 - the first comment line is the description in `dev help`.
 - `# flags: --a --b` declares the flags that `dev help <verb>` and shell
-  completion offer.
+  completion offer, and the only flags dev lets through to the script.
+  `dev help flags` has the rule.
 - `# group: <name>` sets the heading `dev help` lists a verb under. A verb
   with no group lands in a group named after the project directory. A noun
   takes the group of its first subcommand script that has the line.

@@ -43,17 +43,9 @@ end
 ---@field detach boolean whether `--detach` was given
 ---@field level integer the verbosity before the trace file is checked
 
-local function renamed(old, new)
-    stderr:write("dev: ", old, " was renamed ", new, "\n")
-    os.exit(2)
-end
-
 local function parse(argv)
     local parsed =
         { args = {}, after = 0, remote = enabled(os.getenv("DEV_REMOTE") or ""), detach = false }
-    if (os.getenv("DEV_CI") or "") ~= "" then
-        renamed("DEV_CI", "DEV_REMOTE")
-    end
     local count = 0
     for i, word in ipairs(argv) do
         if word == "--" then
@@ -64,8 +56,6 @@ local function parse(argv)
             break
         elseif word == "--verbose" then
             count = count + 1
-        elseif word == "--ci" then
-            renamed("--ci", "--remote")
         elseif word == "--remote" then
             parsed.remote = true
         elseif word == "--detach" then
@@ -175,8 +165,29 @@ local function tail(list, from)
     return out
 end
 
+local UNDECLARED_HINT =
+    "; pass it after -- to reach the script, or add it to the script's # flags: line"
+
+local function is_help(word)
+    return word == "-h" or word == "--help"
+end
+
 local function help_requested(rest, after)
-    return #rest > after and (rest[1] == "-h" or rest[1] == "--help")
+    return #rest > after and is_help(rest[1])
+end
+
+local function refuse_undeclared(reg, ctx, rest, after)
+    local declared = {}
+    for _, flag in ipairs(reg:flags(ctx.words)) do
+        declared[flag] = true
+    end
+    for i = 1, #rest - after do
+        local word = rest[i]
+        local flag = word:match("^(%-%-?[^=]*)")
+        if flag and word ~= "-" and not is_help(flag) and not declared[flag] then
+            verb.usage_error(ctx, "unknown flag " .. flag .. UNDECLARED_HINT)
+        end
+    end
 end
 
 ---Run `dev` with the command line and exit.
@@ -195,7 +206,7 @@ function M.main(argv)
     root_gate(parsed.args)
     local args = parsed.args
     local name = args[1] or "help"
-    if name == "-h" or name == "--help" then
+    if is_help(name) then
         name = "help"
     end
     if goes_to_legacy(name, parsed.remote) then
@@ -230,6 +241,7 @@ function M.main(argv)
         )
     end
     if row and row.script then
+        refuse_undeclared(reg, ctx, rest, parsed.after)
         run_script(row, ctx, rest)
     end
     legacy(argv)

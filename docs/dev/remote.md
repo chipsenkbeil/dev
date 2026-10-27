@@ -5,10 +5,6 @@ anywhere before a `--`, for every verb: `dev test --remote` and
 `dev --remote test` are the same. `DEV_REMOTE=1` in the environment is the same
 as the flag, where empty, `0`, `no` and `false` mean off.
 
-The old `--ci` and `DEV_CI` are refused, anywhere before a `--` and for every
-verb: `dev: --ci was renamed --remote` or `dev: DEV_CI was renamed DEV_REMOTE`,
-exit 2, and nothing runs, locally or remotely.
-
 ```
 dev --remote test
 dev --remote test -- parse
