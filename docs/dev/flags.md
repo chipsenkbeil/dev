@@ -27,14 +27,15 @@ it.
 
 ## Help flags
 
-`-h` and `--help` are reserved for help on every verb, but only before a
-`--`. A script never sees them there, and so cannot declare them in its
-`# flags:` line (`dev __check-topics` reports one that does). Everything
-after a `--` reaches the verb verbatim, so `dev run -- -h` runs
-`cargo run -- -h`.
+`-h` and `--help` are reserved for help on every verb, in any position,
+but only before a `--`. A script never sees them there, and so cannot
+declare them in its `# flags:` line (`dev __check-topics` reports one
+that does). Everything after a `--` reaches the verb verbatim, so
+`dev run -- -h` runs `cargo run -- -h`.
 
-- `-h` after a verb prints its description, usage and flags.
-- `--help` after a verb prints the long form, the same as `dev help <verb>`.
+- `-h` anywhere after a verb prints its description, usage and flags.
+- `--help` anywhere after a verb prints the long form, the same as
+  `dev help <verb>`.
 - `dev help -a` lists every command, hidden ones included.
 - `dev help --topics` lists the topics, and `dev help -k <topic>` prints one.
 

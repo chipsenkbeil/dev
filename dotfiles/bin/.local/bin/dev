@@ -24,7 +24,7 @@ fi
 
 DEV_SELF=$(realpath "${BASH_SOURCE[0]}")
 export DEV_SELF
-share=$(dirname "$DEV_SELF")/../share/dev
+share=$(cd -P "$(dirname "$DEV_SELF")/../share/dev" && pwd -P)
 
 remote_flag=0
 case "${DEV_REMOTE:-}" in
@@ -38,11 +38,17 @@ for arg in "$@"; do
     esac
 done
 
+have_luajit=0
+if [ -n "$luajit" ] && { [ "$luajit" != luajit ] || command -v luajit >/dev/null 2>&1; }; then
+    have_luajit=1
+fi
+
 dev_flag=0
 if [ "${1:-}" = bootstrap ]; then
     for arg in "${@:2}"; do
         case "$arg" in
-        -h | --help | --verbose) dev_flag=1 ;;
+        -h | --help) if [ "$have_luajit" -eq 1 ]; then dev_flag=1; fi ;;
+        --verbose) dev_flag=1 ;;
         --) break ;;
         *) if [[ "$arg" =~ ^-v+$ ]]; then dev_flag=1; fi ;;
         esac

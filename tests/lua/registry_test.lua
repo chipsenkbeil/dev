@@ -36,33 +36,37 @@ local function make_project()
     return root
 end
 
-t.test("builtins match the legacy table byte for byte", function()
-    local text = assert(fs.read(LEGACY), "legacy.bash must exist until Task 29 deletes this test")
-    local table_text = text:match("builtin_table%(%) {\n    cat <<'TABLE'\n(.-)\nTABLE\n")
-    local want = {}
-    for line in table_text:gmatch("[^\n]+") do
-        local f = {}
-        for field in (line .. "|"):gmatch("([^|]*)|") do
-            f[#f + 1] = field
+t.test(
+    "builtins match the legacy table byte for byte, a Lua handler being a blank one there",
+    function()
+        local text =
+            assert(fs.read(LEGACY), "legacy.bash must exist until Task 29 deletes this test")
+        local table_text = text:match("builtin_table%(%) {\n    cat <<'TABLE'\n(.-)\nTABLE\n")
+        local want = {}
+        for line in table_text:gmatch("[^\n]+") do
+            local f = {}
+            for field in (line .. "|"):gmatch("([^|]*)|") do
+                f[#f + 1] = field
+            end
+            local handler = (f[2] ~= "" and f[2] ~= "noun") and "legacy" or f[2]
+            want[#want + 1] = table.concat({ f[1], handler, f[3], f[4], f[5], f[6] or "" }, "|")
         end
-        local handler = (f[2] ~= "" and f[2] ~= "noun") and "legacy" or f[2]
-        want[#want + 1] = table.concat({ f[1], handler, f[3], f[4], f[5], f[6] or "" }, "|")
+        local got = {}
+        for _, row in ipairs(builtins) do
+            local handler = row.noun and "noun" or row.handler or ""
+            local group = row.hidden and "hidden" or row.group or ""
+            got[#got + 1] = table.concat({
+                table.concat(row.words, " "),
+                handler == "lua" and "" or handler,
+                row.flags or "",
+                row.usage or "",
+                row.desc,
+                group,
+            }, "|")
+        end
+        t.eq(got, want)
     end
-    local got = {}
-    for _, row in ipairs(builtins) do
-        local handler = row.noun and "noun" or row.handler or ""
-        local group = row.hidden and "hidden" or row.group or ""
-        got[#got + 1] = table.concat({
-            table.concat(row.words, " "),
-            handler,
-            row.flags or "",
-            row.usage or "",
-            row.desc,
-            group,
-        }, "|")
-    end
-    t.eq(got, want)
-end)
+)
 
 t.test(".lua beats .sh and needs no exec bit, while an unexecutable .sh is no verb", function()
     local root = make_project()

@@ -5,6 +5,8 @@ local fs = require("dev.fs")
 local M = {}
 
 local PRUNED_DIRS = { node_modules = true, target = true }
+local stderr = io.stderr
+local SHARE = debug.getinfo(1, "S").source:match("^@(.*)/lua/dev/[^/]*$") or "."
 
 local function physical_cwd()
     return (devos.capture({ "pwd", "-P" }):gsub("\n$", ""))
@@ -30,6 +32,26 @@ local function vcs_root(argv)
     if code == 0 then
         return (out:gsub("\n$", ""))
     end
+end
+
+---Directory of dev's own code, holding `main.lua` and `legacy.bash`.
+M.share = SHARE
+
+---Find the clone of the dotfiles repository that holds this copy of dev.
+---
+---`DOTFILES` names it for a user, never for root.
+---@return string root absolute path of the clone
+function M.dotfiles_root()
+    local env = os.getenv("DOTFILES")
+    if env and env ~= "" and devos.getuid() ~= 0 then
+        return env
+    end
+    local root = SHARE:match("^(.*)/dotfiles/bin/%.local/share/dev$")
+    if not root then
+        stderr:write("dev: cannot find the dotfiles clone from ", SHARE, "\n")
+        os.exit(1)
+    end
+    return root
 end
 
 ---Find the project root.

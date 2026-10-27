@@ -331,6 +331,13 @@ function Registry:subs(noun)
     return rows
 end
 
+---Read the header of the script behind a row.
+---@param row dev.Row a row from `find`, `verbs` or `subs`
+---@return dev.Header? header nil when the row has no script
+function Registry:header(row)
+    return row.script and self:__header(row.script, row.lang) or nil
+end
+
 ---Check whether a word is a noun.
 ---@param word string word to check
 ---@return boolean noun true for a built-in noun or a directory of scripts no flat script shadows

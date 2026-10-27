@@ -1,5 +1,6 @@
 local devos = require("dev.os")
 local fs = require("dev.fs")
+local help = require("dev.help")
 local project = require("dev.project")
 local registry = require("dev.registry")
 local remote = require("dev.remote")
@@ -9,10 +10,9 @@ local stderr = io.stderr
 local MAX_LEVEL = 2
 local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
 local EXEC_FAILED = 126
-local SHARE = (debug.getinfo(1, "S").source:match("^@(.*)/lua/dev/[^/]*$") or ".")
+local SHARE = project.share
 local PS4 = "+ ${BASH_SOURCE##*/}:${LINENO}: "
 local LEGACY_ONLY = {
-    help = true,
     __verbs = true,
     __subs = true,
     __flags = true,
@@ -68,10 +68,6 @@ local function parse(argv)
     end
     parsed.level = level_of(count > 0 and tostring(count) or os.getenv("VERBOSE") or "")
     return parsed
-end
-
-local function goes_to_legacy(name, remote_run)
-    return LEGACY_ONLY[name] and not (name == "help" and remote_run)
 end
 
 local function root_gate(args)
@@ -172,8 +168,18 @@ local function is_help(word)
     return word == "-h" or word == "--help"
 end
 
-local function help_requested(rest, after)
-    return #rest > after and is_help(rest[1])
+local function help_flag(rest, after)
+    for i = 1, #rest - after do
+        if is_help(rest[i]) then
+            return rest[i]
+        end
+    end
+end
+
+local function noun_usage_error(reg, name, message)
+    stderr:write("dev ", name, ": ", message, "\n\n")
+    help.noun(reg, name, { stderr = true })
+    os.exit(2)
 end
 
 local function refuse_undeclared(reg, ctx, rest, after)
@@ -209,7 +215,7 @@ function M.main(argv)
     if is_help(name) then
         name = "help"
     end
-    if goes_to_legacy(name, parsed.remote) then
+    if LEGACY_ONLY[name] then
         legacy(argv)
     end
     local root = project.root()
@@ -217,15 +223,23 @@ function M.main(argv)
     local words, rest = { name }, tail(args, 2)
     local row = reg:find(words)
     if row and row.noun then
-        local sub = rest[1] and reg:find({ name, rest[1] })
-        if not sub or rest[1] == "help" or rest[1]:find("^__") then
-            legacy(argv)
+        local first = rest[1]
+        local sub = first
+            and first ~= "help"
+            and not first:find("^__")
+            and not is_help(first)
+            and reg:find({ name, first })
+        if not sub then
+            if not first then
+                noun_usage_error(reg, name, "needs a subcommand")
+            end
+            if first == "help" or help_flag(rest, parsed.after) then
+                os.exit(help.noun(reg, name))
+            end
+            noun_usage_error(reg, name, "unknown subcommand " .. first)
         end
-        words[2] = rest[1]
+        words[2] = first
         row, rest = sub, tail(rest, 2)
-    end
-    if name ~= "help" and help_requested(rest, parsed.after) then
-        legacy(argv)
     end
     local ctx = {
         name = table.concat(words, " "),
@@ -235,6 +249,13 @@ function M.main(argv)
         vars = {},
         verbose = parsed.level,
     }
+    local flag = name ~= "help" and help_flag(rest, parsed.after)
+    if flag and not parsed.remote then
+        os.exit(help.verb(ctx, reg, { words = words, short = flag == "-h" }))
+    end
+    if name == "help" and not parsed.remote and not (row and row.script) then
+        os.exit(help.run(ctx, reg))
+    end
     if parsed.remote then
         os.exit(
             remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), parsed.detach)

@@ -1,6 +1,6 @@
 ---@class dev.Builtin
 ---@field words string[] the command words, a noun and a subcommand for a subcommand row
----@field handler string? "legacy" for a bash handler, nil for a noun or the project type's builtin
+---@field handler string? "legacy" for a bash handler, "lua" for a Lua one, nil for a noun or the project type's builtin
 ---@field noun boolean? whether the row is a noun
 ---@field flags string? the flags the verb takes, space separated
 ---@field usage string? the usage line `dev help <verb>` shows
@@ -173,7 +173,7 @@ return {
     },
     {
         words = { "help" },
-        handler = "legacy",
+        handler = "lua",
         flags = "-a -k --topics",
         usage = "dev help [-a] [--topics] [-k topic] [verb or topic]",
         desc = "Show the commands, the details of one verb or a topic",

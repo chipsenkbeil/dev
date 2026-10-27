@@ -245,7 +245,7 @@ box install-tools|cmd_box_install_tools||dev box install-tools BOX [PROJECT...]|
 box delete|cmd_box_delete|--yes -y --no-archive|dev box delete BOX [-y or --yes] [--no-archive]|Archive a box's projects and delete it, or delete it with no archive under --no-archive, after asking unless -y
 box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
 bootstrap|cmd_bootstrap|--dry-run --no-login|dev bootstrap [--dry-run] [--no-login]|Run bootstrap.sh from the dotfiles clone: the package manager and luajit first, then stow, tailscale, the default packages and the manifest tools|hidden
-help|cmd_help|-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
+help||-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
 TABLE
 }
 
@@ -272,18 +272,6 @@ script_desc() {
         /^# *group:/ { next }
         /^# *hidden *$/ { next }
         /^#/ { sub(/^# ?/, ""); print; exit }
-        { exit }
-    ' "$1"
-}
-
-# script_header <script>: the comment block after the shebang, without "# ", minus the group and hidden lines.
-script_header() {
-    awk '
-        NR == 1 { next }
-        /^# *shellcheck / { next }
-        /^# *group:/ { next }
-        /^# *hidden *$/ { next }
-        /^#/ { sub(/^# ?/, ""); print; next }
         { exit }
     ' "$1"
 }
@@ -520,92 +508,6 @@ builtin_commands() {
     esac
 }
 
-# set_colors <fd>: color escapes when that descriptor is a terminal, else empty.
-set_colors() {
-    if [ -t "$1" ] && [ -z "${NO_COLOR:-}" ]; then
-        BOLD=$'\033[1m' DIM=$'\033[2m' CYAN=$'\033[36m' RESET=$'\033[0m'
-    else
-        BOLD="" DIM="" CYAN="" RESET=""
-    fi
-}
-
-# help_section <title> <rows>: an aligned table of "name<TAB>origin<TAB>description".
-# HELP_WIDTH and HELP_MARKW widen the name and marker columns to fit several tables together.
-# The marker column appears only when a row is an override.
-help_section() {
-    local title=$1 rows=$2 width=${HELP_WIDTH:-0} name origin desc mark markw=${HELP_MARKW:-0}
-    [ -n "$rows" ] || return 0
-    while IFS=$'\t' read -r name origin desc; do
-        if [ "${#name}" -gt "$width" ]; then width=${#name}; fi
-        if [ "$origin" = override ]; then markw=10; fi
-    done <<<"$rows"
-    printf '\n%s%s%s\n' "$BOLD" "$title" "$RESET"
-    while IFS=$'\t' read -r name origin desc; do
-        mark=""
-        if [ "$origin" = override ]; then mark="(override)"; fi
-        printf '  %s%-*s%s  ' "$CYAN" "$width" "$name" "$RESET"
-        if [ "$markw" -gt 0 ]; then printf '%s%-*s%s  ' "$DIM" "$markw" "$mark" "$RESET"; fi
-        printf '%s\n' "$desc"
-    done <<<"$rows"
-}
-
-HELP_GROUPS="Check your work|Share it|Set up a machine or project|Boxes"
-HELP_HIDDEN=Hidden
-
-# verb_place <name> <origin>: set PLACE_GROUP and PLACE_HIDDEN (0 or 1) for a verb from its header lines.
-# A verb with none takes its built-in row, and a local verb with no group takes the project directory's name.
-# A noun takes the group, and the hidden flag, of its first subcommand script that has a group.
-verb_place() {
-    local name=$1 origin=$2 script meta=""
-    PLACE_GROUP="" PLACE_HIDDEN=0
-    if [ "$origin" != builtin ]; then
-        if [ -x "$ROOT/.dev/$name.sh" ]; then
-            meta=$(script_place "$ROOT/.dev/$name.sh")
-            PLACE_GROUP=${meta%%$'\n'*}
-            PLACE_HIDDEN=${meta##*$'\n'}
-        else
-            for script in "$ROOT/.dev/$name"/*.sh; do
-                [ -x "$script" ] || continue
-                meta=$(script_place "$script")
-                if [ -n "${meta%%$'\n'*}" ]; then
-                    PLACE_GROUP=${meta%%$'\n'*}
-                    PLACE_HIDDEN=${meta##*$'\n'}
-                    break
-                fi
-            done
-        fi
-    fi
-    if [ -z "$PLACE_GROUP" ] && [ "$origin" != local ]; then
-        PLACE_GROUP=$(builtin_field "$name" 6)
-        if [ "$PLACE_GROUP" = hidden ] && [ "$PLACE_HIDDEN" -eq 0 ]; then
-            PLACE_HIDDEN=1
-        fi
-    fi
-    if [ -z "$PLACE_GROUP" ] || [ "$PLACE_GROUP" = hidden ]; then PLACE_GROUP=$(basename "$ROOT"); fi
-}
-
-# group_rows <all>: "group<TAB>name<TAB>origin<TAB>description" per verb, with the hidden ones
-# and dev's own helpers under "Hidden" when all is 1.
-group_rows() {
-    local all=$1 name origin desc group
-    while IFS=$'\t' read -r name origin desc; do
-        verb_place "$name" "$origin"
-        if [ "$PLACE_HIDDEN" -eq 1 ]; then
-            if [ "$all" -ne 1 ]; then continue; fi
-            group=$HELP_HIDDEN
-        else
-            group=$PLACE_GROUP
-        fi
-        printf '%s\t%s\t%s\t%s\n' "$group" "$name" "$origin" "$desc"
-    done < <(verbs_table)
-    if [ "$all" -eq 1 ]; then
-        printf '%s\t__verbs\tbuiltin\tList the verbs with their descriptions, for shell completion\n' "$HELP_HIDDEN"
-        printf '%s\t__subs\tbuiltin\tList the subcommands of a noun, for shell completion\n' "$HELP_HIDDEN"
-        printf '%s\t__flags\tbuiltin\tList the flags of a verb, for shell completion\n' "$HELP_HIDDEN"
-        printf '%s\t__check-topics\tbuiltin\tCheck the built-in and project topics against the real verbs and flags\n' "$HELP_HIDDEN"
-    fi
-}
-
 # topic_files: the topic files, the built-in ones first, one per line.
 topic_files() {
     local dir file
@@ -616,143 +518,11 @@ topic_files() {
     done
 }
 
-# topics_table: "name<TAB>summary" per topic, sorted by name, from the first line "# name: summary".
-topics_table() {
-    local file first
-    while IFS= read -r file; do
-        first=""
-        IFS= read -r first <"$file" || true
-        printf '%s\t%s\n' "$(basename "$file" .md)" "${first#*: }"
-    done < <(topic_files) | awk -F'\t' '!seen[$1]++' | LC_ALL=C sort
-}
-
-# topic_path <name>: the file of a topic, or failure.
-topic_path() {
-    local file
-    [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] || return 1
-    while IFS= read -r file; do
-        if [ "$(basename "$file" .md)" = "$1" ]; then
-            printf '%s\n' "$file"
-            return 0
-        fi
-    done < <(topic_files)
-    return 1
-}
-
-# help_topic <name>: print a topic.
-help_topic() {
-    local file
-    file=$(topic_path "$1") || usage_error help "unknown topic $1, see dev help --topics"
-    cat "$file"
-}
-
-# help_overview <fd> [all]: the project line, the verbs under their groups, and the topics.
-# With all set to 1 it adds the hidden verbs.
-help_overview() {
-    local all=${2:-0} rows topics groups group type
-    set_colors "$1"
-    rows=$(group_rows "$all")
-    topics=$(topics_table)
-    HELP_WIDTH=$(printf '%s\n%s\n' "$(cut -f2 <<<"$rows")" "$(cut -f1 <<<"$topics")" |
-        awk '{ if (length($0) > w) w = length($0) } END { print w + 0 }')
-    HELP_MARKW=$(awk -F'\t' '$3 == "override" { m = 10 } END { print m + 0 }' <<<"$rows")
-    type=$(detect_type)
-    if [ "$type" = none ]; then
-        printf '%sdev%s: project at %s\n' "$BOLD" "$RESET" "$ROOT"
-    else
-        printf '%sdev%s: %s project at %s\n' "$BOLD" "$RESET" "$type" "$ROOT"
-    fi
-    groups=$(printf '%s\n' "${HELP_GROUPS//|/$'\n'}" "$(cut -f1 <<<"$rows")" |
-        awk -v h="$HELP_HIDDEN" 'NF && $0 != h && !seen[$0]++')
-    while IFS= read -r group; do
-        help_section "$group" "$(awk -F'\t' -v g="$group" '$1 == g { print $2 "\t" $3 "\t" $4 }' <<<"$rows")"
-    done <<<"$groups"
-    if [ "$all" -eq 1 ]; then
-        help_section "$HELP_HIDDEN" "$(awk -F'\t' -v g="$HELP_HIDDEN" '$1 == g { print $2 "\t" $3 "\t" $4 }' <<<"$rows")"
-    fi
-    if [ -n "$topics" ]; then
-        help_section Topics "$(awk -F'\t' '{ print $1 "\ttopic\t" $2 }' <<<"$topics")"
-    fi
-    if [ "$all" -eq 1 ]; then
-        printf "\nRun \`dev help <verb>\` for one command and \`dev help <topic>\` for a topic.\n"
-    else
-        printf "\nRun \`dev help -a\` for every command, \`dev help <verb>\` for one command and \`dev help <topic>\` for a topic.\n"
-    fi
-}
-
 # usage: the curated overview on stderr, for a bad verb or bad arguments.
 usage() {
-    if [ "$(dev_uid)" -eq 0 ]; then
-        help_overview 2
-    else
+    if [ "$(dev_uid)" -ne 0 ]; then
         "$DEV_SELF" help >&2
     fi
-}
-
-# help_noun <noun>: the noun's description and its subcommands.
-help_noun() {
-    local noun=$1
-    set_colors 1
-    printf '%sdev %s%s\n  %s\n' "$BOLD" "$noun" "$RESET" "$(noun_desc "$noun")"
-    help_section "subcommands" "$(noun_subs_table "$noun")"
-
-    # shellcheck disable=SC2016  # the backticks are literal help text
-    printf '\nRun `dev help %s <sub>` for a subcommand'"'"'s flags and header.\n' "$noun"
-}
-
-# help_verb <verb> [short]: the details of one verb, where a subcommand is "noun sub".
-# Short is 1 for the description, usage and flags that `dev <verb> -h` shows.
-help_verb() {
-    local verb=$1 short=${2:-0} script row origin desc flags type usage
-    script=$(script_path "$verb")
-    case "$verb" in
-    *" "*) row=$(noun_subs_table "${verb% *}" | awk -F'\t' -v v="${verb#* }" '$1 == v') ;;
-    *)
-        is_verb "$verb" || usage_error help "unknown verb $verb"
-        row=$(verbs_table | awk -F'\t' -v v="$verb" '$1 == v')
-        ;;
-    esac
-    set_colors 1
-    origin=$(printf '%s\n' "$row" | cut -f2)
-    desc=$(printf '%s\n' "$row" | cut -f3)
-    printf '%sdev %s%s' "$BOLD" "$verb" "$RESET"
-    if [ "$origin" = override ]; then printf ' (override)'; fi
-    printf '\n  %s\n' "$desc"
-    flags=$(verb_flags "$verb")
-    if [ "$short" -eq 1 ]; then
-        usage=$(builtin_field "$verb" 4)
-        case "$usage" in
-        "dev "*) ;;
-        *)
-            usage="dev $verb"
-            if [ -n "$flags" ]; then usage="$usage [flags]"; fi
-            ;;
-        esac
-        printf '\n%susage%s\n  %s\n' "$BOLD" "$RESET" "$usage"
-    fi
-    if [ -n "$flags" ]; then
-        printf '\n%sflags%s\n' "$BOLD" "$RESET"
-        printf '%s\n' "$flags" | sed 's/^/  /'
-    fi
-    if [ "$short" -eq 1 ]; then
-        printf "\nRun \`dev %s --help\` for the script header and the command it runs.\n" "$verb"
-        return 0
-    fi
-    if [ -x "$script" ]; then
-        printf '\n%s%s header%s\n' "$BOLD" "${script#"$ROOT"/}" "$RESET"
-        script_header "$script" | sed 's/^/  /'
-    fi
-    if [ "$origin" != local ]; then
-        type=$(detect_type)
-        printf '\n%sthe built-in runs%s (%s project)\n' "$BOLD" "$RESET" "$type"
-        builtin_commands "$verb" "$type" | sed 's/^/  /'
-    fi
-
-    printf "\nGlobal flags:\n"
-    printf "  -v          print each command before it runs\n"
-    printf "  -vv         also trace every line of dev and of each bash script\n"
-    printf "  --remote    run this command on a remote runner, see \`dev help remote\`\n"
-    printf "  --detach    with --remote, start the job and return\n"
 }
 
 cmd_deploy() {
@@ -764,11 +534,10 @@ cmd_guide() {
     local question="$*" topics="$ROOT/.dev/topics"
     [ "$(dev_uid)" -ne 0 ] || die "refusing to run guide as root"
     if [ -z "$question" ]; then
-        if topic_path overview >/dev/null; then
-            help_topic overview
+        if "$DEV_SELF" help -k overview 2>/dev/null; then
             printf '\n'
         fi
-        help_overview 1
+        "$DEV_SELF" help
         return
     fi
     need guide "dev install guide"
@@ -777,55 +546,6 @@ cmd_guide() {
         exec guide dev --context-dir "$topics" -- "$question"
     fi
     exec guide dev -- "$question"
-}
-
-cmd_help() {
-    case "${1:-}" in
-    -h)
-        help_verb help 1
-        return
-        ;;
-    --help)
-        help_verb help
-        return
-        ;;
-    -a)
-        [ "$#" -eq 1 ] || usage_error help "-a takes no arguments, got $2"
-        help_overview 1 1
-        return
-        ;;
-    --topics)
-        [ "$#" -eq 1 ] || usage_error help "--topics takes no arguments, got $2"
-        topics_table
-        return
-        ;;
-    -k)
-        [ "$#" -eq 2 ] || usage_error help "-k needs one topic name"
-        help_topic "$2"
-        return
-        ;;
-    -*) usage_error help "unknown flag $1" ;;
-    esac
-    case "$#" in
-    0) help_overview 1 ;;
-    1)
-        if is_noun "$1"; then
-            help_noun "$1"
-        elif is_verb "$1"; then
-            help_verb "$1"
-        elif topic_path "$1" >/dev/null; then
-            help_topic "$1"
-        else
-            usage_error help "unknown verb $1, and no topic of that name"
-        fi
-        ;;
-    2)
-        is_noun "$1" || usage_error help "$1 has no subcommands"
-        noun_has_sub "$1" "$2" || usage_error help "unknown subcommand $2 of $1"
-        help_verb "$1 $2"
-        ;;
-    *) usage_error help "too many arguments, got $3" ;;
-    esac
 }
 
 # topic_command_error <command line>: why a quoted `dev ...` line does not parse, or nothing when it does.
@@ -2706,13 +2426,12 @@ cmd_init() {
 }
 
 main() {
-    local verb sub type trace handler count=0 after=0
+    local verb sub type trace handler count=0
     local -a args=()
     while [ "$#" -gt 0 ]; do
         case "$1" in
         --)
             shift
-            after=$#
             args+=("$@")
             break
             ;;
@@ -2768,7 +2487,10 @@ main() {
     verb=$1
     shift
     case "$verb" in
-    -h | --help) verb=help ;;
+    __commands)
+        builtin_commands "${1:-}" "$(detect_type)"
+        return 0
+        ;;
     __verbs)
         verbs_table
         return 0
@@ -2792,33 +2514,17 @@ main() {
         case "$sub" in
         "")
             printf 'dev %s: needs a subcommand\n\n' "$verb" >&2
-            help_noun "$verb" >&2
+            "$DEV_SELF" help "$verb" >&2
             exit 2
-            ;;
-        -h | --help | help)
-            help_noun "$verb"
-            return 0
             ;;
         esac
         if ! noun_has_sub "$verb" "$sub"; then
             printf 'dev %s: unknown subcommand %s\n\n' "$verb" "$sub" >&2
-            help_noun "$verb" >&2
+            "$DEV_SELF" help "$verb" >&2
             exit 2
         fi
         shift
         verb="$verb $sub"
-    fi
-    if [ "$verb" != help ] && [ "$#" -gt "$after" ]; then
-        case "${1:-}" in
-        -h)
-            help_verb "$verb" 1
-            return 0
-            ;;
-        --help)
-            help_verb "$verb"
-            return 0
-            ;;
-        esac
     fi
     case "$verb" in
     *" "*)

@@ -6,6 +6,7 @@ set -o pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
+SHARE_MAIN="$(cd -P "$REPO/dotfiles/bin/.local/share/dev" && pwd -P)/main.lua"
 unset DOTFILES VERBOSE DEV_UID DEV_OS LUA_INIT LUA_PATH LUA_CPATH
 
 TMP="$(mktemp -d)"
@@ -90,26 +91,26 @@ for name in BASH_ENV ENV LUA_PATH LUA_CPATH LUA_INIT LUA_PATH_5_1 LUA_CPATH_5_1 
 done
 
 assert_eq "the launcher exports its real path" "$(grep '^DEV_SELF=' "$ENV_OUT")" "DEV_SELF=$DEV"
-assert_eq "the launcher hands luajit main.lua and the arguments" "$(cat "$ARGS_OUT")" "$REPO/dotfiles/bin/.local/bin/../share/dev/main.lua help"
+assert_eq "the launcher hands luajit main.lua and the arguments" "$(cat "$ARGS_OUT")" "$SHARE_MAIN help"
 
 rm -f "$ENV_OUT"
-out="$(PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" help 2>&1)"
+out="$(PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" __verbs 2>&1)"
 assert_eq "root without a system luajit still runs legacy" "$?" "0"
 assert_contains "root without a system luajit reaches legacy and lists verbs" "$out" "lint"
 assert_eq "root never runs a luajit found on PATH" "$([ -e "$ENV_OUT" ] && echo ran || echo absent)" "absent"
-out="$(DEV_UID=0 PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" help 2>&1)"
+out="$(DEV_UID=0 PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" __verbs 2>&1)"
 assert_eq "root without a system luajit ignores an inherited DEV_UID" "$?" "0"
 rm -f "$ENV_OUT"
 out="$(PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_REC" help 2>&1)"
 assert_eq "root runs the luajit from the system directory" "$([ -e "$ENV_OUT" ] && echo ran || echo absent)" "ran"
 
-out="$(PATH="$NOLUA" "$DEV" bootstrap --help 2>&1)"
+out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --help 2>&1)"
 assert_eq "bootstrap --help without luajit exits 0" "$?" "0"
-assert_contains "bootstrap --help without luajit prints dev's own help" "$out" "dev bootstrap [--dry-run] [--no-login]"
+assert_contains "bootstrap --help without luajit reaches bootstrap.sh, which prints its own usage" "$out" "args: --help"
 for flag in -h --help -v -vv -vvv --verbose --remote; do
     rm -f "$ARGS_OUT"
     PATH="$RECORDER:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap "$flag" >/dev/null 2>&1
-    assert_eq "bootstrap $flag goes to main.lua" "$(cat "$ARGS_OUT")" "$REPO/dotfiles/bin/.local/bin/../share/dev/main.lua bootstrap $flag"
+    assert_eq "bootstrap $flag goes to main.lua" "$(cat "$ARGS_OUT")" "$SHARE_MAIN bootstrap $flag"
 done
 out="$(PATH="$RECORDER:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run -- --help 2>&1)"
 assert_contains "bootstrap routes its own arguments after --" "$out" "args: --dry-run -- --help"
@@ -161,6 +162,19 @@ ln -s "$DEV" "$TMP/with space/dev"
 out="$(cd "$REPO" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$TMP/with space/dev" help 2>&1)"
 assert_eq "a symlink under a path with a space runs" "$?" "0"
 assert_contains "the symlinked launcher lists verbs" "$out" "lint"
+
+NOPROJ="$TMP/noproj"
+mkdir -p "$NOPROJ"
+out="$(cd "$NOPROJ" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$TMP/with space/dev" help --topics 2>&1)"
+assert_contains "the symlinked launcher finds the built-in topics" "$out" "remote"
+
+CLONE="$TMP/a clone"
+mkdir -p "$CLONE/dotfiles/bin/.local/bin" "$CLONE/dotfiles/bin/.local/share"
+cp "$DEV" "$CLONE/dotfiles/bin/.local/bin/dev"
+cp -R "$REPO/dotfiles/bin/.local/share/dev" "$CLONE/dotfiles/bin/.local/share/dev"
+cp -R "$REPO/docs" "$CLONE/docs"
+out="$(cd "$NOPROJ" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$CLONE/dotfiles/bin/.local/bin/dev" help --topics 2>&1)"
+assert_contains "a clone under a path with a space finds the built-in topics" "$out" "remote"
 
 CIBIN="$TMP/cibin"
 CILOG="$TMP/ci.log"
