@@ -131,47 +131,47 @@ for root in "$PROJ" "$REPO"; do
 done
 
 # The topic check
-out="$(cd "$REPO" && DOTFILES="$REPO" "$DEV" __check-topics 2>&1)"
-assert_eq "__check-topics passes on the real topics" "$?" "0"
-assert_eq "__check-topics is silent when the topics pass" "$out" ""
-out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __check-topics 2>&1)"
-assert_eq "__check-topics passes on the fixture topics" "$?" "0"
+out="$(cd "$REPO" && DOTFILES="$REPO" "$DEV" __topics check 2>&1)"
+assert_eq "__topics check passes on the real topics" "$?" "0"
+assert_eq "__topics check is silent when the topics pass" "$out" ""
+out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __topics check 2>&1)"
+assert_eq "__topics check passes on the fixture topics" "$?" "0"
 
 check_topic() {
     printf '%s\n' "$2" >"$PROJ/.dev/topics/$1.md"
-    out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __check-topics 2>&1)"
+    out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __topics check 2>&1)"
     rc=$?
     rm "$PROJ/.dev/topics/$1.md"
 }
 check_topic badflag $'# badflag: Quotes a flag that does not exist\n\nRun `dev lint --bogus` to see it fail.'
-assert_eq "__check-topics fails on a made-up flag" "$rc" "1"
-assert_contains "__check-topics names the file and line of a made-up flag" "$out" ".dev/topics/badflag.md:3:"
-assert_contains "__check-topics names the made-up flag" "$out" "--bogus"
+assert_eq "__topics check fails on a made-up flag" "$rc" "1"
+assert_contains "__topics check names the file and line of a made-up flag" "$out" ".dev/topics/badflag.md:3:"
+assert_contains "__topics check names the made-up flag" "$out" "--bogus"
 check_topic badverb $'# badverb: Quotes a verb that does not exist\n\n```\ndev frobnicate\n```'
-assert_eq "__check-topics fails on a made-up verb" "$rc" "1"
-assert_contains "__check-topics names the file and line of a made-up verb" "$out" ".dev/topics/badverb.md:4:"
-assert_contains "__check-topics names the made-up verb" "$out" "frobnicate"
+assert_eq "__topics check fails on a made-up verb" "$rc" "1"
+assert_contains "__topics check names the file and line of a made-up verb" "$out" ".dev/topics/badverb.md:4:"
+assert_contains "__topics check names the made-up verb" "$out" "frobnicate"
 check_topic "bad name" $'# bad name: A topic whose name cannot be typed'
-assert_eq "__check-topics fails on an untypeable topic name" "$rc" "1"
-assert_contains "__check-topics explains the topic name" "$out" "the topic name must use only"
+assert_eq "__topics check fails on an untypeable topic name" "$rc" "1"
+assert_contains "__topics check explains the topic name" "$out" "the topic name must use only"
 check_topic stacked $'# stacked: Quotes stacked verbose flags\n\nRun `dev -vvv lint --fix`.'
-assert_eq "__check-topics accepts -vvv" "$rc" "0"
+assert_eq "__topics check accepts -vvv" "$rc" "0"
 printf '#!/usr/bin/env bash\n# Declares a reserved flag.\n# flags: --ok -h\n' >"$PROJ/.dev/reserved.sh"
 chmod +x "$PROJ/.dev/reserved.sh"
-out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __check-topics 2>&1)"
-assert_eq "__check-topics fails on a script that declares -h" "$?" "1"
-assert_contains "__check-topics names the script" "$out" ".dev/reserved.sh:1:"
+out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __topics check 2>&1)"
+assert_eq "__topics check fails on a script that declares -h" "$?" "1"
+assert_contains "__topics check names the script" "$out" ".dev/reserved.sh:1:"
 assert_contains "dev help warns about a reserved flag" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help reserved 2>&1)" "declares -h"
 rm "$PROJ/.dev/reserved.sh"
 check_topic subcheck $'# subcheck: Quotes noun subcommands\n\nRun `dev tools install --dry-run`.'
-assert_eq "__check-topics accepts a real noun subcommand with its flag" "$rc" "0"
+assert_eq "__topics check accepts a real noun subcommand with its flag" "$rc" "0"
 check_topic badsub $'# badsub: Quotes a subcommand the noun lacks\n\nRun `dev tools frob`.\n\n```\ndev tools frob\n```'
-assert_eq "__check-topics fails on a made-up subcommand of a built-in noun" "$rc" "1"
-assert_contains "__check-topics names the line and the bad subcommand" "$out" ".dev/topics/badsub.md:3: \`dev tools frob\`: dev tools has no subcommand frob"
-assert_contains "__check-topics checks a fenced subcommand too" "$out" ".dev/topics/badsub.md:6:"
+assert_eq "__topics check fails on a made-up subcommand of a built-in noun" "$rc" "1"
+assert_contains "__topics check names the line and the bad subcommand" "$out" ".dev/topics/badsub.md:3: \`dev tools frob\`: dev tools has no subcommand frob"
+assert_contains "__topics check checks a fenced subcommand too" "$out" ".dev/topics/badsub.md:6:"
 check_topic subflag $'# subflag: Quotes a flag the subcommand lacks\n\nRun `dev tools check --no-such-flag`.'
-assert_eq "__check-topics fails on a flag the subcommand lacks" "$rc" "1"
-assert_contains "__check-topics names the subcommand's missing flag" "$out" "dev tools check takes no flag --no-such-flag"
+assert_eq "__topics check fails on a flag the subcommand lacks" "$rc" "1"
+assert_contains "__topics check names the subcommand's missing flag" "$out" "dev tools check takes no flag --no-such-flag"
 printf '#!/usr/bin/env bash\n# group: Elsewhere\n# hidden\n# Ordered header lines.\n# flags: --late\n' >"$PROJ/.dev/ordered.sh"
 chmod +x "$PROJ/.dev/ordered.sh"
 listing="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help -a)"
@@ -181,16 +181,16 @@ assert_eq "the curated view omits it" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV"
 assert_eq "a flags line after group and hidden lines is read" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __flags ordered | sed -n 1p)" "--late"
 rm "$PROJ/.dev/ordered.sh"
 check_topic badnoun $'# badnoun: Quotes a subcommand that does not exist\n\nRun `dev widget zap`.'
-assert_eq "__check-topics fails on a made-up subcommand" "$rc" "1"
+assert_eq "__topics check fails on a made-up subcommand" "$rc" "1"
 check_topic badhead 'No heading here'
-assert_eq "__check-topics fails on a bad first line" "$rc" "1"
-assert_contains "__check-topics explains the first line" "$out" "the first line must be"
+assert_eq "__topics check fails on a bad first line" "$rc" "1"
+assert_contains "__topics check explains the first line" "$out" "the first line must be"
 check_topic lint '# lint: A topic named like a verb'
-assert_eq "__check-topics fails on a topic named like a verb" "$rc" "1"
-assert_contains "__check-topics names the verb collision" "$out" "is also a verb"
+assert_eq "__topics check fails on a topic named like a verb" "$rc" "1"
+assert_contains "__topics check names the verb collision" "$out" "is also a verb"
 check_topic flags '# flags: A project topic named like a built-in one'
-assert_eq "__check-topics fails on a topic that shadows a built-in" "$rc" "1"
-assert_contains "__check-topics names the built-in collision" "$out" "is also a built-in topic"
+assert_eq "__topics check fails on a topic that shadows a built-in" "$rc" "1"
+assert_contains "__topics check names the built-in collision" "$out" "is also a built-in topic"
 
 out="$(fixture_dev help nosuch)"
 assert_contains "help of an unknown name says so" "$out" "unknown verb nosuch, and no topic of that name"

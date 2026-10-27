@@ -17,30 +17,25 @@ function M.verbs(_, reg)
     return 0
 end
 
----Print `sub<TAB>origin<TAB>description` for each subcommand of the noun in `ctx.args[1]`.
+---Print `sub<TAB>origin<TAB>description` for each subcommand of the noun named by `ctx.args`, one word per level.
 ---@param ctx dev.Ctx the context
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0, with no output for a word that is not a noun
 function M.subs(ctx, reg)
-    local noun = ctx.args[1] or ""
-    if reg:is_noun(noun) then
-        for _, row in ipairs(reg:subs(noun)) do
-            io.write(row.words[2], "\t", row.kind, "\t", row.desc, "\n")
+    if reg:is_noun(ctx.args) then
+        for _, row in ipairs(reg:subs(ctx.args)) do
+            io.write(row.words[#row.words], "\t", row.kind, "\t", row.desc, "\n")
         end
     end
     return 0
 end
 
----Print the flags of the verb, and subcommand, in `ctx.args`, then the global flags.
+---Print the flags of the verb in `ctx.args`, one word per level, then the global flags.
 ---@param ctx dev.Ctx the context
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0
 function M.flags(ctx, reg)
-    local words = {}
-    for i = 1, math.min(#ctx.args, 2) do
-        words[i] = ctx.args[i]
-    end
-    for _, flag in ipairs(reg:flags(words)) do
+    for _, flag in ipairs(reg:flags(ctx.args)) do
         io.write(flag, "\n")
     end
     for _, flag in ipairs(registry.GLOBAL_FLAGS) do

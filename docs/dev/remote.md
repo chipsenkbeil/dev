@@ -20,7 +20,8 @@ is a usage error.
 
 With no override, the runner is `ci`. A verb runs the job of the same name from
 the project's default pipeline (`.ci/jobs.lua`), and `dev <noun> <sub>` runs the
-job `<noun>-<sub>`:
+job `<noun>.<sub>` (`<noun>.<sub>.<sub2>` one level deeper, a dot between
+every word):
 
 ```
 ci -C <root> run --local --follow --job <job> -- <args>

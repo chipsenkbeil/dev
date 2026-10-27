@@ -162,9 +162,14 @@ return {
         desc = "Replace a running box's lifetime, counted from now",
     },
     {
-        words = { "box", "install-tools" },
+        words = { "box", "tools" },
+        noun = true,
+        desc = "Work with a running box's tools",
+    },
+    {
+        words = { "box", "tools", "install" },
         handler = "lua",
-        usage = "dev box install-tools BOX [PROJECT...]",
+        usage = "dev box tools install BOX [PROJECT...]",
         desc = "Reinstall a running box's tools, for every project unless some are named",
     },
     {

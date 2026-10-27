@@ -27,15 +27,17 @@ local GLOBAL_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--detach" }
 ---@field script string? path of the project script behind the row
 ---@field lang "sh"|"lua"? language of that script
 
+---@class dev.Dir
+---@field scripts table<string, dev.Script> the scripts in the directory by name
+---@field order string[] names in `scripts` in listing order
+---@field subs string[] names of the directories inside it in listing order
+
 ---@class dev.Registry
 ---@field root string project root
 ---@field warn fun(message: string) receives each warning about a script's header
 ---@field private builtin table<string, dev.Builtin> built-in rows by name
----@field private builtin_subs table<string, dev.Builtin[]> built-in subcommand rows by noun
----@field private flat table<string, dev.Script> verb scripts in `.dev` by name
----@field private flat_order string[] names in `flat` in listing order
----@field private dirs table<string, {scripts: table<string, dev.Script>, order: string[]}> subcommand scripts by noun directory
----@field private dir_order string[] names in `dirs` in listing order
+---@field private builtin_subs table<string, dev.Builtin[]> built-in rows by the name of their parent noun
+---@field private dirs table<string, dev.Dir|false> the directories read so far by the space-joined words of the noun, `""` for `.dev`
 ---@field private headers table<string, dev.Header> parsed headers by script path
 ---@field private rows table<string, dev.Row|false> resolved verb rows by name
 local Registry = {}
@@ -122,29 +124,46 @@ function M.load(root, opts)
         builtin = {},
         builtin_subs = {},
         dirs = {},
-        dir_order = {},
         headers = {},
         rows = {},
     }, Registry)
     for _, row in ipairs(builtins) do
         self.builtin[table.concat(row.words, " ")] = row
-        if #row.words == 2 then
-            local subs = self.builtin_subs[row.words[1]] or {}
+        if #row.words > 1 then
+            local parent = table.concat(row.words, " ", 1, #row.words - 1)
+            local subs = self.builtin_subs[parent] or {}
             subs[#subs + 1] = row
-            self.builtin_subs[row.words[1]] = subs
-        end
-    end
-    local dev_dir = fs.join(root, ".dev")
-    self.flat, self.flat_order = scripts_in(dev_dir)
-    for _, name in ipairs(glob_names(dev_dir)) do
-        local path = fs.join(dev_dir, name)
-        if fs.is_dir(path) and not RESERVED_DIRS[name] then
-            local scripts, order = scripts_in(path)
-            self.dirs[name] = { scripts = scripts, order = order }
-            self.dir_order[#self.dir_order + 1] = name
+            self.builtin_subs[parent] = subs
         end
     end
     return self
+end
+
+function Registry:__dir(name)
+    local cached = self.dirs[name]
+    if cached ~= nil then
+        return cached or nil
+    end
+    local path = fs.join(self.root, ".dev", (name:gsub(" ", "/")))
+    if RESERVED_DIRS[name:match("^%S+")] or not fs.is_dir(path) then
+        local empty = name == "" and { scripts = {}, order = {}, subs = {} }
+        self.dirs[name] = empty or false
+        return empty
+    end
+    local scripts, order = scripts_in(path)
+    local subs = {}
+    for _, word in ipairs(glob_names(path)) do
+        if fs.is_dir(fs.join(path, word)) and not (name == "" and RESERVED_DIRS[word]) then
+            subs[#subs + 1] = word
+        end
+    end
+    local dir = { scripts = scripts, order = order, subs = subs }
+    self.dirs[name] = dir
+    return dir
+end
+
+function Registry:__flat(name)
+    return self:__dir("").scripts[name]
 end
 
 function Registry:__header(path, lang)
@@ -156,9 +175,20 @@ function Registry:__header(path, lang)
     return cached
 end
 
-function Registry:__has_subs(noun)
-    local dir = self.dirs[noun]
-    return dir ~= nil and has_visible(dir.scripts, dir.order)
+function Registry:__has_subs(name)
+    local dir = self:__dir(name)
+    if not dir then
+        return false
+    end
+    if has_visible(dir.scripts, dir.order) then
+        return true
+    end
+    for _, sub in ipairs(dir.subs) do
+        if sub:sub(1, 2) ~= "__" and self:__has_subs(name .. " " .. sub) then
+            return true
+        end
+    end
+    return false
 end
 
 function Registry:__noun_desc(noun)
@@ -166,7 +196,7 @@ function Registry:__noun_desc(noun)
     if builtin and builtin.desc ~= "" then
         return builtin.desc
     end
-    local first = fs.read(fs.join(self.root, ".dev", noun, "DESCRIPTION"))
+    local first = fs.read(fs.join(self.root, ".dev", (noun:gsub(" ", "/")), "DESCRIPTION"))
     local line = first and first:match("^[^\n]*") or ""
     if line ~= "" then
         return line
@@ -175,17 +205,47 @@ function Registry:__noun_desc(noun)
 end
 
 function Registry:__sub_names(noun)
-    local names = {}
+    local names, seen = {}, {}
     for _, builtin in ipairs(self.builtin_subs[noun] or {}) do
-        names[#names + 1] = builtin.words[2]
+        local word = builtin.words[#builtin.words]
+        seen[word] = true
+        names[#names + 1] = word
     end
-    local dir = self.dirs[noun]
-    for _, sub in ipairs(dir and dir.order or {}) do
-        if sub:sub(1, 2) ~= "__" and not self.builtin[noun .. " " .. sub] then
-            names[#names + 1] = sub
+    local dir = self:__dir(noun)
+    if dir then
+        for _, sub in ipairs(dir.order) do
+            if sub:sub(1, 2) ~= "__" and not seen[sub] then
+                seen[sub] = true
+                names[#names + 1] = sub
+            end
+        end
+        for _, sub in ipairs(dir.subs) do
+            if sub:sub(1, 2) ~= "__" and not seen[sub] and self:__has_subs(noun .. " " .. sub) then
+                seen[sub] = true
+                names[#names + 1] = sub
+            end
         end
     end
     return names
+end
+
+function Registry:__first_group(name)
+    local dir = self:__dir(name)
+    if not dir then
+        return nil
+    end
+    for _, sub in ipairs(dir.order) do
+        local h = self:__header(dir.scripts[sub].path, dir.scripts[sub].lang)
+        if h.group then
+            return h.group, h.hidden
+        end
+    end
+    for _, sub in ipairs(dir.subs) do
+        local group, hidden = self:__first_group(name .. " " .. sub)
+        if group then
+            return group, hidden
+        end
+    end
 end
 
 function Registry:__place(row)
@@ -196,13 +256,9 @@ function Registry:__place(row)
             local h = self:__header(row.script, row.lang)
             group, hidden = h.group or "", h.hidden
         elseif row.noun then
-            local dir = self.dirs[row.name]
-            for _, sub in ipairs(dir.order) do
-                local h = self:__header(dir.scripts[sub].path, dir.scripts[sub].lang)
-                if h.group then
-                    group, hidden = h.group, h.hidden
-                    break
-                end
+            local found, found_hidden = self:__first_group(row.name)
+            if found then
+                group, hidden = found, found_hidden
             end
         end
     end
@@ -221,7 +277,7 @@ function Registry:__verb(name)
     if cached ~= nil then
         return cached or nil
     end
-    local builtin, script = self.builtin[name], self.flat[name]
+    local builtin, script = self.builtin[name], self:__flat(name)
     local row
     if builtin then
         row = copy(builtin)
@@ -248,25 +304,41 @@ function Registry:__verb(name)
 end
 
 function Registry:__sub(noun, sub)
-    for _, builtin in ipairs(self.builtin_subs[noun.name] or {}) do
-        if builtin.words[2] == sub then
-            local row = copy(builtin)
-            row.name, row.kind, row.noun = noun.name .. " " .. sub, "builtin", false
-            row.group, row.hidden = noun.group, false
-            return row
-        end
+    local name = noun.name .. " " .. sub
+    local words = {}
+    for i, word in ipairs(noun.words) do
+        words[i] = word
     end
-    local dir = self.dirs[noun.name]
+    words[#words + 1] = sub
+    local builtin = self.builtin[name]
+    if builtin then
+        local row = copy(builtin)
+        row.name, row.kind, row.noun = name, "builtin", builtin.noun or false
+        row.group, row.hidden = noun.group, false
+        return row
+    end
+    local dir = self:__dir(noun.name)
     local script = dir and dir.scripts[sub]
     if script then
         return {
-            words = { noun.name, sub },
-            name = noun.name .. " " .. sub,
+            words = words,
+            name = name,
             kind = "local",
             noun = false,
             script = script.path,
             lang = script.lang,
             desc = self:__header(script.path, script.lang).desc,
+            group = noun.group,
+            hidden = false,
+        }
+    end
+    if dir and self:__has_subs(name) then
+        return {
+            words = words,
+            name = name,
+            kind = "local",
+            noun = true,
+            desc = self:__noun_desc(name),
             group = noun.group,
             hidden = false,
         }
@@ -278,7 +350,7 @@ end
 ---A project script replaces a built-in verb, never a built-in noun or a
 ---built-in subcommand, and a script `.dev/<verb>.<ext>` beats a directory of
 ---the same name. A `__` script is found here though `verbs` and `subs` list it.
----@param words string[] one word for a verb or noun, two for a noun's subcommand
+---@param words string[] one word for a verb or noun, then one for each level of subcommand
 ---@return dev.Row? row nil when nothing answers to the words
 function Registry:find(words)
     for _, word in ipairs(words) do
@@ -286,12 +358,14 @@ function Registry:find(words)
             return nil
         end
     end
-    if #words == 1 then
-        return self:__verb(words[1])
-    elseif #words == 2 then
-        local noun = self:__verb(words[1])
-        return noun and noun.noun and self:__sub(noun, words[2]) or nil
+    local row = words[1] and self:__verb(words[1])
+    for i = 2, #words do
+        if not (row and row.noun) then
+            return nil
+        end
+        row = self:__sub(row, words[i])
     end
+    return row
 end
 
 ---List the verbs and nouns.
@@ -306,12 +380,13 @@ function Registry:verbs()
             rows[#rows + 1] = self:__verb(builtin.words[1])
         end
     end
-    for _, name in ipairs(self.flat_order) do
+    local top = self:__dir("")
+    for _, name in ipairs(top.order) do
         if name:sub(1, 2) ~= "__" and not self.builtin[name] then
             rows[#rows + 1] = self:__verb(name)
         end
     end
-    for _, name in ipairs(self.dir_order) do
+    for _, name in ipairs(top.subs) do
         local row = name:sub(1, 2) ~= "__" and not self.builtin[name] and self:__verb(name)
         if row and row.noun then
             rows[#rows + 1] = row
@@ -321,33 +396,40 @@ function Registry:verbs()
 end
 
 ---List the subcommands of a noun.
----@param noun string the noun's name
----@return dev.Row[] rows the built-in subcommands, then the project's, none for a word that is not a noun
+---@param noun string|string[] the noun's words, or its name when it is one word
+---@return dev.Row[] rows the built-in subcommands, then the project's, none for words that are not a noun
 function Registry:subs(noun)
-    local parent = self:find({ noun })
+    local words = type(noun) == "string" and { noun } or noun
+    local parent = self:find(words)
     local rows = {}
     if not (parent and parent.noun) then
         return rows
     end
-    for _, sub in ipairs(self:__sub_names(noun)) do
+    for _, sub in ipairs(self:__sub_names(parent.name)) do
         rows[#rows + 1] = self:__sub(parent, sub)
     end
     return rows
 end
 
+local function collect(self, name, out, seen)
+    local dir = self:__dir(name)
+    if not dir or seen[dir] then
+        return
+    end
+    seen[dir] = true
+    for _, script in ipairs(dir.order) do
+        out[#out + 1] = dir.scripts[script]
+    end
+    for _, sub in ipairs(dir.subs) do
+        collect(self, name == "" and sub or name .. " " .. sub, out, seen)
+    end
+end
+
 ---List every script in `.dev` and in its noun directories, `__` helpers included.
----@return dev.Script[] scripts the scripts, the flat ones first
+---@return dev.Script[] scripts the scripts, each directory's own before the ones inside it
 function Registry:scripts()
     local out = {}
-    for _, name in ipairs(self.flat_order) do
-        out[#out + 1] = self.flat[name]
-    end
-    for _, noun in ipairs(self.dir_order) do
-        local dir = self.dirs[noun]
-        for _, name in ipairs(dir.order) do
-            out[#out + 1] = dir.scripts[name]
-        end
-    end
+    collect(self, "", out, {})
     return out
 end
 
@@ -359,10 +441,10 @@ function Registry:header(row)
 end
 
 ---Check whether a word is a noun.
----@param word string word to check
----@return boolean noun true for a built-in noun or a directory of scripts no flat script shadows
+---@param word string|string[] the words to check, or the name when it is one word
+---@return boolean noun true for a built-in noun or a directory of scripts no script of the same name shadows
 function Registry:is_noun(word)
-    local row = self:find({ word })
+    local row = self:find(type(word) == "string" and { word } or word)
     return row ~= nil and row.noun
 end
 

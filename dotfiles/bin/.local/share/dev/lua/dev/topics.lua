@@ -58,7 +58,7 @@ end
 
 local function has_sub(reg, noun, sub)
     for _, row in ipairs(reg:subs(noun)) do
-        if row.words[2] == sub then
+        if row.words[#row.words] == sub then
             return true
         end
     end
@@ -79,22 +79,24 @@ local function command_error(reg, line)
     if is_placeholder(name) or name:sub(1, 2) == "__" then
         return nil
     end
-    local sub
-    if reg:is_noun(name) then
-        local next_word = words[i + 1] or ""
-        if not is_placeholder(next_word) then
-            if not has_sub(reg, name, next_word) then
-                return string.format("dev %s has no subcommand %s", name, next_word)
-            end
-            sub = next_word
-            i = i + 1
-        end
-    elseif not reg:find({ name }) then
+    local path = { name }
+    if not reg:find(path) then
         return "no verb " .. name
     end
+    while reg:is_noun(path) do
+        local next_word = words[i + 1] or ""
+        if is_placeholder(next_word) then
+            break
+        end
+        if not has_sub(reg, path, next_word) then
+            return string.format("dev %s has no subcommand %s", table.concat(path, " "), next_word)
+        end
+        path[#path + 1] = next_word
+        i = i + 1
+    end
     local valid = {}
-    local shown = name .. (sub and " " .. sub or "")
-    for _, flag in ipairs(reg:flags({ name, sub })) do
+    local shown = table.concat(path, " ")
+    for _, flag in ipairs(reg:flags(path)) do
         valid[flag] = true
     end
     for j = i + 1, #words do

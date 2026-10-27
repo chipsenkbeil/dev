@@ -24,7 +24,7 @@ local HELPERS = {
     { "__subs", "List the subcommands of a noun, for shell completion" },
     { "__flags", "List the flags of a verb, for shell completion" },
     {
-        "__check-topics",
+        "__topics check",
         "Check the built-in and project topics against the real verbs and flags",
     },
 }
@@ -199,13 +199,14 @@ local function overview(ctx, reg, c, opts)
     return table.concat(out)
 end
 
-local function noun_text(reg, c, noun)
+local function noun_text(reg, c, words)
     local out = {}
-    local row = reg:find({ noun })
+    local noun = table.concat(words, " ")
+    local row = reg:find(words)
     out[#out + 1] = ui.paint(c, "dev " .. noun, Style.BOLD) .. "\n  " .. row.desc .. "\n"
     local subs = {}
-    for _, sub in ipairs(reg:subs(noun)) do
-        subs[#subs + 1] = { name = sub.words[2], origin = sub.kind, desc = sub.desc }
+    for _, sub in ipairs(reg:subs(words)) do
+        subs[#subs + 1] = { name = sub.words[#sub.words], origin = sub.kind, desc = sub.desc }
     end
     section(c, out, "subcommands", subs)
     out[#out + 1] = "\nRun `dev help " .. noun .. " <sub>` for a subcommand's flags and header.\n"
@@ -292,15 +293,6 @@ local function verb_text(ctx, reg, c, opts)
     return table.concat(out)
 end
 
-local function has_sub(reg, noun, sub)
-    for _, row in ipairs(reg:subs(noun)) do
-        if row.words[2] == sub then
-            return true
-        end
-    end
-    return false
-end
-
 ---Print the details of one verb or subcommand.
 ---
 ---An unknown name is a usage error of `dev help`, exit 2.
@@ -349,15 +341,16 @@ end
 
 ---Print a noun's description and its subcommands.
 ---@param reg dev.Registry the project's registry
----@param noun string the noun's name
+---@param noun string|string[] the noun's words, or its name when it is one word
 ---@param opts dev.help.NounOpts? where to print
 ---@return integer code 0
 function M.noun(reg, noun, opts)
     local c = screen()
+    local words = type(noun) == "string" and { noun } or noun
     if opts and opts.stderr then
-        stderr:write(noun_text(reg, c:stderr(), noun))
+        stderr:write(noun_text(reg, c:stderr(), words))
     else
-        io.write(noun_text(reg, c, noun))
+        io.write(noun_text(reg, c, words))
     end
     return 0
 end
@@ -414,16 +407,22 @@ function M.run(ctx, reg)
         else
             fail("unknown verb " .. first .. ", and no topic of that name")
         end
-    elseif #args == 2 then
-        if not reg:is_noun(first) then
-            fail(first .. " has no subcommands")
-        end
-        if not has_sub(reg, first, args[2]) then
-            fail("unknown subcommand " .. args[2] .. " of " .. first)
-        end
-        return M.verb(ctx, reg, { words = { first, args[2] } })
     else
-        fail("too many arguments, got " .. args[3])
+        local parent = { first }
+        for i = 2, #args do
+            if not reg:is_noun(parent) then
+                fail(table.concat(parent, " ") .. " has no subcommands")
+            end
+            parent[#parent + 1] = args[i]
+            if not reg:find(parent) then
+                parent[#parent] = nil
+                fail("unknown subcommand " .. args[i] .. " of " .. table.concat(parent, " "))
+            end
+        end
+        if reg:is_noun(args) then
+            return M.noun(reg, args)
+        end
+        return M.verb(ctx, reg, { words = args })
     end
     return 0
 end

@@ -311,25 +311,25 @@ assert_eq "extend refuses --ttl with --keep" "$?" "2"
 
 reset
 fx install-tools "$(jq -c '. + {installed: [{project: "myproject", manifest: true}, {project: "dotfiles", manifest: false}]}' <<<"$(doc "$RUNNING")")"
-out="$(box box install-tools myproject-k3x)"
-assert_eq "install-tools argv" "$(calls)" "ci box install-tools myproject-k3x --json"
-assert_eq "install-tools output" "$out" "myproject: tools installed
+out="$(box box tools install myproject-k3x)"
+assert_eq "tools install argv" "$(calls)" "ci box install-tools myproject-k3x --json"
+assert_eq "tools install output" "$out" "myproject: tools installed
 dotfiles: no .dev/tools.tsv, nothing installed"
 reset
 fx install-tools "$(doc "$RUNNING")"
-box box install-tools myproject-k3x myproject dotfiles >/dev/null 2>&1
-assert_eq "install-tools sends projects after --" "$(calls)" "ci box install-tools myproject-k3x --json -- myproject dotfiles"
-out="$(box box install-tools myproject-k3x --project x 2>&1)"
-assert_eq "install-tools refuses the removed --project" "$?" "2"
+box box tools install myproject-k3x myproject dotfiles >/dev/null 2>&1
+assert_eq "tools install sends projects after --" "$(calls)" "ci box install-tools myproject-k3x --json -- myproject dotfiles"
+out="$(box box tools install myproject-k3x --project x 2>&1)"
+assert_eq "tools install refuses the removed --project" "$?" "2"
 reset
 fx install-tools '{"ok":false,"error":{"code":"bad_state","message":"Box ci-abc is stopped, and only a running box can have its tools installed","state":"stopped"}}' 6
-out="$(box box install-tools ci-abc 2>&1)"
-assert_eq "install-tools on a stopped box exits with ci's 6" "$?" "6"
-assert_eq "install-tools passes ci's message on" "$out" "dev box install-tools: Box ci-abc is stopped, and only a running box can have its tools installed"
+out="$(box box tools install ci-abc 2>&1)"
+assert_eq "tools install on a stopped box exits with ci's 6" "$?" "6"
+assert_eq "tools install passes ci's message on" "$out" "dev box tools install: Box ci-abc is stopped, and only a running box can have its tools installed"
 reset
-out="$(box box install-tools 2>&1)"
-assert_eq "install-tools needs a box name" "$?" "2"
-assert_eq "ci is not called for install-tools without a name" "$(calls)" ""
+out="$(box box tools install 2>&1)"
+assert_eq "tools install needs a box name" "$?" "2"
+assert_eq "ci is not called for tools install without a name" "$(calls)" ""
 
 reset
 fx delete "$(doc "$(jq -c '.state = "deleted" | .archive = {path: "/var/lib/devbox-archive/x.tar.gz", bytes: 5, created_at: "2026-10-20T00:00:00Z"}' <<<"$STOPPED")")"
@@ -609,14 +609,14 @@ out="$(box help)"
 assert_contains "dev help lists box" "$out" "box "
 assert_contains "dev help lists connect" "$out" "connect "
 out="$(box help box)"
-for sub in ls create show stop resume extend install-tools delete connect; do
+for sub in ls create show stop resume extend tools delete connect; do
     assert_contains "dev help box lists $sub" "$out" "  $sub "
 done
 out="$(box help box create)"
 assert_contains "create help states the default lifetime" "$out" "4 hours"
 assert_contains "create help names the target and shape" "$out" "--target T] [--shape S]"
 assert_contains "create help lists --keep" "$out" "--keep"
-assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend install-tools delete connect"
+assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend tools delete connect"
 assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --by --ttl --keep -v --verbose -vv --remote --detach"
 assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
 assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"
@@ -625,14 +625,22 @@ TOPICPROJ="$TMP/topicproj"
 mkdir -p "$TOPICPROJ/.dev/topics" "$TOPICPROJ/.git"
 FENCE="$(printf '\140\140\140')"
 printf '%s\n' '# frob: scratch' '' "$FENCE" 'dev box ls --all' 'dev box frob' 'dev box ls --nope' "$FENCE" >"$TOPICPROJ/.dev/topics/frob.md"
-out="$(cd "$TOPICPROJ" && "$DEV" __check-topics 2>&1)"
-assert_eq "__check-topics fails on a bad box line" "$?" "1"
-assert_contains "__check-topics names the bad box subcommand" "$out" "dev box has no subcommand frob"
-assert_contains "__check-topics names the bad box flag" "$out" "dev box ls takes no flag --nope"
-assert_not_contains "__check-topics accepts a good box line" "$out" "--all"
+out="$(cd "$TOPICPROJ" && "$DEV" __topics check 2>&1)"
+assert_eq "__topics check fails on a bad box line" "$?" "1"
+assert_contains "__topics check names the bad box subcommand" "$out" "dev box has no subcommand frob"
+assert_contains "__topics check names the bad box flag" "$out" "dev box ls takes no flag --nope"
+assert_not_contains "__topics check accepts a good box line" "$out" "--all"
 out="$(box box frobnicate 2>&1)"
 assert_eq "an unknown box subcommand exits 2" "$?" "2"
 assert_contains "an unknown box subcommand is named" "$out" "dev box: unknown subcommand frobnicate"
+
+out="$(box box install-tools myproject-k3x 2>&1)"
+assert_eq "box install-tools is no longer a subcommand" "$?" "2"
+assert_contains "box install-tools is unknown" "$out" "dev box: unknown subcommand install-tools"
+out="$(box help box tools)"
+assert_contains "dev help box tools lists install" "$out" "  install "
+assert_eq "__subs box tools lists install" "$(box __subs box tools | cut -f1)" "install"
+assert_eq "__flags box tools install has no flag of its own" "$(box __flags box tools install | sed -n 1p)" "-v"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

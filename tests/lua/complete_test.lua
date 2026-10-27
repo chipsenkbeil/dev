@@ -45,19 +45,23 @@ t.test("__subs lists a noun's subcommands and nothing for a word that is not a n
     fs.remove(root, { recursive = true })
 end)
 
-t.test("__flags lists the verb's flags, then the global ones, and ignores a third word", function()
-    local root = project({ ["a.lua"] = "--[[\nA.\nflags: --ok\n]]\nreturn 0\n" })
-    t.eq(dev(root, { "__flags", "a" }), "--ok\n" .. GLOBAL_TAIL)
-    t.eq(dev(root, { "__flags", "box", "ls", "extra" }), "--all\n" .. GLOBAL_TAIL)
-    t.eq(dev(root, { "__flags", "nope" }), GLOBAL_TAIL)
-    t.eq(dev(root, { "__flags" }), GLOBAL_TAIL)
-    fs.remove(root, { recursive = true })
-end)
+t.test(
+    "__flags lists the verb's flags, then the global ones, and takes a word per level",
+    function()
+        local root = project({ ["a.lua"] = "--[[\nA.\nflags: --ok\n]]\nreturn 0\n" })
+        t.eq(dev(root, { "__flags", "a" }), "--ok\n" .. GLOBAL_TAIL)
+        t.eq(dev(root, { "__flags", "box", "ls" }), "--all\n" .. GLOBAL_TAIL)
+        t.eq(dev(root, { "__flags", "box", "ls", "extra" }), GLOBAL_TAIL)
+        t.eq(dev(root, { "__flags", "nope" }), GLOBAL_TAIL)
+        t.eq(dev(root, { "__flags" }), GLOBAL_TAIL)
+        fs.remove(root, { recursive = true })
+    end
+)
 
-t.test("__check-topics reports a .lua flags line with -h and exits 1", function()
+t.test("__topics check reports a .lua flags line with -h and exits 1", function()
     local root = project({ ["a.lua"] = "--[[\nA.\nflags: -h\n]]\nreturn 0\n" })
     local out, code = devos.capture(
-        { "luajit", MAIN, "__check-topics" },
+        { "luajit", MAIN, "__topics", "check" },
         { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF } }
     )
     t.eq(code, 1)
@@ -67,12 +71,12 @@ t.test("__check-topics reports a .lua flags line with -h and exits 1", function(
     fs.remove(root, { recursive = true })
 end)
 
-t.test("__check-topics checks the built-in topics in the dotfiles clone itself", function()
+t.test("__topics check checks the built-in topics in the dotfiles clone itself", function()
     local root = project({ ["a.lua"] = "--[[\nA.\n]]\nreturn 0\n" })
     assert(fs.mkdir(root .. "/docs/dev", { parents = true }))
     assert(fs.write(root .. "/docs/dev/bad.md", "# bad: A topic\n\n`dev nope`\n"))
     local out, code = devos.capture(
-        { "luajit", MAIN, "__check-topics" },
+        { "luajit", MAIN, "__topics", "check" },
         { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF, DOTFILES = fs.realpath(root) } }
     )
     t.eq(code, 1)
@@ -80,13 +84,13 @@ t.test("__check-topics checks the built-in topics in the dotfiles clone itself",
     fs.remove(root, { recursive = true })
 end)
 
-t.test("__check-topics skips the built-in topics when DOTFILES names another directory", function()
+t.test("__topics check skips the built-in topics when DOTFILES names another directory", function()
     local root = project({ ["a.lua"] = "--[[\nA.\n]]\nreturn 0\n" })
     local other = support.tempdir()
     assert(fs.mkdir(other .. "/docs/dev", { parents = true }))
     assert(fs.write(other .. "/docs/dev/bad.md", "# bad: A topic\n\n`dev nope`\n"))
     local out, code = devos.capture(
-        { "luajit", MAIN, "__check-topics" },
+        { "luajit", MAIN, "__topics", "check" },
         { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF, DOTFILES = fs.realpath(other) } }
     )
     t.eq({ out, code }, { "", 0 })

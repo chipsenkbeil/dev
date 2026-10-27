@@ -17,6 +17,15 @@ built-in noun (`dev tools`) keeps its subcommands: a project script never
 replaces them, but it can add new ones. A noun with no subcommand, or an
 unknown one, exits 2 and lists the subcommands.
 
+Nouns nest to any depth: `.dev/<noun>/<sub>/<sub2>.sh` runs as
+`dev <noun> <sub> <sub2>`, and a directory of scripts inside a noun is a noun
+too, with its own `DESCRIPTION`, listing and exit 2. `dev help`,
+`dev __subs` and `dev __flags` take one word per level.
+
+A command word has no hyphen. A hyphen reads as two words, so a name such as
+`install-tools` is a noun and a subcommand (`dev box tools install`). Flags
+keep their hyphens.
+
 The first line of `.dev/<noun>/DESCRIPTION` describes the noun. Without it,
 `dev help` lists the subcommand names.
 
@@ -40,7 +49,7 @@ Scripts named `__*.sh` never appear in any listing.
 
 A `.md` file in `.dev/topics/` is a topic, shown by `dev help <topic>`. Its
 first line is `# <name>: <summary>`, where the name is the file name. Run
-`dev __check-topics` to check the format, the names and every quoted `dev`
+`dev __topics check` to check the format, the names and every quoted `dev`
 line.
 
 dev refuses to run any project script as root.

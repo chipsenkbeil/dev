@@ -34,7 +34,7 @@ local HIDDEN_HELPERS = {
     __verbs = complete.verbs,
     __subs = complete.subs,
     __flags = complete.flags,
-    ["__check-topics"] = complete.check_topics,
+    ["__topics check"] = complete.check_topics,
 }
 
 ---@class dev.cli
@@ -211,10 +211,29 @@ local function help_flag(rest, after)
     end
 end
 
-local function noun_usage_error(reg, name, message)
-    stderr:write("dev ", name, ": ", message, "\n\n")
-    help.noun(reg, name, { stderr = true })
+local function noun_usage_error(reg, words, message)
+    stderr:write("dev ", table.concat(words, " "), ": ", message, "\n\n")
+    help.noun(reg, words, { stderr = true })
     os.exit(2)
+end
+
+local function hidden_helper(args, project_root, reg)
+    local name = args[1]
+    if name == "__topics" then
+        local sub = args[2]
+        if sub ~= "check" then
+            local message = sub and ("unknown subcommand " .. sub) or "needs a subcommand"
+            stderr:write("dev __topics: ", message, "\n")
+            os.exit(2)
+        end
+        name = "__topics check"
+    end
+    local run = HIDDEN_HELPERS[name]
+    if run then
+        local from = name == "__topics check" and 3 or 2
+        local ctx = { name = name, words = { name }, root = project_root, args = tail(args, from) }
+        os.exit(run(ctx, reg))
+    end
 end
 
 local function refuse_untaken(ctx, reg)
@@ -289,30 +308,27 @@ function M.main(argv)
     end
     local project_root = project.root()
     local reg = registry.load(project_root)
-    if HIDDEN_HELPERS[name] then
-        local helper_ctx =
-            { name = name, words = { name }, root = project_root, args = tail(args, 2) }
-        os.exit(HIDDEN_HELPERS[name](helper_ctx, reg))
-    end
+    hidden_helper(args, project_root, reg)
     local words, rest = { name }, tail(args, 2)
     local row = reg:find(words)
-    if row and row.noun then
+    while row and row.noun do
         local first = rest[1]
-        local sub = first
-            and first ~= "help"
-            and not first:find("^__")
-            and not is_help(first)
-            and reg:find({ name, first })
+        local sub
+        if first and first ~= "help" and not first:find("^__") and not is_help(first) then
+            words[#words + 1] = first
+            sub = reg:find(words)
+            words[#words] = nil
+        end
         if not sub then
             if not first then
-                noun_usage_error(reg, name, "needs a subcommand")
+                noun_usage_error(reg, words, "needs a subcommand")
             end
             if first == "help" or help_flag(rest, parsed.after) then
-                os.exit(help.noun(reg, name))
+                os.exit(help.noun(reg, words))
             end
-            noun_usage_error(reg, name, "unknown subcommand " .. first)
+            noun_usage_error(reg, words, "unknown subcommand " .. first)
         end
-        words[2] = first
+        words[#words + 1] = first
         row, rest = sub, tail(rest, 2)
     end
     local ctx = {

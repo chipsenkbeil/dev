@@ -65,7 +65,7 @@ t.test("the curated view lists a project verb and its topics, and -a adds the he
     t.ok(out:find("\n  t +A topic: with a colon\n"), out)
     out = dev(root, { "help", "-a" })
     t.ok(out:find("\nHidden\n", 1, true), out)
-    t.ok(out:find("  __check-topics ", 1, true), out)
+    t.ok(out:find("  __topics check ", 1, true), out)
     t.ok(out:find("\n  q +Quiet%.\n"), out)
     t.eq(dev(root, { "help", "-k", "t" }), "# t: A topic: with a colon\n\nbody\n")
     t.eq(
@@ -95,7 +95,7 @@ t.test("a topic that shares a verb's name is reported by the topic check", funct
         ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n",
         ["topics/a.md"] = "# a: A topic named like a verb\n",
     })
-    local out, code = dev(root, { "__check-topics" })
+    local out, code = dev(root, { "__topics", "check" })
     t.eq(code, 1)
     t.ok(out:find("topic a is also a verb", 1, true), out)
 end)

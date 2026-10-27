@@ -29,7 +29,7 @@ it.
 
 `-h` and `--help` are reserved for help on every verb, in any position,
 but only before a `--`. A script never sees them there, and so cannot
-declare them in its `# flags:` line (`dev __check-topics` reports one
+declare them in its `# flags:` line (`dev __topics check` reports one
 that does). Everything after a `--` reaches the verb verbatim, so
 `dev run -- -h` runs `cargo run -- -h`.
 

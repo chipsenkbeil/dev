@@ -21,7 +21,7 @@ local MACHINE_VERBS = {
     connect = true,
 }
 local MACHINE_NOUNS = { tools = true, box = true, board = true, pi = true, antinote = true }
-local JOB_NAME = "^[A-Za-z0-9_-]+$"
+local JOB_NAME = "^[A-Za-z0-9_.-]+$"
 
 ---@class dev.remote.Run
 ---@field words string[] the command words, a noun and its subcommand as two
@@ -75,7 +75,7 @@ end
 ---@return integer code
 function M.ci_runner(run, opts)
     local pipeline = opts.pipeline
-    local job = table.concat(run.words, "-")
+    local job = table.concat(run.words, ".")
     if not job:find(JOB_NAME) then
         verb.die("dev: --remote needs a job name, not " .. table.concat(run.words, " "))
     end

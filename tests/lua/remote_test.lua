@@ -32,7 +32,7 @@ jobs)
     if [ "$2" = bootstrap ]; then
         printf '{"jobs":[{"name":"bootstrap"}]}\n'
     else
-        printf '{"jobs":[{"name":"test"},{"name":"widget-save"}]}\n'
+        printf '{"jobs":[{"name":"test"},{"name":"widget.save"},{"name":"n.m.x"}]}\n'
     fi
     ;;
 run)
@@ -102,10 +102,10 @@ t.test("--detach without --remote is a usage error", function()
     t.eq(log, "")
 end)
 
-t.test("a noun and its subcommand are one hyphenated job", function()
+t.test("a noun and its subcommand are one job named with a dot", function()
     local root, base = setup({ ["widget/save.sh"] = "#!/usr/bin/env bash\ntrue\n" })
     local _, _, log = dev(root, base, { "--remote", "widget", "save" })
-    t.ok(log:find("[--job] [widget-save]", 1, true), log)
+    t.ok(log:find("[--job] [widget.save]", 1, true), log)
 end)
 
 t.test("ci's exit code is dev's", function()
@@ -243,9 +243,9 @@ t.test("-- before the verb or noun still names the job", function()
     t.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [a]\n")
     _, code, log = dev(root, base, { "--remote", "--", "widget", "save" })
     t.eq(code, 0)
-    t.ok(log:find("[--job] [widget-save] [--]", 1, true), log)
+    t.ok(log:find("[--job] [widget.save] [--]", 1, true), log)
     _, code, log = dev(root, base, { "--remote", "widget", "--", "save" })
-    t.ok(log:find("[--job] [widget-save] [--]", 1, true), log)
+    t.ok(log:find("[--job] [widget.save] [--]", 1, true), log)
 end)
 
 t.test("-- before a machine-local noun is still refused", function()
@@ -321,4 +321,11 @@ t.test("the project's __remote.lua keeps -v and -vv for the ci echo", function()
     end
     local out = dev(root, base, { "--remote", "test" })
     t.ok(not out:find("+ ci", 1, true), out)
+end)
+
+t.test("a noun nested two deep is one job with a dot between each word", function()
+    local root, base = setup({ ["n/m/x.sh"] = "#!/usr/bin/env bash\ntrue\n" })
+    local _, code, log = dev(root, base, { "--remote", "n", "m", "x" })
+    t.eq(code, 0)
+    t.ok(log:find("[--job] [n.m.x]", 1, true), log)
 end)

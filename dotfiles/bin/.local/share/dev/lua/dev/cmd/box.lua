@@ -82,7 +82,7 @@ local State, Exit = M.State, M.Exit
 ---@field box dev.cmd.box.Box? the box a one-box subcommand answers about
 ---@field boxes dev.cmd.box.Box[]? the boxes `ls` lists
 ---@field cap dev.cmd.box.Cap? the cap `ls` reports
----@field installed dev.cmd.box.Installed[]? the projects `install-tools` handled
+---@field installed dev.cmd.box.Installed[]? the projects `ci box install-tools` handled
 
 ---@class dev.cmd.box.Args
 ---@field target string? the `--target` value
@@ -674,7 +674,7 @@ M.handlers["box extend"] = function(ctx)
     return 0
 end
 
-M.handlers["box install-tools"] = function(ctx)
+M.handlers["box tools install"] = function(ctx)
     local parsed = M.parse(ctx, {})
     if #parsed.pos == 0 then
         verb.usage_error(ctx, "needs a box name")
@@ -689,7 +689,7 @@ M.handlers["box install-tools"] = function(ctx)
         end
     end
     M.need_ci()
-    local installed = M.call("install-tools", args).installed or {}
+    local installed = M.call("tools install", args).installed or {}
     if #installed == 0 then
         print("no projects")
     end
