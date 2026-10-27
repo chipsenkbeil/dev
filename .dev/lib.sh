@@ -38,22 +38,6 @@ SRC_DIR="${SRC_DIR:-$ROOT/dotfiles}"
 TARGET_DIR="${TARGET_DIR:-$HOME}"
 export SRC_DIR TARGET_DIR
 
-LUA_ROOTS=(dotfiles/bin/.local/share/dev/lua dotfiles/bin/.local/share/dev/main.lua tests/lua)
-
-# shellcheck disable=SC2034
-LUA_LINT_DIR=dotfiles/claude/.claude/skills/style/lint/lua
-
-collect_lua_files() {
-    LUA_FILES=()
-    local root f
-    for root in "${LUA_ROOTS[@]}"; do
-        [ -e "$root" ] || continue
-        while IFS= read -r f; do
-            LUA_FILES+=("$f")
-        done < <(find "$root" -type f -name '*.lua' | sort)
-    done
-}
-
 STOW_WEB_BIN=https://ftp.gnu.org/gnu/stow/stow-2.4.1.tar.gz
 STOW_ARCHIVE=stow.tar.gz
 STOW_DIR=stow-2.4.1

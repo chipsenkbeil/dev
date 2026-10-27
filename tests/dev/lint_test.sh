@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pure-bash tests for .dev/lint.sh and the style skill's Rust and Lua lint.sh, each run on scratch files.
+# Pure-bash tests for .dev/lint.lua and the style skill's Rust and Lua lint.sh, each run on scratch files.
 # Each script is copied into a temp tree, so the repo is never linted, and the style sets run on stubbed tools.
 set -o pipefail
 
@@ -8,8 +8,13 @@ REPO="$(cd "$DIR/../.." && pwd)"
 export RIPGREP_CONFIG_PATH=/dev/null
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/.dev" "$TMP/scripts" "$TMP/tests" "$TMP/dotfiles/bin" "$TMP/dotfiles/jj/.config/jj/scripts"
-cp "$REPO/.dev/lint.sh" "$REPO/.dev/lib.sh" "$TMP/.dev/"
+DEV="$REPO/dotfiles/bin/.local/bin/dev"
+LUA_STYLE=dotfiles/claude/.claude/skills/style/lint
+mkdir -p "$TMP/.dev/lua/dotfiles" "$TMP/scripts" "$TMP/tests" "$TMP/dotfiles/bin" "$TMP/dotfiles/jj/.config/jj/scripts" "$TMP/$LUA_STYLE"
+cp "$REPO/.dev/lint.lua" "$TMP/.dev/"
+cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/.dev/lua/dotfiles/"
+cp -R "$REPO/$LUA_STYLE/lua" "$TMP/$LUA_STYLE/"
+cp "$REPO/$LUA_STYLE/lint-lib.sh" "$TMP/$LUA_STYLE/"
 cp "$REPO/scripts/helpers.sh" "$TMP/scripts/helpers.sh"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n    echo ok\nfi\n' >"$TMP/scripts/clean.sh"
 
@@ -47,9 +52,9 @@ assert_not_contains() {
     esac
 }
 
-# lint: run the copied lint script, capturing stdout and stderr together.
+# lint: run dev lint on the scratch tree, capturing stdout and stderr together.
 lint() {
-    bash "$TMP/.dev/lint.sh" 2>&1
+    (cd "$TMP" && "$DEV" lint 2>&1)
 }
 
 out="$(lint)"
@@ -88,6 +93,20 @@ rc=$?
 assert_eq "a [[ ]] assertion ending in || false passes" "$rc" "0"
 assert_not_contains "a [[ ]] inside a command string passes" "$out" "tests/bare.bats"
 rm "$TMP/tests/bare.bats"
+
+if command -v selene >/dev/null 2>&1; then
+    printf 'local unused = 1\n' >"$TMP/.dev/x.lua"
+    out="$(lint)"
+    rc=$?
+    assert_eq "a lua violation under .dev exits non-zero" "$((rc != 0))" "1"
+    assert_contains "a lua violation under .dev is named by selene" "$out" ".dev/x.lua"
+    rm "$TMP/.dev/x.lua"
+    out="$(lint)"
+    rc=$?
+    assert_eq "the tree passes again once the .dev violation is gone" "$rc" "0"
+else
+    printf 'skip - the .dev lua violation (needs selene)\n'
+fi
 
 STYLE="$REPO/dotfiles/claude/.claude/skills/style/lint"
 STUBS="$TMP/stubs"
