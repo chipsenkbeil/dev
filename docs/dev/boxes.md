@@ -85,7 +85,7 @@ tmux command, which checks the same host keys.
 When ci exits non-zero with an `{"ok":false}` document, dev prints
 `dev box <sub>: <message>` to stderr and exits with ci's code (2 to 11).
 Other output passes through. `dev box delete` asks on `/dev/tty` unless you
-pass `-y`, and exits 2 with no terminal. `dev --ci` refuses `box` and `connect`.
+pass `-y`, and exits 2 with no terminal. `dev --remote` refuses `box` and `connect`.
 
 `dev box delete --no-archive` deletes the box without archiving its projects,
 so anything not pushed is lost, and its question says so.

@@ -6,7 +6,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
 export DOTFILES="$REPO"
-unset VERBOSE DEV_CI
+unset VERBOSE DEV_REMOTE
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -113,9 +113,9 @@ out="$(run_fetch "$lua" fetch)"
 assert_eq "a lua project exits 1" "$?" "1"
 assert_contains "a lua project gets the unsupported message" "$out" "dev: no built-in fetch for lua projects, add .dev/fetch.sh"
 
-out="$(run_fetch "$plain" --ci fetch)"
-assert_eq "--ci fetch exits 2" "$?" "2"
-assert_contains "--ci names fetch" "$out" "dev fetch: --ci cannot run this verb"
+out="$(run_fetch "$plain" --remote fetch)"
+assert_eq "--remote fetch exits 2" "$?" "2"
+assert_contains "--remote names fetch" "$out" "dev fetch: runs on this machine only, so --remote does not apply"
 
 out="$(run_fetch "$deny" help fetch)"
 assert_contains "help fetch shows the fetch command" "$out" "env CARGO_NET_OFFLINE=false cargo fetch --locked"

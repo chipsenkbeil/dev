@@ -318,11 +318,11 @@ if [ "$REAL_ROOT" = 0 ]; then
     assert_contains "an unknown tools subcommand is named" "$out" "dev tools: unknown subcommand frobnicate"
     out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
     assert_contains "dev help lists the tools noun" "$out" "tools"
-    out="$(cd "$proj" && "$DEV" --ci tools install 2>&1)"
-    assert_eq "--ci refuses tools install" "$?" "2"
-    assert_contains "--ci names the refused subcommand" "$out" "dev tools install: --ci cannot run this verb"
-    out="$(cd "$proj" && "$DEV" --ci tools check 2>&1)"
-    assert_eq "--ci refuses tools check" "$?" "2"
+    out="$(cd "$proj" && "$DEV" --remote tools install 2>&1)"
+    assert_eq "--remote refuses tools install" "$?" "2"
+    assert_contains "--remote names the refused subcommand" "$out" "dev tools install: runs on this machine only, so --remote does not apply"
+    out="$(cd "$proj" && "$DEV" --remote tools check 2>&1)"
+    assert_eq "--remote refuses tools check" "$?" "2"
 else
     skip_user
 fi

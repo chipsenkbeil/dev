@@ -329,7 +329,8 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 -v
 --verbose
 -vv
---ci"
+--remote
+--detach"
 out="$(run_dev "$rust" __flags sync)"
 assert_eq "__flags sync" "$out" "--check
 --yes
@@ -337,10 +338,11 @@ assert_eq "__flags sync" "$out" "--check
 -v
 --verbose
 -vv
---ci"
+--remote
+--detach"
 out="$(run_dev "$rust" help sync)"
 assert_contains "help sync lists --yes" "$out" "--yes"
-assert_contains "help <verb> mentions the global flags" "$out" "-v, -vv and --ci work anywhere"
+assert_contains "help <verb> mentions the global flags" "$out" "Global flags:"
 out="$(run_dev "$rust" help install)"
 assert_contains "help <verb> shows the script header" "$out" ".dev/install.sh header"
 out="$(run_dev "$rust" help build)"
@@ -872,7 +874,8 @@ assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
 -v
 --verbose
 -vv
---ci"
+--remote
+--detach"
 assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
 printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/widget.sh"
 chmod +x "$nn/.dev/widget.sh"
@@ -886,18 +889,24 @@ out="$(run_dev "$nn_none" help)"
 assert_not_contains "a directory named like a built-in verb is not a noun" "$out" "  x "
 assert_not_contains "a directory with no scripts is not a noun" "$out" "empty"
 
-# --ci
+# --remote
 cistubs="$TMP/cistubs"
 mkdir -p "$cistubs"
 cat >"$cistubs/ci" <<'STUB'
 #!/usr/bin/env bash
-if [ "$1" = -C ]; then shift 2; fi
+root=""
+if [ "$1" = -C ]; then
+    root="$2"
+    shift 2
+fi
 case "$1" in
 jobs) printf '{"jobs":[{"name":"lint","oses":["linux-base"]},{"name":"test","oses":["linux-base"]},{"name":"widget-save","oses":["linux-base"]}]}\n' ;;
 run)
-echo "ci $* (in $PWD)" >>"$STUB_LOG"
-exit "${CI_STUB_RC:-0}"
-;;
+    printf 'ci -C %s' "$root" >>"$STUB_LOG"
+    printf ' [%s]' "$@" >>"$STUB_LOG"
+    printf '\n' >>"$STUB_LOG"
+    exit "${CI_STUB_RC:-0}"
+    ;;
 esac
 STUB
 chmod +x "$cistubs/ci"
@@ -913,47 +922,83 @@ mkdir -p "$cip/.ci" "$sub"
 printf 'return {}\n' >"$cip/.ci/jobs.lua"
 git -C "$cip" init -q
 
-out="$(cirun "$sub" --ci lint 2>&1)"
-assert_eq "--ci runs the job through ci from the project root" "$out" ""
-assert_eq "--ci passes the pipeline, job and follow flags" "$(log)" "ci run --local --job lint -f (in $cip)"
-cirun "$cip" lint --ci >/dev/null 2>&1
-assert_contains "--ci works after the verb" "$(log)" "ci run --local --job lint -f"
-DEV_CI=1 cirun "$cip" test >/dev/null 2>&1
-assert_contains "DEV_CI=1 counts as --ci" "$(log)" "ci run --local --job test -f"
-DEV_CI=0 cirun "$cip" lint >/dev/null 2>&1
-assert_not_contains "DEV_CI=0 runs locally" "$(log)" "ci run"
-CI_STUB_RC=7 cirun "$cip" --ci test >/dev/null 2>&1
-assert_eq "--ci exits with ci's status" "$?" "7"
+out="$(cirun "$sub" --remote lint 2>&1)"
+assert_eq "--remote runs the job through ci from the project root" "$out" ""
+assert_eq "--remote passes the root, job and follow flags" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--]"
+cirun "$cip" lint --remote >/dev/null 2>&1
+assert_contains "--remote works after the verb" "$(log)" "[--follow] [--job] [lint]"
+DEV_REMOTE=1 cirun "$cip" test >/dev/null 2>&1
+assert_contains "DEV_REMOTE=1 counts as --remote" "$(log)" "[--job] [test]"
+DEV_REMOTE=0 cirun "$cip" lint >/dev/null 2>&1
+assert_not_contains "DEV_REMOTE=0 runs locally" "$(log)" "[run]"
+CI_STUB_RC=7 cirun "$cip" --remote test >/dev/null 2>&1
+assert_eq "--remote exits with ci's status" "$?" "7"
+cirun "$cip" --remote test -- a "b c" "\$(x)" >/dev/null 2>&1
+assert_contains "--remote hands the arguments after -- over as separate words" "$(log)" "[--job] [test] [--] [a] [b c] [\$(x)]"
+cirun "$cip" test --remote -- a >/dev/null 2>&1
+assert_contains "--remote after the verb passes the same arguments" "$(log)" "[--job] [test] [--] [a]"
+cirun "$cip" --remote --detach test >/dev/null 2>&1
+assert_contains "--detach replaces --follow" "$(log)" "[--detach] [--job] [test]"
+assert_not_contains "--detach drops --follow" "$(log)" "[--follow]"
+out="$(cirun "$cip" --detach test 2>&1)"
+assert_eq "--detach without --remote exits 2" "$?" "2"
+assert_contains "--detach without --remote says so" "$out" "--detach needs --remote"
+assert_eq "--detach without --remote runs nothing" "$(log)" ""
 
-out="$(cirun "$cip" --ci build 2>&1)"
-assert_eq "--ci with no such job exits 1" "$?" "1"
-assert_contains "--ci with no such job hints at the pipeline" "$out" "no job named build in the project's default pipeline (.ci/jobs.lua), add one"
-assert_eq "--ci with no such job runs nothing" "$(log)" ""
-out="$(cirun "$cip" --ci lint --extra 2>&1)"
-assert_eq "--ci refuses extra arguments with 2" "$?" "2"
-assert_contains "--ci names the extra argument" "$out" "passes no arguments to the job, got --extra"
+out="$(cirun "$cip" --remote build 2>&1)"
+assert_eq "--remote with no such job exits 1" "$?" "1"
+assert_contains "--remote with no such job hints at the pipeline" "$out" "no job named build in the project's default pipeline (.ci/jobs.lua), add one"
+assert_eq "--remote with no such job runs nothing" "$(log)" ""
+out="$(cirun "$cip" --remote lint --extra 2>&1)"
+assert_eq "--remote refuses arguments before -- with 2" "$?" "2"
+assert_contains "--remote names the extra argument" "$out" "--remote passes arguments to the job only after --, got --extra"
+out="$(cirun "$cip" --ci lint 2>&1)"
+assert_eq "--ci is refused with 2" "$?" "2"
+assert_contains "--ci says it was renamed" "$out" "dev: --ci was renamed --remote"
+assert_eq "--ci runs nothing" "$(log)" ""
+out="$(DEV_CI=1 cirun "$cip" lint 2>&1)"
+assert_eq "DEV_CI is refused with 2" "$?" "2"
+assert_contains "DEV_CI says it was renamed" "$out" "dev: DEV_CI was renamed DEV_REMOTE"
+assert_eq "DEV_CI runs nothing" "$(log)" ""
 
 mkdir -p "$cip/.dev/widget"
 printf '#!/usr/bin/env bash\necho x\n' >"$cip/.dev/widget/save.sh"
 chmod +x "$cip/.dev/widget/save.sh"
-cirun "$cip" --ci widget save >/dev/null 2>&1
-assert_contains "--ci maps a subcommand to the job noun-sub" "$(log)" "ci run --local --job widget-save -f"
-out="$(cirun "$cip" widget --ci zap 2>&1)"
-assert_eq "--ci with an unknown subcommand exits 2" "$?" "2"
-assert_contains "--ci with an unknown subcommand names it" "$out" "unknown subcommand zap"
+cirun "$cip" --remote widget save >/dev/null 2>&1
+assert_contains "--remote maps a subcommand to the job noun-sub" "$(log)" "[--job] [widget-save]"
+out="$(cirun "$cip" widget --remote zap 2>&1)"
+assert_eq "--remote with an unknown subcommand exits 2" "$?" "2"
+assert_contains "--remote with an unknown subcommand names it" "$out" "unknown subcommand zap"
 for verb in install uninstall restow sync setup fmt fetch help init push pull; do
-    out="$(cirun "$cip" --ci "$verb" 2>&1)"
-    assert_eq "--ci refuses $verb with 2" "$?" "2"
-    assert_contains "--ci names the refused verb $verb" "$out" "dev $verb: --ci cannot run this verb"
+    out="$(cirun "$cip" --remote "$verb" 2>&1)"
+    assert_eq "--remote refuses $verb with 2" "$?" "2"
+    assert_contains "--remote names the refused verb $verb" "$out" "dev $verb: runs on this machine only, so --remote does not apply"
 done
 for flag in -h --help; do
-    out="$(cirun "$cip" --ci "$flag" 2>&1)"
-    assert_eq "--ci $flag is refused like help" "$?" "2"
-    assert_contains "--ci $flag names help" "$out" "dev help: --ci cannot run this verb"
+    out="$(cirun "$cip" --remote "$flag" 2>&1)"
+    assert_eq "--remote $flag is refused like help" "$?" "2"
+    assert_contains "--remote $flag names help" "$out" "dev help: runs on this machine only, so --remote does not apply"
 done
 assert_eq "a refused verb runs nothing" "$(log)" ""
 out="$(cirun "$cip" help)"
-assert_contains "help mentions --ci" "$out" "--ci"
+assert_contains "help mentions --remote" "$out" "--remote"
+
+printf '#!/usr/bin/env bash\nexit 99\n' >"$cip/.dev/lint.sh"
+chmod +x "$cip/.dev/lint.sh"
+mkdir -p "$cip/.dev"
+cat >"$cip/.dev/__remote.lua" <<'LUA'
+return function(run)
+    io.write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
+    return 5
+end
+LUA
+out="$(cirun "$cip" --remote lint -- a 'b c' 2>&1)"
+assert_eq "a __remote.lua runner's integer is the exit code" "$?" "5"
+assert_eq "a __remote.lua runner gets words, args, detach and root" "$out" "lint|a,b c|false|$cip"
+assert_eq "a __remote.lua runner replaces ci" "$(log)" ""
+out="$(cirun "$cip" --remote --detach lint 2>&1)"
+assert_contains "a __remote.lua runner sees --detach" "$out" "|true|"
+rm "$cip/.dev/__remote.lua"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

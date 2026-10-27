@@ -45,4 +45,4 @@ from a repo outside the distribution.
 dev runs `scripts/pkg.sh` from the dotfiles clone that holds dev, from the
 project root. `DOTFILES` overrides where that clone is found. A project
 script cannot replace the `tools` subcommands, so the root step of an image
-build never runs project code. `dev --ci` refuses every `tools` subcommand.
+build never runs project code. `dev --remote` refuses every `tools` subcommand.

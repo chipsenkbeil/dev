@@ -7,7 +7,7 @@ set -o pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
-unset DOTFILES VERBOSE DEV_CI LOGNAME
+unset DOTFILES VERBOSE DEV_REMOTE LOGNAME
 export USER=tester
 
 TMP="$(mktemp -d)"
@@ -604,12 +604,12 @@ assert_not_contains "no et without an ssh user" "$(calls)" "et --ssh-option"
 
 # --- dispatch ---
 
-out="$(box --ci box ls 2>&1)"
-assert_eq "--ci refuses box ls" "$?" "2"
-assert_contains "--ci names the refused subcommand" "$out" "dev box ls: --ci cannot run this verb"
-out="$(box --ci connect 2>&1)"
-assert_eq "--ci refuses connect" "$?" "2"
-assert_contains "--ci names connect" "$out" "dev connect: --ci cannot run this verb"
+out="$(box --remote box ls 2>&1)"
+assert_eq "--remote refuses box ls" "$?" "2"
+assert_contains "--remote names the refused subcommand" "$out" "dev box ls: runs on this machine only, so --remote does not apply"
+out="$(box --remote connect 2>&1)"
+assert_eq "--remote refuses connect" "$?" "2"
+assert_contains "--remote names connect" "$out" "dev connect: runs on this machine only, so --remote does not apply"
 out="$(box help)"
 assert_contains "dev help lists box" "$out" "box "
 assert_contains "dev help lists connect" "$out" "connect "
@@ -622,7 +622,7 @@ assert_contains "create help states the default lifetime" "$out" "4 hours"
 assert_contains "create help names the target and shape" "$out" "--target T] [--shape S]"
 assert_contains "create help lists --keep" "$out" "--keep"
 assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend install-tools delete connect"
-assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --by --ttl --keep -v --verbose -vv --ci"
+assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --by --ttl --keep -v --verbose -vv --remote --detach"
 assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
 assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"
 assert_eq "__flags box ls" "$(box __flags box ls | sed -n 1p)" "--all"

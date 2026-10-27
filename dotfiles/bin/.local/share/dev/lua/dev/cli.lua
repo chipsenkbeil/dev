@@ -39,11 +39,21 @@ end
 ---@class dev.cli.Parsed
 ---@field args string[] the arguments with the global flags removed
 ---@field after integer how many of them came after a `--`
----@field ci boolean whether `--ci` or `DEV_CI` asks for the pipeline job
+---@field remote boolean whether `--remote` or `DEV_REMOTE` asks for a remote run
+---@field detach boolean whether `--detach` was given
 ---@field level integer the verbosity before the trace file is checked
 
+local function renamed(old, new)
+    stderr:write("dev: ", old, " was renamed ", new, "\n")
+    os.exit(2)
+end
+
 local function parse(argv)
-    local parsed = { args = {}, after = 0, ci = enabled(os.getenv("DEV_CI") or "") }
+    local parsed =
+        { args = {}, after = 0, remote = enabled(os.getenv("DEV_REMOTE") or ""), detach = false }
+    if (os.getenv("DEV_CI") or "") ~= "" then
+        renamed("DEV_CI", "DEV_REMOTE")
+    end
     local count = 0
     for i, word in ipairs(argv) do
         if word == "--" then
@@ -55,7 +65,11 @@ local function parse(argv)
         elseif word == "--verbose" then
             count = count + 1
         elseif word == "--ci" then
-            parsed.ci = true
+            renamed("--ci", "--remote")
+        elseif word == "--remote" then
+            parsed.remote = true
+        elseif word == "--detach" then
+            parsed.detach = true
         elseif word:find("^%-v+$") then
             count = count + #word - 1
         else
@@ -66,8 +80,8 @@ local function parse(argv)
     return parsed
 end
 
-local function goes_to_legacy(name, ci)
-    return LEGACY_ONLY[name] and not (name == "help" and ci)
+local function goes_to_legacy(name, remote_run)
+    return LEGACY_ONLY[name] and not (name == "help" and remote_run)
 end
 
 local function root_gate(args)
@@ -174,13 +188,17 @@ end
 ---@return nil
 function M.main(argv)
     local parsed = parse(argv)
+    if parsed.detach and not parsed.remote then
+        stderr:write("dev: --detach needs --remote\n")
+        os.exit(2)
+    end
     root_gate(parsed.args)
     local args = parsed.args
     local name = args[1] or "help"
     if name == "-h" or name == "--help" then
         name = "help"
     end
-    if goes_to_legacy(name, parsed.ci) then
+    if goes_to_legacy(name, parsed.remote) then
         legacy(argv)
     end
     local root = project.root()
@@ -206,8 +224,10 @@ function M.main(argv)
         vars = {},
         verbose = parsed.level,
     }
-    if parsed.ci then
-        remote.ci(ctx)
+    if parsed.remote then
+        os.exit(
+            remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), parsed.detach)
+        )
     end
     if row and row.script then
         run_script(row, ctx, rest)

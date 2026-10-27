@@ -1,14 +1,16 @@
-# flags: The global flags -v, -vv and --ci, and how help flags work
+# flags: The global flags -v, -vv, --remote and --detach, and how help flags work
 
-Three flags work anywhere before a `--` on the line, whatever the verb.
+Four flags work anywhere before a `--` on the line, whatever the verb.
 
 - `-v` or `--verbose`: print each command before it runs, and export
   `VERBOSE=1` to it.
 - `-vv`: also trace every line of dev and of each bash script it runs, which
   exports `VERBOSE=2`.
-- `--ci`: run the verb's job of the same name from the project's default
-  pipeline (`.ci/jobs.lua`) on example-box, through
-  `ci run --local --job <verb> -f`.
+- `--remote`: run the command on a remote runner, by default the verb's job of
+  the same name from the project's default pipeline (`.ci/jobs.lua`) on
+  example-box through ci. `DEV_REMOTE=1` in the environment is the same.
+- `--detach`: with `--remote`, start the job and return. Alone it is a usage
+  error.
 
 `-v` and `-vv` also stack as `-vvv` (the count is capped at 2). Setting
 `VERBOSE` in the environment counts the same, where empty, `no` and `false`
@@ -17,17 +19,11 @@ mean off and any other word means 1.
 ```
 dev -v lint
 dev -vv test
-dev --ci test
+dev --remote test
 ```
 
-## --ci
-
-`--ci` exits with the job's status and never falls back to a local run. It
-refuses a verb with no job of that name and any extra argument. It also
-refuses the machine-local verbs install, uninstall, restow, sync, setup, fmt,
-fetch, help, init, push and pull, and the nouns tools, cargo, pi and antinote. A
-subcommand `dev --ci <noun> <sub>` runs the job named `<noun>-<sub>`.
-`DEV_CI=1` in the environment is the same as the flag.
+`dev help remote` explains the runner, the refusals and how a project replaces
+it.
 
 ## Help flags
 

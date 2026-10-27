@@ -8,5 +8,9 @@ flags
   Save the widget.
   flags: --now
 
--v, -vv and --ci work anywhere on the line, see `dev help flags`.
+Global flags:
+  -v          print each command before it runs
+  -vv         also trace every line of dev and of each bash script
+  --remote    run this command on a remote runner, see `dev help remote`
+  --detach    with --remote, start the job and return
 exit 0

@@ -8,7 +8,7 @@ REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
 FIXTURES="$DIR/fixtures"
 SNAPSHOTS="$FIXTURES/help-snapshots"
-unset VERBOSE DEV_CI
+unset VERBOSE DEV_REMOTE
 export NO_COLOR=1
 
 TMP="$(mktemp -d)"

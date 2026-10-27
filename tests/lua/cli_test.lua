@@ -108,15 +108,21 @@ t.test("the root gate refuses a verb other than tools install and check", functi
     t.eq(out, "dev: as root, dev runs only on Linux\n")
 end)
 
-t.test("--ci refuses a machine-local verb and an unknown subcommand is a usage error", function()
-    local root = project({ ["v.lua"] = "@v.lua" })
-    local out, code = dev(root, { "--ci", "fmt" })
-    t.eq(code, 2)
-    t.ok(out:find("dev fmt: --ci cannot run this verb", 1, true), out)
-    out, code = dev(root, { "tools", "zap" })
-    t.eq(code, 2)
-    t.ok(out:find("dev tools: unknown subcommand zap", 1, true), out)
-end)
+t.test(
+    "--remote refuses a machine-local verb and an unknown subcommand is a usage error",
+    function()
+        local root = project({ ["v.lua"] = "@v.lua" })
+        local out, code = dev(root, { "--remote", "fmt" })
+        t.eq(code, 2)
+        t.ok(
+            out:find("dev fmt: runs on this machine only, so --remote does not apply", 1, true),
+            out
+        )
+        out, code = dev(root, { "tools", "zap" })
+        t.eq(code, 2)
+        t.ok(out:find("dev tools: unknown subcommand zap", 1, true), out)
+    end
+)
 
 t.test("a noun runs its subcommand script and refuses a __ helper", function()
     local root = project({

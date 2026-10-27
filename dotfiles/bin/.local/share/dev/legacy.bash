@@ -748,7 +748,11 @@ help_verb() {
         builtin_commands "$verb" "$type" | sed 's/^/  /'
     fi
 
-    printf "\n-v, -vv and --ci work anywhere on the line, see \`dev help flags\`.\n"
+    printf "\nGlobal flags:\n"
+    printf "  -v          print each command before it runs\n"
+    printf "  -vv         also trace every line of dev and of each bash script\n"
+    printf "  --remote    run this command on a remote runner, see \`dev help remote\`\n"
+    printf "  --detach    with --remote, start the job and return\n"
 }
 
 cmd_deploy() {
@@ -829,7 +833,7 @@ topic_command_error() {
     local -a words
     local i=1 verb sub="" word valid
     read -r -a words <<<"$1"
-    while [[ "${words[i]:-}" =~ ^(-v+|--verbose|--ci)$ ]]; do i=$((i + 1)); done
+    while [[ "${words[i]:-}" =~ ^(-v+|--verbose|--remote|--detach)$ ]]; do i=$((i + 1)); done
     verb=${words[i]:-}
     case "$verb" in
     "" | "<"* | "["* | -* | __*) return 0 ;;
@@ -862,7 +866,7 @@ topic_command_error() {
         word=${word%%\]*}
         word=${word%%=*}
         case "$word" in
-        -- | -h | --help | --verbose | --ci) ;;
+        -- | -h | --help | --verbose | --remote | --detach) ;;
         -*)
             if [[ "$word" =~ ^-v+$ ]]; then continue; fi
             if ! has_line "$valid" "$word"; then
@@ -2713,7 +2717,7 @@ main() {
             break
             ;;
         --verbose) count=$((count + 1)) ;;
-        --ci) ;;
+        --remote | --detach) ;;
         -v*)
             if [[ "$1" =~ ^-v+$ ]]; then
                 count=$((count + ${#1} - 1))
@@ -2775,7 +2779,7 @@ main() {
         ;;
     __flags)
         verb_flags "${1:-}${2:+ $2}"
-        printf '%s\n' -v --verbose -vv --ci
+        printf '%s\n' -v --verbose -vv --remote --detach
         return 0
         ;;
     __check-topics)

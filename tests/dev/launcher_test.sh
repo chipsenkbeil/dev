@@ -106,7 +106,7 @@ assert_eq "root runs the luajit from the system directory" "$([ -e "$ENV_OUT" ] 
 out="$(PATH="$NOLUA" "$DEV" bootstrap --help 2>&1)"
 assert_eq "bootstrap --help without luajit exits 0" "$?" "0"
 assert_contains "bootstrap --help without luajit prints dev's own help" "$out" "dev bootstrap [--dry-run] [--no-login]"
-for flag in -h --help -v -vv -vvv --verbose --ci; do
+for flag in -h --help -v -vv -vvv --verbose --remote; do
     rm -f "$ARGS_OUT"
     PATH="$RECORDER:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap "$flag" >/dev/null 2>&1
     assert_eq "bootstrap $flag goes to main.lua" "$(cat "$ARGS_OUT")" "$REPO/dotfiles/bin/.local/bin/../share/dev/main.lua bootstrap $flag"
@@ -119,9 +119,8 @@ out="$(cd "$REPO" && PATH="$REALPATH" "$DEV" bootstrap --help 2>&1)"
 assert_contains "bootstrap --help prints dev's own help" "$out" "dev bootstrap [--dry-run] [--no-login]"
 out="$(cd "$REPO" && PATH="$REALPATH" "$DEV" bootstrap -h 2>&1)"
 assert_contains "bootstrap -h prints dev's own short help" "$out" "dev bootstrap [--dry-run] [--no-login]"
-out="$(cd "$REPO" && PATH="$REALPATH" "$DEV" bootstrap --ci 2>&1)"
-assert_eq "--ci refuses bootstrap with exit 2" "$?" "2"
-assert_contains "--ci names bootstrap as machine-local" "$out" "dev bootstrap: --ci cannot run this verb"
+out="$(cd "$REPO" && PATH="$REALPATH" "$DEV" bootstrap --remote 2>&1)"
+assert_eq "--remote does not refuse bootstrap, which has a job" "$(printf '%s' "$out" | grep -c "runs on this machine only")" "0"
 out="$(cd "$REPO" && PATH="$REALPATH" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap -v --dry-run 2>&1)"
 assert_contains "bootstrap -v is a global flag and still reaches bootstrap.sh" "$out" "args: --dry-run"
 
@@ -162,6 +161,90 @@ ln -s "$DEV" "$TMP/with space/dev"
 out="$(cd "$REPO" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$TMP/with space/dev" help 2>&1)"
 assert_eq "a symlink under a path with a space runs" "$?" "0"
 assert_contains "the symlinked launcher lists verbs" "$out" "lint"
+
+CIBIN="$TMP/cibin"
+CILOG="$TMP/ci.log"
+PROJ="$TMP/ciproj"
+BOOT_MARK="$TMP/boot-marker"
+mkdir -p "$CIBIN" "$PROJ/.dev/widget"
+cat >"$CIBIN/ci" <<'STUB'
+#!/bin/sh
+echo "ci $*" >>"$CI_LOG"
+[ "$3" = jobs ] && echo '{"jobs":[]}'
+exit 0
+STUB
+chmod +x "$CIBIN/ci"
+printf '#!/bin/sh\ntouch "%s"\n' "$BOOT_MARK" >"$FAKE_DOTFILES/bootstrap.sh"
+printf '#!/bin/sh\ntouch "%s"\n' "$TMP/widget-marker" >"$PROJ/.dev/widget/save.sh"
+chmod +x "$PROJ/.dev/widget/save.sh"
+export CI_LOG="$CILOG"
+CIPATH="$CIBIN:$TMP/realjit:$NOLUA:/usr/bin:/bin"
+
+# ran_nothing <desc>: the ci log and the markers are all absent.
+ran_nothing() {
+    local seen=absent
+    if [ -e "$CILOG" ] || [ -e "$BOOT_MARK" ] || [ -e "$TMP/widget-marker" ]; then seen=ran; fi
+    assert_eq "$1 ran nothing" "$seen" "absent"
+    rm -f "$CILOG" "$BOOT_MARK" "$TMP/widget-marker"
+}
+
+renamed_flag='dev: --ci was renamed --remote'
+renamed_env='dev: DEV_CI was renamed DEV_REMOTE'
+rm -f "$CILOG" "$BOOT_MARK" "$TMP/widget-marker"
+for words in "bootstrap --ci" "help --ci" "-v lint --ci" "widget save --ci"; do
+    # shellcheck disable=SC2086
+    out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" "$DEV" $words 2>&1)"
+    assert_eq "dev $words exits 2" "$?" "2"
+    assert_eq "dev $words says --ci was renamed" "$out" "$renamed_flag"
+    ran_nothing "dev $words"
+done
+out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_CI=1 "$DEV" bootstrap 2>&1)"
+assert_eq "DEV_CI=1 dev bootstrap exits 2" "$?" "2"
+assert_eq "DEV_CI=1 dev bootstrap says DEV_CI was renamed" "$out" "$renamed_env"
+ran_nothing "DEV_CI=1 dev bootstrap"
+out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=1 "$DEV" bootstrap 2>&1)"
+assert_eq "DEV_REMOTE=1 dev bootstrap goes through main.lua and finds no job" "$?" "1"
+assert_contains "DEV_REMOTE=1 dev bootstrap names the missing job" "$out" "dev: no job named bootstrap"
+assert_eq "DEV_REMOTE=1 dev bootstrap did not run bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "absent"
+assert_eq "DEV_REMOTE=1 dev bootstrap ran no ci job" "$(grep -c " run " "$CILOG")" "0"
+rm -f "$CILOG"
+out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=0 "$DEV" bootstrap 2>&1)"
+assert_eq "DEV_REMOTE=0 dev bootstrap still runs bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "ran"
+rm -f "$CILOG" "$BOOT_MARK"
+
+NOJIT="$CIBIN:$NOLUA"
+out="$(cd "$PROJ" && PATH="$NOJIT" "$DEV" lint --ci 2>&1)"
+assert_eq "no luajit, dev lint --ci exits 2" "$?" "2"
+assert_eq "no luajit, dev lint --ci says --ci was renamed" "$out" "$renamed_flag"
+out="$(cd "$PROJ" && PATH="$NOJIT" DEV_CI=1 "$DEV" lint 2>&1)"
+assert_eq "no luajit, DEV_CI=1 dev lint exits 2" "$?" "2"
+assert_eq "no luajit, DEV_CI=1 dev lint says DEV_CI was renamed" "$out" "$renamed_env"
+ran_nothing "no luajit"
+remote_missing='dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit or dnf install luajit'
+out="$(cd "$PROJ" && PATH="$NOJIT" "$DEV" lint --remote 2>&1)"
+assert_eq "no luajit, dev lint --remote exits 1" "$?" "1"
+assert_eq "no luajit, dev lint --remote says --remote needs luajit" "$out" "$remote_missing"
+ran_nothing "no luajit with --remote"
+out="$(cd "$PROJ" && PATH="$NOJIT" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=1 "$DEV" bootstrap -v 2>&1)"
+assert_eq "no luajit, DEV_REMOTE=1 dev bootstrap -v exits 1" "$?" "1"
+assert_eq "no luajit, DEV_REMOTE=1 dev bootstrap -v says --remote needs luajit" "$out" "$remote_missing"
+out="$(cd "$PROJ" && PATH="$NOJIT" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --verbose --remote 2>&1)"
+assert_eq "no luajit, dev bootstrap --verbose --remote exits 1" "$?" "1"
+ran_nothing "no luajit, a remote bootstrap with -v runs no bootstrap.sh"
+
+for words in "--remote tools install" "lint --detach"; do
+    # shellcheck disable=SC2086
+    out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" "$LC_NONE" $words 2>&1)"
+    assert_eq "root without luajit, dev $words exits 2" "$?" "2"
+    assert_eq "root without luajit, dev $words gets the root refusal" "$out" "dev: as root, dev runs only tools install and tools check"
+    ran_nothing "root without luajit, dev $words"
+done
+out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" DEV_REMOTE=1 "$LC_NONE" tools check 2>&1)"
+assert_eq "root without luajit, DEV_REMOTE=1 exits 2" "$?" "2"
+assert_eq "root without luajit, DEV_REMOTE=1 gets the root refusal" "$out" "dev: as root, dev runs only tools install and tools check"
+out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" DEV_CI=1 "$LC_NONE" tools check 2>&1)"
+assert_eq "root without luajit, DEV_CI=1 says DEV_CI was renamed" "$out" "$renamed_env"
+ran_nothing "root without luajit, DEV_REMOTE and DEV_CI"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

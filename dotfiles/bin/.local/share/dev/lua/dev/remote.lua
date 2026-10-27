@@ -1,4 +1,5 @@
 local devos = require("dev.os")
+local fs = require("dev.fs")
 local json = require("dev.json")
 local verb = require("dev.verb")
 
@@ -18,18 +19,33 @@ local MACHINE_VERBS = {
     pull = true,
     guide = true,
     connect = true,
-    bootstrap = true,
 }
-local MACHINE_NOUNS = { tools = true, box = true, cargo = true, pi = true, antinote = true }
+local MACHINE_NOUNS = { tools = true, box = true, pi = true, antinote = true }
 local JOB_NAME = "^[A-Za-z0-9_-]+$"
+
+---@class dev.remote.Run
+---@field words string[] the command words, a noun and its subcommand as two
+---@field args string[] the arguments after `--`, untouched
+---@field detach boolean whether `--detach` was given
+---@field root string absolute path of the project root
 
 ---@class dev.remote
 local M = {}
 
-local function has_job(ctx, job)
-    local out, code = devos.capture({ "ci", "-C", ctx.root, "jobs", "--json" }, { stderr = "null" })
+local function has_job(root, job)
+    local errfile = fs.mktemp({ prefix = "dev-remote" })
+    local out, code = devos.capture({ "ci", "-C", root, "jobs", "--json" }, { stderr = errfile })
+    local detail = errfile and fs.read(errfile) or ""
+    if errfile then
+        fs.remove(errfile)
+    end
     local doc = code == 0 and json.decode(out)
-    for _, entry in ipairs(type(doc) == "table" and type(doc.jobs) == "table" and doc.jobs or {}) do
+    if code ~= 0 or type(doc) ~= "table" or type(doc.jobs) ~= "table" then
+        detail = detail:gsub("%s+$", "")
+        stderr:write("dev: ci jobs failed", detail ~= "" and (": " .. detail) or "", "\n")
+        os.exit(code ~= 0 and code or 1)
+    end
+    for _, entry in ipairs(doc.jobs) do
         if type(entry) == "table" and entry.name == job then
             return true
         end
@@ -37,41 +53,105 @@ local function has_job(ctx, job)
     return false
 end
 
----Run a verb's job from the project's default pipeline on the fleet.
----
----The job of a subcommand is named `noun-sub`. It exits with the job's status
----and never falls back to a local run.
----@param ctx dev.Ctx the verb's context, whose `args` are every argument after the verb
----@return nil
-function M.ci(ctx)
-    local name = ctx.name
-    if MACHINE_VERBS[name] or MACHINE_NOUNS[ctx.words[1]] then
-        verb.usage_error(ctx, "--ci cannot run this verb, it works on this machine")
+local function trace(argv, verbosity)
+    if verbosity >= 1 then
+        stderr:write("+ ", table.concat(argv, " "), "\n")
     end
-    local job = name:gsub(" ", "-")
+end
+
+local function ci_runner(run, verbosity)
+    local job = table.concat(run.words, "-")
     if not job:find(JOB_NAME) then
-        verb.usage_error(ctx, "--ci needs a job name, not " .. name)
-    end
-    if #ctx.args > 0 then
-        verb.usage_error(ctx, "--ci passes no arguments to the job, got " .. ctx.args[1])
+        verb.die("dev: --remote needs a job name, not " .. table.concat(run.words, " "))
     end
     if not devos.which("ci") then
         stderr:write("WARNING: ci not found. Install with: dev install from the ci repo\n")
-        os.exit(1)
+        return 1
     end
-    if not has_job(ctx, job) then
+    if not has_job(run.root, job) then
         verb.die(
             "dev: no job named "
                 .. job
-                .. " in the project's default pipeline (.ci/jobs.lua), add one to run it with --ci"
+                .. " in the project's default pipeline (.ci/jobs.lua), add one to run it with --remote"
         )
     end
-    local argv = { "ci", "run", "--local", "--job", job, "-f" }
-    if ctx.verbose >= 1 then
-        stderr:write("+ ", table.concat(argv, " "), "\n")
+    local argv = {
+        "ci",
+        "-C",
+        run.root,
+        "run",
+        "--local",
+        run.detach and "--detach" or "--follow",
+        "--job",
+        job,
+        "--",
+    }
+    for _, word in ipairs(run.args) do
+        argv[#argv + 1] = word
     end
-    local _, message = devos.exec(argv, { cwd = ctx.root })
-    verb.die("dev: cannot run ci: " .. message)
+    trace(argv, verbosity)
+    local code = devos.run(argv)
+    if code == nil then
+        verb.die("dev: cannot run ci")
+    end
+    return code
+end
+
+local function file_runner(path, run)
+    local source, reason = fs.read(path)
+    if not source then
+        verb.die("dev: cannot read " .. path .. ": " .. tostring(reason))
+    end
+    local chunk, message = load(source, "=" .. path)
+    local ok, runner = false, message
+    if chunk then
+        ok, runner = pcall(chunk)
+    end
+    if not ok then
+        verb.die("dev: " .. tostring(runner))
+    end
+    if type(runner) ~= "function" then
+        verb.die("dev: " .. path .. " must return a function")
+    end
+    local done, code = pcall(runner, run)
+    if not done then
+        verb.die("dev: " .. tostring(code))
+    end
+    if code == nil then
+        return 0
+    end
+    if type(code) ~= "number" or code % 1 ~= 0 then
+        verb.die("dev: " .. path .. " returned " .. tostring(code) .. ", not an exit code")
+    end
+    return code % 256
+end
+
+---Run a command somewhere else and return its exit code.
+---
+---The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
+---machine-local verb is refused whatever the runner. Arguments before a `--`
+---are a usage error, since only the arguments after it reach the job.
+---@param ctx dev.Ctx the command's context, whose `args` are every argument after the command words
+---@param words string[] the command words
+---@param args string[] the arguments after `--`
+---@param detach boolean whether to start the job and return
+---@return integer code the runner's exit code
+function M.run(ctx, words, args, detach)
+    if MACHINE_VERBS[words[1]] or MACHINE_NOUNS[words[1]] then
+        verb.usage_error(ctx, "runs on this machine only, so --remote does not apply")
+    end
+    if #ctx.args > #args then
+        verb.usage_error(
+            ctx,
+            "--remote passes arguments to the job only after --, got " .. ctx.args[1]
+        )
+    end
+    local run = { words = words, args = args, detach = detach, root = ctx.root }
+    local override = ctx.root .. "/.dev/__remote.lua"
+    if fs.is_file(override) then
+        return file_runner(override, run)
+    end
+    return ci_runner(run, ctx.verbose)
 end
 
 return M

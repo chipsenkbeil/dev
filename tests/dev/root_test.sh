@@ -111,6 +111,33 @@ for verb in push lint fetch init foo test tools "tools frobnicate" help -h --hel
     assert_eq "root dev '$verb' runs no jj or git" "$(cat "$VCSLOG")" ""
 done
 
+if [ "$REAL_ROOT" = 1 ]; then
+    rm -f "$TMP/remote-marker"
+    printf 'return function() io.open("%s", "w"):close() return 0 end\n' "$TMP/remote-marker" >"$proj/.dev/__remote.lua"
+    for words in "tools check" "test" "-- tools check" "-- test"; do
+        # shellcheck disable=SC2086
+        out="$(dev "$proj/a" --remote $words 2>&1)"
+        assert_eq "root dev --remote $words exits 2" "$?" "2"
+    done
+    assert_eq "root never loads a project __remote.lua" "$([ -e "$TMP/remote-marker" ] && echo loaded || echo absent)" "absent"
+    rm -f "$proj/.dev/__remote.lua"
+    mkdir -p "$TMP/lc/bin"
+    sed "s|^SYSTEM_BIN_DIRS=.*|SYSTEM_BIN_DIRS=($TMP/nowhere)|" "$DEV" >"$TMP/lc/bin/dev"
+    chmod +x "$TMP/lc/bin/dev"
+    ln -s "$REPO/dotfiles/bin/.local/share" "$TMP/lc/share"
+    printf 'return function() io.open("%s", "w"):close() return 0 end\n' "$TMP/remote-marker" >"$proj/.dev/__remote.lua"
+    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" --remote tools install --dry-run 2>&1)"
+    assert_eq "root without luajit, dev --remote tools install exits 2" "$?" "2"
+    assert_eq "root without luajit, dev --remote says what root may run" "$out" "dev: $MSG"
+    out="$(cd "$proj/a" && DEV_REMOTE=1 "$TMP/lc/bin/dev" tools check 2>&1)"
+    assert_eq "root without luajit, DEV_REMOTE=1 tools check exits 2" "$?" "2"
+    assert_eq "root without luajit, DEV_REMOTE=1 says what root may run" "$out" "dev: $MSG"
+    assert_eq "root without luajit runs no project __remote.lua" "$([ -e "$TMP/remote-marker" ] && echo loaded || echo absent)" "absent"
+    rm -f "$proj/.dev/__remote.lua"
+else
+    printf 'SKIP - the __remote.lua root test needs real root\n'
+fi
+
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(FAKE_OS=Darwin dev "$proj/a" tools check 2>&1)"
     assert_eq "root on another OS exits 2" "$?" "2"
