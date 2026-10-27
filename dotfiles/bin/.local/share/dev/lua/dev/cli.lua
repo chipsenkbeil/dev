@@ -2,6 +2,7 @@ local complete = require("dev.complete")
 local misc = require("dev.cmd.misc")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
+local tools = require("dev.cmd.tools")
 local types = require("dev.cmd.types")
 local devos = require("dev.os")
 local fs = require("dev.fs")
@@ -9,6 +10,7 @@ local help = require("dev.help")
 local project = require("dev.project")
 local registry = require("dev.registry")
 local remote = require("dev.remote")
+local root = require("dev.root")
 local verb = require("dev.verb")
 
 local stderr = io.stderr
@@ -16,7 +18,6 @@ local MAX_LEVEL = 2
 local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
 local EXEC_FAILED = 126
 local SHARE = project.share
-local PS4 = "+ ${BASH_SOURCE##*/}:${LINENO}: "
 local VCS_HANDLERS = { push = push.run, pull = pull.run }
 local NOT_TAKEN = {
     push = function(arg)
@@ -88,7 +89,7 @@ local function root_gate(args)
     if devos.getuid() ~= 0 then
         return
     end
-    if not (args[1] == "tools" and (args[2] == "install" or args[2] == "check")) then
+    if not root.allowed(args) then
         stderr:write(ROOT_REFUSAL)
         os.exit(2)
     end
@@ -120,7 +121,7 @@ local function apply_level(level)
         local trace = SHARE .. "/xtrace.bash"
         if fs.is_file(trace) then
             devos.defaults.env.BASH_ENV = trace
-            devos.defaults.env.PS4 = PS4
+            devos.defaults.env.PS4 = project.PS4
         else
             stderr:write("dev: trace file ", trace, " is missing, showing commands only\n")
             level = 1
@@ -173,7 +174,10 @@ end
 
 local function builtin_handler(row)
     if row and row.kind == "builtin" and not row.noun and row.handler == "lua" then
-        return types.handlers[row.name] or VCS_HANDLERS[row.name] or misc[row.name]
+        return types.handlers[row.name]
+            or VCS_HANDLERS[row.name]
+            or misc[row.name]
+            or tools.handlers[row.name]
     end
     return nil
 end
@@ -233,6 +237,27 @@ local function refuse_undeclared(reg, ctx, rest, after)
     end
 end
 
+local function run_as_root(parsed)
+    local args = parsed.args
+    local words = { args[1], args[2] }
+    local rest = tail(args, 3)
+    local ctx = {
+        name = table.concat(words, " "),
+        words = words,
+        root = project.root(),
+        args = rest,
+        vars = {},
+        verbose = parsed.level,
+    }
+    if parsed.remote then
+        os.exit(
+            remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), parsed.detach)
+        )
+    end
+    prepare(ctx)
+    os.exit(tools.handlers[ctx.name](ctx))
+end
+
 ---Run `dev` with the command line and exit.
 ---
 ---Global flags, the root gate and the usage errors come first. A `.lua` verb
@@ -247,15 +272,19 @@ function M.main(argv)
         os.exit(2)
     end
     root_gate(parsed.args)
+    if devos.getuid() == 0 then
+        run_as_root(parsed)
+    end
     local args = parsed.args
     local name = args[1] or "help"
     if is_help(name) then
         name = "help"
     end
-    local root = project.root()
-    local reg = registry.load(root)
+    local project_root = project.root()
+    local reg = registry.load(project_root)
     if HIDDEN_HELPERS[name] then
-        local helper_ctx = { name = name, words = { name }, root = root, args = tail(args, 2) }
+        local helper_ctx =
+            { name = name, words = { name }, root = project_root, args = tail(args, 2) }
         os.exit(HIDDEN_HELPERS[name](helper_ctx, reg))
     end
     local words, rest = { name }, tail(args, 2)
@@ -282,8 +311,9 @@ function M.main(argv)
     local ctx = {
         name = table.concat(words, " "),
         words = words,
-        root = root,
+        root = project_root,
         args = rest,
+
         vars = {},
         verbose = parsed.level,
     }

@@ -88,14 +88,14 @@ return {
     },
     {
         words = { "tools", "install" },
-        handler = "legacy",
+        handler = "lua",
         flags = "--dry-run --force --group --system --user",
         usage = "dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]",
         desc = "Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user",
     },
     {
         words = { "tools", "check" },
-        handler = "legacy",
+        handler = "lua",
         flags = "--group",
         usage = "dev tools check [--group NAME]",
         desc = "Report which of the manifest's tools are on PATH, exit 1 when one is missing",

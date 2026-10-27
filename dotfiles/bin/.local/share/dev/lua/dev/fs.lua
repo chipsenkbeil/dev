@@ -1,16 +1,14 @@
 local devos = require("dev.os")
 
-local S_IFMT = 0xF000
-local KINDS = { [0x8000] = "file", [0x4000] = "dir", [0xA000] = "link" }
-
 ---@class dev.fs.Stat
 ---@field uid integer owner user id
 ---@field mode integer raw st_mode, file type bits included
 ---@field size integer size in bytes
----@field kind "file"|"dir"|"link"|"other" what the path is, without following a link
+---@field kind dev.os.Kind what the path is, without following a link
 
 ---@class dev.fs
-local M = {}
+---@field Kind table<string, dev.os.Kind> the kinds a `Stat` names, by constant
+local M = { Kind = devos.Kind }
 
 local gnu_stat
 
@@ -168,7 +166,7 @@ function M.stat(path)
         uid = tonumber(uid),
         mode = raw,
         size = tonumber(size),
-        kind = KINDS[bit.band(raw, S_IFMT)] or "other",
+        kind = devos.kind_of(raw),
     }
 end
 

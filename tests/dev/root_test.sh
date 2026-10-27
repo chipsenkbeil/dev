@@ -80,7 +80,6 @@ if [ -d "/proc/$$/fd" ]; then
     HAVE_PROC=1
 else
     HAVE_PROC=0
-    printf 'SKIP - the manifest-copy tests need /proc/$$/fd, absent on this OS\n'
 fi
 
 outside="$TMP/outside"
@@ -151,6 +150,20 @@ out="$(dev "$proj/a" tools install 2>&1)"
 assert_eq "root tools install with no scope exits 2" "$?" "2"
 assert_eq "root tools install runs no jj or git" "$(cat "$VCSLOG")" ""
 
+out="$(dev "$proj/a" tools check --bogus 2>&1)"
+assert_eq "root tools check with a bad flag exits 2" "$?" "2"
+assert_contains "root tools check names the bad flag" "$out" "dev tools check: unknown flag --bogus"
+assert_contains "root tools check hints the accepted form" "$out" "usage: dev tools check [--group NAME]"
+out="$(dev "$proj/a" tools install --system --bogus 2>&1)"
+assert_eq "root tools install with a bad flag exits 2" "$?" "2"
+assert_contains "root tools install hints the accepted form" "$out" "usage: dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]"
+out="$(dev "$proj/a" tools check --help 2>&1)"
+assert_eq "root tools check --help is a usage error" "$?" "2"
+assert_contains "root tools check --help names the flag" "$out" "dev tools check: unknown flag --help"
+assert_contains "root tools check --help hints the accepted form" "$out" "usage: dev tools check [--group NAME]"
+out="$(dev "$proj/a" tools check --group 2>&1)"
+assert_contains "root tools check hints a missing group name" "$out" "usage: dev tools check [--group NAME]"
+
 out="$(DOTFILES=/tmp/evil-dotfiles dev "$proj/a/b" tools check 2>&1)"
 assert_not_contains "root ignores DOTFILES" "$out" "evil-dotfiles"
 
@@ -165,45 +178,40 @@ linkdir="$TMP/linkdir"
 mkdir -p "$linkdir/.jj"
 ln -s "$outside/dir" "$linkdir/.dev"
 
+count_tmp() { find /tmp -maxdepth 1 -name 'dev-tools.*' | wc -l; }
+before="$(count_tmp)"
+OWN="must be owned by root and not writable by others"
+
+out="$(dev "$linkfile" tools check 2>&1)"
+assert_eq "root tools check refuses a symlinked manifest" "$?" "1"
+assert_contains "root tools check names the manifest" "$out" "$linkfile/.dev/tools.tsv"
+assert_not_contains "root tools check does not run pkg.sh on it" "$out" "SECRET-MARKER"
+out="$(dev "$linkfile" tools install --system 2>&1)"
+assert_eq "root tools install refuses a symlinked manifest" "$?" "1"
+assert_contains "root tools install names the manifest" "$out" "$linkfile/.dev/tools.tsv"
+assert_not_contains "root tools install does not run pkg.sh on it" "$out" "SECRET-MARKER"
+assert_eq "no temp copy is left after a symlink refusal" "$(count_tmp)" "$before"
+
+out="$(dev "$linkdir" tools check 2>&1)"
+assert_eq "root tools check refuses a symlinked .dev" "$?" "1"
+assert_contains "root tools check names the manifest under the symlinked .dev" "$out" "$linkdir/.dev/tools.tsv"
+assert_not_contains "root tools check does not run pkg.sh on the outside file" "$out" "SECRET-MARKER"
+assert_eq "the refusals run no jj or git" "$(cat "$VCSLOG")" ""
+
+owned="$TMP/owned"
+mkdir -p "$owned/.dev"
+printf '%s\n' "$MANIFEST" >"$owned/.dev/tools.tsv"
+if [ "$REAL_ROOT" = 1 ]; then chown -R 65534:65534 "$owned"; fi
+out="$(dev "$owned" tools check 2>&1)"
+assert_eq "root refuses a user-owned chain" "$?" "1"
+assert_contains "the ownership refusal names the manifest" "$out" "refusing $(cd "$owned" && pwd -P)/.dev/tools.tsv as root: "
+assert_contains "the ownership refusal says what is required" "$out" "$OWN"
+assert_eq "no temp copy is left after an ownership refusal" "$(count_tmp)" "$before"
+
+out="$(DOTFILES=/tmp/evil-dotfiles dev "$nojj" tools check 2>&1)"
+assert_not_contains "root does not use a DOTFILES pkg.sh" "$out" "evil-dotfiles"
+
 if [ "$HAVE_PROC" = 1 ]; then
-    count_tmp() { find /tmp -maxdepth 1 -name 'dev-tools.*' | wc -l; }
-    before="$(count_tmp)"
-    OWN="must be owned by root and not writable by others"
-
-    out="$(dev "$linkfile" tools check 2>&1)"
-    assert_eq "root tools check refuses a symlinked manifest" "$?" "1"
-    assert_contains "root tools check names the manifest" "$out" "$linkfile/.dev/tools.tsv"
-    assert_not_contains "root tools check does not run pkg.sh on it" "$out" "SECRET-MARKER"
-    out="$(dev "$linkfile" tools install --system 2>&1)"
-    assert_eq "root tools install refuses a symlinked manifest" "$?" "1"
-    assert_contains "root tools install names the manifest" "$out" "$linkfile/.dev/tools.tsv"
-    assert_not_contains "root tools install does not run pkg.sh on it" "$out" "SECRET-MARKER"
-    assert_eq "no temp copy is left after a symlink refusal" "$(count_tmp)" "$before"
-
-    out="$(dev "$linkdir" tools check 2>&1)"
-    assert_eq "root tools check refuses a symlinked .dev" "$?" "1"
-    assert_contains "root tools check names the manifest under the symlinked .dev" "$out" "$linkdir/.dev/tools.tsv"
-    assert_not_contains "root tools check does not run pkg.sh on the outside file" "$out" "SECRET-MARKER"
-    assert_eq "the refusals run no jj or git" "$(cat "$VCSLOG")" ""
-
-    owned="$TMP/owned"
-    mkdir -p "$owned/.dev"
-    printf '%s\n' "$MANIFEST" >"$owned/.dev/tools.tsv"
-    if [ "$REAL_ROOT" = 1 ]; then chown -R 65534:65534 "$owned"; fi
-    out="$(dev "$owned" tools check 2>&1)"
-    assert_eq "root refuses a user-owned chain" "$?" "1"
-    assert_contains "the ownership refusal names the manifest" "$out" "refusing $owned/.dev/tools.tsv as root: "
-    assert_contains "the ownership refusal says what is required" "$out" "$OWN"
-    assert_eq "no temp copy is left after an ownership refusal" "$(count_tmp)" "$before"
-
-    exec 3<"$outside/tools.tsv"
-    out="$(dev "$nojj" tools check 2>&1)"
-    exec 3<&-
-    assert_contains "an inherited fd 3 is refused" "$out" "fd 3 is already open"
-
-    out="$(DOTFILES=/tmp/evil-dotfiles dev "$nojj" tools check 2>&1)"
-    assert_not_contains "root does not use a DOTFILES pkg.sh" "$out" "evil-dotfiles"
-
     fifo="$TMP/fifo.tsv"
     mkfifo "$fifo"
     if [ "$REAL_ROOT" = 1 ]; then chown 65534:65534 "$fifo"; fi
@@ -226,13 +234,27 @@ RUN
     assert_eq "a user-owned FIFO is refused without hanging" "$?" "1"
     assert_contains "the FIFO refusal is an ownership refusal naming the path" "$out" "refusing $fifo as root: $fifo $OWN"
     assert_eq "no temp copy is left after the FIFO refusal" "$(count_tmp)" "$before"
+else
+    printf 'SKIP - the legacy fallback FIFO test needs /proc/$$/fd, absent on this OS\n'
 fi
 
-if [ "$HAVE_PROC" = 1 ] && [ "$REAL_ROOT" = 1 ]; then
+if [ "$REAL_ROOT" = 1 ]; then
     gw="$TMP/gw"
     mkdir -p "$gw/.dev"
     printf '%s\n' "$MANIFEST" >"$gw/.dev/tools.tsv"
     chmod g+w "$gw/.dev"
+    hostile="$TMP/x'\$(touch PWNED)"
+    mkdir -p "$hostile/.dev"
+
+    # shellcheck disable=SC2016  # the cell is literal text
+    printf 'name binary pacman\n$(>PWNED) zzz-none-bin x\n' >"$hostile/.dev/tools.tsv"
+    out="$(dev "$hostile" tools check 2>&1)"
+    assert_eq "root reads a manifest under a hostile project name" "$?" "1"
+
+    # shellcheck disable=SC2016  # the cell is literal text
+    assert_contains "root passes the hostile cell to pkg.sh as text" "$out" '$(>PWNED)'
+    assert_eq "a hostile project name and cell run nothing" "$(find "$TMP" -name PWNED | wc -l | tr -d ' ')" "0"
+
     out="$(dev "$gw" tools check 2>&1)"
     assert_eq "root refuses a group-writable .dev" "$?" "1"
     assert_contains "the .dev refusal names the offending path" "$out" "refusing $gw/.dev/tools.tsv as root: $gw/.dev $OWN"
@@ -273,6 +295,11 @@ if [ "$HAVE_PROC" = 1 ] && [ "$REAL_ROOT" = 1 ]; then
     good="$TMP/good"
     mkdir -p "$good/.dev"
     printf 'name binary pacman\nsh-tool sh sh\n' >"$good/.dev/tools.tsv"
+    out="$(BASH_ENV=/tmp/evil-bash-env PS4=evil-ps4 dev "$good" -vv tools check 2>&1)"
+    assert_eq "root tools check -vv exits 0" "$?" "0"
+    assert_contains "-vv gives the driver dev's own trace file" "$out" "BASH_ENV=$REPO/dotfiles/bin/.local/share/dev/xtrace.bash"
+    assert_not_contains "-vv keeps the caller's BASH_ENV out of the driver" "$out" "evil-bash-env"
+    assert_not_contains "-vv keeps the caller's PS4 out of the driver" "$out" "evil-ps4"
     out="$(dev "$good" tools check 2>&1)"
     assert_eq "root tools check passes for a present tool" "$?" "0"
     assert_eq "no temp copy is left after success" "$(count_tmp)" "$before"
@@ -369,7 +396,7 @@ if [ "$HAVE_PROC" = 1 ] && [ "$REAL_ROOT" = 1 ]; then
     else
         printf 'SKIP - the --force test needs the real /usr/bin/pacman\n'
     fi
-elif [ "$HAVE_PROC" = 1 ]; then
+else
     printf 'SKIP - the root-owned-chain success tests need real root\n'
 fi
 

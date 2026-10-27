@@ -5,16 +5,89 @@ int isatty(int fd);
 unsigned int getuid(void);
 int execvp(const char *file, char *const argv[]);
 char *strerror(int errnum);
+int open(const char *path, int flags, ...);
+int close(int fd);
+long read(int fd, void *buf, size_t count);
 ]])
+
+local STAT_LAYOUTS = {
+    ["Linux/x64"] = [[
+struct dev_stat {
+    uint64_t st_dev, st_ino, st_nlink;
+    uint32_t st_mode, st_uid, st_gid;
+    int32_t pad0;
+    uint64_t st_rdev;
+    int64_t st_size, st_blksize, st_blocks;
+    int64_t times[6];
+    int64_t unused[3];
+};]],
+    ["Linux/arm64"] = [[
+struct dev_stat {
+    uint64_t st_dev, st_ino;
+    uint32_t st_mode, st_nlink, st_uid, st_gid;
+    uint64_t st_rdev, pad1;
+    int64_t st_size;
+    int32_t st_blksize, pad2;
+    int64_t st_blocks;
+    int64_t times[6];
+    uint32_t unused[2];
+};]],
+    ["OSX/arm64"] = [[
+struct dev_stat {
+    int32_t st_dev;
+    uint16_t st_mode, st_nlink;
+    uint64_t st_ino;
+    uint32_t st_uid, st_gid;
+    int32_t st_rdev, pad0;
+    int64_t times[8];
+    int64_t st_size, st_blocks;
+    int32_t st_blksize;
+    uint32_t st_flags, st_gen;
+    int32_t st_lspare;
+    int64_t st_qspare[2];
+};]],
+}
+
+local OPEN_FLAGS = {
+    ["Linux/x64"] = { nofollow = 0x20000, cloexec = 0x80000, nonblock = 0x800 },
+    ["Linux/arm64"] = { nofollow = 0x8000, cloexec = 0x80000, nonblock = 0x800 },
+    ["OSX/arm64"] = { nofollow = 0x100, cloexec = 0x1000000, nonblock = 0x4 },
+}
+
+local PLATFORM = ffi.os .. "/" .. ffi.arch
+local STAT_LAYOUT = STAT_LAYOUTS[PLATFORM]
+if STAT_LAYOUT then
+    ffi.cdef(STAT_LAYOUT)
+    ffi.cdef("int fstat(int fd, struct dev_stat *buf);")
+end
+local HAS_FSTAT = STAT_LAYOUT ~= nil and pcall(function()
+    return ffi.C.fstat
+end)
+
+local S_IFMT = 0xF000
+local KIND_BITS = { [0x8000] = "file", [0x4000] = "dir", [0xA000] = "link" }
+local EINTR = 4
+local READ_CHUNK_BYTES = 65536
 
 local WAIT_SIGNAL_MASK = 0x7f
 local WAIT_EXIT_SHIFT = 256
 
+---@alias dev.os.Kind "file"|"dir"|"link"|"other"
+
 ---@class dev.os
+---@field Kind table<string, dev.os.Kind> the kinds of file `kind_of` names, by constant
 ---@field SIGNAL_EXIT_BASE integer exit status of a process killed by signal n, which is this plus n
 local M = {
     SIGNAL_EXIT_BASE = 128,
+    Kind = { FILE = "file", DIR = "dir", LINK = "link", OTHER = "other" },
 }
+
+---Name the kind of file a raw `st_mode` describes.
+---@param mode integer raw st_mode, file type bits included
+---@return dev.os.Kind kind what the mode says it is
+function M.kind_of(mode)
+    return KIND_BITS[bit.band(mode, S_IFMT)] or M.Kind.OTHER
+end
 
 ---Quote `arg` as one shell word.
 ---@param arg string word to quote, with no NUL byte
@@ -325,6 +398,84 @@ function M.exec(argv, opts)
     flush_output()
     ffi.C.execvp(argv[1], cargs)
     return nil, M.strerror()
+end
+
+---@class dev.os.FdStat
+---@field uid integer owner user id
+---@field mode integer raw st_mode, file type bits included
+---@field size integer size in bytes
+---@field kind dev.os.Kind what the descriptor is
+
+---Open `path` for reading, refusing a symbolic link in its last part.
+---
+---The open sets close-on-exec and does not block, so a FIFO never hangs it.
+---@param path string file to open
+---@return integer? fd the descriptor, or nil on failure
+---@return string? message why it failed
+function M.open_nofollow(path)
+    local flags = OPEN_FLAGS[PLATFORM]
+    if not flags then
+        return nil, "no safe open on " .. PLATFORM
+    end
+    if path:find("\0", 1, true) then
+        return nil, "path has a NUL byte"
+    end
+    local fd = ffi.C.open(path, bit.bor(flags.nofollow, flags.cloexec, flags.nonblock))
+    if fd < 0 then
+        return nil, M.strerror()
+    end
+    return fd
+end
+
+---Read the owner, mode and size of an open descriptor.
+---@param fd integer descriptor to inspect
+---@return dev.os.FdStat? stat the descriptor's facts, or nil on failure
+---@return string? message why it failed
+function M.fstat(fd)
+    if not HAS_FSTAT then
+        return nil, "no fstat on " .. PLATFORM
+    end
+    local buf = ffi.new("struct dev_stat[1]")
+    if ffi.C.fstat(fd, buf) ~= 0 then
+        return nil, M.strerror()
+    end
+    local mode = tonumber(buf[0].st_mode)
+    return {
+        uid = tonumber(buf[0].st_uid),
+        mode = mode,
+        size = tonumber(buf[0].st_size),
+        kind = M.kind_of(mode),
+    }
+end
+
+---Read up to `limit` bytes from an open descriptor.
+---@param fd integer descriptor to read
+---@param limit integer most bytes to read
+---@return string? bytes what was read, which is shorter than `limit` only at end of file
+---@return string? message why it failed
+function M.read_fd(fd, limit)
+    local buf = ffi.new("char[?]", READ_CHUNK_BYTES)
+    local parts, total = {}, 0
+    while total < limit do
+        local count = tonumber(ffi.C.read(fd, buf, math.min(READ_CHUNK_BYTES, limit - total)))
+        if count < 0 and ffi.errno() ~= EINTR then
+            return nil, M.strerror()
+        end
+        if count == 0 then
+            break
+        end
+        if count > 0 then
+            parts[#parts + 1] = ffi.string(buf, count)
+            total = total + count
+        end
+    end
+    return table.concat(parts)
+end
+
+---Close a descriptor.
+---@param fd integer descriptor to close
+function M.close(fd)
+    ffi.C.close(fd)
 end
 
 return M

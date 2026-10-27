@@ -47,6 +47,9 @@ end
 ---The project types dev knows.
 M.Kind = Kind
 
+---The `PS4` that turns on the file and line prefix of a traced bash script.
+M.PS4 = "+ ${BASH_SOURCE##*/}:${LINENO}: "
+
 ---Directory of dev's own code, holding `main.lua` and `legacy.bash`.
 M.share = SHARE
 

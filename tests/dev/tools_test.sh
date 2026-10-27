@@ -100,7 +100,7 @@ else
     skip_user
 fi
 
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
+if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$proj" install --system --dry-run)"
     assert_eq "--system as root exits 0" "$?" "0"
     assert_contains "--system plans a package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
@@ -110,7 +110,7 @@ if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_contains "--system names the skipped AUR row in one line" "$out" "skipped third-party rows (built into the image, not installed with root): aur-b (aur:)"
     assert_eq "--system prints the skip line once" "$(printf '%s\n' "$out" | grep -c 'skipped third-party')" "1"
 else
-    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP - root pkg.sh runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 
 if [ "$REAL_ROOT" = 0 ]; then
@@ -188,12 +188,12 @@ if [ "$REAL_ROOT" = 0 ]; then
 else
     skip_user
 fi
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
+if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$badproj" install --system --dry-run 2>&1)"
     assert_contains "--system skips luarocks like aur and copr" "$out" "rock-f (luarocks:)"
     assert_not_contains "--system does not plan the rock" "$out" "luarocks install"
 else
-    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP - root pkg.sh runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$badproj" install --dry-run rock-f 2>&1)"
@@ -202,6 +202,22 @@ if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" check 2>&1)"
     assert_eq "check exits 1 when a tool is missing" "$?" "1"
     assert_contains "check reports the missing tool" "$out" "[ ] pkg-a"
+    out="$(tools "$proj" check --bogus 2>&1)"
+    assert_eq "check with a bad flag exits 2" "$?" "2"
+    assert_contains "check names the bad flag" "$out" "dev tools check: unknown flag --bogus"
+    assert_contains "check shows the curated help" "$out" "Set up a machine or project"
+
+    hostile="$TMP/x'\$(touch PWNED)"
+    mkdir -p "$hostile/.dev"
+
+    # shellcheck disable=SC2016  # the cell is literal text
+    printf 'name binary pacman\n$(>PWNED) zzz-none-bin x\n' >"$hostile/.dev/tools.tsv"
+    out="$(tools "$hostile" check 2>&1)"
+    assert_eq "check reads a manifest under a hostile project name" "$?" "1"
+
+    # shellcheck disable=SC2016  # the cell is literal text
+    assert_contains "check shows the hostile cell as text" "$out" '$(>PWNED)'
+    assert_eq "a hostile project name and cell run nothing" "$(find "$TMP" -name PWNED | wc -l | tr -d ' ')" "0"
 
     empty="$TMP/empty"
     mkdir -p "$empty/.dev"
@@ -231,12 +247,12 @@ STUB
 else
     skip_user
 fi
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
+if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run 2>&1)"
     assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.sh"
     assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
 else
-    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP - root pkg.sh runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 assert_eq "the old manifest path is gone" "$([ -e "$REPO/tools.tsv" ] && echo present || echo gone)" "gone"
 
@@ -267,12 +283,12 @@ cat >"$proj/.dev/tools.sh" <<'STUB'
 echo "FLAT OVERRIDE RAN $*"
 STUB
 chmod +x "$proj/.dev/tools/install.sh" "$proj/.dev/tools/extra.sh" "$proj/.dev/tools.sh"
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
+if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$proj" install --system --dry-run 2>&1)"
     assert_not_contains "a project script cannot replace a built-in tools subcommand" "$out" "OVERRIDE RAN"
     assert_contains "the built-in still runs" "$out" "pacman -S --needed --noconfirm -- pkg-a"
 else
-    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP - root pkg.sh runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" --help)"
@@ -372,7 +388,7 @@ else
     skip_user
 fi
 
-if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
+if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$gproj" install --system --dry-run --group base)"
     assert_eq "--system --group base as root exits 0" "$?" "0"
     assert_contains "--system --group plans the package row" "$out" "pacman -S --needed --noconfirm -- pkg-a"
@@ -388,7 +404,7 @@ if [ -d "/proc/$$/fd" ] && [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_eq "--system --group rust ran no package manager" "$(grep -c 'pacman -S' "$CALLS")" "0"
     assert_not_contains "--system --group rust skips no third-party row" "$out" "skipped"
 else
-    printf 'SKIP - root pkg.sh runs need /proc/$$/fd, the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP - root pkg.sh runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$gproj" install --dry-run --group "" 2>&1)"
