@@ -1,5 +1,7 @@
 local complete = require("dev.complete")
 local misc = require("dev.cmd.misc")
+local pull = require("dev.cmd.pull")
+local push = require("dev.cmd.push")
 local types = require("dev.cmd.types")
 local devos = require("dev.os")
 local fs = require("dev.fs")
@@ -15,6 +17,15 @@ local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\
 local EXEC_FAILED = 126
 local SHARE = project.share
 local PS4 = "+ ${BASH_SOURCE##*/}:${LINENO}: "
+local VCS_HANDLERS = { push = push.run, pull = pull.run }
+local NOT_TAKEN = {
+    push = function(arg)
+        return arg:sub(1, 1) == "-"
+    end,
+    pull = function()
+        return true
+    end,
+}
 local HIDDEN_HELPERS = {
     __verbs = complete.verbs,
     __subs = complete.subs,
@@ -162,7 +173,7 @@ end
 
 local function builtin_handler(row)
     if row and row.kind == "builtin" and not row.noun and row.handler == "lua" then
-        return types.handlers[row.name] or misc[row.name]
+        return types.handlers[row.name] or VCS_HANDLERS[row.name] or misc[row.name]
     end
     return nil
 end
@@ -194,6 +205,18 @@ local function noun_usage_error(reg, name, message)
     stderr:write("dev ", name, ": ", message, "\n\n")
     help.noun(reg, name, { stderr = true })
     os.exit(2)
+end
+
+local function refuse_untaken(ctx, reg)
+    local not_taken = NOT_TAKEN[ctx.name]
+    if not not_taken then
+        return
+    end
+    for _, arg in ipairs(ctx.args) do
+        if not_taken(arg) then
+            help.bad_argument(ctx, reg, arg)
+        end
+    end
 end
 
 local function refuse_undeclared(reg, ctx, rest, after)
@@ -282,6 +305,7 @@ function M.main(argv)
     end
     local handler = builtin_handler(row)
     if handler then
+        refuse_untaken(ctx, reg)
         prepare(ctx)
         os.exit(handler(ctx, reg))
     end

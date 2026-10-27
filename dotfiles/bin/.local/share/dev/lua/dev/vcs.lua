@@ -1,0 +1,150 @@
+local devos = require("dev.os")
+local fs = require("dev.fs")
+
+---@alias dev.vcs.Backend "jj"|"git"
+
+---@class dev.vcs.BaseOpts
+---@field quiet boolean? add `--color never` for jj
+
+---@class dev.vcs
+---@field JJ "jj" the jj backend
+---@field GIT "git" the git backend
+local M = { JJ = "jj", GIT = "git" }
+
+local function lines_of(text)
+    local out = {}
+    for line in text:gmatch("[^\n]+") do
+        out[#out + 1] = line
+    end
+    return out
+end
+
+---Pick the backend a project uses.
+---
+---A project with `.jj` uses jj, one with only `.git` uses git.
+---@param root string absolute path of the project root
+---@return dev.vcs.Backend? backend nil when the project has neither
+---@return string? err why there is no backend
+function M.backend(root)
+    if fs.is_dir(root .. "/.jj") then
+        return M.JJ
+    end
+    if fs.exists(root .. "/.git") then
+        return M.GIT
+    end
+    return nil, "neither .jj nor .git found in " .. root
+end
+
+---Pick the backend and check its tool is installed.
+---@param root string absolute path of the project root
+---@return dev.vcs.Backend? backend nil on failure
+---@return string? err why there is no usable backend
+function M.require(root)
+    local backend, err = M.backend(root)
+    if backend == M.JJ and not devos.which("jj") then
+        return nil, "jj not found, install with: brew install jj"
+    end
+    return backend, err
+end
+
+---Add words to the end of a command.
+---@param base string[] the command so far
+---@param ... string the words to add
+---@return string[] argv a new command
+function M.with(base, ...)
+    local argv = { unpack(base) }
+    for _, word in ipairs({ ... }) do
+        argv[#argv + 1] = word
+    end
+    return argv
+end
+
+---The argv prefix that runs jj or git on a project.
+---@param root string absolute path of the project root
+---@param backend dev.vcs.Backend the project's backend
+---@param opts dev.vcs.BaseOpts? how to run it
+---@return string[] argv the command words before the subcommand
+function M.base(root, backend, opts)
+    if backend == M.JJ then
+        if opts and opts.quiet then
+            return { "jj", "--no-pager", "--color", "never", "-R", root }
+        end
+        return { "jj", "--no-pager", "-R", root }
+    end
+    return { "git", "-C", root }
+end
+
+---List the project's remotes by name.
+---@param root string absolute path of the project root
+---@param backend dev.vcs.Backend the project's backend
+---@return string[] names the remotes, empty when the listing fails
+function M.remotes(root, backend)
+    local base = M.base(root, backend, { quiet = true })
+    local argv = backend == M.JJ and M.with(base, "git", "remote", "list") or M.with(base, "remote")
+    local out, code = devos.capture(argv)
+    if code ~= 0 then
+        return {}
+    end
+    local names = {}
+    for _, line in ipairs(lines_of(out)) do
+        names[#names + 1] = line:match("^%S+")
+    end
+    return names
+end
+
+---List the project's branches or bookmarks by name.
+---@param root string absolute path of the project root
+---@param backend dev.vcs.Backend the project's backend
+---@return string[] names the branches, empty when the listing fails
+function M.branches(root, backend)
+    local base = M.base(root, backend, { quiet = true })
+    local argv
+    if backend == M.JJ then
+        argv = M.with(base, "bookmark", "list", "-T", 'name ++ "\\n"')
+    else
+        argv = M.with(base, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+    end
+    local out, code = devos.capture(argv)
+    if code ~= 0 then
+        return {}
+    end
+    return lines_of(out)
+end
+
+---Pick `master` or `main`, whichever the list holds.
+---@param names string[] branch names
+---@return string? name the trunk's name
+function M.trunk(names)
+    for _, want in ipairs({ "master", "main" }) do
+        for _, name in ipairs(names) do
+            if name == want then
+                return want
+            end
+        end
+    end
+    return nil
+end
+
+---Read a git config value from the repository's own store.
+---
+---For a jj project that is the git store under `.jj`.
+---@param root string absolute path of the project root
+---@param backend dev.vcs.Backend the project's backend
+---@param key string the config key
+---@return string value the value, empty when unset
+function M.config(root, backend, key)
+    local argv
+    if backend == M.JJ then
+        local dir = devos.capture(M.with(M.base(root, backend), "git", "root"))
+        argv = { "git", "--git-dir=" .. dir:gsub("\n$", ""), "config", "--get", key }
+    else
+        argv = { "git", "-C", root, "config", "--get", key }
+    end
+    local out, code = devos.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        return ""
+    end
+    return (out:gsub("\n$", ""))
+end
+
+return M

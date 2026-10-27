@@ -58,4 +58,24 @@ function M.fit(s, width)
     return table.concat(out)
 end
 
+---Cut the whitespace off the end of a string.
+---@param s string the text
+---@return string trimmed the text without trailing whitespace
+function M.trim(s)
+    return (s:gsub("%s+$", ""))
+end
+
+---Tell whether a list holds a value.
+---@param list any[] the list
+---@param want any the value to look for
+---@return boolean found whether the list has it
+function M.contains(list, want)
+    for _, item in ipairs(list) do
+        if item == want then
+            return true
+        end
+    end
+    return false
+end
+
 return M

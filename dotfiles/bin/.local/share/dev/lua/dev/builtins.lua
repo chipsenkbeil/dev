@@ -55,13 +55,13 @@ return {
     },
     {
         words = { "push" },
-        handler = "legacy",
+        handler = "lua",
         desc = "Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named",
         group = "Share it",
     },
     {
         words = { "pull" },
-        handler = "legacy",
+        handler = "lua",
         desc = "Fetch the remote and rebase local work onto it",
         group = "Share it",
     },

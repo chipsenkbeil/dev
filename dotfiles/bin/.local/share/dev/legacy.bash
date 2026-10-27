@@ -7,7 +7,7 @@
 # lists its subcommands.
 #
 # `dev help` and the completion and topic helpers, the project-type built-ins, deploy, guide
-# and bootstrap run in Lua. This file serves what is left: push, pull, sync, init, tools and box.
+# and bootstrap run in Lua. This file serves what is left: sync, init, tools and box.
 #
 # `dev sync` compares a project's copied lint files against the templates in
 # the dotfiles repo, unless the project has its own .dev/sync.sh. DOTFILES
@@ -16,10 +16,7 @@ set -euo pipefail
 
 TEMPLATE_BASE="dotfiles/claude/.claude/skills/style/lint"
 PROJECT_TYPE=""
-VCS_BACKEND="" VCS_ERROR=""
-PUSH_REF="" PUSH_SHA="" PUSH_GUARD="" PUSH_REMOTES="" PUSH_NAMED="" PUSH_ERROR=""
-FORGE_KIND="" FORGE_REMOTE="" FORGE_WHY=""
-PULL_SYNC=0 PULL_BRANCH="" PULL_ERROR=""
+VCS_BACKEND=""
 
 die() {
     printf 'dev: %s\n' "$*" >&2
@@ -166,7 +163,7 @@ repo_root() {
     pwd -P
 }
 
-# vcs_backend: set VCS_BACKEND to jj when the repo has .jj, git when it has .git, else set VCS_ERROR and fail.
+# vcs_backend: set VCS_BACKEND to jj when the repo has .jj, git when it has .git, else fail.
 vcs_backend() {
     if [ -d "$ROOT/.jj" ]; then
         VCS_BACKEND=jj
@@ -174,16 +171,6 @@ vcs_backend() {
         VCS_BACKEND=git
     else
         VCS_BACKEND=""
-        VCS_ERROR="neither .jj nor .git found in $ROOT"
-        return 1
-    fi
-}
-
-# vcs_require: vcs_backend, plus jj installed when the backend is jj. Sets VCS_ERROR on failure.
-vcs_require() {
-    vcs_backend || return 1
-    if [ "$VCS_BACKEND" = jj ] && ! command -v jj >/dev/null 2>&1; then
-        VCS_ERROR="jj not found, install with: brew install jj"
         return 1
     fi
 }
@@ -214,8 +201,6 @@ vcs() {
 # The group heads the verb in `dev help`, and `hidden` keeps it to `dev help -a`.
 builtin_table() {
     cat <<'TABLE'
-push|cmd_push|||Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named|Share it
-pull|cmd_pull|||Fetch the remote and rebase local work onto it|Share it
 sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates|Set up a machine or project
 init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]|Seed a project with lint, CI and remotes|Set up a machine or project
 tools|noun|||Install and check the tools in .dev/tools.tsv|Set up a machine or project
@@ -315,7 +300,7 @@ noun_has_sub() {
 
 # builtin_commands <verb> <type>: the command lines the built-in runs, one per line.
 builtin_commands() {
-    local verb=$1 type=$2 remote step
+    local verb=$1 type=$2
     case "$verb" in
     sync)
         if lint_set_for "$type" >/dev/null; then
@@ -323,29 +308,6 @@ builtin_commands() {
         else
             echo "(none: no lint templates for $type projects)"
         fi
-        return
-        ;;
-    push)
-        if ! push_resolve; then
-            echo "(none: $PUSH_ERROR)"
-            return
-        fi
-        for remote in $PUSH_REMOTES; do
-            push_cmd "$remote"
-            echo "${PUSH_CMD[*]}"
-        done
-        return
-        ;;
-    pull)
-        if ! pull_resolve; then
-            echo "(none: $PULL_ERROR)"
-            return
-        fi
-        step=1
-        while pull_cmd "$step"; do
-            echo "${PULL_CMD[*]}"
-            step=$((step + 1))
-        done
         return
         ;;
     esac
@@ -396,198 +358,6 @@ trunk_name() {
         fi
     done
     return 1
-}
-
-# forge_store <args>: git config against the repo's own store, where the forge setting lives.
-forge_store() {
-    if [ "$VCS_BACKEND" = jj ]; then
-        git --git-dir="$(jj --no-pager -R "$ROOT" git root)" config "$@"
-    else
-        git -C "$ROOT" config "$@"
-    fi
-}
-
-# origin_on_github: true when the origin URL names github.com.
-origin_on_github() {
-    case "$(forge_store --get remote.origin.url 2>/dev/null || true)" in
-    *github.com*) return 0 ;;
-    esac
-    return 1
-}
-
-# forge_resolve: set FORGE_KIND (gerrit, github or plain), FORGE_REMOTE and FORGE_WHY after vcs_require, or set PUSH_ERROR and fail.
-# The order matches the jj scripts: JJ_FORGE, then git config forge.kind, then detection.
-forge_resolve() {
-    local remotes kind="${JJ_FORGE:-}" remote why=""
-    remotes=$(remote_names)
-    if [ -n "$kind" ]; then
-        why="JJ_FORGE=$kind"
-    else
-        kind=$(forge_store --get forge.kind 2>/dev/null || true)
-        if [ -n "$kind" ]; then why="git config forge.kind=$kind"; fi
-    fi
-    if [ -z "$kind" ]; then
-        if has_line "$remotes" gerrit; then
-            kind=gerrit
-            why="detected: the project has a gerrit remote"
-        elif origin_on_github; then
-            kind=github
-            why="detected: origin is on github.com"
-        else
-            kind=plain
-            why="detected: no gerrit remote and origin is not on github.com"
-        fi
-    fi
-    case "$kind" in
-    gerrit | github | plain) ;;
-    *)
-        PUSH_ERROR="forge must be gerrit, github or plain (got: $kind, from $why)"
-        return 1
-        ;;
-    esac
-    remote=$(forge_store --get forge.remote 2>/dev/null || true)
-    if [ -n "$remote" ]; then
-        why="$why; remote from git config forge.remote"
-    elif [ "$kind" = gerrit ]; then
-        remote=gerrit
-    else
-        remote=origin
-    fi
-    if ! has_line "$remotes" "$remote"; then
-        PUSH_ERROR="the remote of record $remote is not a remote of this project ($why)"
-        return 1
-    fi
-    FORGE_KIND=$kind FORGE_REMOTE=$remote FORGE_WHY=$why
-}
-
-# push_resolve: set VCS_BACKEND, PUSH_REF, PUSH_SHA, PUSH_GUARD, PUSH_REMOTES (the default target) and PUSH_NAMED (every remote push accepts by name), or set PUSH_ERROR and fail.
-push_resolve() {
-    local remotes remote
-    vcs_require || {
-        PUSH_ERROR=$VCS_ERROR
-        return 1
-    }
-    if [ "$VCS_BACKEND" = jj ]; then
-        PUSH_REF=$(trunk_name "$(jj --no-pager --color never -R "$ROOT" bookmark list -T 'name ++ "\n"')") || {
-            PUSH_ERROR="no master or main bookmark in $ROOT"
-            return 1
-        }
-    else
-        PUSH_REF=$(git -C "$ROOT" symbolic-ref --short -q HEAD) || {
-            PUSH_ERROR="HEAD is detached in $ROOT, check out a branch to push"
-            return 1
-        }
-        PUSH_SHA=$(git -C "$ROOT" rev-parse HEAD)
-        PUSH_GUARD="$(dirname "$DEV_SELF")/commit-guard"
-        if [ ! -x "$PUSH_GUARD" ]; then
-            PUSH_ERROR="commit-guard is missing at $PUSH_GUARD, refusing to push without the attribution check"
-            return 1
-        fi
-    fi
-    remotes=$(remote_names)
-    PUSH_NAMED=""
-    for remote in origin gerrit; do
-        if has_line "$remotes" "$remote"; then
-            PUSH_NAMED+="$remote "
-        fi
-    done
-    if [ -z "$PUSH_NAMED" ]; then
-        PUSH_ERROR="no origin or gerrit remote"
-        return 1
-    fi
-    forge_resolve || return 1
-    PUSH_REMOTES="$FORGE_REMOTE "
-    case " $PUSH_NAMED" in
-    *" $FORGE_REMOTE "*) ;;
-    *) PUSH_NAMED+="$FORGE_REMOTE " ;;
-    esac
-}
-
-# push_cmd <remote>: set PUSH_CMD to the command that pushes to that remote, after push_resolve.
-push_cmd() {
-    if [ "$VCS_BACKEND" = jj ]; then
-        PUSH_CMD=(jj --no-pager --color never -R "$ROOT" git push --remote "$1" -b "$PUSH_REF")
-    else
-        PUSH_CMD=("$PUSH_GUARD" push -- "$1" "$PUSH_SHA:refs/heads/$PUSH_REF")
-    fi
-}
-
-cmd_push() {
-    local remote out rc status=0 remotes
-    for remote in "$@"; do
-        case "$remote" in -*) bad_arg push "$remote" ;; esac
-    done
-    push_resolve || die "$PUSH_ERROR"
-    remotes=$PUSH_REMOTES
-    if [ "$#" -gt 0 ]; then
-        remotes=""
-        for remote in "$@"; do
-            case " $PUSH_NAMED" in
-            *" $remote "*) remotes+="$remote " ;;
-            *) usage_error push "no remote $remote to push to, the project has: $PUSH_NAMED" ;;
-            esac
-        done
-    fi
-    printf 'forge %s, remote of record %s (%s)\n' "$FORGE_KIND" "$FORGE_REMOTE" "$FORGE_WHY"
-    for remote in $remotes; do
-        push_cmd "$remote"
-        show "${PUSH_CMD[@]}"
-        out=$(cd "$ROOT" && "${PUSH_CMD[@]}" 2>&1) && rc=0 || rc=$?
-        if [ "$rc" -eq 0 ]; then
-            printf '%s: pushed %s\n' "$remote" "$PUSH_REF"
-        else
-            printf '%s: push of %s failed\n' "$remote" "$PUSH_REF"
-            status=1
-        fi
-        if [ -n "$out" ]; then
-            printf '%s\n' "$out" | sed 's/^/    /'
-        fi
-    done
-    return "$status"
-}
-
-# pull_resolve: set VCS_BACKEND, PULL_SYNC and PULL_BRANCH, or set PULL_ERROR and fail.
-pull_resolve() {
-    vcs_require || {
-        PULL_ERROR=$VCS_ERROR
-        return 1
-    }
-    if [ "$VCS_BACKEND" = jj ]; then
-        PULL_SYNC=0
-        if jj --no-pager -R "$ROOT" config get aliases.sync >/dev/null 2>&1; then
-            PULL_SYNC=1
-        fi
-        return 0
-    fi
-    PULL_BRANCH=$(git -C "$ROOT" symbolic-ref --short -q HEAD) || {
-        PULL_ERROR="HEAD is detached in $ROOT, check out a branch to pull"
-        return 1
-    }
-    if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]; then
-        PULL_ERROR="$ROOT has uncommitted changes, commit or stash them before pulling"
-        return 1
-    fi
-}
-
-# pull_cmd <step>: set PULL_CMD to that step of the pull, after pull_resolve, or fail past the last step.
-pull_cmd() {
-    case "$VCS_BACKEND:$PULL_SYNC:$1" in
-    jj:1:1) PULL_CMD=(jj --no-pager -R "$ROOT" sync) ;;
-    jj:0:1) PULL_CMD=(jj --no-pager -R "$ROOT" git fetch --all-remotes) ;;
-    jj:0:2) PULL_CMD=(jj --no-pager -R "$ROOT" rebase -o 'trunk()' --skip-emptied) ;;
-    git:*:1) PULL_CMD=(git -C "$ROOT" pull --rebase origin "$PULL_BRANCH") ;;
-    *) return 1 ;;
-    esac
-}
-
-cmd_pull() {
-    local step=1
-    no_more_args pull "$@"
-    pull_resolve || die "$PULL_ERROR"
-    while pull_cmd "$step"; do
-        run_cmd "${PULL_CMD[@]}"
-        step=$((step + 1))
-    done
 }
 
 # --- tools ---

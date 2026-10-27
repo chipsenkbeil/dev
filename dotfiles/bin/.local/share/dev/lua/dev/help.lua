@@ -1,6 +1,8 @@
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
+local pull = require("dev.cmd.pull")
+local push = require("dev.cmd.push")
 local registry = require("dev.registry")
 local types = require("dev.cmd.types")
 local text = require("dev.text")
@@ -16,6 +18,7 @@ local HIDDEN = "Hidden"
 local OVERRIDE = "(override)"
 local HELP_CTX = { name = "help" }
 local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic.\n"
+local LISTED = { push = push, pull = pull }
 local HELPERS = {
     { "__verbs", "List the verbs with their descriptions, for shell completion" },
     { "__subs", "List the subcommands of a noun, for shell completion" },
@@ -216,6 +219,9 @@ local function builtin_commands(ctx, row)
     if types.VERBS[row.name] then
         return types.commands(ctx.root, project_type(ctx), row.name)
     end
+    if LISTED[row.name] then
+        return LISTED[row.name].commands(ctx.root)
+    end
     local out = devos.capture({ "bash", project.share .. "/legacy.bash", "__commands", row.name }, {
         env = { DEV_UID = tostring(devos.getuid()), DEV_OS = devos.name() },
     })
@@ -314,6 +320,19 @@ end
 function M.overview(ctx, reg)
     io.write(overview(ctx, reg, screen(), {}))
     return 0
+end
+
+---Refuse a flag or argument a verb does not take.
+---
+---It prints the message and the curated view on standard error, then exits 2.
+---@param ctx dev.Ctx the context of the command
+---@param reg dev.Registry the project's registry
+---@param arg string the argument that is not taken
+function M.bad_argument(ctx, reg, arg)
+    local kind = arg:sub(1, 1) == "-" and "flag" or "argument"
+    stderr:write("dev ", ctx.name, ": unknown ", kind, " ", arg, "\n\n")
+    stderr:write(overview(ctx, reg, screen():stderr(), {}))
+    os.exit(2)
 end
 
 ---Print the topic called `name` when the project or dev has one.

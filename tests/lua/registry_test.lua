@@ -18,6 +18,8 @@ local LUA_ONLY = {
     deploy = true,
     guide = true,
     bootstrap = true,
+    push = true,
+    pull = true,
 }
 
 local function scripted(dir, rel, text, mode)
