@@ -10,8 +10,7 @@
 # project.godot (godot), package.json (node), any .lua file outside dot
 # directories (lua), Makefile (make), else none.
 #
-# `dev help` lists the verbs under group headings with the topics (`.dev/help.sh` replaces it), and
-# the hidden `dev __verbs`, `dev __flags <verb>` and `dev __check-topics` feed shell completion and tests.
+# `dev help` and the completion and topic helpers are Lua (dev.help, dev.complete, dev.topics).
 #
 # `dev sync` compares a project's copied lint files against the templates in
 # the dotfiles repo, unless the project has its own .dev/sync.sh. DOTFILES
@@ -245,7 +244,6 @@ box install-tools|cmd_box_install_tools||dev box install-tools BOX [PROJECT...]|
 box delete|cmd_box_delete|--yes -y --no-archive|dev box delete BOX [-y or --yes] [--no-archive]|Archive a box's projects and delete it, or delete it with no archive under --no-archive, after asking unless -y
 box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
 bootstrap|cmd_bootstrap|--dry-run --no-login|dev bootstrap [--dry-run] [--no-login]|Run bootstrap.sh from the dotfiles clone: the package manager and luajit first, then stow, tailscale, the default packages and the manifest tools|hidden
-help||-a -k --topics|dev help [-a] [--topics] [-k topic] [verb or topic]|Show the commands, the details of one verb or a topic|hidden
 TABLE
 }
 
@@ -276,72 +274,6 @@ script_desc() {
     ' "$1"
 }
 
-# script_flags <script>: the words on the "# flags:" line, one per line. -h and --help are dropped with a warning.
-script_flags() {
-    awk '
-        /^# *flags:/ { sub(/^# *flags: */, ""); gsub(/,/, " "); n = split($0, w, " ")
-            for (i = 1; i <= n; i++) {
-                if (w[i] == "-h" || w[i] == "--help") {
-                    print "dev: " FILENAME ": the flags line declares " w[i] ", which dev reserves before --" > "/dev/stderr"
-                    continue
-                }
-                print w[i]
-            }
-            exit }
-        /^[^#]/ && NR > 1 { exit }
-    ' "$1"
-}
-
-# script_group <script>: the name on the "# group:" line.
-script_group() {
-    awk '
-        /^# *group:/ { sub(/^# *group: */, ""); print; exit }
-        /^[^#]/ && NR > 1 { exit }
-    ' "$1"
-}
-
-# script_place <script>: the "# group:" name (possibly empty) on one line, then 1 when the header has a "# hidden" line, else 0.
-script_place() {
-    awk '
-        /^# *group:/ && !group { sub(/^# *group: */, ""); group = $0; next }
-        /^# *hidden *$/ { hidden = 1 }
-        /^[^#]/ && NR > 1 { exit }
-        END { print group; print hidden + 0 }
-    ' "$1"
-}
-
-# verbs_table: "name<TAB>origin<TAB>description" per visible verb.
-verbs_table() {
-    local verb script name desc origin
-    for verb in $VERBS; do
-        origin=builtin
-        desc=$(builtin_desc "$verb")
-        if has_override "$verb"; then
-            origin=override
-            script="$ROOT/.dev/$verb.sh"
-            desc=$(script_desc "$script")
-            : "${desc:=$(builtin_desc "$verb")}"
-        fi
-        printf '%s\t%s\t%s\n' "$verb" "$origin" "$desc"
-    done
-    for script in "$ROOT"/.dev/*.sh; do
-        [ -x "$script" ] || continue
-        name=$(basename "$script" .sh)
-        case "$name" in __*) continue ;; esac
-        case " $VERBS " in *" $name "*) continue ;; esac
-        printf '%s\tlocal\t%s\n' "$name" "$(script_desc "$script")"
-    done
-    for script in "$ROOT"/.dev/*/; do
-        [ -d "$script" ] || continue
-        name=$(basename "$script")
-        case "$name" in __*) continue ;; esac
-        case " $VERBS " in *" $name "*) continue ;; esac
-        [ -x "$ROOT/.dev/$name.sh" ] && continue
-        [ -n "$(project_subs "$name")" ] || continue
-        printf '%s\tlocal\t%s\n' "$name" "$(noun_desc "$name")"
-    done
-}
-
 # project_subs <noun>: the names of the executable scripts in .dev/<noun>/, one per line.
 project_subs() {
     local script name
@@ -368,20 +300,6 @@ is_noun() {
     [ -n "$(project_subs "$1")" ]
 }
 
-# noun_desc <noun>: the built-in description, else the first line of .dev/<noun>/DESCRIPTION,
-# else the subcommand names.
-noun_desc() {
-    local desc
-    desc=$(builtin_desc "$1")
-    if [ -z "$desc" ] && [ -f "$ROOT/.dev/$1/DESCRIPTION" ]; then
-        desc=$(head -n1 "$ROOT/.dev/$1/DESCRIPTION")
-    fi
-    if [ -z "$desc" ]; then
-        desc=$(noun_subs_table "$1" | cut -f1 | paste -sd, - | sed 's/,/, /g')
-    fi
-    printf '%s\n' "$desc"
-}
-
 # noun_subs_table <noun>: "sub<TAB>origin<TAB>description" per subcommand, built-ins first.
 noun_subs_table() {
     local noun=$1 sub script desc origin
@@ -405,23 +323,6 @@ noun_subs_table() {
 # noun_has_sub <noun> <sub>: true when the noun has that subcommand.
 noun_has_sub() {
     noun_subs_table "$1" | awk -F'\t' -v s="$2" '$1 == s { found = 1 } END { exit !found }'
-}
-
-# verb_flags <verb>: the flags a verb accepts, one per line. A subcommand is "noun sub".
-verb_flags() {
-    local script
-    script=$(script_path "$1")
-    if [ -x "$script" ]; then
-        script_flags "$script"
-        return
-    fi
-    builtin_field "$1" 3 | tr ' ' '\n' | grep -v '^$' || true
-}
-
-# is_verb <name>: true for a built-in or a script in .dev/.
-is_verb() {
-    case " $VERBS " in *" $1 "*) return 0 ;; esac
-    [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] && has_override "$1"
 }
 
 has_make_target() {
@@ -508,16 +409,6 @@ builtin_commands() {
     esac
 }
 
-# topic_files: the topic files, the built-in ones first, one per line.
-topic_files() {
-    local dir file
-    for dir in "$(dotfiles_root)/docs/dev" "$ROOT/.dev/topics"; do
-        for file in "$dir"/*.md; do
-            if [ -f "$file" ]; then printf '%s\n' "$file"; fi
-        done
-    done
-}
-
 # usage: the curated overview on stderr, for a bad verb or bad arguments.
 usage() {
     if [ "$(dev_uid)" -ne 0 ]; then
@@ -546,117 +437,6 @@ cmd_guide() {
         exec guide dev --context-dir "$topics" -- "$question"
     fi
     exec guide dev -- "$question"
-}
-
-# topic_command_error <command line>: why a quoted `dev ...` line does not parse, or nothing when it does.
-topic_command_error() {
-    local -a words
-    local i=1 verb sub="" word valid
-    read -r -a words <<<"$1"
-    while [[ "${words[i]:-}" =~ ^(-v+|--verbose|--remote|--detach)$ ]]; do i=$((i + 1)); done
-    verb=${words[i]:-}
-    case "$verb" in
-    "" | "<"* | "["* | -* | __*) return 0 ;;
-    esac
-    if is_noun "$verb"; then
-        sub=${words[i + 1]:-}
-        case "$sub" in
-        "" | "<"* | "["* | -*) sub="" ;;
-        *)
-            if ! noun_has_sub "$verb" "$sub"; then
-                printf 'dev %s has no subcommand %s\n' "$verb" "$sub"
-                return 0
-            fi
-            i=$((i + 1))
-            ;;
-        esac
-    elif ! is_verb "$verb"; then
-        printf 'no verb %s\n' "$verb"
-        return 0
-    fi
-    valid=$(verb_flags "$verb${sub:+ $sub}" 2>/dev/null)
-    i=$((i + 1))
-    while [ "$i" -lt "${#words[@]}" ]; do
-        word=${words[i]}
-        i=$((i + 1))
-        case "$word" in
-        "|" | "||" | "&&" | ";" | ">" | "#"*) break ;;
-        esac
-        word=${word#\[}
-        word=${word%%\]*}
-        word=${word%%=*}
-        case "$word" in
-        -- | -h | --help | --verbose | --remote | --detach) ;;
-        -*)
-            if [[ "$word" =~ ^-v+$ ]]; then continue; fi
-            if ! has_line "$valid" "$word"; then
-                printf 'dev %s takes no flag %s\n' "$verb${sub:+ $sub}" "$word"
-                return 0
-            fi
-            ;;
-        esac
-    done
-}
-
-TOPICS_FAILED=0
-
-# topic_problem <file> <line> <message>: print one problem as file:line and remember it.
-topic_problem() {
-    printf '%s:%s: %s\n' "$1" "$2" "$3" >&2
-    TOPICS_FAILED=1
-}
-
-# check_topics: check every built-in and project topic, print each problem as file:line and fail when there is one.
-check_topics() {
-    local file name first line num fence err span rest shown builtin_dir script warn re="\`(dev [^\`]*)\`"
-    builtin_dir="$(dotfiles_root)/docs/dev"
-    TOPICS_FAILED=0
-    while IFS= read -r file; do
-        name=$(basename "$file" .md)
-        shown=${file#"$ROOT"/}
-        [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || topic_problem "$shown" 1 "the topic name must use only letters, digits, - and _"
-        first=""
-        IFS= read -r first <"$file" || true
-        [[ "$first" == "# $name: "?* ]] || topic_problem "$shown" 1 "the first line must be \"# $name: <summary>\""
-        if [ "$(dirname "$file")" != "$builtin_dir" ] && [ -f "$builtin_dir/$name.md" ]; then
-            topic_problem "$shown" 1 "topic $name is also a built-in topic"
-        fi
-        if is_verb "$name" || is_noun "$name"; then topic_problem "$shown" 1 "topic $name is also a verb"; fi
-        num=0 fence=0
-        while IFS= read -r line || [ -n "$line" ]; do
-            num=$((num + 1))
-            case "$line" in
-            '```'*)
-                fence=$((1 - fence))
-                continue
-                ;;
-            esac
-            if [ "$fence" -eq 1 ]; then
-                case "$line" in
-                "dev "*)
-                    err=$(topic_command_error "$line")
-                    if [ -n "$err" ]; then topic_problem "$shown" "$num" "$err"; fi
-                    ;;
-                esac
-                continue
-            fi
-            rest=$line
-            while [[ "$rest" =~ $re ]]; do
-                span=${BASH_REMATCH[1]}
-                err=$(topic_command_error "$span")
-                if [ -n "$err" ]; then topic_problem "$shown" "$num" "\`$span\`: $err"; fi
-                rest=${rest#*"${BASH_REMATCH[0]}"}
-            done
-        done <"$file"
-    done < <(topic_files)
-    for script in "$ROOT"/.dev/*.sh "$ROOT"/.dev/*/*.sh; do
-        [ -x "$script" ] || continue
-        warn=$(script_flags "$script" 2>&1 >/dev/null)
-        if [ -n "$warn" ]; then
-            topic_problem "${script#"$ROOT"/}" 1 "the flags line declares -h or --help, which dev reserves before --"
-        fi
-    done
-    return "$TOPICS_FAILED"
 }
 
 detect_type() {
@@ -2490,23 +2270,6 @@ main() {
     __commands)
         builtin_commands "${1:-}" "$(detect_type)"
         return 0
-        ;;
-    __verbs)
-        verbs_table
-        return 0
-        ;;
-    __subs)
-        if is_noun "${1:-}"; then noun_subs_table "$1"; fi
-        return 0
-        ;;
-    __flags)
-        verb_flags "${1:-}${2:+ $2}"
-        printf '%s\n' -v --verbose -vv --remote --detach
-        return 0
-        ;;
-    __check-topics)
-        check_topics
-        return
         ;;
     esac
     if is_noun "$verb"; then

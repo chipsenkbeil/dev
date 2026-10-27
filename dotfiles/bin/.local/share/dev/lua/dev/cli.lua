@@ -1,3 +1,4 @@
+local complete = require("dev.complete")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
@@ -12,11 +13,11 @@ local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\
 local EXEC_FAILED = 126
 local SHARE = project.share
 local PS4 = "+ ${BASH_SOURCE##*/}:${LINENO}: "
-local LEGACY_ONLY = {
-    __verbs = true,
-    __subs = true,
-    __flags = true,
-    ["__check-topics"] = true,
+local HIDDEN_HELPERS = {
+    __verbs = complete.verbs,
+    __subs = complete.subs,
+    __flags = complete.flags,
+    ["__check-topics"] = complete.check_topics,
 }
 
 ---@class dev.cli
@@ -215,11 +216,12 @@ function M.main(argv)
     if is_help(name) then
         name = "help"
     end
-    if LEGACY_ONLY[name] then
-        legacy(argv)
-    end
     local root = project.root()
     local reg = registry.load(root)
+    if HIDDEN_HELPERS[name] then
+        local helper_ctx = { name = name, words = { name }, root = root, args = tail(args, 2) }
+        os.exit(HIDDEN_HELPERS[name](helper_ctx, reg))
+    end
     local words, rest = { name }, tail(args, 2)
     local row = reg:find(words)
     if row and row.noun then

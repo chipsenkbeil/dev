@@ -3,6 +3,7 @@ local fs = require("dev.fs")
 local project = require("dev.project")
 local registry = require("dev.registry")
 local text = require("dev.text")
+local topics = require("dev.topics")
 local ui = require("dev.ui")
 local verb = require("dev.verb")
 
@@ -74,22 +75,9 @@ local function section(c, out, title, rows, width, markw)
     end
 end
 
-local function topic_files(ctx)
-    local files = {}
-    for _, dir in ipairs({ project.dotfiles_root() .. "/docs/dev", ctx.root .. "/.dev/topics" }) do
-        for _, file in ipairs(fs.list(dir) or {}) do
-            local name = file:match("^([^.].*)%.md$")
-            if name and fs.is_file(dir .. "/" .. file) then
-                files[#files + 1] = { name = name, path = dir .. "/" .. file }
-            end
-        end
-    end
-    return files
-end
-
-local function topics(ctx)
+local function topic_rows(ctx)
     local seen, rows = {}, {}
-    for _, file in ipairs(topic_files(ctx)) do
+    for _, file in ipairs(topics.files(ctx.root)) do
         if not seen[file.name] then
             seen[file.name] = true
             local first = (fs.read(file.path) or ""):match("^[^\n]*")
@@ -111,7 +99,7 @@ local function topic_path(ctx, name)
     if not name:find(NAME) then
         return nil
     end
-    for _, file in ipairs(topic_files(ctx)) do
+    for _, file in ipairs(topics.files(ctx.root)) do
         if file.name == name then
             return file.path
         end
@@ -182,9 +170,9 @@ end
 local function overview(ctx, reg, c, opts)
     local all = opts.all
     local out = {}
-    local rows, topic_rows = verb_rows(reg, opts), topics(ctx)
+    local rows, listed = verb_rows(reg, opts), topic_rows(ctx)
     local width, markw = widths(rows)
-    width = math.max(width, (widths(topic_rows)))
+    width = math.max(width, (widths(listed)))
     local kind = project_type(ctx)
     out[#out + 1] = ui.paint(c, "dev", Style.BOLD)
         .. ": "
@@ -198,7 +186,7 @@ local function overview(ctx, reg, c, opts)
     if all then
         section(c, out, HIDDEN, in_group(rows, HIDDEN), width, markw)
     end
-    section(c, out, "Topics", topic_rows, width, markw)
+    section(c, out, "Topics", listed, width, markw)
     if all then
         out[#out + 1] = "\nRun " .. ONE_COMMAND
     else
@@ -356,7 +344,7 @@ function M.run(ctx, reg)
         if #args ~= 1 then
             fail("--topics takes no arguments, got " .. args[2])
         end
-        for _, row in ipairs(topics(ctx)) do
+        for _, row in ipairs(topic_rows(ctx)) do
             io.write(row.name, "\t", row.desc, "\n")
         end
         return 0

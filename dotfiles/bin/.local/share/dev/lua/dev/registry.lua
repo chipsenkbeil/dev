@@ -7,6 +7,7 @@ local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = io.stderr
 local RESERVED_DIRS = { lua = true, topics = true }
 local HIDDEN_GROUP = "hidden"
+local GLOBAL_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--detach" }
 
 ---@class dev.Script
 ---@field path string path of the script
@@ -42,6 +43,9 @@ Registry.__index = Registry
 
 ---@class dev.registry
 local M = {}
+
+---The flags dev takes before any verb's own, in the order completion lists them.
+M.GLOBAL_FLAGS = GLOBAL_FLAGS
 
 local function glob_names(dir)
     local present = {}
@@ -329,6 +333,22 @@ function Registry:subs(noun)
         rows[#rows + 1] = self:__sub(parent, sub)
     end
     return rows
+end
+
+---List every script in `.dev` and in its noun directories, `__` helpers included.
+---@return dev.Script[] scripts the scripts, the flat ones first
+function Registry:scripts()
+    local out = {}
+    for _, name in ipairs(self.flat_order) do
+        out[#out + 1] = self.flat[name]
+    end
+    for _, noun in ipairs(self.dir_order) do
+        local dir = self.dirs[noun]
+        for _, name in ipairs(dir.order) do
+            out[#out + 1] = dir.scripts[name]
+        end
+    end
+    return out
 end
 
 ---Read the header of the script behind a row.
