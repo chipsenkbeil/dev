@@ -1,6 +1,6 @@
 # boxes: Create, connect to, stop and delete dev boxes through ci box
 
-`dev box` is a client for `ci box ... --json`. It needs `ci` and `jq` on PATH
+`dev box` is a client for `ci box ... --json`. It needs only `ci` on PATH
 and never talks to Incus, ssh-keys or Tailscale itself.
 
 ```

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pure-bash tests for `dev box` and `dev connect`. ci and et are stubs first on PATH that
-# log their arguments, one per line, and ci answers from fixture files in $FX. A fake dotfiles
-# clone in DOTFILES holds a stub scripts/select-items.sh that records the items and picks FAKE_PICK.
+# log their arguments, one per line, and ci answers from fixture files in $FX. LUA_INIT loads
+# tests/lua/fake_env.lua, where FAKE_PICK picks a box and PICK_LOG records the picker items. dev gets no jq.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,11 +17,12 @@ mkdir -p "$LUABIN"
 ln -s "$(command -v luajit)" "$LUABIN/luajit"
 STUBS="$TMP/stubs"
 FX="$TMP/fx"
-FAKE_DOTFILES="$TMP/dotfiles"
-export LOG="$TMP/log" ITEMS="$TMP/items" FX
+JQ="$(command -v jq)"
+export LOG="$TMP/log" ITEMS="$TMP/items" FX JQ
+export LUA_INIT="@$REPO/tests/lua/fake_env.lua" PICK_LOG="$TMP/items"
 export XDG_STATE_HOME="$TMP/state"
 KH="$TMP/state/ci/known_hosts"
-mkdir -p "$STUBS" "$FX" "$FAKE_DOTFILES/scripts"
+mkdir -p "$STUBS" "$FX"
 
 cat >"$STUBS/ci" <<'STUB'
 #!/bin/sh
@@ -30,11 +31,11 @@ sub=$2
 if [ "$sub" = show ] && [ ! -f "$FX/show.json" ]; then
     for src in resume create; do
         if [ -f "$FX/$src.json" ]; then
-            jq -c '.box.ssh_user = "user"' "$FX/$src.json"
+            "$JQ" -c '.box.ssh_user = "user"' "$FX/$src.json"
             exit 0
         fi
     done
-    jq -c --arg n "$3" '{ok: true, box: (.boxes[] | select(.name == $n) | .ssh_user = "user")}' "$FX/ls.json"
+    "$JQ" -c --arg n "$3" '{ok: true, box: (.boxes[] | select(.name == $n) | .ssh_user = "user")}' "$FX/ls.json"
     exit 0
 fi
 [ ! -f "$FX/$sub.err" ] || cat "$FX/$sub.err" >&2
@@ -47,15 +48,9 @@ for tool in et ssh; do
 { echo $tool; printf '%s\n' "\$@"; echo '#'; } >>"\$LOG"
 STUB
 done
-cat >"$FAKE_DOTFILES/scripts/select-items.sh" <<'STUB'
-#!/bin/sh
-{ echo "picker $*"; cat; } >"$ITEMS"
-[ "$FAKE_PICK" != CANCEL ] || exit 1
-echo "$FAKE_PICK"
-STUB
-chmod +x "$STUBS"/* "$FAKE_DOTFILES/scripts/select-items.sh"
+chmod +x "$STUBS"/*
 
-BASE_PATH="$LUABIN:/usr/bin:/bin:/usr/sbin:/sbin:$(dirname "$(command -v jq)")"
+BASE_PATH="$LUABIN:/usr/bin:/bin:/usr/sbin:/sbin"
 fails=0
 
 assert_eq() {
@@ -114,13 +109,13 @@ reset() {
 NOPROJ="$TMP/noproj"
 mkdir -p "$NOPROJ"
 box() {
-    (cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" "$@")
+    (cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" "$DEV" "$@")
 }
 
 PROJ="$TMP/myproject"
 mkdir -p "$PROJ/.git"
 inproj() {
-    (cd "$PROJ" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" "$@")
+    (cd "$PROJ" && PATH="$STUBS:$BASE_PATH" "$DEV" "$@")
 }
 
 # mkbox <name> <state> <projects json> <expires offset s|null> <delete offset s|null>
@@ -263,7 +258,7 @@ reset
 DASH="$TMP/-dash"
 mkdir -p "$DASH/.git"
 fx create "$(doc "$KEPT")"
-out="$(cd "$DASH" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" box create 2>&1)"
+out="$(cd "$DASH" && PATH="$STUBS:$BASE_PATH" "$DEV" box create 2>&1)"
 assert_eq "create skips a default project that starts with a dash" "$(calls)" "ci box create --by human:tester --json"
 assert_contains "the skipped default is warned about" "$out" "not using -dash as the default project"
 reset
@@ -470,7 +465,7 @@ reset
 fx ls "$(lsdoc "$RUNNING")"
 mkdir -p "$TMP/noet"
 ln -sf "$STUBS/ci" "$STUBS/ssh" "$TMP/noet/"
-for tool in bash jq awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname luajit env; do
+for tool in bash sh awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname luajit env; do
     found="$(PATH="$BASE_PATH" command -v "$tool")" && ln -sf "$found" "$TMP/noet/$tool"
 done
 if PATH="$TMP/noet" command -v et >/dev/null 2>&1; then
@@ -501,10 +496,10 @@ assert_eq "connect with no boxes says how to create one" "$out" "no boxes; creat
 reset
 fx ls "$(lsdoc "$KEPT" "$STOPPED" "$RUNNING")"
 FAKE_PICK=myproject-k3x inproj connect
-assert_eq "the picker lists the project's boxes first, with a new-box item last" "$(cat "$ITEMS")" "picker --title Connect to a box
-myproject-k3x	myproject-k3x  running  linux-dev  myproject    $RUN_LEFT
-scratch-a1b	scratch-a1b    running  linux-dev  -            kept
-ci-abc	ci-abc         stopped  linux-dev  ci,dotfiles  $STOP_LEFT
+assert_eq "the picker lists the project's boxes first, with a new-box item last" "$(cat "$ITEMS")" "picker title=Connect to a box auto=true
+myproject-k3x	myproject-k3x	running	linux-dev	myproject	$RUN_LEFT
+scratch-a1b	scratch-a1b	running	linux-dev	-	kept
+ci-abc	ci-abc	stopped	linux-dev	ci,dotfiles	$STOP_LEFT
 __new__	new box for myproject"
 assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
 ci box show myproject-k3x --json
@@ -526,7 +521,7 @@ reset
 fx ls "$(lsdoc)"
 fx create "$(doc "$RUNNING")"
 FAKE_PICK=__new__ inproj connect >/dev/null
-assert_contains "inside a project with no boxes the picker still asks" "$(cat "$ITEMS")" "picker --title Connect to a box --no-auto"
+assert_contains "inside a project with no boxes the picker still asks" "$(cat "$ITEMS")" "picker title=Connect to a box auto=false"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 FAKE_PICK=CANCEL box connect >/dev/null 2>&1
@@ -592,7 +587,7 @@ ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s my_proj -c /srv/projects/my.proj user@myproject-k3x"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-(cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" DOTFILES="$FAKE_DOTFILES" XDG_STATE_HOME=relative/state HOME="$TMP/home" "$DEV" connect myproject-k3x)
+(cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" XDG_STATE_HOME=relative/state HOME="$TMP/home" "$DEV" connect myproject-k3x)
 assert_contains "a relative XDG_STATE_HOME falls back to ~/.local/state" "$(calls)" "UserKnownHostsFile=$TMP/home/.local/state/ci/known_hosts "
 reset
 fx ls "$(lsdoc "$RUNNING")"

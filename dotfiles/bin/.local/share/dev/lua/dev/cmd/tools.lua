@@ -7,7 +7,6 @@ local root = require("dev.root")
 local verb = require("dev.verb")
 
 local stderr = io.stderr
-local EXEC_FAILED = 126
 local ROOT_ENV = {
     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "HOME=/root",
@@ -50,7 +49,7 @@ end
 local function exec(argv, opts)
     local _, message = devos.exec(argv, opts)
     stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
-    return EXEC_FAILED
+    return devos.EXEC_FAILED
 end
 
 local function root_env(ctx)
@@ -111,7 +110,7 @@ local function run_driver(ctx, sub, manifest, args)
     end
     local code = devos.run(argv, { cwd = ctx.root })
     fs.remove(copy)
-    return code or EXEC_FAILED
+    return code or devos.EXEC_FAILED
 end
 
 local function manifest_path(ctx)

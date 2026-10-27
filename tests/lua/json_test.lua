@@ -186,3 +186,9 @@ t.test("encode refuses nesting deeper than 200", function()
     end
     t.ok(json.encode(ok), "199 levels should encode")
 end)
+
+t.test("present turns the null sentinel into nil and keeps other values", function()
+    t.eq(json.present(json.null), nil)
+    t.eq(json.present("x"), "x")
+    t.eq(json.present(false), false)
+end)

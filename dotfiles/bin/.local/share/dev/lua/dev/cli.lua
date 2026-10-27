@@ -1,4 +1,6 @@
+local box = require("dev.cmd.box")
 local complete = require("dev.complete")
+local connect = require("dev.cmd.connect")
 local misc = require("dev.cmd.misc")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
@@ -17,7 +19,6 @@ local stderr = io.stderr
 local INTERPRETER = arg and arg[-1]
 local MAX_LEVEL = 2
 local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
-local EXEC_FAILED = 126
 local SHARE = project.share
 local VCS_HANDLERS = { push = push.run, pull = pull.run }
 local NOT_TAKEN = {
@@ -104,7 +105,7 @@ local function exec_or_exit(argv, opts)
     devos.defaults.show = false
     local _, message = devos.exec(argv, opts)
     stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
-    os.exit(EXEC_FAILED)
+    os.exit(devos.EXEC_FAILED)
 end
 
 local function legacy(argv)
@@ -179,6 +180,8 @@ local function builtin_handler(row)
             or VCS_HANDLERS[row.name]
             or misc[row.name]
             or tools.handlers[row.name]
+            or box.handlers[row.name]
+            or connect.handlers[row.name]
     end
     return nil
 end

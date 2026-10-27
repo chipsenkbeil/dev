@@ -23,6 +23,17 @@ local LUA_ONLY = {
     bootstrap = true,
     push = true,
     pull = true,
+    connect = true,
+    box = true,
+    ["box ls"] = true,
+    ["box create"] = true,
+    ["box show"] = true,
+    ["box stop"] = true,
+    ["box resume"] = true,
+    ["box extend"] = true,
+    ["box install-tools"] = true,
+    ["box delete"] = true,
+    ["box connect"] = true,
 }
 
 local function scripted(dir, rel, text, mode)

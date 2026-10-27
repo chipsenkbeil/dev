@@ -12,12 +12,14 @@ local ESCAPES = {
 local UNESCAPES =
     { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
 
+---@class dev.json.Null the type of the sentinel that stands for JSON null
+
 ---Read and write JSON.
 ---
 ---Integers beyond 2^53 lose precision. Invalid UTF-8 passes through decode and
 ---encode unchanged. A repeated object key keeps its last value.
 ---@class dev.json
----@field null table<string, any> sentinel for JSON null, which keeps array lengths whole
+---@field null dev.json.Null sentinel for JSON null, which keeps array lengths whole
 local M = {
     null = setmetatable({}, {
         __tostring = function()
@@ -25,6 +27,17 @@ local M = {
         end,
     }),
 }
+
+---Turn a decoded JSON null into nil.
+---@generic T
+---@param value T|dev.json.Null? a decoded value
+---@return T? value `value`, or nil when it is `json.null`
+function M.present(value)
+    if value == M.null then
+        return nil
+    end
+    return value
+end
 
 ---@class dev.json.EncodeOpts
 ---@field order? string[] keys that come first, in this order, at every level

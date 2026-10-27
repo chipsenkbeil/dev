@@ -77,8 +77,10 @@ local WAIT_EXIT_SHIFT = 256
 ---@class dev.os
 ---@field Kind table<string, dev.os.Kind> the kinds of file `kind_of` names, by constant
 ---@field SIGNAL_EXIT_BASE integer exit status of a process killed by signal n, which is this plus n
+---@field EXEC_FAILED integer exit status when a command cannot be started
 local M = {
     SIGNAL_EXIT_BASE = 128,
+    EXEC_FAILED = 126,
     Kind = { FILE = "file", DIR = "dir", LINK = "link", OTHER = "other" },
 }
 

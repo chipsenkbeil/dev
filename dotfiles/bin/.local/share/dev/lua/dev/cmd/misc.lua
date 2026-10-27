@@ -5,7 +5,6 @@ local project = require("dev.project")
 local verb = require("dev.verb")
 
 local stderr = io.stderr
-local EXEC_FAILED = 126
 
 ---@class dev.cmd.misc
 local M = {}
@@ -13,7 +12,7 @@ local M = {}
 local function exec(argv, opts)
     local _, message = devos.exec(argv, opts)
     stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
-    return EXEC_FAILED
+    return devos.EXEC_FAILED
 end
 
 ---Say the project has no deploy of its own.

@@ -15,3 +15,23 @@ if name then
         return name
     end
 end
+
+local pick = os.getenv("FAKE_PICK")
+if pick then
+    local picker = require("dev.ui.picker")
+    picker.run = function(_, items, opts)
+        local log = os.getenv("PICK_LOG")
+        if log then
+            local file = assert(io.open(log, "a"))
+            file:write("picker title=", opts.title, " auto=", tostring(opts.auto), "\n")
+            for _, item in ipairs(items) do
+                file:write(item.value, "\t", table.concat(item.cells, "\t"), "\n")
+            end
+            file:close()
+        end
+        if pick == "CANCEL" then
+            return nil
+        end
+        return pick
+    end
+end
