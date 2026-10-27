@@ -48,9 +48,18 @@ end
 
 `run.words` holds the command words (`{"test"}`, or `{"box", "ls"}`),
 `run.args` the arguments after `--`, `run.detach` whether `--detach` was given,
-and `run.root` the project root as an absolute path. The returned integer is
+`run.root` the project root as an absolute path, and `run.verbose` the level of
+`-v` (0, 1 or 2). The returned integer is
 dev's exit code, and nothing means 0. A Lua error is printed as `dev: <message>`
 with exit 1.
+
+A runner can reuse the default one with
+`require("dev.remote").ci_runner(run, opts)`. `opts.verbosity` is the `-v`
+level and `opts.pipeline` names a pipeline under `.ci/`, so the job runs from
+`.ci/<pipeline>.lua` instead of the default pipeline. This repo's
+`.dev/__remote.lua` sends `bootstrap` to `.ci/bootstrap.lua` (`dev --remote
+bootstrap`, the Arch bootstrap proof) and everything else to the default
+pipeline.
 
 ## What it refuses
 

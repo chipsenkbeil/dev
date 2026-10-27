@@ -29,7 +29,11 @@ jobs)
         exit 0
         ;;
     esac
-    printf '{"jobs":[{"name":"test"},{"name":"widget-save"}]}\n'
+    if [ "$2" = bootstrap ]; then
+        printf '{"jobs":[{"name":"bootstrap"}]}\n'
+    else
+        printf '{"jobs":[{"name":"test"},{"name":"widget-save"}]}\n'
+    fi
     ;;
 run)
     printf 'ci -C %s' "$root" >>"$STUB_LOG"
@@ -263,4 +267,58 @@ t.test("arguments after -- reach the job untouched", function()
     local root, base = setup()
     local _, _, log = dev(root, base, { "--remote", "test", "--", "--anything" })
     t.ok(log:find("[--] [--anything]", 1, true), log)
+end)
+
+t.test(
+    "the project's __remote.lua sends bootstrap to the bootstrap pipeline and the rest to the default one",
+    function()
+        local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
+        local root, base = setup({ ["__remote.lua"] = override })
+        local _, code, log = dev(root, base, { "--remote", "bootstrap", "--", "a b" })
+        t.eq(code, 0)
+        t.eq(
+            log,
+            "ci -C "
+                .. root
+                .. " [run] [bootstrap] [--local] [--follow] [--job] [bootstrap] [--] [a b]\n"
+        )
+        _, code, log = dev(root, base, { "--remote", "--detach", "bootstrap" })
+        t.eq(code, 0)
+        t.eq(
+            log,
+            "ci -C " .. root .. " [run] [bootstrap] [--local] [--detach] [--job] [bootstrap] [--]\n"
+        )
+        _, code, log = dev(root, base, { "--remote", "test", "--", "x" })
+        t.eq(code, 0)
+        t.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [x]\n")
+    end
+)
+
+t.test("the project's __remote.lua keeps the default runner's job-not-found error", function()
+    local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
+    local root, base = setup({ ["__remote.lua"] = override })
+    local out, code, log = dev(root, base, { "--remote", "lint" })
+    t.eq(code, 1)
+    t.ok(out:find("dev: no job named lint in the project's default pipeline", 1, true), out)
+    t.eq(log, "")
+end)
+
+t.test("the project's __remote.lua keeps -v and -vv for the ci echo", function()
+    local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
+    local root, base = setup({ ["__remote.lua"] = override })
+    for _, flag in ipairs({ "-v", "-vv" }) do
+        local out = dev(root, base, { flag, "--remote", "bootstrap" })
+        t.ok(
+            out:find(
+                "+ ci -C " .. root .. " run bootstrap --local --follow --job bootstrap --\n",
+                1,
+                true
+            ),
+            out
+        )
+        out = dev(root, base, { flag, "--remote", "test" })
+        t.ok(out:find("+ ci -C " .. root .. " run --local --follow --job test --\n", 1, true), out)
+    end
+    local out = dev(root, base, { "--remote", "test" })
+    t.ok(not out:find("+ ci", 1, true), out)
 end)

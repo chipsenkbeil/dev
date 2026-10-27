@@ -28,13 +28,19 @@ local JOB_NAME = "^[A-Za-z0-9_-]+$"
 ---@field args string[] the arguments after `--`, untouched
 ---@field detach boolean whether `--detach` was given
 ---@field root string absolute path of the project root
+---@field verbose integer 0, or 1 or 2 for `-v` or `-vv`
 
 ---@class dev.remote
 local M = {}
 
-local function has_job(root, job)
+local function has_job(root, job, pipeline)
     local errfile = fs.mktemp({ prefix = "dev-remote" })
-    local out, code = devos.capture({ "ci", "-C", root, "jobs", "--json" }, { stderr = errfile })
+    local list = { "ci", "-C", root, "jobs" }
+    if pipeline then
+        list[#list + 1] = pipeline
+    end
+    list[#list + 1] = "--json"
+    local out, code = devos.capture(list, { stderr = errfile })
     local detail = errfile and fs.read(errfile) or ""
     if errfile then
         fs.remove(errfile)
@@ -59,7 +65,16 @@ local function trace(argv, verbosity)
     end
 end
 
-local function ci_runner(run, verbosity)
+---@class dev.remote.CiOpts
+---@field verbosity integer 1 or more prints the ci command first
+---@field pipeline? string a pipeline under `.ci/` to run the job from, else the default one
+
+---Run a job on ci and return its exit code.
+---@param run dev.remote.Run
+---@param opts dev.remote.CiOpts
+---@return integer code
+function M.ci_runner(run, opts)
+    local pipeline = opts.pipeline
     local job = table.concat(run.words, "-")
     if not job:find(JOB_NAME) then
         verb.die("dev: --remote needs a job name, not " .. table.concat(run.words, " "))
@@ -68,28 +83,27 @@ local function ci_runner(run, verbosity)
         stderr:write("WARNING: ci not found. Install with: dev install from the ci repo\n")
         return 1
     end
-    if not has_job(run.root, job) then
+    if not has_job(run.root, job, pipeline) then
         verb.die(
             "dev: no job named "
                 .. job
-                .. " in the project's default pipeline (.ci/jobs.lua), add one to run it with --remote"
+                .. " in the project's "
+                .. (pipeline and ("pipeline " .. pipeline) or "default pipeline (.ci/jobs.lua)")
+                .. ", add one to run it with --remote"
         )
     end
-    local argv = {
-        "ci",
-        "-C",
-        run.root,
-        "run",
-        "--local",
-        run.detach and "--detach" or "--follow",
-        "--job",
-        job,
-        "--",
-    }
+    local argv = { "ci", "-C", run.root, "run" }
+    if pipeline then
+        argv[#argv + 1] = pipeline
+    end
+    local mode = run.detach and "--detach" or "--follow"
+    for _, word in ipairs({ "--local", mode, "--job", job, "--" }) do
+        argv[#argv + 1] = word
+    end
     for _, word in ipairs(run.args) do
         argv[#argv + 1] = word
     end
-    trace(argv, verbosity)
+    trace(argv, opts.verbosity)
     local code = devos.run(argv)
     if code == nil then
         verb.die("dev: cannot run ci")
@@ -146,12 +160,18 @@ function M.run(ctx, words, args, detach)
             "--remote passes arguments to the job only after --, got " .. ctx.args[1]
         )
     end
-    local run = { words = words, args = args, detach = detach, root = ctx.root }
+    local run = {
+        words = words,
+        args = args,
+        detach = detach,
+        root = ctx.root,
+        verbose = ctx.verbose,
+    }
     local override = ctx.root .. "/.dev/__remote.lua"
     if fs.is_file(override) then
         return file_runner(override, run)
     end
-    return ci_runner(run, ctx.verbose)
+    return M.ci_runner(run, { verbosity = ctx.verbose })
 end
 
 return M

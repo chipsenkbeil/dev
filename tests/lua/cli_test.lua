@@ -305,3 +305,14 @@ t.test("--remote is never an unknown flag", function()
     local out = dev(root, { "s", "--remote" }, env)
     t.ok(not out:find("unknown flag", 1, true), out)
 end)
+
+t.test("root-tests and bootstrap-arch are unknown verbs", function()
+    for _, name in ipairs({ "root-tests", "bootstrap-arch" }) do
+        local out, code = devos.capture(
+            { REPO .. "/dotfiles/bin/.local/bin/dev", name },
+            { cwd = REPO, stderr = "stdout" }
+        )
+        t.eq(code, 2)
+        t.ok(out:find("dev: unknown verb " .. name .. "\n", 1, true), out)
+    end
+end)

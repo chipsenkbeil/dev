@@ -1,13 +1,13 @@
 -- Proves that bootstrap.sh --no-login builds a usable box on Arch, the way the
 -- dev box image build runs it.
 --
---   ci run bootstrap --local --job bootstrap-arch -f
+--   dev --remote bootstrap
 --
 -- The linux-vm target is an Arch VM: the job runs as root with sudo, and
 -- stow and zsh are absent. So the job creates the user the image build uses,
 -- gives it passwordless sudo for the run, and does everything else as that user.
 -- A full run installs every .dev/tools.tsv row, AUR builds included, so it is long
--- and never part of a default run.
+-- and sits in its own pipeline, outside the default one that runs on every patchset.
 local USER = "user"
 local HOME = "/home/" .. USER
 local CLONE = HOME .. "/projects/dotfiles"
@@ -18,15 +18,7 @@ end
 
 return {
   jobs = {
-    ["root-tests"] = {
-      matrix = { { os = "linux-base" } },
-      run = function()
-        ci.sh("[ \"$(id -u)\" -eq 0 ] || { echo 'root-tests must run as root' >&2; exit 1; }")
-        ci.sh("bash tests/dev/root_test.sh </dev/null")
-        ci.sh("bash tests/dev/tools_test.sh </dev/null")
-      end,
-    },
-    ["bootstrap-arch"] = {
+    ["bootstrap"] = {
       matrix = { { os = "linux-vm" } },
       run = function()
         ci.group("create " .. USER, function()
