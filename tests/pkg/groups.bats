@@ -101,7 +101,7 @@ TSV
     source "$REPO/scripts/pkg/lib.sh"
     base="$(manifest_rows "$REPO/.dev/tools.tsv" 1 base | cut -f1 | sort | tr '\n' ' ')"
     rust="$(manifest_rows "$REPO/.dev/tools.tsv" 1 rust | cut -f1 | sort | tr '\n' ' ')"
-    [ "$base" = "ast-grep bats difftastic fd gh git hyperfine jq jujutsu luajit ripgrep sd selene shellcheck shfmt stylua tokei watchexec yq " ]
+    [ "$base" = "ast-grep bats dash difftastic fd gh git hyperfine jq jujutsu luajit ripgrep sd selene shellcheck shfmt stow stylua tokei watchexec yq zsh " ]
     [ "$rust" = "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort rustfmt-nightly rustup sccache " ]
 }
 
