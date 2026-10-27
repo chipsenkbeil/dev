@@ -7,6 +7,9 @@ local vcs = require("dev.vcs")
 
 local has_jj = devos.which("jj") ~= nil
 
+devos.defaults.env =
+    { GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1", JJ_CONFIG = "/dev/null" }
+
 local function ok(argv, opts)
     opts = opts or {}
     opts.stdout = "null"
