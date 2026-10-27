@@ -95,3 +95,51 @@ setup() {
     [ "$status" -eq 1 ]
     [ ! -e "$BATS_TEST_TMPDIR/rustup.log" ]
 }
+
+rustup_log() {
+    cat "$BATS_TEST_TMPDIR/rustup.log"
+}
+
+darwin_rustup() {
+    printf '#!/bin/sh\necho "$*" >>"%s/rustup.log"\n[ "$1 $2" = "target list" ] && printf "%s"\nexit 0\n' "$BATS_TEST_TMPDIR" "$1" >"$STUBS/rustup"
+    chmod +x "$STUBS/rustup"
+}
+
+@test "install-rust-darwin-targets --check exits 0 when both targets are installed" {
+    darwin_rustup 'aarch64-apple-darwin\nx86_64-apple-darwin\nx86_64-unknown-linux-gnu\n'
+    run bash "$REPO/scripts/install-rust-darwin-targets.sh" --check
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [[ "$(rustup_log)" != *"target add"* ]] || false
+}
+
+@test "install-rust-darwin-targets --check exits 1 when one target is missing and adds nothing" {
+    darwin_rustup 'aarch64-apple-darwin\n'
+    run bash "$REPO/scripts/install-rust-darwin-targets.sh" --check
+    [ "$status" -eq 1 ]
+    [[ "$(rustup_log)" != *"target add"* ]] || false
+}
+
+@test "install-rust-darwin-targets adds only the missing target" {
+    darwin_rustup 'aarch64-apple-darwin\n'
+    run bash "$REPO/scripts/install-rust-darwin-targets.sh"
+    [ "$status" -eq 0 ]
+    [[ "$(rustup_log)" == *"target add x86_64-apple-darwin"* ]] || false
+    [[ "$(rustup_log)" != *"target add aarch64"* ]] || false
+}
+
+@test "install-rust-darwin-targets does nothing when both targets are installed" {
+    darwin_rustup 'aarch64-apple-darwin\nx86_64-apple-darwin\n'
+    run bash "$REPO/scripts/install-rust-darwin-targets.sh"
+    [ "$status" -eq 0 ]
+    [[ "$(rustup_log)" != *"target add"* ]] || false
+}
+
+@test "dotfiles' rust group lists zig, cargo-zigbuild and the Apple targets" {
+    cd "$REPO"
+    run luajit "$PKG" install --manifest "$REPO/.dev/tools.tsv" --dry-run --group rust
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"brew install zig"* ]] || false
+    [[ "$output" == *"brew install cargo-zigbuild"* ]] || false
+    [[ "$output" == *"bash scripts/install-rust-darwin-targets.sh"* ]] || false
+}

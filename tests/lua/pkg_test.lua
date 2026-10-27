@@ -248,6 +248,6 @@ t.test("the real manifest puts exactly the base and rust rows in their groups", 
     )
     t.eq(
         names("rust"),
-        "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort rustfmt-nightly rustup sccache"
+        "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort cargo-zigbuild rust-darwin-targets rustfmt-nightly rustup sccache zig"
     )
 end)
