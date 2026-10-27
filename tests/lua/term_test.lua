@@ -14,6 +14,17 @@ t.test("decode names the arrow keys from both escape forms and the vi keys", fun
     t.eq(term.decode("\14"), { Key.DOWN })
 end)
 
+t.test("decode names page, home and end keys in each common form", function()
+    t.eq(term.decode("\27[5~"), { Key.PGUP })
+    t.eq(term.decode("\27[6~"), { Key.PGDN })
+    t.eq(term.decode("\27[H"), { Key.HOME })
+    t.eq(term.decode("\27OH"), { Key.HOME })
+    t.eq(term.decode("\27[1~"), { Key.HOME })
+    t.eq(term.decode("\27[F"), { Key.END })
+    t.eq(term.decode("\27OF"), { Key.END })
+    t.eq(term.decode("\27[4~"), { Key.END })
+end)
+
 t.test("decode names enter, esc, ctrl-c and space", function()
     t.eq(term.decode("\r"), { Key.ENTER })
     t.eq(term.decode("\n"), { Key.ENTER })

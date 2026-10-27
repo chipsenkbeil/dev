@@ -63,6 +63,10 @@ int close(int fd);
 ---@field ESC string a lone escape byte
 ---@field CTRL_C string ctrl-c, delivered as a key in raw mode
 ---@field SPACE string the space bar
+---@field PGUP string page up
+---@field PGDN string page down
+---@field HOME string home
+---@field END string end
 ---@field EOF string the terminal closed or failed
 
 ---@class dev.term
@@ -77,6 +81,10 @@ local M = {
         ESC = "esc",
         CTRL_C = "ctrl-c",
         SPACE = "space",
+        PGUP = "pgup",
+        PGDN = "pgdn",
+        HOME = "home",
+        END = "end",
         EOF = "eof",
     },
 }
@@ -182,6 +190,16 @@ local ESCAPE_KEYS = {
     ["OA"] = Key.UP,
     ["[B"] = Key.DOWN,
     ["OB"] = Key.DOWN,
+    ["[5~"] = Key.PGUP,
+    ["[6~"] = Key.PGDN,
+    ["[H"] = Key.HOME,
+    ["OH"] = Key.HOME,
+    ["[1~"] = Key.HOME,
+    ["[7~"] = Key.HOME,
+    ["[F"] = Key.END,
+    ["OF"] = Key.END,
+    ["[4~"] = Key.END,
+    ["[8~"] = Key.END,
 }
 
 local BYTE_KEYS = {

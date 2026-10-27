@@ -51,6 +51,8 @@ local Outcome = M.Outcome
 ---@field private __has_toggles boolean whether the options list toggles
 ---@field private __toggles dev.ui.picker.Toggle[] toggles with their current `on`
 ---@field private __cursor integer index of the row under the cursor
+---@field private __top integer index of the first row in the window
+---@field private __page integer rows `pgup` and `pgdn` move by
 ---@field private __outcome string? `Outcome` value once the user is done
 local Model = {}
 Model.__index = Model
@@ -62,6 +64,8 @@ local ALL_KEY = "a"
 local ENTER_SCREEN = "\27[?1049h\27[?25l"
 local LEAVE_SCREEN = "\27[?25h\27[?1049l"
 local CLEAR = "\27[H\27[J"
+local DEFAULT_PAGE = 10
+local MIN_WINDOW = 3
 
 local function first_enabled(items)
     for i, item in ipairs(items) do
@@ -85,6 +89,8 @@ function M.new(items, opts)
         __has_toggles = opts.toggles ~= nil,
         __toggles = {},
         __cursor = first_enabled(items),
+        __top = 1,
+        __page = DEFAULT_PAGE,
         __outcome = nil,
     }, Model)
     for i, item in ipairs(items) do
@@ -127,6 +133,31 @@ function Model:__move(step)
     end
 end
 
+---Move the cursor to the first enabled row at or past `target` in a direction.
+---
+---With none before the end of the list, it takes the nearest enabled row between `target` and
+---the cursor, and stays put when there is none.
+---@private
+---@param target integer row to aim for, cut to the list
+---@param step integer 1 to look further down from there, -1 to look further up
+function Model:__jump(target, step)
+    local items = self.__items
+    local from = math.max(1, math.min(#items, target))
+    local at = from
+    while items[at] and items[at].disabled do
+        at = at + step
+    end
+    if not items[at] then
+        at = from
+        while items[at] and items[at].disabled and at ~= self.__cursor do
+            at = at - step
+        end
+    end
+    if items[at] and not items[at].disabled then
+        self.__cursor = at
+    end
+end
+
 ---Check every enabled row, or clear them all when they are all checked.
 ---@private
 function Model:__flip_all()
@@ -162,6 +193,14 @@ function Model:key(name)
         self:__move(-1)
     elseif name == Key.DOWN then
         self:__move(1)
+    elseif name == Key.PGUP then
+        self:__jump(self.__cursor - self.__page, -1)
+    elseif name == Key.PGDN then
+        self:__jump(self.__cursor + self.__page, 1)
+    elseif name == Key.HOME then
+        self:__jump(1, -1)
+    elseif name == Key.END then
+        self:__jump(#self.__items, 1)
     elseif name == Key.SPACE and self.__multi then
         local item = self.__items[self.__cursor]
         if item and not item.disabled then
@@ -253,9 +292,41 @@ function Model:__row(ctx, i, widths)
     return marker .. " " .. box .. row
 end
 
+---Find the last row shown for a window that starts at `top`.
+---@private
+---@param top integer index of the first row in the window
+---@param window integer lines the window has, indicators included
+---@return integer last index of the last row shown
+function Model:__last_shown(top, window)
+    local count = #self.__items
+    local room = window - (top > 1 and 1 or 0)
+    if top + room - 1 >= count then
+        return count
+    end
+    return top + room - 2
+end
+
+---Slide the window so the cursor is in it.
+---@private
+---@param window integer lines the window has, indicators included
+---@return integer last index of the last row shown
+function Model:__scroll(window)
+    local top = math.min(self.__top, self.__cursor)
+    while self:__last_shown(top, window) < self.__cursor and top < self.__cursor do
+        top = top + 1
+    end
+    self.__top = top
+    return self:__last_shown(top, window)
+end
+
 ---Draw the picker as lines, each cut to the context's width.
+---
+---When `ctx.height` is set and the rows do not fit, the rows shown are a window that follows the
+---cursor, with a dim `↑ n more` and `↓ n more` line standing in for the rows cut off. The window
+---is never under 3 lines, so below 5 rows (6 with toggles) the picker draws more than the height.
+---With no `ctx.height` every row is drawn.
 ---@param ctx dev.ui.Context drawing settings
----@return string[] lines the title, one line per row, the toggles when there are any, then the hint
+---@return string[] lines the title, the rows, the toggles when there are any, then the hint
 function Model:lines(ctx)
     local out = {}
     local title = ui.paint(ctx, self.__opts.title, Style.BOLD)
@@ -265,8 +336,25 @@ function Model:lines(ctx)
     out[1] = text.fit(title, ctx.width)
 
     local widths = self:__widths()
-    for i = 1, #self.__items do
+    local count = #self.__items
+    local first, last = 1, count
+    local window = (ctx.height or 0) - 2 - (self.__has_toggles and 1 or 0)
+    if ctx.height and count > 0 and count > window then
+        window = math.max(window, MIN_WINDOW)
+        self.__page = window
+        last = self:__scroll(window)
+        first = self.__top
+    end
+    if first > 1 then
+        out[#out + 1] =
+            text.fit(ui.paint(ctx, "↑ " .. (first - 1) .. " more", Style.DIM), ctx.width)
+    end
+    for i = first, last do
         out[#out + 1] = text.fit(self:__row(ctx, i, widths), ctx.width)
+    end
+    if last < count then
+        out[#out + 1] =
+            text.fit(ui.paint(ctx, "↓ " .. (count - last) .. " more", Style.DIM), ctx.width)
     end
 
     if self.__has_toggles then
@@ -295,7 +383,8 @@ end
 
 local function interact(ctx, model, screen)
     while true do
-        screen.tty:write(CLEAR, table.concat(model:lines(ctx), "\n"))
+        local drawn = ctx.height and ctx or ctx:with_height((ctx.size()))
+        screen.tty:write(CLEAR, table.concat(model:lines(drawn), "\n"))
         screen.tty:flush()
         if model:key(term.read_key(screen.fd)) then
             return model:result()

@@ -97,3 +97,46 @@ same_terminal() {
     same_terminal
     [[ "$(<"$OUT.pty")" != *$'\e[?1049h'* ]] || false
 }
+
+tall_pty() {
+    cat >"$INNER" <<INNER
+stty rows 8 cols 60
+stty -a >"$OUT.before"
+for i in \$(seq 1 30); do printf 'v%s\tRow %s\n' "\$i" "\$i"; done | luajit "$FIXTURE" >"$OUT.choice" 2>"$OUT.err"
+echo \$? >"$OUT.status"
+stty -a >"$OUT.after"
+INNER
+    in_pty "$1"
+}
+
+@test "a list taller than the terminal scrolls and shows the rows cut off" {
+    tall_pty 'jj\r'
+    [ "$(cat "$OUT.choice")" = v3 ]
+    [[ "$(<"$OUT.pty")" == *"↓ 25 more"* ]] || false
+    same_terminal
+    left_screen
+}
+
+@test "G is not a key and pgdn moves down a window" {
+    tall_pty 'G\033[6~\r'
+    [ "$(cat "$OUT.choice")" = v7 ]
+    same_terminal
+    left_screen
+}
+
+@test "end reaches the last row and esc still restores the terminal" {
+    tall_pty '\033[F\033'
+    [[ "$(<"$OUT.pty")" == *"↑ 25 more"* ]] || false
+    [ ! -s "$OUT.choice" ]
+    [ "$(cat "$OUT.status")" = 1 ]
+    same_terminal
+    left_screen
+}
+
+@test "esc after paging restores the terminal" {
+    tall_pty '\033[6~\033'
+    [ ! -s "$OUT.choice" ]
+    [ "$(cat "$OUT.status")" = 1 ]
+    same_terminal
+    left_screen
+}

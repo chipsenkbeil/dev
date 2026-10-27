@@ -156,3 +156,189 @@ t.test("run with auto returns the only enabled item without drawing", function()
     t.eq(picker.run(plain, list, { title = "Pick", auto = true }), "two")
     t.eq(picker.run(plain, list, { title = "Pick", auto = true, multi = true }), { "two" })
 end)
+
+local function many(n)
+    local list = {}
+    for i = 1, n do
+        list[i] = { value = "v" .. i, cells = { "Row " .. i } }
+    end
+    return list
+end
+
+local function tall(height)
+    return ui.context({ color = false, interactive = true, width = 80, height = height })
+end
+
+local function cursor_row(lines)
+    for i, line in ipairs(lines) do
+        if line:find("❯", 1, true) then
+            return i
+        end
+    end
+end
+
+t.test("a list that fits draws with no indicator whatever the height", function()
+    local lines = picker.new(items(), { title = "Pick" }):lines(tall(5))
+    t.eq(#lines, 5)
+    for _, line in ipairs(lines) do
+        t.ok(not line:find("more", 1, true), line)
+    end
+end)
+
+t.test("a tall list never draws more lines than the height", function()
+    local model = picker.new(many(30), { title = "Pick" })
+    for _ = 1, 40 do
+        t.ok(#model:lines(tall(10)) <= 10)
+        model:key(Key.DOWN)
+    end
+end)
+
+t.test("a tall list keeps the cursor row in the window as it moves", function()
+    local model = picker.new(many(30), { title = "Pick" })
+    for _ = 1, 12 do
+        model:key(Key.DOWN)
+        t.ok(cursor_row(model:lines(tall(10))), "cursor row missing")
+    end
+    for _ = 1, 12 do
+        model:key(Key.UP)
+        t.ok(cursor_row(model:lines(tall(10))), "cursor row missing")
+    end
+end)
+
+t.test("the first draw of a tall list shows only a down indicator", function()
+    local lines = picker.new(many(30), { title = "Pick" }):lines(tall(10))
+    t.eq(lines[#lines - 1], "↓ 23 more")
+    for _, line in ipairs(lines) do
+        t.ok(not line:find("^↑ %d+ more"), line)
+    end
+end)
+
+t.test("at the end of a tall list only an up indicator shows", function()
+    local model = picker.new(many(30), { title = "Pick" })
+    press(model, { Key.END })
+    local lines = model:lines(tall(10))
+    t.eq(#lines, 10)
+    t.eq(lines[2], "↑ 23 more")
+    t.ok(lines[#lines - 1]:find("Row 30", 1, true))
+    for _, line in ipairs(lines) do
+        t.ok(not line:find("^↓ %d+ more"), line)
+    end
+end)
+
+t.test("in the middle both indicators count the rows cut off", function()
+    local model = picker.new(many(30), { title = "Pick" })
+    for _ = 1, 12 do
+        model:key(Key.DOWN)
+    end
+    local lines = model:lines(tall(10))
+    local up = tonumber(lines[2]:match("^↑ (%d+) more$"))
+    local down = tonumber(lines[#lines - 1]:match("^↓ (%d+) more$"))
+    t.eq(up + down + (#lines - 4), 30)
+end)
+
+t.test("toggles take one line from the window", function()
+    local toggles = { { key = "d", value = "--dry-run", label = "Dry run" } }
+    local lines = picker.new(many(30), { title = "Pick", toggles = toggles }):lines(tall(10))
+    t.eq(#lines, 10)
+    t.eq(lines[#lines - 1], "[ ] d Dry run")
+end)
+
+t.test("pgdn and pgup move by a window and home and end by the list", function()
+    local model = picker.new(many(30), { title = "Pick" })
+    model:lines(tall(10))
+    press(model, { Key.PGDN, Key.ENTER })
+    t.eq(model:result(), "v9")
+    model = picker.new(many(30), { title = "Pick" })
+    model:lines(tall(10))
+    press(model, { Key.PGDN, Key.PGUP, Key.ENTER })
+    t.eq(model:result(), "v1")
+    model = picker.new(many(30), { title = "Pick" })
+    press(model, { Key.END, Key.ENTER })
+    t.eq(model:result(), "v30")
+    model = picker.new(many(30), { title = "Pick" })
+    press(model, { Key.END, Key.HOME, Key.ENTER })
+    t.eq(model:result(), "v1")
+end)
+
+t.test("paging and the ends skip disabled rows", function()
+    local list = many(30)
+    list[30].disabled = "no"
+    list[9].disabled = "no"
+    local model = picker.new(list, { title = "Pick" })
+    model:lines(tall(10))
+    press(model, { Key.END, Key.ENTER })
+    t.eq(model:result(), "v29")
+    model = picker.new(list, { title = "Pick" })
+    model:lines(tall(10))
+    press(model, { Key.PGDN, Key.ENTER })
+    t.eq(model:result(), "v10")
+end)
+
+t.test("paging goes past a run of disabled rows", function()
+    local list = many(30)
+    for i = 2, 11 do
+        list[i].disabled = "no"
+    end
+    local model = picker.new(list, { title = "Pick" })
+    model:lines(tall(10))
+    press(model, { Key.PGDN, Key.ENTER })
+    t.eq(model:result(), "v12")
+    list = many(30)
+    for i = 20, 29 do
+        list[i].disabled = "no"
+    end
+    model = picker.new(list, { title = "Pick", initial = "v30" })
+    model:lines(tall(10))
+    press(model, { Key.PGUP, Key.ENTER })
+    t.eq(model:result(), "v19")
+end)
+
+t.test("paging and the ends stay put when the cursor row is the only enabled one", function()
+    for _, key in ipairs({ Key.PGUP, Key.PGDN, Key.HOME, Key.END }) do
+        local list = many(30)
+        for i = 1, 30 do
+            list[i].disabled = i ~= 15 and "no" or nil
+        end
+        local model = picker.new(list, { title = "Pick" })
+        model:lines(tall(10))
+        press(model, { key, Key.ENTER })
+        t.eq(model:result(), "v15")
+    end
+end)
+
+t.test("an empty list draws at any height without looping", function()
+    for _, height in ipairs({ 0, 1, 10 }) do
+        t.eq(#picker.new({}, { title = "P" }):lines(tall(height)), 2)
+    end
+end)
+
+t.test("a tall list at a tiny height draws the 3-line minimum window", function()
+    for _, height in ipairs({ 0, 1, 4 }) do
+        local model = picker.new(many(30), { title = "P" })
+        t.eq(#model:lines(tall(height)), 5)
+        press(model, { Key.END })
+        t.eq(#model:lines(tall(height)), 5)
+    end
+    local toggles = { { key = "d", value = "--dry-run", label = "Dry run" } }
+    t.eq(#picker.new(many(30), { title = "P", toggles = toggles }):lines(tall(0)), 6)
+end)
+
+t.test("with no height every row is drawn", function()
+    t.eq(#picker.new(many(30), { title = "P" }):lines(plain), 32)
+end)
+
+t.test("building a context never reads the height and with_height copies it", function()
+    local asked = 0
+    local ctx = ui.context({
+        color = false,
+        interactive = true,
+        width = 80,
+        size = function()
+            asked = asked + 1
+            return 10, 80
+        end,
+    })
+    t.eq(ctx.height, nil)
+    t.eq(ctx:with_height(7).height, 7)
+    t.eq(asked, 0)
+end)

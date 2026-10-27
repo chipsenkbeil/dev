@@ -73,6 +73,8 @@ local stderr = io.stderr
 ---@field stderr_color boolean whether standard error takes color
 ---@field interactive boolean whether standard input and output are terminals
 ---@field width integer columns a line may fill
+---@field height integer? rows the screen has, or nil to draw every row outside the picker
+---@field size fun(): integer, integer terminal rows and columns
 ---@field getenv fun(name: string): string? environment lookup
 local Context = {}
 Context.__index = Context
@@ -81,6 +83,7 @@ Context.__index = Context
 ---@field color boolean? color for both streams, instead of asking the environment
 ---@field interactive boolean? whether a user is at the terminal, instead of asking the terminal
 ---@field width integer? columns a line may fill, instead of asking the terminal
+---@field height integer? rows the screen has, left nil to draw every row outside the picker
 ---@field getenv (fun(name: string): string?)? environment lookup, defaulting to `os.getenv`
 ---@field isatty (fun(fd: integer): boolean)? terminal check, defaulting to `dev.os.isatty`
 ---@field size (fun(): integer, integer)? terminal size, defaulting to `dev.term.size`
@@ -115,8 +118,22 @@ function M.context(opts)
         stderr_color = stderr_color,
         interactive = interactive,
         width = width,
+        height = opts.height,
+        size = size,
         getenv = getenv,
     }, Context)
+end
+
+---Derive a context that has `rows` rows.
+---@param rows integer rows the screen has
+---@return dev.ui.Context ctx a copy whose `height` is `rows`
+function Context:with_height(rows)
+    local copy = setmetatable({}, Context)
+    for key, value in pairs(self) do
+        copy[key] = value
+    end
+    copy.height = rows
+    return copy
 end
 
 ---Derive the context for drawing on standard error.
