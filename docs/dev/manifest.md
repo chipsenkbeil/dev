@@ -43,7 +43,10 @@ from a repo outside the distribution.
 ## Where the code lives
 
 dev runs `luajit dotfiles/bin/.local/share/dev/pkg.lua` from the dotfiles
-clone that holds dev, from the project root. It reads the manifest in Lua and
-calls the bash drivers in `scripts/pkg/` for the package manager commands.
+clone that holds dev, from the project root. It reads the manifest and runs the
+package manager commands in Lua, one driver module per manager under
+`dotfiles/bin/.local/share/dev/lua/dev/pkg/`. Every package, repo and channel
+word reaches a command as one argument, never through a shell. A `script:` row's
+arguments are split on blanks and never glob-expanded.
 `DOTFILES` overrides where that clone is found. A project script cannot replace the `tools` subcommands, so the root step of an image
 build never runs project code. `dev --remote` refuses every `tools` subcommand.

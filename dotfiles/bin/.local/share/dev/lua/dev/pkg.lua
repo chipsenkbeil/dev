@@ -2,35 +2,28 @@ local devos = require("dev.os")
 local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local manifest = require("dev.pkg.manifest")
-local run = require("dev.pkg.run")
+local lib = require("dev.pkg.lib")
+local script = require("dev.pkg.script")
 
 local stdout, stderr = io.stdout, io.stderr
-local Channel, Scope = kinds.Channel, kinds.Scope
+local Channel, Scope, NO_PROBE_BINARY = kinds.Channel, kinds.Scope, kinds.NO_PROBE_BINARY
+local parse_cell, valid_package = lib.parse_cell, lib.valid_package
 
 local USAGE = "usage: pkg.lua check [--manifest FILE] [--group NAME]\n"
     .. "       pkg.lua install [--manifest FILE] [--dry-run] [--force] [--group NAME]"
     .. " [--scope system|user] [--log-file FILE] [name...]\n"
-local PACKAGE_WORD = "^[A-Za-z0-9@._+][A-Za-z0-9@._+%-]*$"
-local REPO_WORD = "^[A-Za-z0-9._][A-Za-z0-9._%-]*/[A-Za-z0-9._%-]+$"
 local SHELL_SPECIAL = "[ \t\n!\"$&'()*;<>?%[\\%]^`{|}]"
-local NO_PROBE_BINARY = "-"
-local UNAVAILABLE_CELL = "-"
 
 ---@class dev.pkg.Opts
 ---@field manifest string path of the manifest
----@field scripts string absolute path of the `scripts` directory holding the bash drivers
+---@field interpreter string the luajit that runs the driver, which runs `.lua` scripts
+---@field modules string absolute path of the directory holding dev's modules
 ---@field group string? keep only the rows listing this group, an unknown group when empty
 ---@field scope dev.pkg.Scope? install only the rows of this scope
 ---@field dry_run boolean whether to print the commands without running them
 ---@field force boolean whether to reinstall what is already present
 ---@field log_file string the file the drivers append their commands' output to, empty for the terminal
 ---@field names string[] install only these tools, every tool when empty
-
----@class dev.pkg.Cell
----@field channel string the part before the first colon of the head
----@field package string the package name, or a script's source and arguments
----@field repo string the `repo:` part
----@field bin string the `bin:` part
 
 ---@class dev.pkg.InstallState
 ---@field opts dev.pkg.Opts the run's options
@@ -65,37 +58,6 @@ end
 
 local function printable(name)
     return (name:gsub("%z", "\\0"))
-end
-
-local function parse_cell(cell)
-    if cell == UNAVAILABLE_CELL then
-        return nil
-    end
-    local head = cell:match("^[^,]*")
-    local parsed = { channel = Channel.BARE, package = head, repo = "", bin = "" }
-    local colon = head:find(":", 1, true)
-    if colon then
-        parsed.channel = head:sub(1, colon - 1)
-        parsed.package = head:sub(colon + 1)
-    end
-    for seg in cell:sub(#head + 2):gmatch("[^,]+") do
-        if seg:sub(1, 5) == "repo:" then
-            parsed.repo = seg:sub(6)
-        elseif seg:sub(1, 4) == "bin:" then
-            parsed.bin = seg:sub(5)
-        end
-    end
-    return parsed
-end
-
-local function valid_package(parsed)
-    if parsed.channel == Channel.SCRIPT then
-        return true
-    end
-    if not parsed.package:find(PACKAGE_WORD) then
-        return false
-    end
-    return parsed.repo == "" or parsed.repo:find(REPO_WORD) ~= nil
 end
 
 local function refusal(row, parsed)
@@ -147,23 +109,31 @@ local function select_rows(rows, select_opts)
     return selected
 end
 
-local function probe_script(package)
-    local argv = { "bash" }
-    for word in package:gmatch("[^ \t\n]+") do
-        argv[#argv + 1] = word
-    end
-    argv[#argv + 1] = "--check"
-    return devos.run(argv, { stdin = "null", stdout = "null", stderr = "null" }) == 0
+local function driver_opts(opts)
+    return {
+        dry_run = opts.dry_run,
+        force = opts.force,
+        log_file = opts.log_file,
+        interpreter = opts.interpreter,
+        modules = opts.modules,
+    }
 end
 
-local function check_script_row(name, package)
+local function load_driver(name)
+    if kinds.DRIVERS[name] then
+        return require("dev.pkg." .. name)
+    end
+    stderr:write("error: no driver ", name, "\n")
+end
+
+local function check_script_row(opts, name, package)
     if package:find("^https?://") then
         stdout:write("[?] ", name, "\t(remote script, no probe)\n")
         return true
     elseif devos.getuid() == 0 then
         stdout:write("[?] ", name, "\t(script row, never run as root)\n")
         return true
-    elseif probe_script(package) then
+    elseif script.probe(package, driver_opts(opts)) then
         stdout:write("[x] ", name, "\t(script --check)\n")
         return true
     end
@@ -171,7 +141,7 @@ local function check_script_row(name, package)
     return false
 end
 
-local function check_row(opts, manager, row)
+local function check_row(opts, driver, row)
     local parsed = parse_cell(row.cell)
     if not parsed then
         return true
@@ -190,17 +160,15 @@ local function check_row(opts, manager, row)
     end
     local binary = parsed.bin ~= "" and parsed.bin or row.binary
     if parsed.channel == Channel.SCRIPT and binary == NO_PROBE_BINARY then
-        return check_script_row(name, parsed.package)
+        return check_script_row(opts, name, parsed.package)
     end
-    local status = run.driver({
-        scripts = opts.scripts,
-        handler = manager,
-        fn = kinds.Fn.STATUS,
-        args = { row.name, binary, parsed.package, parsed.channel },
-        force = false,
-        log_file = "",
-    })
-    return status == 0
+    return driver.check({
+        name = row.name,
+        binary = binary,
+        package = parsed.package,
+        channel = parsed.channel,
+        repo = parsed.repo,
+    }) == 0
 end
 
 ---Report which of the manifest's tools are present.
@@ -212,9 +180,8 @@ function M.check(opts)
         stderr:write("error: no supported package manager detected on this OS\n")
         return 1
     end
-    local driver = opts.scripts .. "/pkg/" .. manager .. ".sh"
-    if not fs.is_file(driver) then
-        stderr:write("error: no driver ", driver, "\n")
+    local driver = load_driver(manager)
+    if not driver then
         return 1
     end
     local rows, column = load_rows(opts, manager)
@@ -231,7 +198,7 @@ function M.check(opts)
     end
     local missing = false
     for _, row in ipairs(selected) do
-        missing = not check_row(opts, manager, row) or missing
+        missing = not check_row(opts, driver, row) or missing
     end
     return missing and 1 or 0
 end
@@ -282,27 +249,18 @@ local function install_row(state, row)
         state.failed[#state.failed + 1] = name
         return
     end
-    local handler_path = opts.scripts .. "/pkg/" .. handler .. ".sh"
-    if not fs.is_file(handler_path) then
-        stderr:write("error: no driver ", handler_path, "\n")
+    local driver = load_driver(handler)
+    if not driver then
         state.failed[#state.failed + 1] = name
         return
     end
-    local status = run.driver({
-        scripts = opts.scripts,
-        handler = handler,
-        fn = kinds.Fn.INSTALL,
-        args = {
-            row.name,
-            parsed.bin ~= "" and parsed.bin or row.binary,
-            parsed.package,
-            parsed.channel,
-            parsed.repo,
-            opts.dry_run and "1" or "0",
-        },
-        force = opts.force,
-        log_file = opts.log_file,
-    })
+    local status = driver.install({
+        name = row.name,
+        binary = parsed.bin ~= "" and parsed.bin or row.binary,
+        package = parsed.package,
+        channel = parsed.channel,
+        repo = parsed.repo,
+    }, driver_opts(opts))
     if status ~= 0 then
         state.failed[#state.failed + 1] = name
     end
@@ -440,14 +398,15 @@ end
 
 ---Run `check` or `install` from a command line.
 ---@param argv string[] the arguments after the program name, starting with the subcommand
----@param defaults { scripts: string, manifest: string } the drivers' directory and the manifest used without `--manifest`
+---@param defaults { interpreter: string, modules: string, manifest: string } the luajit that runs the driver, dev's module directory and the manifest used without `--manifest`
 ---@return integer code the exit code
 function M.main(argv, defaults)
     local sub = argv[1]
     local args = { unpack(argv, 2) }
     local opts = {
         manifest = defaults.manifest,
-        scripts = defaults.scripts,
+        interpreter = defaults.interpreter,
+        modules = defaults.modules,
         dry_run = false,
         force = false,
         log_file = "",

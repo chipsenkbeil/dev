@@ -1,4 +1,4 @@
-# fixture for manifest variable expansion tests (scripts/pkg/lib.sh).
+# fixture for manifest variable expansion tests (dev.pkg.manifest).
 # @env lines declare defaults; cells below reference them. These `# @env`
 # comments must be skipped by manifest_column_index and parsed by manifest_rows.
 # @env FOO bar_value

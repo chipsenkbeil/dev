@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# pkg.sh install tries every row, then exits nonzero naming the rows that
+# The package driver install tries every row, then exits nonzero naming the rows that
 # failed. uname reports Darwin so the brew driver runs, and brew is a stub that
 # records its arguments and fails for the package named bad-formula.
 

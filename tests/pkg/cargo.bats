@@ -1,10 +1,12 @@
 #!/usr/bin/env bats
 
-# cargo.sh gives rustup a default toolchain before a crate install, since the
+# The cargo driver gives rustup a default toolchain before a crate install, since the
 # distro rustup packages ship none. rustup, cargo and cargo-binstall are stubs
 # that record their arguments.
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
+LUAJIT="$(command -v luajit)"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -13,6 +15,8 @@ setup() {
     : >"$LOG"
     stub rustup 'echo "rustup $*" >>"'"$LOG"'"; [ "$1" != default ] || [ -z "${RUSTUP_DEFAULT_FAILS:-}" ] || exit 1; [ "$1 $2" != "show active-toolchain" ] || [ -n "${RUSTUP_HAS_DEFAULT:-}" ]'
     stub cargo-binstall 'echo "binstall $*" >>"'"$LOG"'"'
+    stub uname 'echo Darwin'
+    printf 'name binary brew\nzzz-tool - cargo:zzz-crate\n' >"$BATS_TEST_TMPDIR/tools.tsv"
     export PATH="$STUBS:/usr/bin:/bin"
 }
 
@@ -22,7 +26,7 @@ stub() {
 }
 
 install_crate() {
-    bash -c 'source "$1/scripts/pkg/lib.sh"; source "$1/scripts/pkg/cargo.sh"; pkg_install zzz-tool - zzz-crate stable "" 0' bash "$REPO"
+    "$LUAJIT" "$PKG" install --manifest "$BATS_TEST_TMPDIR/tools.tsv" zzz-tool
 }
 
 @test "a rustup with no default toolchain gets stable before the crate installs" {

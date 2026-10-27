@@ -7,8 +7,10 @@ local registry = require("dev.registry")
 local support = require("support")
 
 local LEGACY = "dotfiles/bin/.local/share/dev/legacy.bash"
-local ALSO_IN_LEGACY = { ["tools install"] = true, ["tools check"] = true }
 local LUA_ONLY = {
+    tools = true,
+    ["tools install"] = true,
+    ["tools check"] = true,
     help = true,
     lint = true,
     fmt = true,
@@ -67,9 +69,6 @@ t.test("builtins match the legacy table byte for byte, except the rows only Lua 
     for _, row in ipairs(builtins) do
         if not LUA_ONLY[table.concat(row.words, " ")] then
             local handler = row.noun and "noun" or row.handler or ""
-            if ALSO_IN_LEGACY[table.concat(row.words, " ")] then
-                handler = "legacy"
-            end
             local group = row.hidden and "hidden" or row.group or ""
             got[#got + 1] = table.concat({
                 table.concat(row.words, " "),

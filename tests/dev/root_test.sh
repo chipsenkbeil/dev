@@ -76,12 +76,6 @@ MSG="as root, dev runs only tools install and tools check"
 MANIFEST='name binary pacman
 zzz-tool zzz-tool-not-here zzz-tool'
 
-if [ -d "/proc/$$/fd" ]; then
-    HAVE_PROC=1
-else
-    HAVE_PROC=0
-fi
-
 outside="$TMP/outside"
 mkdir -p "$outside/dir"
 printf 'SECRET-MARKER\n%s\n' "$MANIFEST" >"$outside/tools.tsv"
@@ -131,6 +125,14 @@ if [ "$REAL_ROOT" = 1 ]; then
     out="$(cd "$proj/a" && DEV_REMOTE=1 "$TMP/lc/bin/dev" tools check 2>&1)"
     assert_eq "root without luajit, DEV_REMOTE=1 tools check exits 2" "$?" "2"
     assert_eq "root without luajit, DEV_REMOTE=1 says what root may run" "$out" "dev: $MSG"
+    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" tools check 2>&1)"
+    assert_eq "root without luajit, tools check exits 1" "$?" "1"
+    assert_eq "root without luajit, tools check says it needs luajit" "$out" "dev: dev tools needs luajit in /usr/bin or /usr/local/bin"
+    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" tools install --system 2>&1)"
+    assert_eq "root without luajit, tools install exits 1" "$?" "1"
+    assert_eq "root without luajit, tools install says it needs luajit" "$out" "dev: dev tools needs luajit in /usr/bin or /usr/local/bin"
+    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" push 2>&1)"
+    assert_eq "root without luajit, push is still refused with exit 2" "$?" "2"
     assert_eq "root without luajit runs no project __remote.lua" "$([ -e "$TMP/remote-marker" ] && echo loaded || echo absent)" "absent"
     rm -f "$proj/.dev/__remote.lua"
 else
@@ -211,33 +213,6 @@ assert_eq "no temp copy is left after an ownership refusal" "$(count_tmp)" "$bef
 out="$(DOTFILES=/tmp/evil-dotfiles dev "$nojj" tools check 2>&1)"
 assert_not_contains "root does not use a DOTFILES package driver" "$out" "evil-dotfiles"
 
-if [ "$HAVE_PROC" = 1 ]; then
-    fifo="$TMP/fifo.tsv"
-    mkfifo "$fifo"
-    if [ "$REAL_ROOT" = 1 ]; then chown 65534:65534 "$fifo"; fi
-    cat >"$TMP/fifo-run.sh" <<'RUN'
-die() {
-    printf 'dev: %s\n' "$*" >&2
-    exit 1
-}
-RUN
-    LEGACY="$REPO/dotfiles/bin/.local/share/dev/legacy.bash"
-    sed -n '/^root_trusted() {/,/^}/p;/^root_manifest_copy() {/,/^}/p' "$LEGACY" >>"$TMP/fifo-run.sh"
-    if [ "$(grep -c "^root_trusted() {\|^root_manifest_copy() {" "$TMP/fifo-run.sh")" -ne 2 ]; then
-        printf 'FAIL - the FIFO helper found no root_trusted or root_manifest_copy in %s\n' "$LEGACY"
-        exit 1
-    fi
-    cat >>"$TMP/fifo-run.sh" <<'RUN'
-root_manifest_copy "$1"
-RUN
-    out="$(ROOT="$TMP" timeout 10 bash "$TMP/fifo-run.sh" "$fifo" 2>&1)"
-    assert_eq "a user-owned FIFO is refused without hanging" "$?" "1"
-    assert_contains "the FIFO refusal is an ownership refusal naming the path" "$out" "refusing $fifo as root: $fifo $OWN"
-    assert_eq "no temp copy is left after the FIFO refusal" "$(count_tmp)" "$before"
-else
-    printf 'SKIP - the legacy fallback FIFO test needs /proc/$$/fd, absent on this OS\n'
-fi
-
 if [ "$REAL_ROOT" = 1 ]; then
     gw="$TMP/gw"
     mkdir -p "$gw/.dev"
@@ -287,8 +262,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     assert_contains "the manifest variable is undefined for the package driver" "$out" "undefined variable"
 
     evil="$TMP/evil"
-    mkdir -p "$evil/scripts" "$evil/dotfiles/bin/.local/share/dev"
-    printf '#!/bin/sh\necho EVIL-RAN\n' >"$evil/scripts/pkg.sh"
+    mkdir -p "$evil/dotfiles/bin/.local/share/dev"
     printf 'io.write("EVIL-RAN\\n")\n' >"$evil/dotfiles/bin/.local/share/dev/pkg.lua"
     out="$(DOTFILES="$evil" dev "$nojj" tools check 2>&1)"
     assert_not_contains "root does not run a package driver from DOTFILES" "$out" "EVIL-RAN"

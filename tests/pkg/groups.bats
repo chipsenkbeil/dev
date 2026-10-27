@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# The groups column of tools.tsv and --group on pkg.sh install and check.
+# The groups column of tools.tsv and --group on the package driver's install and check.
 # uname reports Darwin so the brew driver runs; brew lists nothing and every
 # binary is missing, so check reports every selected row.
 
@@ -86,23 +86,6 @@ TSV
     run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group base
     [ "$status" -eq 2 ]
     [[ "$output" == *"unknown group: base"* ]] || false
-}
-
-@test "groups is never a manager column" {
-    source "$REPO/scripts/pkg/lib.sh"
-    [ -z "$(manifest_column_index "$MANIFEST" groups)" ]
-    [ "$(manifest_column_index "$MANIFEST" brew)" -eq 3 ]
-    run manifest_rows "$MANIFEST" 3
-    [ "${#lines[@]}" -eq 4 ]
-    [[ "$output" != *base* ]] || false
-}
-
-@test "the real manifest puts exactly the base and rust rows in their groups" {
-    source "$REPO/scripts/pkg/lib.sh"
-    base="$(manifest_rows "$REPO/.dev/tools.tsv" 1 base | cut -f1 | sort | tr '\n' ' ')"
-    rust="$(manifest_rows "$REPO/.dev/tools.tsv" 1 rust | cut -f1 | sort | tr '\n' ' ')"
-    [ "$base" = "ast-grep bats dash difftastic fd gh git hyperfine jq jujutsu luajit ripgrep sd selene shellcheck shfmt stow stylua tokei watchexec yq zsh " ]
-    [ "$rust" = "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort rustfmt-nightly rustup sccache " ]
 }
 
 @test "an empty --group name is an unknown group on install and on check" {

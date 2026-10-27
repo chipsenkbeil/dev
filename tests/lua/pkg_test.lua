@@ -3,7 +3,7 @@ local devos = require("dev.os")
 local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local manifest = require("dev.pkg.manifest")
-local run = require("dev.pkg.run")
+local lib = require("dev.pkg.lib")
 local support = require("support")
 
 local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
@@ -160,32 +160,94 @@ t.test(
     end
 )
 
-t.test("the bridge passes every value as one argument and runs no manifest text", function()
-    local dir = assert(fs.realpath(support.tempdir()))
-    assert(fs.mkdir(dir .. "/pkg", { parents = true }))
-    assert(fs.write(dir .. "/pkg/lib.sh", ""))
-    local out = dir .. "/out"
-    assert(
-        fs.write(
-            dir .. "/pkg/x.sh",
-            'pkg_install() { printf "%s|" "$#" "$@" >"'
-                .. out
-                .. '"; printf "%s|%s" "$PKG_FORCE" "${PKG_LOG_FILE-unset}" >>"'
-                .. out
-                .. '"; }\n'
-        )
+t.test("parse_cell splits the channel, package, repo and binary", function()
+    local function parts(cell)
+        local parsed = assert(lib.parse_cell(cell))
+        return { parsed.channel, parsed.package, parsed.repo, parsed.bin }
+    end
+    t.eq(parts("ripgrep"), { "", "ripgrep", "", "" })
+    t.eq(parts("cask:ghostty"), { "cask", "ghostty", "", "" })
+    t.eq(parts("fd-find,bin:fdfind"), { "", "fd-find", "", "fdfind" })
+    t.eq(
+        parts("tap:browserpass,repo:amar1729/formulae"),
+        { "tap", "browserpass", "amar1729/formulae", "" }
     )
-    local hostile = "$(touch " .. dir .. "/PWNED)"
-    local code = run.driver({
-        scripts = dir,
-        handler = "x",
-        fn = kinds.Fn.INSTALL,
-        args = { hostile, "a b", "-x" },
-        force = true,
-        log_file = "",
-    })
-    t.eq(code, 0)
-    t.ok(not fs.exists(dir .. "/PWNED"), "the hostile text must not run")
-    t.eq(fs.read(out), "3|" .. hostile .. "|a b|-x|1|")
-    fs.remove(dir, { recursive = true })
+    t.eq(parts("copr:ghostty,repo:pgdev/ghostty"), { "copr", "ghostty", "pgdev/ghostty", "" })
+    t.eq(
+        parts("tap:browserpass,repo:amar1729/formulae,bin:bpass"),
+        { "tap", "browserpass", "amar1729/formulae", "bpass" }
+    )
+    t.eq(parts("aur:jjui-bin"), { "aur", "jjui-bin", "", "" })
+    t.eq(parts("script:/tmp/x.sh --flag value"), { "script", "/tmp/x.sh --flag value", "", "" })
+    t.eq(lib.parse_cell("-"), nil)
+end)
+
+t.test("valid_package accepts plain words and refuses anything that could be an option", function()
+    local function valid(channel, package, repo)
+        return lib.valid_package({
+            channel = channel,
+            package = package,
+            repo = repo or "",
+            bin = "",
+        })
+    end
+    for _, ok in ipairs({ "ripgrep", "fd-find", "c++", "python3.12", "@scope.pkg", "a_b" }) do
+        t.ok(valid("", ok), ok)
+    end
+    for _, bad in ipairs({
+        "-U",
+        "--config=/x",
+        "a b",
+        "-U http://evil/x",
+        "a;b",
+        "$(x)",
+        "",
+        "a/b",
+    }) do
+        t.ok(not valid("", bad), bad)
+    end
+    t.ok(valid("copr", "ok", "pgdev/ghostty"))
+    t.ok(not valid("copr", "ok", "a/b/c"))
+    t.ok(valid("script", "/x/y.sh --flag"))
+end)
+
+t.test("route names who installs a channel and which driver handles it", function()
+    local scope, driver = kinds.route("", kinds.Manager.BREW)
+    t.eq({ scope, driver }, { kinds.Scope.SYSTEM, "brew" })
+    scope, driver = kinds.route("cargo", kinds.Manager.BREW)
+    t.eq({ scope, driver }, { kinds.Scope.USER, "cargo" })
+    t.ok(kinds.DRIVERS.script and kinds.DRIVERS.brew and not kinds.DRIVERS.flatpak)
+end)
+
+t.test("groups is never a manager column and a group name never lands in a cell", function()
+    local rows = manifest.parse(
+        "name binary brew groups\naa a aa-f base\nbb b bb-f rust\ncc c cc-f base,rust\ndd d dd-f -\n"
+    )
+    t.eq(manifest.column(rows, "groups"), nil)
+    t.eq(manifest.column(rows, "brew"), 3)
+    local selected = assert(select_all(rows, 3))
+    t.eq(#selected, 4)
+    for _, row in ipairs(selected) do
+        t.ok(not row.cell:find("base", 1, true), row.cell)
+    end
+end)
+
+t.test("the real manifest puts exactly the base and rust rows in their groups", function()
+    local rows = manifest.parse(assert(fs.read(REPO .. "/.dev/tools.tsv")))
+    local function names(group)
+        local out = {}
+        for _, row in ipairs(assert(select_all(rows, 1, group))) do
+            out[#out + 1] = row.name
+        end
+        table.sort(out)
+        return table.concat(out, " ")
+    end
+    t.eq(
+        names("base"),
+        "ast-grep bats dash difftastic fd gh git hyperfine jq jujutsu luajit ripgrep sd selene shellcheck shfmt stow stylua tokei watchexec yq zsh"
+    )
+    t.eq(
+        names("rust"),
+        "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort rustfmt-nightly rustup sccache"
+    )
 end)

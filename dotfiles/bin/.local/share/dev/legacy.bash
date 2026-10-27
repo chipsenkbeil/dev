@@ -7,7 +7,7 @@
 # lists its subcommands.
 #
 # `dev help` and the completion and topic helpers, the project-type built-ins, deploy, guide
-# and bootstrap run in Lua. This file serves what is left: sync, init, tools and box.
+# and bootstrap run in Lua. This file serves what is left: sync, init and box.
 #
 # `dev sync` compares a project's copied lint files against the templates in
 # the dotfiles repo, unless the project has its own .dev/sync.sh. DOTFILES
@@ -114,20 +114,6 @@ has_override() {
     [ -x "$(script_path "$1")" ]
 }
 
-# root_project_dir: the first directory from the cwd up holding .jj, .git or .dev, else the cwd. It only tests that they exist and reads nothing in them.
-root_project_dir() {
-    local dir
-    dir=$(pwd -P)
-    while [ "$dir" != / ]; do
-        if [ -e "$dir/.jj" ] || [ -e "$dir/.git" ] || [ -e "$dir/.dev" ]; then
-            printf '%s\n' "$dir"
-            return
-        fi
-        dir=$(dirname "$dir")
-    done
-    pwd -P
-}
-
 # root_allowed <verb> [sub]: whether dev may run this as root, which is tools install and tools check only.
 root_allowed() {
     case "$1" in
@@ -140,10 +126,6 @@ root_allowed() {
 
 repo_root() {
     local root dir
-    if [ "$(dev_uid)" -eq 0 ]; then
-        root_project_dir
-        return
-    fi
     if command -v jj >/dev/null 2>&1 && root=$(jj root 2>/dev/null); then
         printf '%s\n' "$root"
         return
@@ -203,9 +185,6 @@ builtin_table() {
     cat <<'TABLE'
 sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates|Set up a machine or project
 init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]|Seed a project with lint, CI and remotes|Set up a machine or project
-tools|noun|||Install and check the tools in .dev/tools.tsv|Set up a machine or project
-tools install|cmd_tools_install|--dry-run --force --group --system --user|dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
-tools check|cmd_tools_check|--group|dev tools check [--group NAME]|Report which of the manifest's tools are on PATH, exit 1 when one is missing
 connect|cmd_box_connect|--ssh|dev connect [<box>] [--ssh]|Attach to a box over Eternal Terminal in a tmux session, picking, resuming or creating one first|Boxes
 box|noun|||List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box|Boxes
 box ls|cmd_box_ls|--all|dev box ls [--all]|List the boxes with state, target, projects and time left, then the cap
@@ -358,160 +337,6 @@ trunk_name() {
         fi
     done
     return 1
-}
-
-# --- tools ---
-
-# tools_manifest: print the project's .dev/tools.tsv path, or say there is none and fail.
-tools_manifest() {
-    local manifest="$ROOT/.dev/tools.tsv"
-    if [ ! -f "$manifest" ]; then
-        echo "no .dev/tools.tsv"
-        return 1
-    fi
-    printf '%s\n' "$manifest"
-}
-
-# root_trusted <manifest> <path> <strict>: die unless path is a non-symlink owned by uid 0 and not group or other writable. A sticky directory may be other-writable unless strict.
-root_trusted() {
-    local uid mode bits
-    if [ -L "$2" ] || ! read -r uid mode < <(stat -c '%u %a' -- "$2" 2>/dev/null) || [ "$uid" != 0 ]; then
-        die "refusing $1 as root: $2 must be owned by root and not writable by others"
-    fi
-    bits=$((8#$mode))
-    if [ "$((bits & 8#022))" -ne 0 ]; then
-        if [ "$3" = strict ] || [ "$((bits & 8#1000))" -eq 0 ]; then
-            die "refusing $1 as root: $2 must be owned by root and not writable by others"
-        fi
-    fi
-}
-
-# root_manifest_copy <manifest>: require a root-owned chain, open the manifest once on fd 3, check that the opened file is a regular file inside the project, and copy it to a root-owned temp file. Sets MANIFEST_COPY.
-root_manifest_copy() {
-    local opened inside size dir
-    [ -d /proc/$$/fd ] || die "as root, dev needs /proc to read $1"
-    [ ! -e /proc/$$/fd/3 ] || die "fd 3 is already open, cannot read $1"
-    root_trusted "$1" "$1" strict
-    root_trusted "$1" "$ROOT/.dev" strict
-    root_trusted "$1" "$ROOT" strict
-    dir=$(dirname "$ROOT")
-    while [ "$dir" != / ]; do
-        root_trusted "$1" "$dir" ancestor
-        dir=$(dirname "$dir")
-    done
-    root_trusted "$1" / ancestor
-    exec 3<"$1" || die "cannot open $1"
-    opened=$(readlink /proc/$$/fd/3) || die "cannot resolve $1"
-    inside=$(realpath "$ROOT")
-    if [ ! -f /proc/$$/fd/3 ]; then
-        die "refusing $1 as root, it is not a regular file"
-    fi
-    case "$opened" in
-    "$inside"/*) ;;
-    *) die "refusing $1 as root, it resolves outside the project" ;;
-    esac
-    MANIFEST_COPY=$(mktemp /tmp/dev-tools.XXXXXX) || die "cannot make a temp file"
-    trap 'rm -f "$MANIFEST_COPY"' EXIT
-    head -c 262145 <&3 >"$MANIFEST_COPY"
-    exec 3<&-
-    size=$(wc -c <"$MANIFEST_COPY")
-    if [ "$((size))" -gt 262144 ]; then
-        die "refusing $1 as root: larger than 256 KiB"
-    fi
-    if LC_ALL=C awk 'length > 4096 { bad = 1 } END { exit !bad }' "$MANIFEST_COPY"; then
-        die "refusing $1 as root: a line is longer than 4096 bytes"
-    fi
-}
-
-# tools_pkg <sub> <manifest> <args...>: scripts/pkg.sh from the dotfiles clone, so the project needs no copy.
-# It runs from the project root, where a manifest's script: paths are relative to.
-# As root it reads a copy of the manifest and runs with a scrubbed environment.
-tools_pkg() {
-    local pkg sub=$1 manifest=$2 status
-    local -a envv
-    shift 2
-    pkg="$(dotfiles_root)/scripts/pkg.sh"
-    [ -f "$pkg" ] || die "no $pkg (set DOTFILES to the dotfiles repo)"
-    cd "$ROOT"
-    if [ "$(dev_uid)" -ne 0 ]; then
-        show bash "$pkg" "$sub" --manifest "$manifest" "$@"
-        exec bash "$pkg" "$sub" --manifest "$manifest" "$@"
-    fi
-    root_manifest_copy "$manifest"
-    envv=(PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8)
-    if [ "$VERBOSE" -ge 1 ]; then envv+=("VERBOSE=$VERBOSE"); fi
-
-    # shellcheck disable=SC2016  # PS4 is expanded by the traced shell
-    if [ "$VERBOSE" -ge 2 ]; then envv+=("BASH_ENV=$(trace_file)" 'PS4=+ ${BASH_SOURCE##*/}:${LINENO}: '); fi
-    show env -i "${envv[@]}" bash "$pkg" "$sub" --manifest "$MANIFEST_COPY" "$@"
-    status=0
-    env -i "${envv[@]}" bash "$pkg" "$sub" --manifest "$MANIFEST_COPY" "$@" || status=$?
-    return "$status"
-}
-
-cmd_tools_install() {
-    local manifest scope="" uid arg
-    local -a opts=() tools=()
-    while [ "$#" -gt 0 ]; do
-        arg=$1
-        shift
-        case "$arg" in
-        --dry-run | --force) opts+=("$arg") ;;
-        --group)
-            [ "$#" -gt 0 ] || usage_error "tools install" "--group needs a name"
-            opts+=(--group "$1")
-            shift
-            ;;
-        --system | --user)
-            [ -z "$scope" ] || [ "$scope" = "${arg#--}" ] || usage_error "tools install" "--system and --user cannot be combined"
-            scope=${arg#--}
-            ;;
-        -*) usage_error "tools install" "unknown flag $arg" ;;
-        *) tools+=("$arg") ;;
-        esac
-    done
-    manifest=$(tools_manifest) || {
-        echo "$manifest"
-        return 0
-    }
-    uid=$(dev_uid)
-    if [ -z "$scope" ] && [ "$uid" -eq 0 ]; then
-        usage_error "tools install" "as root, pass --system"
-    fi
-    case "$scope" in
-    system)
-        if [ "$uid" -ne 0 ] && [ "$(dev_os)" != Darwin ]; then
-            die "tools install --system installs packages and needs root, run it as root"
-        fi
-        ;;
-    user)
-        if [ "$uid" -eq 0 ]; then
-            die "tools install --user installs into the user's home and refuses to run as root"
-        fi
-        ;;
-    esac
-    if [ -n "$scope" ]; then opts+=(--scope "$scope"); fi
-    tools_pkg install "$manifest" ${opts[@]+"${opts[@]}"} ${tools[@]+"${tools[@]}"}
-}
-
-cmd_tools_check() {
-    local manifest
-    local -a opts=()
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-        --group)
-            [ "$#" -gt 1 ] || usage_error "tools check" "--group needs a name"
-            opts+=(--group "$2")
-            shift 2
-            ;;
-        *) bad_arg "tools check" "$1" ;;
-        esac
-    done
-    manifest=$(tools_manifest) || {
-        echo "$manifest"
-        return 0
-    }
-    tools_pkg check "$manifest" ${opts[@]+"${opts[@]}"}
 }
 
 # --- box ---
@@ -1811,6 +1636,8 @@ main() {
             printf 'dev: as root, dev runs only on Linux\n' >&2
             exit 2
         fi
+        printf 'dev: dev tools needs luajit in /usr/bin or /usr/local/bin\n' >&2
+        exit 1
     fi
     ROOT=$(repo_root)
     if [ "$#" -eq 0 ]; then

@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# pkg.sh install --force, and --force through dev tools install. uname reports
+# The package driver's install --force, and --force through dev tools install. uname reports
 # Darwin so the brew driver runs, and every package manager is a stub that
 # records its arguments.
 
@@ -75,18 +75,23 @@ stub() {
     [[ "$output" != *"skipping"* ]] || false
 }
 
-@test "under PKG_FORCE=1 the other drivers reinstall instead of skipping" {
+@test "under force the other drivers reinstall instead of skipping" {
     stub pacman 'exit 0'
     stub rpm 'exit 0'
     stub cargo 'exit 0'
     stub luarocks 'echo rock'
-    out="$(PKG_FORCE=1 bash -c '
-        dir=$1
-        (source "$dir/pacman.sh" && pkg_install p fx p-pkg "" "" 1)
-        (source "$dir/dnf.sh" && pkg_install d fx d-pkg "" "" 1)
-        (source "$dir/cargo.sh" && pkg_install c fx c-crate "" "" 1)
-        (source "$dir/luarocks.sh" && pkg_install l fx rock "" "" 1)
-    ' _ "$REPO/scripts/pkg" 2>&1)"
+    cat >"$BATS_TEST_TMPDIR/drive.lua" <<'LUA'
+package.path = arg[1] .. "/?.lua"
+local opts = { dry_run = true, force = true, log_file = "", interpreter = "luajit", modules = arg[1] }
+local function row(name, package)
+    return { name = name, binary = "fx", package = package, channel = "", repo = "" }
+end
+require("dev.pkg.pacman").install(row("p", "p-pkg"), opts)
+require("dev.pkg.dnf").install(row("d", "d-pkg"), opts)
+require("dev.pkg.cargo").install(row("c", "c-crate"), opts)
+require("dev.pkg.luarocks").install(row("l", "rock"), opts)
+LUA
+    out="$(luajit "$BATS_TEST_TMPDIR/drive.lua" "$REPO/dotfiles/bin/.local/share/dev/lua" 2>&1)"
     [[ "$out" == *"pacman -S --noconfirm -- p-pkg"* ]] || false
     [[ "$out" == *"dnf reinstall -y -- d-pkg"* ]] || false
     [[ "$out" == *"--force c-crate"* ]] || false

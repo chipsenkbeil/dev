@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# pkg.sh check probes a script: row whose binary is "-" by running the script
+# The package driver check probes a script: row whose binary is "-" by running the script
 # with --check from the project root. uname reports Darwin so the brew driver
 # loads, and curl is a stub that fails loudly when called.
 

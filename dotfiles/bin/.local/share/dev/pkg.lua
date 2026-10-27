@@ -12,7 +12,8 @@ for i = 1, #arg do
     argv[i] = arg[i]
 end
 local code = require("dev.pkg").main(argv, {
-    scripts = root .. "/scripts",
+    interpreter = arg[-1] or "luajit",
+    modules = here .. "/lua",
     manifest = root .. "/.dev/tools.tsv",
 })
 io.stdout:flush()
