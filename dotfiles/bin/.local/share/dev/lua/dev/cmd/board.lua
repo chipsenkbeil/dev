@@ -1,5 +1,7 @@
 local board = require("dev.board")
+local claims = require("dev.board.claims")
 local config = require("dev.config")
+local devos = require("dev.os")
 local fs = require("dev.fs")
 local pomb = require("dev.board.pomb")
 local verb = require("dev.verb")
@@ -7,6 +9,7 @@ local verb = require("dev.verb")
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
+local CLAIMANT_CHARS = 200
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
@@ -63,6 +66,15 @@ local function card_line(card)
     return board.table_lines({ board.cells(card) })[1]
 end
 
+local function claimant()
+    local host = devos.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", "")
+    local session = os.getenv("CLAUDE_SESSION_ID")
+    if not session or session == "" then
+        session = devos.capture({ "sh", "-c", "echo $PPID" }):gsub("%s+$", "")
+    end
+    return ("dev@" .. host .. ":" .. session:gsub("[^%w._-]", "_")):sub(1, CLAIMANT_CHARS)
+end
+
 local function find_card(backend, word)
     local cards, message = backend:cards()
     if not cards then
@@ -97,7 +109,8 @@ function commands.ls(backend, args)
     if not cards then
         return failure(message)
     end
-    local rows = {}
+    local shown_cards = {}
+    local holders = false
     for _, card in ipairs(cards) do
         local shown = card.column == want or (not want and card.column ~= board.DONE)
         if shown and flags["--label"] then
@@ -107,8 +120,13 @@ function commands.ls(backend, args)
             end
         end
         if shown then
-            rows[#rows + 1] = board.cells(card)
+            shown_cards[#shown_cards + 1] = card
+            holders = holders or card.claimant ~= nil
         end
+    end
+    local rows = {}
+    for _, card in ipairs(shown_cards) do
+        rows[#rows + 1] = board.cells(card, holders)
     end
     if #rows == 0 then
         return { output = "no cards" }
@@ -162,7 +180,8 @@ function commands.note(backend, args)
     if not card then
         return err
     end
-    local ok, message = backend:note(card.id, table.concat(words, " ", 2))
+    local held = claims.read(card.id)
+    local ok, message = backend:note(card.id, table.concat(words, " ", 2), held and held.fence)
     if not ok then
         return failure(message)
     end
@@ -186,15 +205,87 @@ function commands.move(backend, args)
     if not card then
         return err
     end
-    local ok, message = backend:move(card.id, column)
+    local held = claims.read(card.id)
+    local ok, message = backend:move(card.id, column, held and held.fence)
     if not ok then
         return failure(message)
+    end
+    if held and column ~= board.WORKING then
+        claims.stop(card.id)
     end
     return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
 end
 
+function commands.take(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held = claims.read(card.id)
+    local fence, message =
+        backend:claim(card.id, claimant(), claims.TTL_SECONDS, held and held.fence)
+    if not fence then
+        return failure(message)
+    end
+    claims.stop(card.id)
+    local ticks, minutes = claims.cap(card.size)
+    local state = { card = card.id, fence = fence }
+    local ok
+    ok, message = claims.write(state)
+    if not ok then
+        backend:release(card.id, fence)
+        return failure(message)
+    end
+    local pid
+    pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id))
+    if not pid then
+        claims.stop(card.id)
+        backend:release(card.id, fence)
+        return failure(message)
+    end
+    state.pid = pid
+    ok, message = claims.write(state)
+    if not ok then
+        claims.stop(card.id)
+        backend:release(card.id, fence)
+        return failure(message)
+    end
+    return {
+        output = string.format(
+            "took %s, fence %d, renewing every %dm for up to %dm",
+            card.id:sub(1, board.MIN_PREFIX),
+            fence,
+            claims.TICK_MINUTES,
+            minutes
+        ),
+    }
+end
+
+function commands.release(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held = claims.read(card.id)
+    if not held then
+        return failure("no claim was taken for " .. args[1] .. " with dev board take")
+    end
+    local ok, message = backend:release(card.id, held.fence)
+    if not ok then
+        return failure(message)
+    end
+    claims.stop(card.id)
+    return { output = "released " .. card.id:sub(1, board.MIN_PREFIX) }
+end
+
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note` or `move`
+---@param sub string `ls`, `next`, `add`, `note`, `move`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@return dev.cmd.board.Result result the output, or a message and the exit code

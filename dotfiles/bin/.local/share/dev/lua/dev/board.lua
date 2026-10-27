@@ -11,14 +11,18 @@ local M = {}
 ---@field column string the name of the column it sits in
 ---@field size string the colour's palette label, or `unsized`
 ---@field labels string[] the card's labels
+---@field claimant string? who holds a live claim on it
 
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
 ---@field next fun(self: dev.board.Backend): dev.board.Card?, string? the top unclaimed, unblocked Ready card, or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, description: string?): dev.board.Card?, string? the new card
----@field note fun(self: dev.board.Backend, id: string, body: string): boolean?, string? a comment of kind agent added to the card
----@field move fun(self: dev.board.Backend, id: string, column: string): boolean?, string? the card moved to the top of a column
+---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?): boolean?, string? a comment of kind agent added to the card, checked against the claim's fence when one is given
+---@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
+---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
+---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
+---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
 
 ---The columns in board order.
 M.COLUMNS = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
@@ -28,6 +32,9 @@ M.DEFAULT_COLUMN = "Backlog"
 
 ---The column a worker takes cards from.
 M.READY = "Ready"
+
+---The column of cards being worked, where a move keeps a claim's loop alive.
+M.WORKING = "In Progress"
 
 ---The column of finished cards, which `ls` leaves out.
 M.DONE = "Done"
@@ -107,10 +114,16 @@ end
 
 ---Say a card in one line.
 ---@param card dev.board.Card the card
----@return string[] cells id prefix, column, size, labels and name
-function M.cells(card)
+---@param holders boolean? add the claim holder before the name
+---@return string[] cells id prefix, column, size, labels, the holder when asked for, and name
+function M.cells(card, holders)
     local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
-    return { card.id:sub(1, M.MIN_PREFIX), card.column, card.size, labels, card.name }
+    local cells = { card.id:sub(1, M.MIN_PREFIX), card.column, card.size, labels }
+    if holders then
+        cells[#cells + 1] = card.claimant or "-"
+    end
+    cells[#cells + 1] = card.name
+    return cells
 end
 
 ---Pad rows into aligned columns, with no trailing spaces.

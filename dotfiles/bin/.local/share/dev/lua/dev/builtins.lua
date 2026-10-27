@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, ls, next, add, note and move",
+        desc = "Read and update the project's board: status, ls, next, add, note, move, take and release",
         hidden = true,
     },
     {
@@ -229,6 +229,18 @@ return {
         handler = "lua",
         usage = "dev board move CARD COLUMN",
         desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox",
+    },
+    {
+        words = { "board", "take" },
+        handler = "lua",
+        usage = "dev board take CARD",
+        desc = "Claim a card and start a loop that renews the claim every 5 minutes without a model turn",
+    },
+    {
+        words = { "board", "release" },
+        handler = "lua",
+        usage = "dev board release CARD",
+        desc = "Release the claim taken with dev board take and stop its loop",
     },
     {
         words = { "bootstrap" },

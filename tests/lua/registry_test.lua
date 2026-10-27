@@ -42,6 +42,8 @@ local LUA_ONLY = {
     ["board add"] = true,
     ["board note"] = true,
     ["board move"] = true,
+    ["board take"] = true,
+    ["board release"] = true,
 }
 
 local function scripted(dir, rel, text, mode)

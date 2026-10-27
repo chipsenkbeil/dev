@@ -182,6 +182,7 @@ local CURL = [[#!/bin/sh
 printf 'curl %s\n' "$*" >>"$ROOT/calls"
 cat >"$ROOT/stdin"
 for last; do :; done
+status=${HTTP_STATUS:-200}
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
@@ -190,9 +191,15 @@ case "$last" in
 */tasks\?*) body='{"items":[{"id":"]] .. ID_A .. [["}],"next_cursor":null}' ;;
 */api/tasks/]] .. ID_A .. [[) body=$(cat "$ROOT/task.json") ;;
 */api/tasks) body=$(cat "$ROOT/task.json") ;;
+*/claim/heartbeat)
+    body='{"ok":true}'
+    if [ -f "$ROOT/hb_status" ]; then status=$(cat "$ROOT/hb_status"); fi
+    ;;
+*/claim/release) body= ;;
+*/claim) body='{"fence":7,"claimant":"x"}' ;;
 *) body='{"ok":true}' ;;
 esac
-printf '%s\n%s' "$body" "${HTTP_STATUS:-200}"
+printf '%s\n%s' "$body" "$status"
 ]]
 
 local function sandbox(opts)
@@ -219,6 +226,7 @@ local function sandbox(opts)
         assert(fs.write(root .. "/" .. name, body))
     end
     executable(root .. "/bin/curl", CURL)
+    executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. devos.which("sleep") .. " 0.2\n")
     executable(
         root .. "/bin/pass",
         '#!/bin/sh\nprintf "pass %s opts=%s\\n" "$*" "$PASSWORD_STORE_GPG_OPTS" >>"$ROOT/calls"\n'
@@ -228,7 +236,11 @@ local function sandbox(opts)
 end
 
 local function dev(root, home, args)
-    return support.dev(root, args, { env = { HOME = home, ROOT = root } })
+    return support.dev(
+        root,
+        args,
+        { env = { HOME = home, ROOT = root, XDG_STATE_HOME = home .. "/state" } }
+    )
 end
 
 local function read(root, name)
@@ -480,4 +492,250 @@ t.test("a note may begin with a dash", function()
     local result = commands.run("note", { "cccccccc", "- fixed", "it" }, backend)
     t.eq(backend.calls[1], { "note", ID_C, "- fixed it" })
     t.eq(result.output, "noted cccccccc")
+end)
+
+local function heartbeats(root)
+    local count = 0
+    for _ in read(root, "calls"):gmatch("/claim/heartbeat") do
+        count = count + 1
+    end
+    return count
+end
+
+local function wait_until(test)
+    for _ = 1, 100 do
+        if test() then
+            return true
+        end
+        devos.run({ "sleep", "0.1" })
+    end
+    return false
+end
+
+local function state_file(home)
+    return home .. "/state/dev/board/" .. ID_A
+end
+
+local function settle(root)
+    local before
+    repeat
+        before = heartbeats(root)
+        devos.run({ "sleep", "0.6" })
+    until heartbeats(root) == before
+    return before
+end
+
+t.test("take claims the card and renews the claim while the loop runs", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    t.eq(code, 0)
+    t.ok(out:find("took 11111111, fence 7, renewing every 5m for up to 50m", 1, true), out)
+    local calls = read(root, "calls")
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/claim", 1, true), calls)
+    t.ok(calls:find('"ttl_seconds":900', 1, true), calls)
+    t.ok(calls:find('"claimant":"dev@', 1, true), calls)
+    t.ok(wait_until(function()
+        return heartbeats(root) >= 3
+    end))
+    t.ok(read(root, "calls"):find('{"fence":7}', 1, true))
+    t.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/heartbeat", 1, true))
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("the state file holds the card, the fence and the pid at mode 600", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    local state = read(home, "state/dev/board/" .. ID_A)
+    t.ok(state:find("card=" .. ID_A .. "\nfence=7\npid=", 1, true), state)
+    t.ok(state:find("pid=%d+\n$"), state)
+    t.eq(state:find(TOKEN, 1, true), nil)
+    local mode = devos.capture({ "ls", "-l", state_file(home) })
+    t.ok(mode:find("^%-rw%-%-%-%-%-%-%-"), mode)
+    mode = devos.capture({ "ls", "-ld", home .. "/state/dev/board" })
+    t.ok(mode:find("^drwx%-%-%-%-%-%-"), mode)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("release gives the claim up, removes the state and stops the loop", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    t.ok(wait_until(function()
+        return heartbeats(root) >= 2
+    end))
+    local out, code = dev(root, home, { "board", "release", "11111111-a" })
+    t.eq(code, 0)
+    t.eq(out, "released 11111111\n")
+    t.ok(
+        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/release", 1, true),
+        read(root, "calls")
+    )
+    t.eq(fs.exists(state_file(home)), false)
+    local after = settle(root)
+    t.ok(after <= 4, after)
+    t.eq(heartbeats(root), after)
+end)
+
+t.test("release without a taken claim is a plain error", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "release", "11111111-a" })
+    t.eq(code, 1)
+    t.ok(out:find("no claim was taken", 1, true), out)
+    t.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
+end)
+
+t.test("move out of progress stops the loop and sends the fence", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    t.ok(wait_until(function()
+        return heartbeats(root) >= 2
+    end))
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
+    t.eq(code, 0)
+    t.eq(out, "moved 11111111 to In Review\n")
+    local moved = read(root, "calls"):match("[^\n]*/move\n?")
+    t.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
+    t.eq(fs.exists(state_file(home)), false)
+    local after = settle(root)
+    t.ok(after <= 4, after)
+    t.eq(heartbeats(root), after)
+end)
+
+t.test("move into progress keeps the loop and the state", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    dev(root, home, { "board", "move", "11111111-a", "progress" })
+    t.eq(fs.exists(state_file(home)), true)
+    local seen = heartbeats(root)
+    t.ok(wait_until(function()
+        return heartbeats(root) > seen
+    end))
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("the loop ends by itself after twice the card's size", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    t.ok(wait_until(function()
+        return not fs.exists(state_file(home))
+    end))
+    t.eq(settle(root), 10)
+end)
+
+t.test("a renewal the server refuses ends the loop", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/hb_status", "409"))
+    dev(root, home, { "board", "take", "11111111-a" })
+    t.ok(wait_until(function()
+        return not fs.exists(state_file(home))
+    end))
+    t.eq(settle(root), 1)
+end)
+
+t.test("a renewal that cannot reach the server keeps trying", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/hb_status", "503"))
+    dev(root, home, { "board", "take", "11111111-a" })
+    t.ok(wait_until(function()
+        return heartbeats(root) >= 3
+    end))
+    t.eq(fs.exists(state_file(home)), true)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("a second take renews with the stored fence", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    dev(root, home, { "board", "take", "11111111-a" })
+    t.ok(
+        read(root, "calls"):find('"fence":7,"ttl_seconds"', 1, true)
+            or read(root, "calls"):find('"ttl_seconds":900,"fence":7', 1, true),
+        read(root, "calls")
+    )
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("take and release want exactly one card", function()
+    local root, home = sandbox()
+    for _, sub in ipairs({ "take", "release" }) do
+        local _, code = dev(root, home, { "board", sub })
+        t.eq(code, 2)
+        _, code = dev(root, home, { "board", sub, "11111111-a", "extra" })
+        t.eq(code, 2)
+    end
+end)
+
+t.test("the token never reaches argv, the environment, the state or the output", function()
+    local root, home = sandbox()
+    executable(
+        root .. "/bin/curl",
+        (CURL:gsub('cat >"$ROOT/stdin"', 'env >>"$ROOT/env"\ncat >"$ROOT/stdin"', 1))
+    )
+    local out = dev(root, home, { "-vv", "board", "take", "11111111-a" })
+    t.ok(wait_until(function()
+        return heartbeats(root) >= 2
+    end))
+    local ps = devos.capture({ "ps", "-ax", "-o", "command=" })
+    out = out .. dev(root, home, { "-vv", "board", "release", "11111111-a" })
+    t.eq(out:find(TOKEN, 1, true), nil)
+    t.eq(ps:find(TOKEN, 1, true), nil)
+    t.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
+    t.eq(read(root, "env"):find(TOKEN, 1, true), nil)
+    t.eq(read(home, "state/dev/board/" .. ID_A):find(TOKEN, 1, true), nil)
+    t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
+    t.ok(read(root, "calls"):find("-K -", 1, true))
+end)
+
+t.test("ls shows who holds a live claim and ignores an expired one", function()
+    local root, home = sandbox()
+    local live = '"claim":{"claimant":"dev@box:42","expires_at":"2999-01-01T00:00:00Z"}'
+    local dead = '"claim":{"claimant":"dev@old:1","expires_at":"2001-01-01T00:00:00Z"}'
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":[{"id":"'
+                .. ID_A
+                .. '","name":"First","column_id":"col-ready","position":1,"color_id":null,"labels":[],'
+                .. live
+                .. '},{"id":"'
+                .. ID_B
+                .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[],'
+                .. dead
+                .. "}]}"
+        )
+    )
+    local out = dev(root, home, { "board", "ls" })
+    t.eq(
+        out,
+        "11111111  Ready  unsized  -  dev@box:42  First\n"
+            .. "11111111  Ready  unsized  -  -           Second\n"
+    )
+end)
+
+t.test("ls adds no holder column while nobody holds a claim", function()
+    local cards = sample()
+    local result = commands.run("ls", {}, fake(cards))
+    t.eq(result.output:find("dev@", 1, true), nil)
+    cards[1].claimant = "dev@box:1"
+    result = commands.run("ls", {}, fake(cards))
+    t.eq(
+        result.output,
+        "11111111  Ready    1 Pomodoro  docs  dev@box:1  Write docs\n"
+            .. "11111111  Backlog  unsized     -     -          Fix lint"
+    )
+end)
+
+t.test("a release the server refuses keeps the state so it can be retried", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    executable(
+        root .. "/bin/curl",
+        (CURL:gsub("%*/claim/release%) body= ;;", "*/claim/release) body=; status=503 ;;", 1))
+    )
+    local out, code = dev(root, home, { "board", "release", "11111111-a" })
+    t.eq(code, 1)
+    t.ok(out:find("pomb answered 503", 1, true), out)
+    t.eq(fs.exists(state_file(home)), true)
+    executable(root .. "/bin/curl", CURL)
+    _, code = dev(root, home, { "board", "release", "11111111-a" })
+    t.eq(code, 0)
 end)

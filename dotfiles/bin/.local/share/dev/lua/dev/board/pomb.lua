@@ -1,6 +1,8 @@
 local board = require("dev.board")
+local claims = require("dev.board.claims")
 local devos = require("dev.os")
 local json = require("dev.json")
+local project = require("dev.project")
 
 local present = json.present
 local PASS_TIMEOUT_SECONDS = "10"
@@ -15,6 +17,10 @@ local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
 local HTTP_ERROR = 400
 local TOP = 0
 local COMMENT_KIND = "agent"
+local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
+local KEEPALIVE_SCRIPT = "/board/keepalive.sh"
+local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
+local STAMP_CHARS = 19
 
 ---Pomb over its HTTP API, through curl.
 ---
@@ -45,6 +51,13 @@ local function unavailable(reason)
     return "board unavailable: " .. reason
 end
 
+local function entry_of(ref)
+    local entry = type(ref) == "string" and ref:match("^pass:(.+)$")
+    if entry and entry:find(ENTRY_PATTERN) and not entry:find("..", 1, true) then
+        return entry
+    end
+end
+
 ---Read the worker token with `pass`, without a prompt.
 ---
 ---A locked store fails at once instead of waiting for a pinentry.
@@ -52,9 +65,9 @@ end
 ---@return string? token the token
 ---@return string? message why it could not be read
 function M.token(ref)
-    local entry = type(ref) == "string" and ref:match("^pass:(.+)$")
-    if not entry or not entry:find(ENTRY_PATTERN) or entry:find("..", 1, true) then
-        return nil, "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
+    local entry = entry_of(ref)
+    if not entry then
+        return nil, BAD_REF
     end
     local out, code = devos.capture({ "timeout", PASS_TIMEOUT_SECONDS, "pass", "show", entry }, {
         env = { PASSWORD_STORE_GPG_OPTS = PASS_GPG_OPTS },
@@ -94,9 +107,10 @@ end
 ---@param method string the HTTP method
 ---@param path string the path under the server's URL
 ---@param body table<string, any>? the JSON body
+---@param fence integer? the claim fence to send as `If-Claim-Fence`
 ---@return any? doc the decoded answer
 ---@return string? message why the call failed
-function Backend:__request(method, path, body)
+function Backend:__request(method, path, body, fence)
     if not self.__secret then
         local token, message = M.token(self.__opts.token)
         if not token then
@@ -120,6 +134,10 @@ function Backend:__request(method, path, body)
         "-w",
         "\n%{http_code}",
     }
+    if fence then
+        argv[#argv + 1] = "-H"
+        argv[#argv + 1] = "If-Claim-Fence: " .. string.format("%d", fence)
+    end
     if body then
         argv[#argv + 1] = "--data-raw"
         argv[#argv + 1] = assert(json.encode(body))
@@ -134,7 +152,12 @@ function Backend:__request(method, path, body)
         return nil, unavailable("cannot reach " .. self.__opts.url .. " (curl exit " .. code .. ")")
     end
     local text, status = out:match("^(.*)\n(%d+)$")
-    local doc = text and json.decode(text)
+    local doc
+    if text == "" then
+        doc = true
+    elseif text then
+        doc = json.decode(text)
+    end
     status = tonumber(status)
     if not status or doc == nil then
         return nil, unavailable("pomb sent an answer dev cannot read")
@@ -198,8 +221,20 @@ function Backend:__column_name(id)
     return "?"
 end
 
+local function holder(claim)
+    if type(claim) ~= "table" or type(claim.claimant) ~= "string" then
+        return nil
+    end
+    local expires = present(claim.expires_at)
+    if type(expires) == "string" and expires:sub(1, STAMP_CHARS) <= os.date(UTC_STAMP) then
+        return nil
+    end
+    return claim.claimant
+end
+
 function Backend:__card(task)
     return {
+        claimant = holder(task.claim),
         id = task.id,
         name = task.name,
         column = self:__column_name(task.column_id),
@@ -293,7 +328,7 @@ function Backend:add(name, column, description)
     return self:__card(task)
 end
 
-function Backend:note(id, body)
+function Backend:note(id, body, fence)
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -302,14 +337,14 @@ function Backend:note(id, body)
     made, message = self:__request("POST", "/api/tasks/" .. id .. "/comments", {
         body = body,
         kind = COMMENT_KIND,
-    })
+    }, fence)
     if not made then
         return nil, message
     end
     return true
 end
 
-function Backend:move(id, column)
+function Backend:move(id, column, fence)
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -322,12 +357,62 @@ function Backend:move(id, column)
     moved, message = self:__request(
         "POST",
         "/api/tasks/" .. id .. "/move",
-        { column_id = target, position = TOP }
+        { column_id = target, position = TOP },
+        fence
     )
     if not moved then
         return nil, message
     end
     return true
+end
+
+function Backend:claim(id, claimant, ttl, fence)
+    local body = { claimant = claimant, ttl_seconds = ttl, fence = fence }
+    local claim, message = self:__request("POST", "/api/tasks/" .. id .. "/claim", body)
+    if not claim then
+        return nil, message
+    end
+    local taken = present(claim.fence)
+    if type(taken) ~= "number" then
+        return nil, unavailable("pomb sent a claim with no fence")
+    end
+    return taken
+end
+
+function Backend:release(id, fence)
+    local done, message =
+        self:__request("POST", "/api/tasks/" .. id .. "/claim/release", { fence = fence })
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:keepalive(id, fence, ticks, state)
+    local entry = entry_of(self.__opts.token)
+    if not entry then
+        return nil, BAD_REF
+    end
+    local out, code = devos.capture({
+        "sh",
+        "-c",
+        'set -m; nohup "$@" </dev/null >/dev/null 2>&1 & echo $!',
+        "sh",
+        "bash",
+        project.share .. KEEPALIVE_SCRIPT,
+        state,
+        id,
+        string.format("%d", fence),
+        string.format("%d", ticks),
+        self.__opts.url,
+        entry,
+        string.format("%d", claims.TICK_SECONDS),
+    }, { unset = CHILD_UNSET, stderr = "null" })
+    local pid = tonumber(out:match("%d+"))
+    if code ~= 0 or not pid then
+        return nil, "cannot start the keep-alive loop"
+    end
+    return pid
 end
 
 return M

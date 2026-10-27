@@ -10,6 +10,8 @@ dev board next
 dev board add "Name the new thing" --column backlog --description "why"
 dev board note 8af0e001 "Tests pass, landing now."
 dev board move 8af0e001 progress
+dev board take 8af0e001
+dev board release 8af0e001
 ```
 
 ## Opting in
@@ -63,3 +65,30 @@ unclaimed and not blocked, or `no ready cards`.
 
 `add` puts a card in Backlog unless `--column` names another column. `note`
 adds a comment of kind agent. `move` puts the card at the top of the column.
+
+## Claims
+
+`take` claims a card so no other agent picks it up, and starts a loop that
+keeps the claim alive. The claim lasts 900 seconds. The loop renews it every 5
+minutes with curl, so it costs no model turns and outlives the shell that
+started it. Its claimant is `dev@<host>:<session or pid>`.
+
+```
+dev board next
+dev board take 8af0e001
+dev board move 8af0e001 progress
+```
+
+The loop stops when you `release` the card, when you `move` it to any column
+but In Progress, when Pomb refuses a renewal because the claim is gone, and by
+itself after twice the card's size: 50 minutes for 1 Pomodoro, 100 for 2
+Pomodori and 150 for the rest. A crashed agent therefore loses its claim
+within 15 minutes of the loop's end. A network failure does not stop it.
+
+The loop's state is a file named for the card in `$XDG_STATE_HOME/dev/board/`,
+or `~/.local/state/dev/board/`, with the card, the fence and the loop's pid at
+mode 600. It never holds the token. The loop reads the token from `pass` for
+each renewal and hands it to curl on standard input, so it is in no argument
+list, environment variable, file or output. While you hold a claim, `move` and
+`note` send its fence, and `ls` shows each live claim's holder in a column
+before the name.
