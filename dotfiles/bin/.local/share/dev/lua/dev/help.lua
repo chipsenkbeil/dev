@@ -2,6 +2,7 @@ local devos = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
 local registry = require("dev.registry")
+local types = require("dev.cmd.types")
 local text = require("dev.text")
 local topics = require("dev.topics")
 local ui = require("dev.ui")
@@ -208,9 +209,12 @@ local function noun_text(reg, c, noun)
     return table.concat(out)
 end
 
-local function builtin_commands(row)
+local function builtin_commands(ctx, row)
     if row.usage and row.usage ~= "" then
         return { row.usage }
+    end
+    if types.VERBS[row.name] then
+        return types.commands(ctx.root, project_type(ctx), row.name)
     end
     local out = devos.capture({ "bash", project.share .. "/legacy.bash", "__commands", row.name }, {
         env = { DEV_UID = tostring(devos.getuid()), DEV_OS = devos.name() },
@@ -270,7 +274,7 @@ local function verb_text(ctx, reg, c, opts)
             .. " ("
             .. project_type(ctx)
             .. " project)\n"
-        for _, line in ipairs(builtin_commands(row)) do
+        for _, line in ipairs(builtin_commands(ctx, row)) do
             out[#out + 1] = "  " .. line .. "\n"
         end
     end
@@ -301,6 +305,27 @@ end
 function M.verb(ctx, reg, opts)
     io.write(verb_text(ctx, reg, screen(), opts))
     return 0
+end
+
+---Print the curated view, as `dev help` does with no argument.
+---@param ctx dev.Ctx the context of the command
+---@param reg dev.Registry the project's registry
+---@return integer code 0
+function M.overview(ctx, reg)
+    io.write(overview(ctx, reg, screen(), {}))
+    return 0
+end
+
+---Print the topic called `name` when the project or dev has one.
+---@param ctx dev.Ctx the context of the command
+---@param name string the topic name
+---@return boolean found whether the topic exists, so whether it was printed
+function M.topic(ctx, name)
+    if not topic_path(ctx, name) then
+        return false
+    end
+    print_topic(ctx, name)
+    return true
 end
 
 ---Print a noun's description and its subcommands.
@@ -358,7 +383,7 @@ function M.run(ctx, reg)
         fail("unknown flag " .. first)
     end
     if #args == 0 then
-        io.write(overview(ctx, reg, screen(), {}))
+        return M.overview(ctx, reg)
     elseif #args == 1 then
         local row = reg:find({ first })
         if row and row.noun then

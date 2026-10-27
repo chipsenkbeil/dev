@@ -4,6 +4,16 @@ local fs = require("dev.fs")
 ---@class dev.project
 local M = {}
 
+---@enum dev.project.Kind
+local Kind = {
+    RUST = "rust",
+    LOVE2D = "love2d",
+    GODOT = "godot",
+    NODE = "node",
+    LUA = "lua",
+    MAKE = "make",
+}
+
 local PRUNED_DIRS = { node_modules = true, target = true }
 local stderr = io.stderr
 local SHARE = debug.getinfo(1, "S").source:match("^@(.*)/lua/dev/[^/]*$") or "."
@@ -33,6 +43,9 @@ local function vcs_root(argv)
         return (out:gsub("\n$", ""))
     end
 end
+
+---The project types dev knows.
+M.Kind = Kind
 
 ---Directory of dev's own code, holding `main.lua` and `legacy.bash`.
 M.share = SHARE
@@ -92,20 +105,20 @@ end
 
 ---Name the project's language by the files in its root.
 ---@param root string project root
----@return "rust"|"love2d"|"godot"|"node"|"lua"|"make"|nil type nil when no file points to a type
+---@return dev.project.Kind? type nil when no file points to a type
 function M.detect_type(root)
     if fs.is_file(root .. "/Cargo.toml") then
-        return "rust"
+        return Kind.RUST
     elseif fs.is_file(root .. "/main.lua") and fs.is_file(root .. "/conf.lua") then
-        return "love2d"
+        return Kind.LOVE2D
     elseif fs.is_file(root .. "/project.godot") then
-        return "godot"
+        return Kind.GODOT
     elseif fs.is_file(root .. "/package.json") then
-        return "node"
+        return Kind.NODE
     elseif has_lua_file(root) then
-        return "lua"
+        return Kind.LUA
     elseif fs.is_file(root .. "/Makefile") then
-        return "make"
+        return Kind.MAKE
     end
 end
 

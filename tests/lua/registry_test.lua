@@ -7,7 +7,18 @@ local registry = require("dev.registry")
 local support = require("support")
 
 local LEGACY = "dotfiles/bin/.local/share/dev/legacy.bash"
-local LUA_ONLY = { help = true }
+local LUA_ONLY = {
+    help = true,
+    lint = true,
+    fmt = true,
+    test = true,
+    build = true,
+    run = true,
+    fetch = true,
+    deploy = true,
+    guide = true,
+    bootstrap = true,
+}
 
 local function scripted(dir, rel, text, mode)
     local path = fs.join(dir, rel)

@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# dev: one entry point for lint, fmt, test, build, run, deploy, push and pull.
+# dev: the verbs not ported to Lua yet.
 #
 # `dev <verb>` runs `.dev/<verb>.sh` at the repo root when it is executable.
 # `dev <noun> <sub>` runs `.dev/<noun>/<sub>.sh` the same way, and built-in nouns
 # sit beside the flat verbs. `dev help` lists a noun once and `dev help <noun>`
 # lists its subcommands.
-# Otherwise it detects the project type and runs the standard sequence for it.
-# Detection order: Cargo.toml (rust), main.lua and conf.lua (love2d),
-# project.godot (godot), package.json (node), any .lua file outside dot
-# directories (lua), Makefile (make), else none.
 #
-# `dev help` and the completion and topic helpers are Lua (dev.help, dev.complete, dev.topics).
+# `dev help` and the completion and topic helpers, the project-type built-ins, deploy, guide
+# and bootstrap run in Lua. This file serves what is left: push, pull, sync, init, tools and box.
 #
 # `dev sync` compares a project's copied lint files against the templates in
 # the dotfiles repo, unless the project has its own .dev/sync.sh. DOTFILES
@@ -217,13 +214,6 @@ vcs() {
 # The group heads the verb in `dev help`, and `hidden` keeps it to `dev help -a`.
 builtin_table() {
     cat <<'TABLE'
-lint||||Check style and formatting for the project type|Check your work
-fmt||||Format the source for the project type|Check your work
-test||||Run the project's tests|Check your work
-build||||Build the project|Check your work
-run||||Run the project|Check your work
-fetch||||Download the crates and advisory database an offline lint and test need|Check your work
-deploy|cmd_deploy||(none: add .dev/deploy.sh)|Deploy the project (needs .dev/deploy.sh)|Share it
 push|cmd_push|||Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named|Share it
 pull|cmd_pull|||Fetch the remote and rebase local work onto it|Share it
 sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates|Set up a machine or project
@@ -231,7 +221,6 @@ init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [
 tools|noun|||Install and check the tools in .dev/tools.tsv|Set up a machine or project
 tools install|cmd_tools_install|--dry-run --force --group --system --user|dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]|Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
 tools check|cmd_tools_check|--group|dev tools check [--group NAME]|Report which of the manifest's tools are on PATH, exit 1 when one is missing
-guide|cmd_guide||dev guide [question...]|Show this repo's overview, or ask guide a question about its commands and topics|Set up a machine or project
 connect|cmd_box_connect|--ssh|dev connect [<box>] [--ssh]|Attach to a box over Eternal Terminal in a tmux session, picking, resuming or creating one first|Boxes
 box|noun|||List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box|Boxes
 box ls|cmd_box_ls|--all|dev box ls [--all]|List the boxes with state, target, projects and time left, then the cap
@@ -243,7 +232,6 @@ box extend|cmd_box_extend|--ttl --keep|dev box extend BOX (--ttl HOURS or --keep
 box install-tools|cmd_box_install_tools||dev box install-tools BOX [PROJECT...]|Reinstall a running box's tools, for every project unless some are named
 box delete|cmd_box_delete|--yes -y --no-archive|dev box delete BOX [-y or --yes] [--no-archive]|Archive a box's projects and delete it, or delete it with no archive under --no-archive, after asking unless -y
 box connect|cmd_box_connect|--ssh|dev box connect [<box>] [--ssh]|Same as dev connect
-bootstrap|cmd_bootstrap|--dry-run --no-login|dev bootstrap [--dry-run] [--no-login]|Run bootstrap.sh from the dotfiles clone: the package manager and luajit first, then stow, tailscale, the default packages and the manifest tools|hidden
 TABLE
 }
 
@@ -325,18 +313,9 @@ noun_has_sub() {
     noun_subs_table "$1" | awk -F'\t' -v s="$2" '$1 == s { found = 1 } END { exit !found }'
 }
 
-has_make_target() {
-    [ -f "$ROOT/Makefile" ] && grep -Eq "^$1[[:space:]]*:" "$ROOT/Makefile"
-}
-
 # builtin_commands <verb> <type>: the command lines the built-in runs, one per line.
 builtin_commands() {
-    local verb=$1 type=$2 remote step usage
-    usage=$(builtin_field "$verb" 4)
-    if [ -n "$usage" ]; then
-        echo "$usage"
-        return
-    fi
+    local verb=$1 type=$2 remote step
     case "$verb" in
     sync)
         if lint_set_for "$type" >/dev/null; then
@@ -370,43 +349,7 @@ builtin_commands() {
         return
         ;;
     esac
-    case "$type:$verb" in
-    rust:lint)
-        echo "cargo +nightly fmt --check"
-        echo "cargo clippy --all-targets --all-features -- -D warnings"
-        if [ -f "$ROOT/sgconfig.yml" ]; then echo "ast-grep scan --globs '!target/**'"; fi
-        ;;
-    rust:fmt) echo "cargo +nightly fmt" ;;
-    rust:test)
-        echo "cargo nextest run --all-features"
-        echo "cargo test --doc --all-features"
-        ;;
-    rust:build) echo "cargo build --release" ;;
-    rust:run) echo "cargo run --" ;;
-    rust:fetch)
-        echo "env CARGO_NET_OFFLINE=false cargo fetch --locked"
-        if [ -f "$ROOT/deny.toml" ]; then echo "env CARGO_NET_OFFLINE=false cargo deny fetch"; fi
-        ;;
-    love2d:run) echo "love $ROOT" ;;
-    love2d:fmt | lua:fmt) echo "stylua $ROOT" ;;
-    love2d:test | love2d:lint | lua:* | make:*)
-        if has_make_target "$verb"; then
-            echo "make -C $ROOT $verb"
-        else
-            echo "(none: no $verb target in the Makefile)"
-        fi
-        ;;
-    godot:run) echo "godot --path $ROOT" ;;
-    node:*)
-        if command -v jq >/dev/null 2>&1 &&
-            jq -e --arg v "$verb" '.scripts[$v] // empty' "$ROOT/package.json" >/dev/null 2>&1; then
-            echo "npm --prefix $ROOT run $verb"
-        else
-            echo "(none: no $verb script in package.json)"
-        fi
-        ;;
-    *) echo "(none: no built-in $verb for $type projects)" ;;
-    esac
+    echo "(none: no built-in $verb for $type projects)"
 }
 
 # usage: the curated overview on stderr, for a bad verb or bad arguments.
@@ -414,29 +357,6 @@ usage() {
     if [ "$(dev_uid)" -ne 0 ]; then
         "$DEV_SELF" help >&2
     fi
-}
-
-cmd_deploy() {
-    die "deploy has no built-in, add .dev/deploy.sh"
-}
-
-# cmd_guide [question...]: show the overview topic and the curated help, or ask guide about this repo with the repo's topics read first.
-cmd_guide() {
-    local question="$*" topics="$ROOT/.dev/topics"
-    [ "$(dev_uid)" -ne 0 ] || die "refusing to run guide as root"
-    if [ -z "$question" ]; then
-        if "$DEV_SELF" help -k overview 2>/dev/null; then
-            printf '\n'
-        fi
-        "$DEV_SELF" help
-        return
-    fi
-    need guide "dev install guide"
-    cd "$ROOT"
-    if [ -d "$topics" ]; then
-        exec guide dev --context-dir "$topics" -- "$question"
-    fi
-    exec guide dev -- "$question"
 }
 
 detect_type() {
@@ -464,136 +384,6 @@ lint_set_for() {
     love2d | lua) echo lua ;;
     *) return 1 ;;
     esac
-}
-
-unsupported() {
-    printf 'dev: no built-in %s for %s projects, add .dev/%s.sh\n' "$1" "$2" "$1" >&2
-    exit 1
-}
-
-# make_target <target> [args...]: run the Makefile target when it exists.
-make_target() {
-    local target=$1
-    if [ -f "$ROOT/Makefile" ] && grep -Eq "^${target}[[:space:]]*:" "$ROOT/Makefile"; then
-        need make "xcode-select --install"
-        run_cmd make -C "$ROOT" "$@"
-    else
-        return 1
-    fi
-}
-
-builtin_rust() {
-    local verb=$1
-    shift
-    need cargo "brew install rustup"
-    case "$verb" in
-    lint)
-        if ! cargo +nightly fmt --version >/dev/null 2>&1; then
-            printf 'WARNING: nightly rustfmt not found. Install with: rustup toolchain install nightly --component rustfmt\n' >&2
-            exit 1
-        fi
-        run_cmd cargo +nightly fmt --check
-        run_cmd cargo clippy --all-targets --all-features -- -D warnings
-        if [ -f "$ROOT/sgconfig.yml" ]; then
-            need ast-grep "brew install ast-grep"
-            (cd "$ROOT" && run_cmd ast-grep scan --globs '!target/**')
-        fi
-        ;;
-    fmt)
-        run_cmd cargo +nightly fmt "$@"
-        ;;
-    test)
-        if ! cargo nextest --version >/dev/null 2>&1; then
-            printf 'WARNING: cargo-nextest not found. Install with: cargo install cargo-nextest --locked\n' >&2
-            exit 1
-        fi
-        run_cmd cargo nextest run --all-features "$@"
-        run_cmd cargo test --doc --all-features "$@"
-        ;;
-    build)
-        run_cmd cargo build --release "$@"
-        ;;
-    run)
-        run_cmd cargo run -- "$@"
-        ;;
-    fetch)
-        (cd "$ROOT" && run_cmd env CARGO_NET_OFFLINE=false cargo fetch --locked) || exit $?
-        if [ -f "$ROOT/deny.toml" ]; then
-            if ! cargo deny --version >/dev/null 2>&1; then
-                printf 'WARNING: cargo-deny not found. Install with: cargo install cargo-deny --locked\n' >&2
-                exit 1
-            fi
-            (cd "$ROOT" && run_cmd env CARGO_NET_OFFLINE=false cargo deny fetch) || exit $?
-        fi
-        ;;
-    *) unsupported "$verb" rust ;;
-    esac
-}
-
-builtin_love2d() {
-    local verb=$1
-    shift
-    case "$verb" in
-    run)
-        need love "brew install --cask love"
-        run_cmd love "$ROOT" "$@"
-        ;;
-    test | lint)
-        make_target "$verb" "$@" || unsupported "$verb" love2d
-        ;;
-    fmt)
-        need stylua "brew install stylua"
-        run_cmd stylua "$@" "$ROOT"
-        ;;
-    *) unsupported "$verb" love2d ;;
-    esac
-}
-
-builtin_lua() {
-    local verb=$1
-    shift
-    case "$verb" in
-    fmt)
-        need stylua "brew install stylua"
-        run_cmd stylua "$@" "$ROOT"
-        ;;
-    *)
-        make_target "$verb" "$@" || unsupported "$verb" lua
-        ;;
-    esac
-}
-
-builtin_godot() {
-    local verb=$1
-    shift
-    case "$verb" in
-    run)
-        need godot "brew install --cask godot"
-        run_cmd godot --path "$ROOT" "$@"
-        ;;
-    *) unsupported "$verb" godot ;;
-    esac
-}
-
-builtin_node() {
-    local verb=$1
-    shift
-    need jq "brew install jq"
-    if ! jq -e --arg v "$verb" '.scripts[$v] // empty' "$ROOT/package.json" >/dev/null 2>&1; then
-        unsupported "$verb" node
-    fi
-    need npm "brew install node"
-    if [ "$#" -gt 0 ]; then
-        run_cmd npm --prefix "$ROOT" run "$verb" -- "$@"
-    else
-        run_cmd npm --prefix "$ROOT" run "$verb"
-    fi
-}
-
-builtin_make() {
-    local verb=$1
-    shift
-    make_target "$verb" "$@" || unsupported "$verb" make
 }
 
 # trunk_name <bookmark list>: master or main, whichever the list holds.
@@ -798,14 +588,6 @@ cmd_pull() {
         run_cmd "${PULL_CMD[@]}"
         step=$((step + 1))
     done
-}
-
-# cmd_bootstrap [args...]: run bootstrap.sh from the dotfiles root.
-cmd_bootstrap() {
-    local root
-    root=$(dotfiles_root)
-    cd "$root"
-    exec bash "$root/bootstrap.sh" "$@"
 }
 
 # --- tools ---
@@ -2206,7 +1988,7 @@ cmd_init() {
 }
 
 main() {
-    local verb sub type trace handler count=0
+    local verb sub trace count=0
     local -a args=()
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -2313,17 +2095,7 @@ main() {
     if has_override "$verb"; then
         run_script "$verb" "$@"
     fi
-    handler=$(builtin_field "$verb" 2)
-    if [ -n "$handler" ]; then
-        "$handler" "$@"
-        return
-    fi
-
-    type=$(detect_type)
-    case "$type" in
-    rust | love2d | lua | godot | node | make) "builtin_$type" "$verb" "$@" ;;
-    *) unsupported "$verb" undetected ;;
-    esac
+    "$(builtin_field "$verb" 2)" "$@"
 }
 
 main "$@"

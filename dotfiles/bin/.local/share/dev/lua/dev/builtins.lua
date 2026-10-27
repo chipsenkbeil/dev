@@ -1,6 +1,6 @@
 ---@class dev.Builtin
 ---@field words string[] the command words, a noun and a subcommand for a subcommand row
----@field handler string? "legacy" for a bash handler, "lua" for a Lua one, nil for a noun or the project type's builtin
+---@field handler string? "legacy" for a bash handler, "lua" for a Lua one, nil for a noun
 ---@field noun boolean? whether the row is a noun
 ---@field flags string? the flags the verb takes, space separated
 ---@field usage string? the usage line `dev help <verb>` shows
@@ -12,25 +12,43 @@
 return {
     {
         words = { "lint" },
+        handler = "lua",
         desc = "Check style and formatting for the project type",
         group = "Check your work",
     },
     {
         words = { "fmt" },
+        handler = "lua",
         desc = "Format the source for the project type",
         group = "Check your work",
     },
-    { words = { "test" }, desc = "Run the project's tests", group = "Check your work" },
-    { words = { "build" }, desc = "Build the project", group = "Check your work" },
-    { words = { "run" }, desc = "Run the project", group = "Check your work" },
+    {
+        words = { "test" },
+        handler = "lua",
+        desc = "Run the project's tests",
+        group = "Check your work",
+    },
+    {
+        words = { "build" },
+        handler = "lua",
+        desc = "Build the project",
+        group = "Check your work",
+    },
+    {
+        words = { "run" },
+        handler = "lua",
+        desc = "Run the project",
+        group = "Check your work",
+    },
     {
         words = { "fetch" },
+        handler = "lua",
         desc = "Download the crates and advisory database an offline lint and test need",
         group = "Check your work",
     },
     {
         words = { "deploy" },
-        handler = "legacy",
+        handler = "lua",
         usage = "(none: add .dev/deploy.sh)",
         desc = "Deploy the project (needs .dev/deploy.sh)",
         group = "Share it",
@@ -84,7 +102,7 @@ return {
     },
     {
         words = { "guide" },
-        handler = "legacy",
+        handler = "lua",
         usage = "dev guide [question...]",
         desc = "Show this repo's overview, or ask guide a question about its commands and topics",
         group = "Set up a machine or project",
@@ -165,7 +183,7 @@ return {
     },
     {
         words = { "bootstrap" },
-        handler = "legacy",
+        handler = "lua",
         flags = "--dry-run --no-login",
         usage = "dev bootstrap [--dry-run] [--no-login]",
         desc = "Run bootstrap.sh from the dotfiles clone: the package manager and luajit first, then stow, tailscale, the default packages and the manifest tools",

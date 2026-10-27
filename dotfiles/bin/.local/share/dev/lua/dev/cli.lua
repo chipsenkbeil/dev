@@ -1,4 +1,6 @@
 local complete = require("dev.complete")
+local misc = require("dev.cmd.misc")
+local types = require("dev.cmd.types")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
@@ -132,12 +134,16 @@ local function split_vars(args)
     return plain, vars
 end
 
-local function run_script(row, ctx, rest)
-    local relative = row.script:sub(#ctx.root + 2)
+local function prepare(ctx)
     ctx.verbose = apply_level(ctx.verbose)
     if ctx.verbose == 0 then
         devos.defaults.unset = { "VERBOSE" }
     end
+end
+
+local function run_script(row, ctx, rest)
+    local relative = row.script:sub(#ctx.root + 2)
+    prepare(ctx)
     if ctx.verbose >= 1 then
         stderr:write("+ ", relative, #rest > 0 and " " or "", table.concat(rest, " "), "\n")
     end
@@ -152,6 +158,13 @@ local function run_script(row, ctx, rest)
     devos.defaults.show = ctx.verbose >= 1
     ctx.args, ctx.vars = split_vars(rest)
     os.exit(verb.run(row.script, ctx))
+end
+
+local function builtin_handler(row)
+    if row and row.kind == "builtin" and not row.noun and row.handler == "lua" then
+        return types.handlers[row.name] or misc[row.name]
+    end
+    return nil
 end
 
 local function tail(list, from)
@@ -266,6 +279,11 @@ function M.main(argv)
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)
         run_script(row, ctx, rest)
+    end
+    local handler = builtin_handler(row)
+    if handler then
+        prepare(ctx)
+        os.exit(handler(ctx, reg))
     end
     legacy(argv)
 end

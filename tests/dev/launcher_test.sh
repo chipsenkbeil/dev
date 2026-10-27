@@ -26,7 +26,9 @@ cat >"$RECORDER/luajit" <<'STUB'
 env >"$ENV_OUT"
 echo "$*" >"$ARGS_OUT"
 STUB
-printf '#!/bin/sh\necho "bootstrap plan (dry run, nothing will change)"\necho "args: $*"\n' >"$FAKE_DOTFILES/bootstrap.sh"
+
+# shellcheck disable=SC2016  # $* and ${VERBOSE} expand when the stub runs
+printf '#!/bin/sh\necho "bootstrap plan (dry run, nothing will change)"\necho "args: $*"\necho "verbose: ${VERBOSE:-unset}"\n' >"$FAKE_DOTFILES/bootstrap.sh"
 chmod +x "$ROOTID/id" "$RECORDER/luajit"
 export ENV_OUT="$TMP/env.out" ARGS_OUT="$TMP/args.out"
 
@@ -104,6 +106,15 @@ rm -f "$ENV_OUT"
 out="$(PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_REC" help 2>&1)"
 assert_eq "root runs the luajit from the system directory" "$([ -e "$ENV_OUT" ] && echo ran || echo absent)" "ran"
 
+for spec in "-v:1" "-vv:2" "--verbose:1" "-vvv:2"; do
+    flag=${spec%%:*}
+    want=${spec##*:}
+    out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap "$flag" --dry-run 2>&1)"
+    assert_eq "bootstrap $flag without luajit reaches bootstrap.sh with VERBOSE=$want" "$(printf '%s\n' "$out" | tail -2)" "args: --dry-run
+verbose: $want"
+done
+out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run -- -v 2>&1)"
+assert_contains "bootstrap keeps a -v after -- without luajit" "$out" "args: --dry-run -v"
 out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --help 2>&1)"
 assert_eq "bootstrap --help without luajit exits 0" "$?" "0"
 assert_contains "bootstrap --help without luajit reaches bootstrap.sh, which prints its own usage" "$out" "args: --help"
@@ -113,16 +124,28 @@ for flag in -h --help -v -vv -vvv --verbose --remote; do
     assert_eq "bootstrap $flag goes to main.lua" "$(cat "$ARGS_OUT")" "$SHARE_MAIN bootstrap $flag"
 done
 out="$(PATH="$RECORDER:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run -- --help 2>&1)"
-assert_contains "bootstrap routes its own arguments after --" "$out" "args: --dry-run -- --help"
+assert_contains "bootstrap routes its own arguments after --, without the --" "$out" "args: --dry-run --help"
 
-REALPATH="$TMP/realjit:$NOLUA:/usr/bin:/bin"
-out="$(cd "$REPO" && PATH="$REALPATH" "$DEV" bootstrap --help 2>&1)"
+REALJIT_PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin"
+for mode in nojit jit; do
+    for spec in "--no-login:unset" "-- --no-login:unset" "-v -- --no-login:1"; do
+        words=${spec%:*}
+        read -r -a bootstrap_words <<<"$words"
+        want=${spec##*:}
+        if [ "$mode" = jit ]; then path=$REALJIT_PATH; else path=$NOLUA; fi
+        out="$(cd "$REPO" && PATH="$path" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap "${bootstrap_words[@]}" 2>&1)"
+        assert_eq "$mode: dev bootstrap $words gives bootstrap.sh --no-login and VERBOSE $want" "$(printf '%s\n' "$out" | tail -2)" "args: --no-login
+verbose: $want"
+    done
+done
+
+out="$(cd "$REPO" && PATH="$REALJIT_PATH" "$DEV" bootstrap --help 2>&1)"
 assert_contains "bootstrap --help prints dev's own help" "$out" "dev bootstrap [--dry-run] [--no-login]"
-out="$(cd "$REPO" && PATH="$REALPATH" "$DEV" bootstrap -h 2>&1)"
+out="$(cd "$REPO" && PATH="$REALJIT_PATH" "$DEV" bootstrap -h 2>&1)"
 assert_contains "bootstrap -h prints dev's own short help" "$out" "dev bootstrap [--dry-run] [--no-login]"
-out="$(cd "$REPO" && PATH="$REALPATH" "$DEV" bootstrap --remote 2>&1)"
+out="$(cd "$REPO" && PATH="$REALJIT_PATH" "$DEV" bootstrap --remote 2>&1)"
 assert_eq "--remote does not refuse bootstrap, which has a job" "$(printf '%s' "$out" | grep -c "runs on this machine only")" "0"
-out="$(cd "$REPO" && PATH="$REALPATH" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap -v --dry-run 2>&1)"
+out="$(cd "$REPO" && PATH="$REALJIT_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap -v --dry-run 2>&1)"
 assert_contains "bootstrap -v is a global flag and still reaches bootstrap.sh" "$out" "args: --dry-run"
 
 mkdir -p "$TMP/spy"

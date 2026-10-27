@@ -1,3 +1,4 @@
+local devos = require("dev.os")
 local fs = require("dev.fs")
 local stderr = io.stderr
 
@@ -41,6 +42,25 @@ end
 function M.die(msg)
     stderr:write(msg, "\n")
     os.exit(1)
+end
+
+---Print the command on standard error as `+ command` when `ctx.verbose` is 1 or more.
+---@param ctx dev.Ctx the verb's context
+---@param argv string[] the command and its arguments, joined with spaces
+function M.show(ctx, argv)
+    if ctx.verbose >= 1 then
+        stderr:write("+ ", table.concat(argv, " "), "\n")
+    end
+end
+
+---Exit 1 with one WARNING line when `binary` is not on PATH.
+---@param binary string the command the verb needs
+---@param install string how to install it, as the warning shows
+function M.need(binary, install)
+    if not devos.which(binary) then
+        stderr:write("WARNING: ", binary, " not found. Install with: ", install, "\n")
+        os.exit(1)
+    end
 end
 
 ---Run a verb script in this process.
