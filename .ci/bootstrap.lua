@@ -19,7 +19,7 @@ end
 return {
   jobs = {
     ["bootstrap"] = {
-      matrix = { { os = "linux-vm" } },
+      matrix = { { target = "linux-vm" } },
       run = function()
         ci.group("create " .. USER, function()
           ci.sh("id " .. USER .. " >/dev/null 2>&1 || useradd -m -s /bin/bash " .. USER)

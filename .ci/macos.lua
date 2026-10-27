@@ -3,7 +3,7 @@ local BREW_PACKAGES = "jj luajit bats-core shellcheck shfmt stylua selene ast-gr
 return {
   jobs = {
     test = {
-      matrix = { { os = "macos-rust" } },
+      matrix = { { target = "macos-rust" } },
       run = function()
         ci.sh("HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet " .. BREW_PACKAGES)
         ci.sh("./dotfiles/bin/.local/bin/dev test </dev/null")

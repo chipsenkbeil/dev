@@ -1,7 +1,7 @@
 local t = require("testing")
 local json = require("dev.json")
 
-local JOBS = '{"jobs":[{"name":"lint","oses":["linux-base"]}],"pipeline":"./.ci/jobs.lua"}'
+local JOBS = '{"jobs":[{"name":"lint","targets":["linux-base"]}],"pipeline":"./.ci/jobs.lua"}'
 local BOX = '{"name":"myproject-k3x","state":"running","profile":"medium","cpu":8,"memory_gib":16,'
     .. '"projects":[{"name":"myproject","path":"/srv/projects/myproject"}],"tailnet_name":"box-myproject-k3x",'
     .. '"created_at":"2026-10-19T14:03:11Z","ttl_hours":4,"expires_at":"2026-10-19T18:03:11Z","stopped_at":null,'
@@ -11,7 +11,7 @@ t.test("decode reads ci's jobs document", function()
     local doc = assert(json.decode(JOBS))
     t.eq(doc.pipeline, "./.ci/jobs.lua")
     t.eq(doc.jobs[1].name, "lint")
-    t.eq(doc.jobs[1].oses, { "linux-base" })
+    t.eq(doc.jobs[1].targets, { "linux-base" })
 end)
 
 t.test("decode reads a box document with null fields", function()

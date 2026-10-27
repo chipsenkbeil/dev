@@ -442,7 +442,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init writes the pipeline" "$(cat "$init/.ci/jobs.lua")" ".dev/lint.sh"
     assert_contains "init seeds a lint job" "$(cat "$init/.ci/jobs.lua")" "    lint = {"
     assert_contains "init seeds a test job" "$(cat "$init/.ci/jobs.lua")" "    test = {"
-    assert_contains "init runs the jobs on the rust runner image" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { os = \"linux-base\", image = \"linux-rust\" }"
+    assert_contains "init runs the jobs on the rust runner target" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { target = \"linux-rust\" }"
     assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/jobs.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
     assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/jobs.lua")" 'io.open("rust-toolchain.toml")'
     assert_contains "init writes the workflow for windows" "$(cat "$init/.github/workflows/ci.yml")" "windows-latest"
@@ -900,7 +900,7 @@ if [ "$1" = -C ]; then
     shift 2
 fi
 case "$1" in
-jobs) printf '{"jobs":[{"name":"lint","oses":["linux-base"]},{"name":"test","oses":["linux-base"]},{"name":"widget-save","oses":["linux-base"]}]}\n' ;;
+jobs) printf '{"jobs":[{"name":"lint","targets":["linux-base"]},{"name":"test","targets":["linux-base"]},{"name":"widget-save","targets":["linux-base"]}]}\n' ;;
 run)
     printf 'ci -C %s' "$root" >>"$STUB_LOG"
     printf ' [%s]' "$@" >>"$STUB_LOG"

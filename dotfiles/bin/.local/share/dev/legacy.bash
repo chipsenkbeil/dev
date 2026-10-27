@@ -842,7 +842,7 @@ emit_pipeline() {
 --   ci run --local --job test
 
 -- Run the lint and test jobs on an image that bakes the toolchain
-local LINUX = { os = "linux-base", image = "linux-rust" }
+local LINUX = { target = "linux-rust" }
 
 local function toolchain()
   local file = assert(io.open("rust-toolchain.toml"), "rust-toolchain.toml is missing")
@@ -892,7 +892,7 @@ LUA
 --   ci run --local
 --   ci run --local --job test
 
-local LINUX = { os = "linux-base" }
+local LINUX = { target = "linux-base" }
 
 return {
   jobs = {
