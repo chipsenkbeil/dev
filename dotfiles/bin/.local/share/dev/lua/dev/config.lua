@@ -75,4 +75,27 @@ function M.get(root, key)
     return nil
 end
 
+---Look up a dotted key in the user file alone.
+---
+---A project file cannot set it, which is how a key that names a server or a
+---secret stays out of a repository's reach. A malformed file ends the process
+---with `dev: <path>:<line>: <reason>` and exit 1. As root no file is read.
+---@param key string dotted key
+---@return any? value the value, or nil when the user file does not set it
+function M.user(key)
+    local home = os.getenv("HOME")
+    if devos.getuid() == 0 or not home or home == "" then
+        return nil
+    end
+    local tree, err = read(home .. "/.config/dev/config.toml")
+    if not tree then
+        verb.die(err)
+    end
+    local parts = {}
+    for part in key:gmatch("[^.]+") do
+        parts[#parts + 1] = part
+    end
+    return lookup(tree, parts)
+end
+
 return M

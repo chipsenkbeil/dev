@@ -1,3 +1,4 @@
+local board = require("dev.cmd.board")
 local box = require("dev.cmd.box")
 local complete = require("dev.complete")
 local connect = require("dev.cmd.connect")
@@ -181,6 +182,7 @@ local function builtin_handler(row)
             or misc[row.name]
             or tools.handlers[row.name]
             or box.handlers[row.name]
+            or board.handlers[row.name]
             or connect.handlers[row.name]
     end
     return nil

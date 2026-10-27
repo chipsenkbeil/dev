@@ -314,6 +314,56 @@ function M.capture(argv, opts)
     return text:sub(1, split - 1), tonumber(text:sub(split + 1))
 end
 
+---Run `argv` with `input` on its standard input and collect its standard output.
+---
+---The input never reaches an argument list, an environment or a file, so a
+---secret handed over this way stays out of `ps`. `opts.stdin` and `opts.stdout`
+---are not allowed.
+---@param argv string[] command and its arguments, with at least one word
+---@param input string what the command reads from standard input
+---@param opts dev.os.Opts? environment, directory and standard error options
+---@return string output everything the command wrote to standard output
+---@return integer? code exit status of the command
+function M.capture_input(argv, input, opts)
+    opts = opts or {}
+    if opts.stdin ~= nil or opts.stdout ~= nil then
+        error("capture_input takes the input as an argument and keeps standard output", 2)
+    end
+    local sink, sink_code = M.capture({
+        "mktemp",
+        ((os.getenv("TMPDIR") or "/tmp"):gsub("/+$", "")) .. "/dev-input.XXXXXX",
+    })
+    if sink_code ~= 0 then
+        error("capture_input cannot make a temporary file")
+    end
+    sink = sink:gsub("\n$", "")
+    local command = shell_line(argv, opts, check(opts))
+        .. " >"
+        .. M.quote(sink)
+        .. [[; printf '\n%d' "$?" >>]]
+        .. M.quote(sink)
+    announce(argv)
+    flush_output()
+    local ok, text = pcall(function()
+        local pipe = assert(io.popen(command, "w"))
+        pipe:write(input)
+        pipe:close()
+        local file = assert(io.open(sink, "rb"))
+        local content = file:read("*a")
+        file:close()
+        return content
+    end)
+    os.remove(sink)
+    if not ok then
+        error(text, 0)
+    end
+    local split = text:match("^.*()\n")
+    if not split then
+        error("capture_input lost the exit status of " .. argv[1])
+    end
+    return text:sub(1, split - 1), tonumber(text:sub(split + 1))
+end
+
 ---Find `name` on PATH.
 ---@param name string command name to look up
 ---@return string? path absolute path, or nil when `name` is not on PATH

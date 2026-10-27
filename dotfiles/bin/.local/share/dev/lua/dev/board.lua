@@ -1,0 +1,137 @@
+local text = require("dev.text")
+
+---The board seam: the column names, the card helpers and the one interface the
+---`dev board` commands call, which a backend implements.
+---@class dev.board
+local M = {}
+
+---@class dev.board.Card
+---@field id string the card's full id
+---@field name string the card's title
+---@field column string the name of the column it sits in
+---@field size string the colour's palette label, or `unsized`
+---@field labels string[] the card's labels
+
+---@class dev.board.Backend
+---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
+---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
+---@field next fun(self: dev.board.Backend): dev.board.Card?, string? the top unclaimed, unblocked Ready card, or nil and a message when it failed
+---@field add fun(self: dev.board.Backend, name: string, column: string, description: string?): dev.board.Card?, string? the new card
+---@field note fun(self: dev.board.Backend, id: string, body: string): boolean?, string? a comment of kind agent added to the card
+---@field move fun(self: dev.board.Backend, id: string, column: string): boolean?, string? the card moved to the top of a column
+
+---The columns in board order.
+M.COLUMNS = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
+
+---The column a card is added to when none is named.
+M.DEFAULT_COLUMN = "Backlog"
+
+---The column a worker takes cards from.
+M.READY = "Ready"
+
+---The column of finished cards, which `ls` leaves out.
+M.DONE = "Done"
+
+---The backends a project may name.
+M.Backend = { POMB = "pomb", LOCAL = "local" }
+
+---The fewest characters of a card id that name a card.
+M.MIN_PREFIX = 8
+
+local SHORT_FORMS = {
+    progress = "In Progress",
+    review = "In Review",
+}
+
+local UNSIZED = "unsized"
+
+---Name a column from its full name or a short form, in any case.
+---@param word string `ready`, `progress`, `In Review` and so on
+---@return string? column the column's name, or nil when it is not one of the seven
+function M.column(word)
+    local lowered = word:lower():gsub("%s+", " ")
+    local short = SHORT_FORMS[lowered]
+    if short then
+        return short
+    end
+    for _, name in ipairs(M.COLUMNS) do
+        if name:lower() == lowered then
+            return name
+        end
+    end
+end
+
+---List the column names a user may type.
+---@return string names the seven names and the short forms
+function M.column_help()
+    return table.concat(M.COLUMNS, ", ") .. " (or progress, review, in any case)"
+end
+
+---Find the card an id or a unique prefix of it names.
+---@param cards dev.board.Card[] the board's cards
+---@param word string the id or a prefix of at least 8 characters
+---@return dev.board.Card? card the card
+---@return string? message why no card matched
+function M.resolve(cards, word)
+    local prefix = word:lower()
+    if #prefix < M.MIN_PREFIX or not prefix:find("^[%x-]+$") then
+        return nil, "a card id needs at least " .. M.MIN_PREFIX .. " hex characters: " .. word
+    end
+    local found
+    for _, card in ipairs(cards) do
+        if card.id:lower():sub(1, #prefix) == prefix then
+            if card.id:lower() == prefix then
+                return card
+            end
+            if found then
+                return nil, word .. " matches more than one card, give more characters"
+            end
+            found = card
+        end
+    end
+    if not found then
+        return nil, "no card starts with " .. word
+    end
+    return found
+end
+
+---Show the label for a card's colour.
+---@param label string? the palette label, nil when the card has no colour
+---@return string size the label or `unsized`
+function M.size(label)
+    if label == nil or label == "" then
+        return UNSIZED
+    end
+    return label
+end
+
+---Say a card in one line.
+---@param card dev.board.Card the card
+---@return string[] cells id prefix, column, size, labels and name
+function M.cells(card)
+    local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
+    return { card.id:sub(1, M.MIN_PREFIX), card.column, card.size, labels, card.name }
+end
+
+---Pad rows into aligned columns, with no trailing spaces.
+---@param rows string[][] the cells of each row
+---@return string[] lines one line per row
+function M.table_lines(rows)
+    local widths = {}
+    for _, row in ipairs(rows) do
+        for c, value in ipairs(row) do
+            widths[c] = math.max(widths[c] or 0, text.width(value))
+        end
+    end
+    local lines = {}
+    for r, row in ipairs(rows) do
+        local parts = {}
+        for c, value in ipairs(row) do
+            parts[c] = c < #row and value .. string.rep(" ", widths[c] - text.width(value)) or value
+        end
+        lines[r] = table.concat(parts, text.GAP):gsub(" +$", "")
+    end
+    return lines
+end
+
+return M

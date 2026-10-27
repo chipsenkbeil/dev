@@ -34,6 +34,13 @@ local LUA_ONLY = {
     ["box install-tools"] = true,
     ["box delete"] = true,
     ["box connect"] = true,
+    board = true,
+    ["board status"] = true,
+    ["board ls"] = true,
+    ["board next"] = true,
+    ["board add"] = true,
+    ["board note"] = true,
+    ["board move"] = true,
 }
 
 local function scripted(dir, rel, text, mode)
