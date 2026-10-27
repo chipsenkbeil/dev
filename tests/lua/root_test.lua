@@ -214,23 +214,30 @@ local FIXED_ENV = {
     "LANG=C.UTF-8",
 }
 local WRAPPER = 5
+local INTERPRETER = "/usr/bin/luajit"
 
 local function is_wrapper(argv)
     return argv[1] == "sh" and argv[2] == "-c" and argv[3]:find("trap", 1, true) ~= nil
 end
 
-local function run_as_root(dir, handler, verbose, hook)
+---@class root_test.Opts
+---@field verbose 0|1|2? the verbosity, 0 by default
+---@field hook (fun(argv: string[], opts: table, run: function): integer)? replaces running the wrapper
+---@field interpreter string? the interpreter in the context, an absolute path by default
+
+local function run_as_root(dir, handler, opts)
+    opts = opts or {}
     local getuid, run = devos.getuid, devos.run
     local seen
     devos.getuid = function()
         return 0
     end
-    devos.run = function(argv, opts)
+    devos.run = function(argv, run_opts)
         if not is_wrapper(argv) then
-            return run(argv, opts)
+            return run(argv, run_opts)
         end
-        seen = { argv = argv, opts = opts }
-        return hook and hook(argv, opts, run) or 0
+        seen = { argv = argv, opts = run_opts }
+        return opts.hook and opts.hook(argv, run_opts, run) or 0
     end
     local code
     local ok, err = pcall(function()
@@ -240,7 +247,8 @@ local function run_as_root(dir, handler, verbose, hook)
                 args = {},
                 root = dir,
                 vars = {},
-                verbose = verbose or 0,
+                verbose = opts.verbose or 0,
+                interpreter = opts.interpreter or INTERPRETER,
             })
         end)
     end)
@@ -266,8 +274,8 @@ t.test("the driver runs under env -i with only the fixed variables, from the cop
     t.ok(copy:find("^/tmp/dev%-tools%."), copy)
     local driver = driver_of(argv)
     t.eq({ unpack(driver, 1, 5) }, FIXED_ENV)
-    t.eq(driver[6], "bash")
-    t.ok(driver[7]:find("/scripts/pkg.sh$"), driver[7])
+    t.eq(driver[6], INTERPRETER)
+    t.ok(driver[7]:find("/dotfiles/bin/%.local/share/dev/pkg%.lua$"), driver[7])
     t.eq({ driver[8], driver[9], driver[10] }, { "check", "--manifest", copy })
     t.eq(#driver, 10)
     t.eq(seen.opts.cwd, dir)
@@ -289,11 +297,11 @@ end)
 t.test("verbose adds VERBOSE to the driver environment and nothing else", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir = project(base, "p", "name binary pacman\n")
-    local _, seen = run_as_root(dir, "tools check", 1)
+    local _, seen = run_as_root(dir, "tools check", { verbose = 1 })
     local driver = driver_of(seen.argv)
     t.eq({ unpack(driver, 1, 5) }, FIXED_ENV)
     t.eq(driver[6], "VERBOSE=1")
-    t.eq(driver[7], "bash")
+    t.eq(driver[7], INTERPRETER)
     fs.remove(base, { recursive = true })
 end)
 
@@ -302,14 +310,14 @@ t.test("at -vv the driver gets exactly the trace file and the fixed PS4", functi
     local dir = project(base, "p", "name binary pacman\n")
     devos.defaults.env.BASH_ENV = "/tmp/evil-bash-env"
     devos.defaults.env.PS4 = "evil-ps4"
-    local _, seen = run_as_root(dir, "tools check", 2)
+    local _, seen = run_as_root(dir, "tools check", { verbose = 2 })
     devos.defaults.env = {}
     local driver = driver_of(seen.argv)
     t.eq({ unpack(driver, 1, 5) }, FIXED_ENV)
     t.eq(driver[6], "VERBOSE=2")
     t.eq(driver[7], "BASH_ENV=" .. devproject.share .. "/xtrace.bash")
     t.eq(driver[8], "PS4=" .. devproject.PS4)
-    t.eq(driver[9], "bash")
+    t.eq(driver[9], INTERPRETER)
     fs.remove(base, { recursive = true })
 end)
 
@@ -318,11 +326,22 @@ t.test("at -vv with the trace file missing the driver falls back to level 1", fu
     local dir = project(base, "p", "name binary pacman\n")
     local share = devproject.share
     devproject.share = base .. "/no-share"
-    local _, seen = run_as_root(dir, "tools check", 2)
+    local _, seen = run_as_root(dir, "tools check", { verbose = 2 })
     devproject.share = share
     local driver = driver_of(seen.argv)
     t.eq(driver[6], "VERBOSE=1")
-    t.eq(driver[7], "bash")
+    t.eq(driver[7], INTERPRETER)
+    fs.remove(base, { recursive = true })
+end)
+
+t.test("a relative interpreter is refused as root and leaves no copy", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local dir = project(base, "p", "name binary pacman\n")
+    local before = temp_count()
+    local code, seen = run_as_root(dir, "tools check", { interpreter = "luajit" })
+    t.eq(code, 1)
+    t.eq(seen, nil)
+    t.eq(temp_count(), before)
     fs.remove(base, { recursive = true })
 end)
 
@@ -332,16 +351,18 @@ t.test("the copy is gone after the driver exits nonzero or is terminated", funct
     local before = temp_count()
     for _, script in ipairs({ "exit 3", "kill -TERM $PPID; sleep 1" }) do
         local gone, copy
-        local code = run_as_root(dir, "tools check", 0, function(argv, opts, run)
-            copy = argv[WRAPPER]
-            local real = { unpack(argv, 1, WRAPPER) }
-            for _, word in ipairs({ "sh", "-c", script }) do
-                real[#real + 1] = word
-            end
-            local result = run(real, opts)
-            gone = not fs.exists(copy)
-            return result
-        end)
+        local code = run_as_root(dir, "tools check", {
+            hook = function(argv, opts, run)
+                copy = argv[WRAPPER]
+                local real = { unpack(argv, 1, WRAPPER) }
+                for _, word in ipairs({ "sh", "-c", script }) do
+                    real[#real + 1] = word
+                end
+                local result = run(real, opts)
+                gone = not fs.exists(copy)
+                return result
+            end,
+        })
         t.ok(code ~= 0, "the driver's failure should reach the caller")
         t.ok(gone, "the wrapper should remove the copy for " .. script)
     end

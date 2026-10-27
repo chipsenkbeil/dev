@@ -7,7 +7,7 @@
 bats_require_minimum_version 1.5.0
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/scripts/pkg.sh"
+PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -27,7 +27,7 @@ TSV
 }
 
 @test "install --group base plans the base rows, comma lists included" {
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group base
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group base
     [ "$status" -eq 0 ]
     [[ "$output" == *aa-f* ]] || false
     [[ "$output" == *cc-f* ]] || false
@@ -36,7 +36,7 @@ TSV
 }
 
 @test "install --group rust plans the rust rows, comma lists included" {
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group rust
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group rust
     [ "$status" -eq 0 ]
     [[ "$output" == *bb-f* ]] || false
     [[ "$output" == *cc-f* ]] || false
@@ -45,7 +45,7 @@ TSV
 }
 
 @test "check --group base reports only the base rows" {
-    run bash "$PKG" check --manifest "$MANIFEST" --group base
+    run luajit "$PKG" check --manifest "$MANIFEST" --group base
     [ "$status" -eq 1 ]
     [[ "$output" == *aa* ]] || false
     [[ "$output" == *cc* ]] || false
@@ -54,25 +54,25 @@ TSV
 }
 
 @test "an unknown group is exit 2 on install and on check" {
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group nope
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group nope
     [ "$status" -eq 2 ]
     [[ "$output" == *"unknown group: nope"* ]] || false
-    run bash "$PKG" check --manifest "$MANIFEST" --group nope
+    run luajit "$PKG" check --manifest "$MANIFEST" --group nope
     [ "$status" -eq 2 ]
     [[ "$output" == *"unknown group: nope"* ]] || false
 }
 
 @test "a named tool outside the group is exit 2 and names the tool" {
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group base bb
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group base bb
     [ "$status" -eq 2 ]
     [[ "$output" == *"tool bb is not in group base"* ]] || false
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group base zz
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group base zz
     [ "$status" -eq 2 ]
     [[ "$output" == *"unknown tool: zz"* ]] || false
 }
 
 @test "a named tool inside the group installs" {
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group base aa
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group base aa
     [ "$status" -eq 0 ]
     [[ "$output" == *aa-f* ]] || false
     [[ "$output" != *cc-f* ]] || false
@@ -80,10 +80,10 @@ TSV
 
 @test "a manifest without a groups column still works and --group is unknown" {
     printf 'name binary brew\naa aa-zzz aa-f\n' >"$MANIFEST"
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *aa-f* ]] || false
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group base
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group base
     [ "$status" -eq 2 ]
     [[ "$output" == *"unknown group: base"* ]] || false
 }
@@ -106,11 +106,11 @@ TSV
 }
 
 @test "an empty --group name is an unknown group on install and on check" {
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --group ""
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --group ""
     [ "$status" -eq 2 ]
     [[ "$output" == *"unknown group: "* ]] || false
     [[ "$output" != *aa-f* ]] || false
-    run bash "$PKG" check --manifest "$MANIFEST" --group ""
+    run luajit "$PKG" check --manifest "$MANIFEST" --group ""
     [ "$status" -eq 2 ]
     [[ "$output" == *"unknown group: "* ]] || false
 }
@@ -119,20 +119,20 @@ TSV
     printf '#!/bin/sh\necho "brew $*" >>"%s"\n[ "" != list ]\n' "$BATS_TEST_TMPDIR/calls" >"$STUBS/brew"
     printf '#!/bin/sh\nexit 0\n' >"$STUBS/aa-zzz"
     chmod +x "$STUBS/aa-zzz"
-    run bash "$PKG" install --manifest "$MANIFEST" --group base --force aa
+    run luajit "$PKG" install --manifest "$MANIFEST" --group base --force aa
     [ "$status" -eq 0 ]
     grep -q "install.*aa-f" "$BATS_TEST_TMPDIR/calls"
     ! grep -q "cc-f" "$BATS_TEST_TMPDIR/calls"
-    run bash "$PKG" install --manifest "$MANIFEST" --group base --force bb
+    run luajit "$PKG" install --manifest "$MANIFEST" --group base --force bb
     [ "$status" -eq 2 ]
 }
 
 @test "--scope system --group rust with only user-scope rows is a successful no-op" {
     printf 'name binary brew groups\nu1 u1-zzz script:%s/x.sh rust\nu2 u2-zzz cargo:u2 rust\nsys sys-zzz sys-f base\n' "$BATS_TEST_TMPDIR" >"$MANIFEST"
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --scope system --group rust
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --scope system --group rust
     [ "$status" -eq 0 ]
     [ -z "$output" ]
-    run bash "$PKG" install --manifest "$MANIFEST" --dry-run --scope system --group base
+    run luajit "$PKG" install --manifest "$MANIFEST" --dry-run --scope system --group base
     [ "$status" -eq 0 ]
     [[ "$output" == *sys-f* ]] || false
 }

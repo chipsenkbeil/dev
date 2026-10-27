@@ -42,7 +42,8 @@ from a repo outside the distribution.
 
 ## Where the code lives
 
-dev runs `scripts/pkg.sh` from the dotfiles clone that holds dev, from the
-project root. `DOTFILES` overrides where that clone is found. A project
-script cannot replace the `tools` subcommands, so the root step of an image
+dev runs `luajit dotfiles/bin/.local/share/dev/pkg.lua` from the dotfiles
+clone that holds dev, from the project root. It reads the manifest in Lua and
+calls the bash drivers in `scripts/pkg/` for the package manager commands.
+`DOTFILES` overrides where that clone is found. A project script cannot replace the `tools` subcommands, so the root step of an image
 build never runs project code. `dev --remote` refuses every `tools` subcommand.

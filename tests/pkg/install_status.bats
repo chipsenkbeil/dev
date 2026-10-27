@@ -5,7 +5,7 @@
 # records its arguments and fails for the package named bad-formula.
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/scripts/pkg.sh"
+PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -21,7 +21,7 @@ setup() {
 }
 
 @test "a failing middle row exits nonzero and the last row still installs" {
-    run bash "$PKG" install --manifest "$MANIFEST"
+    run luajit "$PKG" install --manifest "$MANIFEST"
     [ "$status" -ne 0 ]
     grep -qx 'install first-formula' "$LOG"
     grep -qx 'install last-formula' "$LOG"
@@ -30,19 +30,19 @@ setup() {
 
 @test "every failed row is named in the one summary line" {
     printf '#!/bin/sh\necho "$*" >>"%s"\n[ "$1" != list ] || exit 1\n[ "$1" != install ]\n' "$LOG" >"$STUBS/brew"
-    run bash "$PKG" install --manifest "$MANIFEST"
+    run luajit "$PKG" install --manifest "$MANIFEST"
     [ "$status" -ne 0 ]
     [[ "$output" == *"install failed: first-tool bad-tool last-tool" ]] || false
 }
 
 @test "a run where every row succeeds exits zero with no summary" {
-    run bash "$PKG" install --manifest "$MANIFEST" first-tool last-tool
+    run luajit "$PKG" install --manifest "$MANIFEST" first-tool last-tool
     [ "$status" -eq 0 ]
     [[ "$output" != *"install failed"* ]] || false
 }
 
 @test "naming only the failing tool exits nonzero" {
-    run bash "$PKG" install --manifest "$MANIFEST" bad-tool
+    run luajit "$PKG" install --manifest "$MANIFEST" bad-tool
     [ "$status" -ne 0 ]
     [[ "$output" == *"install failed: bad-tool" ]] || false
 }
@@ -51,10 +51,10 @@ setup() {
     printf '#!/bin/sh\nexit 0\n' >"$BATS_TEST_TMPDIR/app-cli"
     chmod +x "$BATS_TEST_TMPDIR/app-cli"
     printf 'name binary brew\napp-tool - cask:app-cask,bin:%s\n' "$BATS_TEST_TMPDIR/app-cli" >"$MANIFEST"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     [ "$status" -eq 0 ]
     [[ "$output" == *"[x] app-tool"*"$BATS_TEST_TMPDIR/app-cli"* ]] || false
-    run bash "$PKG" install --manifest "$MANIFEST"
+    run luajit "$PKG" install --manifest "$MANIFEST"
     [ "$status" -eq 0 ]
     [[ "$output" == *"app-tool already on PATH, skipping"* ]] || false
     ! grep -q '^install' "$LOG"
@@ -62,7 +62,7 @@ setup() {
 
 @test "check refuses an option-like package name without querying the package manager" {
     printf 'name binary brew\nevil-tool zzz-evil -U\n' >"$MANIFEST"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     [ "$status" -ne 0 ]
     [[ "$output" == *"[ ] evil-tool"*"refusing the package"* ]] || false
     ! grep -q '^list' "$LOG"
@@ -73,6 +73,6 @@ setup() {
     printf '#!/bin/sh\necho "pacman $*" >>"%s"\nexit 1\n' "$LOG" >"$STUBS/pacman"
     chmod +x "$STUBS/uname" "$STUBS/pacman"
     printf 'name binary pacman\nfirst-tool zzz-first first-pkg\n' >"$MANIFEST"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     grep -qx 'pacman -Q -- first-pkg' "$LOG"
 }

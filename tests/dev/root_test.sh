@@ -185,17 +185,17 @@ OWN="must be owned by root and not writable by others"
 out="$(dev "$linkfile" tools check 2>&1)"
 assert_eq "root tools check refuses a symlinked manifest" "$?" "1"
 assert_contains "root tools check names the manifest" "$out" "$linkfile/.dev/tools.tsv"
-assert_not_contains "root tools check does not run pkg.sh on it" "$out" "SECRET-MARKER"
+assert_not_contains "root tools check does not run the package driver on it" "$out" "SECRET-MARKER"
 out="$(dev "$linkfile" tools install --system 2>&1)"
 assert_eq "root tools install refuses a symlinked manifest" "$?" "1"
 assert_contains "root tools install names the manifest" "$out" "$linkfile/.dev/tools.tsv"
-assert_not_contains "root tools install does not run pkg.sh on it" "$out" "SECRET-MARKER"
+assert_not_contains "root tools install does not run the package driver on it" "$out" "SECRET-MARKER"
 assert_eq "no temp copy is left after a symlink refusal" "$(count_tmp)" "$before"
 
 out="$(dev "$linkdir" tools check 2>&1)"
 assert_eq "root tools check refuses a symlinked .dev" "$?" "1"
 assert_contains "root tools check names the manifest under the symlinked .dev" "$out" "$linkdir/.dev/tools.tsv"
-assert_not_contains "root tools check does not run pkg.sh on the outside file" "$out" "SECRET-MARKER"
+assert_not_contains "root tools check does not run the package driver on the outside file" "$out" "SECRET-MARKER"
 assert_eq "the refusals run no jj or git" "$(cat "$VCSLOG")" ""
 
 owned="$TMP/owned"
@@ -209,7 +209,7 @@ assert_contains "the ownership refusal says what is required" "$out" "$OWN"
 assert_eq "no temp copy is left after an ownership refusal" "$(count_tmp)" "$before"
 
 out="$(DOTFILES=/tmp/evil-dotfiles dev "$nojj" tools check 2>&1)"
-assert_not_contains "root does not use a DOTFILES pkg.sh" "$out" "evil-dotfiles"
+assert_not_contains "root does not use a DOTFILES package driver" "$out" "evil-dotfiles"
 
 if [ "$HAVE_PROC" = 1 ]; then
     fifo="$TMP/fifo.tsv"
@@ -252,7 +252,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     assert_eq "root reads a manifest under a hostile project name" "$?" "1"
 
     # shellcheck disable=SC2016  # the cell is literal text
-    assert_contains "root passes the hostile cell to pkg.sh as text" "$out" '$(>PWNED)'
+    assert_contains "root passes the hostile cell to the package driver as text" "$out" '$(>PWNED)'
     assert_eq "a hostile project name and cell run nothing" "$(find "$TMP" -name PWNED | wc -l | tr -d ' ')" "0"
 
     out="$(dev "$gw" tools check 2>&1)"
@@ -275,7 +275,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     out="$(dev "$nojj" tools check 2>&1)"
     assert_eq "root tools check in a project with only .dev exits 1" "$?" "1"
     assert_contains "root tools check reads that manifest" "$out" "zzz-tool"
-    assert_eq "no temp copy is left after a pkg.sh failure" "$(count_tmp)" "$before"
+    assert_eq "no temp copy is left after a package driver failure" "$(count_tmp)" "$before"
 
     leak="$TMP/leak"
     mkdir -p "$leak/.dev"
@@ -284,13 +284,14 @@ if [ "$REAL_ROOT" = 1 ]; then
     printf 'name binary pacman\n${SECRET} ${SECRET} x\n' >"$leak/.dev/tools.tsv"
     out="$(SECRET=leakvalue-9 dev "$leak" tools check 2>&1)"
     assert_not_contains "root's environment does not reach the manifest" "$out" "leakvalue-9"
-    assert_contains "the manifest variable is undefined for pkg.sh" "$out" "undefined variable"
+    assert_contains "the manifest variable is undefined for the package driver" "$out" "undefined variable"
 
     evil="$TMP/evil"
-    mkdir -p "$evil/scripts"
+    mkdir -p "$evil/scripts" "$evil/dotfiles/bin/.local/share/dev"
     printf '#!/bin/sh\necho EVIL-RAN\n' >"$evil/scripts/pkg.sh"
+    printf 'io.write("EVIL-RAN\\n")\n' >"$evil/dotfiles/bin/.local/share/dev/pkg.lua"
     out="$(DOTFILES="$evil" dev "$nojj" tools check 2>&1)"
-    assert_not_contains "root does not run a pkg.sh from DOTFILES" "$out" "EVIL-RAN"
+    assert_not_contains "root does not run a package driver from DOTFILES" "$out" "EVIL-RAN"
 
     good="$TMP/good"
     mkdir -p "$good/.dev"
@@ -378,20 +379,20 @@ if [ "$REAL_ROOT" = 1 ]; then
         assert_eq "root tools install --system plans from the copy" "$?" "0"
         assert_contains "root tools install --system plans the package row" "$out" "pacman -S --needed --noconfirm -- zzz-tool"
         out="$(dev "$nojj" tools install --system --force --dry-run zzz-tool 2>&1)"
-        assert_contains "--force reaches pkg.sh as root" "$out" "pacman -S --noconfirm -- zzz-tool"
+        assert_contains "--force reaches the package driver as root" "$out" "pacman -S --noconfirm -- zzz-tool"
         assert_not_contains "--force drops --needed" "$out" "--needed"
         grp="$TMP/grp"
         mkdir -p "$grp/.dev"
         printf 'name binary pacman groups\nzzz-in zzz-in-not-here zzz-in base\nzzz-out zzz-out-not-here zzz-out -\n' >"$grp/.dev/tools.tsv"
         out="$(dev "$grp" tools install --system --group base --dry-run 2>&1)"
-        assert_eq "--group reaches pkg.sh as root" "$?" "0"
+        assert_eq "--group reaches the package driver as root" "$?" "0"
         assert_contains "--group base as root plans the group row" "$out" "pacman -S --needed --noconfirm -- zzz-in"
         assert_not_contains "--group base as root leaves out the other row" "$out" "zzz-out"
         out="$(dev "$grp" tools install --system --group nope --dry-run 2>&1)"
         assert_eq "an unknown --group as root exits 2" "$?" "2"
         assert_contains "an unknown --group as root is named" "$out" "unknown group: nope"
         out="$(dev "$grp" tools check --group base 2>&1)"
-        assert_contains "check --group reaches pkg.sh as root" "$out" "zzz-in"
+        assert_contains "check --group reaches the package driver as root" "$out" "zzz-in"
         assert_not_contains "check --group as root leaves out the other row" "$out" "zzz-out"
     else
         printf 'SKIP - the --force test needs the real /usr/bin/pacman\n'

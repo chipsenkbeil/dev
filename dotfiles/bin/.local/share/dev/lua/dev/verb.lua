@@ -9,6 +9,7 @@ local stderr = io.stderr
 ---@field args string[] the positional arguments, with every `KEY=value` removed
 ---@field vars table<string, string> the `KEY=value` arguments, whose key starts with an uppercase letter
 ---@field verbose 0|1|2 the verbosity after the flags and `VERBOSE`
+---@field interpreter string? the program dev runs under, as the launcher started it
 
 ---@class dev.verb
 local M = {}

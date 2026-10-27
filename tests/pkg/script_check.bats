@@ -5,7 +5,7 @@
 # loads, and curl is a stub that fails loudly when called.
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/scripts/pkg.sh"
+PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -23,7 +23,7 @@ setup() {
     printf '#!/bin/sh\n[ "$1" = --check ]\n' >"$ROOT/probe.sh"
     printf 'name binary brew\nprobe-tool - script:probe.sh\n' >"$MANIFEST"
     cd "$ROOT"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     [ "$status" -eq 0 ]
     [[ "$output" == *$'[x] probe-tool\t(script --check)'* ]] || false
 }
@@ -32,7 +32,7 @@ setup() {
     printf '#!/bin/sh\nexit 1\n' >"$ROOT/probe.sh"
     printf 'name binary brew\nprobe-tool - script:probe.sh\n' >"$MANIFEST"
     cd "$ROOT"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     [ "$status" -eq 1 ]
     [[ "$output" == *"[ ] probe-tool"* ]] || false
 }
@@ -42,18 +42,17 @@ setup() {
     printf '#!/bin/sh\nexit 0\n' >"$ROOT/probe2.sh"
     printf 'name binary brew\nprobe-tool - script:probe.sh\nprobe-two - script:probe2.sh\n' >"$MANIFEST"
     cd "$ROOT"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     [ "$status" -eq 0 ]
     [[ "$output" == *$'[x] probe-two\t(script --check)'* ]] || false
 }
 
 @test "check as root never runs a script row and shows it as unknown" {
     printf '#!/bin/sh\necho ran >"%s/ran"\nexit 0\n' "$BATS_TEST_TMPDIR" >"$ROOT/probe.sh"
-    printf '#!/bin/sh\necho 0\n' >"$STUBS/id"
-    chmod +x "$STUBS/id"
+    export LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0
     printf 'name binary brew\nprobe-tool - script:probe.sh\n' >"$MANIFEST"
     cd "$ROOT"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     [ "$status" -eq 0 ]
     [[ "$output" == *$'[?] probe-tool\t(script row, never run as root)'* ]] || false
     [ ! -e "$BATS_TEST_TMPDIR/ran" ]
@@ -72,7 +71,7 @@ setup() {
 @test "an https script row with no binary is never fetched and does not fail check" {
     printf 'name binary brew\nremote-tool - script:https://example.invalid/x.sh\n' >"$MANIFEST"
     cd "$ROOT"
-    run bash "$PKG" check --manifest "$MANIFEST"
+    run luajit "$PKG" check --manifest "$MANIFEST"
     [ "$status" -eq 0 ]
     [[ "$output" == *$'[?] remote-tool\t(remote script, no probe)'* ]] || false
     [[ "$output" != *"curl called"* ]] || false

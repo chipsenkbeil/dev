@@ -14,6 +14,7 @@ local root = require("dev.root")
 local verb = require("dev.verb")
 
 local stderr = io.stderr
+local INTERPRETER = arg and arg[-1]
 local MAX_LEVEL = 2
 local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
 local EXEC_FAILED = 126
@@ -248,6 +249,7 @@ local function run_as_root(parsed)
         args = rest,
         vars = {},
         verbose = parsed.level,
+        interpreter = INTERPRETER,
     }
     if parsed.remote then
         os.exit(
@@ -316,6 +318,7 @@ function M.main(argv)
 
         vars = {},
         verbose = parsed.level,
+        interpreter = INTERPRETER,
     }
     local flag = name ~= "help" and help_flag(rest, parsed.after)
     if flag and not parsed.remote then

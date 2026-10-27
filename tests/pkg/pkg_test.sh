@@ -101,9 +101,9 @@ assert_eq "quoted script package (path + args)" "$PC_PACKAGE" "/tmp/x.sh --flag 
 # End-to-end: pkg.sh install --dry-run against the quoted-args fixture must print
 # the script path WITH its args. The fixture carries the quoted cell in every
 # manager column so the lookup succeeds whatever primary manager this OS uses.
-PKG_SH="$(cd "$DIR/../../scripts" && pwd)/pkg.sh"
+PKG_SH="$(cd "$DIR/../../dotfiles/bin/.local/share/dev" && pwd)/pkg.lua"
 if [ -n "$(detect_primary_manager)" ]; then
-    iout="$(bash "$PKG_SH" install --manifest "$DIR/fixtures/script-args.tsv" --dry-run script-args 2>&1)"
+    iout="$(luajit "$PKG_SH" install --manifest "$DIR/fixtures/script-args.tsv" --dry-run script-args 2>&1)"
     case "$iout" in
     *"bash /tmp/echo-args.sh --flag value"*)
         assert_eq "install dry-run passes args through" "ok" "ok"

@@ -7,7 +7,7 @@
 bats_require_minimum_version 1.5.0
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/scripts/pkg.sh"
+PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -32,32 +32,32 @@ stub() {
 }
 
 @test "an installed formula is skipped without --force" {
-    run bash "$PKG" install --manifest "$MANIFEST" formula-x
+    run luajit "$PKG" install --manifest "$MANIFEST" formula-x
     [ "$status" -eq 0 ]
     [[ "$output" == *"formula-x already on PATH, skipping"* ]] || false
     [ "$(grep -c install "$LOG")" -eq 0 ]
 }
 
 @test "--force reinstalls a formula brew already lists" {
-    run bash "$PKG" install --manifest "$MANIFEST" --force formula-x
+    run luajit "$PKG" install --manifest "$MANIFEST" --force formula-x
     [ "$status" -eq 0 ]
     grep -qx 'brew reinstall fx-formula' "$LOG"
 }
 
 @test "--force installs a formula brew does not list" {
-    BREW_LISTED=0 run bash "$PKG" install --manifest "$MANIFEST" --force formula-x
+    BREW_LISTED=0 run luajit "$PKG" install --manifest "$MANIFEST" --force formula-x
     [ "$status" -eq 0 ]
     grep -qx 'brew install fx-formula' "$LOG"
 }
 
 @test "--force runs a script: installer that is on PATH and passes PKG_FORCE to it" {
-    run bash "$PKG" install --manifest "$MANIFEST" --force script-y
+    run luajit "$PKG" install --manifest "$MANIFEST" --force script-y
     [ "$status" -eq 0 ]
     grep -qx 'script PKG_FORCE=1' "$LOG"
 }
 
 @test "--force with no tool name is a usage error" {
-    run --separate-stderr bash "$PKG" install --manifest "$MANIFEST" --force
+    run --separate-stderr luajit "$PKG" install --manifest "$MANIFEST" --force
     [ "$status" -eq 2 ]
     [ "$stderr" = "--force needs at least one tool name" ]
     [ ! -s "$LOG" ]

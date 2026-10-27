@@ -16,8 +16,7 @@ local ROOT_ENV = {
 local REMOVE_COPY =
     "copy=$1; shift; trap 'rm -f -- \"$copy\"' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; \"$@\""
 
----@enum dev.cmd.tools.Scope
-local Scope = { SYSTEM = "system", USER = "user" }
+local Scope = require("dev.pkg.kinds").Scope
 
 ---@class dev.cmd.tools
 ---@field handlers table<string, fun(ctx: dev.Ctx, reg: dev.Registry?): integer> the handlers of `tools install` and `tools check`, the registry being nil as root
@@ -71,13 +70,25 @@ local function root_env(ctx)
     return env
 end
 
+local function interpreter(ctx, is_root)
+    local path = ctx.interpreter
+    if path and path:sub(1, 1) == "/" then
+        return path
+    end
+    if not is_root then
+        return "luajit"
+    end
+end
+
 local function run_driver(ctx, sub, manifest, args)
-    local pkg = project.dotfiles_root() .. "/scripts/pkg.sh"
+    local pkg = project.dotfiles_root() .. "/dotfiles/bin/.local/share/dev/pkg.lua"
     if not fs.is_file(pkg) then
         return fail("no " .. pkg .. " (set DOTFILES to the dotfiles repo)")
     end
-    if devos.getuid() ~= 0 then
-        local argv = { "bash", pkg, sub, "--manifest", manifest, unpack(args) }
+    local is_root = devos.getuid() == 0
+    local luajit = interpreter(ctx, is_root)
+    if not is_root then
+        local argv = { luajit, pkg, sub, "--manifest", manifest, unpack(args) }
         verb.show(ctx, argv)
         return exec(argv, { cwd = ctx.root })
     end
@@ -85,8 +96,12 @@ local function run_driver(ctx, sub, manifest, args)
     if not copy then
         return fail(message)
     end
+    if not luajit then
+        fs.remove(copy)
+        return fail("cannot find the absolute path of the luajit that runs dev")
+    end
     local driver = { "env", "-i", unpack(root_env(ctx)) }
-    for _, word in ipairs({ "bash", pkg, sub, "--manifest", copy, unpack(args) }) do
+    for _, word in ipairs({ luajit, pkg, sub, "--manifest", copy, unpack(args) }) do
         driver[#driver + 1] = word
     end
     verb.show(ctx, driver)
