@@ -253,18 +253,19 @@ install_gpg() {
 
 # Same shape as install_gpg and for the same reason: ~/.ssh must stay a real
 # 0700 directory or ssh refuses to use the keys in it. --no-folding keeps stow
-# from symlinking the whole directory into the repo, so only config.d/*.conf is
-# ours and keys, known_hosts and the hand-maintained config stay untracked.
+# from symlinking the whole directory into the repo, so config and config.d/*.conf
+# are ours and keys, known_hosts and config.local stay untracked.
 install_ssh() {
     printf '> Installing ssh... '
+    if [ -f "$TARGET_DIR/.ssh/config" ] && [ ! -L "$TARGET_DIR/.ssh/config" ]; then
+        printf 'SKIPPED\n'
+        printf '>> ~/.ssh/config is a file of its own: move its machine-only hosts into ~/.ssh/config.local, remove it and run dev install ssh again\n' >&2
+        return 1
+    fi
     mkdir -p "$TARGET_DIR/.ssh/config.d"
     chmod 700 "$TARGET_DIR/.ssh"
     stow_pkg -S ssh
     printf 'DONE\n'
-    grep -qs 'config.d/\*.conf' "$TARGET_DIR/.ssh/config" ||
-        printf '>> Add near the TOP of ~/.ssh/config: Include ~/.ssh/config.d/*.conf\n'
-    grep -qs 'ci/ssh_config' "$TARGET_DIR/.ssh/config" ||
-        printf '>> Add as the FIRST line of ~/.ssh/config, for ssh to reach a dev box: Include ~/.local/state/ci/ssh_config\n'
 }
 
 # Antinote keeps every setting in one sandboxed plist that cfprefsd rewrites in
