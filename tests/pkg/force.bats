@@ -71,7 +71,7 @@ stub() {
     [[ "$output" == *"muchsync already on PATH, skipping"* ]] || false
     run "$REPO/dotfiles/bin/.local/bin/dev" tools install --force --dry-run muchsync
     [ "$status" -eq 0 ]
-    [[ "$output" == *"bash scripts/install-muchsync.sh"* ]] || false
+    [[ "$output" == *"luajit scripts/install-muchsync.lua"* ]] || false
     [[ "$output" != *"skipping"* ]] || false
 }
 

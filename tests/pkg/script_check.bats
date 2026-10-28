@@ -81,7 +81,7 @@ setup() {
     printf '#!/bin/sh\nexit 0\n' >"$STUBS/cargo"
     printf '#!/bin/sh\necho "$*" >>"%s/rustup.log"\n' "$BATS_TEST_TMPDIR" >"$STUBS/rustup"
     chmod +x "$STUBS/cargo" "$STUBS/rustup"
-    run bash "$REPO/scripts/install-rustfmt-nightly.sh" --check
+    run env LUA_PATH="$REPO/dotfiles/bin/.local/share/dev/lua/?.lua" luajit "$REPO/scripts/install-rustfmt-nightly.lua" --check
     [ "$status" -eq 0 ]
     [ -z "$output" ]
     [ ! -e "$BATS_TEST_TMPDIR/rustup.log" ]
@@ -91,7 +91,7 @@ setup() {
     printf '#!/bin/sh\nexit 1\n' >"$STUBS/cargo"
     printf '#!/bin/sh\necho "$*" >>"%s/rustup.log"\n' "$BATS_TEST_TMPDIR" >"$STUBS/rustup"
     chmod +x "$STUBS/cargo" "$STUBS/rustup"
-    run bash "$REPO/scripts/install-rustfmt-nightly.sh" --check
+    run env LUA_PATH="$REPO/dotfiles/bin/.local/share/dev/lua/?.lua" luajit "$REPO/scripts/install-rustfmt-nightly.lua" --check
     [ "$status" -eq 1 ]
     [ ! -e "$BATS_TEST_TMPDIR/rustup.log" ]
 }

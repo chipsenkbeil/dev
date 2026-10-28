@@ -249,7 +249,7 @@ else
 fi
 if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run 2>&1)"
-    assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.sh"
+    assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.lua"
     assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
 else
     printf 'SKIP - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
