@@ -169,12 +169,15 @@ Progress or In Review for N days or more, 7 by default, oldest first. Each line
 is the id prefix, the column, the days in it (`9d`), the size and the name.
 It counts whole days from the card's `column_entered_at`, which Pomb gives
 every task view, so a card at 6 days is fresh and one at 7 is stale. Icebox,
-Blocked and Done are never stale. A card that is stale by that rule and has
-the `needs:human` label is listed apart under `for the owner (needs:human):`,
-because it waits on the owner, not on an agent. When nothing is stale it prints
-`no stale cards`. A `--days` that is not a whole number of 1 or more is a
-usage error (exit 2). An orchestrator can run it at startup and re-plan,
-escalate or ice each card it lists.
+Blocked and Done are never stale. Every card with the `needs:human` label, in
+any column but Done and at any age, is listed apart under
+`for the owner (needs:human):` with its column and days in column, and never
+among the stale ones (it waits on the owner, not on an agent). A card in one of
+those columns, or with that label, that the tasks view did not date gets a line
+`could not date <id> <name>` after a blank line, instead of being skipped. When
+nothing is stale it prints `no stale cards`. A `--days` that is not a whole
+number of 1 or more is a usage error (exit 2). An orchestrator can run it at
+startup and re-plan, escalate or ice each card it lists.
 
 ## Claims
 

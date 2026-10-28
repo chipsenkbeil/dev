@@ -310,22 +310,47 @@ t.test("stale covers Backlog, Ready, In Progress and In Review only", function()
     t.eq(lines, { "Backlog", "Ready", "In Progress", "In Review" })
 end)
 
-t.test("stale lists needs:human cards apart and never as stale", function()
+t.test("stale lists every needs:human card apart at any age, and never as stale", function()
+    local human = { "needs:human" }
     local cards, times = aged(
-        { "Ready", "Backlog", "Blocked" },
-        { 9, 20, 50 },
-        { {}, { "needs:human" }, { "needs:human" } }
+        { "Ready", "Backlog", "Blocked", "Done", "Ready" },
+        { 9, 20, 50, 60, 1 },
+        { {}, human, human, human, human }
     )
     local result = commands.run("stale", {}, fake(cards, times), NOW)
     t.eq(
         result.output,
-        "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n00000002  Backlog  20d  unsized  Card 2"
+        "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n"
+            .. "00000003  Blocked  50d  unsized  Card 3\n"
+            .. "00000002  Backlog  20d  unsized  Card 2\n"
+            .. "00000005  Ready    1d   unsized  Card 5"
     )
-    cards, times = aged({ "Ready" }, { 9 }, { { "needs:human" } })
+    cards, times = aged({ "Ready" }, { 9 }, { human })
     result = commands.run("stale", {}, fake(cards, times), NOW)
     t.eq(
         result.output,
         "no stale cards\n\nfor the owner (needs:human):\n00000001  Ready  9d  unsized  Card 1"
+    )
+end)
+
+t.test("stale names a card it could not date instead of skipping it", function()
+    local human = { "needs:human" }
+    local cards, times = aged(
+        { "Ready", "Blocked", "Done", "Icebox", "Ready" },
+        { 1, 1, 1, 1, 1 },
+        { {}, human, human, {}, {} }
+    )
+    times[cards[1].id] = nil
+    times[cards[2].id] = nil
+    times[cards[3].id] = nil
+    local result = commands.run("stale", {}, fake(cards, times), NOW)
+    t.eq(
+        result.output,
+        "no stale cards\n\ncould not date "
+            .. cards[1].id
+            .. " Card 1\ncould not date "
+            .. cards[2].id
+            .. " Card 2"
     )
 end)
 
@@ -1041,7 +1066,7 @@ t.test("stale reads column_entered_at from every page of the tasks view", functi
     t.eq(code, 0)
     t.ok(
         out:find(
-            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n$"
+            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n\ncould not date cccccccc%S+ Early\n$"
         ),
         out
     )

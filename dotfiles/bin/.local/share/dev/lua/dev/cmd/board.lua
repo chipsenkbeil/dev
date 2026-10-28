@@ -400,29 +400,35 @@ function commands.stale(backend, args, now)
         return failure(message)
     end
     now = now or os.time()
-    local found, owner = {}, {}
+    local found, owner, undated = {}, {}, {}
     for _, card in ipairs(cards) do
-        local stamp = entered[card.id]
-        if board.STALE_COLUMNS[card.column] and stamp then
-            local at = box.parse_time(stamp)
-            if not at then
-                return failure("pomb sent a column time dev cannot read for " .. card.id)
-            end
-            local days = math.floor((now - at) / box.SECONDS_PER_DAY)
-            if days >= limit then
-                local item = {
-                    id = card.id,
-                    column = card.column,
-                    size = card.size,
-                    name = card.name,
-                    days = days,
-                    at = at,
-                }
-                local into = index_of(card.labels, board.NEEDS_HUMAN) and owner or found
-                into[#into + 1] = item
+        local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
+        if card.column ~= board.DONE and (mine or board.STALE_COLUMNS[card.column]) then
+            local stamp = entered[card.id]
+            if not stamp then
+                undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name
+            else
+                local at = box.parse_time(stamp)
+                if not at then
+                    return failure("pomb sent a column time dev cannot read for " .. card.id)
+                end
+                local days = math.floor((now - at) / box.SECONDS_PER_DAY)
+                if mine or days >= limit then
+                    local item = {
+                        id = card.id,
+                        column = card.column,
+                        size = card.size,
+                        name = card.name,
+                        days = days,
+                        at = at,
+                    }
+                    local into = mine and owner or found
+                    into[#into + 1] = item
+                end
             end
         end
     end
+    table.sort(undated)
     local function oldest(a, b)
         if a.at ~= b.at then
             return a.at < b.at
@@ -441,6 +447,10 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "for the owner (" .. board.NEEDS_HUMAN .. "):"
         append(lines, stale_rows(owner))
+    end
+    if #undated > 0 then
+        lines[#lines + 1] = ""
+        append(lines, undated)
     end
     return { output = table.concat(lines, "\n") }
 end

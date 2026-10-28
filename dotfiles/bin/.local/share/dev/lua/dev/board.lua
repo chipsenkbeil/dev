@@ -70,7 +70,7 @@ M.STALE_COLUMNS = {
     [M.WORKING] = true,
     [M.REVIEW] = true,
 }
----The label of a card that waits on the owner, which `stale` lists apart.
+---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"
 
 ---The column of finished cards, which `ls` leaves out.
