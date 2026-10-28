@@ -32,6 +32,16 @@ if pick then
         if pick == "CANCEL" then
             return nil
         end
+        if opts.multi then
+            local values, toggles = {}, {}
+            for word in pick:gmatch("%S+") do
+                values[#values + 1] = word
+            end
+            for word in (os.getenv("FAKE_PICK_TOGGLES") or ""):gmatch("%S+") do
+                toggles[#toggles + 1] = word
+            end
+            return { values = values, toggles = toggles }
+        end
         return pick
     end
 end

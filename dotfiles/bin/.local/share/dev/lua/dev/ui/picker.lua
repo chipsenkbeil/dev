@@ -9,6 +9,7 @@ local Style = ui.Style
 ---@field value string handed back when the row is picked
 ---@field cells string[] column texts, lined up with the other rows
 ---@field disabled string? why the row cannot be picked
+---@field checked boolean? whether the row starts checked in multi mode
 
 ---@class dev.ui.picker.Toggle
 ---@field key string key that flips it
@@ -21,6 +22,7 @@ local Style = ui.Style
 ---@field note string? dim text after the title
 ---@field initial string? value of the row that starts under the cursor
 ---@field multi boolean? whether several rows can be checked
+---@field required boolean? whether enter waits until a row is checked in multi mode
 ---@field auto boolean? skip the screen when exactly one row is enabled
 ---@field toggles dev.ui.picker.Toggle[]? on and off choices below the rows
 
@@ -94,6 +96,9 @@ function M.new(items, opts)
         __outcome = nil,
     }, Model)
     for i, item in ipairs(items) do
+        if model.__multi and item.checked and not item.disabled then
+            model.__checked[i] = true
+        end
         if item.value == opts.initial and not item.disabled then
             model.__cursor = i
             break
@@ -172,10 +177,25 @@ function Model:__flip_all()
     end
 end
 
+---Tell whether enter may finish, which a required multi picker allows once a row is checked.
+---@private
+---@return boolean ok false while a required multi picker has no row checked
+function Model:__may_finish()
+    if not (self.__multi and self.__opts.required) then
+        return true
+    end
+    for i, item in ipairs(self.__items) do
+        if self.__checked[i] and not item.disabled then
+            return true
+        end
+    end
+    return false
+end
+
 ---Handle one key.
 ---
 ---Esc, q, ctrl-c and end of input cancel. Enter picks the row under the cursor unless it is
----disabled.
+---disabled, or a required multi picker has no row checked.
 ---@param name string key name from `dev.term`
 ---@return string? outcome `Outcome` value once the user is done, nil while the picker goes on
 function Model:key(name)
@@ -210,7 +230,7 @@ function Model:key(name)
         self:__flip_all()
     elseif name == Key.ENTER then
         local item = self.__items[self.__cursor]
-        if item and not item.disabled then
+        if item and not item.disabled and self:__may_finish() then
             self.__outcome = Outcome.PICK
             return Outcome.PICK
         end

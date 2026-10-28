@@ -89,6 +89,45 @@ t.test("multi mode: a leaves disabled items unchecked", function()
     t.eq(model:result(), { "one", "three" })
 end)
 
+t.test("multi mode: a row marked checked starts checked", function()
+    local list = items()
+    list[1].checked = true
+    list[3].checked = true
+    local model = picker.new(list, { title = "Pick", multi = true })
+    press(model, { Key.ENTER })
+    t.eq(model:result(), { "one", "three" })
+end)
+
+t.test("a checked row is ignored outside multi mode and when disabled", function()
+    local list = items()
+    list[1].checked = true
+    list[2].checked = true
+    list[2].disabled = "no"
+    local model = picker.new(list, { title = "Pick", multi = true })
+    press(model, { Key.ENTER })
+    t.eq(model:result(), { "one" })
+    model = picker.new(items(), { title = "Pick" })
+    press(model, { Key.ENTER })
+    t.eq(model:result(), "one")
+end)
+
+t.test("required multi mode: enter waits until a row is checked", function()
+    local model = picker.new(items(), { title = "Pick", multi = true, required = true })
+    t.eq(press(model, { Key.ENTER }), nil)
+    t.eq(model:result(), nil)
+    t.eq(press(model, { Key.SPACE, Key.ENTER }), picker.Outcome.PICK)
+    t.eq(model:result(), { "one" })
+end)
+
+t.test("required multi mode: clearing every box blocks enter again, and q still cancels", function()
+    local list = items()
+    list[1].checked = true
+    local model = picker.new(list, { title = "Pick", multi = true, required = true })
+    t.eq(press(model, { Key.SPACE, Key.ENTER }), nil)
+    t.eq(press(model, { "q" }), picker.Outcome.CANCEL)
+    t.eq(model:result(), nil)
+end)
+
 t.test("a toggle flips its value in the result", function()
     local toggles = { { key = "d", value = "--dry-run", label = "Dry run" } }
     local model = picker.new(items(), { title = "Pick", toggles = toggles })

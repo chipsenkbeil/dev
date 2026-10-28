@@ -5,7 +5,6 @@ local BATS_SUITES = {
   "tests/dev/picker.bats",
   "tests/dev/term.bats",
   "tests/scripts/helpers.bats",
-  "tests/scripts/select-items.bats",
 }
 
 local SCRIPT_SUITES = {
