@@ -686,6 +686,7 @@ function Backend:read()
             label = color.label,
             description = color.description or "",
             is_default = color.is_default == true,
+            enabled = color.enabled ~= false,
         }
     end
     for _, task in ipairs(export.tasks) do

@@ -30,6 +30,7 @@ local function stock_palette()
             label = value:sub(1, 1):upper() .. value:sub(2),
             description = "",
             is_default = value == "yellow",
+            enabled = true,
         }
     end
     return colors
@@ -97,6 +98,9 @@ local function fake_layout(opts)
         for _, color in ipairs(state.colors) do
             if fields.is_default then
                 color.is_default = color.id == id
+            end
+            if color.id == id and fields.enabled ~= nil then
+                color.enabled = fields.enabled
             end
             if color.id == id then
                 color.label = fields.label or color.label
@@ -721,4 +725,90 @@ t.test("a run that stops while stripping can be repeated without losing a size",
     run(layout)
     t.eq(layout.state.cards[1].name, "Thing")
     t.eq(layout.state.cards[1].color_id, "red-id")
+end)
+
+t.test("colours outside the size palette are disabled and the five are enabled", function()
+    local colors = stock_palette()
+    for _, value in ipairs({ "purple", "brown" }) do
+        colors[#colors + 1] = {
+            id = value .. "-id",
+            value = value,
+            label = value,
+            description = "",
+            is_default = false,
+            enabled = true,
+        }
+    end
+    color({ state = { colors = colors } }, "white").enabled = false
+    local layout = fake_layout({ columns = template_columns(), colors = colors })
+    local _, message, lines = run(layout)
+    t.eq(message, nil)
+    local joined = table.concat(lines, "\n")
+    for _, line in ipairs({
+        "enabled white",
+        "disabled orange",
+        "disabled purple",
+        "disabled brown",
+    }) do
+        t.ok(joined:find(line .. "\n", 1, true) or joined:find(line .. "$"), joined)
+    end
+    for _, value in ipairs({ "yellow", "green", "blue", "red", "white" }) do
+        t.eq(color(layout, value).enabled, true)
+    end
+    for _, value in ipairs({ "orange", "purple", "brown" }) do
+        t.eq(color(layout, value).enabled, false)
+    end
+    local again, _, second = run(layout)
+    t.eq(again, 0)
+    t.eq(second, {})
+end)
+
+t.test("a card wearing a disabled colour is reported on every run and left alone", function()
+    local layout = fake_layout({
+        columns = template_columns(),
+        cards = { { id = "aaaaaaaa-1", name = "Odd", color_id = "orange-id" } },
+    })
+    local _, _, lines = run(layout)
+    local report = "card aaaaaaaa wears the disabled colour orange, left as it is"
+    t.eq(lines[#lines], report)
+    t.eq(layout.state.cards[1].color_id, "orange-id")
+    local changes, _, second = run(layout)
+    t.eq(changes, 0)
+    t.eq(second, { report })
+end)
+
+t.test("a token that may not enable colours leaves them and carries on", function()
+    local layout = fake_layout({ columns = template_columns() })
+    local set_color = layout.set_color
+    function layout:set_color(id, fields)
+        if fields.enabled ~= nil then
+            return nil, "board unavailable: pomb answered 403: insufficient_scope"
+        end
+        return set_color(self, id, fields)
+    end
+    local changes, message, lines = run(layout)
+    t.eq(message, nil)
+    t.ok(changes > 0)
+    local left = 0
+    for _, line in ipairs(lines) do
+        if line:find("run dev board init --admin", 1, true) then
+            left = left + 1
+        end
+    end
+    t.eq(left, 1)
+    t.eq(color(layout, "orange").enabled, true)
+    t.eq(color(layout, "white").is_default, true)
+end)
+
+t.test("init sends enabled through the palette PATCH for each colour", function()
+    local root, home, tmp = sandbox()
+    local orange = ',{"id":"orange-id","value":"orange","label":"Orange",'
+        .. '"description":"","is_default":false,"enabled":true}]'
+    assert(fs.write(root .. "/colors.json", colors_json():gsub("%]$", "") .. orange))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0)
+    local patch = '--data-raw {"enabled":false} '
+        .. "https://pomb.example/api/boards/board-1/colors/orange-id"
+    t.ok(calls_of(root):find(patch, 1, true), calls_of(root))
+    t.eq(out, "disabled orange\nboard demo: 1 change\n")
 end)

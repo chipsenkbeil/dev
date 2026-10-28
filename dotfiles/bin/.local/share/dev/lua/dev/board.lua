@@ -49,12 +49,12 @@ local M = {}
 ---@field add_column fun(self: dev.board.Layout, name: string, is_done: boolean): boolean?, string? a column at the end
 ---@field move_column fun(self: dev.board.Layout, id: string, position: integer): boolean?, string? a column moved, 0 first
 ---@field mark_done fun(self: dev.board.Layout, id: string): boolean?, string? a column made the one of finished cards
----@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description or default flag
+---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description, default flag or enabled flag
 ---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a card's name or colour
 
 ---@class dev.board.LayoutState
 ---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
----@field colors {id: string, value: string, label: string, description: string, is_default: boolean}[] the palette
+---@field colors {id: string, value: string, label: string, description: string, is_default: boolean, enabled: boolean}[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 
 ---The columns in board order.

@@ -86,6 +86,13 @@ What it lays out:
 - The palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`, red
   `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps its
   colour in every column, so the colour is the only record of its size.
+- Which colours are on. White, yellow, green, blue and red are enabled and every
+  other colour (orange, purple, magenta, cyan, brown) is disabled, one line per
+  change such as `disabled orange`. Nothing is deleted. A card that already
+  wears a disabled colour keeps it and is reported on every run, one line each.
+  Pomb lets only an admin token change this, so with the lead token a 403 prints
+  `left the colours enabled as they are...`, and the rest of the run still
+  happens. Run `dev board init --admin` to switch the colours.
 - Size words off card names. A trailing `(yellow)`, `(green)`, `(blue)`, `(red)`
   or `(red, split)` comes off the name. If the card is still white, has no
   colour, or has the colour that was the default when the run began (Pomb gave

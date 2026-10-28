@@ -18,7 +18,7 @@ local M = {}
 ---@class dev.board.localboard.Doc
 ---@field name string the board's name
 ---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
----@field colors {id: string, value: string, label: string, description: string, is_default: boolean}[] the palette
+---@field colors {id: string, value: string, label: string, description: string, is_default: boolean, enabled: boolean?}[] the palette
 ---@field cards table<integer, table<string, any>> the cards, each a table of the fields the file holds
 
 ---@class dev.board.localboard.Opts
@@ -497,6 +497,7 @@ function Backend:read()
             label = color.label,
             description = color.description or "",
             is_default = color.is_default == true,
+            enabled = color.enabled ~= false,
         }
     end
     for _, card in ipairs(doc.cards) do

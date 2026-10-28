@@ -1,6 +1,8 @@
 local board = require("dev.board")
 
 local NEEDS_ADMIN = "pomb answered 403"
+local LEFT_ENABLED = "left the colours enabled as they are, since this token may not change them; "
+    .. "run dev board init --admin"
 local ADMIN_HINT = "; this token may not change this board, run dev board init --admin"
 
 ---The standard board: the seven columns, the size palette and names without
@@ -60,8 +62,12 @@ function M.split_size(name)
     return found, value
 end
 
+local function needs_admin(message)
+    return message:find(NEEDS_ADMIN, 1, true) ~= nil
+end
+
 local function advise(message)
-    if message:find(NEEDS_ADMIN, 1, true) then
+    if needs_admin(message) then
         return message .. ADMIN_HINT
     end
     return message
@@ -197,6 +203,53 @@ local function default_step(layout, state, say)
     return true
 end
 
+local function enabled_step(layout, state, say)
+    local wanted = {}
+    for _, swatch in ipairs(M.PALETTE) do
+        wanted[swatch.value] = true
+    end
+    for _, enable in ipairs({ true, false }) do
+        for _, color in ipairs(state.colors) do
+            if (wanted[color.value] == true) == enable and color.enabled ~= enable then
+                local ok, message = layout:set_color(color.id, { enabled = enable })
+                if not ok then
+                    if needs_admin(message) then
+                        say(LEFT_ENABLED)
+                        return true
+                    end
+                    return nil, message
+                end
+                color.enabled = enable
+                say((enable and "enabled " or "disabled ") .. color.value)
+                state.changes = state.changes + 1
+            end
+        end
+    end
+    return true
+end
+
+local function worn_step(_, state, say)
+    local off = {}
+    for _, color in ipairs(state.colors) do
+        if color.enabled == false then
+            off[color.id] = color.value
+        end
+    end
+    for _, card in ipairs(state.cards) do
+        local value = card.color_id and off[card.color_id]
+        if value then
+            say(
+                "card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " wears the disabled colour "
+                    .. value
+                    .. ", left as it is"
+            )
+        end
+    end
+    return true
+end
+
 local function strip_step(layout, state, say)
     local white = state.by_value[DEFAULT_VALUE].id
     for _, card in ipairs(state.cards) do
@@ -266,7 +319,14 @@ function M.run(layout, name, say)
     end
     state.columns, state.colors, state.cards =
         layout_state.columns, layout_state.colors, layout_state.cards
-    for _, step in ipairs({ columns_step, palette_step, strip_step, default_step }) do
+    for _, step in ipairs({
+        columns_step,
+        palette_step,
+        strip_step,
+        enabled_step,
+        default_step,
+        worn_step,
+    }) do
         local ok
         ok, message = step(layout, state, say)
         if not ok then
