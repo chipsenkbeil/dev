@@ -196,5 +196,36 @@ out="$(fixture_dev help nosuch)"
 assert_contains "help of an unknown name says so" "$out" "unknown verb nosuch, and no topic of that name"
 assert_contains "help of an unknown name exits 2" "$out" "exit 2"
 
+# The porting topic's before and after verbs behave the same
+assert_contains "the real topics list porting" "$(cd "$REPO" && DOTFILES="$REPO" "$DEV" help --topics)" $'porting\tPort a .dev bash verb to Lua'
+fence() {
+    awk -v lang="$1" '
+        $0 == "```" lang { on = 1; next }
+        $0 == "```" { on = 0 }
+        on { print }
+    ' "$REPO/docs/dev/porting.md"
+}
+for pair in sh:bash lua:lua; do
+    ext=${pair%%:*}
+    mkdir -p "$TMP/port-$ext/.dev"
+    fence "${pair##*:}" >"$TMP/port-$ext/.dev/list.$ext"
+    chmod +x "$TMP/port-$ext/.dev/list.$ext"
+done
+assert_contains "the topic holds a bash verb" "$(cat "$TMP/port-sh/.dev/list.sh")" "set -eo pipefail"
+assert_contains "the topic holds a Lua verb" "$(cat "$TMP/port-lua/.dev/list.lua")" 'require("dev.verb")'
+port_run() {
+    (
+        cd "$TMP/port-$1" && DOTFILES="$REPO" "$DEV" list "${@:2}" 2>&1
+        printf 'exit %s\n' "$?"
+    )
+}
+assert_contains "the bash verb lists the targets" "$(port_run sh)" "+ nvim"
+assert_eq "the Lua verb prints what the bash verb prints" "$(port_run lua)" "$(port_run sh)"
+assert_eq "the Lua verb refuses an argument as the bash verb does" "$(port_run lua extra)" "$(port_run sh extra)"
+assert_contains "the refusal exits 2" "$(port_run lua extra)" "exit 2"
+assert_eq "the Lua verb refuses a flag after -- as the bash verb does" "$(port_run lua -- -x)" "$(port_run sh -- -x)"
+assert_eq "the hidden header of both verbs hides list" \
+    "$(cd "$TMP/port-lua" && DOTFILES="$REPO" "$DEV" help | grep -c '^  list ' || true)" "0"
+
 printf '\n%s failed\n' "$fails"
 [ "$fails" -eq 0 ]
