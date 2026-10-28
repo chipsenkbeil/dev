@@ -620,6 +620,18 @@ local function state_file(home)
     return home .. "/state/dev/board/" .. ID_A
 end
 
+local function loop_pid(home)
+    return assert(read(home, "state/dev/board/" .. ID_A):match("pid=(%d+)"))
+end
+
+local function loop_gone(pid)
+    return wait_until(function()
+        return devos
+            .capture({ "ps", "-p", pid, "-o", "command=" }, { stderr = "null" })
+            :find("keepalive", 1, true) == nil
+    end)
+end
+
 local function settle(root)
     local before
     repeat
@@ -666,6 +678,7 @@ t.test("release gives the claim up, removes the state and stops the loop", funct
     t.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
+    local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     t.eq(code, 0)
     t.eq(out, "released 11111111\n")
@@ -674,8 +687,8 @@ t.test("release gives the claim up, removes the state and stops the loop", funct
         read(root, "calls")
     )
     t.eq(fs.exists(state_file(home)), false)
+    t.ok(loop_gone(pid))
     local after = settle(root)
-    t.ok(after <= 4, after)
     t.eq(heartbeats(root), after)
 end)
 
@@ -693,14 +706,15 @@ t.test("move out of progress stops the loop and sends the fence", function()
     t.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
+    local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
     t.eq(code, 0)
     t.eq(out, "moved 11111111 to In Review\n")
     local moved = read(root, "calls"):match("[^\n]*/move\n?")
     t.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
     t.eq(fs.exists(state_file(home)), false)
+    t.ok(loop_gone(pid))
     local after = settle(root)
-    t.ok(after <= 4, after)
     t.eq(heartbeats(root), after)
 end)
 
