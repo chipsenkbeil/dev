@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, label, stale, take and release",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, label, stale, take, release and sync",
         hidden = true,
     },
     {
@@ -274,6 +274,12 @@ return {
         handler = "lua",
         usage = "dev board release CARD",
         desc = "Release the claim taken with dev board take and stop its loop",
+    },
+    {
+        words = { "board", "sync" },
+        handler = "lua",
+        usage = "dev board sync",
+        desc = "Replay the changes queued while Pomb was unreachable, oldest first, and report any Pomb refuses",
     },
     {
         words = { "bootstrap" },

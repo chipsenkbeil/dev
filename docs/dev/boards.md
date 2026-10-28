@@ -21,6 +21,7 @@ dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
 dev board take 8af0e001
 dev board release 8af0e001
+dev board sync
 ```
 
 ## Opting in
@@ -36,8 +37,7 @@ name = "dotfiles"
 `backend` is `pomb` or `local`, and `name` defaults to the project directory's
 name. `dev board status` prints the backend and the board, or `no board for
 this project` with exit 1, and every other subcommand says the same and exits 1
-without a `[board]` section. The `local` backend is not built yet and stops with
-an error.
+without a `[board]` section. The `local` backend keeps the board in a file (see Local boards below).
 
 The server and the token live once in the user file
 `~/.config/dev/config.toml`, never in a project file:
@@ -191,6 +191,57 @@ those columns, or with that label, that the tasks view did not date gets a line
 nothing is stale it prints `no stale cards`. A `--days` that is not a whole
 number of 1 or more is a usage error (exit 2). An orchestrator can run it at
 startup and re-plan, escalate or ice each card it lists.
+
+## Local boards
+
+`backend = "local"` keeps the board in one JSON file, so a project needs no
+Pomb server. Every command works on it, with the same seven columns, size
+colours and labels as a Pomb board, so a board reads the same either way.
+
+```toml
+[board]
+backend = "local"
+name = "scratch"
+```
+
+The file is `~/.local/state/dev/boards/scratch.json` (under `$XDG_STATE_HOME`
+when that is an absolute path), readable by you alone. To keep the board in
+the repository and commit it, name a path inside the project:
+
+```toml
+[board]
+backend = "local"
+path = ".dev/board.json"
+```
+
+`dev board init` lays out the columns and the palette in the file. Two
+processes can write at once: each change takes a lock beside the file, reads it
+again and renames a finished copy into place. `take` sets a claim that lapses
+after twice the card's size and needs no loop, and `release` gives it up. Only
+a note written by dev can be edited or deleted. A local board has nothing to
+sync, so `dev board sync` says so.
+
+## When Pomb is unreachable
+
+On a Pomb board, `add`, `move`, `note`, `size` and `label` that cannot reach
+Pomb, or cannot read the token because `pass` is locked, are kept in a queue
+and print the line below. A timeout or a gateway error may come after Pomb
+applied the change, so only `move`, `size` and `label`, which are safe to
+repeat, are queued for those; `add` and `note` fail instead of risking a
+duplicate.
+
+```
+queued: Pomb unreachable, will sync
+```
+
+The queue is `~/.local/state/dev/boards/<name>.queue`, readable by you alone,
+and holds the commands as you typed them and never the token. `dev board sync`
+replays it in order once Pomb answers, and every other `dev board` command on
+the board tries that first when the queue is not empty. Card ids are matched
+when the change is replayed. A change Pomb refuses, for example because the
+card is gone, is reported as `dropped <command> <card>: <reason>` and removed,
+so it is never retried. A change that dev was killed in the middle of replaying stays queued and may be sent twice. A replay that finds Pomb still down leaves the rest
+queued, and `sync` then prints how many are left and exits 1.
 
 ## Claims
 

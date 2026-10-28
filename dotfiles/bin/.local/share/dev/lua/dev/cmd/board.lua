@@ -6,10 +6,14 @@ local device = require("dev.board.device")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local init = require("dev.board.init")
+local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
+local queue = require("dev.board.queue")
+local store = require("dev.board.store")
 local toml = require("dev.toml")
 local verb = require("dev.verb")
 
+local stderr = io.stderr
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
@@ -22,10 +26,17 @@ local STALE_DAYS = 7
 local STAMP_CHARS = 16
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
+local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
+local PATH_PATTERN = "^[%w._][%w._/-]*$"
+local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
+local IDEMPOTENT = { move = true, size = true, label = true }
+local QUEUED = { add = true, move = true, note = true, size = true, label = true }
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
 ---@field name string the board's name
+---@field path string? the file of a local board, in the state directory when nil
+---@field root string? the project's root, which a tracked path is under
 
 ---@class dev.cmd.board.Result
 ---@field output string? what to print on success
@@ -591,6 +602,16 @@ function commands.take(backend, args)
         backend:release(card.id, fence)
         return failure(message)
     end
+    if pid == 0 then
+        return {
+            output = string.format(
+                "took %s, fence %d, held for %dm",
+                card.id:sub(1, board.MIN_PREFIX),
+                fence,
+                minutes
+            ),
+        }
+    end
     return {
         output = string.format(
             "took %s, fence %d, renewing every %dm for up to %dm",
@@ -638,7 +659,18 @@ end
 ---@return string? message why there is none
 function M.open(settings)
     if settings.backend == board.Backend.LOCAL then
-        return nil, "dev: the local board backend is not built yet"
+        if settings.path then
+            return localboard.new({ name = settings.name, path = settings.path })
+        end
+        if not settings.name:find(LOCAL_NAME_PATTERN) or #settings.name > NAME_CHARS then
+            return nil,
+                "dev: a local board's name must be letters, digits, dots, dashes and underscores to name its file, or set [board] path"
+        end
+        return localboard.new({
+            name = settings.name,
+            path = store.dir() .. "/" .. settings.name .. ".json",
+            private = true,
+        })
     end
     local backend, message = pomb.new({
         url = config.user("board.pomb.url"),
@@ -666,7 +698,24 @@ local function settings(ctx)
     if type(name) ~= "string" or name == "" then
         verb.die("dev: [board] name must be a non-empty string in .dev/config.toml")
     end
-    return { backend = backend, name = name }
+    local path = config.get(ctx.root, "board.path")
+    if path ~= nil then
+        if backend ~= board.Backend.LOCAL then
+            verb.die('dev: [board] path only applies to backend = "local"')
+        end
+        if
+            type(path) ~= "string"
+            or not path:find(PATH_PATTERN)
+            or path:find("..", 1, true)
+            or path:find("//", 1, true)
+        then
+            verb.die(
+                "dev: [board] path must be a relative path inside the project, such as .dev/board.json"
+            )
+        end
+        path = ctx.root .. "/" .. path
+    end
+    return { backend = backend, name = name, path = path, root = ctx.root }
 end
 
 local function has_section(root)
@@ -681,9 +730,7 @@ local function board_name(ctx, flags)
     if backend == nil and has_section(ctx.root) then
         verb.die('dev: [board] needs backend = "pomb" in .dev/config.toml')
     end
-    if backend == board.Backend.LOCAL then
-        verb.die("dev: the local board backend is not built yet")
-    elseif backend ~= nil and backend ~= board.Backend.POMB then
+    if backend ~= nil and backend ~= board.Backend.POMB then
         verb.die('dev: [board] backend must be "pomb" or "local" in .dev/config.toml')
     end
     local asked = flags["--name"]
@@ -730,6 +777,40 @@ local function host()
     return (devos.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", ""))
 end
 
+local function init_local(ctx, flags, admin)
+    if admin then
+        verb.usage_error(ctx, "--admin applies to a Pomb board, not a local one")
+    end
+    local found = settings(ctx)
+    if flags["--name"] and flags["--name"] ~= found.name then
+        verb.usage_error(
+            ctx,
+            "--name " .. flags["--name"] .. " is not the [board] name " .. found.name
+        )
+    end
+    local backend, message = M.open(found)
+    if not backend then
+        verb.die(message)
+    end
+    local changes
+    changes, message = init.run(backend, found.name, print)
+    if not changes then
+        verb.die("dev: " .. message)
+    end
+    print(
+        changes == 0
+                and ("board " .. found.name .. " already follows the standard, nothing to change")
+            or (
+                "board "
+                .. found.name
+                .. ": "
+                .. changes
+                .. (changes == 1 and " change" or " changes")
+            )
+    )
+    return 0
+end
+
 M.handlers["board init"] = function(ctx)
     local rest, admin = {}, false
     for _, arg in ipairs(ctx.args) do
@@ -744,6 +825,9 @@ M.handlers["board init"] = function(ctx)
         verb.usage_error(ctx, extra.message)
     elseif #extra > 0 then
         verb.usage_error(ctx, "unknown argument " .. extra[1])
+    end
+    if config.get(ctx.root, "board.backend") == board.Backend.LOCAL then
+        return init_local(ctx, flags, admin)
     end
     local name, missing = board_name(ctx, flags)
     local opts = {
@@ -797,23 +881,138 @@ M.handlers["board init"] = function(ctx)
     return 0
 end
 
+local function brief(entry)
+    return entry.sub .. " " .. tostring(entry.args[1])
+end
+
+---Replay the changes queued while Pomb was unreachable, oldest first.
+---
+---A change Pomb refuses is reported and dropped. A change that finds Pomb
+---unreachable again stays queued with the ones behind it.
+---@param backend dev.board.Backend the Pomb board
+---@param pending dev.board.queue.Queue the board's queue
+---@param say fun(line: string) prints one line
+---@return integer? left how many changes are still queued, nil when the queue could not be used
+---@return string? message why the queue could not be used
+local function replay(backend, pending, say)
+    local drained, message = pending:drain(function(entry)
+        if not QUEUED[entry.sub] or type(entry.args) ~= "table" then
+            say("dropped " .. tostring(entry.sub) .. ": not a change dev queues")
+            return queue.Replay.DONE
+        end
+        local result = M.run(entry.sub, entry.args, backend)
+        if not result.message then
+            say("synced " .. brief(entry))
+            return queue.Replay.DONE
+        elseif pomb.unreachable(result.message, IDEMPOTENT[entry.sub]) then
+            say("Pomb is still unreachable, " .. brief(entry) .. " stays queued")
+            return queue.Replay.STOP
+        end
+        say("dropped " .. brief(entry) .. ": " .. result.message)
+        return queue.Replay.DONE
+    end)
+    if not drained then
+        return nil, message
+    end
+    return pending:count()
+end
+
+local function stderr_line(line)
+    stderr:write(line, "\n")
+end
+
+local function stderr_news(line)
+    if not line:find("^Pomb is still unreachable") then
+        stderr_line(line)
+    end
+end
+
+local function open_board(ctx)
+    local found = settings(ctx)
+    local backend, message = M.open(found)
+    if not backend then
+        verb.die(message)
+    end
+    local pending
+    if found.backend == board.Backend.POMB then
+        pending = queue.new(found.name)
+        if pending:count() > 0 then
+            replay(backend, pending, stderr_news)
+        end
+    end
+    return backend, pending
+end
+
 M.handlers["board status"] = function(ctx)
     verb.no_args(ctx)
     local found = settings(ctx)
     print("backend: " .. found.backend)
     print("board: " .. found.name)
+    if found.backend == board.Backend.POMB then
+        local pending = queue.new(found.name)
+        if pending:count() > 0 then
+            local backend = M.open(found)
+            if backend then
+                replay(backend, pending, stderr_line)
+            end
+            local left = pending:count()
+            if left > 0 then
+                print("queued: " .. left)
+            end
+        end
+    end
+    return 0
+end
+
+M.handlers["board sync"] = function(ctx)
+    verb.no_args(ctx)
+    local found = settings(ctx)
+    if found.backend ~= board.Backend.POMB then
+        verb.die("dev: a local board has nothing to sync")
+    end
+    local pending = queue.new(found.name)
+    if pending:count() == 0 then
+        print("nothing queued")
+        return 0
+    end
+    local backend, message = M.open(found)
+    if not backend then
+        verb.die(message)
+    end
+    local left
+    left, message = replay(backend, pending, print)
+    if not left then
+        verb.die("dev: " .. message)
+    end
+    if left > 0 then
+        print("queued: " .. left)
+        return 1
+    end
+    print("synced")
     return 0
 end
 
 for sub in pairs(commands) do
     M.handlers["board " .. sub] = function(ctx)
-        local found = settings(ctx)
-        local backend, message = M.open(found)
-        if not backend then
-            verb.die(message)
-        end
+        local backend, pending = open_board(ctx)
         local result = M.run(sub, ctx.args, backend)
         if result.message then
+            local note = sub == "note" and (ctx.args[2] == EDIT_FLAG or ctx.args[2] == DELETE_FLAG)
+            if
+                pending
+                and QUEUED[sub]
+                and not note
+                and pomb.unreachable(result.message, IDEMPOTENT[sub])
+            then
+                local ok, why = pending:push(sub, ctx.args)
+                if not ok then
+                    verb.die(
+                        "dev: " .. result.message .. "; and the change could not be queued: " .. why
+                    )
+                end
+                print(QUEUED_NOTICE)
+                return 0
+            end
             if result.code == USAGE then
                 verb.usage_error(ctx, result.message)
             end

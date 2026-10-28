@@ -46,6 +46,7 @@ local LUA_ONLY = {
     ["board move"] = true,
     ["board take"] = true,
     ["board release"] = true,
+    ["board sync"] = true,
     ["board size"] = true,
     ["board label"] = true,
     ["board stale"] = true,

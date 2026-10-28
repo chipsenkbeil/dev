@@ -58,6 +58,43 @@ local function unavailable(reason)
     return "board unavailable: " .. reason
 end
 
+---Tell whether a failure means Pomb could not be asked, as opposed to Pomb
+---refusing the request.
+---
+---A request that never left the machine is unreachable: a `pass` that is locked
+---or slow, or a curl that could not resolve or connect (exit 5, 6 or 7). A
+---timeout, a gateway error and a page that is not JSON may have followed an
+---applied change, so they count only for a change that is safe to apply twice.
+---Any other answer is a refusal.
+---@param message string? what a backend call returned
+---@param idempotent boolean? whether the change may be applied twice without harm
+---@return boolean unreachable true when the change may wait for a later sync
+function M.unreachable(message, idempotent)
+    if type(message) ~= "string" then
+        return false
+    end
+    local reasons = {
+        "cannot reach .* %(curl exit [567]%)$",
+        "pass timed out",
+        "pass is locked or has no entry ",
+    }
+    if idempotent then
+        for _, reason in ipairs({
+            "cannot reach .* %(curl exit 28%)$",
+            "pomb answered 50[234]:",
+            "pomb sent an answer dev cannot read",
+        }) do
+            reasons[#reasons + 1] = reason
+        end
+    end
+    for _, reason in ipairs(reasons) do
+        if message:find("^board unavailable: " .. reason) then
+            return true
+        end
+    end
+    return false
+end
+
 local function entry_of(ref)
     local entry = type(ref) == "string" and ref:match("^pass:(.+)$")
     if entry and entry:find(ENTRY_PATTERN) and not entry:find("..", 1, true) then
