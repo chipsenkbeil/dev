@@ -11,6 +11,8 @@ dev board next
 dev board add "Name the new thing" --column backlog --description "why" --size 2
 dev board ls --size 3+
 dev board size 8af0e001 1
+dev board add "Name" --label needs:lead --label docs
+dev board label 8af0e001 +needs:human
 dev board note 8af0e001 "Tests pass, landing now."
 dev board move 8af0e001 progress
 dev board take 8af0e001
@@ -147,6 +149,19 @@ where a card with no colour counts as unsized. Any other word is a usage error
 palette, never by its label, so it works before and after `dev board init`
 names the labels. A board missing the colour fails with
 `board unavailable: the board has no yellow colour`.
+
+`add --label L` gives a new card a label, and may be repeated. `label CARD +L`
+adds a label to a card and `-L` removes one, with as many as you like in one
+call. Pomb replaces a card's whole label list on a change, so `label` reads
+the current labels, applies the edits in order and sends the full list, with
+the claim's fence when this machine holds one. Adding a label the card has, or
+removing one it lacks, changes nothing and sends nothing. A label is one word
+with no spaces and no leading `-`; anything else, or a word with no sign, is a
+usage error (exit 2). dev reads a bare `-L` as a flag it does not know, so put
+`--` between the card and the label. The escalation
+labels `needs:lead` and `needs:human` are plain labels to dev. Two agents
+editing the same card's labels at the same moment can lose one edit, because
+pomb has no add or remove call and takes the whole list.
 
 ## Claims
 

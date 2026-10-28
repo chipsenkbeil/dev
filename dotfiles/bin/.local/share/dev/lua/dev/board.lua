@@ -20,6 +20,7 @@ local M = {}
 ---@field next fun(self: dev.board.Backend): dev.board.Card?, string? the top unclaimed, unblocked Ready card, or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
 ---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?): boolean?, string? the card given the palette colour of that value, checked against the claim's fence when one is given
+---@field set_labels fun(self: dev.board.Backend, id: string, labels: string[], fence: integer?): boolean?, string? the card's whole label list replaced, checked against the claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?): boolean?, string? a comment of kind agent added to the card, checked against the claim's fence when one is given
 ---@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
@@ -29,6 +30,7 @@ local M = {}
 ---@class dev.board.AddOpts
 ---@field description string? the card's description
 ---@field color string? the standard value of the palette colour to give it
+---@field labels string[]? the labels to give it
 
 ---@class dev.board.Layout
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a message

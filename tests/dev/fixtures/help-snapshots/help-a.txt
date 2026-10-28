@@ -33,7 +33,7 @@ Widgets
   widget                      Manage the widget.
 
 Hidden
-  board                       Read and update the project's board: status, init, ls, next, add, note, move, size, take and release
+  board                       Read and update the project's board: status, init, ls, next, add, note, move, size, label, take and release
   bootstrap                   Run bootstrap.sh from the dotfiles clone: the package manager and luajit first, then stow, tailscale, the default packages and the manifest tools
   help                        Show the commands, the details of one verb or a topic
   plumbing                    Internal helper for the other verbs.

@@ -40,7 +40,7 @@ local function failure(message)
     return { message = message, code = FAILURE }
 end
 
-local function parse(args, takes)
+local function parse(args, takes, many)
     local flags, positional = {}, {}
     local i = 1
     while i <= #args do
@@ -50,7 +50,12 @@ local function parse(args, takes)
             if i > #args then
                 return nil, usage(arg .. " needs a value")
             end
-            flags[arg] = args[i]
+            if many and many[arg] then
+                flags[arg] = flags[arg] or {}
+                table.insert(flags[arg], args[i])
+            else
+                flags[arg] = args[i]
+            end
             i = i + 1
         elseif #arg > 1 and arg:sub(1, 1) == "-" then
             return nil, usage("unknown flag " .. arg)
@@ -75,6 +80,21 @@ local function sized(word)
         return nil, usage("unknown size " .. word .. ", the sizes are " .. board.size_help())
     end
     return color
+end
+
+local function plain(label)
+    if label == "" or label:find("%s") or label:find("%c") or label:sub(1, 1) == "-" then
+        return nil, usage("label " .. label .. " must be one word that does not start with -")
+    end
+    return label
+end
+
+local function index_of(list, word)
+    for i, item in ipairs(list) do
+        if item == word then
+            return i
+        end
+    end
 end
 
 local function card_line(card)
@@ -175,13 +195,27 @@ function commands.next(backend, args)
 end
 
 function commands.add(backend, args)
-    local flags, words =
-        parse(args, { ["--column"] = true, ["--description"] = true, ["--size"] = true })
+    local flags, words = parse(
+        args,
+        { ["--column"] = true, ["--description"] = true, ["--size"] = true, ["--label"] = true },
+        { ["--label"] = true }
+    )
     if not flags then
         return words
     end
     if #words == 0 then
         return usage("needs a card name")
+    end
+    local labels
+    for _, label in ipairs(flags["--label"] or {}) do
+        local ok, err = plain(label)
+        if not ok then
+            return err
+        end
+        labels = labels or {}
+        if not index_of(labels, label) then
+            labels[#labels + 1] = label
+        end
     end
     local color
     if flags["--size"] then
@@ -202,7 +236,7 @@ function commands.add(backend, args)
     local card, message = backend:add(
         table.concat(words, " "),
         column,
-        { description = flags["--description"], color = color }
+        { description = flags["--description"], color = color, labels = labels }
     )
     if not card then
         return failure(message)
@@ -276,6 +310,49 @@ function commands.size(backend, args)
     return { output = "sized " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. args[2]:lower() }
 end
 
+function commands.label(backend, args)
+    if #args < 2 then
+        return usage("needs a card and one or more +label or -label")
+    end
+    local edits = {}
+    for i = 2, #args do
+        local sign, word = args[i]:sub(1, 1), args[i]:sub(2)
+        if sign ~= "+" and sign ~= "-" then
+            return usage("label " .. args[i] .. " needs a + or - before it")
+        end
+        local ok, err = plain(word)
+        if not ok then
+            return err
+        end
+        edits[#edits + 1] = { add = sign == "+", word = word }
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local labels = {}
+    for i, label in ipairs(card.labels) do
+        labels[i] = label
+    end
+    for _, change in ipairs(edits) do
+        local at = index_of(labels, change.word)
+        if change.add and not at then
+            labels[#labels + 1] = change.word
+        elseif not change.add and at then
+            table.remove(labels, at)
+        end
+    end
+    if table.concat(labels, "\0") ~= table.concat(card.labels, "\0") then
+        local held = claims.read(card.id)
+        local ok, message = backend:set_labels(card.id, labels, held and held.fence)
+        if not ok then
+            return failure(message)
+        end
+    end
+    local shown = #labels > 0 and table.concat(labels, ",") or "-"
+    return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
+end
+
 function commands.take(backend, args)
     if #args ~= 1 then
         return usage("needs a card")
@@ -345,7 +422,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `move`, `size`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `move`, `size`, `label`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@return dev.cmd.board.Result result the output, or a message and the exit code

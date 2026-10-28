@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, take and release",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, label, take and release",
         hidden = true,
     },
     {
@@ -221,9 +221,15 @@ return {
     {
         words = { "board", "add" },
         handler = "lua",
-        flags = "--column --description --size",
-        usage = "dev board add NAME [--column C] [--description TEXT] [--size S]",
-        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized",
+        flags = "--column --description --size --label",
+        usage = "dev board add NAME [--column C] [--description TEXT] [--size S] [--label L]...",
+        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized and any labels",
+    },
+    {
+        words = { "board", "label" },
+        handler = "lua",
+        usage = "dev board label CARD +L|-L...",
+        desc = "Add or remove labels on a card, +L to add and -L to remove (put -- before a -L)",
     },
     {
         words = { "board", "note" },

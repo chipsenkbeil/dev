@@ -28,11 +28,15 @@ local function fake(cards)
         return cards[1]
     end
     function backend:add(name, column, opts)
-        calls[#calls + 1] = { "add", name, column, opts.description, opts.color }
+        calls[#calls + 1] = { "add", name, column, opts.description, opts.color, opts.labels }
         return { id = ID_C, name = name, column = column, size = "unsized", labels = {} }
     end
     function backend:note(id, text)
         calls[#calls + 1] = { "note", id, text }
+        return true
+    end
+    function backend:set_labels(id, labels, fence)
+        calls[#calls + 1] = { "set_labels", id, labels, fence }
         return true
     end
     function backend:set_size(id, color, fence)
@@ -187,6 +191,46 @@ t.test("ls --size keeps the cards of one colour and counts no colour as unsized"
     result = commands.run("ls", { "--size", "2" }, fake(cards))
     t.eq(result.output, "no cards")
     t.eq(commands.run("ls", { "--size", "9" }, fake(cards)).code, 2)
+end)
+
+t.test("add --label may repeat and drops a duplicate", function()
+    local backend = fake(sample())
+    commands.run("add", { "X", "--label", "a", "--label", "needs:lead", "--label", "a" }, backend)
+    t.eq(backend.calls[1], { "add", "X", "Backlog", nil, nil, { "a", "needs:lead" } })
+    commands.run("add", { "X" }, backend)
+    t.eq(backend.calls[2], { "add", "X", "Backlog", nil, nil, nil })
+end)
+
+t.test("label adds and removes labels and sends the whole list", function()
+    local backend = fake(sample())
+    local result = commands.run("label", { "11111111-a", "+needs:lead", "+x" }, backend)
+    t.eq(result.output, "labelled 11111111 docs,needs:lead,x")
+    t.eq(backend.calls[1], { "set_labels", ID_A, { "docs", "needs:lead", "x" }, nil })
+    result = commands.run("label", { "11111111-a", "-docs" }, backend)
+    t.eq(result.output, "labelled 11111111 -")
+    t.eq(backend.calls[2], { "set_labels", ID_A, {}, nil })
+    result = commands.run("label", { "11111111-a", "-docs", "+new", "-new", "+docs" }, backend)
+    t.eq(result.output, "labelled 11111111 docs")
+    t.eq(#backend.calls, 2)
+end)
+
+t.test("adding a label the card has or removing one it lacks sends nothing", function()
+    local backend = fake(sample())
+    t.eq(commands.run("label", { "11111111-a", "+docs" }, backend).output, "labelled 11111111 docs")
+    t.eq(commands.run("label", { "11111111-a", "-nope" }, backend).output, "labelled 11111111 docs")
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("label refuses a bad label, a missing sign and a missing card", function()
+    local backend = fake(sample())
+    for _, word in ipairs({ "+two words", "+--x", "+", "-", "docs", "+a\tb" }) do
+        t.eq(commands.run("label", { "11111111-a", word }, backend).code, 2)
+    end
+    t.eq(commands.run("label", { "11111111-a" }, backend).code, 2)
+    t.eq(commands.run("add", { "X", "--label", "a b" }, backend).code, 2)
+    t.eq(commands.run("add", { "X", "--label", "-a" }, backend).code, 2)
+    t.eq(commands.run("label", { "deadbeef", "+x" }, backend).code, 1)
+    t.eq(#backend.calls, 0)
 end)
 
 t.test("note and move resolve the card by prefix", function()
@@ -526,6 +570,36 @@ t.test("ls --size reads the colour value from the palette whatever its label", f
     t.eq(out, "11111111  Ready  1 Pomodoro  docs  First\n")
     out = dev(root, home, { "board", "ls", "--size", "unsized" })
     t.eq(out, "cccccccc  Backlog  Unsized  -  Early\n11111111  Ready    unsized  -  Second\n")
+end)
+
+t.test("add --label and label reach pomb as the whole list", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "add", "New", "--label", "a", "--label", "b" })
+    t.eq(code, 0)
+    t.eq(out, "added 11111111 Ready\n")
+    t.ok(read(root, "calls"):find('"labels":["a","b"]', 1, true), read(root, "calls"))
+    out, code = dev(root, home, { "board", "label", "11111111-a", "+needs:lead" })
+    t.eq(code, 0)
+    t.eq(out, "labelled 11111111 docs,needs:lead\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find("-X PATCH", 1, true), calls)
+    t.ok(calls:find('--data-raw {"labels":["docs","needs:lead"]}', 1, true), calls)
+    out, code = dev(root, home, { "board", "label", "11111111-a", "--", "-docs" })
+    t.eq(code, 0)
+    t.eq(out, "labelled 11111111 -\n")
+    t.ok(read(root, "calls"):find('--data-raw {"labels":[]}', 1, true))
+    out, code = dev(root, home, { "board", "label", "11111111-a", "+two words" })
+    t.eq(code, 2)
+end)
+
+t.test("label sends the fence of a claim this machine holds", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    local _, code = dev(root, home, { "board", "label", "11111111-a", "+x" })
+    t.eq(code, 0)
+    local patched = read(root, "calls"):match("%-X PATCH.-/api/tasks/")
+    t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 t.test("note posts a comment of kind agent and move goes to the top of the column", function()

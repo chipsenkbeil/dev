@@ -343,6 +343,9 @@ function Backend:add(name, column, opts)
     if opts and opts.description then
         body.description = opts.description
     end
+    if opts and opts.labels then
+        body.labels = opts.labels
+    end
     local task
     task, message = self:__request("POST", "/api/tasks", body)
     if not task then
@@ -401,6 +404,19 @@ function Backend:set_size(id, color, fence)
     end
     local done
     done, message = self:__request("PATCH", "/api/tasks/" .. id, { color_id = color_id }, fence)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:set_labels(id, labels, fence)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local done
+    done, message = self:__request("PATCH", "/api/tasks/" .. id, { labels = labels }, fence)
     if not done then
         return nil, message
     end
