@@ -115,16 +115,6 @@ local function exec_or_exit(argv, opts)
     os.exit(devos.EXEC_FAILED)
 end
 
-local function legacy(argv)
-    local full = { "bash", SHARE .. "/legacy.bash" }
-    for _, word in ipairs(argv) do
-        full[#full + 1] = word
-    end
-    exec_or_exit(full, {
-        env = { DEV_UID = tostring(devos.getuid()), DEV_OS = devos.name() },
-    })
-end
-
 local function apply_level(level)
     if level >= MAX_LEVEL then
         local trace = SHARE .. "/xtrace.bash"
@@ -305,8 +295,8 @@ end
 ---Run `dev` with the command line and exit.
 ---
 ---Global flags, the root gate and the usage errors come first. A `.lua` verb
----runs in this process, a `.sh` verb replaces it, and everything dev has not
----ported yet is handed to `legacy.bash` with the arguments as they came.
+---runs in this process, a `.sh` verb replaces it, and a verb the registry does
+---not know is a usage error.
 ---@param argv string[] the command line after `dev`
 ---@return nil
 function M.main(argv)
@@ -381,7 +371,7 @@ function M.main(argv)
         prepare(ctx)
         os.exit(handler(ctx, reg))
     end
-    legacy(argv)
+    help.usage_error(ctx, reg, "unknown verb " .. name)
 end
 
 return M

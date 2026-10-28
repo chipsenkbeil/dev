@@ -50,7 +50,7 @@ M.Kind = Kind
 ---The `PS4` that turns on the file and line prefix of a traced bash script.
 M.PS4 = "+ ${BASH_SOURCE##*/}:${LINENO}: "
 
----Directory of dev's own code, holding `main.lua` and `legacy.bash`.
+---Directory of dev's own code, holding `main.lua`.
 M.share = SHARE
 
 ---Find the clone of the dotfiles repository that holds this copy of dev.

@@ -1,4 +1,3 @@
-local devos = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
 local pull = require("dev.cmd.pull")
@@ -224,14 +223,7 @@ local function builtin_commands(ctx, row)
     if LISTED[row.name] then
         return LISTED[row.name].commands(ctx.root)
     end
-    local out = devos.capture({ "bash", project.share .. "/legacy.bash", "__commands", row.name }, {
-        env = { DEV_UID = tostring(devos.getuid()), DEV_OS = devos.name() },
-    })
-    local lines = {}
-    for line in out:gmatch("([^\n]*)\n") do
-        lines[#lines + 1] = line
-    end
-    return lines
+    return { "(none: no built-in " .. row.name .. " for " .. project_type(ctx) .. " projects)" }
 end
 
 local function verb_text(ctx, reg, c, opts)

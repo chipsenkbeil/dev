@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# dev: the launcher. It starts luajit on main.lua, which hands every verb to legacy.bash until each is ported.
+# dev: the launcher. It starts luajit on main.lua, which runs every verb.
 set -euo pipefail
 
 SYSTEM_BIN_DIRS=(/usr/bin /usr/local/bin)
+root_refusal='dev: as root, dev runs only tools install and tools check'
 
 luajit=luajit
 if [ "$EUID" -eq 0 ] || [ "$(id -u)" -eq 0 ]; then
@@ -10,7 +11,7 @@ if [ "$EUID" -eq 0 ] || [ "$(id -u)" -eq 0 ]; then
     unset DEV_UID DEV_OS BASH_ENV ENV
     unset LUA_PATH LUA_CPATH LUA_INIT LUA_PATH_5_1 LUA_CPATH_5_1 LUA_INIT_5_1 LUA_PATH_5_2 LUA_CPATH_5_2 LUA_INIT_5_2
     if [ "${1:-}" = bootstrap ]; then
-        printf 'dev: as root, dev runs only tools install and tools check\n' >&2
+        printf '%s\n' "$root_refusal" >&2
         exit 2
     fi
     luajit=""
@@ -91,10 +92,27 @@ fi
 
 if [ -z "$luajit" ]; then
     if [ "$remote_flag" -eq 1 ]; then
-        printf 'dev: as root, dev runs only tools install and tools check\n' >&2
+        printf '%s\n' "$root_refusal" >&2
         exit 2
     fi
-    exec bash "$share/legacy.bash" "$@"
+    words=()
+    for arg in "$@"; do
+        case "$arg" in
+        -- | --verbose) continue ;;
+        esac
+        [[ "$arg" =~ ^-v+$ ]] && continue
+        words+=("$arg")
+    done
+    if [ "${words[0]:-}" = tools ] && { [ "${words[1]:-}" = install ] || [ "${words[1]:-}" = check ]; }; then
+        if [ "$(uname)" != Linux ]; then
+            printf 'dev: as root, dev runs only on Linux\n' >&2
+            exit 2
+        fi
+        printf 'dev: dev tools needs luajit in /usr/bin or /usr/local/bin\n' >&2
+        exit 1
+    fi
+    printf '%s\n' "$root_refusal" >&2
+    exit 2
 fi
 
 if [ "$luajit" = luajit ] && ! command -v luajit >/dev/null 2>&1; then

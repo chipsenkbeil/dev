@@ -1,6 +1,6 @@
 ---@class dev.Builtin
 ---@field words string[] the command words, a noun and a subcommand for a subcommand row
----@field handler string? "legacy" for a bash handler, "lua" for a Lua one, nil for a noun
+---@field handler string? "lua" for a Lua handler, nil for a noun
 ---@field noun boolean? whether the row is a noun
 ---@field flags string? the flags the verb takes, space separated
 ---@field usage string? the usage line `dev help <verb>` shows

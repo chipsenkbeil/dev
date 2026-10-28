@@ -15,7 +15,6 @@ cp "$REPO/.dev/lint.lua" "$TMP/.dev/"
 cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/.dev/lua/dotfiles/"
 cp -R "$REPO/$LUA_STYLE/lua" "$TMP/$LUA_STYLE/"
 cp "$REPO/$LUA_STYLE/lint-lib.sh" "$TMP/$LUA_STYLE/"
-cp "$REPO/scripts/helpers.sh" "$TMP/scripts/helpers.sh"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n    echo ok\nfi\n' >"$TMP/scripts/clean.sh"
 
 fails=0
