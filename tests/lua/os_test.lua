@@ -318,3 +318,53 @@ end)
 t.test("open_nofollow refuses a path with a NUL byte", function()
     t.eq((devos.open_nofollow("/tmp/a\0b")), nil)
 end)
+
+t.test("capture_timed collects output and the exit code with no stdin", function()
+    local out, code = devos.capture_timed({ "sh", "-c", "cat; echo out; exit 3" }, 10)
+    t.eq(out, "out\n")
+    t.eq(code, 3)
+    out = devos.capture_timed({ "sh", "-c", "echo out; echo err >&2" }, 10, { merge = true })
+    t.eq(out, "out\nerr\n")
+end)
+
+t.test("capture_timed hands the input to the command", function()
+    local out, code = devos.capture_timed({ "cat" }, 10, { input = "a b\n" })
+    t.eq(out, "a b\n")
+    t.eq(code, 0)
+end)
+
+t.test("capture_timed passes hostile words through unchanged", function()
+    local out = devos.capture_timed({ "printf", "%s", "a b;$(id)'\"`" }, 10)
+    t.eq(out, "a b;$(id)'\"`")
+end)
+
+t.test("capture_timed stops a command and its children after the limit", function()
+    local started = os.time()
+    local out, code = devos.capture_timed(
+        { "sh", "-c", "echo before; sleep 3761 & sleep 3762; wait" },
+        1,
+        { merge = true }
+    )
+    t.eq(code, 124)
+    t.eq(out, "before\n")
+    t.ok(os.time() - started < 30, "the limit should not take long")
+    local left = devos.capture({ "pgrep", "-f", "sleep 376[12]" }, { stderr = "null" })
+    t.eq(left, "")
+end)
+
+t.test("capture_timed reports a command killed by a signal as 124", function()
+    local _, code = devos.capture_timed({ "sh", "-c", "exec kill -TERM $$" }, 10)
+    t.eq(code, 124)
+end)
+
+t.test("without_sigpipe turns a write to a closed pipe into a failed write", function()
+    local pipe = assert(io.popen("true", "w"))
+    devos.run({ "sleep", "0.3" })
+    local ok = devos.without_sigpipe(function()
+        local wrote = pipe:write(string.rep("x", 1048576))
+        local flushed = pipe:flush()
+        return wrote ~= nil and flushed ~= nil
+    end)
+    pipe:close()
+    t.eq(ok, false)
+end)

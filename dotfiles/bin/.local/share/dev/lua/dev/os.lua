@@ -4,6 +4,7 @@ ffi.cdef([[
 int isatty(int fd);
 unsigned int getuid(void);
 int execvp(const char *file, char *const argv[]);
+void (*signal(int sig, void (*handler)(int)))(int);
 char *strerror(int errnum);
 int open(const char *path, int flags, ...);
 int close(int fd);
@@ -69,8 +70,14 @@ local KIND_BITS = { [0x8000] = "file", [0x4000] = "dir", [0xA000] = "link" }
 local EINTR = 4
 local READ_CHUNK_BYTES = 65536
 
+local SIGPIPE = 13
 local WAIT_SIGNAL_MASK = 0x7f
 local WAIT_EXIT_SHIFT = 256
+local TIMEOUT_EXIT = 124
+local KILLED_EXITS = { [137] = true, [143] = true }
+local KILL_GRACE_SECS = 1
+local POLL_SECS = "0.1"
+local TIMED_WRAPPER = 'set -m; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } & echo $!'
 
 ---@alias dev.os.Kind "file"|"dir"|"link"|"other"
 
@@ -314,6 +321,20 @@ function M.capture(argv, opts)
     return text:sub(1, split - 1), tonumber(text:sub(split + 1))
 end
 
+---Call `fn` while a write to a closed pipe fails with an error instead of killing the process.
+---@generic T
+---@param fn fun(): T function that writes to a pipe
+---@return T result what `fn` returned
+function M.without_sigpipe(fn)
+    local previous = ffi.C.signal(SIGPIPE, ffi.cast("void (*)(int)", 1))
+    local ok, result = pcall(fn)
+    ffi.C.signal(SIGPIPE, previous)
+    if not ok then
+        error(result, 0)
+    end
+    return result
+end
+
 ---Run `argv` with `input` on its standard input and collect its standard output.
 ---
 ---The input never reaches an argument list, an environment or a file, so a
@@ -346,7 +367,9 @@ function M.capture_input(argv, input, opts)
     flush_output()
     local ok, text = pcall(function()
         local pipe = assert(io.popen(command, "w"))
-        pipe:write(input)
+        M.without_sigpipe(function()
+            pipe:write(input)
+        end)
         pipe:close()
         local file = assert(io.open(sink, "rb"))
         local content = file:read("*a")
@@ -362,6 +385,97 @@ function M.capture_input(argv, input, opts)
         error("capture_input lost the exit status of " .. argv[1])
     end
     return text:sub(1, split - 1), tonumber(text:sub(split + 1))
+end
+
+---@class dev.os.TimedOpts
+---@field env table<string,string>? variables set for the command, over `os.defaults.env`
+---@field unset string[]? variables removed from the command's environment, besides `os.defaults.unset`
+---@field cwd string? directory to run in
+---@field input string? what the command reads from standard input, /dev/null when nil
+---@field merge boolean? send standard error to the collected output instead of the terminal
+
+local function signal_group(signal, pid)
+    M.run({ "sh", "-c", "kill -" .. signal .. ' -- "-$1"', "sh", pid }, { stderr = "null" })
+end
+
+---Run `argv` in its own process group and collect its output, stopping it after `secs` seconds.
+---
+---A command that outlives the limit is sent TERM and then KILL together with everything it started.
+---@param argv string[] command and its arguments, with at least one word
+---@param secs integer seconds the command may run
+---@param opts dev.os.TimedOpts? environment, directory, input and stream options
+---@return string output what the command wrote to standard output, and standard error with `merge`
+---@return integer code exit status, 124 when the limit hit or the command was killed
+function M.capture_timed(argv, secs, opts)
+    opts = opts or {}
+    local words = check({ env = opts.env, unset = opts.unset })
+    local made, made_code = M.capture({
+        "mktemp",
+        "-d",
+        ((os.getenv("TMPDIR") or "/tmp"):gsub("/+$", "")) .. "/dev-timed.XXXXXX",
+    })
+    if made_code ~= 0 then
+        error("capture_timed cannot make a temporary directory")
+    end
+    local dir = made:gsub("\n$", "")
+    local out, status = dir .. "/out", dir .. "/status"
+    local stdin = "/dev/null"
+    if opts.input then
+        stdin = dir .. "/in"
+        local file = assert(io.open(stdin, "wb"))
+        file:write(opts.input)
+        file:close()
+    end
+    local base = shell_line(argv, { env = opts.env, unset = opts.unset, cwd = opts.cwd }, words)
+    local inner = "( "
+        .. base
+        .. " ) <"
+        .. M.quote(stdin)
+        .. " >"
+        .. M.quote(out)
+        .. (opts.merge and " 2>&1" or "")
+    announce(argv)
+    flush_output()
+    local pipe =
+        assert(io.popen(M.command({ "sh", "-c", TIMED_WRAPPER, "sh", inner, status }), "r"))
+    local pid = pipe:read("*l")
+    pipe:close()
+    if not pid then
+        error("capture_timed could not start " .. argv[1])
+    end
+    local started = os.time()
+    local code
+    local polled, failure = pcall(function()
+        while not code do
+            local file = io.open(status, "rb")
+            if file then
+                code = tonumber(file:read("*a"))
+                file:close()
+            elseif os.time() - started > secs then
+                signal_group("TERM", pid)
+                M.run({ "sleep", tostring(KILL_GRACE_SECS) })
+                signal_group("KILL", pid)
+                code = TIMEOUT_EXIT
+            else
+                M.run({ "sleep", POLL_SECS })
+            end
+        end
+    end)
+    if not polled then
+        signal_group("KILL", pid)
+        M.run({ "rm", "-rf", "--", dir })
+        error(failure, 0)
+    end
+    if KILLED_EXITS[code] then
+        code = TIMEOUT_EXIT
+    end
+    local file = io.open(out, "rb")
+    local text = file and file:read("*a") or ""
+    if file then
+        file:close()
+    end
+    M.run({ "rm", "-rf", "--", dir })
+    return text, code
 end
 
 ---Find `name` on PATH.
