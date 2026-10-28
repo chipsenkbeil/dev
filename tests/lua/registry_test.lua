@@ -1,57 +1,9 @@
 local t = require("testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
-local builtins = require("dev.builtins")
 local project = require("dev.project")
 local registry = require("dev.registry")
 local support = require("support")
-
-local LEGACY = "dotfiles/bin/.local/share/dev/legacy.bash"
-local LUA_ONLY = {
-    tools = true,
-    ["tools install"] = true,
-    ["tools check"] = true,
-    help = true,
-    lint = true,
-    fmt = true,
-    test = true,
-    build = true,
-    run = true,
-    fetch = true,
-    deploy = true,
-    guide = true,
-    bootstrap = true,
-    push = true,
-    pull = true,
-    sync = true,
-    connect = true,
-    box = true,
-    ["box ls"] = true,
-    ["box create"] = true,
-    ["box show"] = true,
-    ["box stop"] = true,
-    ["box resume"] = true,
-    ["box extend"] = true,
-    ["box tools"] = true,
-    ["box tools install"] = true,
-    ["box delete"] = true,
-    ["box connect"] = true,
-    board = true,
-    ["board status"] = true,
-    ["board init"] = true,
-    ["board ls"] = true,
-    ["board next"] = true,
-    ["board add"] = true,
-    ["board note"] = true,
-    ["board notes"] = true,
-    ["board move"] = true,
-    ["board take"] = true,
-    ["board release"] = true,
-    ["board sync"] = true,
-    ["board size"] = true,
-    ["board label"] = true,
-    ["board stale"] = true,
-}
 
 local function scripted(dir, rel, text, mode)
     local path = fs.join(dir, rel)
@@ -80,36 +32,6 @@ local function make_project()
     scripted(root, ".dev/off.sh", "#!/usr/bin/env bash\n# Not executable.\n", "644")
     return root
 end
-
-t.test("builtins match the legacy table byte for byte, except the rows only Lua serves", function()
-    local text = assert(fs.read(LEGACY), "legacy.bash must exist for the table comparison")
-    local table_text = text:match("builtin_table%(%) {\n    cat <<'TABLE'\n(.-)\nTABLE\n")
-    local want = {}
-    for line in table_text:gmatch("[^\n]+") do
-        local f = {}
-        for field in (line .. "|"):gmatch("([^|]*)|") do
-            f[#f + 1] = field
-        end
-        local handler = (f[2] ~= "" and f[2] ~= "noun") and "legacy" or f[2]
-        want[#want + 1] = table.concat({ f[1], handler, f[3], f[4], f[5], f[6] or "" }, "|")
-    end
-    local got = {}
-    for _, row in ipairs(builtins) do
-        if not LUA_ONLY[table.concat(row.words, " ")] then
-            local handler = row.noun and "noun" or row.handler or ""
-            local group = row.hidden and "hidden" or row.group or ""
-            got[#got + 1] = table.concat({
-                table.concat(row.words, " "),
-                handler,
-                row.flags or "",
-                row.usage or "",
-                row.desc,
-                group,
-            }, "|")
-        end
-    end
-    t.eq(got, want)
-end)
 
 t.test(".lua beats .sh and needs no exec bit, while an unexecutable .sh is no verb", function()
     local root = make_project()

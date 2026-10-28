@@ -1,0 +1,48 @@
+-- Lint and test on a linux container with .dev/lint.sh and .dev/test.sh
+--
+--   ci run --local
+--   ci run --local --job test
+
+-- Run the lint and test jobs on an image that bakes the toolchain
+local LINUX = { target = "linux-rust" }
+
+local function toolchain()
+  local file = assert(io.open("rust-toolchain.toml"), "rust-toolchain.toml is missing")
+  local text = file:read("*a")
+  file:close()
+  return assert(text:match('channel%s*=%s*"([^"]+)"'), "rust-toolchain.toml names no channel")
+end
+
+-- Prefix cargo's directory on every command, since each ci.sh gets a fresh shell
+local function run(command)
+  return ci.sh("export PATH=$HOME/.cargo/bin:$PATH; " .. command)
+end
+
+-- Install the project's pinned channel, which the runner image usually bakes in
+local function install_rust()
+  local channel = toolchain()
+  ci.group("install rust " .. channel, function()
+    run("rustup toolchain install " .. channel .. " --component clippy,rustfmt")
+    run("rustup toolchain install nightly --profile minimal --component rustfmt")
+    run("command -v cargo-nextest >/dev/null || { mkdir -p $HOME/.cargo/bin && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C $HOME/.cargo/bin; }")
+  end)
+end
+
+return {
+  jobs = {
+    lint = {
+      matrix = { LINUX },
+      run = function()
+        install_rust()
+        run(".dev/lint.sh")
+      end,
+    },
+    test = {
+      matrix = { LINUX },
+      run = function()
+        install_rust()
+        run(".dev/test.sh")
+      end,
+    },
+  },
+}

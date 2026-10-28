@@ -1,4 +1,5 @@
 local t = require("testing")
+local devos = require("dev.os")
 local fs = require("dev.fs")
 local templates = require("dev.templates")
 local project = require("dev.project")
@@ -110,4 +111,28 @@ t.test("the lua manifest adds love.yml for love2d only", function()
     t.ok(dests(Kind.LOVE2D):find("love.yml", 1, true))
     t.ok(not dests(Kind.LUA):find("love.yml", 1, true))
     t.ok(dests(Kind.LUA):find(".dev/ast-grep/rules/", 1, true))
+end)
+
+t.test("lib_crates and app_crates split the member crates by publish = false", function()
+    if not devos.which("yq") then
+        print("skip - yq is not installed")
+        return
+    end
+    local root = support.tempdir()
+    local function crate(name, extra)
+        assert(fs.mkdir(root .. "/crates/" .. name .. "/src", { parents = true }))
+        assert(
+            fs.write(
+                root .. "/crates/" .. name .. "/Cargo.toml",
+                '[package]\nname = "' .. name .. '"\n' .. extra
+            )
+        )
+        assert(fs.write(root .. "/crates/" .. name .. "/src/lib.rs", "pub fn f() {}\n"))
+    end
+    crate("a", "")
+    crate("b", "publish = false\n")
+    assert(fs.write(root .. "/Cargo.toml", '[workspace]\nmembers = ["crates/*"]\n'))
+    t.eq(templates.lib_crates(root), { "crates/a" })
+    t.eq(templates.app_crates(root), { "crates/b" })
+    fs.remove(root, { recursive = true })
 end)

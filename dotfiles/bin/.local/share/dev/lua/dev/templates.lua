@@ -464,6 +464,21 @@ function M.lib_crates(root)
     return out
 end
 
+---List the application crates.
+---
+---They are the member crates marked `publish = false`.
+---@param root string the project root
+---@return string[] dirs the directories relative to the root
+function M.app_crates(root)
+    local out = {}
+    for _, dir in ipairs(crate_dirs(root)) do
+        if is_app(root, dir) then
+            out[#out + 1] = dir
+        end
+    end
+    return out
+end
+
 ---Take the snippet of the library-register lints.
 ---@param dir string the template directory
 ---@return string? snippet the file's text

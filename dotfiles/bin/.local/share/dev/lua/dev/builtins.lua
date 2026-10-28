@@ -74,7 +74,7 @@ return {
     },
     {
         words = { "init" },
-        handler = "legacy",
+        handler = "lua",
         flags = "--type --public --name --dry-run --no-gerrit",
         usage = "dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]",
         desc = "Seed a project with lint, CI and remotes",

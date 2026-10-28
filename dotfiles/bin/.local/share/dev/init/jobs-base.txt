@@ -1,0 +1,23 @@
+-- Lint and test on a linux container with .dev/lint.sh and .dev/test.sh when present
+--
+--   ci run --local
+--   ci run --local --job test
+
+local LINUX = { target = "linux-base" }
+
+return {
+  jobs = {
+    lint = {
+      matrix = { LINUX },
+      run = function()
+        ci.sh("if [ -x .dev/lint.sh ]; then .dev/lint.sh; fi")
+      end,
+    },
+    test = {
+      matrix = { LINUX },
+      run = function()
+        ci.sh("if [ -x .dev/test.sh ]; then .dev/test.sh; fi")
+      end,
+    },
+  },
+}

@@ -2,6 +2,7 @@ local board = require("dev.cmd.board")
 local box = require("dev.cmd.box")
 local complete = require("dev.complete")
 local connect = require("dev.cmd.connect")
+local init = require("dev.cmd.init")
 local misc = require("dev.cmd.misc")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
@@ -189,6 +190,7 @@ local function builtin_handler(row)
             or box.handlers[row.name]
             or board.handlers[row.name]
             or connect.handlers[row.name]
+            or init.handlers[row.name]
     end
     return nil
 end
