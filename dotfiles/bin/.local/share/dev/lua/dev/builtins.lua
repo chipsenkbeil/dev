@@ -228,8 +228,9 @@ return {
     {
         words = { "board", "label" },
         handler = "lua",
-        usage = "dev board label CARD +L|-L...",
-        desc = "Add or remove labels on a card, +L to add and -L to remove (put -- before a -L)",
+        flags = "--remove",
+        usage = "dev board label CARD [+]L... [--remove L]...",
+        desc = "Add labels to a card, L or +L, and remove them with --remove L",
     },
     {
         words = { "board", "note" },

@@ -222,26 +222,49 @@ t.test("label adds and removes labels and sends the whole list", function()
     local result = commands.run("label", { "11111111-a", "+needs:lead", "+x" }, backend)
     t.eq(result.output, "labelled 11111111 docs,needs:lead,x")
     t.eq(backend.calls[1], { "set_labels", ID_A, { "docs", "needs:lead", "x" }, nil })
-    result = commands.run("label", { "11111111-a", "-docs" }, backend)
+    result = commands.run("label", { "11111111-a", "--remove", "docs" }, backend)
     t.eq(result.output, "labelled 11111111 -")
     t.eq(backend.calls[2], { "set_labels", ID_A, {}, nil })
-    result = commands.run("label", { "11111111-a", "-docs", "+new", "-new", "+docs" }, backend)
+    result = commands.run("label", { "11111111-a", "new", "--remove", "new", "+docs" }, backend)
     t.eq(result.output, "labelled 11111111 docs")
     t.eq(#backend.calls, 2)
+    result = commands.run(
+        "label",
+        { "11111111-a", "x", "--remove", "docs", "--remove", "x", "y" },
+        backend
+    )
+    t.eq(result.output, "labelled 11111111 y")
+    t.eq(backend.calls[3], { "set_labels", ID_A, { "y" }, nil })
+end)
+
+t.test("label still replays a queued leading-dash removal", function()
+    local backend = fake(sample())
+    local result =
+        commands.run("label", { "11111111-a", "-docs", "+new", "-new", "+docs" }, backend)
+    t.eq(result.output, "labelled 11111111 docs")
+    result = commands.run("label", { "11111111-a", "-docs" }, backend)
+    t.eq(result.output, "labelled 11111111 -")
+    t.eq(backend.calls[1], { "set_labels", ID_A, {}, nil })
 end)
 
 t.test("adding a label the card has or removing one it lacks sends nothing", function()
     local backend = fake(sample())
     t.eq(commands.run("label", { "11111111-a", "+docs" }, backend).output, "labelled 11111111 docs")
-    t.eq(commands.run("label", { "11111111-a", "-nope" }, backend).output, "labelled 11111111 docs")
+    t.eq(
+        commands.run("label", { "11111111-a", "--remove", "nope" }, backend).output,
+        "labelled 11111111 docs"
+    )
     t.eq(#backend.calls, 0)
 end)
 
-t.test("label refuses a bad label, a missing sign and a missing card", function()
+t.test("label refuses a bad label, a bad --remove value and a missing card", function()
     local backend = fake(sample())
-    for _, word in ipairs({ "+two words", "+--x", "+", "-", "docs", "+a\tb" }) do
+    for _, word in ipairs({ "+two words", "+--x", "+", "-", "+a\tb", "two words" }) do
         t.eq(commands.run("label", { "11111111-a", word }, backend).code, 2)
     end
+    t.eq(commands.run("label", { "11111111-a", "--remove" }, backend).code, 2)
+    t.eq(commands.run("label", { "11111111-a", "--remove", "a b" }, backend).code, 2)
+    t.eq(commands.run("label", { "11111111-a", "--remove", "-a" }, backend).code, 2)
     t.eq(commands.run("label", { "11111111-a" }, backend).code, 2)
     t.eq(commands.run("add", { "X", "--label", "a b" }, backend).code, 2)
     t.eq(commands.run("add", { "X", "--label", "-a" }, backend).code, 2)
@@ -800,7 +823,7 @@ t.test("add --label and label reach pomb as the whole list", function()
     local calls = read(root, "calls")
     t.ok(calls:find("-X PATCH", 1, true), calls)
     t.ok(calls:find('--data-raw {"labels":["docs","needs:lead"]}', 1, true), calls)
-    out, code = dev(root, home, { "board", "label", "11111111-a", "--", "-docs" })
+    out, code = dev(root, home, { "board", "label", "11111111-a", "--remove", "docs" })
     t.eq(code, 0)
     t.eq(out, "labelled 11111111 -\n")
     t.ok(read(root, "calls"):find('--data-raw {"labels":[]}', 1, true))

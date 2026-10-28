@@ -423,20 +423,36 @@ function commands.size(backend, args)
 end
 
 function commands.label(backend, args)
-    if #args < 2 then
-        return usage("needs a card and one or more +label or -label")
+    local edits, removals = {}, {}
+    local pos = 2
+    while pos <= #args do
+        local arg = args[pos]
+        pos = pos + 1
+        if arg == "--remove" then
+            if pos > #args then
+                return usage("--remove needs a value")
+            end
+            local ok, err = plain(args[pos])
+            if not ok then
+                return err
+            end
+            removals[#removals + 1] = { add = false, word = args[pos] }
+            pos = pos + 1
+        else
+            local sign = arg:sub(1, 1)
+            local word = (sign == "+" or sign == "-") and arg:sub(2) or arg
+            local ok, err = plain(word)
+            if not ok then
+                return err
+            end
+            edits[#edits + 1] = { add = sign ~= "-", word = word }
+        end
     end
-    local edits = {}
-    for i = 2, #args do
-        local sign, word = args[i]:sub(1, 1), args[i]:sub(2)
-        if sign ~= "+" and sign ~= "-" then
-            return usage("label " .. args[i] .. " needs a + or - before it")
-        end
-        local ok, err = plain(word)
-        if not ok then
-            return err
-        end
-        edits[#edits + 1] = { add = sign == "+", word = word }
+    if #args < 1 or #edits + #removals == 0 then
+        return usage("needs a card and one or more labels to add or --remove label")
+    end
+    for _, removal in ipairs(removals) do
+        edits[#edits + 1] = removal
     end
     local card, err = find_card(backend, args[1])
     if not card then
