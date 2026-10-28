@@ -442,6 +442,10 @@ function commands.move(backend, args)
     end
     if held and column ~= board.WORKING then
         claims.stop(card.id)
+        local released, why = backend:release(card.id, held.fence)
+        if not released then
+            stderr:write("dev: moved, but the claim was not released: ", why, "\n")
+        end
     end
     return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
 end

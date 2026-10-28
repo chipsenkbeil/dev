@@ -303,6 +303,18 @@ t.test(
     end
 )
 
+t.test("move out of progress releases the claim and warns about nothing", function()
+    local root, home = local_board()
+    local a =
+        prefix_of((dev(root, home, { "board", "add", "Card", "--column", "ready", "--size", "1" })))
+    dev(root, home, { "board", "take", a })
+    t.ok(document(file_of(home)).cards[1].claim ~= nil, "claim held")
+    local out, code = dev(root, home, { "board", "move", a, "review" })
+    t.eq(code, 0, out)
+    t.eq(out, "moved " .. a .. " to In Review\n")
+    t.eq(document(file_of(home)).cards[1].claim, nil)
+end)
+
 t.test("take holds a claim with an expiry and no loop, and release gives it up", function()
     local root, home = local_board()
     local a =

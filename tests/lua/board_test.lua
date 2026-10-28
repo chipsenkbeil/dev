@@ -1240,10 +1240,36 @@ t.test("move out of progress stops the loop and sends the fence", function()
     t.eq(out, "moved 11111111 to In Review\n")
     local moved = read(root, "calls"):match("[^\n]*/move\n?")
     t.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
+    t.ok(
+        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/release", 1, true),
+        read(root, "calls")
+    )
     t.eq(fs.exists(state_file(home)), false)
     t.ok(loop_gone(pid))
     local after = settle(root)
     t.eq(heartbeats(root), after)
+end)
+
+t.test("move into progress does not release the claim", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    dev(root, home, { "board", "move", "11111111-a", "progress" })
+    t.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("a release the server refuses after a move warns and the move succeeds", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    executable(
+        root .. "/bin/curl",
+        (CURL:gsub("%*/claim/release%) body= ;;", "*/claim/release) body=; status=503 ;;", 1))
+    )
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "done" })
+    t.eq(code, 0)
+    t.ok(out:find("moved 11111111 to Done", 1, true), out)
+    t.ok(out:find("the claim was not released", 1, true), out)
+    t.eq(fs.exists(state_file(home)), false)
 end)
 
 t.test("move into progress keeps the loop and the state", function()

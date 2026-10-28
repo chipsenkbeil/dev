@@ -351,7 +351,9 @@ The loop stops when you `release` the card, when you `move` it to any column
 but In Progress, when Pomb refuses a renewal because the claim is gone, and by
 itself after twice the card's size: 50 minutes for 1 Pomodoro, 100 for 2
 Pomodori and 150 for the rest. A crashed agent therefore loses its claim
-within 15 minutes of the loop's end. A network failure does not stop it.
+within 15 minutes of the loop's end. A network failure does not stop it. A
+`move` out of In Progress also releases the claim once the move has succeeded,
+and a refused release prints a warning and leaves the move done.
 
 The loop's state is a file named for the card in `$XDG_STATE_HOME/dev/board/`,
 or `~/.local/state/dev/board/`, with the card, the fence and the loop's pid at
