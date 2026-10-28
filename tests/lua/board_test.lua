@@ -379,6 +379,28 @@ t.test("notes lists each comment with its id prefix, writer, time and first line
     t.eq(commands.run("notes", { "deadbeef" }, backend).code, 1)
 end)
 
+t.test("show prints the card line, its description and its comments", function()
+    local cards = sample()
+    cards[1].description = "Why it matters.\nSecond line."
+    local backend = with_comments()
+    backend.cards = function()
+        return cards
+    end
+    local result = commands.run("show", { "11111111-a" }, backend)
+    t.eq(
+        result.output,
+        "11111111  Ready  1 Pomodoro  docs  Write docs\n\nWhy it matters.\nSecond line.\n\n"
+            .. "aaaaaaaa  worker  2026-10-27 09:30  first line\nbbbbbbbb  human   2026-10-27 10:00  ok"
+    )
+    t.eq(backend.calls[#backend.calls], { "comments", ID_A })
+    result = commands.run("show", { "bbbbbbbb-b" }, fake(sample()))
+    t.eq(result.code, 1)
+    result = commands.run("show", { "11111111-b" }, fake(sample()))
+    t.eq(result.output, "11111111  Backlog  unsized  -  Fix lint\n\nno description\n\nno comments")
+    t.eq(commands.run("show", {}, backend).code, 2)
+    t.eq(commands.run("show", { "deadbeef" }, backend).code, 1)
+end)
+
 t.test("note --edit and --delete resolve the comment by prefix", function()
     local backend = with_comments()
     local result =
@@ -643,7 +665,7 @@ local EXPORT = '{"tasks":['
     .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[]},'
     .. '{"id":"'
     .. ID_A
-    .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"]},'
+    .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why it matters."},'
     .. '{"id":"'
     .. ID_C
     .. '","name":"Early","column_id":"col-backlog","position":1,"color_id":"white-id","labels":[]}]}'
@@ -1008,6 +1030,13 @@ t.test("notes, note --edit and note --delete reach pomb's comment routes", funct
     t.eq(
         out,
         "aaaaaaaa  worker  2026-10-27 09:30  first\ndddddddd  human   2026-10-27 10:00  mine? no\n"
+    )
+    out, code = dev(root, home, { "board", "show", "11111111-a" })
+    t.eq(code, 0)
+    t.eq(
+        out,
+        "11111111  Ready  1 Pomodoro  docs  First\n\nWhy it matters.\n\n"
+            .. "aaaaaaaa  worker  2026-10-27 09:30  first\ndddddddd  human   2026-10-27 10:00  mine? no\n"
     )
     out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "aaaaaaaa", "better" })
     t.eq(code, 0)

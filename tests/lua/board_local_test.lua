@@ -160,6 +160,22 @@ t.test("add, ls, next, move, size and label work on a local board", function()
     t.ok(out:find("Done  2 Pomodori", 1, true), out)
 end)
 
+t.test("show prints a local card's description and notes", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--description",
+        "why it matters",
+    })))
+    local out = dev(root, home, { "board", "show", a })
+    t.eq(out, a .. "  Backlog  Unsized  -  Card\n\nwhy it matters\n\nno comments\n")
+    dev(root, home, { "board", "note", a, "hello" })
+    out = dev(root, home, { "board", "show", a })
+    t.ok(out:find("\n\nwhy it matters\n\n%x+  agent  .-  hello\n$"), out)
+end)
+
 t.test("notes, edit and delete work on a local board and refuse another author's", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "Card" })))

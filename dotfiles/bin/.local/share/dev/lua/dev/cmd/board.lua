@@ -334,6 +334,22 @@ local function delete_note(backend, args)
     return changed("deleted", card, comment)
 end
 
+local function comment_lines(list)
+    if #list == 0 then
+        return "no comments"
+    end
+    local rows = {}
+    for _, comment in ipairs(list) do
+        rows[#rows + 1] = {
+            comment.id:sub(1, board.MIN_PREFIX),
+            comment.who,
+            comment.at:sub(1, STAMP_CHARS):gsub("T", " "),
+            comment.body:match("^[^\r\n]*"),
+        }
+    end
+    return table.concat(board.table_lines(rows), "\n")
+end
+
 function commands.notes(backend, args)
     if #args ~= 1 then
         return usage("needs a card")
@@ -346,19 +362,28 @@ function commands.notes(backend, args)
     if not list then
         return failure(message)
     end
-    if #list == 0 then
-        return { output = "no comments" }
+    return { output = comment_lines(list) }
+end
+
+function commands.show(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
     end
-    local rows = {}
-    for _, comment in ipairs(list) do
-        rows[#rows + 1] = {
-            comment.id:sub(1, board.MIN_PREFIX),
-            comment.who,
-            comment.at:sub(1, STAMP_CHARS):gsub("T", " "),
-            comment.body:match("^[^\r\n]*"),
-        }
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
     end
-    return { output = table.concat(board.table_lines(rows), "\n") }
+    local list, message = backend:comments(card.id)
+    if not list then
+        return failure(message)
+    end
+    local description = (card.description or ""):match("^%s*(.-)%s*$")
+    if description == "" then
+        description = "no description"
+    end
+    return {
+        output = card_line(card) .. "\n\n" .. description .. "\n\n" .. comment_lines(list),
+    }
 end
 
 function commands.note(backend, args)
@@ -734,7 +759,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `move`, `size`, `label`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

@@ -12,6 +12,7 @@ local M = {}
 ---@field size string the colour's palette label, or `unsized`
 ---@field color string? the colour's standard value (`yellow`, `green`, `blue`, `red`, `white`), nil when the card has none
 ---@field labels string[] the card's labels
+---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds a live claim on it
 
 ---@class dev.board.Backend

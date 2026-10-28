@@ -324,6 +324,7 @@ function Backend:__card(task)
         size = board.size(self.__colors[present(task.color_id)]),
         color = present(task.color_id) and (self.__values[task.color_id] or "unknown") or nil,
         labels = task.labels or {},
+        description = present(task.description),
     }
 end
 

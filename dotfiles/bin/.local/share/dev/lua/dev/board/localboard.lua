@@ -160,6 +160,7 @@ local function card_view(doc, card)
         size = board.size(color and color.label),
         color = color and color.value or nil,
         labels = card.labels or {},
+        description = card.description,
         claimant = claim and claim.claimant or nil,
     }
 end

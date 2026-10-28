@@ -16,6 +16,7 @@ dev board label 8af0e001 needs:human --remove needs:lead
 dev board stale --days 7
 dev board note 8af0e001 "Tests pass, landing now."
 dev board notes 8af0e001
+dev board show 8af0e001
 dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
 dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
@@ -206,6 +207,13 @@ CARD ready` refuses a card that is unsized (white or no colour) or red, more
 than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit 1);
 a red card is split instead. `add --column ready` without `--size 1`, `2` or `3`
 is a usage error (exit 2). Every other column takes a card of any colour.
+
+`show CARD` prints everything a runner needs to take a card: the `ls` line
+(id prefix, column, size, labels and name), then the description, then the
+comments in the `notes` format. A card with no description prints `no
+description`, and one with no comments `no comments`. Use it instead of the
+Pomb API to read a card, so the token stays inside dev. It does not list links
+yet.
 
 `notes CARD` lists the card's comments, oldest first: the comment's id prefix,
 who wrote it (the token's name, else the kind of actor), the time in UTC and the
