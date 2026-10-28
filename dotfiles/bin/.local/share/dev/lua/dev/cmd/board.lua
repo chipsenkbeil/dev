@@ -873,12 +873,10 @@ M.handlers["board init"] = function(ctx)
             verb.die("dev: " .. message)
         end
         backend:authorize(secret)
-        local scope
-        scope, message = backend:scope()
-        if not scope then
+        local ok
+        ok, message = backend:admin()
+        if not ok then
             verb.die("dev: " .. message)
-        elseif scope ~= ADMIN_SCOPE then
-            verb.die("dev: the approved token has the " .. scope .. " scope, init needs admin")
         end
     end
     local changes

@@ -113,6 +113,26 @@ same way as `token`. Pomb lets the lead token name colours, set the default
 colour and reorder columns only on boards that token created. On any other
 board Pomb answers 403 and `init` says to run it with `--admin`.
 
+Pomb is moving to fine-grained tokens, and dev reads both servers. Today a
+refusal is `insufficient_scope` and `whoami` returns a `scope`. After the
+change a refusal is `permission_denied` with the `permission` and a `board_id`,
+and `whoami` returns `permissions` and `boards` (`all`, or a list of ids and
+names). dev prints two messages for the new refusal:
+
+- `board_id` null: the token lacks the permission on every board, so use a
+  token that has it. `init` adds the `--admin` hint to this one.
+- `board_id` set: the token has the permission but is not assigned to that
+  board, so add the board to the token. No `--admin` hint, since a new
+  sign-in does not change the assignment.
+
+A board missing from `GET /api/boards` on a token assigned only some boards
+is reported as `pomb lists no board named X for this token, which is assigned
+only to ...`. On a token that sees every board it stays `pomb has no board
+named X`. `init --admin` accepts the sign-in when `whoami` says `scope` is
+`admin`, or when `permissions` holds every permission the catalog
+(`GET /api/v1/auth/permissions`) lists for the `admin` preset and `boards` is
+`all`.
+
 `--admin` signs in through Pomb's device flow. dev prints a code and a link,
 you open the link in your browser, check that it asks for `admin`, approve it
 and pick an expiry, and dev carries on. The token it receives is held in memory

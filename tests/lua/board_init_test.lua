@@ -291,6 +291,8 @@ t.test("a refused change says to use --admin and stops with the changes so far s
     t.eq(lines[1], "added column Icebox")
 end)
 
+local PERMISSIONS = '[{"name":"cards.read","presets":["read","work","lead","admin"]},'
+    .. '{"name":"boards.write","presets":["lead","admin"]},{"name":"templates.write","presets":["admin"]}]'
 local BOARDS = '[{"id":"board-1","name":"demo","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"demo","swimlanes":[],"columns":['
 local function detail()
@@ -353,6 +355,7 @@ case "$last" in
     body=${line#*|}
     ;;
 */api/v1/auth/whoami) body=$(cat "$ROOT/whoami.json") ;;
+*/api/v1/auth/permissions) body=$(cat "$ROOT/permissions.json") ;;
 */api/templates) body=$(cat "$ROOT/templates.json") ;;
 */api/boards)
     case " $* " in
@@ -397,6 +400,7 @@ local function sandbox(opts)
         ["export.json"] = EXPORT,
         ["templates.json"] = '[{"id":"tpl-1","name":"agent project","built_in":false}]',
         ["whoami.json"] = '{"kind":"token","name":"x","scope":"admin"}',
+        ["permissions.json"] = PERMISSIONS,
         ["script"] = opts.script
             or ("200|" .. '{"token":"' .. ADMIN_TOKEN .. '","name":"n","scopes":["admin"]}\n'),
     }) do
@@ -812,3 +816,68 @@ t.test("init sends enabled through the palette PATCH for each colour", function(
     t.ok(calls_of(root):find(patch, 1, true), calls_of(root))
     t.eq(out, "disabled orange\nboard demo: 1 change\n")
 end)
+
+t.test("init --admin accepts a token with the admin preset's permissions on every board", function()
+    local root, home, tmp = sandbox()
+    assert(
+        fs.write(
+            root .. "/whoami.json",
+            '{"permissions":["cards.read","boards.write","templates.write"],"boards":"all"}'
+        )
+    )
+    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+    t.eq(code, 0)
+    t.ok(out:find("already follows the standard", 1, true), out)
+end)
+
+t.test("init --admin refuses a token missing an admin permission or some boards", function()
+    for _, case in ipairs({
+        {
+            '{"permissions":["cards.read","boards.write"],"boards":"all"}',
+            "lacks the templates.write permission, init needs the admin preset",
+        },
+        {
+            '{"permissions":["cards.read","boards.write","templates.write"],'
+                .. '"boards":[{"id":"b","name":"n"}]}',
+            "assigned only some boards, init needs all of them",
+        },
+    }) do
+        local root, home, tmp = sandbox()
+        assert(fs.write(root .. "/whoami.json", case[1]))
+        local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+        t.eq(code, 1)
+        t.ok(out:find(case[2], 1, true), out)
+        t.eq(writes(root), 0)
+    end
+end)
+
+t.test("init --admin refuses a catalog that lists no admin preset", function()
+    local root, home, tmp = sandbox()
+    assert(fs.write(root .. "/whoami.json", '{"permissions":[],"boards":"all"}'))
+    assert(fs.write(root .. "/permissions.json", "[]"))
+    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+    t.eq(code, 1)
+    t.ok(out:find("lists no admin preset", 1, true), out)
+    t.eq(writes(root), 0)
+end)
+
+t.test(
+    "init on a permission_denied with no board suggests --admin, with a board does not",
+    function()
+        local layout = fake_layout({ columns = template_columns() })
+        function layout:set_color()
+            return nil,
+                "board unavailable: pomb answered 403: this token lacks the boards.write permission "
+                    .. "on every board; use a token that has it"
+        end
+        local _, message = run(layout)
+        t.ok(message:find("run dev board init --admin", 1, true), message)
+        function layout:set_color()
+            return nil,
+                "board unavailable: this token has the boards.write permission but is not assigned "
+                    .. "to board b; add the board to the token"
+        end
+        _, message = run(layout)
+        t.eq(message:find("--admin", 1, true), nil)
+    end
+)

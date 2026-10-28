@@ -1234,3 +1234,86 @@ t.test("stale reads column_entered_at from every page of the tasks view", functi
     out, code = dev(root, home, { "board", "stale", "--days", "x" })
     t.eq(code, 2)
 end)
+
+local function answering(root, routes)
+    executable(
+        root .. "/bin/curl",
+        "#!/bin/sh\ncat >/dev/null\nfor last; do :; done\n"
+            .. 'case "$last" in\n'
+            .. routes
+            .. "esac\n"
+    )
+end
+
+t.test("a permission_denied with no board says the token lacks it everywhere", function()
+    local root, home = sandbox()
+    answering(
+        root,
+        [[*) printf '{"code":"permission_denied","permission":"tasks.write","message":"m","board_id":null}\n403' ;;
+]]
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(
+        out,
+        "dev: board unavailable: pomb answered 403: this token lacks the tasks.write permission "
+            .. "on every board; use a token that has it\n"
+    )
+end)
+
+t.test("a permission_denied with a board says the board is not assigned", function()
+    local root, home = sandbox()
+    answering(
+        root,
+        [[*) printf '{"code":"permission_denied","permission":"tasks.write","message":"m","board_id":"board-9"}\n403' ;;
+]]
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(
+        out,
+        "dev: board unavailable: this token has the tasks.write permission but is not assigned "
+            .. "to board board-9; add the board to the token\n"
+    )
+end)
+
+t.test("an insufficient_scope 403 still reports the server's message", function()
+    local root, home = sandbox()
+    answering(
+        root,
+        [[*) printf '{"code":"insufficient_scope","message":"insufficient token scope: needs admin"}\n403' ;;
+]]
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(out, "dev: board unavailable: pomb answered 403: insufficient token scope: needs admin\n")
+end)
+
+t.test("a board missing from a token's assigned boards gets its own message", function()
+    local root, home = sandbox()
+    answering(
+        root,
+        [[*/api/v1/auth/whoami) printf '{"permissions":["tasks.read"],"boards":[{"id":"b1","name":"Other"}]}\n200' ;;
+*/api/boards) printf '[{"id":"b1","name":"Other"}]\n200' ;;
+]]
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(
+        out,
+        "dev: board unavailable: pomb lists no board named dotfiles for this token, which is "
+            .. "assigned only to Other; if the board exists, add it to the token\n"
+    )
+end)
+
+t.test("a missing board stays plain on a token that sees every board", function()
+    for _, who in ipairs({ '{"scope":"work"}', '{"permissions":["tasks.read"],"boards":"all"}' }) do
+        local root, home = sandbox()
+        answering(root, "*/api/v1/auth/whoami) printf '" .. who .. [[\n200' ;;
+*/api/boards) printf '[{"id":"b1","name":"Other"}]\n200' ;;
+]])
+        local out, code = dev(root, home, { "board", "ls" })
+        t.eq(code, 1)
+        t.eq(out, "dev: board unavailable: pomb has no board named dotfiles\n")
+    end
+end)

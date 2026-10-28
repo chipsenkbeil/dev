@@ -24,6 +24,9 @@ local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
 local STAMP_CHARS = 19
 local PAGE_LIMIT = 500
 local FORBIDDEN = 403
+local PERMISSION_DENIED = "permission_denied"
+local ADMIN = "admin"
+local ALL_BOARDS = "all"
 local NOT_YOURS = "that comment is not yours to change"
 
 ---Pomb over its HTTP API, through curl.
@@ -56,6 +59,34 @@ Backend.__index = Backend
 
 local function unavailable(reason)
     return "board unavailable: " .. reason
+end
+
+local function listed(list, word)
+    for _, item in ipairs(list) do
+        if item == word then
+            return true
+        end
+    end
+    return false
+end
+
+local function denied(doc)
+    local permission = present(doc.permission) or "needed"
+    local board_id = present(doc.board_id)
+    if board_id then
+        return unavailable(
+            "this token has the "
+                .. permission
+                .. " permission but is not assigned to board "
+                .. board_id
+                .. "; add the board to the token"
+        )
+    end
+    return unavailable(
+        "pomb answered 403: this token lacks the "
+            .. permission
+            .. " permission on every board; use a token that has it"
+    )
 end
 
 ---Tell whether a failure means Pomb could not be asked, as opposed to Pomb
@@ -207,6 +238,9 @@ function Backend:__request(method, path, body, fence)
     if not status or doc == nil then
         return nil, unavailable("pomb sent an answer dev cannot read")
     end
+    if status == FORBIDDEN and type(doc) == "table" and doc.code == PERMISSION_DENIED then
+        return nil, denied(doc), status
+    end
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
         return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail)), status
@@ -229,7 +263,7 @@ function Backend:__load()
         end
     end
     if not id then
-        return nil, unavailable("pomb has no board named " .. self.__opts.name)
+        return nil, self:__missing()
     end
     local detail
     detail, message = self:__request("GET", "/api/boards/" .. id)
@@ -582,17 +616,83 @@ function Backend:authorize(secret)
     self.__secret = secret
 end
 
----Ask which scope the token in use carries.
----@return string? scope the token's scope, nil when it could not be read
----@return string? message why it could not be read
-function Backend:scope()
+---Check that the token in use is an admin token, on either server shape.
+---
+---A server that reports a `scope` is admin when it says so. A server that
+---reports `permissions` and `boards` is admin when the token holds every
+---permission the catalog lists for the admin preset and is assigned all boards.
+---@return boolean? ok true when the token is admin
+---@return string? message why not, or why it could not be read
+function Backend:admin()
     local who, message = self:__request("GET", "/api/v1/auth/whoami")
     if not who then
         return nil, message
     end
-    return present(who.scope) or "none"
+    if type(who.permissions) ~= "table" then
+        local scope = present(who.scope) or "none"
+        if scope ~= ADMIN then
+            return nil, "the approved token has the " .. scope .. " scope, init needs admin"
+        end
+        return true
+    end
+    local catalog
+    catalog, message = self:__request("GET", "/api/v1/auth/permissions")
+    if not catalog then
+        return nil, message
+    end
+    local held = {}
+    for _, name in ipairs(who.permissions) do
+        held[name] = true
+    end
+    local missing, wanted = {}, 0
+    for _, entry in ipairs(catalog) do
+        local presets = type(entry.presets) == "table" and entry.presets or {}
+        if present(entry.name) and listed(presets, ADMIN) then
+            wanted = wanted + 1
+            if not held[entry.name] then
+                missing[#missing + 1] = entry.name
+            end
+        end
+    end
+    if wanted == 0 then
+        return nil, "the permission catalog lists no admin preset, so the token cannot be checked"
+    end
+    if #missing > 0 then
+        return nil,
+            "the approved token lacks the "
+                .. table.concat(missing, ", ")
+                .. " permission, init needs the admin preset"
+    end
+    if who.boards ~= ALL_BOARDS then
+        return nil, "the approved token is assigned only some boards, init needs all of them"
+    end
+    return true
 end
 
+---Say why the board is not in the list the token sees.
+---
+---A server that reports the token's boards may be hiding the board by
+---assignment, which looks the same as a board that does not exist.
+---@private
+---@return string message the reason
+function Backend:__missing()
+    local name = self.__opts.name
+    local who = self:__request("GET", "/api/v1/auth/whoami")
+    if type(who) == "table" and type(who.boards) == "table" then
+        local names = {}
+        for _, entry in ipairs(who.boards) do
+            names[#names + 1] = tostring(present(entry.name) or present(entry.id))
+        end
+        return unavailable(
+            "pomb lists no board named "
+                .. name
+                .. " for this token, which is assigned only to "
+                .. (#names > 0 and table.concat(names, ", ") or "no boards")
+                .. "; if the board exists, add it to the token"
+        )
+    end
+    return unavailable("pomb has no board named " .. name)
+end
 ---Find the board's id by name, asking once.
 ---@private
 ---@return string? id the board's id
@@ -611,7 +711,7 @@ function Backend:__board_id()
             return entry.id
         end
     end
-    return nil, unavailable("pomb has no board named " .. self.__opts.name)
+    return nil, self:__missing()
 end
 
 function Backend:find()
