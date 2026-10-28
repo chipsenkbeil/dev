@@ -26,6 +26,8 @@ local M = {}
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
+---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks` or `related`) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
+---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
@@ -87,6 +89,12 @@ M.DONE = "Done"
 
 ---The backends a project may name.
 M.Backend = { POMB = "pomb", LOCAL = "local" }
+
+---The kinds of link between two cards.
+M.LinkKind = { BLOCKED_BY = "blocked_by", BLOCKS = "blocks", RELATED = "related" }
+
+---The link kinds in the order help lists them.
+M.LINK_KINDS = { M.LinkKind.BLOCKED_BY, M.LinkKind.BLOCKS, M.LinkKind.RELATED }
 
 ---The fewest characters of a card id that name a card.
 M.MIN_PREFIX = 8

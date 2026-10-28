@@ -231,6 +231,88 @@ function Backend:entered()
     return times
 end
 
+local function blockers(card)
+    local found = {}
+    for _, held in ipairs(card.links or {}) do
+        if held.kind == board.LinkKind.BLOCKED_BY then
+            found[#found + 1] = held.target_id
+        end
+    end
+    return found
+end
+
+local function depends_on(doc, from, goal, seen)
+    if from == goal then
+        return true
+    end
+    if seen[from] then
+        return false
+    end
+    seen[from] = true
+    local card = find_by_id(doc.cards, from)
+    for _, blocker in ipairs(card and blockers(card) or {}) do
+        if depends_on(doc, blocker, goal, seen) then
+            return true
+        end
+    end
+    return false
+end
+
+local function is_blocked(doc, card)
+    for _, blocker in ipairs(blockers(card)) do
+        local held = find_by_id(doc.cards, blocker)
+        local column = held and find_by_id(doc.columns, held.column_id)
+        if held and not (column and column.is_done) then
+            return true
+        end
+    end
+    return false
+end
+
+function Backend:link(id, kind, other)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id)
+        if not card then
+            return nil, message
+        end
+        local target
+        target, message = card_of(doc, other)
+        if not target then
+            return nil, message
+        end
+        if card == target then
+            return nil, "a card cannot be linked to itself"
+        end
+        local holder, held_kind, held_target = card, kind, target
+        if kind == board.LinkKind.BLOCKS then
+            holder, held_kind, held_target = target, board.LinkKind.BLOCKED_BY, card
+        end
+        if
+            held_kind == board.LinkKind.BLOCKED_BY
+            and depends_on(doc, held_target.id, holder.id, {})
+        then
+            return nil, "the link would make the cards wait on each other"
+        end
+        holder.links = holder.links or {}
+        for _, existing in ipairs(holder.links) do
+            if existing.kind == held_kind and existing.target_id == held_target.id then
+                return true
+            end
+        end
+        holder.links[#holder.links + 1] = {
+            id = store.id(),
+            kind = held_kind,
+            target_id = held_target.id,
+            created_at = store.stamp(),
+        }
+        return true
+    end)
+end
+
+function Backend:other_board(name)
+    return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
+end
+
 function Backend:next()
     local doc, message = self:__read()
     if not doc then
@@ -241,7 +323,7 @@ function Backend:next()
         return nil, "the board has no Ready column, run dev board init"
     end
     for _, card in ipairs(ordered(doc)) do
-        if card.column_id == ready.id and not live(card.claim) then
+        if card.column_id == ready.id and not live(card.claim) and not is_blocked(doc, card) then
             return card_view(doc, card)
         end
     end

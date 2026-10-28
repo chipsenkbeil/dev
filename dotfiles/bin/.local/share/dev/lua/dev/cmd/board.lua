@@ -24,13 +24,14 @@ local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
 local STALE_DAYS = 7
 local STAMP_CHARS = 16
+local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
-local IDEMPOTENT = { move = true, size = true, label = true }
-local QUEUED = { add = true, move = true, note = true, size = true, label = true }
+local IDEMPOTENT = { move = true, size = true, label = true, link = true }
+local QUEUED = { add = true, move = true, note = true, size = true, label = true, link = true }
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
@@ -498,6 +499,48 @@ function commands.label(backend, args)
     end
     local shown = #labels > 0 and table.concat(labels, ",") or "-"
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
+end
+
+function commands.link(backend, args)
+    if #args ~= 3 then
+        return usage("needs a card, a kind (" .. LINK_HELP .. ") and the other card")
+    end
+    if not index_of(board.LINK_KINDS, args[2]) then
+        return usage("unknown link kind " .. args[2] .. ", the kinds are " .. LINK_HELP)
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local word = args[3]
+    local other_name, prefix = word:match("^(.+):([^:]*)$")
+    local home = backend
+    if other_name then
+        local why
+        home, why = backend:other_board(other_name)
+        if not home then
+            return failure(why)
+        end
+        word = prefix
+    end
+    local other
+    other, err = find_card(home, word)
+    if not other then
+        return err
+    end
+    local ok, message = backend:link(card.id, args[2], other.id)
+    if not ok then
+        return failure(message)
+    end
+    return {
+        output = "linked "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. " "
+            .. args[2]
+            .. " "
+            .. (other_name and other_name .. ":" or "")
+            .. other.id:sub(1, board.MIN_PREFIX),
+    }
 end
 
 local function append(lines, more)

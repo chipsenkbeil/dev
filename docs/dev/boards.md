@@ -238,6 +238,18 @@ nothing and sends nothing. A label is one word with no spaces and no leading
 editing the same card's labels at the same moment can lose one edit, because
 pomb has no add or remove call and takes the whole list.
 
+`link CARD KIND OTHER` links two cards. `KIND` is `blocked_by`, `blocks` or
+`related`. `OTHER` is a card of this board, by id or prefix, or `BOARD:PREFIX`
+for a card on another board of the same Pomb server, which dev finds by reading
+that board, so write the work that spans repos as
+`dev board link 5ff0e014 blocked_by ci:1a2b3c4d`. It prints
+`linked <id prefix> <kind> <other>`. Pomb keeps one link whichever card holds it,
+and asking again for a link it has changes nothing, so a `link` that could not
+reach Pomb is queued with the others. Pomb refuses a card linked to itself and a
+link that would make cards wait on each other. A local board stores the links
+on its own cards, links only its own cards, and its `next` skips a card that a
+card outside Done blocks. dev has no command to list or remove links yet.
+
 `stale [--days N]` lists the cards that have sat in Backlog, Ready, In
 Progress or In Review for N days or more, 7 by default, oldest first. Each line
 is the id prefix, the column, the days in it (`9d`), the size and the name.
@@ -287,10 +299,10 @@ sync, so `dev board sync` says so.
 
 ## When Pomb is unreachable
 
-On a Pomb board, `add`, `move`, `note`, `size` and `label` that cannot reach
+On a Pomb board, `add`, `move`, `note`, `size`, `label` and `link` that cannot reach
 Pomb, or cannot read the token because `pass` is locked, are kept in a queue
 and print the line below. A timeout or a gateway error may come after Pomb
-applied the change, so only `move`, `size` and `label`, which are safe to
+applied the change, so only `move`, `size`, `label` and `link`, which are safe to
 repeat, are queued for those; `add` and `note` fail instead of risking a
 duplicate.
 

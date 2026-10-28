@@ -183,6 +183,74 @@ t.test("notes, edit and delete work on a local board and refuse another author's
     t.eq(out, "dev: that comment is not yours to change\n")
 end)
 
+t.test(
+    "link stores blocked_by, blocks and related on a local board and keeps next honest",
+    function()
+        local root, home = local_board()
+        local function add(name)
+            return prefix_of(
+                (dev(root, home, { "board", "add", name, "--column", "ready", "--size", "1" }))
+            )
+        end
+        local first, second, third = add("First"), add("Second"), add("Third")
+        local out, code = dev(root, home, { "board", "link", first, "blocked_by", second })
+        t.eq(out, "linked " .. first .. " blocked_by " .. second .. "\n")
+        t.eq(code, 0)
+        t.eq(dev(root, home, { "board", "link", first, "blocked_by", second }), out)
+        out = dev(root, home, { "board", "link", third, "blocks", second })
+        t.eq(out, "linked " .. third .. " blocks " .. second .. "\n")
+        out = dev(root, home, { "board", "link", first, "related", third })
+        t.eq(out, "linked " .. first .. " related " .. third .. "\n")
+        local held = {}
+        for _, card in ipairs(document(file_of(home)).cards) do
+            held[card.id:sub(1, 8)] = card.links
+        end
+        t.eq(#held[first], 2)
+        t.eq(held[first][1].kind, "blocked_by")
+        t.eq(held[first][1].target_id:sub(1, 8), second)
+        t.eq(held[first][2].kind, "related")
+        t.eq(#held[second], 1)
+        t.eq(held[second][1].kind, "blocked_by")
+        t.eq(held[second][1].target_id:sub(1, 8), third)
+        t.eq(held[third], nil)
+        out = dev(root, home, { "board", "next" })
+        t.ok(out:find("^" .. third), out)
+        dev(root, home, { "board", "move", third, "done" })
+        out = dev(root, home, { "board", "next" })
+        t.ok(out:find("^" .. second), out)
+        dev(root, home, { "board", "move", second, "done" })
+        out = dev(root, home, { "board", "next" })
+        t.ok(out:find("^" .. first), out)
+    end
+)
+
+t.test("link refuses itself, a cycle, another board and a bad kind on a local board", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "A" })))
+    local b = prefix_of((dev(root, home, { "board", "add", "B" })))
+    local c = prefix_of((dev(root, home, { "board", "add", "C" })))
+    local out, code = dev(root, home, { "board", "link", a, "related", a })
+    t.eq(code, 1, out)
+    t.ok(out:find("itself", 1, true), out)
+    dev(root, home, { "board", "link", a, "blocked_by", b })
+    dev(root, home, { "board", "link", b, "blocked_by", c })
+    out, code = dev(root, home, { "board", "link", c, "blocked_by", a })
+    t.eq(code, 1, out)
+    t.ok(out:find("wait on each other", 1, true), out)
+    out, code = dev(root, home, { "board", "link", a, "blocks", c })
+    t.eq(code, 1, out)
+    out, code = dev(root, home, { "board", "link", a, "related", "other:" .. b })
+    t.eq(code, 1, out)
+    t.ok(out:find("links only its own cards", 1, true), out)
+    out, code = dev(root, home, { "board", "link", a, "needs", b })
+    t.eq(code, 2, out)
+    local links = 0
+    for _, card in ipairs(document(file_of(home)).cards) do
+        links = links + #(card.links or {})
+    end
+    t.eq(links, 2)
+end)
+
 t.test("stale counts the days a card sat in its column", function()
     local root, home = local_board()
     local a =
@@ -370,6 +438,7 @@ method=GET
 prev=
 for arg; do
     if [ "$prev" = -X ]; then method=$arg; fi
+    if [ "$prev" = --data-raw ]; then printf "%s\n" "$arg" >>"$ROOT/bodies"; fi
     prev=$arg
 done
 for last; do :; done
@@ -501,6 +570,28 @@ t.test("reads, usage errors and refusals are not queued", function()
     out, code = pomb_dev(root, home, { "board", "take", ID_A:sub(1, 8) })
     t.eq(code, 1, out)
     t.eq(fs.exists(queue_path(home)), false)
+end)
+
+t.test("link posts to the task and queues while Pomb is unreachable", function()
+    local root, home = pomb()
+    local out, code =
+        pomb_dev(root, home, { "board", "link", ID_A:sub(1, 8), "blocks", ID_B:sub(1, 8) })
+    t.eq(code, 0, out)
+    t.eq(out, "linked aaaaaaaa blocks bbbbbbbb\n")
+    t.ok(calls(root):find("/api/tasks/" .. ID_A .. "/links", 1, true), calls(root))
+    t.eq(fs.read(root .. "/bodies"), '{"kind":"blocks","target_id":"' .. ID_B .. '"}\n')
+    assert(fs.write(root .. "/down", ""))
+    out, code = pomb_dev(root, home, { "board", "link", ID_B:sub(1, 8), "related", ID_A:sub(1, 8) })
+    t.eq(out, QUEUED)
+    t.eq(code, 0)
+    local entries = document(queue_path(home))
+    t.eq(#entries, 1)
+    t.eq(entries[1].sub, "link")
+    t.eq(entries[1].args, { ID_B:sub(1, 8), "related", ID_A:sub(1, 8) })
+    assert(fs.remove(root .. "/down"))
+    out = pomb_dev(root, home, { "board", "sync" })
+    t.eq(out, "synced link bbbbbbbb\nsynced\n")
+    t.ok(calls(root):find("/api/tasks/" .. ID_B .. "/links", 1, true), calls(root))
 end)
 
 t.test("sync replays the queue in order and empties it", function()

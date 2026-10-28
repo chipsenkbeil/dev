@@ -59,6 +59,17 @@ local function fake(cards, times)
         calls[#calls + 1] = { "set_size", id, color, fence }
         return true
     end
+    function backend:link(id, kind, other)
+        calls[#calls + 1] = { "link", id, kind, other }
+        return true
+    end
+    function backend:other_board(name)
+        calls[#calls + 1] = { "other_board", name }
+        if name == "ci" then
+            return backend.sibling
+        end
+        return nil, "pomb has no board named " .. name
+    end
     function backend:move(id, column)
         calls[#calls + 1] = { "move", id, column }
         return true
@@ -273,6 +284,57 @@ t.test("label refuses a bad label, a bad --remove value and a missing card", fun
     t.eq(commands.run("add", { "X", "--label", "a b" }, backend).code, 2)
     t.eq(commands.run("add", { "X", "--label", "-a" }, backend).code, 2)
     t.eq(commands.run("label", { "deadbeef", "+x" }, backend).code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("link sends the full ids of the card and the other card", function()
+    local backend = fake(sample())
+    local result = commands.run("link", { "11111111-a", "blocked_by", "cccccccc" }, backend)
+    t.eq(result.output, "linked 11111111 blocked_by cccccccc")
+    t.eq(backend.calls[1], { "link", ID_A, "blocked_by", ID_C })
+    result = commands.run("link", { "cccccccc", "blocks", "11111111-b" }, backend)
+    t.eq(result.output, "linked cccccccc blocks 11111111")
+    t.eq(backend.calls[2], { "link", ID_C, "blocks", ID_B })
+    result = commands.run("link", { "cccccccc", "related", "11111111-a" }, backend)
+    t.eq(backend.calls[3], { "link", ID_C, "related", ID_A })
+end)
+
+t.test("link to BOARD:CARD resolves the card on the other board", function()
+    local backend = fake(sample())
+    local elsewhere = {
+        cards = function()
+            return {
+                {
+                    id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                    name = "Far",
+                    column = "Ready",
+                    size = "unsized",
+                    labels = {},
+                },
+            }
+        end,
+    }
+    backend.sibling = elsewhere
+    local result = commands.run("link", { "11111111-a", "blocked_by", "ci:dddddddd" }, backend)
+    t.eq(result.output, "linked 11111111 blocked_by ci:dddddddd")
+    t.eq(backend.calls[1], { "other_board", "ci" })
+    t.eq(backend.calls[2], { "link", ID_A, "blocked_by", "dddddddd-dddd-4ddd-8ddd-dddddddddddd" })
+    result = commands.run("link", { "11111111-a", "related", "nope:dddddddd" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    result = commands.run("link", { "11111111-a", "related", "ci:eeeeeeee" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("no card starts with eeeeeeee", 1, true), result.message)
+    t.eq(#backend.calls, 4)
+end)
+
+t.test("link refuses a bad kind, a missing word and an unknown card", function()
+    local backend = fake(sample())
+    t.eq(commands.run("link", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
+    t.eq(commands.run("link", { "11111111-a", "blocks" }, backend).code, 2)
+    t.eq(commands.run("link", { "11111111-a", "blocks", "cccccccc", "x" }, backend).code, 2)
+    t.eq(commands.run("link", { "deadbeef", "blocks", "cccccccc" }, backend).code, 1)
+    t.eq(commands.run("link", { "11111111-a", "blocks", "deadbeef" }, backend).code, 1)
     t.eq(#backend.calls, 0)
 end)
 

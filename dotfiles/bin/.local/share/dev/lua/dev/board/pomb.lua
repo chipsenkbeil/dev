@@ -561,6 +561,24 @@ function Backend:set_labels(id, labels, fence)
     return true
 end
 
+function Backend:link(id, kind, other)
+    local made, message =
+        self:__request("POST", "/api/tasks/" .. id .. "/links", { kind = kind, target_id = other })
+    if not made then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:other_board(name)
+    local opts = {}
+    for key, value in pairs(self.__opts) do
+        opts[key] = value
+    end
+    opts.name = name
+    return setmetatable({ __opts = opts, __secret = self.__secret }, Backend)
+end
+
 function Backend:claim(id, claimant, ttl, fence)
     local body = { claimant = claimant, ttl_seconds = ttl, fence = fence }
     local claim, message = self:__request("POST", "/api/tasks/" .. id .. "/claim", body)
