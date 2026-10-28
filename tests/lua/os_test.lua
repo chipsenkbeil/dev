@@ -368,3 +368,55 @@ t.test("without_sigpipe turns a write to a closed pipe into a failed write", fun
     pipe:close()
     t.eq(ok, false)
 end)
+
+t.test("capture_timed with no seconds starts nothing and does not wait", function()
+    local dir = assert(fs.mktemp({ dir = true }))
+    local started = os.time()
+    local out, code = devos.capture_timed({ "touch", dir .. "/ran" }, 0)
+    t.eq(out, "")
+    t.eq(code, 124)
+    t.ok(os.time() - started < 1, "no seconds should not wait")
+    t.eq(fs.exists(dir .. "/ran"), false)
+    fs.remove(dir, { recursive = true })
+end)
+
+t.test("capture_timed cleans up when its process is terminated", function()
+    local tmp = assert(fs.mktemp({ dir = true }))
+    local snippet = ("package.path = %q; "):format(package.path)
+        .. 'require("dev.os").capture_timed({ "sh", "-c", "sleep 3773 & sleep 3774; wait" }, 600)'
+    local pid = devos.capture({
+        "sh",
+        "-c",
+        [[TMPDIR="$2" luajit -e "$1" </dev/null >/dev/null 2>&1 & echo $!]],
+        "sh",
+        snippet,
+        tmp,
+    })
+    pid = pid:gsub("%s+$", "")
+    local function sleeping()
+        local out = devos.capture({ "sh", "-c", "ps -axo args=" })
+        return ("\n" .. out):find("\nsleep 3773\n", 1, true) ~= nil
+    end
+    local function stray()
+        return devos.capture({ "sh", "-c", "ps -axo args= | grep -x 'sleep 377[34]' || true" })
+    end
+    for _ = 1, 50 do
+        if sleeping() then
+            break
+        end
+        devos.run({ "sleep", "0.1" })
+    end
+    t.ok(sleeping(), "the command should be running")
+    devos.run({ "kill", "-TERM", pid })
+    for _ = 1, 50 do
+        if not sleeping() then
+            break
+        end
+        devos.run({ "sleep", "0.1" })
+    end
+    local left = stray()
+    local dirs = devos.capture({ "ls", tmp })
+    fs.remove(tmp, { recursive = true })
+    t.eq(left, "")
+    t.eq(dirs, "")
+end)

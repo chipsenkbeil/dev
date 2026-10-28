@@ -3,6 +3,8 @@ local ffi = require("ffi")
 ffi.cdef([[
 int isatty(int fd);
 unsigned int getuid(void);
+int getpid(void);
+int usleep(unsigned int usec);
 int execvp(const char *file, char *const argv[]);
 void (*signal(int sig, void (*handler)(int)))(int);
 char *strerror(int errnum);
@@ -76,8 +78,15 @@ local WAIT_EXIT_SHIFT = 256
 local TIMEOUT_EXIT = 124
 local KILLED_EXITS = { [137] = true, [143] = true }
 local KILL_GRACE_SECS = 1
-local POLL_SECS = "0.1"
-local TIMED_WRAPPER = 'set -m; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } & echo $!'
+local POLL_SECS = 0.1
+local MICROS_PER_SEC = 1000000
+local TIMED_WRAPPER = table.concat({
+    'set -m; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } & pid=$!;',
+    '( while [ -d "$4" ]; do',
+    'kill -0 "$3" 2>/dev/null || { [ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
+    'rm -rf -- "$4"; exit; };',
+    "sleep 0.2; done ) </dev/null >/dev/null 2>&1 & echo $pid $!",
+}, " ")
 
 ---@alias dev.os.Kind "file"|"dir"|"link"|"other"
 
@@ -394,6 +403,10 @@ end
 ---@field input string? what the command reads from standard input, /dev/null when nil
 ---@field merge boolean? send standard error to the collected output instead of the terminal
 
+local function nap(secs)
+    ffi.C.usleep(secs * MICROS_PER_SEC)
+end
+
 local function signal_group(signal, pid)
     M.run({ "sh", "-c", "kill -" .. signal .. ' -- "-$1"', "sh", pid }, { stderr = "null" })
 end
@@ -401,13 +414,19 @@ end
 ---Run `argv` in its own process group and collect its output, stopping it after `secs` seconds.
 ---
 ---A command that outlives the limit is sent TERM and then KILL together with everything it started.
+---A `secs` of 0 or less allows no time: nothing is started and the result is "" and 124.
+---When this process dies first (INT, TERM or KILL), the command's process group is killed and the
+---temporary directory removed.
 ---@param argv string[] command and its arguments, with at least one word
----@param secs integer seconds the command may run
+---@param secs number seconds the command may run
 ---@param opts dev.os.TimedOpts? environment, directory, input and stream options
 ---@return string output what the command wrote to standard output, and standard error with `merge`
 ---@return integer code exit status, 124 when the limit hit or the command was killed
 function M.capture_timed(argv, secs, opts)
     opts = opts or {}
+    if secs <= 0 then
+        return "", TIMEOUT_EXIT
+    end
     local words = check({ env = opts.env, unset = opts.unset })
     local made, made_code = M.capture({
         "mktemp",
@@ -436,9 +455,20 @@ function M.capture_timed(argv, secs, opts)
         .. (opts.merge and " 2>&1" or "")
     announce(argv)
     flush_output()
-    local pipe =
-        assert(io.popen(M.command({ "sh", "-c", TIMED_WRAPPER, "sh", inner, status }), "r"))
-    local pid = pipe:read("*l")
+    local pipe = assert(io.popen(
+        M.command({
+            "sh",
+            "-c",
+            TIMED_WRAPPER,
+            "sh",
+            inner,
+            status,
+            tostring(ffi.C.getpid()),
+            dir,
+        }),
+        "r"
+    ))
+    local pid, watcher = (pipe:read("*l") or ""):match("^(%d+) (%d+)$")
     pipe:close()
     if not pid then
         error("capture_timed could not start " .. argv[1])
@@ -453,16 +483,17 @@ function M.capture_timed(argv, secs, opts)
                 file:close()
             elseif os.time() - started > secs then
                 signal_group("TERM", pid)
-                M.run({ "sleep", tostring(KILL_GRACE_SECS) })
+                nap(KILL_GRACE_SECS)
                 signal_group("KILL", pid)
                 code = TIMEOUT_EXIT
             else
-                M.run({ "sleep", POLL_SECS })
+                nap(POLL_SECS)
             end
         end
     end)
     if not polled then
         signal_group("KILL", pid)
+        M.run({ "kill", watcher }, { stderr = "null" })
         M.run({ "rm", "-rf", "--", dir })
         error(failure, 0)
     end
@@ -474,6 +505,7 @@ function M.capture_timed(argv, secs, opts)
     if file then
         file:close()
     end
+    M.run({ "kill", watcher }, { stderr = "null" })
     M.run({ "rm", "-rf", "--", dir })
     return text, code
 end
