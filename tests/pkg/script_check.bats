@@ -137,7 +137,7 @@ darwin_rustup() {
 
 @test "dotfiles' rust group lists zig, cargo-zigbuild and the Apple targets" {
     cd "$REPO"
-    run luajit "$PKG" install --manifest "$REPO/.dev/tools.tsv" --dry-run --group rust
+    run luajit "$PKG" install zig cargo-zigbuild rust-darwin-targets --force --manifest "$REPO/.dev/tools.tsv" --dry-run --group rust
     [ "$status" -eq 0 ]
     [[ "$output" == *"brew install zig"* ]] || false
     [[ "$output" == *"brew install cargo-zigbuild"* ]] || false
