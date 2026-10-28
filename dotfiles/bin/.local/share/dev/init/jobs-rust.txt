@@ -4,7 +4,7 @@
 --   ci run --local --job test
 
 -- Run the lint and test jobs on an image that bakes the toolchain
-local LINUX = { target = "linux-rust" }
+local LINUX = { target = "linux-x86-rust" }
 
 local function toolchain()
   local file = assert(io.open("rust-toolchain.toml"), "rust-toolchain.toml is missing")

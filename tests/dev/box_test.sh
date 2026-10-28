@@ -121,7 +121,7 @@ inproj() {
 # mkbox <name> <state> <projects json> <expires offset s|null> <delete offset s|null>
 mkbox() {
     jq -nc --arg name "$1" --arg state "$2" --argjson names "$3" --argjson exp "$4" --argjson del "$5" '{
-        name: $name, state: $state, target: "linux-dev", shape: "medium", machine: "example-box", created_by: "human:tester", cpu: 8, memory_gib: 16,
+        name: $name, state: $state, target: "linux-x86-dev", shape: "medium", machine: "example-box", created_by: "human:tester", cpu: 8, memory_gib: 16,
         projects: ($names | map({name: ., path: "/srv/projects/\(.)"})),
         tailnet_name: $name, ttl_hours: 4,
         expires_at: (if $exp == null then null else now + $exp | floor | todate end),
@@ -165,10 +165,10 @@ CREATING="$(mkbox new-111 creating '[]' null null)"
 reset
 fx ls "$(lsdoc "$RUNNING" "$STOPPED" "$KEPT" "$CREATING")"
 out="$(box box ls)"
-assert_eq "ls renders a row per box and the cap line" "$out" "myproject-k3x  running   linux-dev  myproject    $RUN_LEFT
-ci-abc         stopped   linux-dev  ci,dotfiles  $STOP_LEFT
-scratch-a1b    running   linux-dev  -            kept
-new-111        creating  linux-dev  -
+assert_eq "ls renders a row per box and the cap line" "$out" "myproject-k3x  running   linux-x86-dev  myproject    $RUN_LEFT
+ci-abc         stopped   linux-x86-dev  ci,dotfiles  $STOP_LEFT
+scratch-a1b    running   linux-x86-dev  -            kept
+new-111        creating  linux-x86-dev  -
 2 of 3 running, 24 of 32 GiB"
 assert_eq "ls reads memory_limits_gib for the cap line" "$(printf '%s\n' "$out" | tail -n 1)" "2 of 3 running, 24 of 32 GiB"
 assert_eq "ls asks ci for json" "$(calls)" "ci box ls --json"
@@ -186,13 +186,13 @@ assert_eq "ls rejects an argument" "$?" "2"
 reset
 fx create "$(doc "$(mkbox myproject-k3x running '["myproject"]' "$NEW_OFF" null)")"
 out="$(inproj box create)"
-assert_eq "create prints the summary" "$out" "created myproject-k3x (linux-dev, medium, myproject), $NEW_LEFT, host myproject-k3x"
+assert_eq "create prints the summary" "$out" "created myproject-k3x (linux-x86-dev, medium, myproject), $NEW_LEFT, host myproject-k3x"
 assert_eq "create inside a project defaults --project to its basename" "$(calls)" "ci box create --by human:tester --json -- myproject"
 reset
 fx create "$(doc "$KEPT")"
-out="$(inproj box create --target win-dev --shape large --by agent:s1 --keep a b)"
-assert_eq "create with explicit projects skips the default" "$(calls)" "ci box create --target win-dev --shape large --by agent:s1 --keep --json -- a b"
-assert_contains "create shows kept and no projects" "$out" "created scratch-a1b (linux-dev, medium, -), kept, host scratch-a1b"
+out="$(inproj box create --target windows-vm-dev --shape large --by agent:s1 --keep a b)"
+assert_eq "create with explicit projects skips the default" "$(calls)" "ci box create --target windows-vm-dev --shape large --by agent:s1 --keep --json -- a b"
+assert_contains "create shows kept and no projects" "$out" "created scratch-a1b (linux-x86-dev, medium, -), kept, host scratch-a1b"
 reset
 box box create >/dev/null 2>&1
 assert_eq "create outside a project passes no project" "$(calls)" "ci box create --by human:tester --json"
@@ -232,7 +232,7 @@ out="$(box box show myproject-k3x)"
 assert_eq "show argv" "$(calls)" "ci box show myproject-k3x --json"
 assert_eq "show renders key: value lines" "$out" "name: myproject-k3x
 state: running
-target: linux-dev
+target: linux-x86-dev
 shape: medium
 cpu: 8
 memory_gib: 16
@@ -269,7 +269,7 @@ assert_contains "show prints - for a null tailnet_name" "$out" "tailnet_name: -"
 reset
 fx create "$(doc "$NOHOST")"
 out="$(box box create)"
-assert_eq "create prints host - for a null tailnet_name" "$out" "created myproject-k3x (linux-dev, medium, myproject), creating, host -"
+assert_eq "create prints host - for a null tailnet_name" "$out" "created myproject-k3x (linux-x86-dev, medium, myproject), creating, host -"
 reset
 fx resume "$(doc "$NOHOST")"
 out="$(box box resume myproject-k3x)"
@@ -292,7 +292,7 @@ reset
 fx resume "$(doc "$RUNNING")"
 out="$(box box resume myproject-k3x --ttl 2)"
 assert_eq "resume argv" "$(calls)" "ci box resume myproject-k3x --ttl 2 --json"
-assert_eq "resume output" "$out" "resumed myproject-k3x (linux-dev, medium, myproject), $RUN_LEFT, host myproject-k3x"
+assert_eq "resume output" "$out" "resumed myproject-k3x (linux-x86-dev, medium, myproject), $RUN_LEFT, host myproject-k3x"
 
 reset
 fx extend "$(doc "$RUNNING")"
@@ -460,7 +460,7 @@ assert_eq "connect to a stopped box resumes then runs et" "$(calls)" "ci box ls 
 ci box resume ci-abc --json
 ci box show ci-abc --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s ci -c $PROJECTS_DIR/ci user@ci-abc"
-assert_eq "connect prints the resume line" "$out" "resumed ci-abc (linux-dev, medium, ci,dotfiles), $NEW_LEFT, host ci-abc"
+assert_eq "connect prints the resume line" "$out" "resumed ci-abc (linux-x86-dev, medium, ci,dotfiles), $NEW_LEFT, host ci-abc"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 mkdir -p "$TMP/noet"
@@ -497,9 +497,9 @@ reset
 fx ls "$(lsdoc "$KEPT" "$STOPPED" "$RUNNING")"
 FAKE_PICK=myproject-k3x inproj connect
 assert_eq "the picker lists the project's boxes first, with a new-box item last" "$(cat "$ITEMS")" "picker title=Connect to a box auto=true
-myproject-k3x	myproject-k3x	running	linux-dev	myproject	$RUN_LEFT
-scratch-a1b	scratch-a1b	running	linux-dev	-	kept
-ci-abc	ci-abc	stopped	linux-dev	ci,dotfiles	$STOP_LEFT
+myproject-k3x	myproject-k3x	running	linux-x86-dev	myproject	$RUN_LEFT
+scratch-a1b	scratch-a1b	running	linux-x86-dev	-	kept
+ci-abc	ci-abc	stopped	linux-x86-dev	ci,dotfiles	$STOP_LEFT
 __new__	new box for myproject"
 assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
 ci box show myproject-k3x --json

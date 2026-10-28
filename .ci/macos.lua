@@ -23,7 +23,7 @@ local LUA_SUITES = {
 return {
   jobs = {
     test = {
-      matrix = { { target = "macos-rust" } },
+      matrix = { { target = "macos-vm-rust", arch = "aarch64" } },
       run = function()
         ci.sh("HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet " .. BREW_PACKAGES)
         for _, file in ipairs(BATS_SUITES) do

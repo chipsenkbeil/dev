@@ -8,14 +8,14 @@ end
 return {
   jobs = {
     lint = {
-      matrix = { { target = "linux-dev" } },
+      matrix = { { target = "linux-x86-dev" } },
       run = function()
         prepare()
         ci.sh("./dotfiles/bin/.local/bin/dev lint </dev/null")
       end,
     },
     test = {
-      matrix = { { target = "linux-rust" } },
+      matrix = { { target = "linux-x86-rust" } },
       run = function()
         prepare()
         ci.sh("./dotfiles/bin/.local/bin/dev test </dev/null")

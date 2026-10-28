@@ -3,7 +3,7 @@
 --   ci run --local
 --   ci run --local --job test
 
-local LINUX = { target = "linux-base" }
+local LINUX = { target = "linux-x86-base" }
 
 return {
   jobs = {

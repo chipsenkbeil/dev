@@ -3,8 +3,8 @@
 --
 --   dev --remote bootstrap
 --
--- The linux-vm target is an Arch VM: the job runs as root with sudo, and
--- stow and zsh are absent. So the job creates the user the image build uses,
+-- The linux-x86-base target with vm = true is an Arch VM: the job runs as root
+-- with sudo, and stow and zsh are absent. So the job creates the user the image build uses,
 -- gives it passwordless sudo for the run, and does everything else as that user.
 -- A full run installs every .dev/tools.tsv row, AUR builds included, so it is long
 -- and sits in its own pipeline, outside the default one that runs on every patchset.
@@ -19,7 +19,7 @@ end
 return {
   jobs = {
     ["bootstrap"] = {
-      matrix = { { target = "linux-vm" } },
+      matrix = { { target = "linux-x86-base", vm = true } },
       run = function()
         ci.group("create " .. USER, function()
           ci.sh("id " .. USER .. " >/dev/null 2>&1 || useradd -m -s /bin/bash " .. USER)
