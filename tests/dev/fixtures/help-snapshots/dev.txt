@@ -12,6 +12,7 @@ Share it
   deploy                Deploy the project (needs .dev/deploy.sh)
   push                  Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named
   pull                  Fetch the remote and rebase local work onto it
+  board                 Read and update the project's board: status, init, ls, next, add, note, move, size, label, stale, take, release and sync
 
 Set up a machine or project
   sync                  Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates

@@ -190,7 +190,7 @@ return {
         words = { "board" },
         noun = true,
         desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, label, stale, take, release and sync",
-        hidden = true,
+        group = "Share it",
     },
     {
         words = { "board", "status" },
