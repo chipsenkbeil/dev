@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, ls, next, add, note, move, take and release",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, move, take and release",
         hidden = true,
     },
     {
@@ -197,6 +197,13 @@ return {
         handler = "lua",
         usage = "dev board status",
         desc = "Print the board's backend and name, or no board for this project and exit 1",
+    },
+    {
+        words = { "board", "init" },
+        handler = "lua",
+        flags = "--name --admin",
+        usage = "dev board init [--name N] [--admin]",
+        desc = "Bring the board to the standard: seven columns, the size palette with White as the default, no size words in names; --admin signs in through the browser for existing boards",
     },
     {
         words = { "board", "ls" },

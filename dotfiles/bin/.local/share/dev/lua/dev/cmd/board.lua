@@ -1,15 +1,22 @@
 local board = require("dev.board")
 local claims = require("dev.board.claims")
 local config = require("dev.config")
+local device = require("dev.board.device")
 local devos = require("dev.os")
 local fs = require("dev.fs")
+local init = require("dev.board.init")
 local pomb = require("dev.board.pomb")
+local toml = require("dev.toml")
 local verb = require("dev.verb")
 
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
 local CLAIMANT_CHARS = 200
+local NAME_PATTERN = '^[^%c"\\]+$'
+local NAME_CHARS = 100
+local ADMIN_SCOPE = "admin"
+local CLIENT_CHARS = 80
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
@@ -328,6 +335,134 @@ local function settings(ctx)
         verb.die("dev: [board] name must be a non-empty string in .dev/config.toml")
     end
     return { backend = backend, name = name }
+end
+
+local function has_section(root)
+    local text = fs.exists(root .. "/.dev/config.toml") and fs.read(root .. "/.dev/config.toml")
+    local tree = text and toml.parse(text)
+    return tree ~= nil and tree.board ~= nil
+end
+
+local function board_name(ctx, flags)
+    local backend = config.get(ctx.root, "board.backend")
+    local name = config.get(ctx.root, "board.name")
+    if backend == nil and has_section(ctx.root) then
+        verb.die('dev: [board] needs backend = "pomb" in .dev/config.toml')
+    end
+    if backend == board.Backend.LOCAL then
+        verb.die("dev: the local board backend is not built yet")
+    elseif backend ~= nil and backend ~= board.Backend.POMB then
+        verb.die('dev: [board] backend must be "pomb" or "local" in .dev/config.toml')
+    end
+    local asked = flags["--name"]
+    if backend == nil then
+        if not asked then
+            verb.die(
+                "dev: this project has no [board] section, pass --name N to make a board and write it"
+            )
+        end
+        name = asked
+    else
+        name = name or fs.basename(ctx.root)
+        if asked and asked ~= name then
+            verb.usage_error(
+                ctx,
+                "--name " .. asked .. " is not the [board] name " .. tostring(name)
+            )
+        end
+    end
+    if
+        type(name) ~= "string"
+        or #name == 0
+        or #name > NAME_CHARS
+        or not name:find(NAME_PATTERN)
+    then
+        verb.die("dev: the board's name must be 1 to 100 characters with no quote or backslash")
+    end
+    return name, backend == nil
+end
+
+local function write_section(root, name)
+    local path = root .. "/.dev/config.toml"
+    local existing = fs.exists(path) and fs.read(path) or ""
+    local gap = existing == "" and "" or (existing:sub(-1) == "\n" and "\n" or "\n\n")
+    local section = '[board]\nbackend = "pomb"\nname = ' .. string.format("%q", name) .. "\n"
+    assert(toml.parse(existing .. gap .. section), "dev: .dev/config.toml would not parse")
+    local ok, message = fs.write(path, existing .. gap .. section)
+    if not ok then
+        verb.die("dev: cannot write " .. path .. ": " .. tostring(message))
+    end
+end
+
+local function host()
+    return (devos.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", ""))
+end
+
+M.handlers["board init"] = function(ctx)
+    local rest, admin = {}, false
+    for _, arg in ipairs(ctx.args) do
+        if arg == "--admin" then
+            admin = true
+        else
+            rest[#rest + 1] = arg
+        end
+    end
+    local flags, extra = parse(rest, { ["--name"] = true })
+    if not flags then
+        verb.usage_error(ctx, extra.message)
+    elseif #extra > 0 then
+        verb.usage_error(ctx, "unknown argument " .. extra[1])
+    end
+    local name, missing = board_name(ctx, flags)
+    local opts = {
+        url = config.user("board.pomb.url"),
+        token = config.user("board.pomb.lead_token"),
+        name = name,
+    }
+    if not admin and opts.token == nil then
+        verb.die(
+            "dev: [board.pomb] lead_token is not set in ~/.config/dev/config.toml, "
+                .. "set it to pass:<entry> or run with --admin"
+        )
+    end
+    local backend, message = pomb.new(opts)
+    if not backend then
+        verb.die("dev: " .. message)
+    end
+    if admin then
+        local secret
+        secret, message = device.pair({
+            url = opts.url,
+            client_name = ("dev-board-init@" .. host()):sub(1, CLIENT_CHARS),
+            scope = ADMIN_SCOPE,
+            say = print,
+        })
+        if not secret then
+            verb.die("dev: " .. message)
+        end
+        backend:authorize(secret)
+        local scope
+        scope, message = backend:scope()
+        if not scope then
+            verb.die("dev: " .. message)
+        elseif scope ~= ADMIN_SCOPE then
+            verb.die("dev: the approved token has the " .. scope .. " scope, init needs admin")
+        end
+    end
+    local changes
+    changes, message = init.run(backend, name, print)
+    if not changes then
+        verb.die("dev: " .. message)
+    end
+    if missing then
+        write_section(ctx.root, name)
+        print("wrote [board] to .dev/config.toml")
+    end
+    print(
+        changes == 0 and ("board " .. name .. " already follows the standard, nothing to change")
+            or ("board " .. name .. ": " .. changes .. (changes == 1 and " change" or " changes"))
+    )
+    return 0
 end
 
 M.handlers["board status"] = function(ctx)

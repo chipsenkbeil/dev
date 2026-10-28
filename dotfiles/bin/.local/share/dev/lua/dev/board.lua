@@ -24,6 +24,21 @@ local M = {}
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
 
+---@class dev.board.Layout
+---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a message
+---@field create fun(self: dev.board.Layout): boolean?, string? the board made, with the name of the template it came from
+---@field read fun(self: dev.board.Layout): dev.board.LayoutState?, string? the board's columns, colours and cards
+---@field add_column fun(self: dev.board.Layout, name: string, is_done: boolean): boolean?, string? a column at the end
+---@field move_column fun(self: dev.board.Layout, id: string, position: integer): boolean?, string? a column moved, 0 first
+---@field mark_done fun(self: dev.board.Layout, id: string): boolean?, string? a column made the one of finished cards
+---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description or default flag
+---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a card's name or colour
+
+---@class dev.board.LayoutState
+---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
+---@field colors {id: string, value: string, label: string, description: string, is_default: boolean}[] the palette
+---@field cards {id: string, name: string, color_id: string?}[] every card
+
 ---The columns in board order.
 M.COLUMNS = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
 

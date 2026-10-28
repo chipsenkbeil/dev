@@ -5,6 +5,7 @@ handles the board's API. It is machine-local: `--remote` and root refuse it.
 
 ```
 dev board status
+dev board init
 dev board ls --column ready
 dev board next
 dev board add "Name the new thing" --column backlog --description "why"
@@ -37,6 +38,7 @@ The server and the token live once in the user file
 [board.pomb]
 url = "https://pomb.example.com"
 token = "pass:secrets/worker/token/pomb.example.com"
+lead_token = "pass:secrets/lead/token/pomb.example.com"
 ```
 
 dev reads `[board.pomb]` from the user file alone, so a repository cannot send
@@ -50,6 +52,75 @@ store fails at once with `board unavailable: pass is locked or has no entry
 ...` instead of waiting on a prompt. The token goes to curl on standard input
 as a config line. It is in no argument list, no environment variable, no file
 and no output, `-v` and `-vv` included.
+
+## Laying out the board
+
+`dev board init` brings the project's board to the standard, whether the board
+is new or old. It adds what is missing, fixes what is wrong and never deletes
+anything, so running it twice is the same as running it once. It prints one line
+per change, and `board X already follows the standard, nothing to change` when
+there is none.
+
+```
+dev board init
+dev board init --name ci
+dev board init --admin
+```
+
+What it lays out:
+
+- The columns Icebox, Backlog, Ready, In Progress, In Review, Blocked and Done,
+  in that order, with Done counting as done. A missing board is made from Pomb's
+  `agent project` template, and the missing columns are added and moved into
+  place. A column it does not know stays, comes after Done and is reported as
+  `kept column "X", which is not part of the standard board`. It never renames
+  a column.
+- The palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`, red
+  `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps its
+  colour in every column, so the colour is the only record of its size.
+- Size words off card names. A trailing `(yellow)`, `(green)`, `(blue)`, `(red)`
+  or `(red, split)` comes off the name. If the card is still white, has no
+  colour, or has the colour that was the default when the run began (Pomb gave
+  that to every card nobody coloured), the card takes the colour the word names.
+  A card with any other colour keeps it.
+- Labels need nothing: `needs:lead` and `needs:human` are plain strings on a
+  card, and Pomb makes them when a card first carries one.
+
+The board's name comes from `[board]`. In a project with no `[board]` section,
+`--name N` names the board and `init` appends the section to `.dev/config.toml`
+once the board is in order. `--name` with a different name than the section's
+is a usage error.
+
+### Tokens
+
+By default `init` uses the lead token, `lead_token` in `[board.pomb]`, read the
+same way as `token`. Pomb lets the lead token name colours, set the default
+colour and reorder columns only on boards that token created. On any other
+board Pomb answers 403 and `init` says to run it with `--admin`.
+
+`--admin` signs in through Pomb's device flow. dev prints a code and a link,
+you open the link in your browser, check that it asks for `admin`, approve it
+and pick an expiry, and dev carries on. The token it receives is held in memory
+for that run. It is never written to a file, put in an argument or an
+environment variable, or printed. If you approve a lower scope than `admin`,
+`init` stops before changing anything.
+
+```
+approve the admin sign-in at https://pomb.example.com/device
+code: ABCD-EFGH
+```
+
+Run it once on each existing board, from that board's repository. The four
+without a `[board]` section get one from `--name`, an uncommitted change to
+`.dev/config.toml` that you commit with the rest of that repository's work:
+
+```
+cd ~/projects/dotfiles && dev board init --admin
+cd ~/src/ci && dev board init --admin --name ci
+cd ~/projects/infra && dev board init --admin --name infra
+cd ~/projects/pomb && dev board init --admin --name pomb
+cd ~/projects/demo && dev board init --admin --name demo
+```
 
 ## Columns, cards and sizes
 

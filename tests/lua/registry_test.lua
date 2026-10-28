@@ -37,6 +37,7 @@ local LUA_ONLY = {
     ["box connect"] = true,
     board = true,
     ["board status"] = true,
+    ["board init"] = true,
     ["board ls"] = true,
     ["board next"] = true,
     ["board add"] = true,

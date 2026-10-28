@@ -19,6 +19,7 @@ local TOP = 0
 local COMMENT_KIND = "agent"
 local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
 local KEEPALIVE_SCRIPT = "/board/keepalive.sh"
+local TEMPLATE = "agent project"
 local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
 local STAMP_CHARS = 19
 
@@ -32,18 +33,19 @@ local M = {}
 
 ---@class dev.board.pomb.Opts
 ---@field url string the server's base URL
----@field token string `pass:<entry>`, where the worker token is kept
+---@field token string? `pass:<entry>`, where the token is kept, unneeded when `authorize` gives one
 ---@field name string the board's name
 
 ---@class dev.board.pomb.Detail
 ---@field id string the board's id
 ---@field columns {id: string, name: string}[] the columns in board order
 
----@class dev.board.pomb.Backend: dev.board.Backend
+---@class dev.board.pomb.Backend: dev.board.Backend, dev.board.Layout
 ---@field private __opts dev.board.pomb.Opts the server, token reference and board name
----@field private __secret string? the worker token, nil until the first request
+---@field private __secret string? the token, nil until the first request
 ---@field private __detail dev.board.pomb.Detail? the board with its columns
 ---@field private __colors table<string, string>? palette labels by colour id
+---@field private __id string? the board's id, once found or created
 local Backend = {}
 Backend.__index = Backend
 
@@ -413,6 +415,181 @@ function Backend:keepalive(id, fence, ticks, state)
         return nil, "cannot start the keep-alive loop"
     end
     return pid
+end
+
+---Use a token already in hand instead of reading one with `pass`.
+---@param secret string the token, held in memory only
+function Backend:authorize(secret)
+    self.__secret = secret
+end
+
+---Ask which scope the token in use carries.
+---@return string? scope the token's scope, nil when it could not be read
+---@return string? message why it could not be read
+function Backend:scope()
+    local who, message = self:__request("GET", "/api/v1/auth/whoami")
+    if not who then
+        return nil, message
+    end
+    return present(who.scope) or "none"
+end
+
+---Find the board's id by name, asking once.
+---@private
+---@return string? id the board's id
+---@return string? message why it cannot be found
+function Backend:__board_id()
+    if self.__id then
+        return self.__id
+    end
+    local boards, message = self:__request("GET", "/api/boards")
+    if not boards then
+        return nil, message
+    end
+    for _, entry in ipairs(boards) do
+        if entry.name == self.__opts.name then
+            self.__id = entry.id
+            return entry.id
+        end
+    end
+    return nil, unavailable("pomb has no board named " .. self.__opts.name)
+end
+
+function Backend:find()
+    local boards, message = self:__request("GET", "/api/boards")
+    if not boards then
+        return nil, message
+    end
+    for _, entry in ipairs(boards) do
+        if entry.name == self.__opts.name then
+            self.__id = entry.id
+            return true
+        end
+    end
+    return false
+end
+
+function Backend:create()
+    local templates, message = self:__request("GET", "/api/templates")
+    if not templates then
+        return nil, message
+    end
+    local body = { name = self.__opts.name }
+    local used
+    for _, template in ipairs(templates) do
+        if template.name == TEMPLATE then
+            body.template_id = template.id
+            used = template.name
+        end
+    end
+    local made
+    made, message = self:__request("POST", "/api/boards", body)
+    if not made then
+        return nil, message
+    end
+    self.__id = made.id
+    self.__detail = nil
+    return true, used
+end
+
+function Backend:read()
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local detail
+    detail, message = self:__request("GET", "/api/boards/" .. id)
+    if not detail then
+        return nil, message
+    end
+    local palette
+    palette, message = self:__request("GET", "/api/boards/" .. id .. "/colors")
+    if not palette then
+        return nil, message
+    end
+    local export
+    export, message = self:__request("GET", "/api/boards/" .. id .. "/export-data")
+    if not export then
+        return nil, message
+    end
+    local columns, colors, cards = {}, {}, {}
+    for _, column in ipairs(detail.columns) do
+        columns[#columns + 1] = {
+            id = column.id,
+            name = column.name,
+            is_done = column.is_done == true,
+        }
+    end
+    for _, color in ipairs(palette) do
+        colors[#colors + 1] = {
+            id = color.id,
+            value = color.value,
+            label = color.label,
+            description = color.description or "",
+            is_default = color.is_default == true,
+        }
+    end
+    for _, task in ipairs(export.tasks) do
+        cards[#cards + 1] = {
+            id = task.id,
+            name = task.name,
+            color_id = present(task.color_id),
+        }
+    end
+    return { columns = columns, colors = colors, cards = cards }
+end
+
+function Backend:add_column(name, is_done)
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local made
+    made, message =
+        self:__request("POST", "/api/columns", { board_id = id, name = name, is_done = is_done })
+    if not made then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:move_column(id, position)
+    local moved, message = self:__request("POST", "/api/columns/" .. id .. "/move", {
+        position = position,
+    })
+    if not moved then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:mark_done(id)
+    local done, message = self:__request("PATCH", "/api/columns/" .. id, { is_done = true })
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:set_color(id, fields)
+    local board_id, message = self:__board_id()
+    if not board_id then
+        return nil, message
+    end
+    local done
+    done, message = self:__request("PATCH", "/api/boards/" .. board_id .. "/colors/" .. id, fields)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:set_card(id, fields)
+    local done, message = self:__request("PATCH", "/api/tasks/" .. id, fields)
+    if not done then
+        return nil, message
+    end
+    return true
 end
 
 return M

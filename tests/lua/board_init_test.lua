@@ -1,0 +1,707 @@
+local t = require("testing")
+local board = require("dev.board")
+local devos = require("dev.os")
+local fs = require("dev.fs")
+local init = require("dev.board.init")
+local support = require("support")
+
+local TOKEN = "pomb_SECRETtoken0123456789"
+local DEVICE_CODE = "DEVCODE-secret-9876"
+local ADMIN_TOKEN = "pomb_ADMINtoken0123456789"
+local STANDARD = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
+
+local function copy(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local out = {}
+    for key, inner in pairs(value) do
+        out[key] = copy(inner)
+    end
+    return out
+end
+
+local function stock_palette()
+    local colors = {}
+    for index, value in ipairs({ "yellow", "green", "blue", "red", "orange", "white" }) do
+        colors[index] = {
+            id = value .. "-id",
+            value = value,
+            label = value:sub(1, 1):upper() .. value:sub(2),
+            description = "",
+            is_default = value == "yellow",
+        }
+    end
+    return colors
+end
+
+local function template_columns()
+    local columns = {}
+    for index, name in ipairs({ "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }) do
+        columns[index] = { id = "col-" .. name, name = name, is_done = name == "Done" }
+    end
+    return columns
+end
+
+local function fake_layout(opts)
+    opts = opts or {}
+    local state = {
+        exists = opts.exists ~= false,
+        columns = opts.columns or {},
+        colors = opts.colors or stock_palette(),
+        cards = opts.cards or {},
+        writes = {},
+    }
+    local layout = { state = state }
+    local function write(...)
+        state.writes[#state.writes + 1] = { ... }
+    end
+    function layout:find()
+        return state.exists
+    end
+    function layout:create()
+        write("create")
+        state.exists = true
+        state.columns = template_columns()
+        return true, "agent project"
+    end
+    function layout:read()
+        return copy({ columns = state.columns, colors = state.colors, cards = state.cards })
+    end
+    function layout:add_column(name, is_done)
+        write("add_column", name, is_done)
+        state.columns[#state.columns + 1] = { id = "col-" .. name, name = name, is_done = is_done }
+        return true
+    end
+    function layout:move_column(id, position)
+        write("move_column", id, position)
+        for at, column in ipairs(state.columns) do
+            if column.id == id then
+                table.insert(state.columns, position + 1, table.remove(state.columns, at))
+                break
+            end
+        end
+        return true
+    end
+    function layout:mark_done(id)
+        write("mark_done", id)
+        for _, column in ipairs(state.columns) do
+            if column.id == id then
+                column.is_done = true
+            end
+        end
+        return true
+    end
+    function layout:set_color(id, fields)
+        write("set_color", id)
+        for _, color in ipairs(state.colors) do
+            if fields.is_default then
+                color.is_default = color.id == id
+            end
+            if color.id == id then
+                color.label = fields.label or color.label
+                color.description = fields.description or color.description
+            end
+        end
+        return true
+    end
+    function layout:set_card(id, fields)
+        write("set_card", id)
+        for _, card in ipairs(state.cards) do
+            if card.id == id then
+                card.name = fields.name or card.name
+                card.color_id = fields.color_id or card.color_id
+            end
+        end
+        return true
+    end
+    return layout
+end
+
+local function names(columns)
+    local out = {}
+    for index, column in ipairs(columns) do
+        out[index] = column.name
+    end
+    return out
+end
+
+local function run(layout)
+    local lines = {}
+    local changes, message = init.run(layout, "demo", function(line)
+        lines[#lines + 1] = line
+    end)
+    return changes, message, lines
+end
+
+local function color(layout, value)
+    for _, candidate in ipairs(layout.state.colors) do
+        if candidate.value == value then
+            return candidate
+        end
+    end
+end
+
+t.test("a missing board ends in the standard state", function()
+    local layout = fake_layout({ exists = false })
+    local changes, message, lines = run(layout)
+    t.eq(message, nil)
+    t.eq(names(layout.state.columns), STANDARD)
+    t.eq(layout.state.columns[7].is_done, true)
+    t.eq(color(layout, "yellow").label, "1 Pomodoro")
+    t.eq(color(layout, "green").label, "2 Pomodori")
+    t.eq(color(layout, "blue").label, "3 Pomodori")
+    t.eq(color(layout, "red").label, ">3 Pomodori")
+    t.eq(color(layout, "white").label, "Unsized")
+    t.eq(color(layout, "white").is_default, true)
+    t.eq(color(layout, "yellow").is_default, false)
+    t.eq(lines[1], "created board demo from the agent project template")
+    t.eq(changes, #lines)
+end)
+
+t.test("a second run changes nothing and says nothing", function()
+    local layout = fake_layout({ exists = false })
+    run(layout)
+    local writes = #layout.state.writes
+    local changes, message, lines = run(layout)
+    t.eq(message, nil)
+    t.eq(changes, 0)
+    t.eq(lines, {})
+    t.eq(#layout.state.writes, writes)
+end)
+
+t.test("an old board keeps its cards and gains what is missing", function()
+    local layout = fake_layout({
+        columns = {
+            { id = "col-Done", name = "Done", is_done = true },
+            { id = "col-Ready", name = "ready", is_done = false },
+            { id = "col-Backlog", name = "Backlog", is_done = false },
+        },
+    })
+    local changes, message = run(layout)
+    t.eq(message, nil)
+    t.eq(names(layout.state.columns), {
+        "Icebox",
+        "Backlog",
+        "ready",
+        "In Progress",
+        "In Review",
+        "Blocked",
+        "Done",
+    })
+    t.ok(changes > 0)
+    local again = run(layout)
+    t.eq(again, 0)
+end)
+
+t.test("a column init does not recognise is reported and kept where it was named", function()
+    local columns = template_columns()
+    table.insert(columns, 3, { id = "col-odd", name = "Someday", is_done = false })
+    local layout = fake_layout({ columns = columns })
+    local _, message, lines = run(layout)
+    t.eq(message, nil)
+    local kept = 0
+    for _, line in ipairs(lines) do
+        if line == 'kept column "Someday", which is not part of the standard board' then
+            kept = kept + 1
+        end
+    end
+    t.eq(kept, 1)
+    t.eq(layout.state.columns[#layout.state.columns].name, "Someday")
+    t.eq(layout.state.columns[#layout.state.columns].id, "col-odd")
+    for _, write in ipairs(layout.state.writes) do
+        t.ok(write[1] ~= "rename")
+    end
+    local _, _, second = run(layout)
+    t.eq(#second, 1)
+    t.ok(second[1]:find("kept column", 1, true))
+    t.eq(#layout.state.writes > 0, true)
+end)
+
+t.test("a Done column that does not count as done is marked", function()
+    local columns = template_columns()
+    columns[6].is_done = false
+    local layout = fake_layout({ columns = columns })
+    local _, _, lines = run(layout)
+    t.eq(layout.state.columns[7].is_done, true)
+    t.ok(lines[2]:find("marked Done", 1, true) or lines[1]:find("marked Done", 1, true), lines[1])
+end)
+
+t.test("size words come off names and set the colour of a card still at the default", function()
+    local layout = fake_layout({
+        columns = template_columns(),
+        cards = {
+            { id = "aaaaaaaa-1", name = "Plain card", color_id = "yellow-id" },
+            { id = "bbbbbbbb-1", name = "Make it (blue)", color_id = "yellow-id" },
+            { id = "cccccccc-1", name = "Big thing (red, split)", color_id = nil },
+            { id = "dddddddd-1", name = "Chosen (yellow)", color_id = "green-id" },
+            { id = "eeeeeeee-1", name = "Small (green)", color_id = "white-id" },
+            { id = "ffffffff-1", name = "(blue)", color_id = nil },
+        },
+    })
+    local _, message, lines = run(layout)
+    t.eq(message, nil)
+    local cards = layout.state.cards
+    t.eq(cards[1].name, "Plain card")
+    t.eq(cards[2].name, "Make it")
+    t.eq(cards[2].color_id, "blue-id")
+    t.eq(cards[3].name, "Big thing")
+    t.eq(cards[3].color_id, "red-id")
+    t.eq(cards[4].name, "Chosen")
+    t.eq(cards[4].color_id, "green-id")
+    t.eq(cards[5].name, "Small")
+    t.eq(cards[5].color_id, "green-id")
+    t.eq(cards[6].name, "(blue)")
+    local joined = table.concat(lines, "\n")
+    t.ok(joined:find('renamed card bbbbbbbb to "Make it" and coloured it blue', 1, true), joined)
+    t.ok(
+        joined:find('renamed card dddddddd to "Chosen"\n', 1, true)
+            or joined:find('renamed card dddddddd to "Chosen"$'),
+        joined
+    )
+    t.ok(joined:find("kept card ffffffff", 1, true), joined)
+    local again = run(layout)
+    t.eq(again, 0)
+end)
+
+t.test("split_size takes the five trailing size words and nothing else", function()
+    t.eq({ init.split_size("A (yellow)") }, { "A", "yellow" })
+    t.eq({ init.split_size("A (green)") }, { "A", "green" })
+    t.eq({ init.split_size("A b (blue)") }, { "A b", "blue" })
+    t.eq({ init.split_size("A (red)") }, { "A", "red" })
+    t.eq({ init.split_size("A (red, split)") }, { "A", "red" })
+    t.eq({ init.split_size("A (red) (blue)") }, { "A", "blue" })
+    t.eq(init.split_size("A (blue) later"), nil)
+    t.eq(init.split_size("A (purple)"), nil)
+    t.eq(init.split_size("A blue"), nil)
+end)
+
+t.test("a refused change says to use --admin and stops with the changes so far said", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:set_color()
+        return nil, "board unavailable: pomb answered 403: insufficient_scope"
+    end
+    local changes, message, lines = run(layout)
+    t.eq(changes, nil)
+    t.ok(message:find("run dev board init --admin", 1, true), message)
+    t.eq(lines[1], "added column Icebox")
+end)
+
+local BOARDS = '[{"id":"board-1","name":"demo","archived":false}]'
+local DETAIL = '{"id":"board-1","name":"demo","swimlanes":[],"columns":['
+local function detail()
+    local parts = {}
+    for _, name in ipairs(STANDARD) do
+        parts[#parts + 1] = string.format(
+            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s}',
+            name:gsub(" ", ""),
+            name,
+            name == "Done" and "true" or "false"
+        )
+    end
+    return DETAIL .. table.concat(parts, ",") .. "]}"
+end
+
+local function colors_json()
+    local labels = {
+        yellow = "1 Pomodoro",
+        green = "2 Pomodori",
+        blue = "3 Pomodori",
+        red = ">3 Pomodori",
+        white = "Unsized",
+    }
+    local descriptions = {}
+    for _, swatch in ipairs(init.PALETTE) do
+        descriptions[swatch.value] = swatch.description
+    end
+    local parts = {}
+    for _, value in ipairs({ "yellow", "green", "blue", "red", "white" }) do
+        parts[#parts + 1] = string.format(
+            '{"id":"%s-id","value":"%s","label":"%s","description":"%s","is_default":%s,"enabled":true}',
+            value,
+            value,
+            labels[value],
+            descriptions[value],
+            value == "white" and "true" or "false"
+        )
+    end
+    return "[" .. table.concat(parts, ",") .. "]"
+end
+
+local EXPORT =
+    '{"tasks":[{"id":"11111111-aaaa","name":"Keep","column_id":"col-Ready","color_id":"blue-id"}]}'
+
+local CURL = [[#!/bin/sh
+printf 'curl %s\n' "$*" >>"$ROOT/calls"
+env >>"$ROOT/env"
+case " $* " in *" -K - "*) cat >"$ROOT/stdin" ;; esac
+for a; do case "$a" in @*) cat "${a#@}" >>"$ROOT/bodies"; echo >>"$ROOT/bodies" ;; esac; done
+for last; do :; done
+status=200
+case "$last" in
+*/api/v1/auth/device) body='{"device_code":"]] .. DEVICE_CODE .. [[","user_code":"ABCD-EFGH","verification_url":"https://pomb.example/device","expires_in_seconds":600,"interval_seconds":1}' ;;
+*/api/v1/auth/device/token)
+    n=$(cat "$ROOT/polls" 2>/dev/null || echo 0)
+    n=$((n + 1))
+    echo "$n" >"$ROOT/polls"
+    line=$(sed -n "${n}p" "$ROOT/script")
+    status=${line%%|*}
+    body=${line#*|}
+    ;;
+*/api/v1/auth/whoami) body=$(cat "$ROOT/whoami.json") ;;
+*/api/templates) body=$(cat "$ROOT/templates.json") ;;
+*/api/boards)
+    case " $* " in
+    *" -X POST "*) body='{"id":"board-1"}' ;;
+    *) body=$(cat "$ROOT/boards.json") ;;
+    esac
+    ;;
+*/api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
+*/colors) body=$(cat "$ROOT/colors.json") ;;
+*/export-data) body=$(cat "$ROOT/export.json") ;;
+*) body='{"ok":true}' ;;
+esac
+printf '%s\n%s' "$body" "$status"
+]]
+
+local function executable(path, body)
+    assert(fs.write(path, body))
+    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+end
+
+local function sandbox(opts)
+    opts = opts or {}
+    local root = support.sandbox({
+        [".dev/config.toml"] = opts.project or '[board]\nbackend = "pomb"\nname = "demo"\n',
+    }, {})
+    local home = support.tempdir()
+    local tmp = support.tempdir()
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
+    assert(
+        fs.write(
+            home .. "/.config/dev/config.toml",
+            opts.user
+                or '[board.pomb]\nurl = "https://pomb.example"\nlead_token = "pass:secrets/lead/token/pomb"\n'
+        )
+    )
+    for name, body in pairs({
+        ["boards.json"] = BOARDS,
+        ["detail.json"] = detail(),
+        ["colors.json"] = colors_json(),
+        ["export.json"] = EXPORT,
+        ["templates.json"] = '[{"id":"tpl-1","name":"agent project","built_in":false}]',
+        ["whoami.json"] = '{"kind":"token","name":"x","scope":"admin"}',
+        ["script"] = opts.script
+            or ("200|" .. '{"token":"' .. ADMIN_TOKEN .. '","name":"n","scopes":["admin"]}\n'),
+    }) do
+        assert(fs.write(root .. "/" .. name, body))
+    end
+    executable(root .. "/bin/curl", CURL)
+    executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. devos.which("sleep") .. " 0.1\n")
+    executable(
+        root .. "/bin/pass",
+        '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\necho "' .. TOKEN .. '"\n'
+    )
+    return root, home, tmp
+end
+
+local function dev(root, home, tmp, args)
+    return support.dev(
+        root,
+        args,
+        { env = { HOME = home, ROOT = root, TMPDIR = tmp, XDG_STATE_HOME = home .. "/state" } }
+    )
+end
+
+local function read(root, name)
+    return fs.read(root .. "/" .. name) or ""
+end
+
+local function writes(root)
+    local count = 0
+    for line in read(root, "calls"):gsub("\n%%", " %%"):gmatch("[^\n]+") do
+        if
+            line:find("-X PATCH", 1, true)
+            or (line:find("-X POST", 1, true) and not line:find("/auth/", 1, true))
+        then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+t.test("init on a board already at the standard says so and writes nothing", function()
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0)
+    t.eq(out, "board demo already follows the standard, nothing to change\n")
+    t.eq(writes(root), 0)
+    t.ok(read(root, "calls"):find("pass show secrets/lead/token/pomb", 1, true))
+    t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
+end)
+
+t.test("init --admin pairs through pending, slow_down and success", function()
+    local root, home, tmp = sandbox({
+        script = '428|{"code":"authorization_pending","message":"wait"}\n'
+            .. '429|{"code":"slow_down","message":"slower"}\n'
+            .. '428|{"code":"authorization_pending","message":"wait"}\n'
+            .. '200|{"token":"'
+            .. ADMIN_TOKEN
+            .. '","name":"n","scopes":["admin"]}\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+    t.eq(code, 0)
+    t.eq(
+        out,
+        "approve the admin sign-in at https://pomb.example/device\n"
+            .. "code: ABCD-EFGH\n"
+            .. "board demo already follows the standard, nothing to change\n"
+    )
+    t.eq(read(root, "polls"), "4\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find('"client_name":"dev-board-init@', 1, true), calls)
+    t.ok(calls:find('"scopes":["admin"]', 1, true), calls)
+    t.eq(calls:find("pass show", 1, true), nil)
+    t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. ADMIN_TOKEN .. '"\n')
+end)
+
+t.test("the device token never reaches argv, the environment, a file or the output", function()
+    local root, home, tmp = sandbox()
+    local out = dev(root, home, tmp, { "-vv", "board", "init", "--admin" })
+    t.eq(out:find(ADMIN_TOKEN, 1, true), nil)
+    t.eq(read(root, "calls"):find(ADMIN_TOKEN, 1, true), nil)
+    t.eq(read(root, "env"):find(ADMIN_TOKEN, 1, true), nil)
+    t.eq(read(root, "calls"):find(DEVICE_CODE, 1, true), nil)
+    t.eq(read(root, "env"):find(DEVICE_CODE, 1, true), nil)
+    t.ok(read(root, "bodies"):find(DEVICE_CODE, 1, true))
+    t.eq(read(root, "bodies"):find(ADMIN_TOKEN, 1, true), nil)
+    t.eq(fs.list(tmp), {})
+    t.eq(fs.list(home .. "/state") == nil or #fs.list(home .. "/state") == 0, true)
+    local found = devos.capture({ "grep", "-rl", ADMIN_TOKEN, home, tmp })
+    t.eq(found, "")
+end)
+
+t.test("a denied sign-in ends the run with no board call", function()
+    local root, home, tmp = sandbox({
+        script = '403|{"code":"access_denied","message":"no"}\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+    t.eq(code, 1)
+    t.ok(out:find("dev: the sign-in was denied", 1, true), out)
+    t.eq(read(root, "calls"):find("/api/boards", 1, true), nil)
+    t.eq(fs.list(tmp), {})
+end)
+
+t.test("an expired or unknown sign-in ends the run", function()
+    for _, case in ipairs({
+        { '410|{"code":"device_code_expired","message":"x"}\n', "not approved in time" },
+        { '400|{"code":"invalid_grant","message":"x"}\n', "no longer knows" },
+        { '409|{"code":"quota_exceeded","message":"x"}\n', "revoke one" },
+        { '200|{"token":"bad\\"token","name":"n"}\n', "not plain text" },
+    }) do
+        local root, home, tmp = sandbox({ script = case[1] })
+        local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+        t.eq(code, 1)
+        t.ok(out:find(case[2], 1, true), out)
+    end
+end)
+
+t.test("a token the approver lowered is refused", function()
+    local root, home, tmp = sandbox()
+    assert(fs.write(root .. "/whoami.json", '{"kind":"token","name":"x","scope":"work"}'))
+    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+    t.eq(code, 1)
+    t.ok(out:find("the approved token has the work scope, init needs admin", 1, true), out)
+    t.eq(writes(root), 0)
+end)
+
+t.test("init without a lead token or --admin says what to set", function()
+    local root, home, tmp = sandbox({ user = '[board.pomb]\nurl = "https://pomb.example"\n' })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 1)
+    t.ok(out:find("lead_token is not set", 1, true), out)
+end)
+
+t.test("a project with no [board] section needs --name and then gets one", function()
+    local root, home, tmp = sandbox({ project = "" })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 1)
+    t.ok(out:find("pass --name N", 1, true), out)
+    t.eq(read(root, ".dev/config.toml"), "")
+    out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
+    t.eq(code, 0)
+    t.eq(
+        out,
+        "wrote [board] to .dev/config.toml\n"
+            .. "board demo already follows the standard, nothing to change\n"
+    )
+    t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
+    out, code = dev(root, home, tmp, { "board", "status" })
+    t.eq(out, "backend: pomb\nboard: demo\n")
+end)
+
+t.test("the section is appended after other config", function()
+    local root, home, tmp = sandbox({ project = '[remote]\nrunner = "ci"' })
+    dev(root, home, tmp, { "board", "init", "--name", "demo" })
+    t.eq(
+        read(root, ".dev/config.toml"),
+        '[remote]\nrunner = "ci"\n\n[board]\nbackend = "pomb"\nname = "demo"\n'
+    )
+end)
+
+t.test("--name that disagrees with the [board] name is a usage error", function()
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init", "--name", "other" })
+    t.eq(code, 2)
+    t.ok(out:find("--name other is not the [board] name demo", 1, true), out)
+    t.eq(read(root, "calls"), "")
+end)
+
+t.test("init refuses an unknown flag and a stray argument", function()
+    local root, home, tmp = sandbox()
+    local _, code = dev(root, home, tmp, { "board", "init", "--bogus" })
+    t.eq(code, 2)
+    _, code = dev(root, home, tmp, { "board", "init", "extra" })
+    t.eq(code, 2)
+end)
+
+local function calls_of(root)
+    return (read(root, "calls"):gsub("\n%%", " %%"))
+end
+
+t.test("init sends the changes an old board needs as the API's own calls", function()
+    local root, home, tmp = sandbox()
+    local last = DETAIL
+    local ordered = { "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done", "Icebox" }
+    local parts = {}
+    for _, name in ipairs(ordered) do
+        parts[#parts + 1] = string.format(
+            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s}',
+            name:gsub(" ", ""),
+            name,
+            name == "Done" and "true" or "false"
+        )
+    end
+    assert(fs.write(root .. "/detail.json", last .. table.concat(parts, ",") .. "]}"))
+    local stock = {}
+    for _, value in ipairs({ "yellow", "green", "blue", "red", "white" }) do
+        stock[#stock + 1] = string.format(
+            '{"id":"%s-id","value":"%s","label":"%s","description":"","is_default":%s}',
+            value,
+            value,
+            value:sub(1, 1):upper() .. value:sub(2),
+            value == "yellow" and "true" or "false"
+        )
+    end
+    assert(fs.write(root .. "/colors.json", "[" .. table.concat(stock, ",") .. "]"))
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":[{"id":"11111111-aaaa","name":"Keep it (blue)","column_id":"col-Ready","color_id":"yellow-id"}]}'
+        )
+    )
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0)
+    local calls = calls_of(root)
+    t.ok(calls:find("-X POST", 1, true), calls)
+    t.ok(
+        calls:find(
+            '--data-raw {"position":0} https://pomb.example/api/columns/col-Icebox/move',
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(calls:find("-X PATCH", 1, true), calls)
+    t.ok(
+        calls:find(
+            '--data-raw {"description":"One pomodoro or less","label":"1 Pomodoro"} https://pomb.example/api/boards/board-1/colors/yellow-id',
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(
+        calls:find(
+            '--data-raw {"is_default":true} https://pomb.example/api/boards/board-1/colors/white-id',
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(
+        calls:find(
+            '--data-raw {"color_id":"blue-id","name":"Keep it"} https://pomb.example/api/tasks/11111111-aaaa',
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(out:find("moved column Icebox to position 0\n", 1, true), out)
+    t.ok(out:find('named yellow "1 Pomodoro"\n', 1, true), out)
+    t.ok(out:find("made white the default colour\n", 1, true), out)
+    t.ok(out:find('renamed card 11111111 to "Keep it" and coloured it blue\n', 1, true), out)
+    t.eq(out:find(TOKEN, 1, true), nil)
+end)
+
+t.test("init makes a missing board from the agent project template", function()
+    local root, home, tmp = sandbox()
+    assert(fs.write(root .. "/boards.json", "[]"))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0)
+    local calls = calls_of(root)
+    t.ok(
+        calls:find(
+            '--data-raw {"name":"demo","template_id":"tpl-1"} https://pomb.example/api/boards',
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(out:find("created board demo from the agent project template\n", 1, true), out)
+end)
+
+t.test("init adds a column with the done flag where it belongs", function()
+    local root, home, tmp = sandbox()
+    assert(
+        fs.write(
+            root .. "/detail.json",
+            '{"id":"board-1","name":"demo","swimlanes":[],"columns":[{"id":"col-Backlog","name":"Backlog","is_done":false}]}'
+        )
+    )
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 1)
+    local calls = calls_of(root)
+    t.ok(
+        calls:find(
+            '--data-raw {"board_id":"board-1","is_done":true,"name":"Done"} https://pomb.example/api/columns',
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(calls:find('"is_done":false,"name":"Icebox"', 1, true), calls)
+    t.ok(out:find("added column Icebox\n", 1, true), out)
+    t.ok(out:find("still has no Icebox column", 1, true), out)
+end)
+
+t.test("board names the columns init lays out", function()
+    t.eq(board.COLUMNS, STANDARD)
+end)
+
+t.test("a run that stops while stripping can be repeated without losing a size", function()
+    local layout = fake_layout({
+        columns = template_columns(),
+        cards = { { id = "aaaaaaaa-1", name = "Thing (red)", color_id = "yellow-id" } },
+    })
+    local set_card = layout.set_card
+    function layout:set_card()
+        return nil, "board unavailable: pomb answered 503: down"
+    end
+    local changes = run(layout)
+    t.eq(changes, nil)
+    layout.set_card = set_card
+    run(layout)
+    t.eq(layout.state.cards[1].name, "Thing")
+    t.eq(layout.state.cards[1].color_id, "red-id")
+end)
