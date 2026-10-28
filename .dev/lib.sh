@@ -27,13 +27,6 @@ split_vars() {
 
 split_vars "$@"
 
-# shellcheck disable=SC2034  # setup.sh reads HOST_OS
-if [ "${OS:-}" = Windows_NT ]; then
-    HOST_OS=Windows
-else
-    HOST_OS="$(uname)"
-fi
-
 die() {
     printf '%s\n' "$*" >&2
     exit 1

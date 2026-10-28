@@ -15,7 +15,9 @@ local SCRIPT_SUITES = {
 }
 
 local LUA_SUITES = {
+  "tests/lua/mac_test.lua",
   "tests/lua/os_test.lua",
+  "tests/lua/steps_test.lua",
   "tests/lua/term_test.lua",
 }
 

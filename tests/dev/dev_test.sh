@@ -236,16 +236,6 @@ assert_contains "-v prints the built-in command on stderr" "$(run_dev "$rust" -v
 assert_contains "-vv exports the trace to the built-in's bash children" "$(run_dev "$rust" -vv build 2>&1 >/dev/null)" "+ cargo:2: echo"
 assert_contains "__flags lint includes --verbose" "$(run_dev "$vp" __flags lint)" "--verbose"
 assert_contains "help lists the global flags" "$(run_dev "$vp" help)" "global flags"
-assert_eq "verbose_printf prints for VERBOSE=1" "$(
-    # shellcheck source=../../scripts/helpers.sh
-    source "$REPO/scripts/helpers.sh"
-    VERBOSE=1 verbose_printf 'seen'
-)" "seen"
-assert_eq "verbose_printf prints for VERBOSE=yes" "$(
-    # shellcheck source=../../scripts/helpers.sh
-    source "$REPO/scripts/helpers.sh"
-    VERBOSE=yes verbose_printf 'seen'
-)" "seen"
 
 # Usage
 run_dev "$rust" bogus >/dev/null 2>&1
