@@ -17,6 +17,14 @@ function M.tempdir()
     return assert(fs.mktemp({ prefix = "test", dir = true }))
 end
 
+---Read everything a temporary file holds.
+---@param file file* a file from `io.tmpfile`
+---@return string text the whole content
+function M.drain(file)
+    file:seek("set")
+    return file:read("*a")
+end
+
 local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"

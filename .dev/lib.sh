@@ -255,7 +255,7 @@ install_ssh() {
 # Antinote keeps every setting in one sandboxed plist that cfprefsd rewrites in
 # place, so a symlink there is replaced by a real file the first time the app
 # writes a setting. Stow places the tracked copy under ~/.config/antinote and
-# antinote.sh imports it into the app's domain with `defaults import`, which
+# dev antinote import imports it into the app's domain with `defaults import`, which
 # merges key by key and so leaves the app's runtime state alone.
 install_antinote() {
     printf '> Installing antinote... '
@@ -265,10 +265,10 @@ install_antinote() {
         printf '> Skipping the Antinote settings import, which writes the real prefs domain and not TARGET_DIR %s\n' "$TARGET_DIR"
         return 0
     fi
-    bash scripts/antinote.sh import --skip-if-running
+    "$DEV_SELF" antinote import --skip-if-running
 }
 
-# settings.json is ignored by stow and copied by pi-settings.sh instead. pi
+# settings.json is ignored by stow and copied by dev pi install instead. pi
 # writes runtime state into that file -- `theme` on every system appearance
 # change, `lastChangelogVersion` after showing a changelog -- so a symlink makes
 # the repo dirty every time the Mac switches to light mode. ~/.pi/agent stays a
@@ -278,7 +278,7 @@ install_pi() {
     mkdir -p "$TARGET_DIR/.pi/agent"
     stow_pkg -S pi
     printf 'DONE\n'
-    bash scripts/pi-settings.sh install
+    "$DEV_SELF" pi install
 }
 
 # The pomb skill is served by the board, so it is fetched into the
