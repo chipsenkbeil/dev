@@ -8,10 +8,6 @@ cd "$ROOT" || exit 1
 source "$ROOT/scripts/helpers.sh"
 
 VERB="$(basename "$0" .sh)"
-NOUN="$(cd "$(dirname "$0")" && basename "$PWD")"
-if [ "$NOUN" != .dev ]; then
-    VERB="$NOUN $VERB"
-fi
 
 # ARGS is read by the scripts that source this file.
 
