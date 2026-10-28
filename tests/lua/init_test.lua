@@ -3,6 +3,8 @@ local devos = require("dev.os")
 local fs = require("dev.fs")
 local pipelines = require("dev.pipelines")
 local support = require("support")
+local templates = require("dev.templates")
+local Kind = require("dev.project").Kind
 
 local function project()
     local root = support.sandbox({ ["a.lua"] = "print(1)\n" }, {})
@@ -82,6 +84,16 @@ t.test("init skips the lint set and the workflow for a type that has none", func
     )
     t.ok(out:find("skipped: lint set: none yet for godot projects", 1, true), out)
     fs.remove(root, { recursive = true })
+end)
+
+t.test("init plans a lint set exactly for the types templates.set_for knows", function()
+    for _, kind in ipairs({ Kind.RUST, Kind.LOVE2D, Kind.LUA, Kind.GODOT, Kind.NODE }) do
+        local root = project()
+        local out = support.dev(root, { "init", "--type", kind, "--dry-run", "--no-gerrit" })
+        local none = out:find("skipped: lint set: none yet for " .. kind, 1, true) ~= nil
+        t.eq(none, templates.set_for(kind) == nil, kind .. "\n" .. out)
+        fs.remove(root, { recursive = true })
+    end
 end)
 
 t.test("init refuses a type it has no name for", function()

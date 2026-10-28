@@ -249,7 +249,7 @@ end
 local function init_lints(run)
     local kind = run.kind
     local dir, err
-    if kind == Kind.RUST or kind == Kind.LOVE2D or kind == Kind.LUA then
+    if templates.set_for(kind) then
         dir, err = templates.dir(kind)
         if not dir then
             die(err)
