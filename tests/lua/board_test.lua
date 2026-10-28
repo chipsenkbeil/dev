@@ -39,6 +39,18 @@ local function fake(cards, times)
         calls[#calls + 1] = { "note", id, text }
         return true
     end
+    function backend:comments(id)
+        calls[#calls + 1] = { "comments", id }
+        return backend.listed or {}
+    end
+    function backend:edit_note(id, comment, text)
+        calls[#calls + 1] = { "edit_note", id, comment, text }
+        return true
+    end
+    function backend:delete_note(id, comment)
+        calls[#calls + 1] = { "delete_note", id, comment }
+        return true
+    end
     function backend:set_labels(id, labels, fence)
         calls[#calls + 1] = { "set_labels", id, labels, fence }
         return true
@@ -249,6 +261,77 @@ t.test("note and move resolve the card by prefix", function()
     t.eq(backend.calls[3], { "move", ID_C, "In Review" })
 end)
 
+local COMMENT_1 = "aaaaaaaa-1111-4111-8111-111111111111"
+local COMMENT_2 = "bbbbbbbb-2222-4222-8222-222222222222"
+
+local function with_comments()
+    local backend = fake(sample())
+    backend.listed = {
+        {
+            id = COMMENT_1,
+            who = "worker",
+            at = "2026-10-27T09:30:12Z",
+            body = "first line\nsecond",
+        },
+        { id = COMMENT_2, who = "human", at = "2026-10-27T10:00:00Z", body = "ok" },
+    }
+    return backend
+end
+
+t.test("notes lists each comment with its id prefix, writer, time and first line", function()
+    local backend = with_comments()
+    local result = commands.run("notes", { "cccccccc" }, backend)
+    t.eq(
+        result.output,
+        "aaaaaaaa  worker  2026-10-27 09:30  first line\nbbbbbbbb  human   2026-10-27 10:00  ok"
+    )
+    t.eq(commands.run("notes", { "cccccccc" }, fake(sample())).output, "no comments")
+    t.eq(commands.run("notes", {}, backend).code, 2)
+    t.eq(commands.run("notes", { "deadbeef" }, backend).code, 1)
+end)
+
+t.test("note --edit and --delete resolve the comment by prefix", function()
+    local backend = with_comments()
+    local result =
+        commands.run("note", { "cccccccc", "--edit", "bbbbbbbb", "fixed", "it" }, backend)
+    t.eq(result.output, "edited cccccccc bbbbbbbb")
+    t.eq(backend.calls[2], { "edit_note", ID_C, COMMENT_2, "fixed it" })
+    result = commands.run("note", { "cccccccc", "--delete", "aaaaaaaa-1" }, backend)
+    t.eq(result.output, "deleted cccccccc aaaaaaaa")
+    t.eq(backend.calls[4], { "delete_note", ID_C, COMMENT_1 })
+end)
+
+t.test("note --edit and --delete refuse a bad comment prefix or a bad shape", function()
+    local backend = with_comments()
+    for _, args in ipairs({
+        { "cccccccc", "--edit", "bbbb", "x" },
+        { "cccccccc", "--delete", "zzzzzzzz" },
+        { "cccccccc", "--delete", "cccccccc" },
+    }) do
+        local result = commands.run("note", args, backend)
+        t.eq(result.code, 1)
+    end
+    t.eq(
+        commands.run("note", { "cccccccc", "--delete", "bbbb" }, backend).message,
+        "a comment id needs at least 8 hex characters: bbbb"
+    )
+    t.eq(
+        commands.run("note", { "cccccccc", "--delete", "cccccccc" }, backend).message,
+        "no comment starts with cccccccc"
+    )
+    for _, args in ipairs({
+        { "cccccccc", "--edit", "bbbbbbbb" },
+        { "cccccccc", "--edit" },
+        { "cccccccc", "--delete" },
+        { "cccccccc", "--delete", "bbbbbbbb", "extra" },
+    }) do
+        t.eq(commands.run("note", args, backend).code, 2)
+    end
+    for _, call in ipairs(backend.calls) do
+        t.ok(call[1] == "comments", call[1])
+    end
+end)
+
 t.test("move and note refuse before the backend is called", function()
     local backend = fake(sample())
     local result = commands.run("move", { "cccccccc", "doing" }, backend)
@@ -405,6 +488,10 @@ local EXPORT = '{"tasks":['
     .. '{"id":"'
     .. ID_C
     .. '","name":"Early","column_id":"col-backlog","position":1,"color_id":"white-id","labels":[]}]}'
+local COMMENTS = '[{"id":"aaaaaaaa-1111-4111-8111-111111111111","author":"api-token","actor_kind":"agent",'
+    .. '"token_name":"worker","created_at":"2026-10-27T09:30:12Z","body":"first\\nline"},'
+    .. '{"id":"dddddddd-4444-4444-8444-444444444444","author":"x","actor_kind":"human",'
+    .. '"token_name":null,"created_at":"2026-10-27T10:00:00Z","body":"mine? no"}]'
 local TASK = '{"id":"'
     .. ID_A
     .. '","name":"First","column_id":"col-ready","color_id":"yellow-id","labels":["docs"]}'
@@ -429,6 +516,9 @@ case "$last" in
     if [ -f "$ROOT/hb_status" ]; then status=$(cat "$ROOT/hb_status"); fi
     ;;
 */claim/release) body= ;;
+*/comments/dddddddd*) body='{"message":"not yours"}'; status=403 ;;
+*/comments/*) body='{"ok":true}' ;;
+*/comments) body=$(cat "$ROOT/comments.json") ;;
 */claim) body='{"fence":7,"claimant":"x"}' ;;
 *) body='{"ok":true}' ;;
 esac
@@ -455,6 +545,7 @@ local function sandbox(opts)
         ["colors.json"] = COLORS,
         ["export.json"] = EXPORT,
         ["task.json"] = TASK,
+        ["comments.json"] = COMMENTS,
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
@@ -740,6 +831,47 @@ t.test("note posts a comment of kind agent and move goes to the top of the colum
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     t.ok(calls:find('"column_id":"col-review"', 1, true), calls)
     t.ok(calls:find('"position":0', 1, true), calls)
+end)
+
+t.test("notes, note --edit and note --delete reach pomb's comment routes", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "notes", "11111111-a" })
+    t.eq(code, 0)
+    t.eq(
+        out,
+        "aaaaaaaa  worker  2026-10-27 09:30  first\ndddddddd  human   2026-10-27 10:00  mine? no\n"
+    )
+    out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "aaaaaaaa", "better" })
+    t.eq(code, 0)
+    t.eq(out, "edited 11111111 aaaaaaaa\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find("-X PATCH", 1, true), calls)
+    t.ok(
+        calls:find(
+            "/api/tasks/" .. ID_A .. "/comments/aaaaaaaa-1111-4111-8111-111111111111",
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(calls:find('--data-raw {"body":"better"}', 1, true), calls)
+    out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "aaaaaaaa" })
+    t.eq(code, 0)
+    t.eq(out, "deleted 11111111 aaaaaaaa\n")
+    t.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
+end)
+
+t.test("a 403 on a comment says it is not yours and exits 1", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "dddddddd", "x" })
+    t.eq(code, 1)
+    t.eq(out, "dev: that comment is not yours to change\n")
+    out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "dddddddd" })
+    t.eq(code, 1)
+    t.eq(out, "dev: that comment is not yours to change\n")
+    out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
+    t.eq(code, 1)
+    t.eq(out, "dev: a comment id needs at least 8 hex characters: eeee\n")
 end)
 
 t.test("a nonexistent column on the board is reported", function()

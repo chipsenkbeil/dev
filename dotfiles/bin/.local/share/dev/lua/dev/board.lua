@@ -23,10 +23,19 @@ local M = {}
 ---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?): boolean?, string? the card given the palette colour of that value, checked against the claim's fence when one is given
 ---@field set_labels fun(self: dev.board.Backend, id: string, labels: string[], fence: integer?): boolean?, string? the card's whole label list replaced, checked against the claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?): boolean?, string? a comment of kind agent added to the card, checked against the claim's fence when one is given
+---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
+---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
+---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
+
+---@class dev.board.Comment
+---@field id string the comment's full id
+---@field who string the token's name, else the kind of actor that wrote it
+---@field at string when it was written, as an RFC 3339 stamp
+---@field body string its text
 
 ---@class dev.board.AddOpts
 ---@field description string? the card's description
@@ -137,30 +146,34 @@ function M.has_color(card, color)
     return (card.color or M.SIZES[UNSIZED]) == color
 end
 
----Find the card an id or a unique prefix of it names.
----@param cards dev.board.Card[] the board's cards
+---Find the card, or other item with an id, that an id or a unique prefix of it names.
+---@generic T: {id: string}
+---@param items T[] the board's cards, or a card's comments
 ---@param word string the id or a prefix of at least 8 characters
----@return dev.board.Card? card the card
----@return string? message why no card matched
-function M.resolve(cards, word)
+---@param noun string? what the items are called in a message, `card` by default
+---@return T? item the item
+---@return string? message why no item matched
+function M.resolve(items, word, noun)
+    noun = noun or "card"
     local prefix = word:lower()
     if #prefix < M.MIN_PREFIX or not prefix:find("^[%x-]+$") then
-        return nil, "a card id needs at least " .. M.MIN_PREFIX .. " hex characters: " .. word
+        return nil,
+            "a " .. noun .. " id needs at least " .. M.MIN_PREFIX .. " hex characters: " .. word
     end
     local found
-    for _, card in ipairs(cards) do
-        if card.id:lower():sub(1, #prefix) == prefix then
-            if card.id:lower() == prefix then
-                return card
+    for _, item in ipairs(items) do
+        if item.id:lower():sub(1, #prefix) == prefix then
+            if item.id:lower() == prefix then
+                return item
             end
             if found then
-                return nil, word .. " matches more than one card, give more characters"
+                return nil, word .. " matches more than one " .. noun .. ", give more characters"
             end
-            found = card
+            found = item
         end
     end
     if not found then
-        return nil, "no card starts with " .. word
+        return nil, "no " .. noun .. " starts with " .. word
     end
     return found
 end

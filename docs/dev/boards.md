@@ -15,6 +15,9 @@ dev board add "Name" --label needs:lead --label docs
 dev board label 8af0e001 +needs:human
 dev board stale --days 7
 dev board note 8af0e001 "Tests pass, landing now."
+dev board notes 8af0e001
+dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
+dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
 dev board take 8af0e001
 dev board release 8af0e001
@@ -141,6 +144,16 @@ unclaimed and not blocked, or `no ready cards`.
 
 `add` puts a card in Backlog unless `--column` names another column. `note`
 adds a comment of kind agent. `move` puts the card at the top of the column.
+
+`notes CARD` lists the card's comments, oldest first: the comment's id prefix,
+who wrote it (the token's name, else the kind of actor), the time in UTC and the
+first line. `note CARD --edit COMMENT TEXT` replaces the text of one of your own
+comments and `note CARD --delete COMMENT` removes it. `COMMENT` is an id prefix
+of at least 8 characters from `notes`. Pomb lets a token change only the
+comments it wrote, so a comment from a person, from another token or from
+before Pomb 0.5.7 answers 403, and dev says `that comment is not yours to
+change` (exit 1). A deleted comment is gone for good (Pomb keeps no recycle bin
+for comments).
 
 `size CARD S` sets a card's colour from the size word `S`: `1` is yellow, `2`
 green, `3` blue, `3+` red and `unsized` white. `add --size S` does the same

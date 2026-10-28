@@ -19,6 +19,9 @@ local NAME_CHARS = 100
 local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
 local STALE_DAYS = 7
+local STAMP_CHARS = 16
+local EDIT_FLAG = "--edit"
+local DELETE_FLAG = "--delete"
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
@@ -246,7 +249,103 @@ function commands.add(backend, args)
     return { output = "added " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. card.column }
 end
 
+local function find_comment(backend, card, word)
+    local list, message = backend:comments(card.id)
+    if not list then
+        return nil, failure(message)
+    end
+    local comment, why = board.resolve(list, word, "comment")
+    if not comment then
+        return nil, failure(why)
+    end
+    return comment
+end
+
+local function changed(verb_word, card, comment)
+    return {
+        output = verb_word .. " " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. comment.id:sub(
+            1,
+            board.MIN_PREFIX
+        ),
+    }
+end
+
+local function edit_note(backend, args)
+    if #args < 4 then
+        return usage(EDIT_FLAG .. " needs a comment and the new text")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local comment
+    comment, err = find_comment(backend, card, args[3])
+    if not comment then
+        return err
+    end
+    local ok, message = backend:edit_note(card.id, comment.id, table.concat(args, " ", 4))
+    if not ok then
+        return failure(message)
+    end
+    return changed("edited", card, comment)
+end
+
+local function delete_note(backend, args)
+    if #args < 3 then
+        return usage(DELETE_FLAG .. " needs a comment")
+    end
+    if #args > 3 then
+        return usage("unknown argument " .. args[4])
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local comment
+    comment, err = find_comment(backend, card, args[3])
+    if not comment then
+        return err
+    end
+    local ok, message = backend:delete_note(card.id, comment.id)
+    if not ok then
+        return failure(message)
+    end
+    return changed("deleted", card, comment)
+end
+
+function commands.notes(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local list, message = backend:comments(card.id)
+    if not list then
+        return failure(message)
+    end
+    if #list == 0 then
+        return { output = "no comments" }
+    end
+    local rows = {}
+    for _, comment in ipairs(list) do
+        rows[#rows + 1] = {
+            comment.id:sub(1, board.MIN_PREFIX),
+            comment.who,
+            comment.at:sub(1, STAMP_CHARS):gsub("T", " "),
+            comment.body:match("^[^\r\n]*"),
+        }
+    end
+    return { output = table.concat(board.table_lines(rows), "\n") }
+end
+
 function commands.note(backend, args)
+    if args[2] == EDIT_FLAG then
+        return edit_note(backend, args)
+    elseif args[2] == DELETE_FLAG then
+        return delete_note(backend, args)
+    end
     if #args < 2 then
         return usage("needs a card and the note")
     end
@@ -524,7 +623,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `move`, `size`, `label`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `move`, `size`, `label`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

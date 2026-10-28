@@ -23,6 +23,8 @@ local TEMPLATE = "agent project"
 local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
 local STAMP_CHARS = 19
 local PAGE_LIMIT = 500
+local FORBIDDEN = 403
+local NOT_YOURS = "that comment is not yours to change"
 
 ---Pomb over its HTTP API, through curl.
 ---
@@ -115,6 +117,7 @@ end
 ---@param fence integer? the claim fence to send as `If-Claim-Fence`
 ---@return any? doc the decoded answer
 ---@return string? message why the call failed
+---@return integer? status the HTTP status when pomb refused the call
 function Backend:__request(method, path, body, fence)
     if not self.__secret then
         local token, message = M.token(self.__opts.token)
@@ -169,7 +172,7 @@ function Backend:__request(method, path, body, fence)
     end
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
-        return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail))
+        return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail)), status
     end
     return doc
 end
@@ -395,6 +398,41 @@ function Backend:note(id, body, fence)
     }, fence)
     if not made then
         return nil, message
+    end
+    return true
+end
+
+function Backend:comments(id)
+    local list, message = self:__request("GET", "/api/tasks/" .. id .. "/comments")
+    if not list then
+        return nil, message
+    end
+    local found = {}
+    for _, comment in ipairs(list) do
+        found[#found + 1] = {
+            id = comment.id,
+            who = present(comment.token_name) or present(comment.actor_kind) or "unknown",
+            at = present(comment.created_at) or "",
+            body = present(comment.body) or "",
+        }
+    end
+    return found
+end
+
+function Backend:edit_note(id, comment, body)
+    local done, message, status =
+        self:__request("PATCH", "/api/tasks/" .. id .. "/comments/" .. comment, { body = body })
+    if not done then
+        return nil, status == FORBIDDEN and NOT_YOURS or message
+    end
+    return true
+end
+
+function Backend:delete_note(id, comment)
+    local done, message, status =
+        self:__request("DELETE", "/api/tasks/" .. id .. "/comments/" .. comment)
+    if not done then
+        return nil, status == FORBIDDEN and NOT_YOURS or message
     end
     return true
 end

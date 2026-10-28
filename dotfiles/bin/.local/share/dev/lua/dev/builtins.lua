@@ -234,8 +234,15 @@ return {
     {
         words = { "board", "note" },
         handler = "lua",
-        usage = "dev board note CARD TEXT",
-        desc = "Add a comment to a card, written as an agent",
+        flags = "--edit --delete",
+        usage = "dev board note CARD TEXT | CARD --edit COMMENT TEXT | CARD --delete COMMENT",
+        desc = "Add a comment to a card, written as an agent, or edit or delete one of your own by its id prefix",
+    },
+    {
+        words = { "board", "notes" },
+        handler = "lua",
+        usage = "dev board notes CARD",
+        desc = "List a card's comments: id prefix, who wrote it, when and the first line",
     },
     {
         words = { "board", "move" },

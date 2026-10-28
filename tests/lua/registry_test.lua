@@ -42,6 +42,7 @@ local LUA_ONLY = {
     ["board next"] = true,
     ["board add"] = true,
     ["board note"] = true,
+    ["board notes"] = true,
     ["board move"] = true,
     ["board take"] = true,
     ["board release"] = true,
