@@ -185,8 +185,9 @@ end)
 
 t.test("stale counts the days a card sat in its column", function()
     local root, home = local_board()
-    local a = prefix_of((dev(root, home, { "board", "add", "Old", "--column", "ready" })))
-    prefix_of((dev(root, home, { "board", "add", "New", "--column", "ready" })))
+    local a =
+        prefix_of((dev(root, home, { "board", "add", "Old", "--column", "ready", "--size", "1" })))
+    prefix_of((dev(root, home, { "board", "add", "New", "--column", "ready", "--size", "1" })))
     local doc = document(file_of(home))
     doc.cards[1].entered_at = "2020-01-01T00:00:00Z"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
@@ -194,6 +195,29 @@ t.test("stale counts the days a card sat in its column", function()
     t.ok(out:find(a .. "  Ready  ", 1, true) and out:find("Old", 1, true), out)
     t.ok(not out:find("New", 1, true), out)
 end)
+
+t.test(
+    "a local board keeps an unsized or red card out of Ready and lists the unsized in stale",
+    function()
+        local root, home = local_board()
+        local a = prefix_of((dev(root, home, { "board", "add", "Loose" })))
+        local out, code = dev(root, home, { "board", "move", a, "ready" })
+        t.eq(code, 1)
+        t.ok(out:find("dev board size", 1, true), out)
+        out, code = dev(root, home, { "board", "add", "Direct", "--column", "ready" })
+        t.eq(code, 2)
+        out = dev(root, home, { "board", "stale" })
+        t.eq(out, "no stale cards\n\nunsized in Backlog:\n" .. a .. "  Backlog  Loose\n")
+        dev(root, home, { "board", "size", a, "3+" })
+        out, code = dev(root, home, { "board", "move", a, "ready" })
+        t.eq(code, 1)
+        t.ok(out:find("red", 1, true), out)
+        dev(root, home, { "board", "size", a, "2" })
+        out, code = dev(root, home, { "board", "move", a, "ready" })
+        t.eq(code, 0, out)
+        t.eq(dev(root, home, { "board", "stale" }), "no stale cards\n")
+    end
+)
 
 t.test("take holds a claim with an expiry and no loop, and release gives it up", function()
     local root, home = local_board()
@@ -236,7 +260,8 @@ end)
 
 t.test("an expired claim does not block the card", function()
     local root, home = local_board()
-    local a = prefix_of((dev(root, home, { "board", "add", "Card", "--column", "ready" })))
+    local a =
+        prefix_of((dev(root, home, { "board", "add", "Card", "--column", "ready", "--size", "1" })))
     dev(root, home, { "board", "take", a })
     local doc = document(file_of(home))
     doc.cards[1].claim.expires_at = "2020-01-01T00:00:00Z"

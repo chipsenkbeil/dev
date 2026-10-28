@@ -201,6 +201,12 @@ unclaimed and not blocked, or `no ready cards`.
 `add` puts a card in Backlog unless `--column` names another column. `note`
 adds a comment of kind agent. `move` puts the card at the top of the column.
 
+Sizing is part of planning, so a card cannot enter Ready without a size. `move
+CARD ready` refuses a card that is unsized (white or no colour) or red, more
+than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit 1);
+a red card is split instead. `add --column ready` without `--size 1`, `2` or `3`
+is a usage error (exit 2). Every other column takes a card of any colour.
+
 `notes CARD` lists the card's comments, oldest first: the comment's id prefix,
 who wrote it (the token's name, else the kind of actor), the time in UTC and the
 first line. `note CARD --edit COMMENT TEXT` replaces the text of one of your own
@@ -244,7 +250,10 @@ among the stale ones (it waits on the owner, not on an agent). A card in one of
 those columns, or with that label, that the tasks view did not date gets a line
 `could not date <id> <name>` after a blank line, instead of being skipped. When
 nothing is stale it prints `no stale cards`. A `--days` that is not a whole
-number of 1 or more is a usage error (exit 2). An orchestrator can run it at
+number of 1 or more is a usage error (exit 2). Every card in Backlog that is
+unsized (white or no colour) is also listed at any age, apart, under
+`unsized in Backlog:` with its id prefix, column and name, so a planner sees what
+still needs a size. An orchestrator can run it at
 startup and re-plan, escalate or ice each card it lists.
 
 ## Local boards

@@ -98,6 +98,10 @@ local function sized(word)
     return color
 end
 
+local function unready(color)
+    return color == nil or color == board.SIZES.unsized or color == board.SIZES["3+"]
+end
+
 local function plain(label)
     if label == "" or label:find("%s") or label:find("%c") or label:sub(1, 1) == "-" then
         return nil, usage("label " .. label .. " must be one word that does not start with -")
@@ -249,6 +253,11 @@ function commands.add(backend, args)
         end
         column = named
     end
+    if column == board.READY and unready(color) then
+        return usage(
+            "a card must be sized 1, 2 or 3 before it enters Ready, so add it with --size or to Backlog"
+        )
+    end
     local card, message = backend:add(
         table.concat(words, " "),
         column,
@@ -390,6 +399,16 @@ function commands.move(backend, args)
     if not card then
         return err
     end
+    if column == board.READY and unready(card.color) then
+        local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
+            or "has no size"
+        return failure(
+            card.id:sub(1, board.MIN_PREFIX)
+                .. " "
+                .. why
+                .. " and cannot enter Ready; size it with dev board size CARD 1, 2 or 3"
+        )
+    end
     local held = claims.read(card.id)
     local ok, message = backend:move(card.id, column, held and held.fence)
     if not ok then
@@ -526,8 +545,11 @@ function commands.stale(backend, args, now)
         return failure(message)
     end
     now = now or os.time()
-    local found, owner, undated = {}, {}, {}
+    local found, owner, undated, unsized = {}, {}, {}, {}
     for _, card in ipairs(cards) do
+        if card.column == board.DEFAULT_COLUMN and board.has_color(card, board.SIZES.unsized) then
+            unsized[#unsized + 1] = card
+        end
         local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
         if card.column ~= board.DONE and (mine or board.STALE_COLUMNS[card.column]) then
             local stamp = entered[card.id]
@@ -573,6 +595,15 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "for the owner (" .. board.NEEDS_HUMAN .. "):"
         append(lines, stale_rows(owner))
+    end
+    if #unsized > 0 then
+        local rows = {}
+        for _, card in ipairs(unsized) do
+            rows[#rows + 1] = { card.id:sub(1, board.MIN_PREFIX), card.column, card.name }
+        end
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "unsized in " .. board.DEFAULT_COLUMN .. ":"
+        append(lines, board.table_lines(rows))
     end
     if #undated > 0 then
         lines[#lines + 1] = ""

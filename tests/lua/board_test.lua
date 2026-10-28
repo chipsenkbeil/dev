@@ -146,8 +146,12 @@ t.test("add defaults to Backlog and joins the words of the name", function()
     local result = commands.run("add", { "A", "new", "card" }, backend)
     t.eq(result.output, "added cccccccc Backlog")
     t.eq(backend.calls[1], { "add", "A new card", "Backlog", nil, nil })
-    result = commands.run("add", { "X", "--column", "ready", "--description", "why" }, backend)
-    t.eq(backend.calls[2], { "add", "X", "Ready", "why", nil })
+    result = commands.run(
+        "add",
+        { "X", "--column", "ready", "--description", "why", "--size", "2" },
+        backend
+    )
+    t.eq(backend.calls[2], { "add", "X", "Ready", "why", "green" })
     t.eq(commands.run("add", {}, backend).code, 2)
 end)
 
@@ -366,6 +370,59 @@ t.test("move and note refuse before the backend is called", function()
     t.eq(#backend.calls, 0)
 end)
 
+t.test(
+    "add to Ready refuses a card with no size or a red one before the backend is called",
+    function()
+        local backend = fake(sample())
+        for _, args in ipairs({
+            { "X", "--column", "ready" },
+            { "X", "--column", "ready", "--size", "unsized" },
+            { "X", "--column", "ready", "--size", "3+" },
+        }) do
+            t.eq(commands.run("add", args, backend).code, 2)
+        end
+        t.eq(#backend.calls, 0)
+        t.eq(commands.run("add", { "X", "--column", "backlog" }, backend).code, nil)
+        t.eq(commands.run("add", { "X", "--column", "ready", "--size", "3" }, backend).code, nil)
+    end
+)
+
+local function colored(color)
+    local card = { id = ID_C, name = "Card", column = "Backlog", size = "x", labels = {} }
+    card.color = color
+    return card
+end
+
+t.test("move to Ready refuses a white, uncoloured or red card and names dev board size", function()
+    for _, color in ipairs({ "white", "red" }) do
+        local backend = fake({ colored(color) })
+        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("dev board size", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+    local backend = fake({ colored(nil) })
+    local result = commands.run("move", { "cccccccc", "Ready" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("has no size", 1, true), result.message)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("move to Ready takes a sized card, and other columns take any card", function()
+    for _, color in ipairs({ "yellow", "green", "blue" }) do
+        local backend = fake({ colored(color) })
+        t.eq(
+            commands.run("move", { "cccccccc", "ready" }, backend).output,
+            "moved cccccccc to Ready"
+        )
+    end
+    for _, column in ipairs({ "icebox", "backlog", "progress", "review", "blocked", "done" }) do
+        local backend = fake({ colored("white") })
+        t.eq(commands.run("move", { "cccccccc", column }, backend).code, nil)
+        t.eq(#backend.calls, 1)
+    end
+end)
+
 t.test("next shows the top card or says none", function()
     local result = commands.run("next", {}, fake(sample()))
     t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
@@ -413,7 +470,7 @@ t.test("stale covers Backlog, Ready, In Progress and In Review only", function()
     for line in result.output:gmatch("[^\n]+") do
         lines[#lines + 1] = line:match("^%d+%s+(%a+[ %a]-)%s%s")
     end
-    t.eq(lines, { "Backlog", "Ready", "In Progress", "In Review" })
+    t.eq(lines, { "Backlog", "Ready", "In Progress", "In Review", "Backlog" })
 end)
 
 t.test("stale lists every needs:human card apart at any age, and never as stale", function()
@@ -429,7 +486,8 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
         "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n"
             .. "00000003  Blocked  50d  unsized  Card 3\n"
             .. "00000002  Backlog  20d  unsized  Card 2\n"
-            .. "00000005  Ready    1d   unsized  Card 5"
+            .. "00000005  Ready    1d   unsized  Card 5\n\nunsized in Backlog:\n"
+            .. "00000002  Backlog  Card 2"
     )
     cards, times = aged({ "Ready" }, { 9 }, { human })
     result = commands.run("stale", {}, fake(cards, times), NOW)
@@ -437,6 +495,22 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
         result.output,
         "no stale cards\n\nfor the owner (needs:human):\n00000001  Ready  9d  unsized  Card 1"
     )
+end)
+
+t.test("stale lists the unsized Backlog cards at any age and leaves sized ones out", function()
+    local cards, times = aged(
+        { "Backlog", "Backlog", "Backlog", "Ready", "Icebox" },
+        { 0, 1, 2, 1, 1 }
+    )
+    cards[2].color = "green"
+    cards[3].color = "white"
+    t.eq(
+        commands.run("stale", {}, fake(cards, times), NOW).output,
+        "no stale cards\n\nunsized in Backlog:\n00000001  Backlog  Card 1\n00000003  Backlog  Card 3"
+    )
+    cards[1].color = "red"
+    cards[3].color = "blue"
+    t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
 end)
 
 t.test("stale names a card it could not date instead of skipping it", function()
@@ -755,8 +829,17 @@ end)
 
 t.test("add posts the card to the named column", function()
     local root, home = sandbox()
-    local out, code =
-        dev(root, home, { "board", "add", "New card", "--column", "ready", "--description", "why" })
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "New card",
+        "--column",
+        "ready",
+        "--description",
+        "why",
+        "--size",
+        "1",
+    })
     t.eq(code, 0)
     t.eq(out, "added 11111111 Ready\n")
     local calls = read(root, "calls")
@@ -1221,7 +1304,7 @@ t.test("stale reads column_entered_at from every page of the tasks view", functi
     t.eq(code, 0)
     t.ok(
         out:find(
-            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n\ncould not date cccccccc%S+ Early\n$"
+            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n\nunsized in Backlog:\ncccccccc  Backlog  Early\n\ncould not date cccccccc%S+ Early\n$"
         ),
         out
     )
