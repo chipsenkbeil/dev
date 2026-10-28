@@ -45,6 +45,8 @@ local M = {}
 ---@field private __secret string? the token, nil until the first request
 ---@field private __detail dev.board.pomb.Detail? the board with its columns
 ---@field private __colors table<string, string>? palette labels by colour id
+---@field private __values table<string, string>? palette colour values by colour id
+---@field private __ids table<string, string>? palette colour ids by colour value
 ---@field private __id string? the board's id, once found or created
 local Backend = {}
 Backend.__index = Backend
@@ -198,9 +200,13 @@ function Backend:__load()
     if not palette then
         return nil, message
     end
-    self.__colors = {}
+    self.__colors, self.__values, self.__ids = {}, {}, {}
     for _, color in ipairs(palette) do
         self.__colors[color.id] = color.label
+        if type(color.value) == "string" then
+            self.__values[color.id] = color.value
+            self.__ids[color.value] = color.id
+        end
     end
     self.__detail = detail
     return true
@@ -241,6 +247,7 @@ function Backend:__card(task)
         name = task.name,
         column = self:__column_name(task.column_id),
         size = board.size(self.__colors[present(task.color_id)]),
+        color = present(task.color_id) and (self.__values[task.color_id] or "unknown") or nil,
         labels = task.labels or {},
     }
 end
@@ -309,7 +316,15 @@ function Backend:next()
     return self:__card(task)
 end
 
-function Backend:add(name, column, description)
+function Backend:__color_id(color)
+    local id = self.__ids[color]
+    if not id then
+        return nil, unavailable("the board has no " .. color .. " colour")
+    end
+    return id
+end
+
+function Backend:add(name, column, opts)
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -319,8 +334,14 @@ function Backend:add(name, column, description)
         return nil, unavailable("the board has no " .. column .. " column")
     end
     local body = { name = name, column_id = id }
-    if description then
-        body.description = description
+    if opts and opts.color then
+        body.color_id, message = self:__color_id(opts.color)
+        if not body.color_id then
+            return nil, message
+        end
+    end
+    if opts and opts.description then
+        body.description = opts.description
     end
     local task
     task, message = self:__request("POST", "/api/tasks", body)
@@ -363,6 +384,24 @@ function Backend:move(id, column, fence)
         fence
     )
     if not moved then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:set_size(id, color, fence)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local color_id
+    color_id, message = self:__color_id(color)
+    if not color_id then
+        return nil, message
+    end
+    local done
+    done, message = self:__request("PATCH", "/api/tasks/" .. id, { color_id = color_id }, fence)
+    if not done then
         return nil, message
     end
     return true

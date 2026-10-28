@@ -10,6 +10,7 @@ local M = {}
 ---@field name string the card's title
 ---@field column string the name of the column it sits in
 ---@field size string the colour's palette label, or `unsized`
+---@field color string? the colour's standard value (`yellow`, `green`, `blue`, `red`, `white`), nil when the card has none
 ---@field labels string[] the card's labels
 ---@field claimant string? who holds a live claim on it
 
@@ -17,12 +18,17 @@ local M = {}
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
 ---@field next fun(self: dev.board.Backend): dev.board.Card?, string? the top unclaimed, unblocked Ready card, or nil and a message when it failed
----@field add fun(self: dev.board.Backend, name: string, column: string, description: string?): dev.board.Card?, string? the new card
+---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
+---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?): boolean?, string? the card given the palette colour of that value, checked against the claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?): boolean?, string? a comment of kind agent added to the card, checked against the claim's fence when one is given
 ---@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
+
+---@class dev.board.AddOpts
+---@field description string? the card's description
+---@field color string? the standard value of the palette colour to give it
 
 ---@class dev.board.Layout
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a message
@@ -67,6 +73,11 @@ local SHORT_FORMS = {
 
 local UNSIZED = "unsized"
 
+---The size words a user may type, with the palette colour each names.
+M.SIZES = { ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red", [UNSIZED] = "white" }
+
+local SIZE_WORDS = { "1", "2", "3", "3+", UNSIZED }
+
 ---Name a column from its full name or a short form, in any case.
 ---@param word string `ready`, `progress`, `In Review` and so on
 ---@return string? column the column's name, or nil when it is not one of the seven
@@ -87,6 +98,27 @@ end
 ---@return string names the seven names and the short forms
 function M.column_help()
     return table.concat(M.COLUMNS, ", ") .. " (or progress, review, in any case)"
+end
+
+---Name a palette colour from a size word.
+---@param word string `1`, `2`, `3`, `3+` or `unsized`
+---@return string? color the colour's standard value, nil when the word is not a size
+function M.size_color(word)
+    return M.SIZES[word:lower()]
+end
+
+---List the size words a user may type.
+---@return string words the five size words
+function M.size_help()
+    return table.concat(SIZE_WORDS, ", ")
+end
+
+---Tell whether a card has the colour a size word names, where no colour counts as white.
+---@param card dev.board.Card the card
+---@param color string the colour's standard value
+---@return boolean
+function M.has_color(card, color)
+    return (card.color or M.SIZES[UNSIZED]) == color
 end
 
 ---Find the card an id or a unique prefix of it names.

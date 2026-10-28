@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, move, take and release",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, take and release",
         hidden = true,
     },
     {
@@ -208,9 +208,9 @@ return {
     {
         words = { "board", "ls" },
         handler = "lua",
-        flags = "--column --label",
-        usage = "dev board ls [--column C] [--label L]",
-        desc = "List the cards with id prefix, column, size, labels and name, Done left out unless --column Done",
+        flags = "--column --label --size",
+        usage = "dev board ls [--column C] [--label L] [--size S]",
+        desc = "List the cards with id prefix, column, size, labels and name, Done left out unless --column Done, --size keeping one size of 1, 2, 3, 3+ or unsized",
     },
     {
         words = { "board", "next" },
@@ -221,9 +221,9 @@ return {
     {
         words = { "board", "add" },
         handler = "lua",
-        flags = "--column --description",
-        usage = "dev board add NAME [--column C] [--description TEXT]",
-        desc = "Add a card, to Backlog unless --column names another column",
+        flags = "--column --description --size",
+        usage = "dev board add NAME [--column C] [--description TEXT] [--size S]",
+        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized",
     },
     {
         words = { "board", "note" },
@@ -236,6 +236,12 @@ return {
         handler = "lua",
         usage = "dev board move CARD COLUMN",
         desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox",
+    },
+    {
+        words = { "board", "size" },
+        handler = "lua",
+        usage = "dev board size CARD S",
+        desc = "Set a card's size colour: 1 yellow, 2 green, 3 blue, 3+ red, unsized white",
     },
     {
         words = { "board", "take" },

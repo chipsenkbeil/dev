@@ -8,7 +8,9 @@ dev board status
 dev board init
 dev board ls --column ready
 dev board next
-dev board add "Name the new thing" --column backlog --description "why"
+dev board add "Name the new thing" --column backlog --description "why" --size 2
+dev board ls --size 3+
+dev board size 8af0e001 1
 dev board note 8af0e001 "Tests pass, landing now."
 dev board move 8af0e001 progress
 dev board take 8af0e001
@@ -136,6 +138,15 @@ unclaimed and not blocked, or `no ready cards`.
 
 `add` puts a card in Backlog unless `--column` names another column. `note`
 adds a comment of kind agent. `move` puts the card at the top of the column.
+
+`size CARD S` sets a card's colour from the size word `S`: `1` is yellow, `2`
+green, `3` blue, `3+` red and `unsized` white. `add --size S` does the same
+when it makes the card, and `ls --size S` keeps only the cards of that colour,
+where a card with no colour counts as unsized. Any other word is a usage error
+(exit 2) that lists the five. The colour is found by its value in the board's
+palette, never by its label, so it works before and after `dev board init`
+names the labels. A board missing the colour fails with
+`board unavailable: the board has no yellow colour`.
 
 ## Claims
 

@@ -27,12 +27,16 @@ local function fake(cards)
     function backend:next()
         return cards[1]
     end
-    function backend:add(name, column, description)
-        calls[#calls + 1] = { "add", name, column, description }
+    function backend:add(name, column, opts)
+        calls[#calls + 1] = { "add", name, column, opts.description, opts.color }
         return { id = ID_C, name = name, column = column, size = "unsized", labels = {} }
     end
     function backend:note(id, text)
         calls[#calls + 1] = { "note", id, text }
+        return true
+    end
+    function backend:set_size(id, color, fence)
+        calls[#calls + 1] = { "set_size", id, color, fence }
         return true
     end
     function backend:move(id, column)
@@ -121,10 +125,68 @@ t.test("add defaults to Backlog and joins the words of the name", function()
     local backend = fake(sample())
     local result = commands.run("add", { "A", "new", "card" }, backend)
     t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.calls[1], { "add", "A new card", "Backlog", nil })
+    t.eq(backend.calls[1], { "add", "A new card", "Backlog", nil, nil })
     result = commands.run("add", { "X", "--column", "ready", "--description", "why" }, backend)
-    t.eq(backend.calls[2], { "add", "X", "Ready", "why" })
+    t.eq(backend.calls[2], { "add", "X", "Ready", "why", nil })
     t.eq(commands.run("add", {}, backend).code, 2)
+end)
+
+t.test("add --size passes the colour its size word names", function()
+    local backend = fake(sample())
+    for word, color in pairs({ ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }) do
+        commands.run("add", { "X", "--size", word }, backend)
+        t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", nil, color })
+    end
+    commands.run("add", { "X", "--size", "UNSIZED" }, backend)
+    t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", nil, "white" })
+    local result = commands.run("add", { "X", "--size", "4" }, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("unknown size 4", 1, true), result.message)
+    t.eq(commands.run("add", { "X", "--size" }, backend).code, 2)
+end)
+
+t.test("size sets the colour of each size word and resolves the card by prefix", function()
+    local backend = fake(sample())
+    local want = { ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }
+    for word, color in pairs(want) do
+        local result = commands.run("size", { "cccccccc", word }, backend)
+        t.eq(result.output, "sized cccccccc " .. word)
+        t.eq(backend.calls[#backend.calls], { "set_size", ID_C, color, nil })
+    end
+    local result = commands.run("size", { "cccccccc", "unsized" }, backend)
+    t.eq(result.output, "sized cccccccc unsized")
+    t.eq(backend.calls[#backend.calls], { "set_size", ID_C, "white", nil })
+end)
+
+t.test("size refuses a bad size, a missing argument and an unknown card", function()
+    local backend = fake(sample())
+    local result = commands.run("size", { "cccccccc", "4" }, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("the sizes are 1, 2, 3, 3+, unsized", 1, true), result.message)
+    t.eq(commands.run("size", { "cccccccc" }, backend).code, 2)
+    t.eq(commands.run("size", { "cccccccc", "2", "3" }, backend).code, 2)
+    result = commands.run("size", { "deadbeef", "2" }, backend)
+    t.eq(result.code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("ls --size keeps the cards of one colour and counts no colour as unsized", function()
+    local cards = sample()
+    cards[1].color = "yellow"
+    cards[2].color = "white"
+    cards[3].color = "blue"
+    local result = commands.run("ls", { "--size", "1" }, fake(cards))
+    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
+    result = commands.run("ls", { "--size", "unsized" }, fake(cards))
+    t.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
+    cards[2].color = nil
+    result = commands.run("ls", { "--size", "unsized" }, fake(cards))
+    t.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
+    result = commands.run("ls", { "--size", "3", "--column", "done" }, fake(cards))
+    t.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
+    result = commands.run("ls", { "--size", "2" }, fake(cards))
+    t.eq(result.output, "no cards")
+    t.eq(commands.run("ls", { "--size", "9" }, fake(cards)).code, 2)
 end)
 
 t.test("note and move resolve the card by prefix", function()
@@ -163,7 +225,9 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
     .. '{"id":"col-ready","name":"Ready"},{"id":"col-progress","name":"In Progress"},'
     .. '{"id":"col-review","name":"In Review"},{"id":"col-blocked","name":"Blocked"},'
     .. '{"id":"col-done","name":"Done"}]}'
-local COLORS = '[{"id":"yellow-id","label":"1 Pomodoro"},{"id":"white-id","label":"Unsized"}]'
+local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
+    .. '{"id":"green-id","value":"green","label":"Two"},{"id":"blue-id","value":"blue","label":"Three"},'
+    .. '{"id":"red-id","value":"red","label":"More"},{"id":"white-id","value":"white","label":"Unsized"}]'
 local EXPORT = '{"tasks":['
     .. '{"id":"'
     .. ID_B
@@ -422,6 +486,46 @@ t.test("add posts the card to the named column", function()
         ) or calls:find('"column_id":"col-ready"', 1, true),
         calls
     )
+end)
+
+t.test("add --size and size reach pomb with the id of the colour, not its label", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "add", "New", "--size", "3+" })
+    t.eq(code, 0)
+    t.eq(out, "added 11111111 Ready\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find('"color_id":"red-id"', 1, true), calls)
+    out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
+    t.eq(code, 0)
+    t.eq(out, "sized 11111111 2\n")
+    calls = read(root, "calls")
+    t.ok(calls:find("-X PATCH", 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
+    t.ok(calls:find('--data-raw {"color_id":"green-id"}', 1, true), calls)
+    out, code = dev(root, home, { "board", "size", "11111111-a", "unsized" })
+    t.eq(code, 0)
+    t.ok(read(root, "calls"):find('{"color_id":"white-id"}', 1, true))
+end)
+
+t.test("a board with no colour of the size asked for is reported", function()
+    local root, home = sandbox()
+    assert(
+        fs.write(root .. "/colors.json", '[{"id":"white-id","value":"white","label":"Unsized"}]')
+    )
+    local out, code = dev(root, home, { "board", "size", "11111111-a", "1" })
+    t.eq(code, 1)
+    t.ok(out:find("board unavailable: the board has no yellow colour", 1, true), out)
+    out, code = dev(root, home, { "board", "size", "11111111-a", "7" })
+    t.eq(code, 2)
+end)
+
+t.test("ls --size reads the colour value from the palette whatever its label", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "ls", "--size", "1" })
+    t.eq(code, 0)
+    t.eq(out, "11111111  Ready  1 Pomodoro  docs  First\n")
+    out = dev(root, home, { "board", "ls", "--size", "unsized" })
+    t.eq(out, "cccccccc  Backlog  Unsized  -  Early\n11111111  Ready    unsized  -  Second\n")
 end)
 
 t.test("note posts a comment of kind agent and move goes to the top of the column", function()

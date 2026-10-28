@@ -69,6 +69,14 @@ local function named_column(word)
     return column
 end
 
+local function sized(word)
+    local color = board.size_color(word)
+    if not color then
+        return nil, usage("unknown size " .. word .. ", the sizes are " .. board.size_help())
+    end
+    return color
+end
+
 local function card_line(card)
     return board.table_lines({ board.cells(card) })[1]
 end
@@ -97,12 +105,20 @@ end
 local commands = {}
 
 function commands.ls(backend, args)
-    local flags, extra = parse(args, { ["--column"] = true, ["--label"] = true })
+    local flags, extra = parse(args, { ["--column"] = true, ["--label"] = true, ["--size"] = true })
     if not flags then
         return extra
     end
     if #extra > 0 then
         return usage("unknown argument " .. extra[1])
+    end
+    local color
+    if flags["--size"] then
+        local named, err = sized(flags["--size"])
+        if not named then
+            return err
+        end
+        color = named
     end
     local want
     if flags["--column"] then
@@ -125,6 +141,9 @@ function commands.ls(backend, args)
             for _, label in ipairs(card.labels) do
                 shown = shown or label == flags["--label"]
             end
+        end
+        if shown and color then
+            shown = board.has_color(card, color)
         end
         if shown then
             shown_cards[#shown_cards + 1] = card
@@ -156,12 +175,21 @@ function commands.next(backend, args)
 end
 
 function commands.add(backend, args)
-    local flags, words = parse(args, { ["--column"] = true, ["--description"] = true })
+    local flags, words =
+        parse(args, { ["--column"] = true, ["--description"] = true, ["--size"] = true })
     if not flags then
         return words
     end
     if #words == 0 then
         return usage("needs a card name")
+    end
+    local color
+    if flags["--size"] then
+        local named, err = sized(flags["--size"])
+        if not named then
+            return err
+        end
+        color = named
     end
     local column = board.DEFAULT_COLUMN
     if flags["--column"] then
@@ -171,7 +199,11 @@ function commands.add(backend, args)
         end
         column = named
     end
-    local card, message = backend:add(table.concat(words, " "), column, flags["--description"])
+    local card, message = backend:add(
+        table.concat(words, " "),
+        column,
+        { description = flags["--description"], color = color }
+    )
     if not card then
         return failure(message)
     end
@@ -221,6 +253,27 @@ function commands.move(backend, args)
         claims.stop(card.id)
     end
     return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
+end
+
+function commands.size(backend, args)
+    if #args ~= 2 then
+        return usage("needs a card and a size")
+    end
+    local color, err = sized(args[2])
+    if not color then
+        return err
+    end
+    local card
+    card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held = claims.read(card.id)
+    local ok, message = backend:set_size(card.id, color, held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    return { output = "sized " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. args[2]:lower() }
 end
 
 function commands.take(backend, args)
@@ -292,7 +345,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `move`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `move`, `size`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
