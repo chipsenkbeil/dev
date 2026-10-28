@@ -13,6 +13,7 @@ dev board ls --size 3+
 dev board size 8af0e001 1
 dev board add "Name" --label needs:lead --label docs
 dev board label 8af0e001 +needs:human
+dev board stale --days 7
 dev board note 8af0e001 "Tests pass, landing now."
 dev board move 8af0e001 progress
 dev board take 8af0e001
@@ -162,6 +163,18 @@ usage error (exit 2). dev reads a bare `-L` as a flag it does not know, so put
 labels `needs:lead` and `needs:human` are plain labels to dev. Two agents
 editing the same card's labels at the same moment can lose one edit, because
 pomb has no add or remove call and takes the whole list.
+
+`stale [--days N]` lists the cards that have sat in Backlog, Ready, In
+Progress or In Review for N days or more, 7 by default, oldest first. Each line
+is the id prefix, the column, the days in it (`9d`), the size and the name.
+It counts whole days from the card's `column_entered_at`, which Pomb gives
+every task view, so a card at 6 days is fresh and one at 7 is stale. Icebox,
+Blocked and Done are never stale. A card that is stale by that rule and has
+the `needs:human` label is listed apart under `for the owner (needs:human):`,
+because it waits on the owner, not on an agent. When nothing is stale it prints
+`no stale cards`. A `--days` that is not a whole number of 1 or more is a
+usage error (exit 2). An orchestrator can run it at startup and re-plan,
+escalate or ice each card it lists.
 
 ## Claims
 

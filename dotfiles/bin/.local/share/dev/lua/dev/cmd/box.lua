@@ -30,6 +30,7 @@ local VALUE_FLAGS = { ["--target"] = true, ["--shape"] = true, ["--by"] = true, 
 ---@field Exit dev.cmd.box.Exit the exit codes dev picks itself, ci's own are passed through
 local M = {
     handlers = {},
+    SECONDS_PER_DAY = SECONDS_PER_DAY,
     State = { RUNNING = "running", STOPPED = "stopped" },
     Exit = { FAILED = 1, NOT_FOUND = 3, NOT_READY = 6 },
 }
@@ -149,7 +150,7 @@ end
 ---Read an RFC 3339 time, with optional fractional seconds and `Z` or an offset.
 ---@param stamp string? the time as ci writes it
 ---@return integer? seconds seconds since the epoch, nil when it does not parse
-local function parse_time(stamp)
+function M.parse_time(stamp)
     if type(stamp) ~= "string" then
         return nil
     end
@@ -199,7 +200,7 @@ function M.left(box, now)
         if expires == nil then
             return "kept"
         end
-        local at = parse_time(expires)
+        local at = M.parse_time(expires)
         if not at then
             return ""
         end
@@ -215,7 +216,7 @@ function M.left(box, now)
         end
         return math.floor(seconds / SECONDS_PER_MINUTE) .. "m left"
     elseif state == State.STOPPED and delete_after ~= nil then
-        local at = parse_time(delete_after)
+        local at = M.parse_time(delete_after)
         if not at then
             return ""
         end
@@ -646,7 +647,7 @@ M.handlers["box stop"] = function(ctx)
     M.need_ci()
     local stopped = M.one("stop", box_args("stop", name))
     local line = "stopped " .. interp(stopped.name)
-    local at = parse_time(present(stopped.delete_after))
+    local at = M.parse_time(present(stopped.delete_after))
     if at then
         local days = math.max(math.ceil((at - os.time()) / SECONDS_PER_DAY), 0)
         line = line .. ", deleted in " .. days .. "d unless resumed"

@@ -47,6 +47,7 @@ local LUA_ONLY = {
     ["board release"] = true,
     ["board size"] = true,
     ["board label"] = true,
+    ["board stale"] = true,
 }
 
 local function scripted(dir, rel, text, mode)

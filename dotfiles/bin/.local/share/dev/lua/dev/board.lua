@@ -19,6 +19,7 @@ local M = {}
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
 ---@field next fun(self: dev.board.Backend): dev.board.Card?, string? the top unclaimed, unblocked Ready card, or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
+---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card entered its column, as an RFC 3339 stamp by card id, or nil and a message
 ---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?): boolean?, string? the card given the palette colour of that value, checked against the claim's fence when one is given
 ---@field set_labels fun(self: dev.board.Backend, id: string, labels: string[], fence: integer?): boolean?, string? the card's whole label list replaced, checked against the claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?): boolean?, string? a comment of kind agent added to the card, checked against the claim's fence when one is given
@@ -56,8 +57,21 @@ M.DEFAULT_COLUMN = "Backlog"
 ---The column a worker takes cards from.
 M.READY = "Ready"
 
+---The column of cards waiting for review.
+M.REVIEW = "In Review"
+
 ---The column of cards being worked, where a move keeps a claim's loop alive.
 M.WORKING = "In Progress"
+
+---The columns where a card that sits untouched is stale.
+M.STALE_COLUMNS = {
+    [M.DEFAULT_COLUMN] = true,
+    [M.READY] = true,
+    [M.WORKING] = true,
+    [M.REVIEW] = true,
+}
+---The label of a card that waits on the owner, which `stale` lists apart.
+M.NEEDS_HUMAN = "needs:human"
 
 ---The column of finished cards, which `ls` leaves out.
 M.DONE = "Done"

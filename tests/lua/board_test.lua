@@ -1,5 +1,6 @@
 local t = require("testing")
 local board = require("dev.board")
+local box = require("dev.cmd.box")
 local commands = require("dev.cmd.board")
 local devos = require("dev.os")
 local fs = require("dev.fs")
@@ -15,9 +16,12 @@ local function executable(path, body)
     assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
-local function fake(cards)
+local function fake(cards, times)
     local calls = {}
     local backend = { calls = calls }
+    function backend:entered()
+        return times or {}
+    end
     function backend:describe()
         return "fake"
     end
@@ -263,6 +267,100 @@ t.test("next shows the top card or says none", function()
     t.eq(result.output, "no ready cards")
 end)
 
+local NOW = assert(box.parse_time("2026-10-27T12:00:00Z"))
+
+local function aged(columns, days, labels)
+    local cards, times = {}, {}
+    for i, column in ipairs(columns) do
+        local id = string.format("%08d-aaaa-4aaa-8aaa-aaaaaaaaaaaa", i)
+        cards[i] = { id = id, name = "Card " .. i, column = column, size = "unsized", labels = {} }
+        for _, label in ipairs(labels and labels[i] or {}) do
+            cards[i].labels[#cards[i].labels + 1] = label
+        end
+        local at = NOW - days[i] * box.SECONDS_PER_DAY - (days[i] > 0 and 60 or 0)
+        times[id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", at)
+    end
+    return cards, times
+end
+
+t.test("stale counts whole days, so 6 days is fresh and 7 is stale", function()
+    local cards, times = aged({ "Ready", "Ready", "Ready" }, { 6, 7, 30 })
+    cards[2].size = "2 Pomodori"
+    local result = commands.run("stale", {}, fake(cards, times), NOW)
+    t.eq(
+        result.output,
+        "00000003  Ready  30d  unsized     Card 3\n00000002  Ready  7d   2 Pomodori  Card 2"
+    )
+end)
+
+t.test("stale counts a card entered just under the limit as fresh", function()
+    local cards, times = aged({ "Ready" }, { 7 })
+    times[cards[1].id] = os.date("!%Y-%m-%dT%H:%M:%SZ", NOW - 7 * box.SECONDS_PER_DAY + 1)
+    t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+end)
+
+t.test("stale covers Backlog, Ready, In Progress and In Review only", function()
+    local columns = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
+    local cards, times = aged(columns, { 40, 40, 40, 40, 40, 40, 40 })
+    local result = commands.run("stale", {}, fake(cards, times), NOW)
+    local lines = {}
+    for line in result.output:gmatch("[^\n]+") do
+        lines[#lines + 1] = line:match("^%d+%s+(%a+[ %a]-)%s%s")
+    end
+    t.eq(lines, { "Backlog", "Ready", "In Progress", "In Review" })
+end)
+
+t.test("stale lists needs:human cards apart and never as stale", function()
+    local cards, times = aged(
+        { "Ready", "Backlog", "Blocked" },
+        { 9, 20, 50 },
+        { {}, { "needs:human" }, { "needs:human" } }
+    )
+    local result = commands.run("stale", {}, fake(cards, times), NOW)
+    t.eq(
+        result.output,
+        "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n00000002  Backlog  20d  unsized  Card 2"
+    )
+    cards, times = aged({ "Ready" }, { 9 }, { { "needs:human" } })
+    result = commands.run("stale", {}, fake(cards, times), NOW)
+    t.eq(
+        result.output,
+        "no stale cards\n\nfor the owner (needs:human):\n00000001  Ready  9d  unsized  Card 1"
+    )
+end)
+
+t.test("stale --days moves the limit", function()
+    local cards, times = aged({ "Ready", "Ready" }, { 2, 3 })
+    local result = commands.run("stale", { "--days", "3" }, fake(cards, times), NOW)
+    t.eq(result.output, "00000002  Ready  3d  unsized  Card 2")
+    result = commands.run("stale", { "--days", "1" }, fake(cards, times), NOW)
+    t.eq(
+        result.output,
+        "00000002  Ready  3d  unsized  Card 2\n00000001  Ready  2d  unsized  Card 1"
+    )
+end)
+
+t.test("stale refuses a bad --days with a usage error", function()
+    for _, word in ipairs({ "0", "-1", "x", "1.5", "" }) do
+        local result = commands.run("stale", { "--days", word }, fake({}), NOW)
+        t.eq(result.code, 2, word)
+    end
+    t.eq(commands.run("stale", { "--days" }, fake({}), NOW).code, 2)
+    t.eq(commands.run("stale", { "extra" }, fake({}), NOW).code, 2)
+end)
+
+t.test("stale says so when nothing is stale", function()
+    t.eq(commands.run("stale", {}, fake({}), NOW).output, "no stale cards")
+    local cards, times = aged({ "Ready" }, { 1 })
+    t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+end)
+
+t.test("stale fails on a column time it cannot read", function()
+    local cards = aged({ "Ready" }, { 9 })
+    local result = commands.run("stale", {}, fake(cards, { [cards[1].id] = "yesterday" }), NOW)
+    t.eq(result.code, 1)
+end)
+
 local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
     .. '{"id":"col-icebox","name":"Icebox"},{"id":"col-backlog","name":"Backlog"},'
@@ -296,6 +394,8 @@ case "$last" in
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. ID_B .. [[","column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
+*/tasks\?limit=500) body='{"items":[{"id":"]] .. ID_A .. [[","column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
 */tasks\?*) body='{"items":[{"id":"]] .. ID_A .. [["}],"next_cursor":null}' ;;
 */api/tasks/]] .. ID_A .. [[) body=$(cat "$ROOT/task.json") ;;
 */api/tasks) body=$(cat "$ROOT/task.json") ;;
@@ -930,4 +1030,24 @@ t.test("a release the server refuses keeps the state so it can be retried", func
     executable(root .. "/bin/curl", CURL)
     _, code = dev(root, home, { "board", "release", "11111111-a" })
     t.eq(code, 0)
+end)
+
+t.test("stale reads column_entered_at from every page of the tasks view", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "stale" })
+    t.eq(code, 0)
+    t.ok(
+        out:find(
+            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n$"
+        ),
+        out
+    )
+    local calls = read(root, "calls")
+    t.ok(
+        calls:find("/tasks?limit=500 ", 1, true) or calls:find("/tasks?limit=500\n", 1, true),
+        calls
+    )
+    t.ok(calls:find("/tasks?limit=500&cursor=c2", 1, true), calls)
+    out, code = dev(root, home, { "board", "stale", "--days", "x" })
+    t.eq(code, 2)
 end)

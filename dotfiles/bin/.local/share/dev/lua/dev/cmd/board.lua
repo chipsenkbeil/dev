@@ -1,4 +1,5 @@
 local board = require("dev.board")
+local box = require("dev.cmd.box")
 local claims = require("dev.board.claims")
 local config = require("dev.config")
 local device = require("dev.board.device")
@@ -17,6 +18,7 @@ local NAME_PATTERN = '^[^%c"\\]+$'
 local NAME_CHARS = 100
 local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
+local STALE_DAYS = 7
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
@@ -353,6 +355,96 @@ function commands.label(backend, args)
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
 end
 
+local function append(lines, more)
+    for _, line in ipairs(more) do
+        lines[#lines + 1] = line
+    end
+end
+
+local function stale_rows(cards)
+    local rows = {}
+    for _, card in ipairs(cards) do
+        rows[#rows + 1] = {
+            card.id:sub(1, board.MIN_PREFIX),
+            card.column,
+            card.days .. "d",
+            card.size,
+            card.name,
+        }
+    end
+    return board.table_lines(rows)
+end
+
+function commands.stale(backend, args, now)
+    local flags, extra = parse(args, { ["--days"] = true })
+    if not flags then
+        return extra
+    end
+    if #extra > 0 then
+        return usage("unknown argument " .. extra[1])
+    end
+    local limit = STALE_DAYS
+    if flags["--days"] then
+        limit = flags["--days"]:find("^%d+$") and tonumber(flags["--days"])
+        if not limit or limit < 1 then
+            return usage("--days needs a whole number of days, 1 or more: " .. flags["--days"])
+        end
+    end
+    local cards, message = backend:cards()
+    if not cards then
+        return failure(message)
+    end
+    local entered
+    entered, message = backend:entered()
+    if not entered then
+        return failure(message)
+    end
+    now = now or os.time()
+    local found, owner = {}, {}
+    for _, card in ipairs(cards) do
+        local stamp = entered[card.id]
+        if board.STALE_COLUMNS[card.column] and stamp then
+            local at = box.parse_time(stamp)
+            if not at then
+                return failure("pomb sent a column time dev cannot read for " .. card.id)
+            end
+            local days = math.floor((now - at) / box.SECONDS_PER_DAY)
+            if days >= limit then
+                local item = {
+                    id = card.id,
+                    column = card.column,
+                    size = card.size,
+                    name = card.name,
+                    days = days,
+                    at = at,
+                }
+                local into = index_of(card.labels, board.NEEDS_HUMAN) and owner or found
+                into[#into + 1] = item
+            end
+        end
+    end
+    local function oldest(a, b)
+        if a.at ~= b.at then
+            return a.at < b.at
+        end
+        return a.id < b.id
+    end
+    table.sort(found, oldest)
+    table.sort(owner, oldest)
+    local lines = {}
+    if #found == 0 then
+        lines[1] = "no stale cards"
+    else
+        append(lines, stale_rows(found))
+    end
+    if #owner > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "for the owner (" .. board.NEEDS_HUMAN .. "):"
+        append(lines, stale_rows(owner))
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
 function commands.take(backend, args)
     if #args ~= 1 then
         return usage("needs a card")
@@ -422,12 +514,13 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `move`, `size`, `label`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `move`, `size`, `label`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
+---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
-function M.run(sub, args, backend)
-    return commands[sub](backend, args)
+function M.run(sub, args, backend, now)
+    return commands[sub](backend, args, now)
 end
 
 ---Build the backend a project's board uses.

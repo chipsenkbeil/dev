@@ -22,6 +22,7 @@ local KEEPALIVE_SCRIPT = "/board/keepalive.sh"
 local TEMPLATE = "agent project"
 local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
 local STAMP_CHARS = 19
+local PAGE_LIMIT = 500
 
 ---Pomb over its HTTP API, through curl.
 ---
@@ -282,6 +283,34 @@ function Backend:cards()
         cards[#cards + 1] = self:__card(task)
     end
     return cards
+end
+
+function Backend:entered()
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local times = {}
+    local cursor
+    repeat
+        local page
+        page, message = self:__request(
+            "GET",
+            "/api/boards/"
+                .. self.__detail.id
+                .. "/tasks?limit="
+                .. PAGE_LIMIT
+                .. (cursor and "&cursor=" .. cursor or "")
+        )
+        if not page then
+            return nil, message
+        end
+        for _, task in ipairs(page.items) do
+            times[task.id] = present(task.column_entered_at)
+        end
+        cursor = present(page.next_cursor)
+    until cursor == nil
+    return times
 end
 
 function Backend:next()

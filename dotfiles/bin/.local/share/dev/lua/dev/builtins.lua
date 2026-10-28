@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, label, take and release",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, move, size, label, stale, take and release",
         hidden = true,
     },
     {
@@ -248,6 +248,13 @@ return {
         handler = "lua",
         usage = "dev board size CARD S",
         desc = "Set a card's size colour: 1 yellow, 2 green, 3 blue, 3+ red, unsized white",
+    },
+    {
+        words = { "board", "stale" },
+        handler = "lua",
+        flags = "--days",
+        usage = "dev board stale [--days N]",
+        desc = "List the cards that sat in Backlog, Ready, In Progress or In Review for N days (7 by default), oldest first, and the needs:human ones apart",
     },
     {
         words = { "board", "take" },
