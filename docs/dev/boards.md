@@ -143,6 +143,35 @@ The columns are Icebox, Backlog, Ready, In Progress, In Review, Blocked and
 Done, matched by name. A column argument is a name in any case or `ready`,
 `progress`, `review`, `blocked`, `done`, `backlog` or `icebox`.
 
+What each column means, in the order a card travels:
+
+- Icebox: maybe later. Agents groom it: they discuss, size and promote cards
+  to Backlog, and never leave one there to be forgotten. A card labelled
+  `needs:human` stays yours until you remove the label or move it.
+- Backlog: wanted, but not yet planned or sized.
+- Ready: you are done commenting, or an agent finished planning the card or
+  answered its question. The top card is next, and the order within Ready is
+  the priority. The agent that takes a card first checks it, and sends it to
+  Backlog if the size (never red), success criteria or checks are missing, or to
+  Blocked with `needs:human` if your last comment leaves a question open.
+- In Progress: an agent holds the card.
+- In Review: under review or ci, then it lands.
+- Blocked: waiting on an answer. `needs:human` is yours. `needs:lead` is the
+  lead agent's, which resolves it and moves the card to Ready or Backlog.
+- Done: landed, answered or dropped.
+
+An agent never acts on a comment on a `needs:human` Blocked card. Your comments
+there are drafts until you move the card out of Blocked. Where you move it says
+what happens next, and the agent removes `needs:human`:
+
+- Ready: you are done commenting. An agent takes it and reads every comment
+  since its own last one.
+- Backlog: it needs planning again.
+- Icebox: not now.
+- Done: drop it. The agent adds a closing note only.
+
+To push a card later, drag it lower in Ready.
+
 A card is named by its id or by a prefix of at least 8 characters that is
 unique on the board. `ls` prints the id prefix, column, size, labels and name,
 with Done left out unless `--column Done` asks for it. The size is the card
