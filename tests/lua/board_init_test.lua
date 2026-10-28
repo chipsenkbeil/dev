@@ -565,6 +565,20 @@ t.test("a project with no .dev/config.toml takes --name and gets the file", func
     t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
 end)
 
+t.test("a project with no .dev directory gets it and the file", function()
+    local root, home, tmp = sandbox({ project = false })
+    assert(fs.remove(root .. "/.dev", { recursive = true }))
+    local out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
+    t.eq(code, 0, out)
+    t.eq(
+        out,
+        "wrote [board] to .dev/config.toml\n"
+            .. "board demo already follows the standard, nothing to change\n"
+    )
+    t.ok(fs.is_dir(root .. "/.dev"))
+    t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
+end)
+
 t.test("the section is appended after other config", function()
     local root, home, tmp = sandbox({ project = '[remote]\nrunner = "ci"' })
     dev(root, home, tmp, { "board", "init", "--name", "demo" })

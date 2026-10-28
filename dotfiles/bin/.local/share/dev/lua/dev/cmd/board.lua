@@ -814,7 +814,13 @@ local function write_section(root, name)
     local gap = existing == "" and "" or (existing:sub(-1) == "\n" and "\n" or "\n\n")
     local section = '[board]\nbackend = "pomb"\nname = ' .. string.format("%q", name) .. "\n"
     assert(toml.parse(existing .. gap .. section), "dev: .dev/config.toml would not parse")
-    local ok, message = fs.write(path, existing .. gap .. section)
+    local ok, message = true, nil
+    if not fs.is_dir(root .. "/.dev") then
+        ok, message = fs.mkdir(root .. "/.dev")
+    end
+    if ok then
+        ok, message = fs.write(path, existing .. gap .. section)
+    end
     if not ok then
         verb.die("dev: cannot write " .. path .. ": " .. tostring(message))
     end
