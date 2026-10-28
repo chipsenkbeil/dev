@@ -23,6 +23,7 @@ local LUA_ONLY = {
     bootstrap = true,
     push = true,
     pull = true,
+    sync = true,
     connect = true,
     box = true,
     ["box ls"] = true,

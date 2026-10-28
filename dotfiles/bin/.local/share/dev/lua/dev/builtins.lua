@@ -67,7 +67,7 @@ return {
     },
     {
         words = { "sync" },
-        handler = "legacy",
+        handler = "lua",
         flags = "--check --yes -y",
         desc = "Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates",
         group = "Set up a machine or project",

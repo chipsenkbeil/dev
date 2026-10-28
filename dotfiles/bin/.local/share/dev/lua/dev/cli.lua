@@ -5,6 +5,7 @@ local connect = require("dev.cmd.connect")
 local misc = require("dev.cmd.misc")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
+local sync = require("dev.cmd.sync")
 local tools = require("dev.cmd.tools")
 local types = require("dev.cmd.types")
 local devos = require("dev.os")
@@ -21,7 +22,7 @@ local INTERPRETER = arg and arg[-1]
 local MAX_LEVEL = 2
 local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
 local SHARE = project.share
-local VCS_HANDLERS = { push = push.run, pull = pull.run }
+local VCS_HANDLERS = { push = push.run, pull = pull.run, sync = sync.run }
 local NOT_TAKEN = {
     push = function(arg)
         return arg:sub(1, 1) == "-"
@@ -29,7 +30,11 @@ local NOT_TAKEN = {
     pull = function()
         return true
     end,
+    sync = function(arg)
+        return arg ~= "--check" and arg ~= "--yes" and arg ~= "-y"
+    end,
 }
+local EXCLUSIVE = { sync = true }
 local HIDDEN_HELPERS = {
     __verbs = complete.verbs,
     __subs = complete.subs,
@@ -244,6 +249,17 @@ local function refuse_untaken(ctx, reg)
     for _, arg in ipairs(ctx.args) do
         if not_taken(arg) then
             help.bad_argument(ctx, reg, arg)
+        end
+    end
+    local exclusive = EXCLUSIVE[ctx.name]
+    if exclusive then
+        local has_check, has_yes = false, false
+        for _, arg in ipairs(ctx.args) do
+            has_check = has_check or arg == "--check"
+            has_yes = has_yes or arg == "--yes" or arg == "-y"
+        end
+        if has_check and has_yes then
+            help.usage_error(ctx, reg, "sync takes --check or --yes, not both")
         end
     end
 end

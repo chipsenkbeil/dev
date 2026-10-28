@@ -6,12 +6,9 @@
 # sit beside the flat verbs. `dev help` lists a noun once and `dev help <noun>`
 # lists its subcommands.
 #
-# `dev help` and the completion and topic helpers, the project-type built-ins, deploy, guide
-# and bootstrap run in Lua. This file serves what is left: sync and init.
-#
-# `dev sync` compares a project's copied lint files against the templates in
-# the dotfiles repo, unless the project has its own .dev/sync.sh. DOTFILES
-# overrides where that repo is found.
+# `dev help` and the completion and topic helpers, the project-type built-ins, deploy, guide,
+# bootstrap and sync run in Lua. This file serves what is left: init, with the lint template
+# helpers it still needs. DOTFILES overrides where the dotfiles repo is found.
 set -euo pipefail
 
 TEMPLATE_BASE="dotfiles/claude/.claude/skills/style/lint"
@@ -183,7 +180,6 @@ vcs() {
 # The group heads the verb in `dev help`, and `hidden` keeps it to `dev help -a`.
 builtin_table() {
     cat <<'TABLE'
-sync|cmd_sync|--check --yes -y||Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates|Set up a machine or project
 init|cmd_init|--type --public --name --dry-run --no-gerrit|dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]|Seed a project with lint, CI and remotes|Set up a machine or project
 TABLE
 }
@@ -269,16 +265,6 @@ noun_has_sub() {
 # builtin_commands <verb> <type>: the command lines the built-in runs, one per line.
 builtin_commands() {
     local verb=$1 type=$2
-    case "$verb" in
-    sync)
-        if lint_set_for "$type" >/dev/null; then
-            echo "diff the project's lint files against $(dotfiles_root)/$TEMPLATE_BASE/$(lint_set_for "$type")"
-        else
-            echo "(none: no lint templates for $type projects)"
-        fi
-        return
-        ;;
-    esac
     echo "(none: no built-in $verb for $type projects)"
 }
 
@@ -483,53 +469,6 @@ install_rendered() {
     case "$1" in *.sh) chmod +x "$ROOT/$1" ;; esac
 }
 
-# lints_template_block <template dir>: the workspace lints without the paste header.
-lints_template_block() {
-    local block
-    block=$(<"$1/workspace-lints.toml")
-    printf '%s\n' "${block#*$'\n\n'}"
-}
-
-# lints_project_block: the [workspace.lints*] tables of the project Cargo.toml, from the
-# first such line to the next other top-level table or the end, without trailing blanks.
-lints_project_block() {
-    local block
-    [ -f "$ROOT/Cargo.toml" ] || return 0
-    block=$(awk '
-        done { next }
-        /^\[/ { if ($0 ~ /^\[workspace\.lints/) { on = 1 } else if (on) { done = 1; next } }
-        on { print }
-    ' "$ROOT/Cargo.toml")
-    [ -n "$block" ] && printf '%s\n' "$block"
-    return 0
-}
-
-# lints_replace <block file>: swap the project block for the file, or append it.
-lints_replace() {
-    local out
-    out=$(mktemp)
-    if grep -q '^\[workspace\.lints' "$ROOT/Cargo.toml"; then
-        awk -v blockfile="$1" '
-            function emit(   l) { while ((getline l < blockfile) > 0) print l; close(blockfile) }
-            done { print; next }
-            /^\[/ {
-                if ($0 ~ /^\[workspace\.lints/) { if (!on) { emit(); on = 1 } next }
-                if (on) { on = 0; done = 1; print ""; print; next }
-            }
-            on { next }
-            { print }
-        ' "$ROOT/Cargo.toml" >"$out"
-    else
-        {
-            cat "$ROOT/Cargo.toml"
-            printf '\n'
-            cat "$1"
-        } >"$out"
-    fi
-    cat "$out" >"$ROOT/Cargo.toml"
-    rm -f "$out"
-}
-
 # crate_dirs: the member crate directories (relative to the root), one per line.
 crate_dirs() {
     local m d
@@ -598,125 +537,6 @@ lib_attr_insert() {
     ' "$file" >"$out"
     cat "$out" >"$file"
     rm -f "$out"
-}
-
-cmd_sync() {
-    local check=0 yes=0 t type channel dest src tmp rc=0 drifted=0 answer lib missing_libs="" guide style_drift=0
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-        --check) check=1 ;;
-        -y | --yes) yes=1 ;;
-        *) bad_arg sync "$1" ;;
-        esac
-        shift
-    done
-    if [ "$check" -eq 1 ] && [ "$yes" -eq 1 ]; then
-        printf 'dev: sync takes --check or --yes, not both\n\n' >&2
-        usage >&2
-        exit 2
-    fi
-    type=$(detect_type)
-    if ! lint_set_for "$type" >/dev/null; then
-        echo "dev: no lint templates for $type projects"
-        return 0
-    fi
-    PROJECT_TYPE=$type
-    t=$(templates_dir "$type")
-    if [ -f "$ROOT/Cargo.toml" ]; then
-        need yq "brew install yq"
-    fi
-    channel=$(channel_for_project)
-    SYNC_TMP=$(mktemp -d)
-    tmp=$SYNC_TMP
-    trap 'rm -rf "$SYNC_TMP"' EXIT
-
-    while IFS=$'\t' read -r dest src; do
-        mkdir -p "$(dirname "$tmp/$dest")"
-        render "$dest" "$src" "$channel" >"$tmp/$dest"
-        if [ ! -f "$ROOT/$dest" ]; then
-            printf 'missing: %s\n' "$dest"
-            drifted=1
-        elif ! diff -q "$ROOT/$dest" "$tmp/$dest" >/dev/null; then
-            printf 'differs: %s\n' "$dest"
-            drifted=1
-        fi
-    done < <(manifest "$t")
-
-    if [ -f "$ROOT/Cargo.toml" ]; then
-        lints_template_block "$t" >"$tmp/lints.new"
-        lints_project_block >"$tmp/lints.old"
-        if [ ! -s "$tmp/lints.old" ]; then
-            printf 'missing: [workspace.lints] block in Cargo.toml\n'
-            drifted=1
-        elif ! diff -q "$tmp/lints.old" "$tmp/lints.new" >/dev/null; then
-            printf 'differs: [workspace.lints] block in Cargo.toml\n'
-            drifted=1
-        fi
-    fi
-    while IFS= read -r lib; do
-        if ! lib_attr_present "$t" "$lib"; then
-            printf 'missing: library-register attribute in %s/src/lib.rs\n' "$lib"
-            missing_libs+="$lib"$'\n'
-            drifted=1
-        fi
-    done < <(lib_crates)
-    if [ -f "$ROOT/docs/STYLE.md" ] && grep -qx "$STYLE_MARKER" "$ROOT/docs/STYLE.md" &&
-        guide=$(style_guide_for "$type") && [ -f "$guide" ]; then
-        render_style "$guide" >"$tmp/STYLE.md"
-        if ! diff -q "$ROOT/docs/STYLE.md" "$tmp/STYLE.md" >/dev/null; then
-            printf 'differs: docs/STYLE.md above "%s"\n' "$STYLE_MARKER"
-            style_drift=1
-            drifted=1
-        fi
-    fi
-
-    if [ "$drifted" -eq 0 ]; then
-        echo "up to date"
-        return 0
-    fi
-    if [ "$check" -eq 1 ]; then
-        return 1
-    fi
-    if [ "$yes" -eq 0 ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
-        die "sync overwrites files and needs a terminal to confirm, pass --yes to apply without asking, or --check to list drift"
-    fi
-    while IFS=$'\t' read -r dest src; do
-        if [ ! -f "$ROOT/$dest" ]; then
-            diff -u /dev/null "$tmp/$dest" || true
-        else
-            diff -u "$ROOT/$dest" "$tmp/$dest" || true
-        fi
-    done < <(manifest "$t")
-    if [ -f "$ROOT/Cargo.toml" ] && ! diff -q "$tmp/lints.old" "$tmp/lints.new" >/dev/null; then
-        diff -u "$tmp/lints.old" "$tmp/lints.new" || true
-    fi
-    while IFS= read -r lib; do
-        [ -n "$lib" ] && printf 'would insert into %s/src/lib.rs:\n%s\n' "$lib" "$(<"$t/lib-lints.rs.snippet")"
-    done <<<"$missing_libs"
-    [ "$style_drift" -eq 0 ] || diff -u "$ROOT/docs/STYLE.md" "$tmp/STYLE.md" || true
-    if [ "$yes" -eq 1 ]; then
-        answer=y
-    else
-        printf 'Overwrite these files, the lints block, the lib.rs attributes and the guide part of docs/STYLE.md with the templates? [y/N] '
-        read -r answer
-    fi
-    case "$answer" in
-    y | Y | yes)
-        while IFS=$'\t' read -r dest src; do
-            install_rendered "$dest" "$src" "$channel" || rc=1
-        done < <(manifest "$t")
-        if [ -f "$ROOT/Cargo.toml" ] && ! diff -q "$tmp/lints.old" "$tmp/lints.new" >/dev/null; then
-            lints_replace "$tmp/lints.new" || rc=1
-        fi
-        while IFS= read -r lib; do
-            [ -z "$lib" ] || lib_attr_insert "$t" "$lib" || rc=1
-        done <<<"$missing_libs"
-        [ "$style_drift" -eq 0 ] || cat "$tmp/STYLE.md" >"$ROOT/docs/STYLE.md" || rc=1
-        echo "synced"
-        ;;
-    *) echo "aborted" ;;
-    esac
-    return "$rc"
 }
 
 # --- init ---

@@ -3,6 +3,7 @@ local fs = require("dev.fs")
 local project = require("dev.project")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
+local sync = require("dev.cmd.sync")
 local registry = require("dev.registry")
 local types = require("dev.cmd.types")
 local text = require("dev.text")
@@ -18,7 +19,7 @@ local HIDDEN = "Hidden"
 local OVERRIDE = "(override)"
 local HELP_CTX = { name = "help" }
 local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic.\n"
-local LISTED = { push = push, pull = pull }
+local LISTED = { push = push, pull = pull, sync = sync }
 local HELPERS = {
     { "__verbs", "List the verbs with their descriptions, for shell completion" },
     { "__subs", "List the subcommands of a noun, for shell completion" },
@@ -323,6 +324,18 @@ end
 function M.bad_argument(ctx, reg, arg)
     local kind = arg:sub(1, 1) == "-" and "flag" or "argument"
     stderr:write("dev ", ctx.name, ": unknown ", kind, " ", arg, "\n\n")
+    stderr:write(overview(ctx, reg, screen():stderr(), {}))
+    os.exit(2)
+end
+
+---Refuse a combination of arguments a verb does not take.
+---
+---It prints `dev: <message>` and the curated view on standard error, then exits 2.
+---@param ctx dev.Ctx the context of the command
+---@param reg dev.Registry the project's registry
+---@param message string what is wrong
+function M.usage_error(ctx, reg, message)
+    stderr:write("dev: ", message, "\n\n")
     stderr:write(overview(ctx, reg, screen():stderr(), {}))
     os.exit(2)
 end
