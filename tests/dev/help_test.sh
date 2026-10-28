@@ -126,7 +126,7 @@ for root in "$PROJ" "$REPO"; do
     if [ "$root" = "$PROJ" ]; then
         assert_contains "the fixture hides plumbing" "$hidden" " plumbing "
     else
-        assert_contains "the repo hides stow" "$hidden" " stow "
+        assert_contains "the repo hides bootstrap" "$hidden" " bootstrap "
     fi
 done
 
