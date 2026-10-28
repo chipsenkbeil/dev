@@ -414,19 +414,16 @@ end
 ---Run `argv` in its own process group and collect its output, stopping it after `secs` seconds.
 ---
 ---A command that outlives the limit is sent TERM and then KILL together with everything it started.
----A `secs` of 0 or less allows no time: nothing is started and the result is "" and 124.
+---A `secs` of 0 or less sets no limit, as GNU timeout does: the command runs to completion.
 ---When this process dies first (INT, TERM or KILL), the command's process group is killed and the
 ---temporary directory removed.
 ---@param argv string[] command and its arguments, with at least one word
----@param secs number seconds the command may run
+---@param secs number seconds the command may run, 0 or less for no limit
 ---@param opts dev.os.TimedOpts? environment, directory, input and stream options
 ---@return string output what the command wrote to standard output, and standard error with `merge`
 ---@return integer code exit status, 124 when the limit hit or the command was killed
 function M.capture_timed(argv, secs, opts)
     opts = opts or {}
-    if secs <= 0 then
-        return "", TIMEOUT_EXIT
-    end
     local words = check({ env = opts.env, unset = opts.unset })
     local made, made_code = M.capture({
         "mktemp",
@@ -481,7 +478,7 @@ function M.capture_timed(argv, secs, opts)
             if file then
                 code = tonumber(file:read("*a"))
                 file:close()
-            elseif os.time() - started > secs then
+            elseif secs > 0 and os.time() - started > secs then
                 signal_group("TERM", pid)
                 nap(KILL_GRACE_SECS)
                 signal_group("KILL", pid)
