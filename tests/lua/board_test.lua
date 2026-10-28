@@ -960,7 +960,7 @@ t.test("the token never reaches argv, the environment, the state or the output",
     local root, home = sandbox()
     executable(
         root .. "/bin/curl",
-        (CURL:gsub('cat >"$ROOT/stdin"', 'env >>"$ROOT/env"\ncat >"$ROOT/stdin"', 1))
+        (CURL:gsub('cat >"$ROOT/stdin"', 'env >>"$ROOT/env"\ncat >"$ROOT/stdin.$$"', 1))
     )
     local out = dev(root, home, { "-vv", "board", "take", "11111111-a" })
     t.ok(wait_until(function()
@@ -973,7 +973,10 @@ t.test("the token never reaches argv, the environment, the state or the output",
     t.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
     t.eq(read(root, "env"):find(TOKEN, 1, true), nil)
     t.eq(read(home, "state/dev/board/" .. ID_A):find(TOKEN, 1, true), nil)
-    t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
+    local header = 'header = "Authorization: Bearer ' .. TOKEN .. '"\n'
+    local seen = devos.capture({ "sh", "-c", 'cat "$1"/stdin.*', "sh", root })
+    t.ok(seen:find(header, 1, true), seen)
+    t.eq((seen:gsub(header:gsub("%p", "%%%0"), "")), "")
     t.ok(read(root, "calls"):find("-K -", 1, true))
 end)
 
