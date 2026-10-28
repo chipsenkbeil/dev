@@ -38,3 +38,13 @@ On jj, `dev pull` runs `jj sync` when that alias exists. Otherwise it runs
 `jj git fetch --all-remotes` and rebases onto `trunk()`. On git it runs
 `git pull --rebase origin <branch>` and refuses a tree with uncommitted
 changes.
+
+## trunk()
+
+The shared jj config redefines `trunk()` as jj's builtin with the `gerrit`
+remote added: the newest of `main`, `master` or `trunk` on `gerrit`, `origin`
+or `upstream`, else `root()`. A commit pushed to gerrit stays immutable before
+the mirror reaches origin. A repo's own `trunk()` alias still wins.
+`jj sync` only fast-forwards the local trunk bookmark to an origin bookmark on
+the `trunk()` commit, so while gerrit is ahead of origin it rebases onto the
+gerrit trunk and leaves the local bookmark where it is.
