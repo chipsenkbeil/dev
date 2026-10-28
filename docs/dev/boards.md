@@ -242,6 +242,13 @@ card is gone, is reported as `dropped <command> <card>: <reason>` and removed,
 so it is never retried. A change that dev was killed in the middle of replaying stays queued and may be sent twice. A replay that finds Pomb still down leaves the rest
 queued, and `sync` then prints how many are left and exits 1.
 
+A missing queue file is an empty queue. A queue file that is damaged, for
+example hand-edited into invalid JSON, is never treated as empty and never
+overwritten. `dev board sync` prints
+`dev: <file>:<line>: <reason>; the queue is left in place` and exits 1. Any other `dev board` command prints that line on
+standard error, skips the replay and runs as usual. A write that cannot reach
+Pomb then fails instead of being queued. Fix or delete the file to go on.
+
 ## Claims
 
 `take` claims a card so no other agent picks it up, and starts a loop that

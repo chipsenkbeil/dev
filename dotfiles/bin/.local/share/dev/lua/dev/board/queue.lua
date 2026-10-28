@@ -1,3 +1,4 @@
+local fs = require("dev.fs")
 local json = require("dev.json")
 local store = require("dev.board.store")
 
@@ -28,16 +29,31 @@ function M.new(name)
     return setmetatable({ path = store.dir() .. "/" .. safe .. ".queue" }, Queue)
 end
 
+local function line_of(text, offset)
+    local _, breaks = text:sub(1, offset - 1):gsub("\n", "")
+    return breaks + 1
+end
+
 local function load(path)
-    local doc, message = store.read(path)
-    if doc == nil then
-        if message then
-            return nil, message
-        end
+    if not fs.exists(path) then
         return {}
     end
-    if type(doc) ~= "table" then
-        return nil, path .. " is not a queue file"
+    local text, err = fs.read(path)
+    if not text then
+        return nil, "cannot read " .. path .. ": " .. tostring(err)
+    end
+    local doc, message = json.decode(text)
+    if doc == nil then
+        local offset = tonumber(tostring(message):match("offset (%d+)")) or 1
+        return nil, path .. ":" .. line_of(text, offset) .. ": " .. tostring(message)
+    end
+    if type(doc) ~= "table" or doc == json.null or (next(doc) ~= nil and doc[1] == nil) then
+        return nil, path .. ":1: not a list of queued commands"
+    end
+    for index, entry in ipairs(doc) do
+        if type(entry) ~= "table" or type(entry.sub) ~= "string" or type(entry.args) ~= "table" then
+            return nil, path .. ": entry " .. index .. " is not a queued command"
+        end
     end
     return doc
 end
@@ -62,10 +78,14 @@ function Queue:list()
 end
 
 ---Count the queued changes.
----@return integer count how many are waiting, 0 when the file cannot be read
+---@return integer? count how many are waiting, 0 when there is no file, nil when it is malformed
+---@return string? message why the file could not be used
 function Queue:count()
-    local entries = load(self.path)
-    return entries and #entries or 0
+    local entries, message = load(self.path)
+    if not entries then
+        return nil, message
+    end
+    return #entries
 end
 
 ---Add a change at the end.

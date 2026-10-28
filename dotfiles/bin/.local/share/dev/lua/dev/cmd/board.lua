@@ -952,7 +952,10 @@ local function open_board(ctx)
     local pending
     if found.backend == board.Backend.POMB then
         pending = queue.new(found.name)
-        if pending:count() > 0 then
+        local waiting, why = pending:count()
+        if not waiting then
+            stderr_line("dev: " .. why .. "; the queue is left in place")
+        elseif waiting > 0 then
             replay(backend, pending, stderr_news)
         end
     end
@@ -966,13 +969,16 @@ M.handlers["board status"] = function(ctx)
     print("board: " .. found.name)
     if found.backend == board.Backend.POMB then
         local pending = queue.new(found.name)
-        if pending:count() > 0 then
+        local waiting, why = pending:count()
+        if not waiting then
+            stderr_line("dev: " .. why .. "; the queue is left in place")
+        elseif waiting > 0 then
             local backend = M.open(found)
             if backend then
                 replay(backend, pending, stderr_line)
             end
             local left = pending:count()
-            if left > 0 then
+            if left and left > 0 then
                 print("queued: " .. left)
             end
         end
@@ -987,11 +993,16 @@ M.handlers["board sync"] = function(ctx)
         verb.die("dev: a local board has nothing to sync")
     end
     local pending = queue.new(found.name)
-    if pending:count() == 0 then
+    local waiting, message = pending:count()
+    if not waiting then
+        verb.die("dev: " .. message .. "; the queue is left in place")
+    end
+    if waiting == 0 then
         print("nothing queued")
         return 0
     end
-    local backend, message = M.open(found)
+    local backend
+    backend, message = M.open(found)
     if not backend then
         verb.die(message)
     end
