@@ -371,9 +371,11 @@ end
 
 local function sandbox(opts)
     opts = opts or {}
-    local root = support.sandbox({
-        [".dev/config.toml"] = opts.project or '[board]\nbackend = "pomb"\nname = "demo"\n',
-    }, {})
+    local files = {}
+    if opts.project ~= false then
+        files[".dev/config.toml"] = opts.project or '[board]\nbackend = "pomb"\nname = "demo"\n'
+    end
+    local root = support.sandbox(files, {})
     local home = support.tempdir()
     local tmp = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
@@ -538,6 +540,21 @@ t.test("a project with no [board] section needs --name and then gets one", funct
     t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
     out, code = dev(root, home, tmp, { "board", "status" })
     t.eq(out, "backend: pomb\nboard: demo\n")
+end)
+
+t.test("a project with no .dev/config.toml takes --name and gets the file", function()
+    local root, home, tmp = sandbox({ project = false })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 1)
+    t.ok(out:find("pass --name N", 1, true), out)
+    out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
+    t.eq(code, 0)
+    t.eq(
+        out,
+        "wrote [board] to .dev/config.toml\n"
+            .. "board demo already follows the standard, nothing to change\n"
+    )
+    t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
 end)
 
 t.test("the section is appended after other config", function()

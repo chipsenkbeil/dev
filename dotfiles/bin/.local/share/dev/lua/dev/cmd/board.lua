@@ -340,7 +340,7 @@ end
 local function has_section(root)
     local text = fs.exists(root .. "/.dev/config.toml") and fs.read(root .. "/.dev/config.toml")
     local tree = text and toml.parse(text)
-    return tree ~= nil and tree.board ~= nil
+    return type(tree) == "table" and tree.board ~= nil
 end
 
 local function board_name(ctx, flags)
