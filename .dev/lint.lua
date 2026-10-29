@@ -1,7 +1,8 @@
 --[[
 Run the shell, bats and Lua checks over the repo.
 Shellcheck, shfmt and comment spacing cover the bash roots, and the bare-assertion check covers
-the bats files. Stylua, selene, ast-grep and the comment checks cover the Lua roots, .dev included.
+the bats files. Stylua, selene, ast-grep and the comment checks cover the Lua roots, .dev included,
+and the rule tests of the Lua and Rust lint sets run once.
 Exit non-zero when any of them reports a finding.
 ]]
 local checks = require("dotfiles.checks")
@@ -22,6 +23,8 @@ local LUA_TOOLS = {
     { "selene", { "--no-exclude", "--config", "STYLE/selene.toml" } },
     { "ast-grep", { "scan", "--config", "STYLE/ast-grep/sgconfig.yml" } },
 }
+
+local RULE_TEST_SETS = { "lua", "rust" }
 
 local function run_checked(argv, opts)
     opts = opts or {}
@@ -120,6 +123,19 @@ end
 local lua_files = checks.lua_files(root)
 if #lua_files > 0 then
     lint_lua(lua_files)
+end
+
+if devos.which("ast-grep") then
+    local sets = fs.join(root, checks.lint_dir, "..")
+    for _, set in ipairs(RULE_TEST_SETS) do
+        stdout:write("> Testing ", set, " ast-grep rules\n")
+        run_checked({
+            "ast-grep",
+            "test",
+            "--config",
+            fs.join(sets, set, "ast-grep", "sgconfig.yml"),
+        })
+    end
 end
 
 return failed and 1 or 0
