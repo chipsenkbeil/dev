@@ -272,3 +272,155 @@ t.test("the rustup script skips the install when rustup is already there", funct
     t.eq(fs.read(dir .. "/calls.log"), nil)
     fs.remove(dir, { recursive = true })
 end)
+
+local ARCHIVED = { "cargo-binstall", "cargo-deny", "cargo-nextest", "sccache" }
+local FAKE_BINSTALL = "#!/bin/sh\n"
+    .. 'echo "cargo-binstall $*" >>"$FAKE_LOG"\n'
+    .. "for last; do :; done\n"
+    .. "home=${CARGO_HOME:-$HOME/.cargo}\n"
+    .. 'mkdir -p "$home/bin"\n'
+    .. "printf '#!/bin/sh\\n' >\"$home/bin/$last\"\n"
+    .. 'chmod 755 "$home/bin/$last"\n'
+local FAKE_RUSTUP = "#!/bin/sh\n"
+    .. 'echo "rustup $*" >>"$FAKE_LOG"\n'
+    .. 'case "$1 $2" in "toolchain install") : >"$FAKE_ASSETS/nightly" ;; esac\n'
+local FAKE_CARGO =
+    '#!/bin/sh\ncase "$1" in +nightly) test -f "$FAKE_ASSETS/nightly"; exit $? ;; esac\n'
+local FAKE_HOME_INIT = "#!/bin/sh\n"
+    .. 'echo "rustup-init $*" >>"$FAKE_LOG"\n'
+    .. "home=${CARGO_HOME:-$HOME/.cargo}\n"
+    .. 'mkdir -p "$home/bin"\n'
+    .. 'cp "$FAKE_ASSETS/rustup-stub" "$home/bin/rustup"\n'
+    .. 'cp "$FAKE_ASSETS/cargo-stub" "$home/bin/cargo"\n'
+    .. 'chmod 755 "$home/bin/rustup" "$home/bin/cargo"\n'
+
+local function rust_group_sandbox()
+    local dir = assert(fs.realpath(support.tempdir()))
+    for _, sub in ipairs({ "assets", "stubs", "pathbin", "tmp", "home", "stage" }) do
+        assert(fs.mkdir(dir .. "/" .. sub))
+    end
+    write_executable(dir .. "/stubs/curl", FAKE_CURL)
+    write_executable(dir .. "/stubs/uname", UNAME)
+    for _, name in ipairs(SYSTEM_TOOLS) do
+        local real = devos.which(name)
+        if real then
+            assert(fs.symlink(real, dir .. "/pathbin/" .. name))
+        end
+    end
+    for _, name in ipairs({ "tar", "gzip", "unzip" }) do
+        local real = devos.which(name)
+        if real then
+            assert(fs.symlink(real, dir .. "/pathbin/" .. name))
+        end
+    end
+    write_executable(dir .. "/assets/rustup-init", FAKE_HOME_INIT)
+    write_executable(dir .. "/assets/rustup-stub", FAKE_RUSTUP)
+    write_executable(dir .. "/assets/cargo-stub", FAKE_CARGO)
+    local pins = {
+        "name version sha256 url path",
+        table.concat({
+            "rustup-init",
+            "9.9.9",
+            sha256(dir .. "/assets/rustup-init"),
+            "https://example.test/rustup-init",
+            "-",
+        }, " "),
+    }
+    for _, name in ipairs(ARCHIVED) do
+        assert(fs.mkdir(dir .. "/stage/" .. name))
+        write_executable(
+            dir .. "/stage/" .. name .. "/" .. name,
+            name == "cargo-binstall" and FAKE_BINSTALL or "#!/bin/sh\n"
+        )
+        local archive = dir .. "/assets/" .. name .. ".tar.gz"
+        assert(
+            devos.run({ "tar", "-czf", archive, "-C", dir .. "/stage/" .. name, name }) == 0,
+            "tar failed"
+        )
+        pins[#pins + 1] = table.concat({
+            name,
+            "1.0.0",
+            sha256(archive),
+            "https://example.test/" .. name .. ".tar.gz",
+            name,
+        }, " ")
+    end
+    assert(fs.write(dir .. "/releases.tsv", table.concat(pins, "\n") .. "\n"))
+    assert(fs.write(dir .. "/tools.tsv", assert(fs.read(REPO .. "/.dev/tools.tsv"))))
+    return dir
+end
+
+local function install_rust_group(dir, extra)
+    local env = {
+        PATH = dir .. "/stubs:" .. dir .. "/pathbin",
+        HOME = dir .. "/home",
+        TMPDIR = dir .. "/tmp",
+        FAKE_ASSETS = dir .. "/assets",
+        FAKE_LOG = dir .. "/calls.log",
+    }
+    local unset = {}
+    for _, key in ipairs({ "CARGO_HOME", "DEV_TOOLS_BIN" }) do
+        if extra[key] then
+            env[key] = extra[key]
+        else
+            unset[#unset + 1] = key
+        end
+    end
+    return devos.capture({
+        assert(devos.which("luajit")),
+        PKG,
+        "install",
+        "--group",
+        "rust",
+        "--manifest",
+        dir .. "/tools.tsv",
+    }, {
+        cwd = REPO,
+        stderr = "stdout",
+        env = env,
+        unset = unset,
+    })
+end
+
+local function check_rust_group(dir, cargo_bin, extra)
+    local out, code = install_rust_group(dir, extra or {})
+    t.eq(code, 0, out)
+    t.eq(out:find("install failed", 1, true), nil, out)
+    t.ok(fs.is_exec(cargo_bin .. "/rustup"), out)
+    t.ok(fs.is_exec(cargo_bin .. "/cargo-sort"), out)
+    t.ok(fs.is_file(dir .. "/assets/nightly"), out)
+    local log = assert(fs.read(dir .. "/calls.log"))
+    t.ok(log:find("rustup toolchain install nightly --profile minimal", 1, true), log)
+    t.ok(
+        log:find("cargo-binstall --no-confirm --disable-telemetry --locked cargo-sort", 1, true),
+        log
+    )
+end
+
+t.test(
+    "the rust group installs in one run on an Intel Mac with no cargo or user bin on PATH",
+    function()
+        if devos.getuid() == 0 then
+            return
+        end
+        local dir = rust_group_sandbox()
+        check_rust_group(dir, dir .. "/home/.cargo/bin")
+        t.ok(fs.is_exec(dir .. "/home/.local/bin/cargo-binstall"))
+        t.ok(fs.is_exec(dir .. "/home/.local/bin/sccache"))
+        fs.remove(dir, { recursive = true })
+    end
+)
+
+t.test("the rust group honours CARGO_HOME and DEV_TOOLS_BIN when they are set", function()
+    if devos.getuid() == 0 then
+        return
+    end
+    local dir = rust_group_sandbox()
+    check_rust_group(dir, dir .. "/cargo/bin", {
+        CARGO_HOME = dir .. "/cargo",
+        DEV_TOOLS_BIN = dir .. "/tools",
+    })
+    t.ok(fs.is_exec(dir .. "/tools/cargo-binstall"))
+    t.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
+    fs.remove(dir, { recursive = true })
+end)

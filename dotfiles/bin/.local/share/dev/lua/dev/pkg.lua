@@ -433,6 +433,25 @@ local function parse_install(args, opts)
     return true
 end
 
+local function tool_dirs()
+    local dirs = {}
+    local home = os.getenv("HOME")
+    local cargo = os.getenv("CARGO_HOME")
+    if not cargo or cargo == "" then
+        cargo = home and home ~= "" and fs.join(home, ".cargo") or nil
+    end
+    local bin = os.getenv("DEV_TOOLS_BIN")
+    if not bin or bin == "" then
+        bin = home and home ~= "" and fs.join(home, ".local", "bin") or nil
+    end
+    for _, dir in ipairs({ cargo and fs.join(cargo, "bin"), bin }) do
+        if dir then
+            dirs[#dirs + 1] = dir
+        end
+    end
+    return dirs
+end
+
 ---Run `check` or `install` from a command line.
 ---@param argv string[] the arguments after the program name, starting with the subcommand
 ---@param defaults { interpreter: string, modules: string, manifest: string } the luajit that runs the driver, dev's module directory and the manifest used without `--manifest`
@@ -452,7 +471,11 @@ function M.main(argv, defaults)
     if sub == nil or sub == "" or sub == "-h" or sub == "--help" then
         stdout:write(USAGE)
         return 0
-    elseif sub == "check" then
+    end
+    if (sub == "check" or sub == "install") and devos.getuid() ~= 0 then
+        devos.append_path(tool_dirs())
+    end
+    if sub == "check" then
         return parse_check(args, opts) and M.check(opts) or 2
     elseif sub == "install" then
         return parse_install(args, opts) and M.install(opts) or 2

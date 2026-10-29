@@ -44,7 +44,7 @@ checks its sha256 before it extracts anything, and builds into `~/.local`
 
 The rust group on Intel macOS routes each row: cargo-binstall, cargo-deny,
 cargo-nextest and sccache are `release:` pins (cargo-nextest ships one
-universal build), rustup is `script:scripts/install-rustup-darwin.lua,bin:-` (the row is then checked by running the script, so `~/.cargo/bin` need not be on PATH),
+universal build), rustup is `script:scripts/install-rustup-darwin.lua,bin:-` (the row is then checked by running the script),
 rustfmt-nightly keeps its script, build-tools is `system:cc`, and zig,
 cargo-zigbuild and rust-darwin-targets are `-` (only cross builds from
 Linux use them). cargo-sort is `cargo:cargo-sort`: upstream ships no x86_64
@@ -131,6 +131,11 @@ first comma. Regenerate them after a manifest change.
 ```
 rg -o --no-filename 'script:scripts/[^ ",]+' .dev/tools.tsv | sort -u
 ```
+
+The driver appends `CARGO_HOME/bin` (else `~/.cargo/bin`) and `DEV_TOOLS_BIN` (else
+`~/.local/bin`) to its own PATH for `install` and `check`, except as root, so a
+row that runs after rustup or cargo-binstall finds what an earlier row put
+there. A tool already on PATH still wins.
 
 ## Scopes
 

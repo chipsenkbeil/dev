@@ -5,6 +5,7 @@ int isatty(int fd);
 unsigned int getuid(void);
 int getpid(void);
 int usleep(unsigned int usec);
+int setenv(const char *name, const char *value, int overwrite);
 int execvp(const char *file, char *const argv[]);
 void (*signal(int sig, void (*handler)(int)))(int);
 char *strerror(int errnum);
@@ -533,6 +534,22 @@ end
 ---@return integer pid process id
 function M.getpid()
     return tonumber(ffi.C.getpid())
+end
+
+---Add directories to the end of this process's PATH.
+---
+---A tool already on PATH still wins.
+---@param dirs string[] the directories, in order
+function M.append_path(dirs)
+    if #dirs == 0 then
+        return
+    end
+    local path = table.concat(dirs, ":")
+    local old = os.getenv("PATH")
+    if old and old ~= "" then
+        path = old .. ":" .. path
+    end
+    ffi.C.setenv("PATH", path, 1)
 end
 
 ---Read the real user id.
