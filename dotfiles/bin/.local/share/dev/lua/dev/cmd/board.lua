@@ -317,6 +317,20 @@ local function terminal_grouped(screen, cards, opts)
     return out
 end
 
+---Refuse a card that carries `needs:human`, which waits on the owner.
+---@param card dev.board.Card the card
+---@return dev.cmd.board.Result? err the failure, nil when the card is free to change
+local function owner_holds(card)
+    if index_of(card.labels, board.NEEDS_HUMAN) then
+        return failure(
+            card.id:sub(1, board.MIN_PREFIX)
+                .. " is labelled "
+                .. board.NEEDS_HUMAN
+                .. ", so it waits on the owner and only the owner moves or edits it"
+        )
+    end
+end
+
 local function card_line(card)
     return board.table_lines({ board.cells(card) })[1]
 end
@@ -499,6 +513,16 @@ function commands.add(backend, args)
             return err
         end
         column = named
+    end
+    if
+        index_of(labels or {}, board.NEEDS_HUMAN)
+        and column ~= board.BLOCKED
+        and column ~= board.ICEBOX
+    then
+        return usage(
+            board.NEEDS_HUMAN
+                .. " lives only in Blocked or Icebox, so add the card there with --column"
+        )
     end
     if column == board.READY and unready(color) then
         return usage(
@@ -848,6 +872,10 @@ function commands.move(backend, args)
     if not card then
         return err
     end
+    local held_back = owner_holds(card)
+    if held_back then
+        return held_back
+    end
     if column == board.READY and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
@@ -879,6 +907,20 @@ function commands.move(backend, args)
                         card.id:sub(1, board.MIN_PREFIX)
                         .. " has no checks row and cannot enter Ready; give it one with dev board checks CARD CMD"
                     )
+            )
+        end
+    end
+    if column == board.READY then
+        local family, why = backend:family(card.id)
+        if not family then
+            return failure(why)
+        end
+        if family.children and family.children.total > 0 then
+            return failure(
+                card.id:sub(1, board.MIN_PREFIX)
+                    .. " is an umbrella with "
+                    .. family.children.total
+                    .. " children and never enters Ready; its children are the work"
             )
         end
     end
@@ -959,6 +1001,22 @@ function commands.label(backend, args)
         labels[i] = label
     end
     for _, change in ipairs(edits) do
+        if
+            change.add
+            and change.word == board.NEEDS_HUMAN
+            and not index_of(labels, change.word)
+            and card.column ~= board.BLOCKED
+            and card.column ~= board.ICEBOX
+        then
+            return failure(
+                card.id:sub(1, board.MIN_PREFIX)
+                    .. " is in "
+                    .. card.column
+                    .. ", and "
+                    .. board.NEEDS_HUMAN
+                    .. " lives only in Blocked or Icebox; move it there first"
+            )
+        end
         local at = index_of(labels, change.word)
         if change.add and not at then
             labels[#labels + 1] = change.word
@@ -1125,6 +1183,10 @@ function commands.edit(backend, args)
     local card, err = find_card(backend, args[1])
     if not card then
         return err
+    end
+    local held_back = owner_holds(card)
+    if held_back then
+        return held_back
     end
     local held = claims.read(card.id)
     local ok, message = backend:set_description(card.id, args[2], held and held.fence)

@@ -1089,6 +1089,50 @@ t.test("move to Ready takes a sized card, and other columns take any card", func
     end
 end)
 
+t.test("move and edit refuse a needs:human card, and label --remove still frees it", function()
+    local cards = sample()
+    cards[1].labels = { "needs:human" }
+    local backend = fake(cards)
+    local result = commands.run("move", { "11111111-a", "backlog" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("needs:human", 1, true), result.message)
+    result = commands.run("edit", { "11111111-a", "text" }, backend)
+    t.eq(result.code, 1)
+    t.eq(#backend.calls, 0)
+    t.eq(commands.run("note", { "11111111-a", "hello" }, backend).output, "noted 11111111")
+    result = commands.run("label", { "11111111-a", "--remove", "needs:human" }, backend)
+    t.eq(result.output, "labelled 11111111 -")
+end)
+
+t.test("label adds needs:human only to a card in Blocked or Icebox", function()
+    local backend = fake(sample())
+    local result = commands.run("label", { "11111111-a", "+needs:human" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("Blocked or Icebox", 1, true), result.message)
+    t.eq(#backend.calls, 0)
+    local added = commands.run("add", { "Idea", "--label", "needs:human" }, backend)
+    t.eq(added.code, 2)
+    t.eq(#backend.calls, 0)
+    for _, column in ipairs({ "Blocked", "Icebox" }) do
+        local cards = sample()
+        cards[1].column = column
+        backend = fake(cards)
+        result = commands.run("label", { "11111111-a", "needs:human" }, backend)
+        t.eq(result.output, "labelled 11111111 docs,needs:human")
+    end
+end)
+
+t.test("move to Ready refuses an umbrella and allows a card without children", function()
+    local backend = fake({ colored("green") })
+    backend.kin = { children = { done = 0, total = 2 } }
+    local result = commands.run("move", { "cccccccc", "ready" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("never enters Ready", 1, true), result.message)
+    t.eq(backend.calls[#backend.calls], { "family", ID_C })
+    result = commands.run("move", { "cccccccc", "backlog" }, backend)
+    t.eq(result.output, "moved cccccccc to Backlog")
+end)
+
 t.test("next shows the top card or says none", function()
     local result = commands.run("next", {}, fake(sample()))
     t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")

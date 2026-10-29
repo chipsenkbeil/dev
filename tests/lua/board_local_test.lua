@@ -377,6 +377,48 @@ t.test("link refuses itself, a cycle, another board and a bad kind on a local bo
     t.eq(links, 2)
 end)
 
+t.test("a local board refuses what the needs:human and umbrella rules forbid", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, { "board", "add", name })))
+    end
+    local card, child = add("Card"), add("Child")
+    local umbrella = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Umbrella",
+        "--size",
+        "2",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    local out, code = dev(root, home, { "board", "label", card, "needs:human" })
+    t.eq(code, 1, out)
+    t.ok(out:find("Blocked or Icebox", 1, true), out)
+    dev(root, home, { "board", "move", card, "blocked" })
+    out, code = dev(root, home, { "board", "label", card, "needs:human" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", card, "backlog" })
+    t.eq(code, 1, out)
+    t.ok(out:find("needs:human", 1, true), out)
+    assert(fs.write(root .. "/plan.md", "new text\n"))
+    out, code = dev(root, home, { "board", "edit", card, "--file", root .. "/plan.md" })
+    t.eq(code, 1, out)
+    t.ok(out:find("needs:human", 1, true), out)
+    out, code = dev(root, home, { "board", "note", card, "still allowed" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "label", card, "--remove", "needs:human" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", card, "backlog" })
+    t.eq(code, 0, out)
+    dev(root, home, { "board", "link", child, "parent", umbrella })
+    out, code = dev(root, home, { "board", "move", umbrella, "ready" })
+    t.eq(code, 1, out)
+    t.ok(out:find("never enters Ready", 1, true), out)
+end)
+
 t.test("link parent sets one umbrella a level deep and show and links report it", function()
     local root, home = local_board()
     local function add(name)
