@@ -23,6 +23,7 @@ local NAME_CHARS = 100
 local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
 local STALE_DAYS = 7
+local ICEBOX_DAYS = 30
 local STAMP_CHARS = 16
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
@@ -1002,20 +1003,87 @@ local function stale_rows(cards)
     return board.table_lines(rows)
 end
 
+local function day_limit(flag, value, default)
+    if not value then
+        return default
+    end
+    local limit = value:find("^%d+$") and tonumber(value)
+    if not limit or limit < 1 then
+        return nil, usage(flag .. " needs a whole number of days, 1 or more: " .. value)
+    end
+    return limit
+end
+
+local function icebox_latest(backend, card, stamp, limit, now)
+    local latest = stamp and box.parse_time(stamp)
+    if not latest then
+        return nil, "could not date " .. card.id .. " " .. card.name
+    end
+    if (now - latest) / box.SECONDS_PER_DAY < limit then
+        return nil
+    end
+    local list = backend:comments(card.id)
+    if not list then
+        return nil, "could not read the comments of " .. card.id .. " " .. card.name
+    end
+    for _, comment in ipairs(list) do
+        local at = box.parse_time(comment.at)
+        if not at then
+            return nil, "could not read the comments of " .. card.id .. " " .. card.name
+        end
+        latest = math.max(latest, at)
+    end
+    return latest
+end
+
+local function icebox_rows(backend, cards, entered, limit, now)
+    local found, undated = {}, {}
+    for _, card in ipairs(cards) do
+        if card.column == board.ICEBOX and index_of(card.labels, board.NEEDS_HUMAN) == nil then
+            local latest, skipped = icebox_latest(backend, card, entered[card.id], limit, now)
+            if skipped then
+                undated[#undated + 1] = skipped
+            elseif latest then
+                local days = math.floor((now - latest) / box.SECONDS_PER_DAY)
+                if days >= limit then
+                    found[#found + 1] = {
+                        id = card.id,
+                        column = card.column,
+                        size = card.size,
+                        name = card.name,
+                        days = days,
+                        at = latest,
+                    }
+                end
+            end
+        end
+    end
+    table.sort(undated)
+    table.sort(found, function(a, b)
+        if a.at ~= b.at then
+            return a.at < b.at
+        end
+        return a.id < b.id
+    end)
+    return found, undated
+end
+
 function commands.stale(backend, args, now)
-    local flags, extra = parse(args, { ["--days"] = true })
+    local flags, extra = parse(args, { ["--days"] = true, ["--icebox-days"] = true })
     if not flags then
         return extra
     end
     if #extra > 0 then
         return usage("unknown argument " .. extra[1])
     end
-    local limit = STALE_DAYS
-    if flags["--days"] then
-        limit = flags["--days"]:find("^%d+$") and tonumber(flags["--days"])
-        if not limit or limit < 1 then
-            return usage("--days needs a whole number of days, 1 or more: " .. flags["--days"])
-        end
+    local limit, refusal = day_limit("--days", flags["--days"], STALE_DAYS)
+    if not limit then
+        return refusal
+    end
+    local icebox_limit
+    icebox_limit, refusal = day_limit("--icebox-days", flags["--icebox-days"], ICEBOX_DAYS)
+    if not icebox_limit then
+        return refusal
     end
     local cards, message = backend:cards()
     if not cards then
@@ -1090,6 +1158,16 @@ function commands.stale(backend, args, now)
     if #undated > 0 then
         lines[#lines + 1] = ""
         append(lines, undated)
+    end
+    local iced, iced_undated = icebox_rows(backend, cards, entered, icebox_limit, now)
+    if #iced > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "icebox, untouched for " .. icebox_limit .. " days:"
+        append(lines, stale_rows(iced))
+    end
+    if #iced_undated > 0 then
+        lines[#lines + 1] = ""
+        append(lines, iced_undated)
     end
     return { output = table.concat(lines, "\n") }
 end

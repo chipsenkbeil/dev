@@ -306,9 +306,9 @@ return {
     {
         words = { "board", "stale" },
         handler = "lua",
-        flags = "--days",
-        usage = "dev board stale [--days N]",
-        desc = "List the cards that sat in Backlog, Ready, In Progress or In Review for N days (7 by default), oldest first, and the needs:human ones apart",
+        flags = "--days --icebox-days",
+        usage = "dev board stale [--days N] [--icebox-days N]",
+        desc = "List the cards that sat in Backlog, Ready, In Progress or In Review for N days (7 by default), oldest first, the needs:human ones apart, and the Icebox cards untouched for --icebox-days (30 by default)",
     },
     {
         words = { "board", "take" },

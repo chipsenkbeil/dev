@@ -971,7 +971,7 @@ end)
 
 t.test("stale covers Backlog, Ready, In Progress and In Review only", function()
     local columns = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
-    local cards, times = aged(columns, { 40, 40, 40, 40, 40, 40, 40 })
+    local cards, times = aged(columns, { 5, 40, 40, 40, 40, 40, 40 })
     local result = commands.run("stale", {}, fake(cards, times), NOW)
     local lines = {}
     for line in result.output:gmatch("[^\n]+") do
@@ -1059,6 +1059,77 @@ t.test("stale refuses a bad --days with a usage error", function()
     end
     t.eq(commands.run("stale", { "--days" }, fake({}), NOW).code, 2)
     t.eq(commands.run("stale", { "extra" }, fake({}), NOW).code, 2)
+end)
+
+t.test("stale lists untouched Icebox cards", function()
+    local human = { "needs:human" }
+    local cards, times = aged(
+        { "Icebox", "Icebox", "Icebox", "Icebox", "Icebox", "Ready" },
+        { 45, 31, 29, 90, 60, 1 },
+        { {}, {}, {}, {}, human, {} }
+    )
+    local backend = fake(cards, times)
+    function backend:comments(id)
+        if id == cards[2].id then
+            return { { at = os.date("!%Y-%m-%dT%H:%M:%SZ", NOW - 2 * box.SECONDS_PER_DAY) } }
+        end
+        if id == cards[4].id then
+            return { { at = os.date("!%Y-%m-%dT%H:%M:%SZ", NOW - 40 * box.SECONDS_PER_DAY) } }
+        end
+        return {}
+    end
+    t.eq(
+        commands.run("stale", {}, backend, NOW).output,
+        "no stale cards\n\nfor the owner (needs:human):\n"
+            .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 30 days:\n"
+            .. "00000001  Icebox  45d  unsized  Card 1\n"
+            .. "00000004  Icebox  40d  unsized  Card 4"
+    )
+    t.eq(
+        commands.run("stale", { "--icebox-days", "10" }, backend, NOW).output,
+        "no stale cards\n\nfor the owner (needs:human):\n"
+            .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 10 days:\n"
+            .. "00000001  Icebox  45d  unsized  Card 1\n"
+            .. "00000004  Icebox  40d  unsized  Card 4\n"
+            .. "00000003  Icebox  29d  unsized  Card 3"
+    )
+end)
+
+t.test("stale keeps its output when an Icebox card cannot be dated or its comments read", function()
+    local cards, times = aged({ "Ready", "Icebox", "Icebox", "Icebox" }, { 9, 50, 50, 50 })
+    times[cards[2].id] = nil
+    local backend = fake(cards, times)
+    function backend:comments(id)
+        if id == cards[3].id then
+            return nil, "boom"
+        end
+        return { { at = "later" } }
+    end
+    t.eq(
+        commands.run("stale", {}, backend, NOW).output,
+        "00000001  Ready  9d  unsized  Card 1\n\ncould not date "
+            .. cards[2].id
+            .. " Card 2\ncould not read the comments of "
+            .. cards[3].id
+            .. " Card 3\ncould not read the comments of "
+            .. cards[4].id
+            .. " Card 4"
+    )
+end)
+
+t.test("stale counts an Icebox card exactly at the limit as untouched", function()
+    local cards, times = aged({ "Icebox", "Icebox" }, { 30, 29 })
+    t.eq(
+        commands.run("stale", {}, fake(cards, times), NOW).output,
+        "no stale cards\n\nicebox, untouched for 30 days:\n00000001  Icebox  30d  unsized  Card 1"
+    )
+end)
+
+t.test("stale refuses a bad --icebox-days with a usage error", function()
+    for _, word in ipairs({ "0", "-1", "x", "1.5", "" }) do
+        t.eq(commands.run("stale", { "--icebox-days", word }, fake({}), NOW).code, 2, word)
+    end
+    t.eq(commands.run("stale", { "--icebox-days" }, fake({}), NOW).code, 2)
 end)
 
 t.test("stale says so when nothing is stale", function()
