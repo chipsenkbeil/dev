@@ -192,19 +192,22 @@ end
 ---@field user string? the login name
 ---@field state string? what ci says it is doing
 
----Print what ci said when `ci connect` failed, then stop with its code.
+---@class dev.cmd.connect.ConnectablesOpts
+---@field strict boolean whether a failure must end the run
+
+---Print what ci said when `ci connect` failed, as one line.
 ---@param raw string ci's output
----@param code integer ci's exit code
-local function connect_failed(raw, code)
+local function connect_failed(raw)
     local out = raw:gsub("\n+$", "")
     local doc = json.decode(out)
     local message = type(doc) == "table" and type(doc.error) == "table" and doc.error.message
-    if type(message) == "string" then
-        stderr:write("dev connect: ", message, "\n")
-    elseif out ~= "" then
-        stderr:write(out, "\n")
+    if type(message) ~= "string" then
+        message = out
     end
-    os.exit(code)
+    message = message:match("^[^\n]*")
+    if message ~= "" then
+        stderr:write("dev connect: ", (message:gsub("[^\32-\126]", " ")), "\n")
+    end
 end
 
 ---Tell whether a name from ci can reach an ssh command line as `ci-<name>`.
@@ -224,9 +227,11 @@ end
 ---Sync ci's ssh_config and list what it can reach apart from boxes.
 ---
 ---A ci with no `connect` exits 2, which shows boxes only, with one note.
----Any other failure prints ci's message and ends the run with ci's code.
+---Any other failure prints ci's message as one line, then ends the run with
+---ci's code when `strict` is set and lists boxes only otherwise.
+---@param opts dev.cmd.connect.ConnectablesOpts how to treat a failure
 ---@return dev.cmd.connect.Connectable[] found the connectables, in ci's order
-local function connectables()
+local function connectables(opts)
     local raw, code = devos.capture({ "ci", "connect", "sync" })
     if code == 0 then
         raw, code = devos.capture({ "ci", "connect", "ls", "--json" })
@@ -236,7 +241,11 @@ local function connectables()
         return {}
     end
     if code ~= 0 then
-        connect_failed(raw, code or Exit.FAILED)
+        connect_failed(raw)
+        if opts.strict then
+            os.exit(code or Exit.FAILED)
+        end
+        return {}
     end
     local doc = json.decode((raw:gsub("\n+$", "")))
     if type(doc) ~= "table" then
@@ -382,7 +391,7 @@ local function run(ctx)
     local boxes = box.call("connect", { "ls", "--json" }).boxes or {}
     local others = {}
     if not given or not has_box(boxes, given) then
-        others = connectables()
+        others = connectables({ strict = given ~= nil })
     end
     local choice = given or choose(boxes, others, project)
     local found

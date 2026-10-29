@@ -619,9 +619,16 @@ reset
 fx ls "$(lsdoc "$RUNNING")"
 fx connect.ls '{"ok":false,"error":{"message":"hub unreachable"}}' 5
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
-assert_eq "a real ci connect error ends with ci's code" "$?" "5"
-assert_contains "a real ci connect error prints ci's message" "$out" "dev connect: hub unreachable"
-assert_not_contains "no attach after a ci connect error" "$(calls)" "et --ssh-option"
+assert_eq "a failing ci connect still lets the picker attach a box" "$?" "0"
+assert_contains "a failing ci connect prints ci's message" "$out" "dev connect: hub unreachable"
+assert_contains "a failing ci connect still offers the boxes" "$(cat "$ITEMS")" "myproject-k3x"
+assert_contains "the box attaches over et" "$(calls)" "et --ssh-option"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+fx connect.ls '{"ok":false,"error":{"message":"hub unreachable"}}' 5
+out="$(box connect host-a 2>&1)"
+assert_eq "a named non-box keeps ci's code when ci connect fails" "$?" "5"
+assert_contains "a named non-box prints ci's message" "$out" "dev connect: hub unreachable"
 reset
 out="$(box connect __new__ 2>&1)"
 assert_eq "connect refuses the new-box sentinel as a name" "$?" "2"

@@ -139,8 +139,10 @@ dev connect host-a
 `dev connect NAME` takes a box or a connectable. A box name goes the way
 above, without asking `ci connect`. Any other name that ci lists as a
 connectable runs `ssh ci-NAME`, which relays through the hub and checks the
-host key ci pinned. A ci that has no `connect` command makes dev list boxes only, with one
-note. Any other ci failure prints ci's message and exits with its code.
+host key ci pinned. A ci that has no `connect` command makes dev list boxes
+only, with one note. Any other ci failure prints ci's message as one line and
+the picker still offers the boxes, while a name that is no box exits with ci's
+code.
 
 ## Errors
 

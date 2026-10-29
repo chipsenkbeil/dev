@@ -103,6 +103,18 @@ t.test("a ci without connect lists boxes only, with one note", function()
     fs.remove(root, { recursive = true })
 end)
 
+t.test("a failing ci connect still lets the picker attach a box", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/connect.json", '{"ok":false,"error":{"message":"hub down"}}'))
+    assert(fs.write(root .. "/connect.rc", "7\n"))
+    local out, code =
+        support.dev(root, { "connect", "--ssh" }, env({ FAKE_TTY = "1", FAKE_PICK = "b1" }))
+    t.eq(code, 0)
+    t.ok(out:find("dev connect: hub down", 1, true), out)
+    t.ok(calls(root):find("ci box ssh b1", 1, true), calls(root))
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("another ci connect failure prints ci's message and keeps its code", function()
     local root = sandbox()
     assert(fs.write(root .. "/connect.json", '{"ok":false,"error":{"message":"hub down"}}'))

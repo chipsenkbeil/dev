@@ -112,7 +112,7 @@ return {
         handler = "lua",
         flags = "--ssh",
         usage = "dev connect [<box>] [--ssh]",
-        desc = "Attach to a box over Eternal Terminal in a tmux session, picking, resuming or creating one first",
+        desc = "Attach to a box or a connectable machine, picking, resuming or creating a box first",
         group = "Boxes",
     },
     {
