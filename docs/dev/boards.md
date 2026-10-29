@@ -200,7 +200,11 @@ with Done left out unless `--column Done` asks for it. The size is the card
 colour's palette label, or `unsized`. `next` prints the top Ready card that is
 unclaimed and not blocked, or `no ready cards`.
 
-`add` puts a card in Backlog unless `--column` names another column. `note`
+`add` puts a card in Backlog unless `--column` names another column, and
+writes the four card format v1 headings into the description (Problem,
+Change, Out of scope and Done when), filling Problem from `--description`. A
+description that already holds a v1 heading is kept as it is, and an Icebox
+card gets the text as given, with no headings. `note`
 adds a comment of kind agent. `move` puts the card at the top of the column.
 
 Sizing is part of planning, so a card cannot enter Ready without a size. `move
@@ -208,6 +212,13 @@ CARD ready` refuses a card that is unsized (white or no colour) or red, more
 than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit 1);
 a red card is split instead. `add --column ready` without `--size 1`, `2` or `3`
 is a usage error (exit 2). Every other column takes a card of any colour.
+
+A card also needs card format v1 to enter Ready: all four headings, and at
+least one `- [ ]` or `- [x]` item under Done when. `move CARD ready` refuses
+a card without them, names what is missing and points to `dev board edit`
+(exit 1), and `add --column ready` does the same for its description
+(exit 2). Icebox cards are free-form, so adding to or moving into Icebox is
+never checked.
 
 `show CARD` prints everything a runner needs to take a card: the `ls` line
 (id prefix, column, size, labels and name), then the description, then the

@@ -267,10 +267,24 @@ function commands.add(backend, args)
             "a card must be sized 1, 2 or 3 before it enters Ready, so add it with --size or to Backlog"
         )
     end
+    local description = flags["--description"]
+    if column ~= board.ICEBOX then
+        description = board.scaffold(description)
+    end
+    if column == board.READY then
+        local missing = board.missing_v1(description)
+        if #missing > 0 then
+            return usage(
+                "a card needs card format v1 before it enters Ready, and this one lacks "
+                    .. table.concat(missing, ", ")
+                    .. "; add it to Backlog or pass a full --description"
+            )
+        end
+    end
     local card, message = backend:add(
         table.concat(words, " "),
         column,
-        { description = flags["--description"], color = color, labels = labels }
+        { description = description, color = color, labels = labels }
     )
     if not card then
         return failure(message)
@@ -442,6 +456,17 @@ function commands.move(backend, args)
                 .. why
                 .. " and cannot enter Ready; size it with dev board size CARD 1, 2 or 3"
         )
+    end
+    if column == board.READY then
+        local missing = board.missing_v1(card.description)
+        if #missing > 0 then
+            return failure(
+                card.id:sub(1, board.MIN_PREFIX)
+                    .. " is not in card format v1 and cannot enter Ready; it lacks "
+                    .. table.concat(missing, ", ")
+                    .. ", so add it with dev board edit"
+            )
+        end
     end
     local held = claims.read(card.id)
     local ok, message = backend:move(card.id, column, held and held.fence)

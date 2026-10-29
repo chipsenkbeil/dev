@@ -10,6 +10,8 @@ local TOKEN = "pomb_SECRETtoken0123456789"
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
+local SCAFFOLD = "## Problem\n\n## Change\n\n## Out of scope\n\n## Done when\n"
 
 local function executable(path, body)
     assert(fs.write(path, body))
@@ -160,13 +162,13 @@ t.test("add defaults to Backlog and joins the words of the name", function()
     local backend = fake(sample())
     local result = commands.run("add", { "A", "new", "card" }, backend)
     t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.calls[1], { "add", "A new card", "Backlog", nil, nil })
+    t.eq(backend.calls[1], { "add", "A new card", "Backlog", SCAFFOLD, nil })
     result = commands.run(
         "add",
-        { "X", "--column", "ready", "--description", "why", "--size", "2" },
+        { "X", "--column", "ready", "--description", V1, "--size", "2" },
         backend
     )
-    t.eq(backend.calls[2], { "add", "X", "Ready", "why", "green" })
+    t.eq(backend.calls[2], { "add", "X", "Ready", V1, "green" })
     t.eq(commands.run("add", {}, backend).code, 2)
 end)
 
@@ -174,10 +176,10 @@ t.test("add --size passes the colour its size word names", function()
     local backend = fake(sample())
     for word, color in pairs({ ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }) do
         commands.run("add", { "X", "--size", word }, backend)
-        t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", nil, color })
+        t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", SCAFFOLD, color })
     end
     commands.run("add", { "X", "--size", "UNSIZED" }, backend)
-    t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", nil, "white" })
+    t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", SCAFFOLD, "white" })
     local result = commands.run("add", { "X", "--size", "4" }, backend)
     t.eq(result.code, 2)
     t.ok(result.message:find("unknown size 4", 1, true), result.message)
@@ -231,9 +233,9 @@ end)
 t.test("add --label may repeat and drops a duplicate", function()
     local backend = fake(sample())
     commands.run("add", { "X", "--label", "a", "--label", "needs:lead", "--label", "a" }, backend)
-    t.eq(backend.calls[1], { "add", "X", "Backlog", nil, nil, { "a", "needs:lead" } })
+    t.eq(backend.calls[1], { "add", "X", "Backlog", SCAFFOLD, nil, { "a", "needs:lead" } })
     commands.run("add", { "X" }, backend)
-    t.eq(backend.calls[2], { "add", "X", "Backlog", nil, nil, nil })
+    t.eq(backend.calls[2], { "add", "X", "Backlog", SCAFFOLD, nil, nil })
 end)
 
 t.test("label adds and removes labels and sends the whole list", function()
@@ -486,12 +488,20 @@ t.test(
         end
         t.eq(#backend.calls, 0)
         t.eq(commands.run("add", { "X", "--column", "backlog" }, backend).code, nil)
-        t.eq(commands.run("add", { "X", "--column", "ready", "--size", "3" }, backend).code, nil)
+        local full = { "X", "--column", "ready", "--size", "3", "--description", V1 }
+        t.eq(commands.run("add", full, backend).code, nil)
     end
 )
 
 local function colored(color)
-    local card = { id = ID_C, name = "Card", column = "Backlog", size = "x", labels = {} }
+    local card = {
+        id = ID_C,
+        name = "Card",
+        column = "Backlog",
+        size = "x",
+        labels = {},
+        description = V1,
+    }
     card.color = color
     return card
 end
@@ -509,6 +519,69 @@ t.test("move to Ready refuses a white, uncoloured or red card and names dev boar
     t.eq(result.code, 1)
     t.ok(result.message:find("has no size", 1, true), result.message)
     t.eq(#backend.calls, 0)
+end)
+
+t.test("add scaffolds the v1 headings, fills Problem and keeps a text that has them", function()
+    local backend = fake(sample())
+    commands.run("add", { "X", "--description", "It breaks." }, backend)
+    t.eq(
+        backend.calls[1][4],
+        "## Problem\nIt breaks.\n\n## Change\n\n## Out of scope\n\n## Done when\n"
+    )
+    commands.run("add", { "X", "--description", V1 }, backend)
+    t.eq(backend.calls[2][4], V1)
+    commands.run("add", { "X", "--column", "icebox", "--description", "loose" }, backend)
+    t.eq(backend.calls[3], { "add", "X", "Icebox", "loose", nil })
+    commands.run("add", { "X", "--column", "icebox" }, backend)
+    t.eq(backend.calls[4], { "add", "X", "Icebox", nil, nil })
+end)
+
+t.test("add to Ready refuses a description without the headings or a Done when item", function()
+    local backend = fake(sample())
+    local result = commands.run(
+        "add",
+        { "X", "--column", "ready", "--size", "1", "--description", "why" },
+        backend
+    )
+    t.eq(result.code, 2)
+    t.ok(result.message:find("a checklist item under ## Done when", 1, true), result.message)
+    result = commands.run("add", { "X", "--column", "ready", "--size", "1" }, backend)
+    t.eq(result.code, 2)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("move to Ready refuses a card missing a heading or a Done when item", function()
+    local cases = {
+        { nil, "## Problem, ## Change, ## Out of scope, ## Done when" },
+        { "## Problem\nx\n\n## Change\ny\n\n## Done when\n- [ ] z", "## Out of scope" },
+        {
+            "## Problem\nx\n\n## Change\ny\n\n## Out of scope\nn\n\n## Done when\nsoon",
+            "a checklist item under ## Done when",
+        },
+        {
+            "## Problem\n- [ ] a\n\n## Change\ny\n\n## Out of scope\nn\n\n## Done when\n",
+            "a checklist item under ## Done when",
+        },
+    }
+    for _, case in ipairs(cases) do
+        local card = colored("green")
+        card.description = case[1]
+        local backend = fake({ card })
+        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find(case[2], 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+    local card = colored("green")
+    card.description = V1:gsub("%[ %]", "[x]")
+    t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+end)
+
+t.test("move into Icebox never checks the description", function()
+    local card = colored("white")
+    card.description = nil
+    local backend = fake({ card })
+    t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)
 end)
 
 t.test("move to Ready takes a sized card, and other columns take any card", function()
@@ -939,7 +1012,7 @@ t.test("add posts the card to the named column", function()
         "--column",
         "ready",
         "--description",
-        "why",
+        V1,
         "--size",
         "1",
     })

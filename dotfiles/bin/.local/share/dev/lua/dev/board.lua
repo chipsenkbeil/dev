@@ -67,6 +67,9 @@ M.COLUMNS = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked
 ---The column a card is added to when none is named.
 M.DEFAULT_COLUMN = "Backlog"
 
+---The column of cards that are free-form, which are never scaffolded or checked.
+M.ICEBOX = "Icebox"
+
 ---The column a worker takes cards from.
 M.READY = "Ready"
 
@@ -186,6 +189,67 @@ function M.resolve(items, word, noun)
         return nil, "no " .. noun .. " starts with " .. word
     end
     return found
+end
+
+---The headings of card format v1, in order.
+M.HEADINGS = { "Problem", "Change", "Out of scope", "Done when" }
+
+local DONE_WHEN = M.HEADINGS[4]
+
+local function lines_of(description)
+    return ((description or "") .. "\n"):gmatch("(.-)\n")
+end
+
+local function heading_of(line)
+    return line:match("^##%s+(.-)%s*$")
+end
+
+---Give a description the four v1 headings, filling Problem from the text given. A text that already
+---holds a v1 heading is kept as it is.
+---@param description string? the text the caller gave, if any
+---@return string description the text with the headings
+function M.scaffold(description)
+    local given = (description or ""):match("^%s*(.-)%s*$")
+    for line in lines_of(given) do
+        local name = heading_of(line)
+        for _, heading in ipairs(M.HEADINGS) do
+            if name == heading then
+                return given
+            end
+        end
+    end
+    local parts = {}
+    for i, heading in ipairs(M.HEADINGS) do
+        parts[i] = "## " .. heading .. "\n" .. (i == 1 and given ~= "" and given .. "\n" or "")
+    end
+    return table.concat(parts, "\n")
+end
+
+---List what a description lacks of card format v1: each missing heading, and a Done when with no
+---checklist item.
+---@param description string? the card's description
+---@return string[] missing the problems, empty when the card follows the format
+function M.missing_v1(description)
+    local seen, items, current = {}, 0, nil
+    for line in lines_of(description) do
+        local name = heading_of(line)
+        if name then
+            current = name
+            seen[name] = true
+        elseif current == DONE_WHEN and line:find("^%s*[-*]%s%[[ xX]%]%s+%S") then
+            items = items + 1
+        end
+    end
+    local missing = {}
+    for _, heading in ipairs(M.HEADINGS) do
+        if not seen[heading] then
+            missing[#missing + 1] = "## " .. heading
+        end
+    end
+    if seen[DONE_WHEN] and items == 0 then
+        missing[#missing + 1] = "a checklist item under ## " .. DONE_WHEN
+    end
+    return missing
 end
 
 ---Show the label for a card's colour.
