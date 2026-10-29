@@ -261,7 +261,11 @@ local function overview(ctx, reg, c, opts)
     if all then
         out[#out + 1] = "\n" .. pointer(c, "Run " .. ONE_COMMAND)
     else
-        out[#out + 1] = "\n" .. pointer(c, "Run `dev help -a` for every command, " .. ONE_COMMAND)
+        out[#out + 1] = "\n"
+            .. pointer(
+                c,
+                "Run `dev help -a` for all, `dev help <verb>` for one, `dev help <topic>` for a topic."
+            )
     end
     return table.concat(out)
 end

@@ -38,5 +38,5 @@ Topics
   nouns                 How the fixture nouns work
   overview              What the fixture project is for and where to start
 
-Run `dev help -a` for every command, `dev help <verb>` for one command and `dev help <topic>` for a topic.
+Run `dev help -a` for all, `dev help <verb>` for one, `dev help <topic>` for a topic.
 exit 0
