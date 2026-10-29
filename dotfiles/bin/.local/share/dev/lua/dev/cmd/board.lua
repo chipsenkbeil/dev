@@ -203,7 +203,7 @@ function commands.ls(backend, args)
         return failure(message)
     end
     local shown_cards = {}
-    local holders = false
+    local holders, progress = false, false
     for _, card in ipairs(cards) do
         local shown = card.column == want or (not want and card.column ~= board.DONE)
         if shown and flags["--label"] then
@@ -218,11 +218,12 @@ function commands.ls(backend, args)
         if shown then
             shown_cards[#shown_cards + 1] = card
             holders = holders or card.claimant ~= nil
+            progress = progress or #card.outcomes > 0
         end
     end
     local rows = {}
     for _, card in ipairs(shown_cards) do
-        rows[#rows + 1] = board.cells(card, holders)
+        rows[#rows + 1] = board.cells(card, { holders = holders, progress = progress })
     end
     if #rows == 0 then
         return { output = "no cards" }
@@ -251,7 +252,8 @@ function commands.add(backend, args)
         ["--size"] = true,
         ["--label"] = true,
         ["--checks"] = true,
-    }, { ["--label"] = true, ["--checks"] = true })
+        ["--done-when"] = true,
+    }, { ["--label"] = true, ["--checks"] = true, ["--done-when"] = true })
     if not flags then
         return words
     end
@@ -275,6 +277,16 @@ function commands.add(backend, args)
             return usage("--checks needs a command")
         end
         checks[#checks + 1] = run
+    end
+    local outcomes = {}
+    for _, item in ipairs(flags["--done-when"] or {}) do
+        if not item:find("%S") then
+            return usage("--done-when needs the outcome")
+        end
+        outcomes[#outcomes + 1] = item
+    end
+    if #outcomes > board.MAX_OUTCOMES then
+        return usage("a card has at most " .. board.MAX_OUTCOMES .. " --done-when outcomes")
     end
     local color
     if flags["--size"] then
@@ -302,12 +314,12 @@ function commands.add(backend, args)
         description = board.scaffold(description)
     end
     if column == board.READY then
-        local missing = board.missing_v1(description)
+        local missing = board.missing(description, #outcomes)
         if #missing > 0 then
             return usage(
-                "a card needs card format v1 before it enters Ready, and this one lacks "
+                "a card needs card format v2 before it enters Ready, and this one lacks "
                     .. table.concat(missing, ", ")
-                    .. "; add it to Backlog or pass a full --description"
+                    .. "; add it to Backlog or pass a full --description and --done-when"
             )
         end
     end
@@ -323,17 +335,23 @@ function commands.add(backend, args)
             return usage("a card needs a checks row before it enters Ready; pass --checks CMD")
         end
     end
-    local card, message = backend:add(
-        table.concat(words, " "),
-        column,
-        { description = description, color = color, labels = labels, checks = checks }
-    )
+    local card, message = backend:add(table.concat(words, " "), column, {
+        description = description,
+        color = color,
+        labels = labels,
+        checks = checks,
+        outcomes = outcomes,
+    })
     if not card then
         return failure(message)
     end
+    local prose = flags["--description"]
+    if #outcomes > 0 then
+        prose = (prose or "") .. "\n## Done when\n" .. table.concat(outcomes, "\n")
+    end
     return {
         output = "added " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. card.column,
-        warnings = board.prose_warnings(flags["--description"]),
+        warnings = board.prose_warnings(prose),
     }
 end
 
@@ -452,14 +470,26 @@ function commands.show(backend, args)
     if description == "" then
         description = "no description"
     end
+    local outcomes = ""
+    if #card.outcomes > 0 then
+        local lines = {}
+        for _, outcome in ipairs(card.outcomes) do
+            lines[#lines + 1] = "- [" .. (outcome.done and "x" or " ") .. "] " .. outcome.name
+        end
+        outcomes = "done when:\n" .. table.concat(lines, "\n") .. "\n\n"
+    end
     local checks = ""
     if #card.checks > 0 then
         checks = "checks:\n- " .. table.concat(card.checks, "\n- ") .. "\n\n"
     end
     return {
-        output = card_line(card) .. "\n\n" .. description .. "\n\n" .. checks .. comment_lines(
-            list
-        ),
+        output = card_line(card)
+            .. "\n\n"
+            .. description
+            .. "\n\n"
+            .. outcomes
+            .. checks
+            .. comment_lines(list),
     }
 end
 
@@ -566,13 +596,13 @@ function commands.move(backend, args)
         )
     end
     if column == board.READY then
-        local missing = board.missing_v1(card.description)
+        local missing = board.missing(card.description, #card.outcomes)
         if #missing > 0 then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
-                    .. " is not in card format v1 and cannot enter Ready; it lacks "
+                    .. " is not in card format v2 and cannot enter Ready; it lacks "
                     .. table.concat(missing, ", ")
-                    .. ", so add it with dev board edit"
+                    .. "; fix the description with dev board edit, where a v1 Done when checklist also counts"
             )
         end
         if #card.checks == 0 then

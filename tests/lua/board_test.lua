@@ -11,7 +11,8 @@ local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
-local SCAFFOLD = "## Problem\n\n## Change\n\n## Out of scope\n\n## Done when\n"
+local SCAFFOLD = "## Problem\n\n## Change\n\n## Out of scope\n"
+local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
 
 local function executable(path, body)
     assert(fs.write(path, body))
@@ -19,6 +20,9 @@ local function executable(path, body)
 end
 
 local function fake(cards, times)
+    for _, card in ipairs(cards) do
+        card.outcomes = card.outcomes or {}
+    end
     local calls = {}
     local backend = { calls = calls }
     function backend:entered()
@@ -46,6 +50,7 @@ local function fake(cards, times)
             size = "unsized",
             labels = {},
             checks = {},
+            outcomes = {},
         }
     end
     function backend:note(id, text, _, opts)
@@ -107,6 +112,7 @@ local function sample()
             size = "1 Pomodoro",
             labels = { "docs" },
             checks = {},
+            outcomes = {},
         },
         {
             id = ID_B,
@@ -115,6 +121,7 @@ local function sample()
             size = "unsized",
             labels = {},
             checks = {},
+            outcomes = {},
         },
         {
             id = ID_C,
@@ -123,6 +130,7 @@ local function sample()
             size = "unsized",
             labels = {},
             checks = {},
+            outcomes = {},
         },
     }
 end
@@ -613,13 +621,10 @@ t.test("move to Ready refuses a white, uncoloured or red card and names dev boar
     t.eq(#backend.calls, 0)
 end)
 
-t.test("add scaffolds the v1 headings, fills Problem and keeps a text that has them", function()
+t.test("add scaffolds the v2 headings, fills Problem and keeps a text that has them", function()
     local backend = fake(sample())
     commands.run("add", { "X", "--description", "It breaks." }, backend)
-    t.eq(
-        backend.calls[1][4],
-        "## Problem\nIt breaks.\n\n## Change\n\n## Out of scope\n\n## Done when\n"
-    )
+    t.eq(backend.calls[1][4], "## Problem\nIt breaks.\n\n## Change\n\n## Out of scope\n")
     commands.run("add", { "X", "--description", V1 }, backend)
     t.eq(backend.calls[2][4], V1)
     commands.run("add", { "X", "--column", "icebox", "--description", "loose" }, backend)
@@ -636,7 +641,7 @@ t.test("add to Ready refuses a description without the headings or a Done when i
         backend
     )
     t.eq(result.code, 2)
-    t.ok(result.message:find("a checklist item under ## Done when", 1, true), result.message)
+    t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
     result = commands.run("add", { "X", "--column", "ready", "--size", "1" }, backend)
     t.eq(result.code, 2)
     t.eq(#backend.calls, 0)
@@ -700,15 +705,15 @@ end)
 
 t.test("move to Ready refuses a card missing a heading or a Done when item", function()
     local cases = {
-        { nil, "## Problem, ## Change, ## Out of scope, ## Done when" },
+        { nil, "## Problem, ## Change, ## Out of scope, 3 to 7 Done when outcomes" },
         { "## Problem\nx\n\n## Change\ny\n\n## Done when\n- [ ] z", "## Out of scope" },
         {
             "## Problem\nx\n\n## Change\ny\n\n## Out of scope\nn\n\n## Done when\nsoon",
-            "a checklist item under ## Done when",
+            "3 to 7 Done when outcomes",
         },
         {
             "## Problem\n- [ ] a\n\n## Change\ny\n\n## Out of scope\nn\n\n## Done when\n",
-            "a checklist item under ## Done when",
+            "3 to 7 Done when outcomes",
         },
     }
     for _, case in ipairs(cases) do
@@ -723,6 +728,94 @@ t.test("move to Ready refuses a card missing a heading or a Done when item", fun
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
     t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+end)
+
+local function outcomes(count, ticked)
+    local list = {}
+    for i = 1, count do
+        list[i] = { id = "s" .. i, name = "Outcome " .. i, done = i <= (ticked or 0) }
+    end
+    return list
+end
+
+t.test("move to Ready counts 3 to 7 outcomes, and a v1 checklist when there are none", function()
+    for _, count in ipairs({ 3, 5, 7 }) do
+        local card = colored("green")
+        card.description = V2
+        card.outcomes = outcomes(count)
+        t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+    end
+    for _, count in ipairs({ 0, 2, 8 }) do
+        local card = colored("green")
+        card.description = V2
+        card.outcomes = outcomes(count)
+        local backend = fake({ card })
+        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("card format v2", 1, true), result.message)
+        t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+    local card = colored("green")
+    card.outcomes = {}
+    t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+end)
+
+t.test("add --done-when hands the outcomes to the backend and checks them", function()
+    local backend = fake(sample())
+    local result =
+        commands.run("add", { "X", "--done-when", "A works", "--done-when", "B works" }, backend)
+    t.eq(result.output, "added cccccccc Backlog")
+    t.eq(backend.opts.outcomes, { "A works", "B works" })
+    t.eq(commands.run("add", { "X", "--done-when", " " }, backend).code, 2)
+    t.eq(commands.run("add", { "X", "--done-when" }, backend).code, 2)
+    local many = { "X" }
+    for i = 1, 8 do
+        many[#many + 1] = "--done-when"
+        many[#many + 1] = "o" .. i
+    end
+    t.eq(commands.run("add", many, backend).code, 2)
+    local ready = {
+        "X",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V2,
+        "--checks",
+        "dev test",
+        "--done-when",
+        "a",
+        "--done-when",
+        "b",
+    }
+    result = commands.run("add", ready, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+    ready[#ready + 1] = "--done-when"
+    ready[#ready + 1] = "c"
+    t.eq(commands.run("add", ready, backend).code, nil)
+    result = commands.run("add", { "X", "--done-when", "see src/a.lua" }, backend)
+    t.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+end)
+
+t.test("show lists the outcomes with their ticks, and ls adds a done column", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3, 1)
+    local result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.ok(
+        result.output:find(
+            "\n\ndone when:\n- [x] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3\n\n",
+            1,
+            true
+        ),
+        result.output
+    )
+    result = commands.run("ls", {}, fake({ card }))
+    t.eq(result.output, "cccccccc  Backlog  x  -  1/3  Card")
+    local plain = colored("green")
+    t.eq(commands.run("ls", {}, fake({ plain })).output, "cccccccc  Backlog  x  -  Card")
 end)
 
 t.test("move into Icebox never checks the description", function()
@@ -942,6 +1035,16 @@ case "$last" in
 */tasks\?*) body='{"items":[{"id":"]] .. ID_A .. [["}],"next_cursor":null}' ;;
 */api/tasks/]] .. ID_A .. [[) body=$(cat "$ROOT/task.json") ;;
 */api/tasks) body=$(cat "$ROOT/task.json") ;;
+*/subtasks)
+    body='{"id":"sub-1","name":"x","done":false}'
+    n=$(cat "$ROOT/sub_n" 2>/dev/null || echo 0)
+    n=$((n + 1))
+    echo "$n" >"$ROOT/sub_n"
+    if [ -f "$ROOT/sub_fail" ] && [ "$n" = "$(cat "$ROOT/sub_fail")" ]; then
+        body='{"message":"nope"}'
+        status=400
+    fi
+    ;;
 */claim/heartbeat)
     body='{"ok":true}'
     if [ -f "$ROOT/hb_status" ]; then status=$(cat "$ROOT/hb_status"); fi
@@ -975,7 +1078,7 @@ local function sandbox(opts)
         ["detail.json"] = DETAIL,
         ["colors.json"] = COLORS,
         ["fields.json"] = opts.fields or FIELDS,
-        ["export.json"] = EXPORT,
+        ["export.json"] = opts.export or EXPORT,
         ["task.json"] = TASK,
         ["comments.json"] = COMMENTS,
     }) do
@@ -1190,6 +1293,96 @@ t.test("add posts the card to the named column", function()
         ) or calls:find('"column_id":"col-ready"', 1, true),
         calls
     )
+end)
+
+t.test("add --done-when posts one subtask per outcome after the card", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--done-when",
+        "A works",
+        "--done-when",
+        "B works",
+    })
+    t.eq(code, 0)
+    t.eq(out, "added 11111111 Ready\n")
+    local calls = read(root, "calls")
+    local first = calls:find("/api/tasks --", 1, true) or calls:find("-X POST", 1, true)
+    t.ok(first, calls)
+    local count, at = 0, 1
+    while true do
+        local found, stop = calls:find("/api/tasks/" .. ID_A .. "/subtasks", at, true)
+        if not found then
+            break
+        end
+        count, at = count + 1, stop + 1
+    end
+    t.eq(count, 2)
+    t.ok(calls:find('--data-raw {"name":"A works"}', 1, true), calls)
+    t.ok(calls:find('--data-raw {"name":"B works"}', 1, true), calls)
+end)
+
+t.test("a failed subtask names the card and what was not added, and is never queued", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/sub_fail", "2"))
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--done-when",
+        "A",
+        "--done-when",
+        "B",
+        "--done-when",
+        "C",
+    })
+    t.eq(code, 1)
+    t.ok(out:find("11111111 was added to Backlog but outcome 2 of 3 was not:", 1, true), out)
+    t.eq(out:find("queued", 1, true), nil)
+end)
+
+t.test("add to Ready with outcomes creates in Backlog and moves after the subtasks", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V2,
+        "--checks",
+        "dev test",
+        "--done-when",
+        "a",
+        "--done-when",
+        "b",
+        "--done-when",
+        "c",
+    })
+    t.eq(code, 0, out)
+    local calls = read(root, "calls")
+    t.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
+    local sub = calls:find("/subtasks", 1, true)
+    local move = calls:find("/move", 1, true)
+    t.ok(sub and move and sub < move, calls)
+end)
+
+t.test("show and ls read the subtasks from the export", function()
+    local export = EXPORT:gsub(
+        '"description":"Why it matters.",',
+        '"description":"Why it matters.","subtasks":[{"id":"s1","name":"Docs written","done":true},'
+            .. '{"id":"s2","name":"Lint clean","done":false}],'
+    )
+    local root, home = sandbox({ export = export })
+    local out = dev(root, home, { "board", "show", "11111111-a" })
+    t.ok(out:find("done when:\n- [x] Docs written\n- [ ] Lint clean\n", 1, true), out)
+    out = dev(root, home, { "board", "ls" })
+    t.ok(out:find("1/2", 1, true), out)
 end)
 
 t.test("add --size and size reach pomb with the id of the colour, not its label", function()

@@ -379,9 +379,26 @@ function Backend:checks_field()
     return self.__has_checks
 end
 
+local function outcomes_of(task)
+    local outcomes = {}
+    if type(task.subtasks) == "table" then
+        for _, sub in ipairs(task.subtasks) do
+            if type(sub) == "table" and type(sub.name) == "string" then
+                outcomes[#outcomes + 1] = {
+                    id = tostring(sub.id),
+                    name = sub.name,
+                    done = sub.done == true,
+                }
+            end
+        end
+    end
+    return outcomes
+end
+
 function Backend:__card(task)
     return {
         checks = runs_of(task),
+        outcomes = outcomes_of(task),
         claimant = holder(task.claim),
         id = task.id,
         name = task.name,
@@ -502,6 +519,14 @@ function Backend:add(name, column, opts)
     if not id then
         return nil, unavailable("the board has no " .. column .. " column")
     end
+    local outcomes = opts and opts.outcomes or {}
+    local final = id
+    if #outcomes > 0 and column == board.READY then
+        id = self:__column_id(board.DEFAULT_COLUMN)
+        if not id then
+            return nil, unavailable("the board has no " .. board.DEFAULT_COLUMN .. " column")
+        end
+    end
     local body = { name = name, column_id = id }
     if opts and opts.color then
         body.color_id, message = self:__color_id(opts.color)
@@ -522,6 +547,40 @@ function Backend:add(name, column, opts)
     task, message = self:__request("POST", "/api/tasks", body)
     if not task then
         return nil, message
+    end
+    task.subtasks = {}
+    for index, text in ipairs(outcomes) do
+        local made
+        made, message =
+            self:__request("POST", "/api/tasks/" .. task.id .. "/subtasks", { name = text })
+        if not made then
+            return nil,
+                task.id:sub(1, board.MIN_PREFIX)
+                    .. " was added to "
+                    .. column
+                    .. " but outcome "
+                    .. index
+                    .. " of "
+                    .. #outcomes
+                    .. " was not: "
+                    .. message
+        end
+        task.subtasks[index] = { id = made.id, name = text, done = false }
+    end
+    if final ~= id then
+        local moved
+        moved, message = self:move(task.id, column)
+        if not moved then
+            return nil,
+                task.id:sub(1, board.MIN_PREFIX)
+                    .. " was added to "
+                    .. board.DEFAULT_COLUMN
+                    .. " with its outcomes but the move to "
+                    .. column
+                    .. " failed: "
+                    .. message
+        end
+        task.column_id = final
     end
     return self:__card(task)
 end

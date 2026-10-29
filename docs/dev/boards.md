@@ -199,24 +199,35 @@ To push a card later, drag it lower in Ready.
 
 A card is named by its id or by a prefix of at least 8 characters that is
 unique on the board. `ls` prints the id prefix, column, size, labels and name,
-with Done left out unless `--column Done` asks for it. The size is the card
+with Done left out unless `--column Done` asks for it. When a listed card has
+Done when outcomes, a column such as `1/3` (ticked over all) follows the
+labels. The size is the card
 colour's palette label, or `unsized`. `next` prints the top Ready card that is
 unclaimed and not blocked, or `no ready cards`.
 
 `add` puts a card in Backlog unless `--column` names another column, and
-writes the four card format v1 headings into the description (Problem,
-Change, Out of scope and Done when), filling Problem from `--description`. A
-description that already holds a v1 heading is kept as it is, and an Icebox
-card gets the text as given, with no headings. `note` adds a comment, of kind
+writes the three card format v2 headings into the description (Problem,
+Change and Out of scope), filling Problem from `--description`. A
+description that already holds a heading or the v1 Done when is kept as it is,
+and an Icebox card gets the text as given, with no headings. Each
+`--done-when TEXT` (repeatable, at most 7) is a Done when outcome: `add` creates
+the card, then appends one Pomb subtask per item. If an append fails, `add`
+exits 1 and names the card and the outcome it stopped at, for example `11111111
+was added to Backlog but outcome 2 of 3 was not: ...`. Nothing is rolled back (an agent token cannot delete a card or a
+subtask) and the failure is never queued, so a replay cannot add the card
+twice. A queued add that never reached
+Pomb replays with all its items. With `--column ready`, Pomb gets the card in
+Backlog first and the move to Ready comes after the subtasks. `note` adds a comment, of kind
 agent unless `--kind` says otherwise. `move` puts the card at the top of the
 column.
 
 `add`, `note` and `edit` warn on standard error, and still write, when the
-prose holds a hex id, a hash or a path, which the v1 format keeps in the
+prose holds a hex id, a hash or a path, which the v2 format keeps in the
 Change section only. One line names each word. A hex id is 7 or more hex
 characters with a digit and a letter. A path holds a `/` and starts with `~/`,
 `./` or `/` or ends in an extension. A URL is exempt. Text under `## Change` is
-not scanned, a note is all prose, and `--checks` is never scanned.
+not scanned, a note is all prose, an outcome is prose, and `--checks` is never
+scanned.
 
 Sizing is part of planning, so a card cannot enter Ready without a size. `move
 CARD ready` refuses a card that is unsized (white or no colour) or red, more
@@ -224,11 +235,12 @@ than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit 1);
 a red card is split instead. `add --column ready` without `--size 1`, `2` or `3`
 is a usage error (exit 2). Every other column takes a card of any colour.
 
-A card also needs card format v1 to enter Ready: all four headings, and at
-least one `- [ ]` or `- [x]` item under Done when. `move CARD ready` refuses
-a card without them, names what is missing and points to `dev board edit`
-(exit 1), and `add --column ready` does the same for its description
-(exit 2). Icebox cards are free-form, so adding to or moving into Icebox is
+A card also needs card format v2 to enter Ready: all three headings, and 3 to
+7 Done when outcomes (subtasks). A card with none is still accepted when its
+description has a v1 `## Done when` checklist item, until the boards are
+converted. `move CARD ready` refuses a card without them and names what is
+missing (exit 1), and `add --column ready` does the same for its description
+and `--done-when` items (exit 2). Icebox cards are free-form, so adding to or moving into Icebox is
 never checked.
 
 A card needs a checks row to enter Ready too. The checks live in the board's
@@ -248,14 +260,15 @@ prints the rows under the description. Icebox is exempt.
 
 `show CARD` prints everything a runner needs to take a card: the `ls` line
 (id prefix, column, size, labels and name), then the description, then the
-comments in the `notes` format. A card with no description prints `no
+comments in the `notes` format. The outcomes print as `done when:` with one
+`- [x]` or `- [ ]` line each, after the description. A card with no description prints `no
 description`, and one with no comments `no comments`. Use it instead of the
 Pomb API to read a card, so the token stays inside dev. It does not list links
 yet.
 
 `edit CARD` replaces a card's description with the text of `--file PATH`, or of
 standard input when there is no `--file`, and prints `edited <id prefix>`. The
-format v1 description always holds the current plan, so rewrite it after a
+format v2 description always holds the current plan, so rewrite it after a
 decision. Trailing whitespace is dropped, and empty text is a usage error
 (exit 2), to keep an empty pipe from wiping a plan. It sends the claim's fence when
 this machine holds one. It does not touch the title or the comments.

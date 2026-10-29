@@ -163,6 +163,7 @@ local function card_view(doc, card)
         labels = card.labels or {},
         description = card.description,
         checks = card.checks or {},
+        outcomes = card.outcomes or {},
         claimant = claim and claim.claimant or nil,
     }
 end
@@ -340,6 +341,14 @@ function Backend:next()
     end
 end
 
+local function outcome_rows(names)
+    local rows = {}
+    for index, name in ipairs(names or {}) do
+        rows[index] = { id = store.id(), name = name, done = false }
+    end
+    return rows
+end
+
 function Backend:add(name, column, opts)
     local added, message = self:__update(function(doc)
         local target = column_named(doc, column)
@@ -369,6 +378,7 @@ function Backend:add(name, column, opts)
             color_id = color_id,
             labels = opts and opts.labels or {},
             checks = opts and opts.checks or {},
+            outcomes = outcome_rows(opts and opts.outcomes),
             comments = {},
             created_at = now,
             entered_at = now,

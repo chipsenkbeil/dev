@@ -421,7 +421,7 @@ t.test(
 )
 
 t.test(
-    "a local board scaffolds the v1 headings and keeps a card without them out of Ready",
+    "a local board scaffolds the v2 headings and keeps a card without them out of Ready",
     function()
         local root, home = local_board()
         local a = prefix_of(
@@ -429,15 +429,15 @@ t.test(
         )
         t.eq(
             document(file_of(home)).cards[1].description,
-            "## Problem\n\n## Change\n\n## Out of scope\n\n## Done when\n"
+            "## Problem\n\n## Change\n\n## Out of scope\n"
         )
         local out, code = dev(root, home, { "board", "move", a, "ready" })
         t.eq(code, 1)
-        t.ok(out:find("a checklist item under ## Done when", 1, true), out)
+        t.ok(out:find("3 to 7 Done when outcomes", 1, true), out)
         out, code =
             dev(root, home, { "board", "add", "Direct", "--column", "ready", "--size", "1" })
         t.eq(code, 2)
-        t.ok(out:find("card format v1", 1, true), out)
+        t.ok(out:find("card format v2", 1, true), out)
         local ice = prefix_of((dev(root, home, { "board", "add", "Loose", "--column", "icebox" })))
         out = dev(root, home, { "board", "show", ice })
         t.ok(out:find("no description", 1, true), out)
@@ -451,6 +451,29 @@ t.test(
         t.eq(code, 0, out)
     end
 )
+
+t.test("a local board keeps --done-when outcomes on the card and shows them", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--done-when",
+        "A works",
+        "--done-when",
+        "B works",
+    })
+    t.eq(code, 0, out)
+    local a = prefix_of(out)
+    local outcomes = document(file_of(home)).cards[1].outcomes
+    t.eq(#outcomes, 2)
+    t.eq(outcomes[1].name, "A works")
+    t.eq(outcomes[1].done, false)
+    out = dev(root, home, { "board", "show", a })
+    t.ok(out:find("done when:\n- [ ] A works\n- [ ] B works\n", 1, true), out)
+    out = dev(root, home, { "board", "ls" })
+    t.ok(out:find("0/2", 1, true), out)
+end)
 
 t.test("move out of progress releases the claim and warns about nothing", function()
     local root, home = local_board()

@@ -15,6 +15,12 @@ local M = {}
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds a live claim on it
 ---@field checks string[] the run commands in its checks rows, empty when it has none
+---@field outcomes dev.board.Outcome[] its Done when outcomes, empty when it has none
+
+---@class dev.board.Outcome
+---@field id string the outcome's id
+---@field name string what has to be true
+---@field done boolean whether it is ticked
 
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
@@ -55,6 +61,7 @@ local M = {}
 ---@field color string? the standard value of the palette colour to give it
 ---@field labels string[]? the labels to give it
 ---@field checks string[] the run commands to give it, one checks row each
+---@field outcomes string[]? the Done when outcomes to give it, one subtask each
 
 ---@class dev.board.Layout
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a message
@@ -215,11 +222,15 @@ function M.resolve(items, word, noun)
     return found
 end
 
----The headings of card format v1, in order.
-M.HEADINGS = { "Problem", "Change", "Out of scope", "Done when" }
+---The headings of card format v2, in order.
+M.HEADINGS = { "Problem", "Change", "Out of scope" }
+
+---The fewest and the most Done when outcomes a planned card has.
+M.MIN_OUTCOMES = 3
+M.MAX_OUTCOMES = 7
 
 local CHANGE = M.HEADINGS[2]
-local DONE_WHEN = M.HEADINGS[4]
+local DONE_WHEN = "Done when"
 
 local function lines_of(description)
     return ((description or "") .. "\n"):gmatch("(.-)\n")
@@ -229,14 +240,17 @@ local function heading_of(line)
     return line:match("^##%s+(.-)%s*$")
 end
 
----Give a description the four v1 headings, filling Problem from the text given. A text that already
----holds a v1 heading is kept as it is.
+---Give a description the three v2 headings, filling Problem from the text given. A text that
+---already holds a v2 heading or the v1 Done when heading is kept as it is.
 ---@param description string? the text the caller gave, if any
 ---@return string description the text with the headings
 function M.scaffold(description)
     local given = (description or ""):match("^%s*(.-)%s*$")
     for line in lines_of(given) do
         local name = heading_of(line)
+        if name == DONE_WHEN then
+            return given
+        end
         for _, heading in ipairs(M.HEADINGS) do
             if name == heading then
                 return given
@@ -311,11 +325,13 @@ function M.prose_warnings(prose)
     return warnings
 end
 
----List what a description lacks of card format v1: each missing heading, and a Done when with no
----checklist item.
+---List what a card lacks of card format v2: each missing heading, and Done when outcomes. The
+---outcomes are 3 to 7 subtasks, and a card with none is accepted when its description has a v1
+---`## Done when` checklist item.
 ---@param description string? the card's description
+---@param outcomes integer how many outcomes the card has
 ---@return string[] missing the problems, empty when the card follows the format
-function M.missing_v1(description)
+function M.missing(description, outcomes)
     local seen, items, current = {}, 0, nil
     for line in lines_of(description) do
         local name = heading_of(line)
@@ -332,8 +348,14 @@ function M.missing_v1(description)
             missing[#missing + 1] = "## " .. heading
         end
     end
-    if seen[DONE_WHEN] and items == 0 then
-        missing[#missing + 1] = "a checklist item under ## " .. DONE_WHEN
+    if outcomes == 0 and items == 0 then
+        missing[#missing + 1] = M.MIN_OUTCOMES .. " to " .. M.MAX_OUTCOMES .. " Done when outcomes"
+    elseif outcomes > 0 and (outcomes < M.MIN_OUTCOMES or outcomes > M.MAX_OUTCOMES) then
+        missing[#missing + 1] = M.MIN_OUTCOMES
+            .. " to "
+            .. M.MAX_OUTCOMES
+            .. " Done when outcomes, not "
+            .. outcomes
     end
     return missing
 end
@@ -348,14 +370,31 @@ function M.size(label)
     return label
 end
 
+---Count the ticked outcomes of a card as `done/total`.
+---@param card dev.board.Card the card
+---@return string ticks `1/3`, or `-` when the card has no outcomes
+function M.ticks(card)
+    local total, ticked = #card.outcomes, 0
+    for _, outcome in ipairs(card.outcomes) do
+        if outcome.done then
+            ticked = ticked + 1
+        end
+    end
+    return total > 0 and ticked .. "/" .. total or "-"
+end
+
 ---Say a card in one line.
 ---@param card dev.board.Card the card
----@param holders boolean? add the claim holder before the name
----@return string[] cells id prefix, column, size, labels, the holder when asked for, and name
-function M.cells(card, holders)
+---@param opts {holders: boolean?, progress: boolean?}? `holders` adds the claim holder before the name, `progress` the ticked outcomes before the holder
+---@return string[] cells id prefix, column, size, labels, the ticks and the holder when asked for, and name
+function M.cells(card, opts)
+    opts = opts or {}
     local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
     local cells = { card.id:sub(1, M.MIN_PREFIX), card.column, card.size, labels }
-    if holders then
+    if opts.progress then
+        cells[#cells + 1] = M.ticks(card)
+    end
+    if opts.holders then
         cells[#cells + 1] = card.claimant or "-"
     end
     cells[#cells + 1] = card.name
