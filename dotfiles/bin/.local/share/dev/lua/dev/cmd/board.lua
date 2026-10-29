@@ -196,6 +196,13 @@ local function size_cell(screen, card)
     return ui.paint(screen, DOT:rep(dots), SIZE_STYLES[color])
 end
 
+local function paint_run(screen, glyph, count, style)
+    if count == 0 then
+        return ""
+    end
+    return ui.paint(screen, glyph:rep(count), style)
+end
+
 local function meter_cell(screen, card)
     local total = #card.outcomes
     if total == 0 then
@@ -208,8 +215,8 @@ local function meter_cell(screen, card)
         end
     end
     local filled = math.floor(METER_CELLS * ticked / total + 0.5)
-    return ui.paint(screen, ("▰"):rep(filled), ui.Style.GREEN)
-        .. ui.paint(screen, ("▱"):rep(METER_CELLS - filled), ui.Style.DIM)
+    return paint_run(screen, "▰", filled, ui.Style.GREEN)
+        .. paint_run(screen, "▱", METER_CELLS - filled, ui.Style.DIM)
         .. " "
         .. ticked
         .. "/"
@@ -396,6 +403,7 @@ function commands.ls(backend, args, _, screen)
     end
     if screen and screen.color then
         local lines = summary_lines(screen, shown_cards)
+        lines[#lines + 1] = ""
         local body
         if grouped then
             body = terminal_grouped(

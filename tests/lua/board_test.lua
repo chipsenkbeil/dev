@@ -234,16 +234,26 @@ end
 t.test("ls on a colour terminal draws the summary, legend, dots and meter", function()
     local result = coloured(progress_sample())
     t.ok(result.page, "output goes through the pager")
-    local lines = {}
-    for line in strip(result.output):gmatch("[^\n]+") do
-        lines[#lines + 1] = line
-    end
+    local lines = split(strip(result.output))
     t.eq(lines[1], "2 cards · 1 ready · 1 blocked")
     t.eq(lines[2], "size  ● 1  ●● 2  ●●● 3  ●●●● >3  ○○○ unsized")
-    t.ok(lines[3]:find("^ID +COLUMN +SIZE +LABELS +DONE +NAME$"), lines[3])
-    t.ok(lines[4]:find("^11111111  Ready +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[4])
-    t.ok(lines[5]:find("^11111111  Blocked +○○○ +%- +%- +Fix lint$"), lines[5])
+    t.eq(lines[3], "")
+    t.ok(lines[4]:find("^ID +COLUMN +SIZE +LABELS +DONE +NAME$"), lines[4])
+    t.ok(lines[5]:find("^11111111  Ready +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[5])
+    t.ok(lines[6]:find("^11111111  Blocked +○○○ +%- +%- +Fix lint$"), lines[6])
     t.ok(result.output:find("\27[33m", 1, true), "yellow is painted")
+end)
+
+t.test("ls on a colour terminal paints no empty colour code in the meter", function()
+    local empty_code = "\27%[[%d;]*m\27%[0m"
+    local cards = progress_sample()
+    cards[1].outcomes = { { done = false }, { done = false } }
+    cards[2].outcomes = { { done = true }, { done = true } }
+    local result = coloured(cards)
+    t.eq(result.output:find(empty_code), nil, result.output)
+    t.ok(strip(result.output):find("▱▱▱▱ 0/2", 1, true), result.output)
+    t.ok(strip(result.output):find("▰▰▰▰ 2/2", 1, true), result.output)
+    t.ok(result.output:find("\27[32m▰▰▰▰\27[0m", 1, true), result.output)
 end)
 
 t.test("ls shows the held by column only when a listed card is claimed", function()
@@ -257,10 +267,11 @@ end)
 t.test("ls --group lists the cards under a heading and count per column", function()
     local result = coloured(progress_sample(), { "--group" })
     local lines = split(strip(result.output))
-    t.eq(lines[3], "Ready  1 card")
-    t.ok(lines[4]:find("^  11111111 +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[4])
-    t.eq(lines[5], "")
-    t.eq(lines[6], "Blocked  1 card")
+    t.eq(lines[3], "")
+    t.eq(lines[4], "Ready  1 card")
+    t.ok(lines[5]:find("^  11111111 +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[5])
+    t.eq(lines[6], "")
+    t.eq(lines[7], "Blocked  1 card")
     t.eq(lines[#lines], "Done is left out unless --column done")
     local filtered = strip(coloured(progress_sample(), { "--group", "--column", "blocked" }).output)
     t.ok(filtered:find("Done is left out unless --column done", 1, true), filtered)
