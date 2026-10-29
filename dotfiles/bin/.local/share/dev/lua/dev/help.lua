@@ -248,6 +248,10 @@ local function verb_text(ctx, reg, c, opts)
         .. row.desc
         .. "\n"
     local flags = reg:flags(words)
+    local header = reg:header(row)
+    if header and header.runs_local then
+        out[#out + 1] = "  runs here under the remote default, see `dev help remote`\n"
+    end
     if short then
         local usage = row.usage
         if not (usage and usage:sub(1, 4) == "dev ") then
@@ -267,7 +271,6 @@ local function verb_text(ctx, reg, c, opts)
             .. " --help` for the script header and the command it runs.\n"
         return table.concat(out)
     end
-    local header = reg:header(row)
     if header then
         out[#out + 1] = "\n"
             .. ui.paint(c, row.script:sub(#ctx.root + 2) .. " header", Style.BOLD)

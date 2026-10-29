@@ -456,3 +456,38 @@ t.test("DEV_REMOTE=0 runs here under the default and --remote still wins", funct
     _, _, log = dev(root, base, { "test", "--remote" }, { DEV_REMOTE = "0" })
     t.ok(log:find("[--job] [test]", 1, true), log)
 end)
+
+t.test("a # local header keeps a verb with a same-named job here until --remote", function()
+    local root, base = setup({
+        ["test.sh"] = "#!/usr/bin/env bash\n# Run the tests.\n# local\necho ran-local\n",
+    })
+    local out, code, log = dev(root, base, { "test" })
+    t.eq(out, "ran-local\n")
+    t.eq(code, 0)
+    t.eq(log, "")
+    _, _, log = dev(root, base, { "test", "--remote" })
+    t.ok(log:find("[--job] [test]", 1, true), log)
+    out = dev(root, base, { "help", "test" })
+    t.ok(out:find("runs here under the remote default", 1, true), out)
+    t.ok(not out:find("# local", 1, true), out)
+end)
+
+t.test("a verb script without # local keeps routing to its job", function()
+    local root, base =
+        setup({ ["test.sh"] = "#!/usr/bin/env bash\n# Run the tests.\necho ran-local\n" })
+    local out, _, log = dev(root, base, { "test" })
+    t.eq(out, "")
+    t.ok(log:find("[--job] [test]", 1, true), log)
+end)
+
+t.test("# local also works in a Lua header and a noun subcommand, and shows under -h", function()
+    local root, base = setup({
+        ["widget/save.lua"] = "--[[\nSave it.\nlocal\n]]\nprint('ran-lua')\n",
+    })
+    local out, code, log = dev(root, base, { "widget", "save" })
+    t.eq(out, "ran-lua\n")
+    t.eq(code, 0)
+    t.eq(log, "")
+    out = dev(root, base, { "widget", "save", "-h" })
+    t.ok(out:find("runs here under the remote default", 1, true), out)
+end)

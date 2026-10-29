@@ -49,10 +49,11 @@ early with another code, return it, or call `os.exit`.
 A Lua verb keeps the header lines of a shell script in one leading block
 comment. The block starts with `--[[` alone on the first line and ends with
 `]]` alone on its own line. The first line inside it that is not a `group:`,
-`hidden` or `flags:` line is the description.
+`hidden`, `local` or `flags:` line is the description.
 
 - `group: <name>`: the heading `dev help` lists the verb under
 - `hidden`: keep the verb out of `dev help`, so only `dev help -a` lists it
+- `local`: keep the remote default from sending the verb to ci
 - `flags: --a --b`: the flags `dev help <verb>` and completion offer, and the
   only flags dev lets through to the script before a `--`
 

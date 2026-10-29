@@ -20,6 +20,11 @@ a command the listing does not name runs here with no message, so
 Unlike an explicit `--remote`, the default passes every argument to the job,
 before the `--` or after it, and a verb with no job is not an error.
 
+A verb script whose header has a `# local` line is never sent to ci by the
+default, for a script that prepares something and then drives ci itself beside
+a job of the same name. `--remote` still sends it, and `dev help <verb>` says
+the verb runs here under the default.
+
 When ci cannot be asked, the default fails instead of running here, to keep a
 ci deploy from moving every run onto the laptop. A missing `ci` on PATH, or a
 `ci jobs` that exits non-zero, fails with ci's error and exit code and the hint

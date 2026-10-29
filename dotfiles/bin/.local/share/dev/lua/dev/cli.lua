@@ -126,6 +126,11 @@ local function remote_default(project_root, words)
     return setting ~= "local" and remote.has_default_job(project_root, words)
 end
 
+local function runs_local(reg, row)
+    local header = row and reg:header(row)
+    return header ~= nil and header.runs_local
+end
+
 local function root_gate(args)
     if devos.getuid() ~= 0 then
         return
@@ -402,7 +407,7 @@ function M.main(argv)
         )
     end
     if
-        not (parsed.local_flag or parsed.env_local or on_remote_host)
+        not (parsed.local_flag or parsed.env_local or on_remote_host or runs_local(reg, row))
         and remote_default(project_root, words)
     then
         os.exit(remote.run(ctx, words, rest, false))

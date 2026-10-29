@@ -2,8 +2,9 @@
 ---@field desc string first comment line, empty when there is none
 ---@field group string? heading named by the `group:` line
 ---@field hidden boolean whether a `hidden` line is present
+---@field runs_local boolean whether a `local` line is present
 ---@field flags string[] words of the `flags:` line, with `-h` and `--help` dropped
----@field long string[] the whole comment block, without the group and hidden lines
+---@field long string[] the whole comment block, without the group, hidden and local lines
 ---@field warnings string[] one message per reserved flag the `flags:` line declared
 
 ---@class dev.header
@@ -11,8 +12,12 @@ local M = {}
 
 local RESERVED_FLAGS = { ["-h"] = true, ["--help"] = true }
 
+local function marker(line)
+    return line:find("^# *group:") or line:find("^# *hidden *$") or line:find("^# *local *$")
+end
+
 local function skipped(line)
-    return line:find("^# *shellcheck ") or line:find("^# *group:") or line:find("^# *hidden *$")
+    return line:find("^# *shellcheck ") or marker(line)
 end
 
 local function ends_header(line, number)
@@ -40,7 +45,7 @@ local function comment_block(lines)
             if line:sub(1, 1) ~= "#" then
                 break
             end
-            if not (line:find("^# *group:") or line:find("^# *hidden *$")) then
+            if not marker(line) then
                 block[#block + 1] = (line:gsub("^# ?", ""))
             end
         end
@@ -74,18 +79,20 @@ local function flag_words(lines, name)
 end
 
 local function placement(lines)
-    local group, hidden = "", false
+    local group, hidden, runs_local = "", false, false
     for number, line in ipairs(lines) do
         local value = line:match("^# *group: *(.*)$")
         if value and group == "" then
             group = value
         elseif line:find("^# *hidden *$") then
             hidden = true
+        elseif line:find("^# *local *$") then
+            runs_local = true
         elseif ends_header(line, number) then
             break
         end
     end
-    return group, hidden
+    return group, hidden, runs_local
 end
 
 local function split_lines(text)
@@ -115,7 +122,7 @@ end
 ---
 ---A shell header is the comment block after the shebang. A Lua header is one
 ---leading `--[[ ... ]]` block holding the same lines. The first comment line
----is the description, and the `group:`, `hidden` and `flags:` lines set the rest.
+---is the description, and the `group:`, `hidden`, `local` and `flags:` lines set the rest.
 ---@param text string contents of the script
 ---@param kind "sh"|"lua" language of the script
 ---@param name string? script path, named in warnings
@@ -123,11 +130,12 @@ end
 function M.parse(text, kind, name)
     local lines = kind == "lua" and lua_block(text) or split_lines(text .. "\n")
     local flags, warnings = flag_words(lines, name or "script")
-    local group, hidden = placement(lines)
+    local group, hidden, runs_local = placement(lines)
     return {
         desc = first_comment(lines),
         group = group ~= "" and group or nil,
         hidden = hidden,
+        runs_local = runs_local,
         flags = flags,
         long = comment_block(lines),
         warnings = warnings,
