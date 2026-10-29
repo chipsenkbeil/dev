@@ -251,3 +251,34 @@ t.test("the real manifest puts exactly the base and rust rows in their groups", 
         "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort cargo-zigbuild rust-darwin-targets rustfmt-nightly rustup sccache zig"
     )
 end)
+
+t.test(
+    "a failed logged command prints the last 20 lines of its output under the failure",
+    function()
+        local dir = assert(fs.realpath(support.tempdir()))
+        local probe = 'package.path = "'
+            .. REPO
+            .. '/dotfiles/bin/.local/share/dev/lua/?.lua;" .. package.path\n'
+            .. 'local lib = require("dev.pkg.lib")\n'
+            .. "local opts = { log_file = arg[1] }\n"
+            .. 'assert(lib.run({ "echo", "earlier" }, opts) == 0)\n'
+            .. 'local code = lib.run({ "sh", "-c", "seq 1 30; echo broke >&2; exit 3" }, opts)\n'
+            .. "assert(code == 3)\n"
+            .. 'lib.failed({ name = "tool" }, "sh -c x")\n'
+            .. 'assert(lib.run({ "true" }, opts) == 0)\n'
+            .. "lib.flush_failure()\n"
+        assert(fs.write(dir .. "/probe.lua", probe))
+        local luajit = devos.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
+        local out, code = devos.capture(
+            { luajit, dir .. "/probe.lua", dir .. "/log" },
+            { stderr = "stdout" }
+        )
+        t.eq(code, 0)
+        local expected = '  ! tool: "sh -c x" failed\n'
+        for i = 12, 30 do
+            expected = expected .. "      " .. i .. "\n"
+        end
+        t.eq(out, expected .. "      broke\n")
+        fs.remove(dir, { recursive = true })
+    end
+)

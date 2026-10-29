@@ -11,7 +11,7 @@ local PKG = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
 local COLUMN = "darwin-x86_64"
 local LINT_PINS = { "shellcheck", "shfmt", "stylua" }
 local SYSTEM_TOOLS = { "git", "zsh", "dash", "luajit" }
-local DROPPED = { "difftastic", "tokei", "watchexec", "hyperfine", "ast-grep" }
+local DROPPED = { "difftastic", "tokei", "watchexec", "hyperfine", "ast-grep", "selene" }
 local SOURCE_BUILDS = { "bats", "stow" }
 local UNAME = '#!/bin/sh\ncase "$1" in -m) echo x86_64 ;; *) echo Darwin ;; esac\n'
 
@@ -43,14 +43,13 @@ t.test("no base row has an empty darwin-x86_64 cell", function()
     end
 end)
 
-t.test("the lint tools are pinned releases and selene builds with cargo", function()
+t.test("the lint tools are pinned releases", function()
     local cells = base_cells()
     local pins = assert(release.read(PINS))
     for _, tool in ipairs(LINT_PINS) do
         t.eq(cells[tool], "release:" .. tool)
         t.ok(pins[tool], tool .. " has no pin")
     end
-    t.eq(cells.selene, "cargo:selene")
 end)
 
 t.test("git, zsh and dash are system tools", function()
@@ -102,8 +101,7 @@ t.test("the Darwin x86_64 dry run prints the release steps for the lint pins", f
     t.ok(out:find("shellcheck-v0.11.0.darwin.x86_64.tar.xz", 1, true), out)
     t.ok(out:find("shfmt_v3.14.1_darwin_amd64", 1, true), out)
     t.ok(out:find("stylua-macos-x86_64.zip", 1, true), out)
-    t.ok(out:find("selene (dry-run):\n      cargo", 1, true), out)
-    t.ok(out:find("cargo", 1, true), out)
+    t.ok(not out:find("cargo", 1, true), out)
     for _, tool in ipairs(SOURCE_BUILDS) do
         t.ok(
             out:find(
@@ -127,5 +125,12 @@ t.test("bats and stow are pinned source builds in the base group", function()
         t.eq(cells[tool], "script:scripts/install-" .. tool .. ".lua,bin:-")
         t.ok(pins[tool], tool .. " has no pin")
         t.ok(fs.is_file(REPO .. "/scripts/install-" .. tool .. ".lua"), tool .. " has no script")
+    end
+end)
+
+t.test("no base row on darwin-x86_64 needs cargo or rustup", function()
+    for tool, cell in pairs(base_cells()) do
+        t.ok(not cell:find("^cargo:"), tool .. " builds with cargo in the base group")
+        t.ok(not cell:find("rustup", 1, true), tool .. " needs rustup in the base group")
     end
 end)

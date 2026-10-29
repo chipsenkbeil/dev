@@ -300,6 +300,7 @@ local function install_row(state, row)
     }, driver_opts(opts))
     if status ~= 0 then
         state.failed[#state.failed + 1] = name
+        lib.flush_failure()
     end
 end
 

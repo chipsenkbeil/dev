@@ -69,18 +69,69 @@ function M.valid_package(parsed)
     return parsed.repo == "" or parsed.repo:find(REPO_WORD) ~= nil
 end
 
+local FAILURE_TAIL_LINES = 20
+
+---@type { path: string, from: integer }?
+local pending_failure
+
+local function log_size(path)
+    local file = io.open(path, "rb")
+    if not file then
+        return 0
+    end
+    local size = file:seek("end")
+    file:close()
+    return size
+end
+
+local function print_tail(path, from)
+    local file = io.open(path, "rb")
+    if not file then
+        return
+    end
+    file:seek("set", from)
+    local text = file:read("*a")
+    file:close()
+    local lines = {}
+    for line in text:gmatch("[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    for i = math.max(1, #lines - FAILURE_TAIL_LINES + 1), #lines do
+        stderr:write("      ", lines[i], "\n")
+    end
+end
+
 ---Run a command, appending its output to the log file when there is one.
+---
+---A failing command with a log file is remembered, and `flush_failure` prints the tail of its output.
 ---@param argv string[] the command and its arguments
 ---@param opts { log_file: string?, env: table<string,string>?, cwd: string? }? the log file, environment and directory
 ---@return integer? code the command's exit status
 function M.run(argv, opts)
     opts = opts or {}
     local run_opts = { env = opts.env, cwd = opts.cwd }
-    if opts.log_file and opts.log_file ~= "" then
+    local logged = opts.log_file and opts.log_file ~= ""
+    local from = 0
+    if logged then
         run_opts.stdout = opts.log_file
         run_opts.stderr = "stdout"
+        from = log_size(opts.log_file)
     end
-    return devos.run(argv, run_opts)
+    local code = devos.run(argv, run_opts)
+    pending_failure = nil
+    if logged and code ~= 0 then
+        pending_failure = { path = opts.log_file, from = from }
+    end
+    return code
+end
+
+---Print the last lines of the output of the most recent failed command, once.
+function M.flush_failure()
+    local failure = pending_failure
+    pending_failure = nil
+    if failure then
+        print_tail(failure.path, failure.from)
+    end
 end
 
 ---Find the binary to probe on PATH.
@@ -198,6 +249,7 @@ end
 ---@return integer code 1
 function M.failed(row, line)
     stderr:write("  ! ", row.name, ': "', line, '" failed\n')
+    M.flush_failure()
     return 1
 end
 

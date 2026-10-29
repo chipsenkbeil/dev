@@ -57,6 +57,9 @@ running it and installs toolchain 1.99.1, the one the lint set pins, as the
 default. `--check` exits 0 when `rustup` is in `~/.cargo/bin` (`CARGO_HOME`
 overrides) or on PATH.
 
+The base group needs no cargo on Intel macOS: selene is `-` there (its
+release zip is arm64 only, and `dev lint` runs on ci by default).
+
 Intel macOS uses neither Homebrew nor MacPorts. Every tool comes from a
 `release:` pin, a `script:` row, `cargo:` or something outside dev tools (`system:`, the OS or the prelude).
 
