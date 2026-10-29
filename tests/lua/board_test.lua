@@ -2297,6 +2297,15 @@ t.test("prose_warnings names each hex id, hash and path outside the Change secti
     )
 end)
 
+t.test("prose_warnings leaves a lone slash command alone", function()
+    t.eq(board.prose_warnings("type /exit or /quit to leave"), {})
+    t.eq(board.prose_warnings("see /etc/hosts, ~/x and /a.lua"), {
+        "card prose holds a path: /etc/hosts",
+        "card prose holds a path: ~/x",
+        "card prose holds a path: /a.lua",
+    })
+end)
+
 t.test("prose_warnings leaves clean prose, plain words, numbers and URLs alone", function()
     t.eq(board.prose_warnings("a decade of facade 1234567 and 20261028, and/or I/O, v1.2"), {})
     t.eq(board.prose_warnings("https://example.com/a/b.html deadbeef12 is read"), {

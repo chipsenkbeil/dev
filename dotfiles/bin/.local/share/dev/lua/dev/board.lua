@@ -282,6 +282,9 @@ local function is_path(word)
     if not word:find("/", 1, true) then
         return false
     end
+    if word:find("^/[^/]*$") and not word:find("%.%a[%w]*$") then
+        return false
+    end
     if word:find("^~/%S") or word:find("^%./%S") or word:find("^/[^/%s]") then
         return true
     end
