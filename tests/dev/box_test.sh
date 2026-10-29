@@ -165,19 +165,23 @@ CREATING="$(mkbox new-111 creating '[]' null null)"
 reset
 fx ls "$(lsdoc "$RUNNING" "$STOPPED" "$KEPT" "$CREATING")"
 out="$(box box ls)"
-assert_eq "ls renders a row per box and the cap line" "$out" "myproject-k3x  running   linux-x86-dev  myproject    $RUN_LEFT
-ci-abc         stopped   linux-x86-dev  ci,dotfiles  $STOP_LEFT
-scratch-a1b    running   linux-x86-dev  -            kept
-new-111        creating  linux-x86-dev  -
-2 of 3 running, 24 of 32 GiB"
-assert_eq "ls reads memory_limits_gib for the cap line" "$(printf '%s\n' "$out" | tail -n 1)" "2 of 3 running, 24 of 32 GiB"
+assert_eq "ls prints the hub line from the cap" "$(printf '%s\n' "$out" | sed -n 1p)" "Boxes   2 of 3 running · 1 more can start"
+assert_eq "ls renders a header and a row per box" "$(printf '%s\n' "$out" | tail -n +3 | tr -s ' ')" "NAME TARGET STATE ACTIVITY WHO SHAPE PROJECTS TIME LEFT
+● myproject-k3x linux-x86-dev @ example-box running ? you medium myproject $RUN_LEFT
+○ ci-abc linux-x86-dev @ example-box stopped - you medium ci,dotfiles $STOP_LEFT
+● scratch-a1b linux-x86-dev @ example-box running ? you medium - kept
+ new-111 linux-x86-dev @ example-box creating - you medium - -"
+assert_not_contains "ls has no escape bytes when piped" "$out" "$(printf '\033')"
 assert_eq "ls asks ci for json" "$(calls)" "ci box ls --json"
 reset
 fx ls "$(lsdoc)"
 out="$(box box ls --all)"
-assert_eq "ls with no boxes says so before the cap line" "$out" "no boxes
-2 of 3 running, 24 of 32 GiB"
+assert_eq "ls with no boxes says so after the hub line" "$out" "Boxes   2 of 3 running · 1 more can start
+no boxes"
 assert_eq "ls --all passes --all" "$(calls)" "ci box ls --json --all"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+assert_eq "ls --json prints ci's document" "$(box box ls --json)" "$(cat "$FX/ls.json")"
 out="$(box box ls extra 2>&1)"
 assert_eq "ls rejects an argument" "$?" "2"
 

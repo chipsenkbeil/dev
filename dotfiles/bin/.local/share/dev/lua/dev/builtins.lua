@@ -124,9 +124,9 @@ return {
     {
         words = { "box", "ls" },
         handler = "lua",
-        flags = "--all",
-        usage = "dev box ls [--all]",
-        desc = "List the boxes with state, target, projects and time left, then the cap",
+        flags = "--all --json",
+        usage = "dev box ls [--all] [--json]",
+        desc = "Show the room on each machine, then the boxes with target, activity, who made them, projects and time left",
     },
     {
         words = { "box", "create" },
@@ -138,7 +138,8 @@ return {
     {
         words = { "box", "show" },
         handler = "lua",
-        usage = "dev box show BOX",
+        flags = "--json",
+        usage = "dev box show BOX [--json]",
         desc = "Show one box as key: value lines",
     },
     {

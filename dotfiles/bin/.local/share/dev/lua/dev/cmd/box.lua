@@ -59,6 +59,7 @@ local State, Exit = M.State, M.Exit
 ---@field projects dev.cmd.box.Project[] the projects on the box
 ---@field tailnet_name string|dev.json.Null the host name on the tailnet
 ---@field ssh_user string|dev.json.Null the user to log in as, shown for a single box
+---@field machine string|dev.json.Null the machine the box runs on
 ---@field created_by string who made the box
 ---@field ttl_hours integer|dev.json.Null the lifetime in hours, null when kept
 ---@field expires_at string|dev.json.Null RFC 3339 time a running box ends
@@ -74,6 +75,13 @@ local State, Exit = M.State, M.Exit
 ---@field memory_limits_gib integer memory promised to running boxes
 ---@field memory_max_gib integer memory the machines have
 
+---@class dev.cmd.box.Machine
+---@field name string the machine's name
+---@field running integer boxes running on it
+---@field memory_limits_gib number memory promised to its running boxes
+---@field new_box_room_gib number memory a new box could still get
+---@field reachable boolean whether ci could ask the machine
+
 ---@class dev.cmd.box.Installed
 ---@field project string the project's name
 ---@field manifest boolean whether it has a `.dev/tools.tsv`
@@ -83,6 +91,7 @@ local State, Exit = M.State, M.Exit
 ---@field box dev.cmd.box.Box? the box a one-box subcommand answers about
 ---@field boxes dev.cmd.box.Box[]? the boxes `ls` lists
 ---@field cap dev.cmd.box.Cap? the cap `ls` reports
+---@field machines dev.cmd.box.Machine[]? the machines `ls` reports
 ---@field installed dev.cmd.box.Installed[]? the projects `ci box install-tools` handled
 
 ---@class dev.cmd.box.Args
@@ -93,6 +102,7 @@ local State, Exit = M.State, M.Exit
 ---@field keep boolean whether `--keep` was given
 ---@field yes boolean whether `-y` or `--yes` was given
 ---@field all boolean whether `--all` was given
+---@field json boolean whether `--json` was given
 ---@field ssh boolean whether `--ssh` was given
 ---@field no_archive boolean whether `--no-archive` was given
 ---@field pos string[] the positional arguments
@@ -257,27 +267,6 @@ function M.row(box, now)
     }
 end
 
----Pad rows into aligned columns, with no trailing spaces.
----@param rows string[][] the cells of each row
----@return string[] lines one line per row
-local function table_lines(rows)
-    local widths = {}
-    for _, row in ipairs(rows) do
-        for c, value in ipairs(row) do
-            widths[c] = math.max(widths[c] or 0, text.width(value))
-        end
-    end
-    local lines = {}
-    for r, row in ipairs(rows) do
-        local parts = {}
-        for c, value in ipairs(row) do
-            parts[c] = c < #row and value .. string.rep(" ", widths[c] - text.width(value)) or value
-        end
-        lines[r] = table.concat(parts, text.GAP):gsub(" +$", "")
-    end
-    return lines
-end
-
 ---Say a box in one line.
 ---@param label string the leading word, such as `created`
 ---@param box dev.cmd.box.Box the box as ci gives it
@@ -317,6 +306,7 @@ function M.parse(ctx, allowed)
         keep = false,
         yes = false,
         all = false,
+        json = false,
         ssh = false,
         no_archive = false,
         pos = {},
@@ -350,6 +340,8 @@ function M.parse(ctx, allowed)
             parsed.no_archive = true
         elseif arg == "--all" then
             parsed.all = true
+        elseif arg == "--json" then
+            parsed.json = true
         elseif arg == "--ssh" then
             parsed.ssh = true
         else
@@ -403,13 +395,14 @@ end
 ---@param sub string the subcommand's name, for the messages
 ---@param args string[] the arguments after `ci box`
 ---@return dev.cmd.box.Doc doc the decoded `ok` document
+---@return string raw ci's output exactly as it printed it
 function M.call(sub, args)
     local argv = { "ci", "box" }
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
-    local out, code = devos.capture(argv)
-    out = out:gsub("\n+$", "")
+    local raw, code = devos.capture(argv)
+    local out = raw:gsub("\n+$", "")
     local doc = json.decode(out)
     if code ~= 0 then
         local message = type(doc) == "table"
@@ -426,7 +419,7 @@ function M.call(sub, args)
     if type(doc) ~= "table" or doc.ok ~= true then
         verb.die("dev: ci box " .. args[1] .. " printed no ok document")
     end
-    return doc
+    return doc, raw
 end
 
 ---Run `ci box` for a subcommand that answers with one box.
@@ -533,37 +526,202 @@ local function box_args(sub, name, parsed)
     return args
 end
 
+---Name the user who runs dev.
+---@return string? user `USER`, else `LOGNAME`, nil when neither is set
+local function current_user()
+    for _, name in ipairs({ "USER", "LOGNAME" }) do
+        local value = os.getenv(name)
+        if value and value ~= "" then
+            return value
+        end
+    end
+    return nil
+end
+
+---Say what is happening in a box's tmux sessions.
+---@param box dev.cmd.box.Box the box as ci gives it
+---@return string activity `attached`, `idle 40m`, `?` when unread, `-` when none or not running
+function M.activity(box)
+    if present(box.state) ~= State.RUNNING then
+        return "-"
+    end
+    local sessions = present(box.tmux_sessions)
+    if sessions == nil then
+        return "?"
+    elseif #sessions == 0 then
+        return "-"
+    end
+    local shortest
+    for _, session in ipairs(sessions) do
+        if session.attached == true then
+            return "attached"
+        end
+        local idle = present(session.idle_seconds)
+        if idle ~= nil and (shortest == nil or idle < shortest) then
+            shortest = idle
+        end
+    end
+    return shortest == nil and "idle" or "idle " .. span(shortest)
+end
+
+---Say who made a box.
+---@param box dev.cmd.box.Box the box as ci gives it
+---@param user string? the user who runs dev
+---@return string who `you`, `agent`, another human's name, or ci's label as it is
+function M.who(box, user)
+    local made = cell(box.created_by)
+    local human = made:match("^human:(.+)$")
+    if human then
+        return human == user and "you" or human
+    elseif made:find("^agent:") then
+        return "agent"
+    end
+    return made == "" and "-" or made
+end
+
+local BAR_WIDTH = 20
+
+---@class dev.cmd.box.BarLine
+---@field used number amount filled
+---@field total number amount that fills the bar
+---@field words string what the numbers say
+
+---Draw a bar and the words beside it, or the words alone off a terminal.
+---@param screen dev.ui.Context drawing settings
+---@param opts dev.cmd.box.BarLine the fill and the words
+---@return string drawn the bar, a space and the words
+local function bar_line(screen, opts)
+    local bar = ui.bar(screen, { used = opts.used, total = opts.total, width = BAR_WIDTH })
+    return bar == "" and opts.words or bar .. " " .. opts.words
+end
+
+---Draw the room lines: the hub's Boxes line, then each machine's.
+---@param screen dev.ui.Context drawing settings
+---@param doc dev.cmd.box.Doc ci's document
+---@return string[] lines the room lines
+local function room_lines(screen, doc)
+    local machines = {}
+    if doc.machines then
+        machines = doc.machines
+    end
+    local width = 0
+    for _, machine in ipairs(machines) do
+        width = math.max(width, text.width(cell(machine.name)))
+    end
+    local lines = {}
+    local cap = doc.cap
+    if cap and present(cap.running) ~= nil and present(cap.running_max) ~= nil then
+        local more = math.max(cap.running_max - cap.running, 0)
+        lines[#lines + 1] = string.rep(" ", width)
+            .. (width > 0 and text.GAP or "")
+            .. "Boxes   "
+            .. bar_line(screen, {
+                used = cap.running,
+                total = cap.running_max,
+                words = string.format(
+                    "%d of %d running · %d more can start",
+                    cap.running,
+                    cap.running_max,
+                    more
+                ),
+            })
+    end
+    for _, machine in ipairs(machines) do
+        local name = cell(machine.name)
+        local head = ui.paint(screen, name, ui.Style.BOLD)
+            .. string.rep(" ", width - text.width(name))
+            .. text.GAP
+        if machine.reachable == false then
+            lines[#lines + 1] = head .. ui.paint(screen, "unreachable", ui.Style.DIM)
+        else
+            local blank = string.rep(" ", width) .. text.GAP
+            lines[#lines + 1] = head .. string.format("Boxes   %d running", machine.running)
+            local used = machine.memory_limits_gib
+            local free = machine.new_box_room_gib
+            lines[#lines + 1] = blank
+                .. "Memory  "
+                .. bar_line(screen, {
+                    used = used,
+                    total = used + free,
+                    words = string.format(
+                        "%g of %g GiB used · %g GiB free",
+                        used,
+                        used + free,
+                        free
+                    ),
+                })
+        end
+    end
+    return lines
+end
+
+local LS_HEADERS =
+    { "NAME", "TARGET", "STATE", "ACTIVITY", "WHO", "SHAPE", "PROJECTS", "TIME LEFT" }
+
+---@class dev.cmd.box.RowOpts
+---@field screen dev.ui.Context drawing settings
+---@field now integer the current time in seconds since the epoch
+---@field user string? the user who runs dev
+
+---The cells of a box's row in `ls`.
+---@param box dev.cmd.box.Box the box as ci gives it
+---@param opts dev.cmd.box.RowOpts how to draw the row
+---@return string[] cells name, target, state, activity, who, shape, projects and time left
+local function ls_row(box, opts)
+    local screen, now, user = opts.screen, opts.now, opts.user
+    local mark = " "
+    if present(box.state) == State.RUNNING then
+        mark = ui.mark(screen, ui.Mark.RUNNING)
+    elseif present(box.state) == State.STOPPED then
+        mark = ui.mark(screen, ui.Mark.STOPPED)
+    end
+    local machine = present(box.machine)
+    local left = M.left(box, now)
+    return {
+        mark .. " " .. ui.paint(screen, cell(box.name), ui.Style.BOLD),
+        cell(box.target) .. (machine and " @ " .. tostring(machine) or ""),
+        cell(box.state),
+        M.activity(box),
+        M.who(box, user),
+        cell(box.shape),
+        project_list(box),
+        left == "" and "-" or left,
+    }
+end
+
 M.handlers["box ls"] = function(ctx)
-    local parsed = M.parse(ctx, { "--all" })
+    local parsed = M.parse(ctx, { "--all", "--json" })
     if #parsed.pos > 0 then
         verb.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
     end
     M.need_ci()
     local args = { "ls", "--json" }
     append_flag(args, "--all", parsed.all)
-    local doc = M.call("ls", args)
+    local doc, raw = M.call("ls", args)
+    if parsed.json then
+        io.write(raw)
+        return 0
+    end
+    local screen = ui.context()
+    if not screen.interactive then
+        screen.width = math.huge
+    end
+    for _, line in ipairs(room_lines(screen, doc)) do
+        print(line)
+    end
     local boxes = doc.boxes or {}
     if #boxes == 0 then
         print("no boxes")
-    else
-        local now, rows = os.time(), {}
-        for i, listed in ipairs(boxes) do
-            rows[i] = M.row(listed, now)
-        end
-        for _, line in ipairs(table_lines(rows)) do
-            print(line)
-        end
+        return 0
     end
-    local cap = doc.cap or {}
-    print(
-        string.format(
-            "%s of %s running, %s of %s GiB",
-            interp(cap.running),
-            interp(cap.running_max),
-            interp(cap.memory_limits_gib),
-            interp(cap.memory_max_gib)
-        )
-    )
+    local now, user, rows = os.time(), current_user(), {}
+    for i, listed in ipairs(boxes) do
+        rows[i] = ls_row(listed, { screen = screen, now = now, user = user })
+    end
+    print()
+    for _, line in ipairs(ui.table(screen, LS_HEADERS, rows)) do
+        print(line)
+    end
     return 0
 end
 
@@ -608,9 +766,18 @@ local function tmux_text(found)
 end
 
 M.handlers["box show"] = function(ctx)
-    local name = M.one_name(ctx, M.parse(ctx, {}))
+    local parsed = M.parse(ctx, { "--json" })
+    local name = M.one_name(ctx, parsed)
     M.need_ci()
-    local found = M.one("show", box_args("show", name))
+    local doc, raw = M.call("show", box_args("show", name))
+    if parsed.json then
+        io.write(raw)
+        return 0
+    end
+    local found = doc.box
+    if type(found) ~= "table" then
+        verb.die("dev: ci box show printed no box")
+    end
     local lines = {
         "name: " .. interp(found.name),
         "state: " .. interp(found.state),

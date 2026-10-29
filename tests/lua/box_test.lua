@@ -93,13 +93,15 @@ t.test("a project path with a quote is refused and nothing is run", function()
 end)
 
 t.test("ls prints plain text with no escape bytes when piped", function()
-    local listing = '{"ok":true,"boxes":[{"name":"b1","state":"running","target":"t","projects":[],'
-        .. '"expires_at":null}],"cap":{"running":1,"running_max":3,"memory_limits_gib":1,"memory_max_gib":2}}'
+    local listing = '{"ok":true,"boxes":[{"name":"b1","state":"running","target":"t","machine":"m",'
+        .. '"shape":"s","created_by":"agent:x","tmux_sessions":[],"projects":[],"expires_at":null}],'
+        .. '"cap":{"running":1,"running_max":3,"memory_limits_gib":1,"memory_max_gib":2},"machines":[]}'
     local root = sandbox(listing)
     local out, code = support.dev(root, { "box", "ls" })
     t.eq(code, 0)
     t.eq(out:find("\27", 1, true), nil)
-    t.eq(out, "b1  running  t  -  kept\n1 of 3 running, 1 of 2 GiB\n")
+    t.eq(out:find("Boxes   1 of 3 running · 2 more can start", 1, true) ~= nil, true)
+    t.eq(out:find("● b1", 1, true) ~= nil, true)
     fs.remove(root, { recursive = true })
 end)
 

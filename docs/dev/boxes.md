@@ -5,6 +5,7 @@ and never talks to Incus, ssh-keys or Tailscale itself.
 
 ```
 dev box ls
+dev box ls --json
 dev box create --shape large --ttl 8 myproject
 dev box stop myproject-k3x
 dev box resume myproject-k3x --keep
@@ -16,9 +17,21 @@ dev box delete myproject-k3x -y --no-archive
 
 ## Listing and creating
 
-`dev box ls` prints one row per box (name, state, target, projects, time
-left), then a cap line such as `2 of 3 running, 24 of 32 GiB`. Time left is
+`dev box ls` opens with the room: a hub `Boxes` line (`2 of 3 running · 1 more
+can start`, from the cap), then for each machine ci reports its name, a
+`Boxes` line with the running count and a `Memory` line (`24 of 32 GiB used ·
+8 GiB free`, the memory promised to running boxes against that plus the room
+left for a new box). A machine ci could not reach shows `unreachable` instead.
+On a terminal the lines carry green bars, and piped output has the words only.
+
+Below that is one row per box: name, target (`<target> @ <machine>`), state,
+activity, who, shape, projects and time left. Activity is `attached` when a
+tmux session is attached, else `idle` and the shortest idle time, `-` for no
+sessions or a box that is not running, and `?` when ci could not read them.
+Who is `you` for a box you made, `agent` for one an agent made, the name for
+another human's, and ci's own label (such as `adopted`) otherwise. Time left is
 `3h12m left` or `kept` for a running box and `deleted in 6d` for a stopped one.
+`--json` on `ls` and `show` prints ci's document unchanged.
 
 `dev box create` blocks until the box runs. Projects are positional:
 `dev box create [--target T] [--shape S] [--by LABEL] [--ttl HOURS | --keep] [PROJECT...]`.

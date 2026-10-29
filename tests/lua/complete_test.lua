@@ -50,7 +50,7 @@ t.test(
     function()
         local root = project({ ["a.lua"] = "--[[\nA.\nflags: --ok\n]]\nreturn 0\n" })
         t.eq(dev(root, { "__flags", "a" }), "--ok\n" .. GLOBAL_TAIL)
-        t.eq(dev(root, { "__flags", "box", "ls" }), "--all\n" .. GLOBAL_TAIL)
+        t.eq(dev(root, { "__flags", "box", "ls" }), "--all\n--json\n" .. GLOBAL_TAIL)
         t.eq(dev(root, { "__flags", "box", "ls", "extra" }), GLOBAL_TAIL)
         t.eq(dev(root, { "__flags", "nope" }), GLOBAL_TAIL)
         t.eq(dev(root, { "__flags" }), GLOBAL_TAIL)
