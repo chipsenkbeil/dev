@@ -407,6 +407,12 @@ local function nap(secs)
     ffi.C.usleep(secs * MICROS_PER_SEC)
 end
 
+---Sleep without starting a process.
+---@param secs number seconds to wait
+function M.nap(secs)
+    nap(secs)
+end
+
 local function signal_group(signal, pid)
     M.run({ "sh", "-c", "kill -" .. signal .. ' -- "-$1"', "sh", pid }, { stderr = "null" })
 end
