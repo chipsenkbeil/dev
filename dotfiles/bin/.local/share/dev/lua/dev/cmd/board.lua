@@ -335,7 +335,29 @@ local function card_line(card)
     return board.table_lines({ board.cells(card) })[1]
 end
 
-local function claimant()
+local function agent_name(flag)
+    local name = flag
+    if name == nil then
+        name = os.getenv("DEV_AGENT")
+    end
+    if name == nil or (flag == nil and name == "") then
+        return nil
+    end
+    if #name > CLAIMANT_CHARS or not name:find("^[%w._/-]+$") then
+        return nil,
+            usage(
+                "an agent name is one word of letters, digits and . - _ / up to "
+                    .. CLAIMANT_CHARS
+                    .. " characters"
+            )
+    end
+    return name
+end
+
+local function claimant(name)
+    if name then
+        return name
+    end
     local host = devos.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", "")
     local session = os.getenv("CLAUDE_SESSION_ID")
     if not session or session == "" then
@@ -855,6 +877,59 @@ function commands.note(backend, args)
     }
 end
 
+local function claim_card(backend, card, name)
+    local held = claims.read(card.id)
+    local fence, message =
+        backend:claim(card.id, claimant(name), claims.TTL_SECONDS, held and held.fence)
+    if not fence then
+        return failure(message)
+    end
+    claims.stop(card.id)
+    local ticks, minutes = claims.cap(card.size)
+    local state = { card = card.id, fence = fence }
+    local ok
+    ok, message = claims.write(state)
+    if not ok then
+        backend:release(card.id, fence)
+        return failure(message)
+    end
+    local pid
+    pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id))
+    if not pid then
+        claims.stop(card.id)
+        backend:release(card.id, fence)
+        return failure(message)
+    end
+    state.pid = pid
+    ok, message = claims.write(state)
+    if not ok then
+        claims.stop(card.id)
+        backend:release(card.id, fence)
+        return failure(message)
+    end
+    if pid == 0 then
+        return {
+            output = string.format(
+                "took %s, fence %d, held for %dm",
+                card.id:sub(1, board.MIN_PREFIX),
+                fence,
+                minutes
+            ),
+        },
+            fence
+    end
+    return {
+        output = string.format(
+            "took %s, fence %d, renewing every %dm for up to %dm",
+            card.id:sub(1, board.MIN_PREFIX),
+            fence,
+            claims.TICK_MINUTES,
+            minutes
+        ),
+    },
+        fence
+end
+
 function commands.move(backend, args)
     local flags, words = parse(args, {})
     if not flags then
@@ -925,8 +1000,31 @@ function commands.move(backend, args)
         end
     end
     local held = claims.read(card.id)
+    local started
+    if column == board.WORKING and not held and not card.claimant then
+        local name, bad = agent_name()
+        if bad then
+            return bad
+        end
+        local family, why = backend:family(card.id)
+        if not family then
+            return failure(why)
+        end
+        if not (family.children and family.children.total > 0) then
+            local result, fence = claim_card(backend, card, name)
+            if not fence then
+                return result
+            end
+            started = true
+            held = { fence = fence }
+        end
+    end
     local ok, message = backend:move(card.id, column, held and held.fence)
     if not ok then
+        if started then
+            claims.stop(card.id)
+            backend:release(card.id, held.fence)
+        end
         return failure(message)
     end
     if held and column ~= board.WORKING then
@@ -1485,61 +1583,22 @@ function commands.stale(backend, args, now)
 end
 
 function commands.take(backend, args)
-    if #args ~= 1 then
+    local flags, words = parse(args, { [AS_FLAG] = true })
+    if not flags then
+        return words
+    end
+    if #words ~= 1 then
         return usage("needs a card")
     end
-    local card, err = find_card(backend, args[1])
+    local name, why = agent_name(flags[AS_FLAG])
+    if why then
+        return why
+    end
+    local card, err = find_card(backend, words[1])
     if not card then
         return err
     end
-    local held = claims.read(card.id)
-    local fence, message =
-        backend:claim(card.id, claimant(), claims.TTL_SECONDS, held and held.fence)
-    if not fence then
-        return failure(message)
-    end
-    claims.stop(card.id)
-    local ticks, minutes = claims.cap(card.size)
-    local state = { card = card.id, fence = fence }
-    local ok
-    ok, message = claims.write(state)
-    if not ok then
-        backend:release(card.id, fence)
-        return failure(message)
-    end
-    local pid
-    pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id))
-    if not pid then
-        claims.stop(card.id)
-        backend:release(card.id, fence)
-        return failure(message)
-    end
-    state.pid = pid
-    ok, message = claims.write(state)
-    if not ok then
-        claims.stop(card.id)
-        backend:release(card.id, fence)
-        return failure(message)
-    end
-    if pid == 0 then
-        return {
-            output = string.format(
-                "took %s, fence %d, held for %dm",
-                card.id:sub(1, board.MIN_PREFIX),
-                fence,
-                minutes
-            ),
-        }
-    end
-    return {
-        output = string.format(
-            "took %s, fence %d, renewing every %dm for up to %dm",
-            card.id:sub(1, board.MIN_PREFIX),
-            fence,
-            claims.TICK_MINUTES,
-            minutes
-        ),
-    }
+    return (claim_card(backend, card, name))
 end
 
 function commands.release(backend, args)

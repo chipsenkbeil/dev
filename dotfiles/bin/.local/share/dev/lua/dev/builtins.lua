@@ -313,8 +313,9 @@ return {
     {
         words = { "board", "take" },
         handler = "lua",
-        usage = "dev board take CARD",
-        desc = "Claim a card and start a loop that renews the claim every 5 minutes without a model turn",
+        flags = "--as",
+        usage = "dev board take CARD [--as NAME]",
+        desc = "Claim a card, as NAME or DEV_AGENT, and start a loop that renews the claim every 5 minutes without a model turn",
     },
     {
         words = { "board", "release" },

@@ -651,6 +651,55 @@ t.test("a local board ticks an outcome while this machine holds the claim", func
     t.eq(document(file_of(home)).cards[1].outcomes[1].done, true)
 end)
 
+local function card_named(doc, name)
+    for _, card in ipairs(doc.cards) do
+        if card.name == name then
+            return card
+        end
+    end
+end
+
+t.test(
+    "take --as and move into progress name the holder, and an umbrella stays unclaimed",
+    function()
+        local root, home = local_board()
+        local function ready(name)
+            return prefix_of((dev(root, home, {
+                "board",
+                "add",
+                name,
+                "--column",
+                "ready",
+                "--size",
+                "1",
+                "--description",
+                V1,
+                "--checks",
+                "dev test",
+            })))
+        end
+        local a, b, c = ready("Alpha"), ready("Beta"), ready("Gamma")
+        local out, code = dev(root, home, { "board", "take", a, "--as", "r/one" })
+        t.eq(code, 0, out)
+        t.eq(document(file_of(home)).cards[1].claim.claimant, "r/one")
+        _, code = dev(root, home, { "board", "take", b, "--as", "bad name" })
+        t.eq(code, 2)
+        out, code = dev(root, home, { "board", "move", b, "progress" }, { DEV_AGENT = "r/two" })
+        t.eq(code, 0, out)
+        t.eq(card_named(document(file_of(home)), "Beta").claim.claimant, "r/two")
+        out = dev(root, home, { "board", "ls" })
+        t.ok(out:find("r/two", 1, true), out)
+        dev(root, home, { "board", "link", c, "parent", a })
+        out, code = dev(root, home, { "board", "move", a, "progress" }, { DEV_AGENT = "r/three" })
+        t.eq(code, 0, out)
+        t.eq(document(file_of(home)).cards[1].claim.claimant, "r/one")
+        dev(root, home, { "board", "release", a })
+        out, code = dev(root, home, { "board", "move", a, "progress" }, { DEV_AGENT = "r/three" })
+        t.eq(code, 0, out)
+        t.eq(document(file_of(home)).cards[1].claim, nil)
+    end
+)
+
 t.test("move out of progress releases the claim and warns about nothing", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {

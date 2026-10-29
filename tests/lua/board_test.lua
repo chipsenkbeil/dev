@@ -589,9 +589,9 @@ t.test("note and move resolve the card by prefix", function()
     local result = commands.run("note", { "cccccccc", "landed", "as", "abc" }, backend)
     t.eq(result.output, "noted cccccccc")
     t.eq(backend.calls[1], { "note", ID_C, "landed as abc", {} })
-    result = commands.run("move", { "cccccccc", "progress" }, backend)
-    t.eq(result.output, "moved cccccccc to In Progress")
-    t.eq(backend.calls[2], { "move", ID_C, "In Progress" })
+    result = commands.run("move", { "cccccccc", "blocked" }, backend)
+    t.eq(result.output, "moved cccccccc to Blocked")
+    t.eq(backend.calls[2], { "move", ID_C, "Blocked" })
     result = commands.run("move", { "cccccccc", "in", "review" }, backend)
     t.eq(backend.calls[3], { "move", ID_C, "In Review" })
 end)
@@ -1082,7 +1082,7 @@ t.test("move to Ready takes a sized card, and other columns take any card", func
             "moved cccccccc to Ready"
         )
     end
-    for _, column in ipairs({ "icebox", "backlog", "progress", "review", "blocked", "done" }) do
+    for _, column in ipairs({ "icebox", "backlog", "review", "blocked", "done" }) do
         local backend = fake({ colored("white") })
         t.eq(commands.run("move", { "cccccccc", column }, backend).code, nil)
         t.eq(#backend.calls, 1)
@@ -1444,7 +1444,7 @@ local function sandbox(opts)
         ["colors.json"] = COLORS,
         ["fields.json"] = opts.fields or FIELDS,
         ["export.json"] = opts.export or EXPORT,
-        ["task.json"] = TASK,
+        ["task.json"] = opts.task or TASK,
         ["comments.json"] = COMMENTS,
         ["links.json"] = opts.links or "[]",
     }) do
@@ -1463,7 +1463,13 @@ end
 local function dev(root, home, args, opts)
     opts = opts or {}
     return support.dev(root, args, {
-        env = { HOME = home, ROOT = root, XDG_STATE_HOME = home .. "/state", CI = "" },
+        env = {
+            HOME = home,
+            ROOT = root,
+            XDG_STATE_HOME = home .. "/state",
+            CI = "",
+            DEV_AGENT = opts.agent or "",
+        },
         split = opts.split,
         input = opts.input,
     })
@@ -2246,6 +2252,55 @@ t.test("move into progress does not release the claim", function()
     dev(root, home, { "board", "move", "11111111-a", "progress" })
     t.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
     dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("take names the claimant from --as, then DEV_AGENT, else dev@host", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", "project-alt/x" })
+    t.eq(code, 0, out)
+    t.ok(read(root, "calls"):find('"claimant":"project-alt/x"', 1, true), read(root, "calls"))
+    dev(root, home, { "board", "release", "11111111-a" })
+    out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "env.agent" })
+    t.eq(code, 0, out)
+    t.ok(read(root, "calls"):find('"claimant":"env.agent"', 1, true), read(root, "calls"))
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("take refuses a name that is not one word of the allowed characters", function()
+    local root, home = sandbox()
+    for _, name in ipairs({ "two words", "semi;colon", "a:b" }) do
+        local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
+        t.eq(code, 2, out)
+    end
+    t.eq(commands.run("take", { "11111111-a", "--as", "" }, fake(sample())).code, 2)
+    local _, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "bad name" })
+    t.eq(code, 2)
+    t.eq(read(root, "calls"):find("/claim", 1, true), nil)
+end)
+
+t.test("move into progress takes the claim of an unclaimed card under the agent name", function()
+    local root, home = sandbox()
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", "progress" },
+        { agent = "r/one" }
+    )
+    t.eq(code, 0, out)
+    local calls = read(root, "calls")
+    t.ok(calls:find('"claimant":"r/one"', 1, true), calls)
+    t.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
+    t.eq(fs.exists(state_file(home)), true)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("move into progress leaves an umbrella unclaimed", function()
+    local root, home =
+        sandbox({ task = '{"id":"' .. ID_A .. '","children_total":2,"children_done":0}' })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "progress" })
+    t.eq(code, 0, out)
+    t.eq(read(root, "calls"):find("/claim", 1, true), nil)
+    t.eq(fs.exists(state_file(home)), false)
 end)
 
 t.test("a release the server refuses after a move warns and the move succeeds", function()
