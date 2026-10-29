@@ -180,7 +180,8 @@ t.test("the Darwin x86_64 dry run prints the rust steps in manifest order", func
     t.eq(code, 0, out)
     local last = 0
     for _, tool in ipairs(ORDER) do
-        local at = out:find(tool .. " (dry-run):", 1, true) or out:find(tool .. " ships", 1, true)
+        local at = out:find(tool .. " (dry-run):", 1, true)
+            or out:find(tool .. " installed outside", 1, true)
         t.ok(at, tool .. " has no step in " .. out)
         t.ok(at > last, tool .. " is out of manifest order in " .. out)
         last = at

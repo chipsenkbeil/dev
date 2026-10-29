@@ -115,7 +115,7 @@ t.test("the Darwin x86_64 dry run prints the release steps for the lint pins", f
         )
     end
     for _, tool in ipairs(SYSTEM_TOOLS) do
-        t.ok(out:find(tool .. " ships with the OS", 1, true), out)
+        t.ok(out:find(tool .. " installed outside dev tools", 1, true), out)
     end
     fs.remove(dir, { recursive = true })
 end)

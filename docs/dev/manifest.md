@@ -32,7 +32,8 @@ column has no groups, so `--group` on it is an unknown group.
 On Darwin with `uname -m` x86_64 the driver reads the `darwin-x86_64` column
 and never calls brew; Apple Silicon keeps `brew`. In that column `-` drops the
 tool, `release:`, `script:` and `cargo:` route to their drivers, `system:NAME`
-names a tool the OS ships (`install` does nothing, `check` probes PATH), and a
+names a tool installed outside dev tools, such as the OS or the prelude
+(`install` prints `installed outside dev tools`, `check` probes PATH), and a
 bare package or any other channel is an error naming the row.
 
 bats and stow have no x86_64 macOS release, so their cells are
@@ -57,7 +58,7 @@ default. `--check` exits 0 when `rustup` is in `~/.cargo/bin` (`CARGO_HOME`
 overrides) or on PATH.
 
 Intel macOS uses neither Homebrew nor MacPorts. Every tool comes from a
-`release:` pin, a `script:` row, `cargo:` or the OS itself (`system:`).
+`release:` pin, a `script:` row, `cargo:` or something outside dev tools (`system:`, the OS or the prelude).
 
 ## Pins
 

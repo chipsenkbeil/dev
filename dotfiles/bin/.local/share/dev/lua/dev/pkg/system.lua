@@ -3,7 +3,7 @@ local lib = require("dev.pkg.lib")
 ---@class dev.pkg.system
 local M = {}
 
----Print whether a tool the OS ships is on PATH, as a line starting `[x]` or `[ ]`.
+---Print whether a tool installed outside dev tools is on PATH, as a line starting `[x]` or `[ ]`.
 ---@param row dev.pkg.Row the tool
 ---@return integer code 0 when present
 function M.check(row)
@@ -14,11 +14,11 @@ function M.check(row)
     })
 end
 
----Install nothing: the OS ships the tool.
+---Install nothing: something outside dev tools installs the tool.
 ---@param row dev.pkg.Row the tool
 ---@return integer code 0
 function M.install(row)
-    return lib.skip(row, "ships with the OS")
+    return lib.skip(row, "installed outside dev tools")
 end
 
 return M
