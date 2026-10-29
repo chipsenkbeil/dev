@@ -1,10 +1,12 @@
 local fs = require("dev.fs")
+local markdown = require("dev.ui.markdown")
 local project = require("dev.project")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
 local sync = require("dev.cmd.sync")
 local registry = require("dev.registry")
 local types = require("dev.cmd.types")
+local term = require("dev.term")
 local text = require("dev.text")
 local topics = require("dev.topics")
 local ui = require("dev.ui")
@@ -16,6 +18,7 @@ local NAME = "^[A-Za-z0-9_-]+$"
 local GROUPS = { "Check your work", "Share it", "Set up a machine or project", "Boxes" }
 local HIDDEN = "Hidden"
 local OVERRIDE = "(override)"
+local TOPIC_WIDTH = 100
 local HELP_CTX = { name = "help" }
 local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic.\n"
 local LISTED = { push = push, pull = pull, sync = sync }
@@ -115,7 +118,12 @@ local function print_topic(ctx, name)
     if not path then
         fail("unknown topic " .. name .. ", see dev help --topics")
     end
-    io.write(fs.read(path) or "")
+    local source = fs.read(path) or ""
+    if ui.context({ width = TOPIC_WIDTH }).color then
+        local _, cols = term.size()
+        source = markdown(source, { width = math.min(cols, TOPIC_WIDTH), color = true })
+    end
+    io.write(source)
 end
 
 local function project_type(ctx)
