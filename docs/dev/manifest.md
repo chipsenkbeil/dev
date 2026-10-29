@@ -35,6 +35,13 @@ tool, `release:`, `script:` and `cargo:` route to their drivers, `system:NAME`
 names a tool the OS ships (`install` does nothing, `check` probes PATH), and a
 bare package or any other channel is an error naming the row.
 
+bats and stow have no x86_64 macOS release, so their cells are
+`script:scripts/install-bats.lua,bin:-` and `script:scripts/install-stow.lua,bin:-`.
+Each script downloads the pinned source archive named in `.dev/releases.tsv`,
+checks its sha256 before it extracts anything, and builds into `~/.local`
+(`DEV_TOOLS_PREFIX` overrides) with the Xcode tools and the perl macOS ships.
+`--check` exits 0 when the tool is in that prefix or on PATH.
+
 ## Scopes
 
 - no scope: every row, as on a laptop or in an image build. Root is a usage

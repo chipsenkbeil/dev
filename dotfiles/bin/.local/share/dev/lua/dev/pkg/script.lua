@@ -32,7 +32,7 @@ end
 
 ---@param run { force: boolean } whether the script is told to reinstall
 local function script_env(cell, opts, run)
-    local env = { PKG_FORCE = run.force and "1" or "0" }
+    local env = { PKG_FORCE = run.force and "1" or "0", PKG_RELEASES = opts.releases }
     if cell.source:find(LUA_SUFFIX) then
         env.LUA_PATH = opts.modules .. "/?.lua"
     end

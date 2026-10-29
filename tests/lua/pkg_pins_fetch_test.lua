@@ -9,7 +9,7 @@ local PINS = REPO .. "/.dev/releases.tsv"
 local SHA256_HEX_DIGITS = 64
 local COLUMN = "darwin-x86_64"
 local ARCH_WORDS = { "x86_64", "amd64", "universal" }
-local SOURCE_PINS = { luajit = true }
+local SOURCE_PINS = { luajit = true, bats = true, stow = true }
 local PINNED_TOOLS = { "ripgrep", "fd", "jq", "yq", "sd", "gh", "jujutsu" }
 
 local function release_cells()

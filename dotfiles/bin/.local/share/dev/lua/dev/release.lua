@@ -54,12 +54,18 @@ end
 
 ---Run `argv`, or print it when the session is a dry run. A command that fails stops the installer.
 ---@param argv string[] the command
-function Session:step(argv)
+---@param cwd string? the directory to run it in
+function Session:step(argv, cwd)
     if self.dry_run then
-        stdout:write("  + (dry-run): ", devos.command(argv), "\n")
+        local line = devos.command(argv)
+        stdout:write(
+            "  + (dry-run): ",
+            cwd and ("cd " .. devos.quote(cwd) .. " && " .. line) or line,
+            "\n"
+        )
         return
     end
-    local code = devos.run(argv)
+    local code = devos.run(argv, { cwd = cwd })
     if code ~= 0 then
         self:die(argv[1] .. " failed (exit " .. tostring(code) .. ")")
     end

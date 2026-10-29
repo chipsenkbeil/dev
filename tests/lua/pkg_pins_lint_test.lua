@@ -12,7 +12,7 @@ local COLUMN = "darwin-x86_64"
 local LINT_PINS = { "shellcheck", "shfmt", "stylua" }
 local SYSTEM_TOOLS = { "git", "zsh", "dash", "luajit" }
 local DROPPED = { "difftastic", "tokei", "watchexec", "hyperfine", "ast-grep" }
-local UNROUTED = { "bats", "stow" }
+local SOURCE_BUILDS = { "bats", "stow" }
 local UNAME = '#!/bin/sh\ncase "$1" in -m) echo x86_64 ;; *) echo Darwin ;; esac\n'
 
 local function base_cells()
@@ -60,11 +60,8 @@ t.test("git, zsh and dash are system tools", function()
     end
 end)
 
-t.test("the dropped and unrouted base rows are exactly the dash cells", function()
+t.test("the dropped base rows are exactly the dash cells", function()
     local expected = set_of(DROPPED)
-    for _, tool in ipairs(UNROUTED) do
-        expected[tool] = true
-    end
     local dashes = {}
     for tool, cell in pairs(base_cells()) do
         if cell == "-" then
@@ -107,8 +104,28 @@ t.test("the Darwin x86_64 dry run prints the release steps for the lint pins", f
     t.ok(out:find("stylua-macos-x86_64.zip", 1, true), out)
     t.ok(out:find("selene (dry-run):\n      cargo", 1, true), out)
     t.ok(out:find("cargo", 1, true), out)
+    for _, tool in ipairs(SOURCE_BUILDS) do
+        t.ok(
+            out:find(
+                tool .. " (dry-run):\n      luajit scripts/install-" .. tool .. ".lua",
+                1,
+                true
+            ),
+            out
+        )
+    end
     for _, tool in ipairs(SYSTEM_TOOLS) do
         t.ok(out:find(tool .. " ships with the OS", 1, true), out)
     end
     fs.remove(dir, { recursive = true })
+end)
+
+t.test("bats and stow are pinned source builds in the base group", function()
+    local cells = base_cells()
+    local pins = assert(release.read(PINS))
+    for _, tool in ipairs(SOURCE_BUILDS) do
+        t.eq(cells[tool], "script:scripts/install-" .. tool .. ".lua,bin:-")
+        t.ok(pins[tool], tool .. " has no pin")
+        t.ok(fs.is_file(REPO .. "/scripts/install-" .. tool .. ".lua"), tool .. " has no script")
+    end
 end)

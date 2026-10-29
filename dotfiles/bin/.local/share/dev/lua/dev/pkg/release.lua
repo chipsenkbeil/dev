@@ -167,16 +167,22 @@ local function install_command(source, target)
     return { "install", "-m", "755", source, target }
 end
 
-local function dry_run(row, pin, dest)
-    local download, extract = "<download>", "<extract>"
-    local lines = { lib.line(fetch_command(pin, download)) }
-    local checksum = checksum_command(download) or { "shasum", "-a", "256", download }
+local PLAN_DOWNLOAD, PLAN_EXTRACT = "<download>", "<extract>"
+
+local function plan(pin)
+    local lines = { lib.line(fetch_command(pin, PLAN_DOWNLOAD)) }
+    local checksum = checksum_command(PLAN_DOWNLOAD) or { "shasum", "-a", "256", PLAN_DOWNLOAD }
     lines[#lines + 1] = lib.line(checksum) .. "  (expect " .. pin.sha256 .. ")"
-    local source = download
+    local source = PLAN_DOWNLOAD
     if is_archive(pin.url) then
-        lines[#lines + 1] = lib.line(extract_command(pin, download, extract))
-        source = extract .. "/" .. pin.path
+        lines[#lines + 1] = lib.line(extract_command(pin, PLAN_DOWNLOAD, PLAN_EXTRACT))
+        source = PLAN_EXTRACT .. "/" .. pin.path
     end
+    return lines, source
+end
+
+local function dry_run(row, pin, dest)
+    local lines, source = plan(pin)
     lines[#lines + 1] = lib.line(install_command(source, dest))
     return lib.dry_run(row, lines)
 end
@@ -213,39 +219,44 @@ local function fail(row, message)
     return 1
 end
 
-local function verified(row, pin, file)
+local function verify(pin, file)
     local actual, err = sha256_of(file)
     if not actual then
         fs.remove(file)
-        return fail(row, err)
+        return err
     elseif actual ~= pin.sha256 then
         fs.remove(file)
-        return fail(
-            row,
-            "sha256 mismatch for " .. pin.url .. ": expected " .. pin.sha256 .. ", got " .. actual
-        )
+        return "sha256 mismatch for "
+            .. pin.url
+            .. ": expected "
+            .. pin.sha256
+            .. ", got "
+            .. actual
     end
-    return 0
 end
 
-local function steps(job, opts)
-    local row, pin, dest, work = job.row, job.pin, job.dest, job.work
+local function unpack_pin(pin, work, opts)
     if lib.run(fetch_command(pin, work.download), opts) ~= 0 then
-        return fail(row, "failed to download " .. pin.url)
+        return nil, "failed to download " .. pin.url
     end
-    local code = verified(row, pin, work.download)
-    if code ~= 0 then
-        return code
+    local mismatch = verify(pin, work.download)
+    if mismatch then
+        return nil, mismatch
     end
     if is_archive(pin.url) then
         fs.mkdir(work.extract, { parents = true })
         if lib.run(extract_command(pin, work.download, work.extract), opts) ~= 0 then
-            return fail(row, "failed to extract " .. pin.url)
+            return nil, "failed to extract " .. pin.url
         end
     end
-    local source, missing = locate(pin, work)
+    return locate(pin, work)
+end
+
+local function steps(job, opts)
+    local row, pin, dest, work = job.row, job.pin, job.dest, job.work
+    local source, problem = unpack_pin(pin, work, opts)
     if not source then
-        return fail(row, missing)
+        return fail(row, problem)
     end
     local made, why = fs.mkdir(fs.dirname(dest), { parents = true })
     if not made then
@@ -267,6 +278,28 @@ local function download_and_install(row, pin, dest, opts)
     fs.remove(dir, { recursive = true })
     return code
 end
+
+---Download a pin, check its sha256 and unpack it, without installing anything.
+---
+---The checksum is verified before anything is extracted, and a mismatch removes the download.
+---@param pin dev.pkg.release.Pin the pinned asset
+---@param dir string an existing directory to work in
+---@param opts { log_file: string? }? where the commands' output goes
+---@return string? path the real path of the pin's file inside the unpacked archive, or of the bare download
+---@return string? err what failed
+function M.fetch(pin, dir, opts)
+    return unpack_pin(
+        pin,
+        { download = fs.join(dir, "download"), extract = fs.join(dir, "extract") },
+        opts
+    )
+end
+
+---List the commands `fetch` would run, as the text a dry run prints.
+---@param pin dev.pkg.release.Pin the pinned asset
+---@return string[] lines the download, checksum and unpack commands
+---@return string path where the pin's file would be, under `<extract>`
+M.plan = plan
 
 ---Print whether a release tool is present, as a line starting `[x]` or `[ ]`.
 ---
