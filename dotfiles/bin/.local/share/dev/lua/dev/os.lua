@@ -83,9 +83,10 @@ local MICROS_PER_SEC = 1000000
 local TIMED_WRAPPER = table.concat({
     'set -m; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } & pid=$!;',
     '( while [ -d "$4" ]; do',
-    'kill -0 "$3" 2>/dev/null || { [ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
-    'rm -rf -- "$4"; exit; };',
-    "sleep 0.2; done ) </dev/null >/dev/null 2>&1 & echo $pid $!",
+    'kill -0 "$3" 2>/dev/null || break;',
+    "sleep 0.2; done;",
+    '[ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
+    'rm -rf -- "$4" ) </dev/null >/dev/null 2>&1 & echo $pid $!',
 }, " ")
 
 ---@alias dev.os.Kind "file"|"dir"|"link"|"other"

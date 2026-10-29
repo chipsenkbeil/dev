@@ -410,6 +410,43 @@ t.test("capture_timed cleans up when its process is terminated", function()
     t.eq(dirs, "")
 end)
 
+t.test("capture_timed ends its command when its temporary directory is removed", function()
+    local tmp = assert(fs.mktemp({ dir = true }))
+    local snippet = ("package.path = %q; "):format(package.path)
+        .. 'require("dev.os").capture_timed({ "sh", "-c", "sleep 3775 & sleep 3776; wait" }, 600)'
+    local pid = devos.capture({
+        "sh",
+        "-c",
+        [[TMPDIR="$2" luajit -e "$1" </dev/null >/dev/null 2>&1 & echo $!]],
+        "sh",
+        snippet,
+        tmp,
+    })
+    pid = pid:gsub("%s+$", "")
+    local function sleeping()
+        local out = devos.capture({ "sh", "-c", "ps -axo args=" })
+        return ("\n" .. out):find("\nsleep 3775\n", 1, true) ~= nil
+    end
+    for _ = 1, 50 do
+        if sleeping() then
+            break
+        end
+        devos.run({ "sleep", "0.1" })
+    end
+    t.ok(sleeping(), "the command should be running")
+    fs.remove(tmp .. "/" .. devos.capture({ "ls", tmp }):gsub("%s+$", ""), { recursive = true })
+    for _ = 1, 50 do
+        if not sleeping() then
+            break
+        end
+        devos.run({ "sleep", "0.1" })
+    end
+    local gone = not sleeping()
+    devos.run({ "kill", "-KILL", pid }, { stderr = "null" })
+    fs.remove(tmp, { recursive = true })
+    t.ok(gone, "the command should end once its directory is removed")
+end)
+
 t.test("capture_timed with no seconds sets no limit and runs to completion", function()
     local started = os.time()
     local out, code = devos.capture_timed({ "sh", "-c", "sleep 2; echo done" }, 0)
