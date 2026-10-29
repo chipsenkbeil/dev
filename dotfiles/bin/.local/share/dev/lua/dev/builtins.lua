@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, show, move, size, label, stale, take, release and sync",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, move, size, label, link, stale, take, release and sync",
         group = "Share it",
     },
     {
@@ -256,6 +256,13 @@ return {
         handler = "lua",
         usage = "dev board show CARD",
         desc = "Print a card's name, column, size, labels, description and comments",
+    },
+    {
+        words = { "board", "edit" },
+        handler = "lua",
+        flags = "--file",
+        usage = "dev board edit CARD [--file PATH]",
+        desc = "Replace a card's description with the text of --file PATH or of standard input",
     },
     {
         words = { "board", "move" },

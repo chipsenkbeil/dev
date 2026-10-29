@@ -160,6 +160,56 @@ t.test("add, ls, next, move, size and label work on a local board", function()
     t.ok(out:find("Done  2 Pomodori", 1, true), out)
 end)
 
+t.test("edit replaces a local card's description from a file or standard input", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card", "--description", "old" })))
+    assert(fs.write(root .. "/plan.md", "## Problem\nfrom a file\n\n"))
+    local out, code = dev(root, home, { "board", "edit", a, "--file", root .. "/plan.md" })
+    t.eq(code, 0, out)
+    t.eq(out, "edited " .. a .. "\n")
+    t.eq(document(file_of(home)).cards[1].description, "## Problem\nfrom a file")
+    out, code = support.dev(
+        root,
+        { "board", "edit", a },
+        { env = env_of(home), input = "from standard input\n" }
+    )
+    t.eq(code, 0, out)
+    out = dev(root, home, { "board", "show", a })
+    t.eq(out, a .. "  Backlog  Unsized  -  Card\n\nfrom standard input\n\nno comments\n")
+end)
+
+t.test("edit refuses empty text, a missing file and an extra word", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card", "--description", "keep" })))
+    local out, code = support.dev(
+        root,
+        { "board", "edit", a },
+        { env = env_of(home), input = " \n\n" }
+    )
+    t.eq(code, 2, out)
+    out, code = dev(root, home, { "board", "edit", a, "--file", root .. "/missing.md" })
+    t.eq(code, 2, out)
+    out, code = dev(root, home, { "board", "edit", a, "extra" })
+    t.eq(code, 2, out)
+    t.eq(document(file_of(home)).cards[1].description, "keep")
+end)
+
+t.test("edit is refused under another process's claim fence", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card", "--description", "keep" })))
+    dev(root, home, { "board", "take", a })
+    local doc = document(file_of(home))
+    doc.cards[1].claim.fence = 9
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    local out, code = support.dev(
+        root,
+        { "board", "edit", a },
+        { env = env_of(home), input = "new\n" }
+    )
+    t.eq(code, 1, out)
+    t.eq(document(file_of(home)).cards[1].description, "keep")
+end)
+
 t.test("show prints a local card's description and notes", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
@@ -620,6 +670,42 @@ t.test("link posts to the task and queues while Pomb is unreachable", function()
     out = pomb_dev(root, home, { "board", "sync" })
     t.eq(out, "synced link bbbbbbbb\nsynced\n")
     t.ok(calls(root):find("/api/tasks/" .. ID_B .. "/links", 1, true), calls(root))
+end)
+
+t.test("edit patches the task, and a queued edit replays with its text", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/plan.md", "new plan\n"))
+    local out, code =
+        pomb_dev(root, home, { "board", "edit", ID_A:sub(1, 8), "--file", root .. "/plan.md" })
+    t.eq(code, 0, out)
+    t.eq(out, "edited aaaaaaaa\n")
+    t.ok(calls(root):find("/api/tasks/" .. ID_A .. "\n", 1, true), calls(root))
+    t.eq(fs.read(root .. "/bodies"), '{"description":"new plan"}\n')
+    assert(fs.write(root .. "/down", ""))
+    out, code = support.dev(root, { "board", "edit", ID_B:sub(1, 8) }, {
+        env = env_of(home, { ROOT = root }),
+        input = "waiting plan\n",
+    })
+    t.eq(out, QUEUED)
+    t.eq(code, 0)
+    local entries = document(queue_path(home))
+    t.eq(#entries, 1)
+    t.eq(entries[1].sub, "edit")
+    t.eq(entries[1].args, { ID_B:sub(1, 8), "waiting plan" })
+    assert(fs.remove(root .. "/down"))
+    out = pomb_dev(root, home, { "board", "sync" })
+    t.eq(out, "synced edit bbbbbbbb\nsynced\n")
+    t.ok(calls(root):find("/api/tasks/" .. ID_B .. "\n", 1, true), calls(root))
+end)
+
+t.test("a gateway error still queues an edit, which is safe to repeat", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/plan.md", "again\n"))
+    assert(fs.write(root .. "/gateway", ""))
+    local out, code =
+        pomb_dev(root, home, { "board", "edit", ID_A:sub(1, 8), "--file", root .. "/plan.md" })
+    t.eq(out, QUEUED)
+    t.eq(code, 0)
 end)
 
 t.test("sync replays the queue in order and empties it", function()

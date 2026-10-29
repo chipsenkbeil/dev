@@ -30,8 +30,16 @@ local DELETE_FLAG = "--delete"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
-local IDEMPOTENT = { move = true, size = true, label = true, link = true }
-local QUEUED = { add = true, move = true, note = true, size = true, label = true, link = true }
+local IDEMPOTENT = { move = true, size = true, label = true, link = true, edit = true }
+local QUEUED = {
+    add = true,
+    move = true,
+    note = true,
+    size = true,
+    label = true,
+    link = true,
+    edit = true,
+}
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
@@ -530,6 +538,22 @@ function commands.label(backend, args)
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
 end
 
+function commands.edit(backend, args)
+    if #args ~= 2 then
+        return usage("needs a card and the new description")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held = claims.read(card.id)
+    local ok, message = backend:set_description(card.id, args[2], held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    return { output = "edited " .. card.id:sub(1, board.MIN_PREFIX) }
+end
+
 function commands.link(backend, args)
     if #args ~= 3 then
         return usage("needs a card, a kind (" .. LINK_HELP .. ") and the other card")
@@ -763,7 +787,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `link`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil
@@ -1004,6 +1028,32 @@ M.handlers["board init"] = function(ctx)
     return 0
 end
 
+local function description_args(args)
+    local flags, words = parse(args, { ["--file"] = true })
+    if not flags then
+        return nil, words.message
+    end
+    if #words ~= 1 then
+        return nil, "needs a card, and the description from --file PATH or standard input"
+    end
+    local text, message
+    if flags["--file"] then
+        text, message = fs.read(flags["--file"])
+        if not text then
+            return nil, "cannot read " .. flags["--file"] .. ": " .. tostring(message)
+        end
+    elseif devos.isatty(0) then
+        return nil, "needs the description from --file PATH or standard input"
+    else
+        text = io.read("*a")
+    end
+    text = text:gsub("%s+$", "")
+    if text == "" then
+        return nil, "the new description is empty"
+    end
+    return { words[1], text }
+end
+
 local function brief(entry)
     return entry.sub .. " " .. tostring(entry.args[1])
 end
@@ -1128,8 +1178,16 @@ end
 
 for sub in pairs(commands) do
     M.handlers["board " .. sub] = function(ctx)
+        local args = ctx.args
+        if sub == "edit" then
+            local why
+            args, why = description_args(ctx.args)
+            if not args then
+                verb.usage_error(ctx, why)
+            end
+        end
         local backend, pending = open_board(ctx)
-        local result = M.run(sub, ctx.args, backend)
+        local result = M.run(sub, args, backend)
         if result.message then
             local note = sub == "note" and (ctx.args[2] == EDIT_FLAG or ctx.args[2] == DELETE_FLAG)
             if
@@ -1138,7 +1196,7 @@ for sub in pairs(commands) do
                 and not note
                 and pomb.unreachable(result.message, IDEMPOTENT[sub])
             then
-                local ok, why = pending:push(sub, ctx.args)
+                local ok, why = pending:push(sub, args)
                 if not ok then
                     verb.die(
                         "dev: " .. result.message .. "; and the change could not be queued: " .. why

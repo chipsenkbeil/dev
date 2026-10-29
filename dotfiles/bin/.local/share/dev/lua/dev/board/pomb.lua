@@ -549,6 +549,19 @@ function Backend:set_size(id, color, fence)
     return true
 end
 
+function Backend:set_description(id, text, fence)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local done
+    done, message = self:__request("PATCH", "/api/tasks/" .. id, { description = text }, fence)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:set_labels(id, labels, fence)
     local ok, message = self:__load()
     if not ok then

@@ -55,6 +55,10 @@ local function fake(cards, times)
         calls[#calls + 1] = { "set_labels", id, labels, fence }
         return true
     end
+    function backend:set_description(id, text, fence)
+        calls[#calls + 1] = { "set_description", id, text, fence }
+        return true
+    end
     function backend:set_size(id, color, fence)
         calls[#calls + 1] = { "set_size", id, color, fence }
         return true
@@ -284,6 +288,21 @@ t.test("label refuses a bad label, a bad --remove value and a missing card", fun
     t.eq(commands.run("add", { "X", "--label", "a b" }, backend).code, 2)
     t.eq(commands.run("add", { "X", "--label", "-a" }, backend).code, 2)
     t.eq(commands.run("label", { "deadbeef", "+x" }, backend).code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("edit sends the whole new description and prints one line", function()
+    local backend = fake(sample())
+    local result = commands.run("edit", { "11111111-a", "## Problem\nnew plan" }, backend)
+    t.eq(result.output, "edited 11111111")
+    t.eq(backend.calls[1], { "set_description", ID_A, "## Problem\nnew plan", nil })
+end)
+
+t.test("edit refuses a missing text, an extra word and an unknown card", function()
+    local backend = fake(sample())
+    t.eq(commands.run("edit", { "11111111-a" }, backend).code, 2)
+    t.eq(commands.run("edit", { "11111111-a", "x", "y" }, backend).code, 2)
+    t.eq(commands.run("edit", { "deadbeef", "x" }, backend).code, 1)
     t.eq(#backend.calls, 0)
 end)
 

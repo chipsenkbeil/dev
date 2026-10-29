@@ -17,6 +17,7 @@ dev board stale --days 7
 dev board note 8af0e001 "Tests pass, landing now."
 dev board notes 8af0e001
 dev board show 8af0e001
+dev board edit 8af0e001 < plan.md
 dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
 dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
@@ -215,6 +216,13 @@ description`, and one with no comments `no comments`. Use it instead of the
 Pomb API to read a card, so the token stays inside dev. It does not list links
 yet.
 
+`edit CARD` replaces a card's description with the text of `--file PATH`, or of
+standard input when there is no `--file`, and prints `edited <id prefix>`. The
+format v1 description always holds the current plan, so rewrite it after a
+decision. Trailing whitespace is dropped, and empty text is a usage error
+(exit 2), to keep an empty pipe from wiping a plan. It sends the claim's fence when
+this machine holds one. It does not touch the title or the comments.
+
 `notes CARD` lists the card's comments, oldest first: the comment's id prefix,
 who wrote it (the token's name, else the kind of actor), the time in UTC and the
 first line. `note CARD --edit COMMENT TEXT` replaces the text of one of your own
@@ -307,12 +315,12 @@ sync, so `dev board sync` says so.
 
 ## When Pomb is unreachable
 
-On a Pomb board, `add`, `move`, `note`, `size`, `label` and `link` that cannot reach
-Pomb, or cannot read the token because `pass` is locked, are kept in a queue
-and print the line below. A timeout or a gateway error may come after Pomb
-applied the change, so only `move`, `size`, `label` and `link`, which are safe to
-repeat, are queued for those; `add` and `note` fail instead of risking a
-duplicate.
+On a Pomb board, `add`, `move`, `note`, `size`, `label`, `link` and `edit`
+that cannot reach Pomb, or cannot read the token because `pass` is locked, are
+kept in a queue and print the line below. A timeout or a gateway error may come
+after Pomb applied the change, so only `move`, `size`, `label`, `link` and
+`edit`, which are safe to repeat, are queued for those; `add` and `note` fail
+instead of risking a duplicate.
 
 ```
 queued: Pomb unreachable, will sync

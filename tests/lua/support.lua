@@ -73,7 +73,11 @@ function M.dev(root, args, opts)
     for name, value in pairs(opts.env or {}) do
         env[name] = value
     end
-    return devos.capture(argv, { cwd = opts.cwd or root, stderr = "stdout", env = env })
+    local run = { cwd = opts.cwd or root, stderr = "stdout", env = env }
+    if opts.input then
+        return devos.capture_input(argv, opts.input, run)
+    end
+    return devos.capture(argv, run)
 end
 
 return M
