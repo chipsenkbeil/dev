@@ -26,6 +26,7 @@ local function sandbox()
         resume = ONE,
         extend = ONE,
         delete = DELETED,
+        sync = "",
     }) do
         assert(fs.write(root .. "/" .. name .. ".json", body))
     end

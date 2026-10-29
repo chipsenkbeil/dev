@@ -122,6 +122,26 @@ outside `/srv/projects[/<name>]` exits 1. `--ssh`, or an `et` missing from
 PATH (with one warning), runs `ci box ssh <box> -- tmux ...` with the same
 tmux command, which checks the same host keys.
 
+## Connecting to machines that are not boxes
+
+Infra can mark a machine or an instance as connectable: an Incus instance,
+a tart VM, the Mac host or example-box. `dev connect` reaches them too, and it
+never talks to Incus or accepts a host key on first use. After listing boxes
+it runs `ci connect sync`, which writes a `Host ci-<name>` block for each
+connectable into ci's ssh_config include, then reads `ci connect ls --json`.
+The picker shows the connectables after the boxes, one row each with the
+name, state, kind, machine and login user.
+
+```
+dev connect host-a
+```
+
+`dev connect NAME` takes a box or a connectable. A box name goes the way
+above, without asking `ci connect`. Any other name that ci lists as a
+connectable runs `ssh ci-NAME`, which relays through the hub and checks the
+host key ci pinned. A ci that has no `connect` command makes dev list boxes only, with one
+note. Any other ci failure prints ci's message and exits with its code.
+
 ## Errors
 
 When ci exits non-zero with an `{"ok":false}` document, dev prints

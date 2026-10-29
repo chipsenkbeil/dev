@@ -13,6 +13,8 @@ local NEW_VALUE = "__new__"
 local MAX_DIR_NAME = 64
 local MAX_USER = 32
 local MAX_HOST = 253
+local MAX_NAME = 40
+local NO_CONNECT = 2
 
 ---@class dev.cmd.connect
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of `connect` and `box connect`
@@ -183,6 +185,99 @@ local function attach(found, opts)
     })
 end
 
+---@class dev.cmd.connect.Connectable
+---@field name string what `ssh ci-<name>` reaches
+---@field machine string? the machine it runs on
+---@field kind string? what it is, such as `incus`, `tart` or `host`
+---@field user string? the login name
+---@field state string? what ci says it is doing
+
+---Print what ci said when `ci connect` failed, then stop with its code.
+---@param raw string ci's output
+---@param code integer ci's exit code
+local function connect_failed(raw, code)
+    local out = raw:gsub("\n+$", "")
+    local doc = json.decode(out)
+    local message = type(doc) == "table" and type(doc.error) == "table" and doc.error.message
+    if type(message) == "string" then
+        stderr:write("dev connect: ", message, "\n")
+    elseif out ~= "" then
+        stderr:write(out, "\n")
+    end
+    os.exit(code)
+end
+
+---Tell whether a name from ci can reach an ssh command line as `ci-<name>`.
+---@param name any the value ci gave
+---@return boolean ok whether it is 1 to 40 of a-z, 0-9 and -
+local function safe_name(name)
+    return type(name) == "string" and #name <= MAX_NAME and name:find("^[a-z0-9%-]+$") ~= nil
+end
+
+---Keep the printable ASCII of a note from ci.
+---@param text string the note
+---@return string shown the note with unprintable bytes replaced
+local function plain(text)
+    return (text:gsub("[^\32-\126]", " "))
+end
+
+---Sync ci's ssh_config and list what it can reach apart from boxes.
+---
+---A ci with no `connect` exits 2, which shows boxes only, with one note.
+---Any other failure prints ci's message and ends the run with ci's code.
+---@return dev.cmd.connect.Connectable[] found the connectables, in ci's order
+local function connectables()
+    local raw, code = devos.capture({ "ci", "connect", "sync" })
+    if code == 0 then
+        raw, code = devos.capture({ "ci", "connect", "ls", "--json" })
+    end
+    if code == NO_CONNECT then
+        stderr:write("dev connect: this ci has no connect command, listing boxes only\n")
+        return {}
+    end
+    if code ~= 0 then
+        connect_failed(raw, code or Exit.FAILED)
+    end
+    local doc = json.decode((raw:gsub("\n+$", "")))
+    if type(doc) ~= "table" then
+        verb.die("dev: ci connect ls printed no document")
+    end
+    for _, note in ipairs(type(doc.notes) == "table" and doc.notes or {}) do
+        if type(note) == "string" then
+            stderr:write("dev connect: ", plain(note), "\n")
+        end
+    end
+    local found = {}
+    for _, entry in ipairs(type(doc.connectables) == "table" and doc.connectables or {}) do
+        if type(entry) == "table" and safe_name(entry.name) then
+            found[#found + 1] = entry
+        else
+            stderr:write("dev connect: skipping a connectable with an invalid name\n")
+        end
+    end
+    return found
+end
+
+---The cells of a connectable's row in the picker.
+---@param entry dev.cmd.connect.Connectable the connectable
+---@return string[] cells name, state, kind, machine and user
+local function connectable_row(entry)
+    local function cell(value)
+        value = present(value)
+        if type(value) ~= "string" or value == "" then
+            return "-"
+        end
+        return plain(value)
+    end
+    return {
+        entry.name,
+        cell(entry.state),
+        cell(entry.kind),
+        cell(entry.machine),
+        cell(entry.user),
+    }
+end
+
 ---Tell whether a box carries a project.
 ---@param candidate dev.cmd.box.Box the box
 ---@param project string the project's name
@@ -196,11 +291,12 @@ local function in_project(candidate, project)
     return false
 end
 
----Make the picker's rows: the project's boxes, the others, then a new-box row.
+---Make the picker's rows: the project's boxes, the others, the connectables, then a new-box row.
 ---@param boxes dev.cmd.box.Box[] the boxes ci lists
+---@param others dev.cmd.connect.Connectable[] the connectables ci lists
 ---@param project string the current project, empty outside one
 ---@return dev.ui.picker.Item[] items the rows
-local function items_for(boxes, project)
+local function items_for(boxes, others, project)
     local now = os.time()
     local ordered = {}
     for _, wanted in ipairs({ true, false }) do
@@ -214,18 +310,22 @@ local function items_for(boxes, project)
     for i, candidate in ipairs(ordered) do
         items[i] = { value = candidate.name, cells = box.row(candidate, now) }
     end
+    for _, entry in ipairs(others) do
+        items[#items + 1] = { value = entry.name, cells = connectable_row(entry) }
+    end
     if project ~= "" then
         items[#items + 1] = { value = NEW_VALUE, cells = { "new box for " .. project } }
     end
     return items
 end
 
----Ask which box to connect to.
+---Ask which box or connectable to connect to.
 ---@param boxes dev.cmd.box.Box[] the boxes ci lists
+---@param others dev.cmd.connect.Connectable[] the connectables ci lists
 ---@param project string the current project, empty outside one
----@return string value the picked box's name, or `__new__`
-local function choose(boxes, project)
-    local items = items_for(boxes, project)
+---@return string value the picked name, or `__new__`
+local function choose(boxes, others, project)
+    local items = items_for(boxes, others, project)
     if #items == 0 then
         stderr:write("no boxes; create one with dev box create\n")
         os.exit(Exit.FAILED)
@@ -251,7 +351,20 @@ local function choose(boxes, project)
     return picked
 end
 
----Connect to a box, picking, resuming or creating one first.
+---Tell whether ci lists a box with a name.
+---@param boxes dev.cmd.box.Box[] the boxes ci lists
+---@param name string the name
+---@return boolean found whether one of the boxes has it
+local function has_box(boxes, name)
+    for _, candidate in ipairs(boxes) do
+        if candidate.name == name then
+            return true
+        end
+    end
+    return false
+end
+
+---Connect to a box or a connectable, picking, resuming or creating one first.
 ---@param ctx dev.Ctx the context of `connect` or `box connect`
 ---@return integer code the exit code of a hand-off that could not start
 local function run(ctx)
@@ -267,8 +380,17 @@ local function run(ctx)
     box.need_ci()
     local project = box.default_project(ctx.root) or ""
     local boxes = box.call("connect", { "ls", "--json" }).boxes or {}
-    local choice = given or choose(boxes, project)
+    local others = {}
+    if not given or not has_box(boxes, given) then
+        others = connectables()
+    end
+    local choice = given or choose(boxes, others, project)
     local found
+    for _, entry in ipairs(others) do
+        if entry.name == choice and not has_box(boxes, choice) then
+            return exec({ "ssh", "ci-" .. entry.name })
+        end
+    end
     if choice == NEW_VALUE then
         local target, shape
         if box.interactive() then
