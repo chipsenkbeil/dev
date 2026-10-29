@@ -66,7 +66,10 @@ local FAKE_CURL = '#!/bin/sh\necho "$*" >>"$FAKE_LOG"\n'
     .. "    shift\n"
     .. "done\n"
     .. 'cp "$FAKE_ASSETS/${url##*/}" "$out"\n'
+local PROXY_GUARD =
+    'case "${0##*/}" in rustup-init) ;; *) echo "error: unknown proxy name: ${0##*/}" >&2; exit 1 ;; esac\n'
 local FAKE_INIT = "#!/bin/sh\n"
+    .. PROXY_GUARD
     .. 'echo "rustup-init $*" >>"$FAKE_LOG"\n'
     .. 'mkdir -p "$CARGO_HOME/bin"\n'
     .. "printf '#!/bin/sh\\n' >\"$CARGO_HOME/bin/rustup\"\n"
@@ -258,6 +261,8 @@ t.test("the rustup script dry run prints every step and changes nothing", functi
     t.eq(code, 0, out)
     t.ok(out:find("(expect " .. sha256(dir .. "/assets/rustup-init") .. ")", 1, true), out)
     t.ok(out:find("'--default-toolchain' '" .. TOOLCHAIN .. "'", 1, true), out)
+    t.ok(out:find("'install' '-m' '755'", 1, true), out)
+    t.ok(out:find("'<tmp>/rustup-init' '-y'", 1, true), out)
     t.eq(fs.read(dir .. "/calls.log"), nil)
     t.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
     fs.remove(dir, { recursive = true })
@@ -288,6 +293,7 @@ local FAKE_RUSTUP = "#!/bin/sh\n"
 local FAKE_CARGO =
     '#!/bin/sh\ncase "$1" in +nightly) test -f "$FAKE_ASSETS/nightly"; exit $? ;; esac\n'
 local FAKE_HOME_INIT = "#!/bin/sh\n"
+    .. PROXY_GUARD
     .. 'echo "rustup-init $*" >>"$FAKE_LOG"\n'
     .. "home=${CARGO_HOME:-$HOME/.cargo}\n"
     .. 'mkdir -p "$home/bin"\n'
