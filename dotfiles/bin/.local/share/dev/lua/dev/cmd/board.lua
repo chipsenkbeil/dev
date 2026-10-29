@@ -33,18 +33,16 @@ local AS_FLAG = "--as"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
-local IDEMPOTENT =
-    { move = true, size = true, label = true, link = true, edit = true, checks = true }
-local QUEUED = {
-    add = true,
-    move = true,
-    note = true,
-    size = true,
-    label = true,
-    link = true,
-    edit = true,
-    checks = true,
-    outcome = true,
+local QUEUE_RULES = {
+    add = { idempotent = false },
+    move = { idempotent = true },
+    note = { idempotent = false },
+    size = { idempotent = true },
+    label = { idempotent = true },
+    link = { idempotent = true },
+    edit = { idempotent = true },
+    checks = { idempotent = true },
+    outcome = { idempotent = false },
 }
 local OutcomeMode = { ADD = "add", RENAME = "rename", TICK = "tick", UNTICK = "untick" }
 local OUTCOME_FLAGS = {
@@ -55,7 +53,10 @@ local OUTCOME_FLAGS = {
 local CONVERT_FLAG = "--convert"
 
 local function idempotent(sub, args)
-    return IDEMPOTENT[sub] or (sub == "outcome" and OUTCOME_FLAGS[args[2]] ~= nil) or false
+    local rule = QUEUE_RULES[sub]
+    return (rule ~= nil and rule.idempotent)
+        or (sub == "outcome" and OUTCOME_FLAGS[args[2]] ~= nil)
+        or false
 end
 
 ---@class dev.cmd.board.Settings
@@ -1533,7 +1534,7 @@ end
 ---@return string? message why the queue could not be used
 local function replay(backend, pending, say)
     local drained, message = pending:drain(function(entry)
-        if not QUEUED[entry.sub] or type(entry.args) ~= "table" then
+        if not QUEUE_RULES[entry.sub] or type(entry.args) ~= "table" then
             say("dropped " .. tostring(entry.sub) .. ": not a change dev queues")
             return queue.Replay.DONE
         end
@@ -1656,7 +1657,7 @@ for sub in pairs(commands) do
             local note = sub == "note" and (ctx.args[2] == EDIT_FLAG or ctx.args[2] == DELETE_FLAG)
             if
                 pending
-                and QUEUED[sub]
+                and QUEUE_RULES[sub]
                 and not note
                 and not (sub == "outcome" and args[2] == CONVERT_FLAG)
                 and pomb.unreachable(result.message, idempotent(sub, args))
