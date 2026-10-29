@@ -475,6 +475,49 @@ t.test("a local board keeps --done-when outcomes on the card and shows them", fu
     t.ok(out:find("0/2", 1, true), out)
 end)
 
+t.test("a local board appends, rewords, ticks and unticks outcomes by number", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--done-when",
+        "A works",
+        "--done-when",
+        "B works",
+    })
+    t.eq(code, 0, out)
+    local a = prefix_of(out)
+    out, code = dev(root, home, { "board", "outcome", a, "C works" })
+    t.eq(out, "outcome " .. a .. " 3 added\n")
+    out = dev(root, home, { "board", "outcome", a, "--tick", "2" })
+    t.eq(out, "outcome " .. a .. " 2 ticked\n")
+    out = dev(root, home, { "board", "outcome", a, "--rename", "1", "A holds" })
+    t.eq(out, "outcome " .. a .. " 1 reworded\n")
+    out = dev(root, home, { "board", "show", a })
+    t.ok(out:find("done when:\n- [ ] A holds\n- [x] B works\n- [ ] C works\n", 1, true), out)
+    out = dev(root, home, { "board", "outcome", a, "--untick", "2" })
+    t.eq(out, "outcome " .. a .. " 2 unticked\n")
+    local rows = document(file_of(home)).cards[1].outcomes
+    t.eq(#rows, 3)
+    t.eq(rows[1].name, "A holds")
+    t.eq(rows[2].done, false)
+    t.eq(rows[2].name, "B works")
+    out, code = dev(root, home, { "board", "outcome", a, "--tick", "4" })
+    t.eq(code, 1)
+    t.ok(out:find("the card has 3 outcomes, so there is no outcome 4", 1, true), out)
+end)
+
+t.test("a local board ticks an outcome while this machine holds the claim", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card", "--done-when", "A works" })))
+    local out, code = dev(root, home, { "board", "take", a })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "outcome", a, "--tick", "1" })
+    t.eq(code, 0, out)
+    t.eq(document(file_of(home)).cards[1].outcomes[1].done, true)
+end)
+
 t.test("move out of progress releases the claim and warns about nothing", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {

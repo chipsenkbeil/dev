@@ -241,6 +241,13 @@ return {
         desc = "Add labels to a card, L or +L, and remove them with --remove L",
     },
     {
+        words = { "board", "outcome" },
+        handler = "lua",
+        flags = "--rename --tick --untick",
+        usage = "dev board outcome CARD TEXT | CARD --rename N TEXT | CARD --tick N | CARD --untick N",
+        desc = "Append a Done when outcome to a card, reword the Nth with --rename, or tick or untick it, N counted from 1 as show lists them",
+    },
+    {
         words = { "board", "link" },
         handler = "lua",
         usage = "dev board link CARD KIND OTHER",

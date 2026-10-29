@@ -21,6 +21,10 @@ dev board notes 8af0e001
 dev board show 8af0e001
 dev board edit 8af0e001 < plan.md
 dev board checks 8af0e001 "dev lint" "dev test"
+dev board outcome 8af0e001 "Two-line cards print in full."
+dev board outcome 8af0e001 --rename 2 "A tick shows in show."
+dev board outcome 8af0e001 --tick 2
+dev board outcome 8af0e001 --untick 2
 dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
 dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
@@ -299,6 +303,17 @@ palette, never by its label, so it works before and after `dev board init`
 names the labels. A board missing the colour fails with
 `board unavailable: the board has no yellow colour`.
 
+`outcome CARD TEXT` appends a Done when outcome to a card that already exists
+(`POST /api/tasks/{id}/subtasks`) and prints `outcome <id prefix> N added`.
+`outcome CARD --rename N TEXT` rewords the Nth, `--tick N` marks it done and
+`--untick N` clears it (`PATCH /api/tasks/{id}/subtasks/{sub_id}` with `name`
+or `done`), each printing `outcome <id prefix> N reworded`, `ticked` or
+`unticked`. N counts from 1 in the order `show` lists the outcomes, and an N
+past the last outcome is exit 1. Ticking belongs to the reviewer. dev never
+deletes or reorders an outcome (Pomb keeps both admin-only). The claim's
+fence goes along when this machine holds one, and a local board keeps the same
+outcomes on the card.
+
 `add --label L` gives a new card a label, and may be repeated. `label CARD L`
 (or `+L`) adds a label to a card and `--remove L` removes one, each as many
 times as you like in one call, the additions first. Pomb replaces a card's
@@ -372,11 +387,13 @@ sync, so `dev board sync` says so.
 
 ## When Pomb is unreachable
 
-On a Pomb board, `add`, `move`, `note`, `size`, `label`, `link` and `edit`
+On a Pomb board, `add`, `move`, `note`, `size`, `label`, `link`, `edit` and
+`outcome`
 that cannot reach Pomb, or cannot read the token because `pass` is locked, are
 kept in a queue and print the line below. A timeout or a gateway error may come
-after Pomb applied the change, so only `move`, `size`, `label`, `link` and
-`edit`, which are safe to repeat, are queued for those; `add` and `note` fail
+after Pomb applied the change, so only `move`, `size`, `label`, `link`, `edit`
+and `outcome` with `--rename`, `--tick` or `--untick`, which are safe to
+repeat, are queued for those; `add`, `note` and an `outcome` append fail
 instead of risking a duplicate.
 
 ```

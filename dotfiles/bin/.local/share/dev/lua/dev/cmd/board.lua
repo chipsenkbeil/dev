@@ -43,7 +43,18 @@ local QUEUED = {
     link = true,
     edit = true,
     checks = true,
+    outcome = true,
 }
+local OutcomeMode = { ADD = "add", RENAME = "rename", TICK = "tick", UNTICK = "untick" }
+local OUTCOME_FLAGS = {
+    ["--rename"] = OutcomeMode.RENAME,
+    ["--tick"] = OutcomeMode.TICK,
+    ["--untick"] = OutcomeMode.UNTICK,
+}
+
+local function idempotent(sub, args)
+    return IDEMPOTENT[sub] or (sub == "outcome" and OUTCOME_FLAGS[args[2]] ~= nil) or false
+end
 
 ---@class dev.cmd.board.Settings
 ---@field backend string `pomb` or `local`
@@ -602,7 +613,7 @@ function commands.move(backend, args)
                 card.id:sub(1, board.MIN_PREFIX)
                     .. " is not in card format v2 and cannot enter Ready; it lacks "
                     .. table.concat(missing, ", ")
-                    .. "; fix the description with dev board edit, where a v1 Done when checklist also counts"
+                    .. "; add outcomes with dev board outcome and fix the description with dev board edit, where a v1 Done when checklist also counts"
             )
         end
         if #card.checks == 0 then
@@ -712,6 +723,92 @@ function commands.label(backend, args)
     end
     local shown = #labels > 0 and table.concat(labels, ",") or "-"
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
+end
+
+local OUTCOME_SAID = {
+    [OutcomeMode.RENAME] = "reworded",
+    [OutcomeMode.TICK] = "ticked",
+    [OutcomeMode.UNTICK] = "unticked",
+}
+
+local function outcome_number(word, count)
+    local number = tonumber(word)
+    if not word:match("^%d+$") or number < 1 then
+        return nil, usage("outcome numbers count from 1, not " .. word)
+    end
+    if number > count then
+        return nil,
+            failure(
+                "the card has "
+                    .. count
+                    .. (count == 1 and " outcome" or " outcomes")
+                    .. ", so there is no outcome "
+                    .. number
+            )
+    end
+    return number
+end
+
+function commands.outcome(backend, args)
+    if #args < 2 then
+        return usage(
+            "needs a card and the outcome text, or --rename N TEXT, --tick N or --untick N"
+        )
+    end
+    local mode = OUTCOME_FLAGS[args[2]]
+    local text, word
+    if not mode then
+        mode, text = OutcomeMode.ADD, table.concat(args, " ", 2)
+    elseif mode == OutcomeMode.RENAME then
+        if #args < 4 then
+            return usage("--rename needs an outcome number and the new text")
+        end
+        word, text = args[3], table.concat(args, " ", 4)
+    else
+        if #args ~= 3 then
+            return usage(args[2] .. " needs one outcome number")
+        end
+        word = args[3]
+    end
+    if text and not text:find("%S") then
+        return usage("the outcome text is empty")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held = claims.read(card.id)
+    local fence = held and held.fence
+    local prefix = card.id:sub(1, board.MIN_PREFIX)
+    local ok, message
+    if mode == OutcomeMode.ADD then
+        ok, message = backend:add_outcome(card.id, text, fence)
+        if not ok then
+            return failure(message)
+        end
+        return {
+            output = "outcome " .. prefix .. " " .. (#card.outcomes + 1) .. " added",
+            warnings = board.prose_warnings(text),
+        }
+    end
+    local number
+    number, err = outcome_number(word, #card.outcomes)
+    if not number then
+        return err
+    end
+    local fields = { name = text }
+    if mode ~= OutcomeMode.RENAME then
+        fields = { done = mode == OutcomeMode.TICK }
+    end
+    ok, message = backend:set_outcome(card.id, card.outcomes[number].id, fields, fence)
+    if not ok then
+        return failure(message)
+    end
+    local result = { output = "outcome " .. prefix .. " " .. number .. " " .. OUTCOME_SAID[mode] }
+    if text then
+        result.warnings = board.prose_warnings(text)
+    end
+    return result
 end
 
 function commands.edit(backend, args)
@@ -998,7 +1095,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `checks`, `link`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil
@@ -1288,7 +1385,7 @@ local function replay(backend, pending, say)
         if not result.message then
             say("synced " .. brief(entry))
             return queue.Replay.DONE
-        elseif pomb.unreachable(result.message, IDEMPOTENT[entry.sub]) then
+        elseif pomb.unreachable(result.message, idempotent(entry.sub, entry.args)) then
             say("Pomb is still unreachable, " .. brief(entry) .. " stays queued")
             return queue.Replay.STOP
         end
@@ -1405,7 +1502,7 @@ for sub in pairs(commands) do
                 pending
                 and QUEUED[sub]
                 and not note
-                and pomb.unreachable(result.message, IDEMPOTENT[sub])
+                and pomb.unreachable(result.message, idempotent(sub, args))
             then
                 local ok, why = pending:push(sub, args)
                 if not ok then

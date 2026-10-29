@@ -73,6 +73,14 @@ local function fake(cards, times)
         calls[#calls + 1] = { "set_labels", id, labels, fence }
         return true
     end
+    function backend:add_outcome(id, text, fence)
+        calls[#calls + 1] = { "add_outcome", id, text, fence }
+        return true
+    end
+    function backend:set_outcome(id, outcome, fields, fence)
+        calls[#calls + 1] = { "set_outcome", id, outcome, fields, fence }
+        return true
+    end
     function backend:set_description(id, text, fence)
         calls[#calls + 1] = { "set_description", id, text, fence }
         return true
@@ -818,6 +826,59 @@ t.test("show lists the outcomes with their ticks, and ls adds a done column", fu
     t.eq(commands.run("ls", {}, fake({ plain })).output, "cccccccc  Backlog  x  -  Card")
 end)
 
+t.test("outcome appends, rewords, ticks and unticks by number", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3, 1)
+    local backend = fake({ card })
+    local result = commands.run("outcome", { "cccccccc", "Fourth", "works" }, backend)
+    t.eq(result.output, "outcome cccccccc 4 added")
+    t.eq(backend.calls[1], { "add_outcome", ID_C, "Fourth works", nil })
+    result = commands.run("outcome", { "cccccccc", "--rename", "2", "New", "words" }, backend)
+    t.eq(result.output, "outcome cccccccc 2 reworded")
+    t.eq(backend.calls[2], { "set_outcome", ID_C, "s2", { name = "New words" }, nil })
+    result = commands.run("outcome", { "cccccccc", "--tick", "2" }, backend)
+    t.eq(result.output, "outcome cccccccc 2 ticked")
+    t.eq(backend.calls[3], { "set_outcome", ID_C, "s2", { done = true }, nil })
+    result = commands.run("outcome", { "cccccccc", "--untick", "1" }, backend)
+    t.eq(result.output, "outcome cccccccc 1 unticked")
+    t.eq(backend.calls[4], { "set_outcome", ID_C, "s1", { done = false }, nil })
+end)
+
+t.test("outcome refuses an N past the last outcome and a bad N", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    local result = commands.run("outcome", { "cccccccc", "--tick", "3" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("the card has 2 outcomes, so there is no outcome 3", 1, true))
+    t.eq(commands.run("outcome", { "cccccccc", "--rename", "9", "x" }, backend).code, 1)
+    for _, word in ipairs({ "0", "-1", "x", "1.5" }) do
+        t.eq(commands.run("outcome", { "cccccccc", "--tick", word }, backend).code, 2)
+    end
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("outcome refuses missing arguments, blank text and a missing card", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    t.eq(commands.run("outcome", { "cccccccc" }, backend).code, 2)
+    t.eq(commands.run("outcome", { "cccccccc", "--tick" }, backend).code, 2)
+    t.eq(commands.run("outcome", { "cccccccc", "--tick", "1", "2" }, backend).code, 2)
+    t.eq(commands.run("outcome", { "cccccccc", "--rename", "1" }, backend).code, 2)
+    t.eq(commands.run("outcome", { "cccccccc", "   " }, backend).code, 2)
+    t.eq(commands.run("outcome", { "deadbeef", "x" }, backend).code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("outcome warns about a path in the text and still writes", function()
+    local card = colored("green")
+    local backend = fake({ card })
+    local result = commands.run("outcome", { "cccccccc", "see src/a.lua" }, backend)
+    t.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    t.eq(#backend.calls, 1)
+end)
+
 t.test("move into Icebox never checks the description", function()
     local card = colored("white")
     card.description = nil
@@ -1248,6 +1309,83 @@ t.test("an unreachable server reports the curl exit", function()
         out:find("board unavailable: cannot reach https://pomb.example (curl exit 7)", 1, true),
         out
     )
+end)
+
+local SUBTASKS_EXPORT = '{"tasks":['
+    .. '{"id":"'
+    .. ID_A
+    .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why.",'
+    .. '"subtasks":[{"id":"sub-a","name":"A works","done":false},{"id":"sub-b","name":"B works","done":true}]}]}'
+
+t.test("outcome posts a subtask and patches the Nth by its id", function()
+    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
+    t.eq(code, 0, out)
+    t.eq(out, "outcome 11111111 3 added\n")
+    out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
+    t.eq(out, "outcome 11111111 1 ticked\n")
+    out = dev(root, home, { "board", "outcome", "11111111", "--rename", "2", "B holds" })
+    t.eq(out, "outcome 11111111 2 reworded\n")
+    out = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
+    t.eq(out, "outcome 11111111 2 unticked\n")
+    local calls = read(root, "calls")
+    t.ok(
+        calls:find("-X POST", 1, true) and calls:find("/api/tasks/" .. ID_A .. "/subtasks", 1, true),
+        calls
+    )
+    t.ok(calls:find('--data-raw {"name":"C works"}', 1, true), calls)
+    t.ok(calls:find("-X PATCH", 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-a", 1, true), calls)
+    t.ok(calls:find('--data-raw {"done":true}', 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-b", 1, true), calls)
+    t.ok(calls:find('--data-raw {"name":"B holds"}', 1, true), calls)
+    t.ok(calls:find('--data-raw {"done":false}', 1, true), calls)
+end)
+
+t.test("outcome past the last subtask exits 1 and changes nothing", function()
+    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
+    t.eq(code, 1)
+    t.ok(out:find("the card has 2 outcomes, so there is no outcome 3", 1, true), out)
+    t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
+end)
+
+t.test("outcome queues a tick but not an append when the write cannot reach Pomb", function()
+    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    executable(
+        root .. "/bin/curl",
+        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */subtasks*) cat >/dev/null; exit 28 ;; esac\n'
+            .. CURL:gsub("^#!/bin/sh\n", "")
+    )
+    local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
+    t.eq(code, 1)
+    t.ok(out:find("curl exit 28", 1, true), out)
+    t.eq(fs.exists(home .. "/state/dev/boards/dotfiles.queue"), false)
+    out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
+    t.eq(code, 0)
+    t.eq(out, "queued: Pomb unreachable, will sync\n")
+    local queued = assert(fs.read(home .. "/state/dev/boards/dotfiles.queue"))
+    t.ok(queued:find('"outcome"', 1, true) and queued:find('"--tick"', 1, true), queued)
+end)
+
+t.test("outcome sends the claim's fence on the subtask call", function()
+    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    local out, code = dev(root, home, { "board", "take", "11111111" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
+    t.eq(code, 0, out)
+    local calls = read(root, "calls")
+    t.ok(
+        calls:find(
+            'If-Claim-Fence: 7 --data-raw {"done":true} https://pomb.example/api/tasks/'
+                .. ID_A
+                .. "/subtasks/sub-a",
+            1,
+            true
+        ),
+        calls
+    )
+    dev(root, home, { "board", "release", "11111111" })
 end)
 
 t.test("next asks for the unclaimed unblocked top of Ready", function()

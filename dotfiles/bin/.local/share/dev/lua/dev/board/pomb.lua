@@ -724,6 +724,24 @@ function Backend:set_labels(id, labels, fence)
     return true
 end
 
+function Backend:add_outcome(id, text, fence)
+    local made, message =
+        self:__request("POST", "/api/tasks/" .. id .. "/subtasks", { name = text }, fence)
+    if not made then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:set_outcome(id, outcome, fields, fence)
+    local done, message =
+        self:__request("PATCH", "/api/tasks/" .. id .. "/subtasks/" .. outcome, fields, fence)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:link(id, kind, other)
     local made, message =
         self:__request("POST", "/api/tasks/" .. id .. "/links", { kind = kind, target_id = other })

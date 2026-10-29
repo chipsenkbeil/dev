@@ -536,6 +536,38 @@ function Backend:set_labels(id, labels, fence)
     end)
 end
 
+function Backend:add_outcome(id, text, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        card.outcomes = card.outcomes or {}
+        card.outcomes[#card.outcomes + 1] = { id = store.id(), name = text, done = false }
+        return true
+    end)
+end
+
+function Backend:set_outcome(id, outcome, fields, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        local row = find_by_id(card.outcomes or {}, outcome)
+        if not row then
+            return nil, "the card has no outcome " .. outcome
+        end
+        if fields.name ~= nil then
+            row.name = fields.name
+        end
+        if fields.done ~= nil then
+            row.done = fields.done
+        end
+        return true
+    end)
+end
+
 function Backend:claim(id, claimant, _, fence)
     return self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
