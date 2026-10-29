@@ -880,6 +880,7 @@ assert_not_contains "a directory named like a built-in verb is not a noun" "$out
 assert_not_contains "a directory with no scripts is not a noun" "$out" "empty"
 
 # --remote
+export JOB_TARGET=linux-x86-base
 cistubs="$TMP/cistubs"
 mkdir -p "$cistubs"
 cat >"$cistubs/ci" <<'STUB'
@@ -890,7 +891,7 @@ if [ "$1" = -C ]; then
     shift 2
 fi
 case "$1" in
-jobs) printf '{"jobs":[{"name":"lint","targets":["linux-x86-base"]},{"name":"test","targets":["linux-x86-base"]},{"name":"widget.save","targets":["linux-x86-base"]}]}\n' ;;
+jobs) printf '{"jobs":[{"name":"lint","targets":["%s"]},{"name":"test","targets":["%s"]},{"name":"widget.save","targets":["%s"]}]}\n' "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" ;;
 run)
     printf 'ci -C %s' "$root" >>"$STUB_LOG"
     printf ' [%s]' "$@" >>"$STUB_LOG"
