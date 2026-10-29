@@ -115,14 +115,8 @@ function M.dir(kind)
     return dir
 end
 
----Name the Rust channel a project uses.
----
----The channel the project's `rust-toolchain.toml` pins wins, then the installed stable compiler's
----version, then `stable`.
----@param root string the project root
----@return string channel the channel word
-function M.channel(root)
-    local text = fs.read(root .. "/rust-toolchain.toml")
+local function pinned_channel(dir)
+    local text = fs.read(dir .. "/rust-toolchain.toml")
     if text then
         for _, line in ipairs(lines_of(text)) do
             if line:find("^channel%s*=") then
@@ -131,15 +125,22 @@ function M.channel(root)
             end
         end
     end
-    for _, argv in ipairs({ { "rustc", "+stable", "--version" }, { "rustc", "--version" } }) do
-        if devos.which("rustc") then
-            local out, code = devos.capture(argv, { stderr = "null" })
-            if code == 0 then
-                return (out:gsub("^rustc ", ""):match("^(%S+)")) or "stable"
-            end
-        end
+    return nil
+end
+
+---Name the Rust channel a project uses.
+---
+---The channel the project's `rust-toolchain.toml` pins wins, then the one the Rust lint set pins,
+---then `stable`.
+---@param root string the project root
+---@return string channel the channel word
+function M.channel(root)
+    local own = pinned_channel(root)
+    if own then
+        return own
     end
-    return "stable"
+    local dir = M.dir(Kind.RUST)
+    return dir and pinned_channel(dir) or "stable"
 end
 
 ---@class dev.templates.Entry

@@ -99,6 +99,16 @@ t.test("render keeps the project's text below the deny.toml and lint.sh markers"
     fs.remove(root, { recursive = true })
 end)
 
+t.test("channel falls back to the lint set's pin, not the installed compiler", function()
+    local root = support.sandbox({}, {})
+    local dir = assert(templates.dir(Kind.RUST))
+    local pin = fs.read(dir .. "/rust-toolchain.toml"):match('channel = "([^"]+)"')
+    t.eq(templates.channel(root), pin)
+    assert(fs.write(root .. "/rust-toolchain.toml", '[toolchain]\nchannel = "1.80.0"\n'))
+    t.eq(templates.channel(root), "1.80.0")
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("the lua manifest adds love.yml for love2d only", function()
     local dir = assert(templates.dir(Kind.LUA))
     local function dests(kind)

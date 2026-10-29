@@ -423,7 +423,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_not_contains "init leaves no path above .dev in the fmt script" "$(cat "$init/.dev/fmt.sh")" "/../lint-lib.sh"
     assert_contains "init points the fmt script cd at the root" "$(cat "$init/.dev/fmt.sh")" 'BASH_SOURCE[0]}")/.."'
     assert_contains "init relocates the ast-grep rules" "$(cat "$init/sgconfig.yml")" ".dev/ast-grep/rules"
-    assert_contains "init pins the stable channel" "$(cat "$init/rust-toolchain.toml")" "channel = \"$(rustc +stable --version | cut -d' ' -f2)\""
+    assert_contains "init pins the lint set channel" "$(cat "$init/rust-toolchain.toml")" "$(grep "^channel = " "$REPO/dotfiles/claude/.claude/skills/style/lint/rust/rust-toolchain.toml")"
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
     assert_contains "init writes the pipeline" "$(cat "$init/.ci/jobs.lua")" ".dev/lint.sh"
     assert_contains "init seeds a lint job" "$(cat "$init/.ci/jobs.lua")" "    lint = {"
