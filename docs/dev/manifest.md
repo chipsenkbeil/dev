@@ -56,6 +56,82 @@ running it and installs toolchain 1.99.1, the one the lint set pins, as the
 default. `--check` exits 0 when `rustup` is in `~/.cargo/bin` (`CARGO_HOME`
 overrides) or on PATH.
 
+Intel macOS uses neither Homebrew nor MacPorts. Every tool comes from a
+`release:` pin, a `script:` row, `cargo:` or the OS itself (`system:`).
+
+## Pins
+
+A `release:NAME` cell installs the row `NAME` of `.dev/releases.tsv` into
+`~/.local/bin` (`DEV_TOOLS_BIN` overrides). The driver appends that directory,
+and `~/.cargo/bin` (`CARGO_HOME` overrides), to its own PATH for `install` and
+`check` (not as root), so a row that follows rustup finds `cargo` in the same
+run. To add a pin:
+
+1. Find the x86_64 macOS asset on the project's releases page and put its url
+   in a new row with `${version}` in place of the version. A tag with a `v`
+   keeps the `v` in the version column.
+2. Compute the checksum of the file at that url (a bare binary or an archive).
+3. Put the checksum in the `sha256` column. For an archive, give the binary's
+   path inside it in the `path` column (`-` for a bare binary).
+4. Set the tool's `darwin-x86_64` cell in `.dev/tools.tsv` to `release:NAME`.
+5. Check the result.
+
+```
+curl -fsSL URL | shasum -a 256
+dev tools install --dry-run NAME
+dev tools install --force NAME
+dev tools check --group base
+```
+
+To bump a pin, change the `version` and `sha256` columns of its row and run
+the last three commands (with `--group rust` on `check` for a rust-group pin).
+A checksum mismatch deletes the download and fails without touching
+`~/.local/bin`.
+
+## A fresh Intel guest
+
+The guest has the Xcode command line tools, no `brew` and a dotfiles archive
+unpacked into its current directory. `dev` finds the project from the
+directory holding `.dev` when there is no `.jj` or `.git`, so run these from
+the archive root. None of them needs `sudo`.
+
+```
+bash scripts/prelude/mac.sh
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+bash dotfiles/bin/.local/bin/dev tools install --group base
+bash dotfiles/bin/.local/bin/dev tools install --group rust
+bash dotfiles/bin/.local/bin/dev tools check
+```
+
+The prelude builds the pinned `luajit` into `~/.local` and needs `curl`,
+`tar`, `make` and a compiler (all from the Xcode tools). The `base` group
+needs `curl`, `tar`, `unzip` and `shasum` for the pins, and Xcode's `perl`
+and `make` for stow. The `rust` group installs rustup with toolchain 1.99.1,
+the nightly rustfmt, cargo-sort and the pinned cargo tools.
+
+The archive must hold these paths and keep the execute bit on `dev`:
+
+- `dotfiles/bin/.local/bin/dev`
+- `dotfiles/bin/.local/share/dev/` (the whole directory)
+- `.dev/tools.tsv`
+- `.dev/releases.tsv`
+- `scripts/prelude/mac.sh`
+- `scripts/install-bats.lua`
+- `scripts/install-jjui.lua`
+- `scripts/install-muchsync.lua`
+- `scripts/install-pi.lua`
+- `scripts/install-rust-darwin-targets.sh`
+- `scripts/install-rustfmt-nightly.lua`
+- `scripts/install-rustup-darwin.lua`
+- `scripts/install-stow.lua`
+
+The script paths are every local `script:` source in the manifest, cut at the
+first comma. Regenerate them after a manifest change.
+
+```
+rg -o --no-filename 'script:scripts/[^ ",]+' .dev/tools.tsv | sort -u
+```
+
 ## Scopes
 
 - no scope: every row, as on a laptop or in an image build. Root is a usage
