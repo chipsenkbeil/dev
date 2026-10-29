@@ -11,9 +11,9 @@ local NONE = "none"
 ---@class dev.cmd.sync
 local M = {}
 
-local QUESTION =
-    "Overwrite these files, the lints block, the lib.rs attributes and the guide part of docs/STYLE.md"
-local CONSEQUENCE = "with the templates?"
+local QUESTION = "Overwrite the project's lint files with the templates?"
+local CONSEQUENCE =
+    "This replaces the copied lint files, the lints block, the lib.rs attributes and the guide part of docs/STYLE.md."
 local NO_TERMINAL =
     "sync overwrites files and needs a terminal to confirm, pass --yes to apply without asking, or --check to list drift"
 

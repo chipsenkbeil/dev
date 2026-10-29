@@ -149,7 +149,8 @@ code.
 When ci exits non-zero with an `{"ok":false}` document, dev prints
 `dev box <sub>: <message>` to stderr and exits with ci's code (2 to 11).
 Other output passes through. `dev box delete` asks on `/dev/tty` unless you
-pass `-y`, and exits 2 with no terminal. It says `You're attached to it.` when
+pass `-y`, and exits 2 with no terminal. The prompt wraps its consequence to the
+terminal width on lines above the `[y/N]` question. It says `You're attached to it.` when
 a tmux session of the box is attached, and ends with
 `Deleted <name> · archive <path>` or `Deleted <name> · no archive`. `dev --remote` refuses `box` and `connect`.
 

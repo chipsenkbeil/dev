@@ -15,6 +15,9 @@ in_pty() {
     local keys="$1" delay="$2" inner="$BATS_TEST_TMPDIR/inner.sh"
     shift 2
     {
+        if [ -n "${PTY_COLS:-}" ]; then
+            printf 'stty rows 24 cols %s\n' "$PTY_COLS"
+        fi
         printf 'luajit'
         printf ' %q' "$@"
         printf '\n'
@@ -169,4 +172,32 @@ with_dash_as_sh() {
     [ "$(cat "$OUT.status")" = 130 ]
     run pgrep -f 'sleep 7.654'
     [ "$status" -ne 0 ]
+}
+
+confirm_lines() {
+    tr -d '\r' <"$OUT.pty" | sd '\x1b\[[0-9;?]*[A-Za-z]' ''
+}
+
+@test "a narrow terminal wraps the consequence above the question" {
+    PTY_COLS=30 in_pty 'n\r' 1 "$CONFIRM" "Delete box?" "Its projects are archived first and every box file is kept."
+    [ "$(cat "$OUT.status")" = 1 ]
+    lines="$(confirm_lines)"
+    [ "$(sed -n 1p <<<"$lines")" = "Its projects are archived" ]
+    [ "$(sed -n 2p <<<"$lines")" = "first and every box file is" ]
+    [ "$(sed -n 3p <<<"$lines")" = "kept." ]
+    [[ "$(sed -n 4p <<<"$lines")" == "Delete box? [y/N]"* ]] || false
+}
+
+@test "a wide terminal keeps a short consequence on one line above the question" {
+    PTY_COLS=100 in_pty 'y\r' 1 "$CONFIRM" "Delete box?" "Its projects are archived first and every box file is kept."
+    [ "$(cat "$OUT.status")" = 0 ]
+    lines="$(confirm_lines)"
+    [ "$(sed -n 1p <<<"$lines")" = "Its projects are archived first and every box file is kept." ]
+    [[ "$(sed -n 2p <<<"$lines")" == "Delete box? [y/N]"* ]] || false
+}
+
+@test "the question is yellow and the N is bold" {
+    NO_COLOR= TERM=xterm in_pty 'n\r' 1 "$CONFIRM" "Delete box?" "Its projects are archived first."
+    [ "$(cat "$OUT.status")" = 1 ]
+    [[ "$(cat "$OUT.pty")" == *$'\e[33mDelete box?\e[0m [y/\e[1mN\e[0m] '* ]] || false
 }

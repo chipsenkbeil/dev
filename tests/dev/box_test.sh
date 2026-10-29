@@ -400,7 +400,8 @@ RUN
             )"
         fi
         rc=$?
-        assert_contains "the delete prompt asks the question" "$out" "Delete ci-abc? Its projects are archived first. [y/N]"
+        assert_contains "the delete prompt states the consequence" "$out" "Its projects are archived first."
+        assert_contains "the delete prompt asks the question" "$(printf '%s' "$out" | tr -d '\r')" "Delete ci-abc? [y/N]"
         if [ "$answer" = n ]; then
             assert_eq "answering n exits 1" "$rc" "1"
             assert_eq "answering n only lists the boxes" "$(calls)" "ci box ls --json"

@@ -275,10 +275,32 @@ function M.require_terminal(ctx, opts)
     os.exit(2)
 end
 
+local function wrap_words(s, width)
+    local lines, line, used = {}, nil, 0
+    for word in s:gmatch("%S+") do
+        local w = text.width(word)
+        if line and used + 1 + w > width then
+            lines[#lines + 1] = line
+            line = nil
+        end
+        if line then
+            line, used = line .. " " .. word, used + 1 + w
+        else
+            line, used = word, w
+        end
+    end
+    if line then
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
 ---Ask a yes or no question on the controlling terminal, where no is the default.
 ---
----Exits with status 2 and a message on standard error when no user is at the terminal. Ctrl-C
----ends the line, closes the terminal and exits with status 130.
+---The consequence is wrapped to the context's width on lines of its own, and the question
+---comes last, on the line that takes the answer. Exits with status 2 and a message on standard
+---error when no user is at the terminal. Ctrl-C ends the line, closes the terminal and exits
+---with status 130.
 ---@param ctx dev.ui.Context drawing settings
 ---@param question string the question, drawn in yellow
 ---@param consequence string what saying yes does
@@ -291,14 +313,10 @@ function M.confirm(ctx, question, consequence)
         out:close()
         error(open_err, 0)
     end
-    out:write(
-        M.paint(ctx, question, Style.YELLOW),
-        " ",
-        consequence,
-        " [y/",
-        M.paint(ctx, "N", Style.BOLD),
-        "] "
-    )
+    for _, line in ipairs(wrap_words(consequence, ctx.width)) do
+        out:write(line, "\n")
+    end
+    out:write(M.paint(ctx, question, Style.YELLOW), " [y/", M.paint(ctx, "N", Style.BOLD), "] ")
     out:flush()
     local ok, answer = pcall(function()
         local line = into:read("*l")
