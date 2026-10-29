@@ -186,18 +186,23 @@ assert_eq "ls --json prints ci's document" "$(box box ls --json)" "$(cat "$FX/ls
 out="$(box box ls extra 2>&1)"
 assert_eq "ls rejects an argument" "$?" "2"
 
+reset
+fx targets '{"ok":true,"targets":[]}'
+assert_eq "targets --json prints ci's document" "$(box box targets --json)" "$(cat "$FX/targets.json")"
+assert_eq "targets reads the structured list" "$(calls)" "ci box targets --json"
+
 # --- create ---
 
 reset
 fx create "$(doc "$(mkbox myproject-k3x running '["myproject"]' "$NEW_OFF" null)")"
 out="$(inproj box create)"
-assert_eq "create prints the summary" "$out" "created myproject-k3x (linux-x86-dev, medium, myproject), $NEW_LEFT, host myproject-k3x"
+assert_eq "create prints the summary" "$out" "Created myproject-k3x · linux-x86-dev @ example-box · medium · $NEW_LEFT · dev connect myproject-k3x"
 assert_eq "create inside a project defaults --project to its basename" "$(calls)" "ci box create --by human:tester --json -- myproject"
 reset
 fx create "$(doc "$KEPT")"
 out="$(inproj box create --target windows-vm-dev --shape large --by agent:s1 --keep a b)"
 assert_eq "create with explicit projects skips the default" "$(calls)" "ci box create --target windows-vm-dev --shape large --by agent:s1 --keep --json -- a b"
-assert_contains "create shows kept and no projects" "$out" "created scratch-a1b (linux-x86-dev, medium, -), kept, host scratch-a1b"
+assert_contains "create shows kept and no projects" "$out" "Created scratch-a1b · linux-x86-dev @ example-box · medium · kept · dev connect scratch-a1b"
 reset
 box box create >/dev/null 2>&1
 assert_eq "create outside a project passes no project" "$(calls)" "ci box create --by human:tester --json"
@@ -274,7 +279,7 @@ assert_contains "show prints - for a null tailnet_name" "$out" "tailnet_name: -"
 reset
 fx create "$(doc "$NOHOST")"
 out="$(box box create)"
-assert_eq "create prints host - for a null tailnet_name" "$out" "created myproject-k3x (linux-x86-dev, medium, myproject), creating, host -"
+assert_eq "create prints the state while the box has no expiry yet" "$out" "Created myproject-k3x · linux-x86-dev @ example-box · medium · creating · dev connect myproject-k3x"
 reset
 fx resume "$(doc "$NOHOST")"
 out="$(box box resume myproject-k3x)"
@@ -521,7 +526,7 @@ assert_eq "the new-box item creates for the project then attaches" "$(calls)" "c
 ci box create --by human:tester --json -- myproject
 ci box show myproject-n3w --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-n3w"
-assert_contains "the new box is reported" "$out" "created myproject-n3w"
+assert_contains "the new box is reported" "$out" "Created myproject-n3w"
 reset
 fx ls "$(lsdoc)"
 fx create "$(doc "$RUNNING")"
@@ -621,7 +626,7 @@ out="$(box help box create)"
 assert_contains "create help states the default lifetime" "$out" "4 hours"
 assert_contains "create help names the target and shape" "$out" "--target T] [--shape S]"
 assert_contains "create help lists --keep" "$out" "--keep"
-assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend tools delete connect"
+assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls targets create show stop resume extend tools delete connect"
 assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --by --ttl --keep -v --verbose -vv --remote --local --detach"
 assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
 assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"

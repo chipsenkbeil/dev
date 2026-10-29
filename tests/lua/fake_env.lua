@@ -19,18 +19,38 @@ end
 local pick = os.getenv("FAKE_PICK")
 if pick then
     local picker = require("dev.ui.picker")
+    local queue = {}
+    for word in pick:gmatch("%S+") do
+        queue[#queue + 1] = word
+    end
+    local used = 0
     picker.run = function(_, items, opts)
         local log = os.getenv("PICK_LOG")
         if log then
             local file = assert(io.open(log, "a"))
-            file:write("picker title=", opts.title, " auto=", tostring(opts.auto), "\n")
+            file:write("picker title=", opts.title, " auto=", tostring(opts.auto))
+            if opts.note then
+                file:write(" note=", opts.note)
+            end
+            if opts.initial then
+                file:write(" initial=", opts.initial)
+            end
+            file:write("\n")
             for _, item in ipairs(items) do
-                file:write(item.value, "\t", table.concat(item.cells, "\t"), "\n")
+                file:write(item.value, "\t", table.concat(item.cells, "\t"))
+                if item.disabled then
+                    file:write("\t!", item.disabled)
+                end
+                file:write("\n")
             end
             file:close()
         end
         if pick == "CANCEL" then
             return nil
+        end
+        if not opts.multi and #queue > 1 then
+            used = used + 1
+            return queue[used]
         end
         if opts.multi then
             local values, toggles = {}, {}
@@ -43,5 +63,12 @@ if pick then
             return { values = values, toggles = toggles }
         end
         return pick
+    end
+end
+
+local tty = os.getenv("FAKE_TTY")
+if tty then
+    require("dev.cmd.box").interactive = function()
+        return tty == "1"
     end
 end

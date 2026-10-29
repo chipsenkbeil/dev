@@ -129,11 +129,18 @@ return {
         desc = "Show the room on each machine, then the boxes with target, activity, who made them, projects and time left",
     },
     {
+        words = { "box", "targets" },
+        handler = "lua",
+        flags = "--json",
+        usage = "dev box targets [--json]",
+        desc = "Show the targets a box can run, grouped by machine, with each one's OS, image, smallest shape and whether it fits now",
+    },
+    {
         words = { "box", "create" },
         handler = "lua",
         flags = "--target --shape --by --ttl --keep",
         usage = "dev box create [--target T] [--shape S] [--by LABEL] [--ttl HOURS or --keep] [PROJECT...]",
-        desc = "Create a box and wait until it runs, with the hub's default target and shape, 4 hours unless told otherwise, and the current project by default",
+        desc = "Create a box and wait until it runs, picking the target and then the shape on a terminal, else the hub's defaults, 4 hours unless told otherwise, and the current project by default",
     },
     {
         words = { "box", "show" },

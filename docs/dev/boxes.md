@@ -6,6 +6,7 @@ and never talks to Incus, ssh-keys or Tailscale itself.
 ```
 dev box ls
 dev box ls --json
+dev box targets
 dev box create --shape large --ttl 8 myproject
 dev box stop myproject-k3x
 dev box resume myproject-k3x --keep
@@ -33,13 +34,30 @@ another human's, and ci's own label (such as `adopted`) otherwise. Time left is
 `3h12m left` or `kept` for a running box and `deleted in 6d` for a stopped one.
 `--json` on `ls` and `show` prints ci's document unchanged.
 
+`dev box targets` shows what a box can run, grouped by machine. Each machine
+heads its block with its room (`8 GiB free · 2 more boxes`, or `unreachable`),
+then one row per target: OS, image, the smallest shape it takes (the smallest
+shape overall when ci names none) and NOW, which is `✓ fits` or ci's reason in
+dim. `--json` prints ci's document unchanged.
+
 `dev box create` blocks until the box runs. Projects are positional:
 `dev box create [--target T] [--shape S] [--by LABEL] [--ttl HOURS | --keep] [PROJECT...]`.
-Target and shape default to the hub's, and the lifetime is 4 hours unless you
+On a terminal it asks two questions, target first (a target's minimum
+rules shapes out). The target picker lists each target with its OS, image and
+smallest shape, and greys one that cannot take a box now with ci's reason. The
+shape picker lists the shapes for that target with CPU and memory. A shape is
+greyed when it is below the target's minimum or can never fit, a shape that
+fits only after a wait can be picked and says `waits for room`, a warning
+(such as the last running slot) shows beside a row that can be picked, and the
+cursor starts on ci's default shape. When nothing can be picked, dev names the
+running boxes to stop and exits 1. `--target T` skips the first picker and
+takes ci's default shape, `--shape S` skips only the second, and with no
+terminal there are no pickers and ci applies its defaults. A shape below the
+target's minimum is refused by ci alone. The lifetime is 4 hours unless you
 pass `--ttl HOURS` or `--keep`. `--ttl` with `--keep` exits 2. Inside a project
 with no project named, dev passes the project root's directory name. `--by`
 defaults to `human:$USER`, else `human:$LOGNAME`, and dev always passes it.
-The summary line is `created <name> (<target>, <shape>, <projects>), <time left>, host <tailnet_name>`.
+The last line is `Created <name> · <target> @ <machine> · <shape> · <time left> · dev connect <name>`.
 
 `dev box show` prints `tmux_sessions` as items such as `main (attached)` or
 `build (idle 5m)`, `none` when there is no tmux server and `unknown` when ci

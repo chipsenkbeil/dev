@@ -4,6 +4,7 @@ local json = require("dev.json")
 local term = require("dev.term")
 local text = require("dev.text")
 local ui = require("dev.ui")
+local picker = require("dev.ui.picker")
 local verb = require("dev.verb")
 
 local present = json.present
@@ -489,6 +490,23 @@ local function requester(by)
     return ""
 end
 
+---Say a created box in one line.
+---@param box dev.cmd.box.Box the box as ci gives it
+---@return string line `Created <name> · <target> @ <machine> · <shape> · <time left> · dev connect <name>`
+function M.created_line(box)
+    local machine = present(box.machine)
+    local left = M.left(box, os.time())
+    return string.format(
+        "Created %s · %s%s · %s · %s · dev connect %s",
+        interp(box.name),
+        interp(box.target),
+        machine and " @ " .. tostring(machine) or "",
+        interp(box.shape),
+        left == "" and interp(box.state) or left,
+        interp(box.name)
+    )
+end
+
 ---Create a box and print its summary.
 ---@param opts dev.cmd.box.CreateOpts what to create
 ---@return dev.cmd.box.Box box the created box
@@ -507,7 +525,7 @@ function M.create(opts)
         end
     end
     local created = M.one("create", args)
-    print(M.summary("created", created))
+    print(M.created_line(created))
     return created
 end
 
@@ -725,6 +743,392 @@ M.handlers["box ls"] = function(ctx)
     return 0
 end
 
+---@class dev.cmd.box.NothingFitsOpts
+---@field what string what found no room, such as `no target`
+---@field machines string[] the machines whose running boxes could be stopped
+
+local Fit = { START = "start", WAIT = "wait", NEVER = "never" }
+local OS_NAMES = { linux = "Linux", windows = "Windows", macos = "macOS" }
+
+---@class dev.cmd.box.Target
+---@field target string the target's name
+---@field os string|dev.json.Null `linux`, `windows` or `macos`
+---@field machines string[] the machines that host it
+---@field image string|dev.json.Null the image its boxes start from
+---@field min_shape string|dev.json.Null the smallest shape it takes, null for any
+---@field can_take_box_now boolean whether a box could start now
+---@field reason string|dev.json.Null why not, when it could not
+
+---@class dev.cmd.box.Fit
+---@field machine string the machine
+---@field fits string `start`, `wait` or `never`, null when ci could not ask the machine
+---@field reason string|dev.json.Null why it waits or never fits
+---@field warning string|dev.json.Null what to watch for
+
+---@class dev.cmd.box.ShapeTarget
+---@field target string the target's name
+---@field below_min boolean whether the shape is under the target's minimum
+---@field machines dev.cmd.box.Fit[] how the shape fits each machine
+
+---@class dev.cmd.box.Shape
+---@field name string the shape's name
+---@field cpu integer processor count
+---@field memory_gib number memory in GiB
+---@field default boolean whether ci picks it when none is named
+---@field targets dev.cmd.box.ShapeTarget[] how it fits each target
+
+---Tell whether the user can answer a picker.
+---@return boolean ok whether standard input and output are a terminal
+function M.interactive()
+    return ui.context().interactive
+end
+
+---Name an operating system for a table.
+---@param target dev.cmd.box.Target the target as ci gives it
+---@return string name `Linux`, `Windows`, `macOS`, or ci's word
+local function os_name(target)
+    local name = cell(target.os)
+    return OS_NAMES[name] or name
+end
+
+---Find the smallest shape.
+---@param shapes dev.cmd.box.Shape[] the shapes ci lists
+---@return string name the name of the shape with the least memory, then the fewest CPUs, `-` for none
+local function smallest_shape(shapes)
+    local best
+    for _, shape in ipairs(shapes) do
+        if
+            best == nil
+            or shape.memory_gib < best.memory_gib
+            or (shape.memory_gib == best.memory_gib and shape.cpu < best.cpu)
+        then
+            best = shape
+        end
+    end
+    return best and cell(best.name) or "-"
+end
+
+---Name the least shape a target takes.
+---@param target dev.cmd.box.Target the target as ci gives it
+---@param shapes dev.cmd.box.Shape[] the shapes ci lists
+---@return string name `min_shape`, else the smallest shape
+local function min_shape(target, shapes)
+    return present(target.min_shape) or smallest_shape(shapes)
+end
+
+---Say why a target cannot take a box now.
+---@param target dev.cmd.box.Target the target as ci gives it
+---@return string reason ci's reason, else a plain one
+local function why_not(target)
+    local reason = cell(target.reason)
+    return reason == "" and "cannot take a box now" or reason
+end
+
+---Say how much room a machine has.
+---@param machine dev.cmd.box.Machine the machine as ci gives it
+---@return string room `53 GiB free`, or `unreachable`
+local function room_words(machine)
+    if machine.reachable == false then
+        return "unreachable"
+    end
+    local room = present(machine.new_box_room_gib)
+    if room == nil then
+        return "room unknown"
+    end
+    return string.format("%g GiB free", math.max(room, 0))
+end
+
+---Name a count of boxes that can still start.
+---@param cap dev.cmd.box.Cap? the cap ci reports
+---@return string words `1 more box`, `2 more boxes`, or an empty string without a cap
+local function more_boxes(cap)
+    if not cap or present(cap.running) == nil or present(cap.running_max) == nil then
+        return ""
+    end
+    local more = math.max(cap.running_max - cap.running, 0)
+    return more .. (more == 1 and " more box" or " more boxes")
+end
+
+---List the machines the targets run on, in the order they first appear.
+---@param targets dev.cmd.box.Target[] the targets ci lists
+---@return string[] names the machine names
+local function machines_of(targets)
+    local seen, names = {}, {}
+    for _, target in ipairs(targets) do
+        for _, name in ipairs(target.machines or {}) do
+            if not seen[name] then
+                seen[name] = true
+                names[#names + 1] = name
+            end
+        end
+    end
+    return names
+end
+
+---Tell whether a list holds a name.
+---@param list string[] the names
+---@param name string the name to look for
+---@return boolean found whether the list has it
+local function has(list, name)
+    for _, item in ipairs(list) do
+        if item == name then
+            return true
+        end
+    end
+    return false
+end
+
+---Find a machine by name.
+---@param machines dev.cmd.box.Machine[]? the machines ci reports
+---@param name string the machine's name
+---@return dev.cmd.box.Machine? machine the machine, nil when ci did not report it
+local function find_machine(machines, name)
+    for _, machine in ipairs(machines or {}) do
+        if machine.name == name then
+            return machine
+        end
+    end
+    return nil
+end
+
+M.handlers["box targets"] = function(ctx)
+    local parsed = M.parse(ctx, { "--json" })
+    if #parsed.pos > 0 then
+        verb.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
+    end
+    M.need_ci()
+    local doc, raw = M.call("targets", { "targets", "--json" })
+    if parsed.json then
+        io.write(raw)
+        return 0
+    end
+    local targets = doc.targets or {}
+    if #targets == 0 then
+        print("no targets")
+        return 0
+    end
+    local sized = M.call("targets", { "shapes", "--json" })
+    local screen = ui.context()
+    if not screen.interactive then
+        screen.width = math.huge
+    end
+    local first = true
+    for _, name in ipairs(machines_of(targets)) do
+        if not first then
+            print()
+        end
+        first = false
+        local machine = find_machine(sized.machines, name)
+        local head = ui.paint(screen, name, ui.Style.BOLD)
+        if machine then
+            local more = more_boxes(sized.cap)
+            head = head .. text.GAP .. room_words(machine) .. (more == "" and "" or " · " .. more)
+        end
+        print(head)
+        local rows = {}
+        for _, target in ipairs(targets) do
+            if has(target.machines or {}, name) then
+                local now = { text = "✓ fits", style = { ui.Style.GREEN } }
+                if target.can_take_box_now ~= true then
+                    now = { text = why_not(target), style = { ui.Style.DIM } }
+                end
+                rows[#rows + 1] = {
+                    cell(target.target),
+                    os_name(target),
+                    cell(target.image),
+                    min_shape(target, sized.shapes or {}),
+                    now,
+                }
+            end
+        end
+        local headers = { "TARGET", "OS", "IMAGE", "MIN SHAPE", "NOW" }
+        for _, line in ipairs(ui.table(screen, headers, rows, { bold_column = 1 })) do
+            print("  " .. line)
+        end
+    end
+    return 0
+end
+
+---Stop with a message that names the boxes whose machines are full.
+---@param opts dev.cmd.box.NothingFitsOpts what found no room, and the machines to look at
+local function nothing_fits(opts)
+    local running = {}
+    for _, listed in ipairs(M.call("create", { "ls", "--json" }).boxes or {}) do
+        local on = present(listed.machine)
+        if present(listed.state) == State.RUNNING and on then
+            for _, name in ipairs(opts.machines) do
+                if on == name then
+                    running[#running + 1] = cell(listed.name)
+                end
+            end
+        end
+    end
+    stderr:write(
+        "dev box create: ",
+        opts.what,
+        " fits now, ",
+        #running > 0 and "stop a running box to make room: " .. table.concat(running, ", ")
+            or "no box is running on its machines",
+        "\n"
+    )
+    os.exit(Exit.FAILED)
+end
+
+---Run a picker, ending the run when the user backs out.
+---@param items dev.ui.picker.Item[] the rows
+---@param opts dev.ui.picker.Opts how to show them
+---@return string value the picked row's value
+local function choose(items, opts)
+    local ok, picked = pcall(picker.run, ui.context(), items, opts)
+    if not ok then
+        stderr:write("dev box create: ", tostring(picked), "\n")
+        os.exit(Exit.FAILED)
+    end
+    if not picked or picked == "" then
+        os.exit(Exit.FAILED)
+    end
+    return picked
+end
+
+---Collect each machine's room into a picker note.
+---@param machines dev.cmd.box.Machine[]? the machines ci reports
+---@param names string[] the machines to name
+---@return string note such as `example-box 53 GiB free`
+local function room_note(machines, names)
+    local parts = {}
+    for _, name in ipairs(names) do
+        local machine = find_machine(machines, name)
+        if machine then
+            parts[#parts + 1] = name .. " " .. room_words(machine)
+        end
+    end
+    return table.concat(parts, ", ")
+end
+
+---Ask which target the box should run.
+---@param project string? the project the box is for
+---@return string target the picked target's name
+local function pick_target(project)
+    local targets = M.call("create", { "targets", "--json" }).targets or {}
+    local sized = M.call("create", { "shapes", "--json" })
+    local items, enabled = {}, 0
+    for i, target in ipairs(targets) do
+        items[i] = {
+            value = cell(target.target),
+            cells = {
+                cell(target.target),
+                os_name(target) .. " · " .. cell(target.image),
+                "from " .. min_shape(target, sized.shapes or {}),
+                "@ " .. table.concat(target.machines or {}, ","),
+            },
+        }
+        if target.can_take_box_now == true then
+            enabled = enabled + 1
+        else
+            items[i].disabled = why_not(target)
+        end
+    end
+    local names = machines_of(targets)
+    if #targets == 0 then
+        stderr:write("dev box create: ci lists no targets\n")
+        os.exit(Exit.FAILED)
+    end
+    if enabled == 0 then
+        nothing_fits({ what = "no target", machines = names })
+    end
+    return choose(items, {
+        title = "What should the " .. (project and project .. " " or "") .. "box run?",
+        note = room_note(sized.machines, names),
+    })
+end
+
+---Sum up how a shape fits the machines that could host a target.
+---@param entry dev.cmd.box.ShapeTarget? the shape's entry for the target
+---@return string fits `start`, `wait` or `never`, null when ci could not ask the machine
+---@return string? note the reason it never fits, or what to watch for
+local function fit_of(entry)
+    if not entry or entry.below_min == true then
+        return Fit.NEVER, nil
+    end
+    local waits, never_reason
+    for _, fit in ipairs(entry.machines or {}) do
+        if fit.fits == Fit.WAIT then
+            waits = waits or fit
+        elseif fit.fits == Fit.START then
+            return Fit.START, present(fit.warning)
+        else
+            never_reason = never_reason or present(fit.reason)
+        end
+    end
+    if waits then
+        return Fit.WAIT, present(waits.warning)
+    end
+    return Fit.NEVER, never_reason
+end
+
+---Ask which shape the box should have.
+---@param target string the target the box runs
+---@return string shape the picked shape's name
+local function pick_shape(target)
+    local doc = M.call("create", { "shapes", "--target", target, "--json" })
+    local items, enabled, initial = {}, 0, nil
+    local names = {}
+    for i, shape in ipairs(doc.shapes or {}) do
+        local entry
+        for _, candidate in ipairs(shape.targets or {}) do
+            if candidate.target == target then
+                entry = candidate
+            end
+        end
+        for _, fit in ipairs(entry and entry.machines or {}) do
+            names[fit.machine] = true
+        end
+        local fits, note = fit_of(entry)
+        local notes = {}
+        if fits == Fit.WAIT then
+            notes[1] = "waits for room"
+        end
+        if fits ~= Fit.NEVER and note then
+            notes[#notes + 1] = note
+        end
+        items[i] = {
+            value = cell(shape.name),
+            cells = {
+                cell(shape.name),
+                cell(shape.cpu) .. " CPU",
+                cell(shape.memory_gib) .. " GiB",
+                table.concat(notes, " · "),
+            },
+        }
+        if fits == Fit.NEVER then
+            items[i].disabled = entry
+                    and entry.below_min == true
+                    and "below " .. target .. "'s minimum"
+                or note
+                or "does not fit"
+        else
+            enabled = enabled + 1
+        end
+        if shape.default == true then
+            initial = cell(shape.name)
+        end
+    end
+    local machines = {}
+    for _, machine in ipairs(doc.machines or {}) do
+        if names[machine.name] then
+            machines[#machines + 1] = machine.name
+        end
+    end
+    if enabled == 0 then
+        nothing_fits({ what = "no shape of " .. target, machines = machines })
+    end
+    return choose(items, {
+        title = "Pick a shape for " .. target .. " on " .. table.concat(machines, ", "),
+        note = room_note(doc.machines, machines),
+        initial = initial,
+    })
+end
+
 M.handlers["box create"] = function(ctx)
     local parsed = M.parse(ctx, { "--target", "--shape", "--by", "--ttl", "--keep" })
     M.need_ci()
@@ -735,9 +1139,16 @@ M.handlers["box create"] = function(ctx)
             projects = { project }
         end
     end
+    local target, shape = parsed.target, parsed.shape
+    if M.interactive() and not target then
+        target = pick_target(projects[1])
+        if not shape then
+            shape = pick_shape(target)
+        end
+    end
     M.create({
-        target = parsed.target,
-        shape = parsed.shape,
+        target = target,
+        shape = shape,
         by = parsed.by,
         ttl = parsed.ttl,
         keep = parsed.keep,
