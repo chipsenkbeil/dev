@@ -19,6 +19,8 @@ local GROUPS = { "Check your work", "Share it", "Set up a machine or project", "
 local HIDDEN = "Hidden"
 local OVERRIDE = "(override)"
 local TOPIC_WIDTH = 100
+local LESS = "less -R"
+local FILTER_HINT = "& filters · / searches · q quits"
 local HELP_CTX = { name = "help" }
 local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic.\n"
 local LISTED = { push = push, pull = pull, sync = sync }
@@ -47,7 +49,7 @@ local function fail(message)
 end
 
 local function screen()
-    return ui.context({ width = 80, interactive = false })
+    return ui.context({ interactive = false })
 end
 
 local function pad(s, width)
@@ -65,20 +67,41 @@ local function widths(rows)
     return width, markw
 end
 
-local function section(c, out, title, rows, width, markw)
+local function fit_line(c, line)
+    return c.color and text.fit(line, c.width) or line
+end
+
+---@class dev.help.Row
+---@field name string the verb, subcommand or topic
+---@field origin string? where it comes from
+---@field desc string the description
+
+---@class dev.help.Section
+---@field title string the heading
+---@field rows dev.help.Row[] the rows under it
+---@field width integer? the name column width to keep at least
+---@field markw integer? the mark column width to keep at least
+---@field compact boolean? true for the terminal layout of the curated view
+
+local function section(c, out, spec)
+    local title, rows, compact = spec.title, spec.rows, spec.compact
     if #rows == 0 then
         return
     end
     local own_width, own_markw = widths(rows)
-    width, markw = math.max(width or 0, own_width), math.max(markw or 0, own_markw)
-    out[#out + 1] = "\n" .. ui.paint(c, title, Style.BOLD) .. "\n"
+    local width = math.max(spec.width or 0, own_width)
+    local markw = math.max(spec.markw or 0, own_markw)
+    local heading = ui.paint(c, title, compact and Style.DIM or Style.BOLD)
+    out[#out + 1] = "\n" .. heading .. "\n"
     for _, row in ipairs(rows) do
-        local line = "  " .. ui.paint(c, pad(row.name, width), Style.CYAN) .. text.GAP
+        local name = pad(row.name, width)
+        local line = "  " .. ui.paint(c, name, compact and Style.BOLD or Style.CYAN) .. text.GAP
         if markw > 0 then
             local mark = row.origin == "override" and OVERRIDE or ""
             line = line .. ui.paint(c, pad(mark, markw), Style.DIM) .. text.GAP
         end
-        out[#out + 1] = line .. row.desc .. "\n"
+        line = line .. row.desc
+        out[#out + 1] = (compact and fit_line(c, line) or line) .. "\n"
     end
 end
 
@@ -123,7 +146,11 @@ local function topic_source(path)
 end
 
 local function page(content, opts)
-    ui.page(content, { allowed = not (opts and opts.no_pager) and os.getenv("DEV_PAGER") ~= "0" })
+    local plan = M.page_plan(opts, os.getenv("PAGER"), os.getenv("DEV_PAGER"))
+    if plan.hint and ui.should_page(content, plan.page) then
+        content = M.hinted(content, screen())
+    end
+    ui.page(content, plan.page)
 end
 
 local function print_topic(ctx, name, opts)
@@ -194,19 +221,35 @@ local function overview(ctx, reg, c, opts)
     local width, markw = widths(rows)
     width = math.max(width, (widths(listed)))
     local kind = project_type(ctx)
-    out[#out + 1] = ui.paint(c, "dev", Style.BOLD)
+    local top = ui.paint(c, "dev", Style.BOLD)
         .. ": "
         .. (kind == "none" and "" or kind .. " ")
         .. "project at "
         .. ctx.root
-        .. "\n"
+    out[#out + 1] = fit_line(c, top) .. "\n"
     for _, group in ipairs(group_order(rows)) do
-        section(c, out, group, in_group(rows, group), width, markw)
+        section(c, out, {
+            title = group,
+            rows = in_group(rows, group),
+            width = width,
+            markw = markw,
+            compact = true,
+        })
     end
     if all then
-        section(c, out, HIDDEN, in_group(rows, HIDDEN), width, markw)
+        section(c, out, {
+            title = HIDDEN,
+            rows = in_group(rows, HIDDEN),
+            width = width,
+            markw = markw,
+            compact = true,
+        })
     end
-    section(c, out, "Topics", listed, width, markw)
+    section(
+        c,
+        out,
+        { title = "Topics", rows = listed, width = width, markw = markw, compact = true }
+    )
     if all then
         out[#out + 1] = "\nRun " .. ONE_COMMAND
     else
@@ -224,7 +267,7 @@ local function noun_text(reg, c, words)
     for _, sub in ipairs(reg:subs(words)) do
         subs[#subs + 1] = { name = sub.words[#sub.words], origin = sub.kind, desc = sub.desc }
     end
-    section(c, out, "subcommands", subs)
+    section(c, out, { title = "subcommands", rows = subs })
     out[#out + 1] = "\nRun `dev help " .. noun .. " <sub>` for a subcommand's flags and header.\n"
     return table.concat(out)
 end
@@ -319,12 +362,58 @@ function M.verb(ctx, reg, opts)
 end
 
 ---Print the curated view, as `dev help` does with no argument.
+---
+---On a terminal it always goes through the pager, with a hint line on
+---filtering at its end when the pager is less.
 ---@param ctx dev.Ctx the context of the command
 ---@param reg dev.Registry the project's registry
+---@param opts { no_pager: boolean? }? whether paging is off
 ---@return integer code 0
-function M.overview(ctx, reg)
-    io.write(M.overview_text(ctx, reg))
+function M.overview(ctx, reg, opts)
+    page(M.overview_text(ctx, reg), { no_pager = opts and opts.no_pager, curated = true })
     return 0
+end
+
+---Tell whether the pager `$PAGER` names is less, which `ui.page` falls back to when it is unset.
+---@param pager string? the value of `PAGER`
+---@return boolean less true when it is unset, empty, or its first word has the basename `less`
+function M.uses_less(pager)
+    if pager == nil or pager == "" then
+        return true
+    end
+    local first = pager:match("^%s*(%S+)")
+    return first ~= nil and first:match("[^/]*$") == "less"
+end
+
+---@class dev.help.PagePlan
+---@field page dev.ui.PageOpts the options for `dev.ui.page`
+---@field hint boolean whether a paged text ends in the filter hint
+
+---Decide how a text is paged.
+---@param opts { curated: boolean?, no_pager: boolean? }? whether it is the curated view, and whether paging is off
+---@param pager string? the value of `PAGER`
+---@param dev_pager string? the value of `DEV_PAGER`
+---@return dev.help.PagePlan plan the pager options, a curated view paging at any height
+function M.page_plan(opts, pager, dev_pager)
+    opts = opts or {}
+    local plan = { page = { allowed = not opts.no_pager and dev_pager ~= "0" }, hint = false }
+    if opts.curated then
+        plan.page.rows = 0
+        if M.uses_less(pager) then
+            plan.hint = true
+            local base = (pager == nil or pager == "") and LESS or pager
+            plan.page.pager = base .. " -+F"
+        end
+    end
+    return plan
+end
+
+---Append the line that tells a pager's reader how to filter and search.
+---@param content string the text a pager will show
+---@param c dev.ui.Context the drawing settings, which decide the dim style
+---@return string hinted `content` and a blank line and the hint
+function M.hinted(content, c)
+    return content .. "\n" .. ui.paint(c, FILTER_HINT, Style.DIM) .. "\n"
 end
 
 ---Refuse a flag or argument a verb does not take.
@@ -364,17 +453,21 @@ end
 ---Return the curated view as `dev help` prints it.
 ---@param ctx dev.Ctx the context of the command
 ---@param reg dev.Registry the project's registry
+---@param c dev.ui.Context? the drawing settings, read from the terminal when nil
 ---@return string text the curated view
-function M.overview_text(ctx, reg)
-    return overview(ctx, reg, screen(), {})
+function M.overview_text(ctx, reg, c)
+    return overview(ctx, reg, c or screen(), {})
 end
 
----Print `content` through the pager when it is taller than the screen.
+---Print `content` through the pager.
 ---
----`DEV_PAGER=0` prints it directly.
+---It pages when it is taller than the screen, and `DEV_PAGER=0` prints it directly.
+---With `curated` it pages on any terminal, and with less as the pager it ends in the
+---filter hint and cancels a `-F`.
 ---@param content string the text to show
-function M.page(content)
-    page(content)
+---@param opts { curated: boolean? }? whether the text is the curated view
+function M.page(content, opts)
+    page(content, opts)
 end
 
 ---Print a noun's description and its subcommands.
@@ -442,7 +535,7 @@ function M.run(ctx, reg)
         fail("unknown flag " .. first)
     end
     if #args == 0 then
-        return M.overview(ctx, reg)
+        return M.overview(ctx, reg, { no_pager = no_pager })
     elseif #args == 1 then
         local row = reg:find({ first })
         if row and row.noun then

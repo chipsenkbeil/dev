@@ -106,3 +106,80 @@ t.test("--no-pager is accepted by help and changes nothing off a terminal", func
     t.eq(dev(root, { "help", "t", "--no-pager" }), "# t: A topic\n\nbody\n")
     t.eq(dev(root, { "help", "-k", "t" }, { DEV_PAGER = "0" }), "# t: A topic\n\nbody\n")
 end)
+
+local function styled(root, width)
+    local help = require("dev.help")
+    local ui = require("dev.ui")
+    local reg = require("dev.registry").load(root)
+    local c = ui.context({ color = true, interactive = false, width = width })
+    return help.overview_text({ root = root, args = {}, name = "help" }, reg, c)
+end
+
+t.test(
+    "the curated view on a terminal has bold verbs, dim headings and one cut line per verb",
+    function()
+        local root = project({
+            ["a.sh"] = "#!/usr/bin/env bash\n# A verb with a description that is far too long for a narrow screen.\n",
+            ["topics/t.md"] = "# t: A topic with a summary that is also far too long for a narrow screen\n",
+        })
+        local out = styled(root, 40)
+        t.ok(out:find("\27[2mTopics\27[0m\n", 1, true), out)
+        t.ok(out:find("  \27[1ma", 1, true), out)
+        t.ok(out:find("  \27[1mt", 1, true), out)
+        local text = require("dev.text")
+        for line in out:gmatch("[^\n]+") do
+            t.ok(line:find("^Run ") or text.width(line) <= 40, line)
+        end
+        t.ok(out:find("…\n", 1, true), out)
+        t.ok(not styled(root, 200):find("…", 1, true))
+    end
+)
+
+t.test("the filter hint is dim and follows the text", function()
+    local help = require("dev.help")
+    local ui = require("dev.ui")
+    local out = help.hinted("body\n", ui.context({ color = true, interactive = false }))
+    t.eq(out, "body\n\n\27[2m& filters · / searches · q quits\27[0m\n")
+    out = help.hinted("body\n", ui.context({ color = false, interactive = false }))
+    t.eq(out, "body\n\n& filters · / searches · q quits\n")
+end)
+
+t.test(
+    "the curated view pages at any height and less gets -+F, topics keep the height rule",
+    function()
+        local help = require("dev.help")
+        local plan = help.page_plan({ curated = true }, nil, nil)
+        t.eq(plan.page.rows, 0)
+        t.eq(plan.page.allowed, true)
+        t.eq(plan.page.pager, "less -R -+F")
+        t.eq(plan.hint, true)
+        t.eq(help.page_plan({ curated = true }, "less -FRX", nil).page.pager, "less -FRX -+F")
+        t.eq(
+            help.page_plan({ curated = true }, "/usr/bin/less", nil).page.pager,
+            "/usr/bin/less -+F"
+        )
+        plan = help.page_plan({ curated = true }, "bat", nil)
+        t.eq(plan.page.rows, 0)
+        t.eq(plan.page.pager, nil)
+        t.eq(plan.hint, false)
+        plan = help.page_plan(nil, nil, nil)
+        t.eq(plan.page.rows, nil)
+        t.eq(plan.page.pager, nil)
+        t.eq(plan.hint, false)
+        t.eq(help.page_plan({ curated = true, no_pager = true }, nil, nil).page.allowed, false)
+        t.eq(help.page_plan({ curated = true }, nil, "0").page.allowed, false)
+        t.eq(help.page_plan({}, nil, "0").page.allowed, false)
+    end
+)
+
+t.test("the hint is for less only", function()
+    local help = require("dev.help")
+    t.ok(help.uses_less(nil))
+    t.ok(help.uses_less(""))
+    t.ok(help.uses_less("less -R"))
+    t.ok(help.uses_less("/usr/bin/less"))
+    t.ok(help.uses_less("  /opt/homebrew/bin/less -FRX"))
+    t.ok(not help.uses_less("more"))
+    t.ok(not help.uses_less("bat --paging=always"))
+    t.ok(not help.uses_less("/usr/bin/lessfilter"))
+end)

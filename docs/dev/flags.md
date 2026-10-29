@@ -43,6 +43,9 @@ that does). Everything after a `--` reaches the verb verbatim, so
 - `dev help --topics` lists the topics, and `dev help -k <topic>` prints one.
 - A topic taller than the terminal opens in `$PAGER` (else `less -R`).
   `dev help --no-pager <topic>` or `DEV_PAGER=0` prints it directly.
+- The curated `dev help` always pages on a terminal, even when it fits, unless
+  `--no-pager` or `DEV_PAGER=0` is set. With less as the pager dev adds `-+F`
+  and the last line reads `& filters · / searches · q quits`: `&` narrows lines as you type.
 
 Color is on only when the output is a terminal and `NO_COLOR` is unset.
 
