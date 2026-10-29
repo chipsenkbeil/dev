@@ -313,6 +313,36 @@ function Backend:link(id, kind, other)
     end)
 end
 
+function Backend:links(id)
+    local doc, message = self:__read()
+    if not doc then
+        return nil, message
+    end
+    local card = find_by_id(doc.cards, id)
+    if not card then
+        return nil, "the board has no card " .. id
+    end
+    local found = {}
+    local seen = {}
+    for _, held in ipairs(card.links or {}) do
+        found[#found + 1] = { kind = held.kind, id = held.target_id }
+        seen[held.kind .. held.target_id] = true
+    end
+    for _, other in ipairs(doc.cards) do
+        for _, held in ipairs(other.links or {}) do
+            if held.target_id == id then
+                local kind = held.kind == board.LinkKind.BLOCKED_BY and board.LinkKind.BLOCKS
+                    or held.kind
+                if not seen[kind .. other.id] then
+                    seen[kind .. other.id] = true
+                    found[#found + 1] = { kind = kind, id = other.id }
+                end
+            end
+        end
+    end
+    return found
+end
+
 function Backend:other_board(name)
     return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
 end

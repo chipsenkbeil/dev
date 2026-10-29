@@ -268,8 +268,7 @@ prints the rows under the description. Icebox is exempt.
 comments in the `notes` format. The outcomes print as `done when:` with one
 `- [x]` or `- [ ]` line each, after the description. A card with no description prints `no
 description`, and one with no comments `no comments`. Use it instead of the
-Pomb API to read a card, so the token stays inside dev. It does not list links
-yet.
+Pomb API to read a card, so the token stays inside dev. `links` lists its links.
 
 `edit CARD` replaces a card's description with the text of `--file PATH`, or of
 standard input when there is no `--file`, and prints `edited <id prefix>`. The
@@ -344,7 +343,16 @@ and asking again for a link it has changes nothing, so a `link` that could not
 reach Pomb is queued with the others. Pomb refuses a card linked to itself and a
 link that would make cards wait on each other. A local board stores the links
 on its own cards, links only its own cards, and its `next` skips a card that a
-card outside Done blocks. dev has no command to list or remove links yet.
+card outside Done blocks.
+
+`links CARD` lists a card's links, one line each: the kind as the card sees it
+(`blocked_by`, `blocks` or `related`), the other card's id prefix and the name
+of its board, with `-` for this board. A card with no links prints `no links`.
+It lists both sides of a link: the ones the card holds and the ones another
+card holds on it, which show as `blocks` or `related`. A link to a card on
+another board shows that board's name, so `blocks  1a2b3c4d  ci` reads as a
+card on `ci` that this one blocks. dev has no command to remove a link
+(Pomb lets only the admin scope delete one).
 
 `stale [--days N]` lists the cards that have sat in Backlog, Ready, In
 Progress or In Review for N days or more, 7 by default, oldest first. Each line

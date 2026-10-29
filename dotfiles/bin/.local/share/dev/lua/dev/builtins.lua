@@ -197,7 +197,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, size, label, link, stale, take, release and sync",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, size, label, link, links, stale, take, release and sync",
         group = "Share it",
     },
     {
@@ -252,6 +252,12 @@ return {
         handler = "lua",
         usage = "dev board link CARD KIND OTHER",
         desc = "Link a card to another card as blocked_by, blocks or related; OTHER is a card of this board or BOARD:CARD on another",
+    },
+    {
+        words = { "board", "links" },
+        handler = "lua",
+        usage = "dev board links CARD",
+        desc = "List a card's links: kind, the other card's id prefix and its board name, - for this board",
     },
     {
         words = { "board", "note" },

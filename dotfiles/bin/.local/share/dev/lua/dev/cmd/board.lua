@@ -960,6 +960,28 @@ function commands.link(backend, args)
     }
 end
 
+function commands.links(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local list, message = backend:links(card.id)
+    if not list then
+        return failure(message)
+    end
+    if #list == 0 then
+        return { output = "no links" }
+    end
+    local rows = {}
+    for _, link in ipairs(list) do
+        rows[#rows + 1] = { link.kind, link.id:sub(1, board.MIN_PREFIX), link.board or "-" }
+    end
+    return { output = table.concat(board.table_lines(rows), "\n") }
+end
+
 local function append(lines, more)
     for _, line in ipairs(more) do
         lines[#lines + 1] = line
@@ -1151,7 +1173,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `links`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

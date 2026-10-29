@@ -97,6 +97,10 @@ local function fake(cards, times)
         calls[#calls + 1] = { "link", id, kind, other }
         return true
     end
+    function backend:links(id)
+        calls[#calls + 1] = { "links", id }
+        return backend.held or {}
+    end
     function backend:other_board(name)
         calls[#calls + 1] = { "other_board", name }
         if name == "ci" then
@@ -418,6 +422,24 @@ t.test("link to BOARD:CARD resolves the card on the other board", function()
     t.eq(result.code, 1)
     t.ok(result.message:find("no card starts with eeeeeeee", 1, true), result.message)
     t.eq(#backend.calls, 4)
+end)
+
+t.test("links lists each link with the kind, the id prefix and the board", function()
+    local backend = fake(sample())
+    backend.held = {
+        { kind = "blocked_by", id = ID_C },
+        { kind = "blocks", id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd", board = "ci" },
+        { kind = "related", id = ID_B },
+    }
+    local result = commands.run("links", { "11111111-a" }, backend)
+    t.eq(
+        result.output,
+        "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -"
+    )
+    t.eq(backend.calls[1], { "links", ID_A })
+    t.eq(commands.run("links", { "11111111-b" }, fake(sample())).output, "no links")
+    t.eq(commands.run("links", {}, backend).code, 2)
+    t.eq(commands.run("links", { "deadbeef" }, backend).code, 1)
 end)
 
 t.test("link refuses a bad kind, a missing word and an unknown card", function()
@@ -1096,6 +1118,7 @@ case "$last" in
 */tasks\?*) body='{"items":[{"id":"]] .. ID_A .. [["}],"next_cursor":null}' ;;
 */api/tasks/]] .. ID_A .. [[) body=$(cat "$ROOT/task.json") ;;
 */api/tasks) body=$(cat "$ROOT/task.json") ;;
+*/links) body=$(cat "$ROOT/links.json") ;;
 */subtasks)
     body='{"id":"sub-1","name":"x","done":false}'
     n=$(cat "$ROOT/sub_n" 2>/dev/null || echo 0)
@@ -1142,6 +1165,7 @@ local function sandbox(opts)
         ["export.json"] = opts.export or EXPORT,
         ["task.json"] = TASK,
         ["comments.json"] = COMMENTS,
+        ["links.json"] = opts.links or "[]",
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
@@ -1644,6 +1668,31 @@ t.test("note posts a comment of kind agent and move goes to the top of the colum
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     t.ok(calls:find('"column_id":"col-review"', 1, true), calls)
     t.ok(calls:find('"position":0', 1, true), calls)
+end)
+
+t.test("links reads the task's links and names the board of a link to another board", function()
+    local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
+        .. ID_C
+        .. '","board_id":"board-1"},'
+        .. '{"id":"l2","kind":"blocks","target_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","board_id":"board-2"},'
+        .. '{"id":"l3","kind":"related","target_id":"'
+        .. ID_B
+        .. '","board_id":null}]'
+    local root, home = sandbox({ links = links })
+    assert(
+        fs.write(
+            root .. "/boards.json",
+            '[{"id":"board-1","name":"dotfiles"},{"id":"board-2","name":"ci"}]'
+        )
+    )
+    local out, code = dev(root, home, { "board", "links", "11111111-a" })
+    t.eq(code, 0, out)
+    t.eq(out, "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -\n")
+    t.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links", 1, true), read(root, "calls"))
+    root, home = sandbox()
+    out, code = dev(root, home, { "board", "links", "11111111-a" })
+    t.eq(code, 0, out)
+    t.eq(out, "no links\n")
 end)
 
 t.test("notes, note --edit and note --delete reach pomb's comment routes", function()

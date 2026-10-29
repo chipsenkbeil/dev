@@ -751,6 +751,40 @@ function Backend:link(id, kind, other)
     return true
 end
 
+function Backend:links(id)
+    local own, message = self:__board_id()
+    if not own then
+        return nil, message
+    end
+    local fetched
+    fetched, message = self:__request("GET", "/api/tasks/" .. id .. "/links")
+    if not fetched then
+        return nil, message
+    end
+    local names
+    local found = {}
+    for _, link in ipairs(fetched) do
+        local home = present(link.board_id)
+        local name
+        if home and home ~= own then
+            if not names then
+                local boards
+                boards, message = self:__request("GET", "/api/boards")
+                if not boards then
+                    return nil, message
+                end
+                names = {}
+                for _, entry in ipairs(boards) do
+                    names[entry.id] = entry.name
+                end
+            end
+            name = names[home] or home
+        end
+        found[#found + 1] = { kind = link.kind, id = link.target_id, board = name }
+    end
+    return found
+end
+
 function Backend:other_board(name)
     local opts = {}
     for key, value in pairs(self.__opts) do
