@@ -6,7 +6,7 @@ flags
   --yes
   -y
 
-the built-in runs (rust project)
+the built-in runs
   diff the project's lint files against <dotfiles>/dotfiles/claude/.claude/skills/style/lint/rust
 
 Global flags:

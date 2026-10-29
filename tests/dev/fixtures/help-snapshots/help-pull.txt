@@ -1,7 +1,7 @@
 dev pull
   Fetch the remote and rebase local work onto it
 
-the built-in runs (rust project)
+the built-in runs
   (none: neither .jj nor .git found in <root>)
 
 Global flags:

@@ -1,7 +1,7 @@
 dev deploy
   Deploy the project (needs .dev/deploy.sh)
 
-the built-in runs (rust project)
+the built-in runs
   (none: add .dev/deploy.sh)
 
 Global flags:

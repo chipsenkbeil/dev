@@ -294,7 +294,7 @@ local function builtin_commands(ctx, row)
     if LISTED[row.name] then
         return LISTED[row.name].commands(ctx.root)
     end
-    return { "(none: no built-in " .. row.name .. " for " .. project_type(ctx) .. " projects)" }
+    return { "(none: no built-in " .. row.name .. ")" }
 end
 
 local function verb_text(ctx, reg, c, opts)
@@ -343,11 +343,8 @@ local function verb_text(ctx, reg, c, opts)
         end
     end
     if row.kind ~= "local" then
-        out[#out + 1] = "\n"
-            .. ui.paint(c, "the built-in runs", Style.BOLD)
-            .. " ("
-            .. project_type(ctx)
-            .. " project)\n"
+        local scope = types.VERBS[row.name] and " (" .. project_type(ctx) .. " project)" or ""
+        out[#out + 1] = "\n" .. ui.paint(c, "the built-in runs", Style.BOLD) .. scope .. "\n"
         for _, line in ipairs(builtin_commands(ctx, row)) do
             out[#out + 1] = "  " .. line .. "\n"
         end

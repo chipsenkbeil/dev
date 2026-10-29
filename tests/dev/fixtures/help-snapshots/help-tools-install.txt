@@ -8,7 +8,7 @@ flags
   --system
   --user
 
-the built-in runs (rust project)
+the built-in runs
   dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]
 
 Global flags:

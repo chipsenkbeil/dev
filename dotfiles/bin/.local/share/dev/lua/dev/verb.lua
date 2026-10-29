@@ -84,6 +84,9 @@ function M.run(path, ctx)
     end
     if not ok then
         local text = tostring(result)
+        if text:find("interrupted!", 1, true) then
+            return devos.SIGNAL_EXIT_BASE + 2
+        end
         if text:sub(1, #ctx.name + 1) == ctx.name .. ":" then
             text = text:sub(#ctx.name + 2):gsub("^%d+: ", "")
         end

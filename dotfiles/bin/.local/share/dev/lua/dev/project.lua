@@ -14,7 +14,7 @@ local Kind = {
     MAKE = "make",
 }
 
-local PRUNED_DIRS = { node_modules = true, target = true }
+local LUA_SEARCH_DEPTH = 4
 local stderr = io.stderr
 local SHARE = debug.getinfo(1, "S").source:match("^@(.*)/lua/dev/[^/]*$") or "."
 
@@ -89,21 +89,35 @@ function M.root()
         or cwd
 end
 
-local function has_lua_file(dir)
-    for _, name in ipairs(fs.list(dir) or {}) do
-        local path = fs.join(dir, name)
-        local stat = fs.stat(path)
-        local kind = stat and stat.kind
-        if name:sub(1, 1) ~= "." then
-            if kind == "file" and name:find("%.lua$") then
-                return true
-            end
-            if kind == "dir" and not PRUNED_DIRS[name] and has_lua_file(path) then
-                return true
-            end
-        end
-    end
-    return false
+local function has_lua_file(root)
+    local out = devos.capture({
+        "find",
+        "-H",
+        root,
+        "-mindepth",
+        "1",
+        "-maxdepth",
+        tostring(LUA_SEARCH_DEPTH),
+        "(",
+        "-name",
+        ".*",
+        "-o",
+        "-name",
+        "node_modules",
+        "-o",
+        "-name",
+        "target",
+        ")",
+        "-prune",
+        "-o",
+        "-type",
+        "f",
+        "-name",
+        "*.lua",
+        "-print",
+        "-quit",
+    }, { stderr = "null" })
+    return out ~= ""
 end
 
 ---Name the project's language by the files in its root.

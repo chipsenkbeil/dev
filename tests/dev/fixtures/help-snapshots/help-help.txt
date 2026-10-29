@@ -7,7 +7,7 @@ flags
   --topics
   --no-pager
 
-the built-in runs (rust project)
+the built-in runs
   dev help [-a] [--topics] [-k topic] [--no-pager] [verb or topic]
 
 Global flags:

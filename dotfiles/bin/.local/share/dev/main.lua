@@ -5,4 +5,8 @@ local argv = {}
 for i = 1, #arg do
     argv[i] = arg[i]
 end
-require("dev.cli").main(argv)
+local cli = require("dev.cli")
+local code = cli.guard(cli.main, argv)
+if code then
+    os.exit(code)
+end

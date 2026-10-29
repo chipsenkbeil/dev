@@ -22,6 +22,7 @@ local verb = require("dev.verb")
 local stderr = io.stderr
 local INTERPRETER = arg and arg[-1]
 local MAX_LEVEL = 2
+local INTERRUPTED = devos.SIGNAL_EXIT_BASE + 2
 local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
 local SHARE = project.share
 local VCS_HANDLERS = { push = push.run, pull = pull.run, sync = sync.run }
@@ -423,6 +424,28 @@ function M.main(argv)
         os.exit(handler(ctx, reg))
     end
     help.usage_error(ctx, reg, "unknown verb " .. name)
+end
+
+---Run `fn`, mapping Lua's interrupt error to the exit status of a SIGINT.
+---
+---Any other error is raised again unchanged.
+---@param fn fun(...): any the function to run
+---@param ... any its arguments
+---@return integer? code 130 when the user interrupted it, nil when it returned
+function M.guard(fn, ...)
+    local ok, err = xpcall(fn, function(message)
+        if tostring(message):find("interrupted!", 1, true) then
+            return INTERRUPTED
+        end
+        return message
+    end, ...)
+    if ok then
+        return nil
+    end
+    if err == INTERRUPTED then
+        return INTERRUPTED
+    end
+    error(err, 0)
 end
 
 return M

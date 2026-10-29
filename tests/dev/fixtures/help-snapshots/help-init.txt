@@ -8,7 +8,7 @@ flags
   --dry-run
   --no-gerrit
 
-the built-in runs (rust project)
+the built-in runs
   dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]
 
 Global flags:

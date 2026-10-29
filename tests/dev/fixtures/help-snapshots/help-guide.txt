@@ -1,7 +1,7 @@
 dev guide
   Show this repo's overview, or ask guide a question about its commands and topics
 
-the built-in runs (rust project)
+the built-in runs
   dev guide [question...]
 
 Global flags:

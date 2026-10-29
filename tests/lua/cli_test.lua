@@ -320,3 +320,37 @@ t.test("root-tests and bootstrap-arch are unknown verbs", function()
         t.ok(out:find("dev: unknown verb " .. name .. "\n", 1, true), out)
     end
 end)
+
+t.test("guard maps an interrupted error to 130 and raises any other", function()
+    local cli = require("dev.cli")
+    t.eq(
+        cli.guard(function()
+            error("luajit: x.lua:1: interrupted!", 0)
+        end),
+        130
+    )
+    t.eq(cli.guard(function() end), nil)
+    local ok, err = pcall(cli.guard, function()
+        error("boom", 0)
+    end)
+    t.ok(not ok and tostring(err):find("boom", 1, true), tostring(err))
+end)
+
+t.test("help for a built-in outside the type verbs runs no project detection", function()
+    local root = support.tempdir()
+    assert(fs.write(root .. "/Makefile", ""))
+    local out = dev(root, { "pull", "--help" })
+    t.ok(out:find("the built-in runs", 1, true), out)
+    t.ok(not out:find(" project)", 1, true), out)
+    out = dev(root, { "lint", "--help" })
+    t.ok(out:find("(make project)", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a project Lua verb that is interrupted exits 130 with nothing on stderr", function()
+    local root = project({ ["stop.lua"] = 'error("interrupted!", 0)\n' })
+    local out, code = dev(root, { "stop" })
+    t.eq(code, 130)
+    t.eq(out, "")
+    fs.remove(root, { recursive = true })
+end)
