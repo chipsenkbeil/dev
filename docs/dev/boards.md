@@ -209,6 +209,13 @@ description that already holds a v1 heading is kept as it is, and an Icebox
 card gets the text as given, with no headings. `note`
 adds a comment of kind agent. `move` puts the card at the top of the column.
 
+`add`, `note` and `edit` warn on standard error, and still write, when the
+prose holds a hex id, a hash or a path, which the v1 format keeps in the
+Change section only. One line names each word. A hex id is 7 or more hex
+characters with a digit and a letter. A path holds a `/` and starts with `~/`,
+`./` or `/` or ends in an extension. A URL is exempt. Text under `## Change` is
+not scanned, a note is all prose, and `--checks` is never scanned.
+
 Sizing is part of planning, so a card cannot enter Ready without a size. `move
 CARD ready` refuses a card that is unsized (white or no colour) or red, more
 than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit 1);

@@ -53,6 +53,7 @@ local QUEUED = {
 ---@field output string? what to print on success
 ---@field message string? what went wrong
 ---@field code integer? 2 for a usage error, 1 otherwise
+---@field warnings string[]? lines for standard error when the change still went through
 
 ---@class dev.cmd.board
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `board` subcommands
@@ -328,7 +329,10 @@ function commands.add(backend, args)
     if not card then
         return failure(message)
     end
-    return { output = "added " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. card.column }
+    return {
+        output = "added " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. card.column,
+        warnings = board.prose_warnings(flags["--description"]),
+    }
 end
 
 local function find_comment(backend, card, word)
@@ -369,7 +373,9 @@ local function edit_note(backend, args)
     if not ok then
         return failure(message)
     end
-    return changed("edited", card, comment)
+    local result = changed("edited", card, comment)
+    result.warnings = board.prose_warnings(table.concat(args, " ", 4))
+    return result
 end
 
 local function delete_note(backend, args)
@@ -472,7 +478,10 @@ function commands.note(backend, args)
     if not ok then
         return failure(message)
     end
-    return { output = "noted " .. card.id:sub(1, board.MIN_PREFIX) }
+    return {
+        output = "noted " .. card.id:sub(1, board.MIN_PREFIX),
+        warnings = board.prose_warnings(table.concat(words, " ", 2)),
+    }
 end
 
 function commands.move(backend, args)
@@ -634,7 +643,10 @@ function commands.edit(backend, args)
     if not ok then
         return failure(message)
     end
-    return { output = "edited " .. card.id:sub(1, board.MIN_PREFIX) }
+    return {
+        output = "edited " .. card.id:sub(1, board.MIN_PREFIX),
+        warnings = board.prose_warnings(args[2]),
+    }
 end
 
 function commands.checks(backend, args)
@@ -1324,6 +1336,9 @@ for sub in pairs(commands) do
                 verb.usage_error(ctx, result.message)
             end
             verb.die("dev: " .. result.message)
+        end
+        for _, line in ipairs(result.warnings or {}) do
+            stderr_line("warning: " .. line)
         end
         print(result.output)
         return 0

@@ -1776,3 +1776,54 @@ t.test(
         t.eq(read(root, "calls"):find("-X POST", 1, true), nil)
     end
 )
+
+t.test("prose_warnings names each hex id, hash and path outside the Change section", function()
+    t.eq(board.prose_warnings("fixed in 2af0e003 and 0ef0e008."), {
+        "card prose holds a hex id or hash: 2af0e003",
+        "card prose holds a hex id or hash: 0ef0e008",
+    })
+    t.eq(board.prose_warnings("see `dotfiles/bin/dev.lua`, ~/notes and ./run, /etc/hosts"), {
+        "card prose holds a path: dotfiles/bin/dev.lua",
+        "card prose holds a path: ~/notes",
+        "card prose holds a path: ./run",
+        "card prose holds a path: /etc/hosts",
+    })
+    t.eq(board.prose_warnings("## Problem\nsee a/b.lua\n\n## Change\n- a/b.lua 2af0e003\n"), {
+        "card prose holds a path: a/b.lua",
+    })
+    t.eq(
+        board.prose_warnings(
+            "## Done when\n- [ ] x\n## Change\nsrc/a.lua\n## Out of scope\nsrc/a.lua"
+        ),
+        {
+            "card prose holds a path: src/a.lua",
+        }
+    )
+end)
+
+t.test("prose_warnings leaves clean prose, plain words, numbers and URLs alone", function()
+    t.eq(board.prose_warnings("a decade of facade 1234567 and 20261028, and/or I/O, v1.2"), {})
+    t.eq(board.prose_warnings("https://example.com/a/b.html deadbeef12 is read"), {
+        "card prose holds a hex id or hash: deadbeef12",
+    })
+    t.eq(board.prose_warnings(nil), {})
+    t.eq(board.prose_warnings(""), {})
+end)
+
+t.test("add, note and edit report prose warnings and still write", function()
+    local backend = fake(sample())
+    local result =
+        commands.run("note", { "cccccccc", "see", "2af0e003", "and", "0ef0e008" }, backend)
+    t.eq(result.output, "noted cccccccc")
+    t.eq(#result.warnings, 2)
+    t.eq(#backend.calls, 1)
+    result = commands.run("note", { "cccccccc", "all", "clear" }, backend)
+    t.eq(#result.warnings, 0)
+    result = commands.run("add", { "X", "--description", "in src/a.lua" }, backend)
+    t.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    result = commands.run("add", { "X", "--description", V1 }, backend)
+    t.eq(result.warnings, {})
+    result =
+        commands.run("edit", { "cccccccc", "## Change\n- a/b.lua\n## Problem\nx/y.sh" }, backend)
+    t.eq(result.warnings, { "card prose holds a path: x/y.sh" })
+end)

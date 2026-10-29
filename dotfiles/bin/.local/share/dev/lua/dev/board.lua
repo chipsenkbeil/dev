@@ -206,6 +206,7 @@ end
 ---The headings of card format v1, in order.
 M.HEADINGS = { "Problem", "Change", "Out of scope", "Done when" }
 
+local CHANGE = M.HEADINGS[2]
 local DONE_WHEN = M.HEADINGS[4]
 
 local function lines_of(description)
@@ -235,6 +236,67 @@ function M.scaffold(description)
         parts[i] = "## " .. heading .. "\n" .. (i == 1 and given ~= "" and given .. "\n" or "")
     end
     return table.concat(parts, "\n")
+end
+
+local HEX_MIN = 7
+
+local function is_url(word)
+    return word:find("^%a[%w+.-]*://") ~= nil
+end
+
+local function is_path(word)
+    if not word:find("/", 1, true) then
+        return false
+    end
+    if word:find("^~/%S") or word:find("^%./%S") or word:find("^/[^/%s]") then
+        return true
+    end
+    return word:find("%.%a[%w]*$") ~= nil
+end
+
+local function is_hex_id(run)
+    return #run >= HEX_MIN
+        and run:find("^%x+$") ~= nil
+        and run:find("%d") ~= nil
+        and run:find("%a") ~= nil
+        and run:find("^%d+[eE]%d+$") == nil
+end
+
+---Warn about the hex ids, hashes and paths in prose. Text under a `## Change` heading is left out,
+---and so is a URL.
+---@param prose string? the description or note
+---@return string[] warnings one line per offending word, in order, without repeats
+function M.prose_warnings(prose)
+    local warnings, seen, in_change = {}, {}, false
+    local function warn(kind, word)
+        local line = "card prose holds " .. kind .. ": " .. word
+        if not seen[line] then
+            seen[line] = true
+            warnings[#warnings + 1] = line
+        end
+    end
+    for line in lines_of(prose) do
+        local name = heading_of(line)
+        if name then
+            in_change = name == CHANGE
+        elseif not in_change then
+            for raw in line:gmatch("%S+") do
+                local word = raw:gsub("^[%(%[<\"'`]+", ""):gsub("[%)%]>\"'`,;:!?.]+$", "")
+                if is_url(word) then
+                    word = ""
+                elseif is_path(word) then
+                    warn("a path", word)
+                    word = ""
+                end
+                for run in word:gmatch("%w+") do
+                    if is_hex_id(run) then
+                        warn("a hex id or hash", run)
+                    end
+                end
+            end
+        end
+    end
+    return warnings
 end
 
 ---List what a description lacks of card format v1: each missing heading, and a Done when with no
