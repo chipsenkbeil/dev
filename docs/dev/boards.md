@@ -174,32 +174,45 @@ The columns are Icebox, Backlog, Ready, In Progress, In Review, Blocked and
 Done, matched by name. A column argument is a name in any case or `ready`,
 `progress`, `review`, `blocked`, `done`, `backlog` or `icebox`.
 
-What each column means, in the order a card travels:
+Every card in every column is fair game for an agent unless it is labelled
+`needs:human`. What each column means, in the order a card travels:
 
-- Icebox: maybe later. Agents groom it: they discuss, size and promote cards
-  to Backlog, and never leave one there to be forgotten. A card labelled
-  `needs:human` stays yours until you remove the label or move it.
-- Backlog: wanted, but not yet planned or sized.
-- Ready: you are done commenting, or an agent finished planning the card or
-  answered its question. The top card is next, and the order within Ready is
-  the priority. The agent that takes a card first checks it, and sends it to
-  Backlog if the size (never red), success criteria or checks are missing, or to
-  Blocked with `needs:human` if your last comment leaves a question open.
-- In Progress: an agent holds the card.
-- In Review: under review or ci, then it lands.
-- Blocked: waiting on an answer. `needs:human` is yours. `needs:lead` is the
-  lead agent's, which resolves it and moves the card to Ready or Backlog.
-- Done: landed, answered or dropped.
+- Icebox: an idea, maybe later. A scoping agent sharpens, sizes and promotes
+  cards to Backlog. A `needs:human` card here is an idea you want to flesh out
+  yourself.
+- Backlog: wanted, not ready to run. A card enters with a Problem. A planner
+  writes the card format v2 description, the outcomes and the checks, sizes it
+  (splitting a red card, which may become an umbrella over its children) and
+  moves it to Ready.
+- Ready: an agent can run it with no questions: size 1 to 3, v2, 3 to 7
+  outcomes and a checks row, which `dev board` enforces. The top card is next,
+  and the order within Ready is the priority. A runner takes it by size: yellow
+  by a haiku agent, green and blue by a sonnet agent.
+- In Progress: an agent holds the card, under its name. Only the claimant works
+  it.
+- In Review: the change is under review or ci, then it lands. Still the
+  claimant's.
+- Blocked: waiting on an answer. `needs:human` is yours alone. `needs:lead` is
+  for a higher-tier agent, which answers and moves the card out.
+- Done: landed, answered, or dropped with a note.
 
-An agent never acts on a comment on a `needs:human` Blocked card. Your comments
-there are drafts until you move the card out of Blocked. Where you move it says
-what happens next, and the agent removes `needs:human`:
+An agent with nothing Ready takes the top of Backlog and then Icebox, planning
+the card first. It reads each card's comments before taking one, and a card
+whose latest comment of yours defers it ("not now", "after X") or asks for
+something goes to Icebox or Blocked with `needs:human` and is left alone.
 
-- Ready: you are done commenting. An agent takes it and reads every comment
-  since its own last one.
-- Backlog: it needs planning again.
-- Icebox: not now.
-- Done: drop it. The agent adds a closing note only.
+`needs:human` means only a human can answer. No agent answers for you on such a
+card, and another agent relaying your view never counts. Agents never move,
+edit or relabel one, and the label sits only in Blocked or Icebox, never
+Backlog. Only you move it out. The one exception is an agent that you answered
+directly in its own session: it quotes you in a decision note, removes the label
+and carries on. Your own comment on the card, or that session answer, counts as
+the answer only when it settles every open choice. A partial answer keeps the
+label. A `needs:human` card whose newest comment is yours counts as
+answered and waits for your move.
+
+An umbrella waits in Backlog until its first child starts, sits in In Progress,
+and is Done when every child is Done. It is never Ready and holds no claim.
 
 To push a card later, drag it lower in Ready.
 
@@ -393,7 +406,7 @@ from the later of the two. Cards labelled `needs:human` are left out, and the
 section is absent when no card qualifies. A card it cannot date, or whose
 comments it cannot read, gets a `could not` line after the section. An
 orchestrator can run it at startup and re-plan, escalate or ice each card it
-lists, and groom the Icebox ones.
+lists, and scope the Icebox ones.
 
 ## Local boards
 
@@ -469,11 +482,10 @@ timeout 3600 dev board wait --for human
 `--for ready` wakes on a card added to Ready or moved into it and prints
 `added <id prefix> to Ready` or `moved <id prefix> to Ready`. `--for human`
 wakes only on a card moved out of Blocked and prints
-`moved <id prefix> out of Blocked`, (your comments on a Blocked card are
-drafts until you move it, so a comment never wakes it). With no `--for`, every
-added card, move, update and comment wakes it. Any other `--for` value is a
-usage error, and a local board is `dev: a local board has nothing to wait on`
-(exit 1). `wait` is never queued.
+`moved <id prefix> out of Blocked` (a comment on a Blocked card never wakes
+it). With no `--for`, every added card, move, update and comment wakes it. Any
+other `--for` value is a usage error, and a local board is
+`dev: a local board has nothing to wait on` (exit 1). `wait` is never queued.
 
 The command asks Pomb for events after a cursor and holds each request for up
 to 50 seconds, repeating on a quiet board until a matching event arrives. It
