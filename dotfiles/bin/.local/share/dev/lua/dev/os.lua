@@ -529,6 +529,12 @@ function M.which(name)
     return nil
 end
 
+---Read the id of this process.
+---@return integer pid process id
+function M.getpid()
+    return tonumber(ffi.C.getpid())
+end
+
 ---Read the real user id.
 ---@return integer uid user id of the process
 function M.getuid()

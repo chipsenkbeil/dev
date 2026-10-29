@@ -17,8 +17,10 @@ verb.need("bats", "brew install bats-core")
 local root = ctx.root
 local stdout, stderr = io.stdout, io.stderr
 local SKIPPED = 3
+local SIGINT = 2
 local POLL_SECS = 0.1
 local ALIVE_POLLS = 50
+local MAX_TMP_BASE_CHARS = 40
 local passed, failed, skipped = 0, 0, 0
 
 local SERIAL = {
@@ -118,27 +120,61 @@ for _, suite in ipairs(suites) do
 end
 
 local jobs = job_count()
-local scratch = assert(fs.mktemp({ prefix = "dev-test", dir = true }))
+local function scratch_dir()
+    local base = (os.getenv("TMPDIR") or "/tmp"):gsub("/+$", "")
+    if #base > MAX_TMP_BASE_CHARS or base:sub(1, 1) ~= "/" then
+        base = "/tmp"
+    end
+    local out, code = devos.capture({ "mktemp", "-d", base .. "/dt.XXXXXX" })
+    assert(code == 0, "dev test cannot make a scratch directory under " .. base)
+    return (out:gsub("\n$", ""))
+end
+
+local scratch = scratch_dir()
+
+local GUARD = [=[
+set -m
+watched=$1
+scratch=$2
+(
+    trap '' INT TERM HUP
+    while [ -d "$scratch" ] && kill -0 "$watched" 2>/dev/null; do sleep 0.2; done
+    if [ -d "$scratch" ]; then
+        for sig in TERM KILL; do
+            for pidfile in "$scratch"/*.pid; do
+                [ -f "$pidfile" ] && [ ! -e "${pidfile%.pid}.status" ] &&
+                    kill -"$sig" -- "-$(cat "$pidfile")" 2>/dev/null
+            done
+            [ "$sig" = TERM ] && sleep 1
+        done
+        sleep 0.5
+        rm -rf -- "$scratch" || { sleep 1; rm -rf -- "$scratch"; }
+    fi
+) </dev/null >/dev/null 2>&1 &
+]=]
+devos.run({ "sh", "-c", GUARD, "sh", tostring(devos.getpid()), scratch })
 
 local LAUNCH = [[
 set -m
 out=$1
 status=$2
 dir=$3
-shift 3
+pidfile=$4
+shift 4
 (
     ( cd -- "$dir" && "$@" ) >"$out" 2>&1 </dev/null
     echo "$?" >"$status.tmp"
     mv "$status.tmp" "$status"
 ) >/dev/null 2>&1 </dev/null &
+echo "$!" >"$pidfile"
 echo "$!"
 ]]
 
 local function start(index, suite)
     local base = scratch .. "/" .. index
-    suite.out, suite.status, suite.tmp = base .. ".out", base .. ".status", base .. ".tmp"
+    suite.out, suite.status, suite.tmp = base .. ".out", base .. ".status", base .. ".t"
     assert(fs.mkdir(suite.tmp))
-    local argv = { "sh", "-c", LAUNCH, "sh", suite.out, suite.status, root }
+    local argv = { "sh", "-c", LAUNCH, "sh", suite.out, suite.status, root, base .. ".pid" }
     for _, word in ipairs(suite.argv) do
         argv[#argv + 1] = word
     end
@@ -227,6 +263,9 @@ if not ok then
 end
 devos.run({ "rm", "-rf", "--", scratch })
 if not ok then
+    if tostring(err):find("interrupted!", 1, true) then
+        os.exit(devos.SIGNAL_EXIT_BASE + SIGINT)
+    end
     error(err, 0)
 end
 
