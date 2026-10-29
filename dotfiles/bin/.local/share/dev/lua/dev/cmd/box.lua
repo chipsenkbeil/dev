@@ -389,20 +389,29 @@ function M.one_name(ctx, parsed)
     return parsed.pos[1]
 end
 
+---@class dev.cmd.box.CallOpts
+---@field label string? what a spinner says on a terminal while ci runs, none by default
+
 ---Run `ci box` with `--json` and decode its document.
 ---
 ---A failure ends the run with ci's code, after its error message goes to
 ---standard error, or its output when it is no error document.
 ---@param sub string the subcommand's name, for the messages
 ---@param args string[] the arguments after `ci box`
+---@param opts dev.cmd.box.CallOpts? `label`
 ---@return dev.cmd.box.Doc doc the decoded `ok` document
 ---@return string raw ci's output exactly as it printed it
-function M.call(sub, args)
+function M.call(sub, args, opts)
     local argv = { "ci", "box" }
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
-    local raw, code = devos.capture(argv)
+    local raw, code
+    if opts and opts.label then
+        code, raw = ui.spin(ui.context(), opts.label, argv, { capture = true })
+    else
+        raw, code = devos.capture(argv)
+    end
     local out = raw:gsub("\n+$", "")
     local doc = json.decode(out)
     if code ~= 0 then
@@ -426,9 +435,10 @@ end
 ---Run `ci box` for a subcommand that answers with one box.
 ---@param sub string the subcommand's name, for the messages
 ---@param args string[] the arguments after `ci box`
+---@param opts dev.cmd.box.CallOpts? `label`
 ---@return dev.cmd.box.Box box the box in ci's document
-function M.one(sub, args)
-    local found = M.call(sub, args).box
+function M.one(sub, args, opts)
+    local found = M.call(sub, args, opts).box
     if type(found) ~= "table" then
         verb.die("dev: ci box " .. args[1] .. " printed no box")
     end
@@ -1496,7 +1506,7 @@ M.handlers["box delete"] = function(ctx)
         end
     end
     M.need_ci()
-    local deleted = M.one("delete", args)
+    local deleted = M.one("delete", args, { label = "Deleting " .. name })
     local archive = present(deleted.archive)
     print(
         "Deleted "

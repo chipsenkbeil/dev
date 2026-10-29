@@ -32,3 +32,11 @@ end)
 t.test("spin without a terminal returns the exit code", function()
     t.eq(ui.spin(plain, "x", { "sh", "-c", "exit 4" }), 4)
 end)
+
+t.test("spin with capture and no terminal returns the code and standard output", function()
+    local code, out = ui.spin(plain, "x", { "sh", "-c", "echo hi; echo no >&2; exit 4" }, {
+        capture = true,
+    })
+    t.eq(code, 4)
+    t.eq(out, "hi\n")
+end)

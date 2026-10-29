@@ -349,11 +349,13 @@ local function read_all(path)
     return body
 end
 
-local function start_job(argv, dir)
+local function start_job(argv, dir, streams)
     local launch = {
         "sh",
         "-c",
-        'set -m; dir=$1; shift; ( "$@" >"$dir/out" 2>&1 </dev/null; echo $? >"$dir/rc" ) >/dev/null 2>&1 & echo $! >"$dir/pid"; echo $!',
+        'set -m; dir=$1; shift; ( "$@" >"$dir/out" '
+            .. streams
+            .. ' </dev/null; echo $? >"$dir/rc" ) >/dev/null 2>&1 & echo $! >"$dir/pid"; echo $!',
         "sh",
         dir,
     }
@@ -445,17 +447,28 @@ local function report(err, label, code, captured)
     end
 end
 
+---@class dev.ui.SpinOpts
+---@field capture boolean? keep standard output apart and return it, showing only standard error on failure
+
 ---Run `argv` with a spinner on standard error, then show a check or a cross and its output.
 ---
 ---Without a terminal on both ends, or when TERM is dumb, the command just runs with the
 ---terminal's streams. Otherwise its output is held back and shown only when it fails. Ctrl-C
----stops the command and every process it started.
+---stops the command and every process it started. With `opts.capture`, standard output is
+---returned as a second value and never shown, and standard error is what a failure shows.
 ---@param ctx dev.ui.Context drawing settings
 ---@param label string what is running
 ---@param argv string[] command and its arguments, with at least one word
+---@param opts dev.ui.SpinOpts? `capture`
 ---@return integer code exit status of the command, or 130 when the user interrupted it
-function M.spin(ctx, label, argv)
+---@return string? output standard output of the command, only with `opts.capture`
+function M.spin(ctx, label, argv, opts)
+    local capture = opts ~= nil and opts.capture == true
     if not (ctx.interactive and devos.isatty(2) and ctx.getenv("TERM") ~= "dumb") then
+        if capture then
+            local out, code = devos.capture(argv)
+            return code, out
+        end
         return devos.run(argv)
     end
     local err = ctx:stderr()
@@ -463,16 +476,17 @@ function M.spin(ctx, label, argv)
     stderr:write(HIDE_CURSOR)
     local ok, code = pcall(function()
         dir = make_workdir(ctx)
-        pid = start_job(argv, dir)
+        pid = start_job(argv, dir, capture and '2>"$dir/err"' or "2>&1")
         if not pid then
             return 1
         end
         return watch({ err = err, label = label, pid = pid, rc_path = dir .. "/rc" })
     end)
     stderr:write(ERASE_LINE, SHOW_CURSOR)
-    local captured = ""
+    local captured, output = "", ""
     if dir then
-        captured = read_all(dir .. "/out")
+        captured = read_all(dir .. (capture and "/err" or "/out"))
+        output = capture and read_all(dir .. "/out") or ""
         pid = pid or tonumber(read_all(dir .. "/pid"):match("^%d+"))
         if pid and (not ok or code == INTERRUPTED) then
             stop_job(pid)
@@ -481,14 +495,17 @@ function M.spin(ctx, label, argv)
     end
     if not ok then
         if tostring(code):find("interrupted!", 1, true) then
-            return INTERRUPTED
+            return INTERRUPTED, ""
         end
         error(code, 0)
     end
     if code == INTERRUPTED then
-        return code
+        return code, ""
     end
     report(err, label, code, captured)
+    if capture then
+        return code, output
+    end
     return code
 end
 

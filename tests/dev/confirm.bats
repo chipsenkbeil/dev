@@ -4,6 +4,7 @@ load pty
 
 CONFIRM="${BATS_TEST_DIRNAME}/../lua/fixtures/confirm.lua"
 SPIN="${BATS_TEST_DIRNAME}/../lua/fixtures/spin.lua"
+SPIN_CAPTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/spin_capture.lua"
 
 setup() {
     require_pty
@@ -58,6 +59,31 @@ in_pty() {
     [ "$(cat "$OUT.status")" = 0 ]
     last="$(tr '\r' '\n' <"$OUT.pty" | sd '\x1b\[[0-9;?]*[A-Za-z]' '' | grep -v '^$' | tail -n 1)"
     [[ "$last" == "✓ Working"* ]] || false
+}
+
+@test "spin with capture returns standard output apart from the spinner" {
+    in_pty '' 0 "$SPIN_CAPTURE" sh -c 'sleep 0.3; echo json; echo noise >&2; exit 0'
+    [ "$(cat "$OUT.status")" = 0 ]
+    out="$(tr '\r' '\n' <"$OUT.pty" | sd '\x1b\[[0-9;?]*[A-Za-z]' '' | grep -v '^$')"
+    [[ "$out" == *"[json"* ]] || false
+    [[ "$out" == *"✓ Working"* ]] || false
+    [[ "$out" != *noise* ]] || false
+}
+
+@test "spin with capture shows standard error and keeps the output back on failure" {
+    in_pty '' 0 "$SPIN_CAPTURE" sh -c 'echo json; echo noise >&2; exit 3'
+    [ "$(cat "$OUT.status")" = 3 ]
+    out="$(tr '\r' '\n' <"$OUT.pty")"
+    [[ "$out" == *"✗"*"Working"* ]] || false
+    [[ "$out" == *noise* ]] || false
+}
+
+@test "ctrl-c with capture exits 130 without an error" {
+    READY="$BATS_TEST_TMPDIR/ready"
+    in_pty '\003' 0 "$SPIN_CAPTURE" sh -c 'touch "$1"; sleep 5.789' sh "$READY"
+    [ "$(cat "$OUT.status")" = 130 ]
+    run pgrep -f 'sleep 5.789'
+    [ "$status" -ne 0 ]
 }
 
 @test "ctrl-c stops the command and exits 130" {
