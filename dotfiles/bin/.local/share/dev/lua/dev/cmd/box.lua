@@ -1156,6 +1156,15 @@ local function pick_shape(target)
     })
 end
 
+---Ask which target to run and then which shape, as `box create` does on a terminal.
+---@param project string? the project the box is for
+---@return string target the picked target
+---@return string shape the picked shape
+function M.pick_create(project)
+    local target = pick_target(project)
+    return target, pick_shape(target)
+end
+
 M.handlers["box create"] = function(ctx)
     local parsed = M.parse(ctx, { "--target", "--shape", "--by", "--ttl", "--keep" })
     M.need_ci()
@@ -1203,9 +1212,87 @@ local function tmux_text(found)
     return table.concat(items, ", ")
 end
 
+---@class dev.cmd.box.PickOpts
+---@field sub string the subcommand's name, for ci's messages
+---@field title string the picker's title
+---@field keep fun(box: dev.cmd.box.Box): boolean whether the verb can act on a box
+---@field none string what to say when no box qualifies
+---@field example string? words that follow the example name in the usage error
+---@field auto boolean? whether a single row skips the screen
+---@field rest boolean? whether more positional arguments may follow the name
+
+---Take the box from the arguments, or pick one on a terminal.
+---@param ctx dev.Ctx the subcommand's context
+---@param parsed dev.cmd.box.Args the parsed arguments
+---@param opts dev.cmd.box.PickOpts how to pick
+---@return string name the box name
+---@return dev.cmd.box.Box[]? boxes the list ci gave when dev asked for it
+local function pick_name(ctx, parsed, opts)
+    if #parsed.pos > 0 then
+        if not opts.rest and #parsed.pos > 1 then
+            verb.usage_error(ctx, "unexpected argument " .. parsed.pos[2])
+        end
+        check_name(ctx, parsed.pos[1])
+        return parsed.pos[1]
+    end
+    if not M.interactive() then
+        verb.usage_error(
+            ctx,
+            "no box given and no terminal to pick one; pass a name, like dev "
+                .. ctx.name
+                .. " ci-abc"
+                .. (opts.example or "")
+        )
+    end
+    M.need_ci()
+    local boxes = M.call(opts.sub, { "ls", "--json" }).boxes or {}
+    local now = os.time()
+    local items = {}
+    for _, candidate in ipairs(boxes) do
+        if opts.keep(candidate) then
+            items[#items + 1] = { value = candidate.name, cells = M.row(candidate, now) }
+        end
+    end
+    if #items == 0 then
+        stderr:write("dev ", ctx.name, ": ", opts.none, "\n")
+        os.exit(Exit.FAILED)
+    end
+    local ok, picked =
+        pcall(picker.run, ui.context(), items, { title = opts.title, auto = opts.auto })
+    if not ok then
+        stderr:write("dev ", ctx.name, ": ", tostring(picked), "\n")
+        os.exit(Exit.FAILED)
+    end
+    if not picked or picked == "" then
+        os.exit(Exit.FAILED)
+    end
+    return picked, boxes
+end
+
+---Make a filter for boxes in one state.
+---@param state string the state a box must be in
+---@return fun(box: dev.cmd.box.Box): boolean keep whether a box is in that state
+local function in_state(state)
+    return function(candidate)
+        return present(candidate.state) == state
+    end
+end
+
+---Keep every box.
+---@return boolean keep always true
+local function any_box()
+    return true
+end
+
 M.handlers["box show"] = function(ctx)
     local parsed = M.parse(ctx, { "--json" })
-    local name = M.one_name(ctx, parsed)
+    local name = pick_name(ctx, parsed, {
+        sub = "show",
+        title = "Show which box?",
+        keep = any_box,
+        none = "no boxes to show",
+        auto = true,
+    })
     M.need_ci()
     local doc, raw = M.call("show", box_args("show", name))
     if parsed.json then
@@ -1248,7 +1335,13 @@ M.handlers["box show"] = function(ctx)
 end
 
 M.handlers["box stop"] = function(ctx)
-    local name = M.one_name(ctx, M.parse(ctx, {}))
+    local name = pick_name(ctx, M.parse(ctx, {}), {
+        sub = "stop",
+        title = "Stop which box?",
+        keep = in_state(State.RUNNING),
+        none = "no running boxes to stop",
+        auto = false,
+    })
     M.need_ci()
     local stopped = M.one("stop", box_args("stop", name))
     local line = "stopped " .. interp(stopped.name)
@@ -1263,7 +1356,13 @@ end
 
 M.handlers["box resume"] = function(ctx)
     local parsed = M.parse(ctx, { "--ttl", "--keep" })
-    local name = M.one_name(ctx, parsed)
+    local name = pick_name(ctx, parsed, {
+        sub = "resume",
+        title = "Resume which box?",
+        keep = in_state(State.STOPPED),
+        none = "no stopped boxes to resume",
+        auto = true,
+    })
     M.need_ci()
     print(M.summary("resumed", M.one("resume", box_args("resume", name, parsed))))
     return 0
@@ -1271,10 +1370,17 @@ end
 
 M.handlers["box extend"] = function(ctx)
     local parsed = M.parse(ctx, { "--ttl", "--keep" })
-    local name = M.one_name(ctx, parsed)
     if not parsed.ttl and not parsed.keep then
         verb.usage_error(ctx, "needs --ttl HOURS or --keep")
     end
+    local name = pick_name(ctx, parsed, {
+        sub = "extend",
+        title = "Extend which box?",
+        keep = in_state(State.RUNNING),
+        none = "no running boxes to extend",
+        example = " --keep",
+        auto = true,
+    })
     M.need_ci()
     print(M.summary("extended", M.one("extend", box_args("extend", name, parsed))))
     return 0
@@ -1282,11 +1388,14 @@ end
 
 M.handlers["box tools install"] = function(ctx)
     local parsed = M.parse(ctx, {})
-    if #parsed.pos == 0 then
-        verb.usage_error(ctx, "needs a box name")
-    end
-    local name = parsed.pos[1]
-    check_name(ctx, name)
+    local name = pick_name(ctx, parsed, {
+        sub = "tools install",
+        title = "Install tools on which box?",
+        keep = in_state(State.RUNNING),
+        none = "no running boxes to install tools on",
+        auto = true,
+        rest = true,
+    })
     local args = box_args("install-tools", name)
     if #parsed.pos > 1 then
         args[#args + 1] = "--"
@@ -1320,21 +1429,66 @@ local function can_ask()
     return true
 end
 
-M.handlers["box delete"] = function(ctx)
-    local parsed = M.parse(ctx, { "--yes", "-y", "--no-archive" })
-    local name = M.one_name(ctx, parsed)
+---Tell whether a tmux session is attached to a box.
+---@param boxes dev.cmd.box.Box[] the boxes ci lists
+---@param name string the box's name
+---@return boolean attached whether any session of that box has a client
+local function is_attached(boxes, name)
+    for _, candidate in ipairs(boxes) do
+        if candidate.name == name then
+            for _, session in ipairs(present(candidate.tmux_sessions) or {}) do
+                if session.attached == true then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+---Word the question that guards a delete.
+---@param name string the box's name
+---@param no_archive boolean whether the projects are not archived
+---@param attached boolean whether a session is attached
+---@return string question what is asked
+---@return string consequence what would be lost
+function M.delete_prompt(name, no_archive, attached)
     local question, consequence = "Delete " .. name .. "?", "Its projects are archived first."
-    local args = { "delete", name }
-    if parsed.no_archive then
+    if no_archive then
         question, consequence =
             "Delete " .. name .. " without an archive?", "Anything not pushed is lost."
     end
+    if attached then
+        consequence = "You're attached to it. " .. consequence
+    end
+    return question, consequence
+end
+
+M.handlers["box delete"] = function(ctx)
+    local parsed = M.parse(ctx, { "--yes", "-y", "--no-archive" })
+    local name, boxes = pick_name(ctx, parsed, {
+        sub = "delete",
+        title = "Delete which box?",
+        keep = any_box,
+        none = "no boxes to delete",
+        example = " -y",
+        auto = false,
+    })
+    local args = { "delete", name }
     append_flag(args, "--no-archive", parsed.no_archive)
     args[#args + 1] = "--json"
     if not parsed.yes then
         if not can_ask() then
             verb.usage_error(ctx, "no terminal to ask on, pass -y to delete " .. name)
         end
+        M.need_ci()
+        if not boxes then
+            local raw, code = devos.capture({ "ci", "box", "ls", "--json" })
+            local doc = code == 0 and json.decode(raw) or nil
+            boxes = type(doc) == "table" and doc.boxes or {}
+        end
+        local question, consequence =
+            M.delete_prompt(name, parsed.no_archive, is_attached(boxes, name))
         local screen = ui.context({ interactive = true, color = false })
         if not ui.confirm(screen, question, consequence) then
             stderr:write("not deleted\n")
@@ -1345,9 +1499,9 @@ M.handlers["box delete"] = function(ctx)
     local deleted = M.one("delete", args)
     local archive = present(deleted.archive)
     print(
-        "deleted "
+        "Deleted "
             .. interp(deleted.name)
-            .. ", "
+            .. " · "
             .. (archive == nil and "no archive" or "archive " .. interp(archive.path))
     )
     return 0

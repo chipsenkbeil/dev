@@ -62,6 +62,13 @@ with no project named, dev passes the project root's directory name. `--by`
 defaults to `human:$USER`, else `human:$LOGNAME`, and dev always passes it.
 The last line is `Created <name> · <target> @ <machine> · <shape> · <time left> · dev connect <name>`.
 
+Leave the box out of `show`, `stop`, `resume`, `extend`, `tools install` or
+`delete` and a terminal gets the same box picker `dev connect` uses, with only
+the boxes the verb can act on: running ones for `stop`, `extend` and
+`tools install`, stopped ones for `resume`. Without a terminal a missing name
+exits 2 and says to pass a name, with an example command such as
+`dev box delete ci-abc -y`.
+
 `dev box show` prints `tmux_sessions` as items such as `main (attached)` or
 `build (idle 5m)`, `none` when there is no tmux server and `unknown` when ci
 could not read them. A box that is not running has no such line. dev sends
@@ -99,7 +106,8 @@ dev connect myproject-k3x --ssh
 
 `dev connect` and `dev box connect` are the same command. With no name it
 lists the boxes, the current project's first, and you pick one. Inside a
-project the last item, `new box for <project>`, creates a box and attaches. A
+project the last item, `new box for <project>`, asks for the target and the shape, as `dev box create` does, then creates a
+box and attaches. A
 stopped box is resumed first. Any other state than running exits 6, as does a
 box with no `tailnet_name` or no project path yet.
 
@@ -119,7 +127,9 @@ tmux command, which checks the same host keys.
 When ci exits non-zero with an `{"ok":false}` document, dev prints
 `dev box <sub>: <message>` to stderr and exits with ci's code (2 to 11).
 Other output passes through. `dev box delete` asks on `/dev/tty` unless you
-pass `-y`, and exits 2 with no terminal. `dev --remote` refuses `box` and `connect`.
+pass `-y`, and exits 2 with no terminal. It says `You're attached to it.` when
+a tmux session of the box is attached, and ends with
+`Deleted <name> · archive <path>` or `Deleted <name> · no archive`. `dev --remote` refuses `box` and `connect`.
 
 `dev box delete --no-archive` deletes the box without archiving its projects,
 so anything not pushed is lost, and its question says so.

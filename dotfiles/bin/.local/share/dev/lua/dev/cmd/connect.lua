@@ -230,6 +230,12 @@ local function choose(boxes, project)
         stderr:write("no boxes; create one with dev box create\n")
         os.exit(Exit.FAILED)
     end
+    if not box.interactive() then
+        verb.usage_error(
+            { name = "box connect" },
+            "no box given and no terminal to pick one; pass a name, like dev box connect ci-abc"
+        )
+    end
     local opts = {
         title = "Connect to a box",
         auto = not (#items == 1 and project ~= ""),
@@ -264,7 +270,16 @@ local function run(ctx)
     local choice = given or choose(boxes, project)
     local found
     if choice == NEW_VALUE then
-        found = box.create({ keep = false, projects = project ~= "" and { project } or {} })
+        local target, shape
+        if box.interactive() then
+            target, shape = box.pick_create(project ~= "" and project or nil)
+        end
+        found = box.create({
+            target = target,
+            shape = shape,
+            keep = false,
+            projects = project ~= "" and { project } or {},
+        })
     else
         for _, candidate in ipairs(boxes) do
             if candidate.name == choice then

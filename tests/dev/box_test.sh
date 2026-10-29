@@ -339,6 +339,7 @@ assert_eq "tools install passes ci's message on" "$out" "dev box tools install: 
 reset
 out="$(box box tools install 2>&1)"
 assert_eq "tools install needs a box name" "$?" "2"
+assert_eq "tools install says to pass a name" "$out" "dev box tools install: no box given and no terminal to pick one; pass a name, like dev box tools install ci-abc"
 assert_eq "ci is not called for tools install without a name" "$(calls)" ""
 
 reset
@@ -353,12 +354,12 @@ else
 fi
 out="$(box box delete ci-abc -y)"
 assert_eq "delete -y argv" "$(calls)" "ci box delete ci-abc --json"
-assert_eq "delete -y output" "$out" "deleted ci-abc, archive /var/lib/devbox-archive/x.tar.gz"
+assert_eq "delete -y output" "$out" "Deleted ci-abc · archive /var/lib/devbox-archive/x.tar.gz"
 reset
 fx delete "$(doc "$(jq -c '.state = "deleted"' <<<"$STOPPED")")"
 out="$(box box delete ci-abc -y --no-archive)"
 assert_eq "delete --no-archive argv" "$(calls)" "ci box delete ci-abc --no-archive --json"
-assert_eq "delete --no-archive output" "$out" "deleted ci-abc, no archive"
+assert_eq "delete --no-archive output" "$out" "Deleted ci-abc · no archive"
 
 if script -q /dev/null true </dev/null >/dev/null 2>&1; then
     PTY=bsd
@@ -375,6 +376,7 @@ cd "$NOPROJ" && PATH="$STUBS:$BASE_PATH" exec "$DEV" box delete ci-abc
 RUN
     for answer in n y; do
         reset
+        fx ls "$(lsdoc "$STOPPED")"
         fx delete "$(doc "$STOPPED")"
         if [ "$PTY" = bsd ]; then
             out="$(
@@ -391,10 +393,11 @@ RUN
         assert_contains "the delete prompt asks the question" "$out" "Delete ci-abc? Its projects are archived first. [y/N]"
         if [ "$answer" = n ]; then
             assert_eq "answering n exits 1" "$rc" "1"
-            assert_eq "answering n never calls ci" "$(calls)" ""
+            assert_eq "answering n only lists the boxes" "$(calls)" "ci box ls --json"
         else
             assert_eq "answering y exits 0" "$rc" "0"
-            assert_eq "answering y deletes" "$(calls)" "ci box delete ci-abc --json"
+            assert_eq "answering y deletes" "$(calls)" "ci box ls --json
+ci box delete ci-abc --json"
         fi
     done
 fi
@@ -505,7 +508,7 @@ assert_eq "connect with no boxes says how to create one" "$out" "no boxes; creat
 
 reset
 fx ls "$(lsdoc "$KEPT" "$STOPPED" "$RUNNING")"
-FAKE_PICK=myproject-k3x inproj connect
+FAKE_TTY=1 FAKE_PICK=myproject-k3x inproj connect
 assert_eq "the picker lists the project's boxes first, with a new-box item last" "$(cat "$ITEMS")" "picker title=Connect to a box auto=true
 myproject-k3x	myproject-k3x	running	linux-x86-dev	myproject	$RUN_LEFT
 scratch-a1b	scratch-a1b	running	linux-x86-dev	-	kept
@@ -516,25 +519,32 @@ ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
 reset
 fx ls "$(lsdoc "$KEPT")"
-FAKE_PICK=scratch-a1b box connect
+FAKE_TTY=1 FAKE_PICK=scratch-a1b box connect
 assert_not_contains "outside a project the picker has no new-box item" "$(cat "$ITEMS")" "__new__"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 fx create "$(doc "$(mkbox myproject-n3w running '["myproject"]' "$NEW_OFF" null)")"
-out="$(FAKE_PICK=__new__ inproj connect)"
-assert_eq "the new-box item creates for the project then attaches" "$(calls)" "ci box ls --json
-ci box create --by human:tester --json -- myproject
+fx targets '{"ok":true,"targets":[{"target":"linux-x86-dev","os":"linux","machines":["example-box"],"image":"devbox","min_shape":null,"can_take_box_now":true,"reason":null}]}'
+fx shapes '{"ok":true,"default_shape":"medium","shapes":[{"name":"medium","cpu":8,"memory_gib":16,"default":true,"targets":[{"target":"linux-x86-dev","below_min":false,"machines":[{"machine":"example-box","fits":"start","reason":null,"warning":null}]}]}],"cap":{"running":1,"running_max":3,"memory_limits_gib":16,"memory_max_gib":32},"machines":[{"name":"example-box","running":1,"memory_limits_gib":16,"new_box_room_gib":8,"reachable":true}]}'
+out="$(FAKE_TTY=1 FAKE_PICK="__new__ linux-x86-dev medium" inproj connect)"
+assert_eq "the new-box item runs the create pickers, creates for the project then attaches" "$(calls)" "ci box ls --json
+ci box targets --json
+ci box shapes --json
+ci box shapes --target linux-x86-dev --json
+ci box create --target linux-x86-dev --shape medium --by human:tester --json -- myproject
 ci box show myproject-n3w --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-n3w"
 assert_contains "the new box is reported" "$out" "Created myproject-n3w"
 reset
 fx ls "$(lsdoc)"
 fx create "$(doc "$RUNNING")"
-FAKE_PICK=__new__ inproj connect >/dev/null
+fx targets '{"ok":true,"targets":[{"target":"linux-x86-dev","os":"linux","machines":["example-box"],"image":"devbox","min_shape":null,"can_take_box_now":true,"reason":null}]}'
+fx shapes '{"ok":true,"default_shape":"medium","shapes":[{"name":"medium","cpu":8,"memory_gib":16,"default":true,"targets":[{"target":"linux-x86-dev","below_min":false,"machines":[{"machine":"example-box","fits":"start","reason":null,"warning":null}]}]}],"cap":{"running":1,"running_max":3,"memory_limits_gib":16,"memory_max_gib":32},"machines":[{"name":"example-box","running":1,"memory_limits_gib":16,"new_box_room_gib":8,"reachable":true}]}'
+FAKE_TTY=1 FAKE_PICK="__new__ linux-x86-dev medium" inproj connect >/dev/null
 assert_contains "inside a project with no boxes the picker still asks" "$(cat "$ITEMS")" "picker title=Connect to a box auto=false"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-FAKE_PICK=CANCEL box connect >/dev/null 2>&1
+FAKE_TTY=1 FAKE_PICK=CANCEL box connect >/dev/null 2>&1
 assert_eq "cancelling the picker exits 1" "$?" "1"
 assert_eq "cancelling the picker calls ci only for ls" "$(calls)" "ci box ls --json"
 reset
