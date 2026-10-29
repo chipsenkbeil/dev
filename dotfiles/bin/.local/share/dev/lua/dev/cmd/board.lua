@@ -27,6 +27,8 @@ local STAMP_CHARS = 16
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
+local KIND_FLAG = "--kind"
+local AS_FLAG = "--as"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
@@ -410,6 +412,8 @@ local function comment_lines(list)
         rows[#rows + 1] = {
             comment.id:sub(1, board.MIN_PREFIX),
             comment.who,
+            comment.kind or "-",
+            comment.author or "-",
             comment.at:sub(1, STAMP_CHARS):gsub("T", " "),
             comment.body:match("^[^\r\n]*"),
         }
@@ -459,28 +463,78 @@ function commands.show(backend, args)
     }
 end
 
+local function note_opts(args)
+    local kind, label
+    local i = 2
+    while args[i] == KIND_FLAG or args[i] == AS_FLAG do
+        if i == #args then
+            return nil, usage(args[i] .. " needs a value")
+        end
+        if args[i] == KIND_FLAG then
+            kind = args[i + 1]
+        else
+            label = args[i + 1]
+        end
+        i = i + 2
+    end
+    if i > 2 and (args[i] == EDIT_FLAG or args[i] == DELETE_FLAG) then
+        return nil, usage(args[i] .. " takes no " .. KIND_FLAG .. " or " .. AS_FLAG)
+    end
+    local words = { args[1] }
+    for j = i, #args do
+        words[#words + 1] = args[j]
+    end
+    if #words < 2 then
+        return nil, usage("needs a card and the note")
+    end
+    local opts = {}
+    if kind then
+        opts.kind = kind:lower()
+        if not index_of(board.NOTE_KINDS, opts.kind) then
+            return nil,
+                usage(
+                    "unknown kind "
+                        .. kind
+                        .. ", the kinds are "
+                        .. table.concat(board.NOTE_KINDS, ", ")
+                )
+        end
+    end
+    if label then
+        opts.author = label:match("^%s*(.-)%s*$")
+        if opts.author == "" or opts.author:find("%c") then
+            return nil, usage(AS_FLAG .. " needs a label with no control characters")
+        end
+        if #opts.author > board.AUTHOR_CHARS then
+            return nil, usage(AS_FLAG .. " takes at most " .. board.AUTHOR_CHARS .. " characters")
+        end
+    end
+    return words, opts
+end
+
 function commands.note(backend, args)
     if args[2] == EDIT_FLAG then
         return edit_note(backend, args)
     elseif args[2] == DELETE_FLAG then
         return delete_note(backend, args)
     end
-    if #args < 2 then
-        return usage("needs a card and the note")
+    local words, opts = note_opts(args)
+    if not words then
+        return opts
     end
-    local words = args
     local card, err = find_card(backend, words[1])
     if not card then
         return err
     end
+    local text = table.concat(words, " ", 2)
     local held = claims.read(card.id)
-    local ok, message = backend:note(card.id, table.concat(words, " ", 2), held and held.fence)
+    local ok, message = backend:note(card.id, text, held and held.fence, opts)
     if not ok then
         return failure(message)
     end
     return {
         output = "noted " .. card.id:sub(1, board.MIN_PREFIX),
-        warnings = board.prose_warnings(table.concat(words, " ", 2)),
+        warnings = board.prose_warnings(text),
     }
 end
 

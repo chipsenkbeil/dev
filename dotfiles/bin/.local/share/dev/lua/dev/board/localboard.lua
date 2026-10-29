@@ -6,6 +6,7 @@ local store = require("dev.board.store")
 local present = json.present
 local SECONDS_PER_MINUTE = 60
 local COMMENT_ACTOR = "agent"
+local COMMENT_KIND = "agent"
 local NOT_YOURS = "that comment is not yours to change"
 local SWATCH_VALUES = { "yellow", "green", "blue", "red", "white" }
 
@@ -378,7 +379,7 @@ function Backend:add(name, column, opts)
     return added, message
 end
 
-function Backend:note(id, body, fence)
+function Backend:note(id, body, fence, opts)
     return self:__update(function(doc)
         local card, message = card_of(doc, id, fence)
         if not card then
@@ -389,6 +390,8 @@ function Backend:note(id, body, fence)
             who = COMMENT_ACTOR,
             at = store.stamp(),
             body = body,
+            kind = opts and opts.kind or COMMENT_KIND,
+            author = opts and opts.author,
         }
         return true
     end)
@@ -410,6 +413,8 @@ function Backend:comments(id)
             who = comment.who,
             at = comment.at,
             body = comment.body,
+            kind = comment.kind,
+            author = comment.author,
         }
     end
     return found

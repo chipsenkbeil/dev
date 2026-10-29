@@ -48,8 +48,8 @@ local function fake(cards, times)
             checks = {},
         }
     end
-    function backend:note(id, text)
-        calls[#calls + 1] = { "note", id, text }
+    function backend:note(id, text, _, opts)
+        calls[#calls + 1] = { "note", id, text, opts }
         return true
     end
     function backend:comments(id)
@@ -418,7 +418,7 @@ t.test("note and move resolve the card by prefix", function()
     local backend = fake(sample())
     local result = commands.run("note", { "cccccccc", "landed", "as", "abc" }, backend)
     t.eq(result.output, "noted cccccccc")
-    t.eq(backend.calls[1], { "note", ID_C, "landed as abc" })
+    t.eq(backend.calls[1], { "note", ID_C, "landed as abc", {} })
     result = commands.run("move", { "cccccccc", "progress" }, backend)
     t.eq(result.output, "moved cccccccc to In Progress")
     t.eq(backend.calls[2], { "move", ID_C, "In Progress" })
@@ -437,6 +437,8 @@ local function with_comments()
             who = "worker",
             at = "2026-10-27T09:30:12Z",
             body = "first line\nsecond",
+            kind = "decision",
+            author = "reviewer",
         },
         { id = COMMENT_2, who = "human", at = "2026-10-27T10:00:00Z", body = "ok" },
     }
@@ -448,11 +450,43 @@ t.test("notes lists each comment with its id prefix, writer, time and first line
     local result = commands.run("notes", { "cccccccc" }, backend)
     t.eq(
         result.output,
-        "aaaaaaaa  worker  2026-10-27 09:30  first line\nbbbbbbbb  human   2026-10-27 10:00  ok"
+        "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
+            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
     )
     t.eq(commands.run("notes", { "cccccccc" }, fake(sample())).output, "no comments")
     t.eq(commands.run("notes", {}, backend).code, 2)
     t.eq(commands.run("notes", { "deadbeef" }, backend).code, 1)
+end)
+
+t.test("note sends a lowercase kind and a trimmed role, and refuses a bad one", function()
+    local backend = fake(sample())
+    local args = { "cccccccc", "--kind", "Decision", "--as", " reviewer ", "go", "ahead" }
+    local result = commands.run("note", args, backend)
+    t.eq(result.output, "noted cccccccc")
+    t.eq(backend.calls[1], { "note", ID_C, "go ahead", { kind = "decision", author = "reviewer" } })
+    result = commands.run("note", { "cccccccc", "--as", "planner", "text" }, backend)
+    t.eq(backend.calls[2], { "note", ID_C, "text", { author = "planner" } })
+    local count = #backend.calls
+    for _, bad in ipairs({
+        { "cccccccc", "--kind", "chatter", "text" },
+        { "cccccccc", "--kind" },
+        { "cccccccc", "--as", "   ", "text" },
+        { "cccccccc", "--as", string.rep("x", 81), "text" },
+        { "cccccccc", "--as", "a\nb", "text" },
+    }) do
+        t.eq(commands.run("note", bad, backend).code, 2)
+    end
+    t.eq(#backend.calls, count)
+    result = commands.run("note", { "cccccccc", "see", "the", "--as", "flag" }, backend)
+    t.eq(backend.calls[count + 1], { "note", ID_C, "see the --as flag", {} })
+    t.eq(
+        commands.run("note", { "cccccccc", "--kind", "done", "--edit", "bbbbbbbb", "x" }, backend).code,
+        2
+    )
+    t.eq(
+        #commands.run("note", { "cccccccc", "--as", string.rep("x", 80), "t" }, backend).output > 0,
+        true
+    )
 end)
 
 t.test("show prints the card line, its description and its comments", function()
@@ -466,7 +500,8 @@ t.test("show prints the card line, its description and its comments", function()
     t.eq(
         result.output,
         "11111111  Ready  1 Pomodoro  docs  Write docs\n\nWhy it matters.\nSecond line.\n\n"
-            .. "aaaaaaaa  worker  2026-10-27 09:30  first line\nbbbbbbbb  human   2026-10-27 10:00  ok"
+            .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
+            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
     )
     t.eq(backend.calls[#backend.calls], { "comments", ID_A })
     result = commands.run("show", { "bbbbbbbb-b" }, fake(sample()))
@@ -1262,6 +1297,16 @@ t.test("note posts a comment of kind agent and move goes to the top of the colum
     local calls = read(root, "calls")
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
     t.ok(calls:find('"kind":"agent"', 1, true), calls)
+    t.ok(not calls:find('"author"', 1, true), calls)
+    out = dev(
+        root,
+        home,
+        { "board", "note", "11111111-a", "--kind", "decision", "--as", "reviewer", "ok" }
+    )
+    t.eq(out, "noted 11111111\n")
+    calls = read(root, "calls")
+    t.ok(calls:find('"kind":"decision"', 1, true), calls)
+    t.ok(calls:find('"author":"reviewer"', 1, true), calls)
     out = dev(root, home, { "board", "move", "11111111-a", "review" })
     t.eq(out, "moved 11111111 to In Review\n")
     calls = read(root, "calls")
@@ -1276,7 +1321,7 @@ t.test("notes, note --edit and note --delete reach pomb's comment routes", funct
     t.eq(code, 0)
     t.eq(
         out,
-        "aaaaaaaa  worker  2026-10-27 09:30  first\ndddddddd  human   2026-10-27 10:00  mine? no\n"
+        "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
     )
     out, code = dev(root, home, { "board", "show", "11111111-a" })
     t.eq(code, 0)
@@ -1284,7 +1329,7 @@ t.test("notes, note --edit and note --delete reach pomb's comment routes", funct
         out,
         "11111111  Ready  1 Pomodoro  docs  First\n\nWhy it matters.\n\n"
             .. "checks:\n- dev test\n- dev lint\n\n"
-            .. "aaaaaaaa  worker  2026-10-27 09:30  first\ndddddddd  human   2026-10-27 10:00  mine? no\n"
+            .. "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
     )
     out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "aaaaaaaa", "better" })
     t.eq(code, 0)
@@ -1370,7 +1415,7 @@ end)
 t.test("a note may begin with a dash", function()
     local backend = fake(sample())
     local result = commands.run("note", { "cccccccc", "- fixed", "it" }, backend)
-    t.eq(backend.calls[1], { "note", ID_C, "- fixed it" })
+    t.eq(backend.calls[1], { "note", ID_C, "- fixed it", {} })
     t.eq(result.output, "noted cccccccc")
 end)
 

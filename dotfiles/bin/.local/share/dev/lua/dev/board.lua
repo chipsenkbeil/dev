@@ -27,7 +27,7 @@ local M = {}
 ---@field set_labels fun(self: dev.board.Backend, id: string, labels: string[], fence: integer?): boolean?, string? the card's whole label list replaced, checked against the claim's fence when one is given
 ---@field set_description fun(self: dev.board.Backend, id: string, text: string, fence: integer?): boolean?, string? the card's description replaced, checked against the claim's fence when one is given
 ---@field set_checks fun(self: dev.board.Backend, id: string, runs: string[], fence: integer?): boolean?, string? the card's checks rows replaced by one row per command, checked against the claim's fence when one is given
----@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?): boolean?, string? a comment of kind agent added to the card, checked against the claim's fence when one is given
+---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts: dev.board.NoteOpts?): boolean?, string? a comment added to the card, of kind agent unless opts names one, checked against the claim's fence when one is given
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
@@ -38,11 +38,17 @@ local M = {}
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
 
+---@class dev.board.NoteOpts
+---@field kind string? the comment's kind, lowercase
+---@field author string? the label the comment is written under
+
 ---@class dev.board.Comment
 ---@field id string the comment's full id
 ---@field who string the token's name, else the kind of actor that wrote it
 ---@field at string when it was written, as an RFC 3339 stamp
 ---@field body string its text
+---@field kind string? its kind tag, when it has one
+---@field author string? the role label it was written under, when it has one
 
 ---@class dev.board.AddOpts
 ---@field description string? the card's description
@@ -115,6 +121,12 @@ M.LINK_KINDS = { M.LinkKind.BLOCKED_BY, M.LinkKind.BLOCKS, M.LinkKind.RELATED }
 
 ---The fewest characters of a card id that name a card.
 M.MIN_PREFIX = 8
+
+---The comment kinds `note --kind` accepts, in the order help lists them.
+M.NOTE_KINDS = { "decision", "question", "blocked", "status", "done" }
+
+---The most characters of the label `note --as` sends, which Pomb enforces.
+M.AUTHOR_CHARS = 80
 
 local SHORT_FORMS = {
     progress = "In Progress",

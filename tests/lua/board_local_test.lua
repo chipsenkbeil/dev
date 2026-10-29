@@ -259,6 +259,22 @@ t.test("notes, edit and delete work on a local board and refuse another author's
     t.eq(out, "dev: that comment is not yours to change\n")
 end)
 
+t.test("note --kind and --as are stored on a local comment and notes prints them", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card" })))
+    dev(root, home, { "board", "note", a, "--kind", "decision", "--as", "reviewer", "ship", "it" })
+    dev(root, home, { "board", "note", a, "plain" })
+    local out = dev(root, home, { "board", "notes", a })
+    t.ok(out:find("agent  decision  reviewer  ", 1, true) and out:find("ship it", 1, true), out)
+    t.ok(out:find("agent  agent     -         ", 1, true), out)
+    out = dev(root, home, { "board", "note", a, "--kind", "chatter", "x" })
+    t.ok(out:find("unknown kind chatter", 1, true), out)
+    local first = assert(dev(root, home, { "board", "notes", a }):match("^(%x+)"))
+    dev(root, home, { "board", "note", a, "--edit", first, "changed" })
+    out = dev(root, home, { "board", "notes", a })
+    t.ok(out:find("decision  reviewer  ", 1, true) and out:find("changed", 1, true), out)
+end)
+
 t.test(
     "link stores blocked_by, blocks and related on a local board and keeps next honest",
     function()
@@ -715,6 +731,14 @@ t.test("writes while Pomb is unreachable are queued and the queue is private", f
     t.eq(mode(home .. "/state/dev/boards"), "700")
     t.ok(not assert(fs.read(queue_path(home))):find(TOKEN, 1, true), "no token in the queue")
     t.eq(calls(root), "")
+end)
+
+t.test("a queued note keeps its kind and role", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/down", ""))
+    local args = { ID_A:sub(1, 8), "--kind", "decision", "--as", "reviewer", "kept" }
+    t.eq(pomb_dev(root, home, { "board", "note", unpack(args) }), QUEUED)
+    t.eq(document(queue_path(home))[1].args, args)
 end)
 
 t.test("after a gateway error only a change that is safe to repeat is queued", function()

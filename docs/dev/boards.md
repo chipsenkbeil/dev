@@ -16,6 +16,7 @@ dev board add "Name" --checks "dev lint" --checks "dev test"
 dev board label 8af0e001 needs:human --remove needs:lead
 dev board stale --days 7
 dev board note 8af0e001 "Tests pass, landing now."
+dev board note 8af0e001 --kind decision --as reviewer "Keep the two flags separate."
 dev board notes 8af0e001
 dev board show 8af0e001
 dev board edit 8af0e001 < plan.md
@@ -206,8 +207,9 @@ unclaimed and not blocked, or `no ready cards`.
 writes the four card format v1 headings into the description (Problem,
 Change, Out of scope and Done when), filling Problem from `--description`. A
 description that already holds a v1 heading is kept as it is, and an Icebox
-card gets the text as given, with no headings. `note`
-adds a comment of kind agent. `move` puts the card at the top of the column.
+card gets the text as given, with no headings. `note` adds a comment, of kind
+agent unless `--kind` says otherwise. `move` puts the card at the top of the
+column.
 
 `add`, `note` and `edit` warn on standard error, and still write, when the
 prose holds a hex id, a hash or a path, which the v1 format keeps in the
@@ -258,9 +260,16 @@ decision. Trailing whitespace is dropped, and empty text is a usage error
 (exit 2), to keep an empty pipe from wiping a plan. It sends the claim's fence when
 this machine holds one. It does not touch the title or the comments.
 
+`note CARD --kind K --as ROLE TEXT` tags the comment: `K` is decision, question,
+blocked, status or done (agent when omitted), and `ROLE` is a free label of at
+most 80 characters, such as planner, implementer or reviewer, that lets agents
+sharing one token tell themselves apart. A note that begins with a dash still
+posts as text. `--edit` changes only the text, so the kind and the label stay,
+and a queued note replays with both.
+
 `notes CARD` lists the card's comments, oldest first: the comment's id prefix,
-who wrote it (the token's name, else the kind of actor), the time in UTC and the
-first line. `note CARD --edit COMMENT TEXT` replaces the text of one of your own
+who wrote it (the token's name, else the kind of actor), its kind, its role
+label (`-` when it has none), the time in UTC and the first line. `note CARD --edit COMMENT TEXT` replaces the text of one of your own
 comments and `note CARD --delete COMMENT` removes it. `COMMENT` is an id prefix
 of at least 8 characters from `notes`. Pomb lets a token change only the
 comments it wrote, so a comment from a person, from another token or from

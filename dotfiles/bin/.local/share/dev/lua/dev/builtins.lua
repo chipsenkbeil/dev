@@ -241,15 +241,15 @@ return {
     {
         words = { "board", "note" },
         handler = "lua",
-        flags = "--edit --delete",
-        usage = "dev board note CARD TEXT | CARD --edit COMMENT TEXT | CARD --delete COMMENT",
-        desc = "Add a comment to a card, written as an agent, or edit or delete one of your own by its id prefix",
+        flags = "--edit --delete --kind --as",
+        usage = "dev board note CARD [--kind K] [--as ROLE] TEXT | CARD --edit COMMENT TEXT | CARD --delete COMMENT",
+        desc = "Add a comment to a card, of kind agent unless --kind gives decision, question, blocked, status or done, under the label --as ROLE, or edit or delete one of your own by its id prefix",
     },
     {
         words = { "board", "notes" },
         handler = "lua",
         usage = "dev board notes CARD",
-        desc = "List a card's comments: id prefix, who wrote it, when and the first line",
+        desc = "List a card's comments: id prefix, who wrote it, kind, role label, when and the first line",
     },
     {
         words = { "board", "show" },

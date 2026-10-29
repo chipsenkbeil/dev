@@ -17,6 +17,7 @@ local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
 local HTTP_ERROR = 400
 local TOP = 0
 local COMMENT_KIND = "agent"
+local DEFAULT_AUTHOR = "api-token"
 local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
 local KEEPALIVE_SCRIPT = "/board/keepalive.sh"
 local TEMPLATE = "agent project"
@@ -525,7 +526,7 @@ function Backend:add(name, column, opts)
     return self:__card(task)
 end
 
-function Backend:note(id, body, fence)
+function Backend:note(id, body, fence, opts)
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -533,7 +534,8 @@ function Backend:note(id, body, fence)
     local made
     made, message = self:__request("POST", "/api/tasks/" .. id .. "/comments", {
         body = body,
-        kind = COMMENT_KIND,
+        kind = opts and opts.kind or COMMENT_KIND,
+        author = opts and opts.author,
     }, fence)
     if not made then
         return nil, message
@@ -548,11 +550,14 @@ function Backend:comments(id)
     end
     local found = {}
     for _, comment in ipairs(list) do
+        local author = present(comment.author)
         found[#found + 1] = {
             id = comment.id,
             who = present(comment.token_name) or present(comment.actor_kind) or "unknown",
             at = present(comment.created_at) or "",
             body = present(comment.body) or "",
+            kind = present(comment.kind),
+            author = author ~= DEFAULT_AUTHOR and author or nil,
         }
     end
     return found
