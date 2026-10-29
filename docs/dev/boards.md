@@ -475,11 +475,16 @@ Pomb has dropped the events after the stored cursor, `wait` stores the oldest
 one it still has, prints `events were trimmed, check the board` and exits 0, so
 look at the board and run it again.
 
-Pomb being unreachable (no route, a locked `pass`, a gateway error) and a 429
-from too many open waits on the token are retried every 30 seconds, up to ten
-failures in a row, and then `wait` exits 1 with the message. Any other refusal,
-such as a bad token, exits 1 at once. Exit 124 from `timeout` means nothing
-changed, so park again.
+Pomb being unreachable (no route, a locked `pass`, a gateway error) is retried
+every 30 seconds, up to ten failures in a row, and then `wait` exits 1 with the
+message. Pomb allows 4 open waits per token and every session shares one, so a
+fifth session gets a 429 with the code `too_many_waits`. That is never a
+failure: `wait` prints one line on standard error the first time, then retries
+with a pause that doubles from 30 seconds to 5 minutes, each pause cut by a
+random fraction of up to a quarter to keep sessions from retrying together,
+and keeps waiting until a slot frees. Any other refusal, such as a bad token,
+exits 1 at once. Exit 124 from `timeout` means nothing changed, so park
+again.
 
 ## Claims
 

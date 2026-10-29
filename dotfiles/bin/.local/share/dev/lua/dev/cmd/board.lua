@@ -1652,9 +1652,12 @@ local WAIT_FOR_KINDS = {
     [WaitFor.HUMAN] = { EventKind.MOVED },
 }
 local WAIT_RETRY_SECONDS = 30
+local WAIT_LIMITED_MAX_SECONDS = 300
+local WAIT_JITTER = 0.25
 local WAIT_RETRIES = 10
 local WAIT_TRIMMED = "events were trimmed, check the board"
-local WAIT_TOO_MANY = "^board unavailable: pomb answered 429:"
+local WAIT_LIMITED_NOTICE =
+    "dev: pomb holds too many open waits for this token, waiting for one to end"
 
 local function cursor_path(name)
     return store.dir() .. "/" .. name:gsub("[^%w._-]", "_")
@@ -1664,6 +1667,17 @@ local function read_cursor(path)
     local text = fs.exists(path) and fs.read(path)
     text = text and text:gsub("%s+", "")
     return text ~= "" and text or nil
+end
+
+local function entropy()
+    local file = assert(io.open("/dev/urandom", "rb"))
+    local bytes = file:read(4)
+    file:close()
+    local n = 0
+    for i = 1, 4 do
+        n = n * 256 + bytes:byte(i)
+    end
+    return n / 4294967296
 end
 
 local function wait_line(event, only)
@@ -1691,13 +1705,18 @@ end
 ---@class dev.cmd.board.WaitOpts
 ---@field stem string the path the cursor files start with, one per `--for` mode
 ---@field nap fun(seconds: number)? sleeps between retries, `dev.os.nap` when nil
+---@field random (fun(): number)? a number in [0, 1) that spreads the pause, entropy from the system when nil
+---@field notice fun(line: string)? prints the one line about too many open waits, standard error when nil
 
 ---Hold until the board changes in a way the caller asked for.
 ---
 ---The cursor is saved after every reply, so a restart misses nothing. A Pomb
----that cannot be asked, or a 429 for too many open waits, is retried and
----fails once the retries run out. A cursor Pomb no longer holds is replaced
----and reported as a notice, not an error.
+---that cannot be asked is retried and fails once ten tries in a row run out. A
+---refusal for too many open waits on the token is never a failure: the wait
+---is reported once and retried with a pause that doubles from 30 seconds to
+---5 minutes, spread by a random fraction so sessions do not retry together.
+---A cursor Pomb no longer holds is replaced and reported as a notice, not an
+---error.
 ---@param backend dev.board.Backend the Pomb board
 ---@param args string[] the arguments after `wait`
 ---@param opts dev.cmd.board.WaitOpts where the cursor lives and how to sleep
@@ -1715,13 +1734,19 @@ function M.wait(backend, args, opts)
         return usage("unknown --for " .. only .. ", the choices are ready and human")
     end
     local nap = opts.nap or devos.nap
+    local random = opts.random or entropy
+    local notice = opts.notice or stderr_line
+    local limited = 0
+    local told = false
     local path = opts.stem .. "." .. (only or "all") .. ".cursor"
     local cursor = read_cursor(path)
     local failures = 0
     while true do
-        local reply, message, oldest = backend:wait(cursor, WAIT_FOR_KINDS[only] or WAIT_KINDS)
+        local reply, message, oldest, refused =
+            backend:wait(cursor, WAIT_FOR_KINDS[only] or WAIT_KINDS)
         if reply then
             failures = 0
+            limited = 0
             if type(reply.cursor) ~= "string" then
                 return failure("pomb answered without a cursor")
             end
@@ -1744,7 +1769,16 @@ function M.wait(backend, args, opts)
                 return failure(why)
             end
             return { output = WAIT_TRIMMED }
-        elseif message:find(WAIT_TOO_MANY) or pomb.unreachable(message, true) then
+        elseif refused then
+            failures = 0
+            if not told then
+                told = true
+                notice(WAIT_LIMITED_NOTICE)
+            end
+            local pause = math.min(WAIT_RETRY_SECONDS * 2 ^ limited, WAIT_LIMITED_MAX_SECONDS)
+            limited = limited + 1
+            nap(pause * (1 - WAIT_JITTER * random()))
+        elseif pomb.unreachable(message, true) then
             failures = failures + 1
             if failures >= WAIT_RETRIES then
                 return failure(message)

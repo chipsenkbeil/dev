@@ -2406,8 +2406,8 @@ local function waiting(root, home, call, status)
     local script = string.format(
         "package.path = %q; local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
             .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
-            .. "local got, message, oldest = b:wait(%s); "
-            .. "print(json.encode({got = got, message = message, oldest = oldest}))",
+            .. "local got, message, oldest, refused = b:wait(%s); "
+            .. "print(json.encode({got = got, message = message, oldest = oldest, refused = refused}))",
         support.absolute_path(),
         call
     )
@@ -2503,16 +2503,27 @@ t.test("wait surfaces too_many_waits as a 429 and keeps no cursor", function()
     t.eq(result.got, nil)
     t.eq(result.oldest, nil)
     t.ok(result.message:find("pomb answered 429: end one", 1, true), result.message)
+    t.eq(result.refused, true)
+end)
+
+t.test("wait does not flag a 429 with another code or another status as too many waits", function()
+    local root, home = sandbox()
+    wait_route(root, '{"code":"rate_limited","message":"slow down"}')
+    local result = waiting(root, home, "'7'", "429")
+    t.eq(result.refused, nil)
+    wait_route(root, '{"code":"too_many_waits","message":"end one"}')
+    result = waiting(root, home, "'7'", "503")
+    t.eq(result.refused, nil)
 end)
 
 local function waiter(replies)
-    local seen = { afters = {}, kinds = {}, naps = {} }
+    local seen = { afters = {}, kinds = {}, naps = {}, notices = {} }
     local backend = {}
     function backend:wait(after, kinds)
         seen.afters[#seen.afters + 1] = after or "none"
         seen.kinds[#seen.kinds + 1] = table.concat(kinds, ",")
         local reply = table.remove(replies, 1)
-        return reply.got, reply.message, reply.oldest
+        return reply.got, reply.message, reply.oldest, reply.refused
     end
     return backend, seen
 end
@@ -2524,6 +2535,12 @@ local function waited(replies, args, path)
         stem = path,
         nap = function(seconds)
             seen.naps[#seen.naps + 1] = seconds
+        end,
+        random = function()
+            return 0
+        end,
+        notice = function(line)
+            seen.notices[#seen.notices + 1] = line
         end,
     })
     return result, seen, path
@@ -2606,14 +2623,13 @@ t.test("wait stores the oldest cursor of an expired one and says events were tri
     t.eq(fs.read(path .. ".ready.cursor"), "17\n")
 end)
 
-t.test("wait retries Pomb being unreachable and a 429, then gives up after ten in a row", function()
+t.test("wait retries Pomb being unreachable, then gives up after ten in a row", function()
     local result, seen = waited({
         { message = "board unavailable: cannot reach https://p (curl exit 7)" },
-        { message = "board unavailable: pomb answered 429: end one" },
         got("5", { kind = "task_added", task_id = ID_A, column = "Ready" }),
     }, { "--for", "ready" })
     t.eq(result.output, "added 11111111 to Ready")
-    t.eq(seen.naps, { 30, 30 })
+    t.eq(seen.naps, { 30 })
     local down = {}
     for i = 1, 10 do
         down[i] = { message = "board unavailable: cannot reach https://p (curl exit 6)" }
@@ -2621,6 +2637,78 @@ t.test("wait retries Pomb being unreachable and a 429, then gives up after ten i
     result, seen = waited(down, {})
     t.ok(result.message:find("curl exit 6", 1, true), result.message)
     t.eq(#seen.naps, 9)
+end)
+
+local function limited()
+    return { message = "board unavailable: pomb answered 429: end one", refused = true }
+end
+
+t.test(
+    "wait keeps waiting through too many open waits, with a pause that grows to 5 minutes",
+    function()
+        local replies = {}
+        for i = 1, 14 do
+            replies[i] = limited()
+        end
+        replies[15] = got("5", { kind = "task_added", task_id = ID_A, column = "Ready" })
+        local result, seen = waited(replies, { "--for", "ready" })
+        t.eq(result.output, "added 11111111 to Ready")
+        t.eq(seen.naps, { 30, 60, 120, 240, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 })
+    end
+)
+
+t.test("wait spreads the pause with the random source and never passes the step", function()
+    local backend =
+        waiter({ limited(), limited(), got("5", { kind = "task_updated", task_id = ID_A }) })
+    local naps = {}
+    local fractions = { 0, 1 }
+    commands.wait(backend, {}, {
+        stem = support.tempdir() .. "/wait",
+        nap = function(seconds)
+            naps[#naps + 1] = seconds
+        end,
+        random = function()
+            return table.remove(fractions, 1)
+        end,
+        notice = function() end,
+    })
+    t.eq(naps, { 30, 45 })
+end)
+
+t.test("wait reports too many open waits once", function()
+    local result, seen = waited({
+        limited(),
+        limited(),
+        got("5", { kind = "task_updated", task_id = ID_A }),
+    }, {})
+    t.eq(result.output, "updated 11111111")
+    t.eq(#seen.notices, 1)
+    t.ok(seen.notices[1]:find("too many open waits", 1, true), seen.notices[1])
+    t.eq(seen.naps, { 30, 60 })
+end)
+
+t.test("wait does not count too many open waits toward the ten failures", function()
+    local replies = {}
+    for _ = 1, 9 do
+        replies[#replies + 1] =
+            { message = "board unavailable: cannot reach https://p (curl exit 6)" }
+    end
+    replies[#replies + 1] = limited()
+    for _ = 1, 9 do
+        replies[#replies + 1] =
+            { message = "board unavailable: cannot reach https://p (curl exit 6)" }
+    end
+    replies[#replies + 1] = got("5", { kind = "task_updated", task_id = ID_A })
+    local result = waited(replies, {})
+    t.eq(result.output, "updated 11111111")
+end)
+
+t.test("wait treats a 429 without the too_many_waits flag as a plain refusal", function()
+    local result, seen = waited({
+        { message = "board unavailable: pomb answered 429: slow down" },
+    }, {})
+    t.eq(result.code, 1)
+    t.eq(#seen.naps, 0)
 end)
 
 t.test("wait fails at once on a refusal", function()

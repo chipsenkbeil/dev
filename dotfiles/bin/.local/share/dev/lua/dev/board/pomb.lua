@@ -13,6 +13,8 @@ local WAIT_SECONDS = 50
 local WAIT_MARGIN_SECONDS = 10
 local GONE = 410
 local CURSOR_EXPIRED = "cursor_expired"
+local TOO_MANY_REQUESTS = 429
+local TOO_MANY_WAITS = "too_many_waits"
 local TIMED_OUT = 124
 local TOKEN_PATTERN = "^[%w%._~%+/=-]+$"
 local ENTRY_PATTERN = "^[%w_./][%w_. /-]*$"
@@ -847,6 +849,13 @@ function Backend:wait(after, kinds, timeout)
     if not doc then
         if status == GONE and type(answer) == "table" and answer.code == CURSOR_EXPIRED then
             return nil, message, present(answer.oldest_cursor)
+        end
+        if
+            status == TOO_MANY_REQUESTS
+            and type(answer) == "table"
+            and answer.code == TOO_MANY_WAITS
+        then
+            return nil, message, nil, true
         end
         return nil, message
     end
