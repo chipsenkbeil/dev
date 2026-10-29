@@ -117,6 +117,9 @@ M.ICEBOX = "Icebox"
 ---The column a worker takes cards from.
 M.READY = "Ready"
 
+---The column of cards that wait on the owner.
+M.BLOCKED = "Blocked"
+
 ---The column of cards waiting for review.
 M.REVIEW = "In Review"
 

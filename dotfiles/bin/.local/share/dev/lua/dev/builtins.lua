@@ -197,7 +197,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, size, label, link, links, stale, take, release and sync",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, size, label, link, links, stale, take, release, wait and sync",
         group = "Share it",
     },
     {
@@ -327,6 +327,13 @@ return {
         handler = "lua",
         usage = "dev board sync",
         desc = "Replay the changes queued while Pomb was unreachable, oldest first, and report any Pomb refuses",
+    },
+    {
+        words = { "board", "wait" },
+        handler = "lua",
+        flags = "--for",
+        usage = "dev board wait [--for ready|human]",
+        desc = "Block until the board changes, then print a line per change and exit 0, so a background run wakes the session: --for ready a card added to or moved into Ready, --for human a card moved out of Blocked",
     },
     {
         words = { "bootstrap" },

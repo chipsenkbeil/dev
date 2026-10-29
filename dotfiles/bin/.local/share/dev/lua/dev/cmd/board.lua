@@ -1608,6 +1608,140 @@ M.handlers["board status"] = function(ctx)
     return 0
 end
 
+local WaitFor = { READY = "ready", HUMAN = "human" }
+local EventKind = {
+    ADDED = "task_added",
+    MOVED = "task_moved",
+    UPDATED = "task_updated",
+    COMMENTED = "comment_added",
+}
+local WAIT_KINDS = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED, EventKind.COMMENTED }
+local WAIT_FOR_KINDS = {
+    [WaitFor.READY] = { EventKind.ADDED, EventKind.MOVED },
+    [WaitFor.HUMAN] = { EventKind.MOVED },
+}
+local WAIT_RETRY_SECONDS = 30
+local WAIT_RETRIES = 10
+local WAIT_TRIMMED = "events were trimmed, check the board"
+local WAIT_TOO_MANY = "^board unavailable: pomb answered 429:"
+
+local function cursor_path(name)
+    return store.dir() .. "/" .. name:gsub("[^%w._-]", "_")
+end
+
+local function read_cursor(path)
+    local text = fs.exists(path) and fs.read(path)
+    text = text and text:gsub("%s+", "")
+    return text ~= "" and text or nil
+end
+
+local function wait_line(event, only)
+    local id = event.task_id:sub(1, board.MIN_PREFIX)
+    local added = event.kind == EventKind.ADDED
+    if only == WaitFor.HUMAN then
+        if event.kind == EventKind.MOVED and event.from_column == board.BLOCKED then
+            return "moved " .. id .. " out of " .. board.BLOCKED
+        end
+    elseif only == WaitFor.READY then
+        if event.column == board.READY and (added or event.kind == EventKind.MOVED) then
+            return (added and "added " or "moved ") .. id .. " to " .. board.READY
+        end
+    elseif added then
+        return "added " .. id .. " to " .. tostring(event.column)
+    elseif event.kind == EventKind.MOVED then
+        return "moved " .. id .. " to " .. tostring(event.column or "another board")
+    elseif event.kind == EventKind.UPDATED then
+        return "updated " .. id
+    elseif event.kind == EventKind.COMMENTED then
+        return "commented on " .. id
+    end
+end
+
+---@class dev.cmd.board.WaitOpts
+---@field stem string the path the cursor files start with, one per `--for` mode
+---@field nap fun(seconds: number)? sleeps between retries, `dev.os.nap` when nil
+
+---Hold until the board changes in a way the caller asked for.
+---
+---The cursor is saved after every reply, so a restart misses nothing. A Pomb
+---that cannot be asked, or a 429 for too many open waits, is retried and
+---fails once the retries run out. A cursor Pomb no longer holds is replaced
+---and reported as a notice, not an error.
+---@param backend dev.board.Backend the Pomb board
+---@param args string[] the arguments after `wait`
+---@param opts dev.cmd.board.WaitOpts where the cursor lives and how to sleep
+---@return dev.cmd.board.Result result the lines for the matching events, or a message and the exit code
+function M.wait(backend, args, opts)
+    local flags, words = parse(args, { ["--for"] = true })
+    if not flags then
+        return words
+    end
+    if #words > 0 then
+        return usage("takes no card")
+    end
+    local only = flags["--for"]
+    if only and not WAIT_FOR_KINDS[only] then
+        return usage("unknown --for " .. only .. ", the choices are ready and human")
+    end
+    local nap = opts.nap or devos.nap
+    local path = opts.stem .. "." .. (only or "all") .. ".cursor"
+    local cursor = read_cursor(path)
+    local failures = 0
+    while true do
+        local reply, message, oldest = backend:wait(cursor, WAIT_FOR_KINDS[only] or WAIT_KINDS)
+        if reply then
+            failures = 0
+            if type(reply.cursor) ~= "string" then
+                return failure("pomb answered without a cursor")
+            end
+            local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
+            if not saved then
+                return failure(why)
+            end
+            cursor = reply.cursor
+            local lines = {}
+            for _, event in ipairs(reply.events) do
+                lines[#lines + 1] = type(event.task_id) == "string" and wait_line(event, only)
+                    or nil
+            end
+            if #lines > 0 then
+                return { output = table.concat(lines, "\n") }
+            end
+        elseif oldest then
+            local saved, why = store.write(path, oldest .. "\n", { private = true })
+            if not saved then
+                return failure(why)
+            end
+            return { output = WAIT_TRIMMED }
+        elseif message:find(WAIT_TOO_MANY) or pomb.unreachable(message, true) then
+            failures = failures + 1
+            if failures >= WAIT_RETRIES then
+                return failure(message)
+            end
+            nap(WAIT_RETRY_SECONDS)
+        else
+            return failure(message)
+        end
+    end
+end
+
+M.handlers["board wait"] = function(ctx)
+    local found = settings(ctx)
+    if found.backend ~= board.Backend.POMB then
+        verb.die("dev: a local board has nothing to wait on")
+    end
+    local backend = open_board(ctx)
+    local result = M.wait(backend, ctx.args, { stem = cursor_path(found.name) })
+    if result.message then
+        if result.code == USAGE then
+            verb.usage_error(ctx, result.message)
+        end
+        verb.die("dev: " .. result.message)
+    end
+    print(result.output)
+    return 0
+end
+
 M.handlers["board sync"] = function(ctx)
     verb.no_args(ctx)
     local found = settings(ctx)

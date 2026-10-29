@@ -721,6 +721,13 @@ t.test("sync on a local board says there is nothing to sync", function()
     t.eq(out, "dev: a local board has nothing to sync\n")
 end)
 
+t.test("wait on a local board says there is nothing to wait on", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, { "board", "wait", "--for", "ready" })
+    t.eq(code, 1)
+    t.eq(out, "dev: a local board has nothing to wait on\n")
+end)
+
 t.test("six processes writing at once lose no card", function()
     local root, home = local_board()
     local script = string.format(

@@ -2481,3 +2481,136 @@ t.test("wait surfaces too_many_waits as a 429 and keeps no cursor", function()
     t.eq(result.oldest, nil)
     t.ok(result.message:find("pomb answered 429: end one", 1, true), result.message)
 end)
+
+local function waiter(replies)
+    local seen = { afters = {}, kinds = {}, naps = {} }
+    local backend = {}
+    function backend:wait(after, kinds)
+        seen.afters[#seen.afters + 1] = after or "none"
+        seen.kinds[#seen.kinds + 1] = table.concat(kinds, ",")
+        local reply = table.remove(replies, 1)
+        return reply.got, reply.message, reply.oldest
+    end
+    return backend, seen
+end
+
+local function waited(replies, args, path)
+    local backend, seen = waiter(replies)
+    path = path or support.tempdir() .. "/wait"
+    local result = commands.wait(backend, args, {
+        stem = path,
+        nap = function(seconds)
+            seen.naps[#seen.naps + 1] = seconds
+        end,
+    })
+    return result, seen, path
+end
+
+local function got(cursor, ...)
+    return { got = { cursor = cursor, events = { ... } } }
+end
+
+t.test(
+    "wait --for ready prints the card added to or moved into Ready and ignores the rest",
+    function()
+        local result, seen, path = waited({
+            got("1"),
+            got("2", { kind = "task_moved", task_id = ID_A, column = "In Progress" }),
+            got(
+                "3",
+                { kind = "task_updated", task_id = ID_A, column = "Ready" },
+                { kind = "task_added", task_id = ID_B, column = "Ready" },
+                { kind = "task_moved", task_id = ID_C, column = "Ready", from_column = "Backlog" }
+            ),
+        }, { "--for", "ready" })
+        t.eq(result.output, "added 11111111 to Ready\nmoved cccccccc to Ready")
+        t.eq(seen.afters, { "none", "1", "2" })
+        t.eq(seen.kinds[1], "task_added,task_moved")
+        t.eq(fs.read(path .. ".ready.cursor"), "3\n")
+    end
+)
+
+t.test("wait --for human wakes on a move out of Blocked and not on a comment", function()
+    local result, seen = waited({
+        got("1"),
+        got(
+            "2",
+            { kind = "comment_added", task_id = ID_A, column = "Blocked" },
+            { kind = "task_moved", task_id = ID_B, column = "In Progress", from_column = "Ready" }
+        ),
+        got(
+            "3",
+            { kind = "task_moved", task_id = ID_C, column = "Ready", from_column = "Blocked" }
+        ),
+    }, { "--for", "human" })
+    t.eq(result.output, "moved cccccccc out of Blocked")
+    t.eq(seen.kinds[1], "task_moved")
+end)
+
+t.test("wait without --for matches every kind", function()
+    local result, seen = waited({
+        got("1", { kind = "comment_added", task_id = ID_A, column = "Ready" }),
+    }, {})
+    t.eq(result.output, "commented on 11111111")
+    t.eq(seen.kinds[1], "task_added,task_moved,task_updated,comment_added")
+end)
+
+t.test("wait resumes from the stored cursor", function()
+    local path = support.tempdir() .. "/wait"
+    assert(fs.write(path .. ".ready.cursor", "41\n"))
+    local result, seen = waited({
+        got("42", { kind = "task_added", task_id = ID_A, column = "Ready" }),
+    }, { "--for", "ready" }, path)
+    t.eq(result.output, "added 11111111 to Ready")
+    t.eq(seen.afters, { "41" })
+    t.eq(fs.read(path .. ".ready.cursor"), "42\n")
+    local _, other = waited({
+        got("9"),
+        got(
+            "10",
+            { kind = "task_moved", task_id = ID_A, column = "Ready", from_column = "Blocked" }
+        ),
+    }, { "--for", "human" }, path)
+    t.eq(other.afters, { "none", "9" })
+end)
+
+t.test("wait stores the oldest cursor of an expired one and says events were trimmed", function()
+    local result, _, path = waited({
+        { message = "board unavailable: pomb answered 410: too old", oldest = "17" },
+    }, { "--for", "ready" })
+    t.eq(result.output, "events were trimmed, check the board")
+    t.eq(result.message, nil)
+    t.eq(fs.read(path .. ".ready.cursor"), "17\n")
+end)
+
+t.test("wait retries Pomb being unreachable and a 429, then gives up after ten in a row", function()
+    local result, seen = waited({
+        { message = "board unavailable: cannot reach https://p (curl exit 7)" },
+        { message = "board unavailable: pomb answered 429: end one" },
+        got("5", { kind = "task_added", task_id = ID_A, column = "Ready" }),
+    }, { "--for", "ready" })
+    t.eq(result.output, "added 11111111 to Ready")
+    t.eq(seen.naps, { 30, 30 })
+    local down = {}
+    for i = 1, 10 do
+        down[i] = { message = "board unavailable: cannot reach https://p (curl exit 6)" }
+    end
+    result, seen = waited(down, {})
+    t.ok(result.message:find("curl exit 6", 1, true), result.message)
+    t.eq(#seen.naps, 9)
+end)
+
+t.test("wait fails at once on a refusal", function()
+    local result, seen = waited({
+        { message = "board unavailable: pomb answered 401: bad token" },
+    }, {})
+    t.eq(result.code, 1)
+    t.eq(#seen.naps, 0)
+end)
+
+t.test("wait rejects an unknown --for value and a card", function()
+    local result = waited({}, { "--for", "everyone" })
+    t.eq(result.code, 2)
+    t.ok(result.message:find("ready and human", 1, true), result.message)
+    t.eq(waited({}, { "abc" }).code, 2)
+end)

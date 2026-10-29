@@ -32,6 +32,7 @@ dev board move 8af0e001 progress
 dev board take 8af0e001
 dev board release 8af0e001
 dev board sync
+dev board wait --for ready
 ```
 
 ## Opting in
@@ -437,6 +438,41 @@ overwritten. `dev board sync` prints
 `dev: <file>:<line>: <reason>; the queue is left in place` and exits 1. Any other `dev board` command prints that line on
 standard error, skips the replay and runs as usual. A write that cannot reach
 Pomb then fails instead of being queued. Fix or delete the file to go on.
+
+## Waiting for the board
+
+`dev board wait` blocks until the board changes, so an agent with nothing to do
+parks on it instead of polling or ending idle. Run it in the background under
+`timeout`, and its exit wakes the session:
+
+```
+timeout 3600 dev board wait --for ready
+timeout 3600 dev board wait --for human
+```
+
+`--for ready` wakes on a card added to Ready or moved into it and prints
+`added <id prefix> to Ready` or `moved <id prefix> to Ready`. `--for human`
+wakes only on a card moved out of Blocked and prints
+`moved <id prefix> out of Blocked`, (your comments on a Blocked card are
+drafts until you move it, so a comment never wakes it). With no `--for`, every
+added card, move, update and comment wakes it. Any other `--for` value is a
+usage error, and a local board is `dev: a local board has nothing to wait on`
+(exit 1). `wait` is never queued.
+
+The command asks Pomb for events after a cursor and holds each request for up
+to 50 seconds, repeating on a quiet board until a matching event arrives. It
+keeps the cursor in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`ready`, `human` or `all`), readable by you
+alone and saved after every reply, so a change made while no wait was running
+wakes the next one. With no cursor file the first call starts from now. When
+Pomb has dropped the events after the stored cursor, `wait` stores the oldest
+one it still has, prints `events were trimmed, check the board` and exits 0, so
+look at the board and run it again.
+
+Pomb being unreachable (no route, a locked `pass`, a gateway error) and a 429
+from too many open waits on the token are retried every 30 seconds, up to ten
+failures in a row, and then `wait` exits 1 with the message. Any other refusal,
+such as a bad token, exits 1 at once. Exit 124 from `timeout` means nothing
+changed, so park again.
 
 ## Claims
 
