@@ -10,6 +10,7 @@ local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
 local store = require("dev.board.store")
+local text_width = require("dev.text").width
 local toml = require("dev.toml")
 local ui = require("dev.ui")
 local verb = require("dev.verb")
@@ -616,22 +617,58 @@ local function delete_note(backend, args)
     return changed("deleted", card, comment)
 end
 
-local function comment_lines(list)
+local function body_lines(body)
+    local trimmed = body:gsub("\r\n?", "\n"):gsub("\n+$", "")
+    local lines = {}
+    for line in (trimmed .. "\n"):gmatch("([^\n]*)\n") do
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
+local function body_column(rows)
+    local marked = {}
+    for i, row in ipairs(rows) do
+        marked[i] = { row[1], row[2], row[3], row[4], row[5], "x" }
+    end
+    return text_width(board.table_lines(marked)[1]) - text_width("x")
+end
+
+---Format the comments as aligned table rows, one per comment.
+---@param list dev.board.Comment[]
+---@param opts? { whole: boolean } `whole` prints every line of each body, not only the first
+---@return string
+local function comment_lines(list, opts)
     if #list == 0 then
         return "no comments"
     end
-    local rows = {}
-    for _, comment in ipairs(list) do
-        rows[#rows + 1] = {
+    local rows, rests = {}, {}
+    for i, comment in ipairs(list) do
+        local lines = body_lines(comment.body)
+        rows[i] = {
             comment.id:sub(1, board.MIN_PREFIX),
             comment.who,
             comment.kind or "-",
             comment.author or "-",
             comment.at:sub(1, STAMP_CHARS):gsub("T", " "),
-            comment.body:match("^[^\r\n]*"),
+            lines[1],
         }
+        rests[i] = {}
+        if opts and opts.whole then
+            for j = 2, #lines do
+                rests[i][#rests[i] + 1] = lines[j]
+            end
+        end
     end
-    return table.concat(board.table_lines(rows), "\n")
+    local indent = string.rep(" ", body_column(rows))
+    local out = {}
+    for i, line in ipairs(board.table_lines(rows)) do
+        out[#out + 1] = line
+        for _, rest in ipairs(rests[i]) do
+            out[#out + 1] = rest:match("^%s*$") and "" or indent .. rest
+        end
+    end
+    return table.concat(out, "\n")
 end
 
 function commands.notes(backend, args)
@@ -715,7 +752,7 @@ function commands.show(backend, args)
             .. "\n\n"
             .. outcomes
             .. checks
-            .. comment_lines(list),
+            .. comment_lines(list, { whole = true }),
     }
 end
 

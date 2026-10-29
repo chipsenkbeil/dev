@@ -598,6 +598,7 @@ end)
 
 local COMMENT_1 = "aaaaaaaa-1111-4111-8111-111111111111"
 local COMMENT_2 = "bbbbbbbb-2222-4222-8222-222222222222"
+local BODY_COLUMN = 56
 
 local function with_comments()
     local backend = fake(sample())
@@ -626,6 +627,37 @@ t.test("notes lists each comment with its id prefix, writer, time and first line
     t.eq(commands.run("notes", { "cccccccc" }, fake(sample())).output, "no comments")
     t.eq(commands.run("notes", {}, backend).code, 2)
     t.eq(commands.run("notes", { "deadbeef" }, backend).code, 1)
+end)
+
+t.test("show indents the rest of a multi-line body under its body, notes keeps one line", function()
+    local backend = fake(sample())
+    backend.listed = {
+        {
+            id = COMMENT_1,
+            who = "worker",
+            at = "2026-10-27T09:30:12Z",
+            body = "1. first\r\n\r\n2. second\n\n",
+            kind = "decision",
+            author = "reviewer",
+        },
+        { id = COMMENT_2, who = "human", at = "2026-10-27T10:00:00Z", body = "ok\nmore" },
+    }
+    local result = commands.run("show", { "cccccccc" }, backend)
+    t.eq(
+        result.output,
+        "cccccccc  Done  unsized  -  Old thing\n\nno description\n\n"
+            .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n\n"
+            .. (" "):rep(BODY_COLUMN)
+            .. "2. second\n"
+            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok\n"
+            .. (" "):rep(BODY_COLUMN)
+            .. "more"
+    )
+    t.eq(
+        commands.run("notes", { "cccccccc" }, backend).output,
+        "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n"
+            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
+    )
 end)
 
 t.test("note sends a lowercase kind and a trimmed role, and refuses a bad one", function()
@@ -671,6 +703,8 @@ t.test("show prints the card line, its description and its comments", function()
         result.output,
         "11111111  Ready  1 Pomodoro  docs  Write docs\n\nWhy it matters.\nSecond line.\n\n"
             .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
+            .. (" "):rep(BODY_COLUMN)
+            .. "second\n"
             .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
     )
     t.eq(backend.calls[#backend.calls], { "family", ID_A })
@@ -1913,7 +1947,9 @@ t.test("notes, note --edit and note --delete reach pomb's comment routes", funct
         out,
         "11111111  Ready  1 Pomodoro  docs  First\n\nWhy it matters.\n\n"
             .. "checks:\n- dev test\n- dev lint\n\n"
-            .. "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
+            .. "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\n"
+            .. (" "):rep(42)
+            .. "line\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
     )
     out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "aaaaaaaa", "better" })
     t.eq(code, 0)

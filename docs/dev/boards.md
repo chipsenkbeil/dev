@@ -279,8 +279,10 @@ prints the rows under the description. Icebox is exempt.
 
 `show CARD` prints everything a runner needs to take a card: the `ls` line
 (id prefix, column, size, labels and name), then the description, then the
-comments in the `notes` format. The outcomes print as `done when:` with one
-`- [x]` or `- [ ]` line each, after the description. A card with no description prints `no
+comments in the `notes` format, except that each comment prints its whole
+body: the lines after the first sit under the body column, so a numbered menu
+reads whole. The outcomes print as `done when:` with one `- [x]` or `- [ ]`
+line each, after the description. A card with no description prints `no
 description`, and one with no comments `no comments`. Use it instead of the
 Pomb API to read a card, so the token stays inside dev. `links` lists its links.
 A child also prints `parent: <id prefix> <name>` under the `ls` line, and an
@@ -302,8 +304,9 @@ and a queued note replays with both.
 
 `notes CARD` lists the card's comments, oldest first: the comment's id prefix,
 who wrote it (the token's name, else the kind of actor), its kind, its role
-label (`-` when it has none), the time in UTC and the first line. `note CARD --edit COMMENT TEXT` replaces the text of one of your own
-comments and `note CARD --delete COMMENT` removes it. `COMMENT` is an id prefix
+label (`-` when it has none), the time in UTC and the first line of the body (`show` prints the rest of a
+multi-line body, `notes` does not). `note CARD --edit COMMENT TEXT` replaces
+the text of one of your own comments and `note CARD --delete COMMENT` removes it. `COMMENT` is an id prefix
 of at least 8 characters from `notes`. Pomb lets a token change only the
 comments it wrote, so a comment from a person, from another token or from
 before Pomb 0.5.7 answers 403, and dev says `that comment is not yours to
