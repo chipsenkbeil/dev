@@ -44,13 +44,16 @@ dim. `--json` prints ci's document unchanged.
 `dev box create [--target T] [--shape S] [--by LABEL] [--ttl HOURS | --keep] [PROJECT...]`.
 On a terminal it asks two questions, target first (a target's minimum
 rules shapes out). The target picker lists each target with its OS, image and
-smallest shape, and greys one that cannot take a box now with ci's reason. The
-shape picker lists the shapes for that target with CPU and memory. A shape is
-greyed when it is below the target's minimum or can never fit, a shape that
-fits only after a wait can be picked and says `waits for room`, a warning
-(such as the last running slot) shows beside a row that can be picked, and the
-cursor starts on ci's default shape. When nothing can be picked, dev names the
-running boxes to stop and exits 1. `--target T` skips the first picker and
+smallest shape. A target that cannot take a box now but could once room
+frees (its smallest shape fits after a wait) can be picked and says
+`waits for room` with ci's reason. One whose smallest shape can never fit, or
+whose machine ci could not ask, is greyed with ci's reason. The shape picker
+lists the shapes for that target with CPU and memory. A shape is greyed when
+it is below the target's minimum or can never fit, a shape that fits only
+after a wait can be picked and says `waits for room`, a warning (such as the
+last running slot) shows beside a row that can be picked, and the cursor
+starts on ci's default shape. When no target, or no shape, can be picked, dev
+names the running boxes to stop and exits 1. `--target T` skips the first picker and
 takes ci's default shape, `--shape S` skips only the second, and with no
 terminal there are no pickers and ci applies its defaults. A shape below the
 target's minimum is refused by ci alone. The lifetime is 4 hours unless you

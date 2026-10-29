@@ -152,6 +152,28 @@ t.test("cancelling a picker exits 1 and creates nothing", function()
     fs.remove(root, { recursive = true })
 end)
 
+t.test("a target that waits for room can be picked and says why", function()
+    local waiting = TARGETS:gsub('"linux%-rust"', '"linux-wait"')
+    local shapes = SHAPES:gsub(
+        '"linux%-mid","below_min":false,"machines":%[{"machine":"example%-box","fits":"start"',
+        '"linux-wait","below_min":false,"machines":[{"machine":"example-box","fits":"wait","reason":"need 16GiB","warning":null}]},\n{"target":"linux-mid","below_min":false,"machines":[{"machine":"example-box","fits":"start"',
+        1
+    )
+    local root = sandbox({ targets = waiting, shapes = shapes, create = CREATED })
+    local _, code = support.dev(
+        root,
+        { "box", "create", "proj" },
+        env(root, { FAKE_PICK = "linux-wait medium" })
+    )
+    t.eq(code, 0)
+    local picks = lines_of(root .. "/picks")
+    t.eq(
+        picks[3],
+        "linux-wait\tlinux-wait\tLinux · linux-wait\tfrom medium\t@ example-box\twaits for room · needs 8 GiB more"
+    )
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("when no target fits, dev names the running box to stop", function()
     local only = [[{"ok":true,"targets":[
 {"target":"linux-rust","os":"linux","machines":["example-box"],"image":"linux-rust","min_shape":"medium","can_take_box_now":false,"reason":"needs 8 GiB more"}]}]]
