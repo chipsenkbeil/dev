@@ -243,9 +243,9 @@ return {
     {
         words = { "board", "outcome" },
         handler = "lua",
-        flags = "--rename --tick --untick",
-        usage = "dev board outcome CARD TEXT | CARD --rename N TEXT | CARD --tick N | CARD --untick N",
-        desc = "Append a Done when outcome to a card, reword the Nth with --rename, or tick or untick it, N counted from 1 as show lists them",
+        flags = "--rename --tick --untick --convert",
+        usage = "dev board outcome CARD TEXT | CARD --rename N TEXT | CARD --tick N | CARD --untick N | CARD --convert",
+        desc = "Append a Done when outcome to a card, reword the Nth with --rename, or tick or untick it (N counted from 1 as show lists them), or move a v1 checklist into outcomes with --convert",
     },
     {
         words = { "board", "link" },

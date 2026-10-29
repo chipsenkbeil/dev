@@ -2203,3 +2203,15 @@ t.test("add, note and edit report prose warnings and still write", function()
         commands.run("edit", { "cccccccc", "## Change\n- a/b.lua\n## Problem\nx/y.sh" }, backend)
     t.eq(result.warnings, { "card prose holds a path: x/y.sh" })
 end)
+
+t.test("split_checklist takes the Done when items and leaves the rest", function()
+    local items, rest = board.split_checklist(
+        "## Problem\nP\n\n\n## Done when\n* [X] one\n  - [ ] two\n\n## Out of scope\nN\n"
+    )
+    t.eq(items, { { name = "one", done = true }, { name = "two", done = false } })
+    t.eq(rest, "## Problem\nP\n\n\n## Out of scope\nN")
+    items, rest = board.split_checklist("## Done when\n- [ ] only\n")
+    t.eq(#items, 1)
+    t.eq(rest, "")
+    t.eq(board.split_checklist("## Problem\n- [ ] not under the heading\n"), nil)
+end)

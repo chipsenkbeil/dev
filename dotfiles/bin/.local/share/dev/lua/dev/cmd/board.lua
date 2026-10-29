@@ -51,6 +51,7 @@ local OUTCOME_FLAGS = {
     ["--tick"] = OutcomeMode.TICK,
     ["--untick"] = OutcomeMode.UNTICK,
 }
+local CONVERT_FLAG = "--convert"
 
 local function idempotent(sub, args)
     return IDEMPOTENT[sub] or (sub == "outcome" and OUTCOME_FLAGS[args[2]] ~= nil) or false
@@ -749,15 +750,70 @@ local function outcome_number(word, count)
     return number
 end
 
+local function convert_outcomes(backend, card, fence)
+    local prefix = card.id:sub(1, board.MIN_PREFIX)
+    if #card.outcomes > 0 then
+        return { output = "outcome " .. prefix .. " left alone: it already has outcomes" }
+    end
+    local items, rest = board.split_checklist(card.description)
+    if not items then
+        return { output = "outcome " .. prefix .. " left alone: it has no Done when checklist" }
+    end
+    for _, item in ipairs(items) do
+        local ok, message = backend:add_outcome(card.id, item.name, fence)
+        if not ok then
+            return failure(message)
+        end
+    end
+    local cards, why = backend:cards()
+    if not cards then
+        return failure(why)
+    end
+    local fresh = board.resolve(cards, card.id)
+    if not fresh or #fresh.outcomes ~= #items then
+        return failure("the outcomes were added but could not be read back to tick them")
+    end
+    for i, item in ipairs(items) do
+        if item.done then
+            local ok, message =
+                backend:set_outcome(card.id, fresh.outcomes[i].id, { done = true }, fence)
+            if not ok then
+                return failure(message)
+            end
+        end
+    end
+    local ok, message = backend:set_description(card.id, rest, fence)
+    if not ok then
+        return failure(message)
+    end
+    return {
+        output = "outcome "
+            .. prefix
+            .. " converted "
+            .. #items
+            .. (#items == 1 and " outcome" or " outcomes"),
+    }
+end
+
 function commands.outcome(backend, args)
     if #args < 2 then
         return usage(
-            "needs a card and the outcome text, or --rename N TEXT, --tick N or --untick N"
+            "needs a card and the outcome text, or --rename N TEXT, --tick N, --untick N or --convert"
         )
     end
     local mode = OUTCOME_FLAGS[args[2]]
     local text, word
-    if not mode then
+    if args[2] == CONVERT_FLAG then
+        if #args ~= 2 then
+            return usage(CONVERT_FLAG .. " takes only the card")
+        end
+        local card, err = find_card(backend, args[1])
+        if not card then
+            return err
+        end
+        local held = claims.read(card.id)
+        return convert_outcomes(backend, card, held and held.fence)
+    elseif not mode then
         mode, text = OutcomeMode.ADD, table.concat(args, " ", 2)
     elseif mode == OutcomeMode.RENAME then
         if #args < 4 then
@@ -1502,6 +1558,7 @@ for sub in pairs(commands) do
                 pending
                 and QUEUED[sub]
                 and not note
+                and not (sub == "outcome" and args[2] == CONVERT_FLAG)
                 and pomb.unreachable(result.message, idempotent(sub, args))
             then
                 local ok, why = pending:push(sub, args)

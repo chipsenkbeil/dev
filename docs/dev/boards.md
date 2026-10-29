@@ -25,6 +25,7 @@ dev board outcome 8af0e001 "Two-line cards print in full."
 dev board outcome 8af0e001 --rename 2 "A tick shows in show."
 dev board outcome 8af0e001 --tick 2
 dev board outcome 8af0e001 --untick 2
+dev board outcome 8af0e001 --convert
 dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
 dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
@@ -314,6 +315,13 @@ deletes or reorders an outcome (Pomb keeps both admin-only). The claim's
 fence goes along when this machine holds one, and a local board keeps the same
 outcomes on the card.
 
+`outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
+appends one outcome per `- [ ]` or `- [x]` item, ticks the ticked ones, and
+only once all of that succeeded rewrites the description without the heading
+and the items, then prints `outcome <id prefix> converted N outcomes`. A card
+that already has outcomes, or has no checklist, is left as it is with one line
+saying why (exit 0), so a second run changes nothing.
+
 `add --label L` gives a new card a label, and may be repeated. `label CARD L`
 (or `+L`) adds a label to a card and `--remove L` removes one, each as many
 times as you like in one call, the additions first. Pomb replaces a card's
@@ -393,8 +401,8 @@ that cannot reach Pomb, or cannot read the token because `pass` is locked, are
 kept in a queue and print the line below. A timeout or a gateway error may come
 after Pomb applied the change, so only `move`, `size`, `label`, `link`, `edit`
 and `outcome` with `--rename`, `--tick` or `--untick`, which are safe to
-repeat, are queued for those; `add`, `note` and an `outcome` append fail
-instead of risking a duplicate.
+repeat, are queued for those; `add`, `note`, an `outcome` append and
+`outcome --convert` fail instead of risking a duplicate.
 
 ```
 queued: Pomb unreachable, will sync

@@ -327,6 +327,42 @@ function M.prose_warnings(prose)
     return warnings
 end
 
+---Split a v1 `## Done when` checklist off a description: the `- [ ]` and `- [x]` items under that
+---heading, and the description without the heading and those items.
+---@param description string? the card's description
+---@return {name: string, done: boolean}[]? items the checklist items in order, nil when there are none
+---@return string? rest the description without the heading and the items
+function M.split_checklist(description)
+    local items, kept, current, cut = {}, {}, nil, false
+    for line in lines_of(description) do
+        local name = heading_of(line)
+        if name then
+            current = name
+        end
+        local mark, label
+        if current == DONE_WHEN and not name then
+            mark, label = line:match("^%s*[-*]%s%[([ xX])%]%s+(%S.-)%s*$")
+        end
+        if mark then
+            items[#items + 1] = { name = label, done = mark ~= " " }
+            cut = true
+        elseif name == DONE_WHEN then
+            cut = true
+        else
+            local blank = not line:find("%S")
+            if not (cut and blank and (#kept == 0 or not kept[#kept]:find("%S"))) then
+                kept[#kept + 1] = line
+            end
+            cut = cut and blank
+        end
+    end
+    if #items == 0 then
+        return nil
+    end
+    local rest = table.concat(kept, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
+    return items, rest
+end
+
 ---List what a card lacks of card format v2: each missing heading, and Done when outcomes. The
 ---outcomes are 3 to 7 subtasks, and a card with none is accepted when its description has a v1
 ---`## Done when` checklist item.
