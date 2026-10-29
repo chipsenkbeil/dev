@@ -9,6 +9,7 @@ local PINS = REPO .. "/.dev/releases.tsv"
 local SHA256_HEX_DIGITS = 64
 local COLUMN = "darwin-x86_64"
 local ARCH_WORDS = { "x86_64", "amd64", "universal" }
+local SOURCE_PINS = { luajit = true }
 local PINNED_TOOLS = { "ripgrep", "fd", "jq", "yq", "sd", "gh", "jujutsu" }
 
 local function release_cells()
@@ -55,6 +56,9 @@ t.test("every pin has a 64 digit sha256 and an https url naming the architecture
             name .. " has a bad sha256"
         )
         t.ok(pin.url:find("^https://"), name .. " url is not https")
-        t.ok(names_arch(pin.url), name .. " url names no x86_64, amd64 or universal asset")
+        t.ok(
+            SOURCE_PINS[name] or names_arch(pin.url),
+            name .. " url names no x86_64, amd64 or universal asset"
+        )
     end
 end)

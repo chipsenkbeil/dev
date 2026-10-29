@@ -10,9 +10,9 @@ local PINS = REPO .. "/.dev/releases.tsv"
 local PKG = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
 local COLUMN = "darwin-x86_64"
 local LINT_PINS = { "shellcheck", "shfmt", "stylua" }
-local SYSTEM_TOOLS = { "git", "zsh", "dash" }
+local SYSTEM_TOOLS = { "git", "zsh", "dash", "luajit" }
 local DROPPED = { "difftastic", "tokei", "watchexec", "hyperfine", "ast-grep" }
-local UNROUTED = { "bats", "stow", "luajit" }
+local UNROUTED = { "bats", "stow" }
 local UNAME = '#!/bin/sh\ncase "$1" in -m) echo x86_64 ;; *) echo Darwin ;; esac\n'
 
 local function base_cells()
