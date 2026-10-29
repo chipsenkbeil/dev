@@ -27,6 +27,7 @@ local SERIAL = {
     ["tests/dev/term.bats"] = true,
     ["tests/dev/picker.bats"] = true,
     ["tests/dev/confirm.bats"] = true,
+    ["tests/dev/sync_test.sh"] = true,
     ["tests/dev/help_test.sh"] = true,
     ["tests/lua/help_test.lua"] = true,
     ["tests/tmux/conf_test.sh"] = true,
