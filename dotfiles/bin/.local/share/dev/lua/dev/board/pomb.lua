@@ -8,7 +8,11 @@ local present = json.present
 local PASS_TIMEOUT_SECONDS = "10"
 local PASS_GPG_OPTS = "--pinentry-mode error --batch"
 local CONNECT_SECONDS = "10"
-local REQUEST_SECONDS = "30"
+local REQUEST_SECONDS = 30
+local WAIT_SECONDS = 50
+local WAIT_MARGIN_SECONDS = 10
+local GONE = 410
+local CURSOR_EXPIRED = "cursor_expired"
 local TIMED_OUT = 124
 local TOKEN_PATTERN = "^[%w%._~%+/=-]+$"
 local ENTRY_PATTERN = "^[%w_./][%w_. /-]*$"
@@ -195,10 +199,12 @@ end
 ---@param path string the path under the server's URL
 ---@param body table<string, any>? the JSON body
 ---@param fence integer? the claim fence to send as `If-Claim-Fence`
+---@param seconds integer? the whole request's `--max-time`, 30 when nil
 ---@return any? doc the decoded answer
 ---@return string? message why the call failed
 ---@return integer? status the HTTP status when pomb refused the call
-function Backend:__request(method, path, body, fence)
+---@return any? answer the decoded body of a refused call
+function Backend:__request(method, path, body, fence, seconds)
     if not self.__secret then
         local token, message = M.token(self.__opts.token)
         if not token then
@@ -212,7 +218,7 @@ function Backend:__request(method, path, body, fence)
         "--connect-timeout",
         CONNECT_SECONDS,
         "--max-time",
-        REQUEST_SECONDS,
+        string.format("%d", seconds or REQUEST_SECONDS),
         "-K",
         "-",
         "-X",
@@ -255,7 +261,7 @@ function Backend:__request(method, path, body, fence)
     end
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
-        return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail)), status
+        return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail)), status, doc
     end
     return doc
 end
@@ -792,6 +798,58 @@ function Backend:other_board(name)
     end
     opts.name = name
     return setmetatable({ __opts = opts, __secret = self.__secret }, Backend)
+end
+
+local function escaped(word)
+    return (
+        word:gsub("[^%w%-%._~,]", function(char)
+            return string.format("%%%02X", char:byte())
+        end)
+    )
+end
+
+function Backend:wait(after, kinds, timeout)
+    local loaded, message = self:__load()
+    if not loaded then
+        return nil, message
+    end
+    timeout = timeout or WAIT_SECONDS
+    local query = { "timeout=" .. string.format("%d", timeout) }
+    if after then
+        query[#query + 1] = "after=" .. escaped(after)
+    end
+    if kinds and #kinds > 0 then
+        query[#query + 1] = "kinds=" .. escaped(table.concat(kinds, ","))
+    end
+    local doc, status, answer
+    doc, message, status, answer = self:__request(
+        "GET",
+        "/api/boards/" .. self.__detail.id .. "/events/wait?" .. table.concat(query, "&"),
+        nil,
+        nil,
+        timeout + WAIT_MARGIN_SECONDS
+    )
+    if not doc then
+        if status == GONE and type(answer) == "table" and answer.code == CURSOR_EXPIRED then
+            return nil, message, present(answer.oldest_cursor)
+        end
+        return nil, message
+    end
+    local events = {}
+    for _, event in ipairs(doc.events or {}) do
+        local column, from = present(event.column_id), present(event.from_column_id)
+        local function known(id)
+            local name = id and self:__column_name(id)
+            return name ~= "?" and name or nil
+        end
+        events[#events + 1] = {
+            kind = event.kind,
+            task_id = event.task_id,
+            column = known(column),
+            from_column = known(from),
+        }
+    end
+    return { cursor = doc.cursor, events = events }
 end
 
 function Backend:claim(id, claimant, ttl, fence)

@@ -343,6 +343,10 @@ function Backend:links(id)
     return found
 end
 
+function Backend:wait()
+    return nil, "a local board has nothing to wait on"
+end
+
 function Backend:other_board(name)
     return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
 end

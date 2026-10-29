@@ -2344,3 +2344,106 @@ t.test("split_checklist takes the Done when items and leaves the rest", function
     t.eq(rest, "")
     t.eq(board.split_checklist("## Problem\n- [ ] not under the heading\n"), nil)
 end)
+
+local function waiting(root, home, call, status)
+    local script = string.format(
+        "package.path = %q; local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+            .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
+            .. "local got, message, oldest = b:wait(%s); "
+            .. "print(json.encode({got = got, message = message, oldest = oldest}))",
+        support.absolute_path(),
+        call
+    )
+    local out, code = devos.capture({ "luajit", "-e", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            HOME = home,
+            ROOT = root,
+            WAIT_STATUS = status,
+        },
+        stderr = "stdout",
+    })
+    t.eq(code, 0, out)
+    return assert(require("dev.json").decode(out), out)
+end
+
+local function wait_route(root, reply)
+    executable(
+        root .. "/bin/curl",
+        CURL:gsub(
+            "\n%*/api/boards%) body",
+            "\n*/events/wait*) body='"
+                .. reply:gsub("'", "'\\''")
+                .. "'; status=${WAIT_STATUS:-200} ;;\n*/api/boards) body",
+            1
+        )
+    )
+end
+
+t.test("wait returns the events oldest first with column names and the cursor", function()
+    local root, home = sandbox()
+    wait_route(
+        root,
+        '{"cursor":"9","events":['
+            .. '{"cursor":"8","kind":"task_added","task_id":"t1","column_id":"col-ready","at":"x","actor_kind":"user","extra":1},'
+            .. '{"cursor":"9","kind":"task_moved","task_id":"t2","column_id":"col-progress","from_column_id":"col-blocked","token_name":null}]}'
+    )
+    local result = waiting(root, home, "'7', {'task_added', 'task_moved'}, 20")
+    t.eq(result.got, {
+        cursor = "9",
+        events = {
+            { kind = "task_added", task_id = "t1", column = "Ready" },
+            {
+                kind = "task_moved",
+                task_id = "t2",
+                column = "In Progress",
+                from_column = "Blocked",
+            },
+        },
+    })
+    local calls = read(root, "calls")
+    t.ok(calls:find("/events/wait?timeout=20&after=7&kinds=task_added,task_moved", 1, true), calls)
+end)
+
+t.test("wait returns an empty list and the cursor to send again", function()
+    local root, home = sandbox()
+    wait_route(root, '{"cursor":"7","events":[]}')
+    t.eq(waiting(root, home, "'7'").got, { cursor = "7", events = {} })
+    local calls = read(root, "calls")
+    t.ok(calls:find("/events/wait?timeout=50&after=7\n", 1, true), calls)
+end)
+
+t.test("wait with no cursor sends none", function()
+    local root, home = sandbox()
+    wait_route(root, '{"cursor":"3","events":[]}')
+    t.eq(waiting(root, home, "nil, nil, 0").got.cursor, "3")
+    local calls = read(root, "calls")
+    t.ok(calls:find("/events/wait?timeout=0\n", 1, true), calls)
+end)
+
+t.test("wait returns the oldest cursor of a 410", function()
+    local root, home = sandbox()
+    wait_route(root, '{"code":"cursor_expired","message":"too old","oldest_cursor":"41"}')
+    local result = waiting(root, home, "'1'", "410")
+    t.eq(result.got, nil)
+    t.eq(result.oldest, "41")
+    t.ok(result.message:find("pomb answered 410: too old", 1, true), result.message)
+end)
+
+t.test("wait gives curl a max-time above the wait's timeout", function()
+    local root, home = sandbox()
+    wait_route(root, '{"cursor":"7","events":[]}')
+    waiting(root, home, "'7', nil, 50")
+    local calls = read(root, "calls")
+    t.ok(calls:find("--max-time 60 ", 1, true), calls)
+    t.ok(calls:find("--max-time 30 ", 1, true), calls)
+end)
+
+t.test("wait surfaces too_many_waits as a 429 and keeps no cursor", function()
+    local root, home = sandbox()
+    wait_route(root, '{"code":"too_many_waits","message":"end one"}')
+    local result = waiting(root, home, "'7'", "429")
+    t.eq(result.got, nil)
+    t.eq(result.oldest, nil)
+    t.ok(result.message:find("pomb answered 429: end one", 1, true), result.message)
+end)

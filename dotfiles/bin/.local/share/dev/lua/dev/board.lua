@@ -22,6 +22,16 @@ local M = {}
 ---@field name string what has to be true
 ---@field done boolean whether it is ticked
 
+---@class dev.board.Event
+---@field kind string `task_added`, `task_moved`, `task_updated` or `comment_added`
+---@field task_id string the card it happened to
+---@field column string? the name of the column the card sits in after the event, nil when it left for another board
+---@field from_column string? the name of the column a moved card left
+
+---@class dev.board.Events
+---@field cursor string the cursor to send as `after` next
+---@field events dev.board.Event[] the events, oldest first, empty when the wait timed out
+
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
@@ -42,6 +52,7 @@ local M = {}
 ---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks` or `related`) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
 ---@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks` or `related` entry for each link another card holds on it, in the order the backend gives them
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
+---@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?): dev.board.Events?, string?, string? the events after the cursor, oldest first, held up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once with none and the board's current cursor. On an expired cursor it returns nil, a message and the oldest cursor that still resumes, and on any other failure nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
