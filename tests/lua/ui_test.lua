@@ -213,3 +213,26 @@ t.test("page survives a pager that quits before it reads the text", function()
     t.eq(paged, true)
     fs.remove(dir, { recursive = true })
 end)
+
+local WARNING = "dev: the pager failed, so the text follows without it\n"
+
+t.test("page prints the text and a warning when the pager command is missing", function()
+    local out = page_output(30, { pager = "no-such-pager-command-xyz" })
+    t.ok(out:find(WARNING, 1, true), out)
+    t.ok(out:find(lines_of(30) .. "false", 1, true), out)
+end)
+
+t.test("page prints the text and a warning when the pager exits non-zero", function()
+    local dir = fake_pager("cat >/dev/null\nexit 3\n")
+    local out = page_output(30, { pager = dir .. "/fakepager" })
+    t.ok(out:find(WARNING, 1, true), out)
+    t.ok(out:find(lines_of(30) .. "false", 1, true), out)
+    fs.remove(dir, { recursive = true })
+end)
+
+t.test("page prints nothing but the pager's own output when the pager succeeds", function()
+    local dir = fake_pager("cat\n")
+    local out = page_output(30, { pager = dir .. "/fakepager" })
+    t.eq(out, lines_of(30) .. "true")
+    fs.remove(dir, { recursive = true })
+end)

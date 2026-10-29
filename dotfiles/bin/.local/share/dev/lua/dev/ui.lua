@@ -1,4 +1,5 @@
 local devos = require("dev.os")
+local fs = require("dev.fs")
 local term = require("dev.term")
 local text = require("dev.text")
 
@@ -542,10 +543,11 @@ end
 
 ---Show `content` through a pager when it is taller than the screen, else print it.
 ---
----A pager that quits before it has read everything is not an error.
+---A pager that quits early is not an error.
+---A pager that is missing or exits non-zero gets one warning line and the text printed directly.
 ---@param content string the text to show
 ---@param opts dev.ui.PageOpts? the pager command, and the settings `should_page` reads
----@return boolean paged true when the text went through the pager
+---@return boolean paged true when the pager showed the text
 function M.page(content, opts)
     opts = opts or {}
     if not M.should_page(content, opts) then
@@ -560,12 +562,20 @@ function M.page(content, opts)
         pager = DEFAULT_PAGER
     end
     io.flush()
-    local pipe = assert(io.popen(pager, "w"))
-    devos.without_sigpipe(function()
-        pipe:write(content)
-        pipe:close()
-    end)
-    return true
+    local path = fs.mktemp({ prefix = "dev-page" })
+    local shown = false
+    if path then
+        if fs.write(path, content) then
+            shown = devos.run({ "sh", "-c", "(" .. pager .. '\n) <"$0"', path }) == 0
+        end
+        fs.remove(path)
+    end
+    if shown then
+        return true
+    end
+    stderr:write("dev: the pager failed, so the text follows without it\n")
+    io.write(content)
+    return false
 end
 
 return M
