@@ -30,7 +30,8 @@ local DELETE_FLAG = "--delete"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
-local IDEMPOTENT = { move = true, size = true, label = true, link = true, edit = true }
+local IDEMPOTENT =
+    { move = true, size = true, label = true, link = true, edit = true, checks = true }
 local QUEUED = {
     add = true,
     move = true,
@@ -39,6 +40,7 @@ local QUEUED = {
     label = true,
     link = true,
     edit = true,
+    checks = true,
 }
 
 ---@class dev.cmd.board.Settings
@@ -519,7 +521,7 @@ function commands.move(backend, args)
                 why
                     or (
                         card.id:sub(1, board.MIN_PREFIX)
-                        .. " has no checks row and cannot enter Ready; give it one in the card's Checks field"
+                        .. " has no checks row and cannot enter Ready; give it one with dev board checks CARD CMD"
                     )
             )
         end
@@ -633,6 +635,38 @@ function commands.edit(backend, args)
         return failure(message)
     end
     return { output = "edited " .. card.id:sub(1, board.MIN_PREFIX) }
+end
+
+function commands.checks(backend, args)
+    if #args < 2 then
+        return usage("needs a card and one or more commands to run as its checks")
+    end
+    for pos = 2, #args do
+        if not args[pos]:find("%S") then
+            return usage("a check needs a command")
+        end
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local why, problem = checks_field_problem(backend)
+    if problem then
+        return problem
+    end
+    if why then
+        return failure(why)
+    end
+    local runs = {}
+    for pos = 2, #args do
+        runs[#runs + 1] = args[pos]
+    end
+    local held = claims.read(card.id)
+    local ok, message = backend:set_checks(card.id, runs, held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    return { output = "set checks " .. card.id:sub(1, board.MIN_PREFIX) .. ", " .. #runs .. " rows" }
 end
 
 function commands.link(backend, args)
@@ -868,7 +902,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `link`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `checks`, `link`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

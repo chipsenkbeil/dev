@@ -189,7 +189,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, move, size, label, link, stale, take, release and sync",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, size, label, link, stale, take, release and sync",
         group = "Share it",
     },
     {
@@ -263,6 +263,12 @@ return {
         flags = "--file",
         usage = "dev board edit CARD [--file PATH]",
         desc = "Replace a card's description with the text of --file PATH or of standard input",
+    },
+    {
+        words = { "board", "checks" },
+        handler = "lua",
+        usage = "dev board checks CARD CMD...",
+        desc = "Replace a card's checks rows with one row per CMD",
     },
     {
         words = { "board", "move" },

@@ -19,6 +19,7 @@ dev board note 8af0e001 "Tests pass, landing now."
 dev board notes 8af0e001
 dev board show 8af0e001
 dev board edit 8af0e001 < plan.md
+dev board checks 8af0e001 "dev lint" "dev test"
 dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
 dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
@@ -227,7 +228,14 @@ A card needs a checks row to enter Ready too. The checks live in the board's
 no row (exit 1), `add --column ready` without `--checks` is a usage error
 (exit 2), and on a Pomb board that has no checks field both say so and point to
 `dev board init`, which defines the field once and never touches one that
-exists. `show` prints the rows under the description. Icebox is exempt.
+exists. `checks CARD CMD...` replaces the rows of a card that is already on
+the board (one row per command, so it also adds a second command) and prints
+`set checks <id prefix>, N rows`. With no command it is a usage error (exit
+2), to keep anyone from clearing the rows by accident. It sends the claim's
+fence when this machine holds one, gives the same refusal as a move into
+Ready on a Pomb board with no checks field, and is queued while Pomb is
+unreachable, since sending the same rows twice changes nothing more. `show`
+prints the rows under the description. Icebox is exempt.
 
 `show CARD` prints everything a runner needs to take a card: the `ls` line
 (id prefix, column, size, labels and name), then the description, then the

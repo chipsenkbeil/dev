@@ -72,6 +72,10 @@ local function fake(cards, times)
         calls[#calls + 1] = { "set_description", id, text, fence }
         return true
     end
+    function backend:set_checks(id, runs, fence)
+        calls[#calls + 1] = { "set_checks", id, runs, fence }
+        return true
+    end
     function backend:set_size(id, color, fence)
         calls[#calls + 1] = { "set_size", id, color, fence }
         return true
@@ -325,6 +329,30 @@ t.test("edit sends the whole new description and prints one line", function()
     t.eq(result.output, "edited 11111111")
     t.eq(backend.calls[1], { "set_description", ID_A, "## Problem\nnew plan", nil })
 end)
+
+t.test("checks replaces the rows with one row per command", function()
+    local backend = fake(sample())
+    local result = commands.run("checks", { "11111111-a", "dev lint", "dev test" }, backend)
+    t.eq(result.output, "set checks 11111111, 2 rows")
+    t.eq(backend.calls[1], { "set_checks", ID_A, { "dev lint", "dev test" }, nil })
+end)
+
+t.test(
+    "checks refuses no command, a blank command, an unknown card and a board without the field",
+    function()
+        local backend = fake(sample())
+        t.eq(commands.run("checks", { "11111111-a" }, backend).code, 2)
+        t.eq(commands.run("checks", {}, backend).code, 2)
+        t.eq(commands.run("checks", { "11111111-a", "dev lint", " " }, backend).code, 2)
+        t.eq(commands.run("checks", { "deadbeef", "dev lint" }, backend).code, 1)
+        backend.nofield = true
+        local result = commands.run("checks", { "11111111-a", "dev lint" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("no checks field", 1, true), result.message)
+        t.ok(result.message:find("dev board init", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+)
 
 t.test("edit refuses a missing text, an extra word and an unknown card", function()
     local backend = fake(sample())
@@ -1197,6 +1225,34 @@ t.test("label sends the fence of a claim this machine holds", function()
     local patched = read(root, "calls"):match("%-X PATCH.-/api/tasks/")
     t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
     dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("checks patches the task's checks field whole, with the claim's fence", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint", "dev test" })
+    t.eq(code, 0, out)
+    t.eq(out, "set checks 11111111, 2 rows\n")
+    local calls = read(root, "calls")
+    t.ok(
+        calls:find(
+            '--data-raw {"fields":{"dev.checks":[{"run":"dev lint"},{"run":"dev test"}]}}',
+            1,
+            true
+        ),
+        calls
+    )
+    local patched = calls:match("%-X PATCH.-/api/tasks/")
+    t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("checks on a Pomb board without the checks field is refused before any write", function()
+    local root, home = sandbox({ fields = "[]" })
+    local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint" })
+    t.eq(code, 1)
+    t.ok(out:find("no checks field", 1, true), out)
+    t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
 end)
 
 t.test("note posts a comment of kind agent and move goes to the top of the column", function()

@@ -624,6 +624,9 @@ local EXPORT = '{"tasks":[{"id":"'
     .. ID_B
     .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[]}]}'
 
+local FIELDS =
+    '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
+
 local CURL = [[#!/bin/sh
 cat >"$ROOT/stdin"
 if [ -f "$ROOT/down" ]; then exit 7; fi
@@ -642,6 +645,7 @@ case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
+*/fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
 */api/tasks) body='{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"x","column_id":"col-backlog"}' ;;
 *) body='{"ok":true}' ;;
@@ -657,6 +661,7 @@ local function pomb(opts)
         ["detail.json"] = DETAIL,
         ["colors.json"] = COLORS,
         ["export.json"] = EXPORT,
+        ["fields.json"] = FIELDS,
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
@@ -812,6 +817,45 @@ t.test("edit patches the task, and a queued edit replays with its text", functio
     out = pomb_dev(root, home, { "board", "sync" })
     t.eq(out, "synced edit bbbbbbbb\nsynced\n")
     t.ok(calls(root):find("/api/tasks/" .. ID_B .. "\n", 1, true), calls(root))
+end)
+
+t.test("a local board replaces a card's checks and then lets it enter Ready", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Bare", "--size", "1" })))
+    local file = root .. "/v1.md"
+    assert(fs.write(file, V1))
+    assert(dev(root, home, { "board", "edit", a, "--file", file }))
+    local out, code = dev(root, home, { "board", "move", a, "ready" })
+    t.eq(code, 1)
+    out, code = dev(root, home, { "board", "checks", a, "dev lint", "dev test" })
+    t.eq(code, 0, out)
+    t.eq(out, "set checks " .. a .. ", 2 rows\n")
+    t.eq(document(file_of(home)).cards[1].checks, { "dev lint", "dev test" })
+    out = dev(root, home, { "board", "show", a })
+    t.ok(out:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), out)
+    out, code = dev(root, home, { "board", "move", a, "ready" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "checks", a, "dev fmt" })
+    t.eq(code, 0, out)
+    t.eq(document(file_of(home)).cards[1].checks, { "dev fmt" })
+    out, code = dev(root, home, { "board", "checks", a })
+    t.eq(code, 2)
+    t.eq(document(file_of(home)).cards[1].checks, { "dev fmt" })
+end)
+
+t.test("a queued checks replaces the rows when Pomb answers again", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/down", ""))
+    local out, code = pomb_dev(root, home, { "board", "checks", ID_A:sub(1, 8), "dev lint" })
+    t.eq(out, QUEUED)
+    t.eq(code, 0)
+    local entries = document(queue_path(home))
+    t.eq(entries[1].sub, "checks")
+    t.eq(entries[1].args, { ID_A:sub(1, 8), "dev lint" })
+    assert(fs.remove(root .. "/down"))
+    out = pomb_dev(root, home, { "board", "sync" })
+    t.eq(out, "synced checks aaaaaaaa\nsynced\n")
+    t.ok(fs.read(root .. "/bodies"):find('"dev.checks":[{"run":"dev lint"}]', 1, true))
 end)
 
 t.test("a gateway error still queues an edit, which is safe to repeat", function()

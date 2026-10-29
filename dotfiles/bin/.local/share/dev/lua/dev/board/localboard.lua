@@ -499,6 +499,17 @@ function Backend:set_description(id, text, fence)
     end)
 end
 
+function Backend:set_checks(id, runs, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        card.checks = runs
+        return true
+    end)
+end
+
 function Backend:set_labels(id, labels, fence)
     return self:__update(function(doc)
         local card, message = card_of(doc, id, fence)
