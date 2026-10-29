@@ -54,6 +54,8 @@ local function setup(files)
     local base = assert(fs.realpath(support.tempdir()))
     local root = base .. "/p"
     assert(fs.mkdir(root .. "/.dev", { parents = true }))
+    assert(fs.mkdir(root .. "/.ci", { parents = true }))
+    assert(fs.write(root .. "/.ci/jobs.lua", "return {}\n"))
     write_exec(base .. "/bin/ci", STUB)
     for name, text in pairs(files or {}) do
         write_exec(root .. "/.dev/" .. name, text)
@@ -231,34 +233,47 @@ t.test("commands without a job and machine-local verbs run here under the defaul
     t.eq(code, 1)
 end)
 
-t.test(
-    "without ci on PATH the default runs here with one line and --remote keeps its error",
-    function()
-        local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
-        assert(fs.mkdir(base .. "/lj"))
-        assert(
-            devos.run({ "ln", "-s", devos.which("luajit"), base .. "/lj/luajit" }) == 0,
-            "ln failed"
-        )
-        local env = { PATH = base .. "/lj:/usr/bin:/bin" }
-        local out, code = dev(root, base, { "hello" }, env)
-        t.eq(out, "dev: ci is not on PATH, so this runs here\nhi\n")
-        t.eq(code, 0)
-        out, code = dev(root, base, { "test", "--remote" }, env)
-        t.eq(code, 1)
-        t.ok(out:find("ci not found", 1, true), out)
-        write_config(base, 'default = "local"')
-        out = dev(root, base, { "hello" }, env)
-        t.eq(out, "hi\n")
-    end
-)
-
-t.test("a failing ci jobs listing under the default runs the command here", function()
+t.test("without ci on PATH the default fails with the --local hint", function()
     local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
-    local out, code, log = dev(root, base, { "hello" }, { CI_STUB_JOBS = "fail" })
+    assert(fs.mkdir(base .. "/lj"))
+    assert(devos.run({ "ln", "-s", devos.which("luajit"), base .. "/lj/luajit" }) == 0, "ln failed")
+    local env = { PATH = base .. "/lj:/usr/bin:/bin" }
+    local out, code = dev(root, base, { "hello" }, env)
+    t.eq(code, 1)
+    t.eq(out, "dev: ci is not on PATH, rerun, or pass --local to run it here\n")
+    out, code = dev(root, base, { "test", "--remote" }, env)
+    t.eq(code, 1)
+    t.ok(out:find("ci not found", 1, true), out)
+    out, code = dev(root, base, { "hello", "--local" }, { PATH = env.PATH })
     t.eq(out, "hi\n")
     t.eq(code, 0)
+    out, code = dev(root, base, { "hello" }, { PATH = env.PATH, CI = "true" })
+    t.eq(out, "hi\n")
+    t.eq(code, 0)
+    out = dev(root, base, { "hello" }, { PATH = env.PATH, DEV_REMOTE = "0" })
+    t.eq(out, "hi\n")
+    write_config(base, 'default = "local"')
+    out = dev(root, base, { "hello" }, env)
+    t.eq(out, "hi\n")
+end)
+
+t.test("a failing ci jobs listing under the default fails with ci's error and the hint", function()
+    local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
+    local out, code, log = dev(root, base, { "hello" }, { CI_STUB_JOBS = "fail" })
+    t.eq(code, 9)
+    t.eq(out, "dev: ci jobs failed: hub unreachable; rerun, or pass --local to run it here\n")
     t.eq(log, "")
+    out, code = dev(root, base, { "hello", "--local" }, { CI_STUB_JOBS = "fail" })
+    t.eq(out, "hi\n")
+    t.eq(code, 0)
+end)
+
+t.test("a project with no pipeline file runs here without calling ci", function()
+    local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
+    assert(devos.run({ "rm", "-rf", root .. "/.ci" }) == 0, "rm failed")
+    local out, code = dev(root, base, { "hello" }, { CI_STUB_JOBS = "fail" })
+    t.eq(out, "hi\n")
+    t.eq(code, 0)
 end)
 
 t.test(
