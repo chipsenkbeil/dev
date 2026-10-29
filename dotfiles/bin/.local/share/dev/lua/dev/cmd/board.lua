@@ -468,6 +468,29 @@ function commands.notes(backend, args)
     return { output = comment_lines(list) }
 end
 
+---@param family dev.board.Family
+---@return string
+local function kin_lines(family)
+    local lines = ""
+    if family.parent then
+        lines = lines
+            .. "parent: "
+            .. family.parent.id:sub(1, board.MIN_PREFIX)
+            .. " "
+            .. family.parent.name
+            .. "\n"
+    end
+    if family.children then
+        lines = lines
+            .. "children: "
+            .. family.children.done
+            .. " of "
+            .. family.children.total
+            .. " done\n"
+    end
+    return lines
+end
+
 function commands.show(backend, args)
     if #args ~= 1 then
         return usage("needs a card")
@@ -480,6 +503,12 @@ function commands.show(backend, args)
     if not list then
         return failure(message)
     end
+    local family
+    family, message = backend:family(card.id)
+    if not family then
+        return failure(message)
+    end
+    local kin = kin_lines(family)
     local description = (card.description or ""):match("^%s*(.-)%s*$")
     if description == "" then
         description = "no description"
@@ -498,7 +527,9 @@ function commands.show(backend, args)
     end
     return {
         output = card_line(card)
-            .. "\n\n"
+            .. "\n"
+            .. kin
+            .. "\n"
             .. description
             .. "\n\n"
             .. outcomes

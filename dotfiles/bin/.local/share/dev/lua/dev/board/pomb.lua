@@ -791,6 +791,21 @@ function Backend:links(id)
     return found
 end
 
+function Backend:family(id)
+    local task, message = self:__request("GET", "/api/tasks/" .. id)
+    if not task then
+        return nil, message
+    end
+    local family = {}
+    if type(task.parent) == "table" and type(task.parent.id) == "string" then
+        family.parent = { id = task.parent.id, name = tostring(task.parent.name) }
+    end
+    if type(task.children_total) == "number" and task.children_total > 0 then
+        family.children = { done = task.children_done or 0, total = task.children_total }
+    end
+    return family
+end
+
 function Backend:other_board(name)
     local opts = {}
     for key, value in pairs(self.__opts) do

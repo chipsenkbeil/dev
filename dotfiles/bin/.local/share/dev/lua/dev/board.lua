@@ -49,8 +49,9 @@ local M = {}
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
----@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks` or `related`) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
----@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks` or `related` entry for each link another card holds on it, in the order the backend gives them
+---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the umbrella) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
+---@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks`, `related` or `child` entry for each link another card holds on it, in the order the backend gives them
+---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's umbrella and the count of its children
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
 ---@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?): dev.board.Events?, string?, string? the events after the cursor, oldest first, held up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once with none and the board's current cursor. On an expired cursor it returns nil, a message and the oldest cursor that still resumes, and on any other failure nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
@@ -59,9 +60,13 @@ local M = {}
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
 
 ---@class dev.board.Link
----@field kind string `blocked_by`, `blocks` or `related`, as seen from the card
+---@field kind string `blocked_by`, `blocks`, `related`, `parent` or `child`, as seen from the card
 ---@field id string the other card's full id
 ---@field board string? the other card's board name, nil for the card's own board
+
+---@class dev.board.Family
+---@field parent {id: string, name: string}? the umbrella the card is part of
+---@field children {done: integer, total: integer}? how many of the card's children are done, nil when it has none
 
 ---@class dev.board.NoteOpts
 ---@field kind string? the comment's kind, lowercase
@@ -143,10 +148,16 @@ M.DONE = "Done"
 M.Backend = { POMB = "pomb", LOCAL = "local" }
 
 ---The kinds of link between two cards.
-M.LinkKind = { BLOCKED_BY = "blocked_by", BLOCKS = "blocks", RELATED = "related" }
+M.LinkKind = {
+    BLOCKED_BY = "blocked_by",
+    BLOCKS = "blocks",
+    RELATED = "related",
+    PARENT = "parent",
+    CHILD = "child",
+}
 
 ---The link kinds in the order help lists them.
-M.LINK_KINDS = { M.LinkKind.BLOCKED_BY, M.LinkKind.BLOCKS, M.LinkKind.RELATED }
+M.LINK_KINDS = { M.LinkKind.BLOCKED_BY, M.LinkKind.BLOCKS, M.LinkKind.RELATED, M.LinkKind.PARENT }
 
 ---The fewest characters of a card id that name a card.
 M.MIN_PREFIX = 8

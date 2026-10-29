@@ -270,6 +270,8 @@ comments in the `notes` format. The outcomes print as `done when:` with one
 `- [x]` or `- [ ]` line each, after the description. A card with no description prints `no
 description`, and one with no comments `no comments`. Use it instead of the
 Pomb API to read a card, so the token stays inside dev. `links` lists its links.
+A child also prints `parent: <id prefix> <name>` under the `ls` line, and an
+umbrella `children: N of M done`.
 
 `edit CARD` replaces a card's description with the text of `--file PATH`, or of
 standard input when there is no `--file`, and prints `edited <id prefix>`. The
@@ -334,23 +336,28 @@ nothing and sends nothing. A label is one word with no spaces and no leading
 editing the same card's labels at the same moment can lose one edit, because
 pomb has no add or remove call and takes the whole list.
 
-`link CARD KIND OTHER` links two cards. `KIND` is `blocked_by`, `blocks` or
-`related`. `OTHER` is a card of this board, by id or prefix, or `BOARD:PREFIX`
+`link CARD KIND OTHER` links two cards. `KIND` is `blocked_by`, `blocks`,
+`related` or `parent`. `OTHER` is a card of this board, by id or prefix, or
+`BOARD:PREFIX`
 for a card on another board of the same Pomb server, which dev finds by reading
 that board, so write the work that spans repos as
 `dev board link 5ff0e014 blocked_by ci:1a2b3c4d`. It prints
 `linked <id prefix> <kind> <other>`. Pomb keeps one link whichever card holds it,
 and asking again for a link it has changes nothing, so a `link` that could not
 reach Pomb is queued with the others. Pomb refuses a card linked to itself and a
-link that would make cards wait on each other. A local board stores the links
+link that would make cards wait on each other. `dev board link CHILD parent UMBRELLA` makes the other card
+the umbrella of the first. A card has one umbrella and umbrellas nest one level, so Pomb refuses a
+second umbrella, an umbrella that is itself a child and a child that is itself
+an umbrella, and a local board refuses them too. A local board stores the links
 on its own cards, links only its own cards, and its `next` skips a card that a
 card outside Done blocks.
 
 `links CARD` lists a card's links, one line each: the kind as the card sees it
-(`blocked_by`, `blocks` or `related`), the other card's id prefix and the name
+(`blocked_by`, `blocks`, `related` or `parent`), the other card's id prefix and
+the name
 of its board, with `-` for this board. A card with no links prints `no links`.
 It lists both sides of a link: the ones the card holds and the ones another
-card holds on it, which show as `blocks` or `related`. A link to a card on
+card holds on it, which show as `blocks`, `related` or `child`. A link to a card on
 another board shows that board's name, so `blocks  1a2b3c4d  ci` reads as a
 card on `ci` that this one blocks. dev has no command to remove a link
 (Pomb lets only the admin scope delete one).

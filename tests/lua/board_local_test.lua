@@ -377,6 +377,39 @@ t.test("link refuses itself, a cycle, another board and a bad kind on a local bo
     t.eq(links, 2)
 end)
 
+t.test("link parent sets one umbrella a level deep and show and links report it", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, { "board", "add", name })))
+    end
+    local umbrella, one, two, other = add("Umbrella"), add("One"), add("Two"), add("Other")
+    local out, code = dev(root, home, { "board", "link", one, "parent", umbrella })
+    t.eq(out, "linked " .. one .. " parent " .. umbrella .. "\n")
+    t.eq(code, 0)
+    t.eq(dev(root, home, { "board", "link", one, "parent", umbrella }), out)
+    dev(root, home, { "board", "link", two, "parent", umbrella })
+    out, code = dev(root, home, { "board", "link", one, "parent", other })
+    t.eq(code, 1, out)
+    t.ok(out:find("already has an umbrella", 1, true), out)
+    out, code = dev(root, home, { "board", "link", other, "parent", one })
+    t.eq(code, 1, out)
+    t.ok(out:find("nest one level", 1, true), out)
+    out, code = dev(root, home, { "board", "link", umbrella, "parent", other })
+    t.eq(code, 1, out)
+    t.ok(out:find("nest one level", 1, true), out)
+    out = dev(root, home, { "board", "show", one })
+    t.ok(out:find("\nparent: " .. umbrella .. " Umbrella\n", 1, true), out)
+    out = dev(root, home, { "board", "show", umbrella })
+    t.ok(out:find("\nchildren: 0 of 2 done\n", 1, true), out)
+    dev(root, home, { "board", "move", one, "done" })
+    out = dev(root, home, { "board", "show", umbrella })
+    t.ok(out:find("\nchildren: 1 of 2 done\n", 1, true), out)
+    out = dev(root, home, { "board", "links", one })
+    t.ok(out:find("parent", 1, true) and out:find(umbrella, 1, true), out)
+    out = dev(root, home, { "board", "links", umbrella })
+    t.ok(out:find("child", 1, true) and out:find(one, 1, true), out)
+end)
+
 t.test("stale counts the days a card sat in its column", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
@@ -794,6 +827,7 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/api/tasks/aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa) body='{"id":"aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa","parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Umbrella"},"children_done":1,"children_total":3}' ;;
 */api/tasks) body='{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"x","column_id":"col-backlog"}' ;;
 *) body='{"ok":true}' ;;
 esac
@@ -901,6 +935,13 @@ t.test("a tracked board leaves no lock file in the project", function()
     local root, home = local_board('[board]\nbackend = "local"\npath = ".dev/board.json"\n')
     dev(root, home, { "board", "add", "One" })
     t.eq(fs.list(root .. "/.dev"), { "board.json", "config.toml" })
+end)
+
+t.test("show reads the umbrella and the children of a card from the task view", function()
+    local root, home = pomb()
+    local out, code = pomb_dev(root, home, { "board", "show", ID_A:sub(1, 8) })
+    t.eq(code, 0, out)
+    t.ok(out:find("\nparent: bbbbbbbb Umbrella\nchildren: 1 of 3 done\n\n", 1, true), out)
 end)
 
 t.test("a locked pass queues a write the same way", function()

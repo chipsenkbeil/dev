@@ -101,6 +101,10 @@ local function fake(cards, times)
         calls[#calls + 1] = { "links", id }
         return backend.held or {}
     end
+    function backend:family(id)
+        calls[#calls + 1] = { "family", id }
+        return backend.kin or {}
+    end
     function backend:other_board(name)
         calls[#calls + 1] = { "other_board", name }
         if name == "ci" then
@@ -442,6 +446,25 @@ t.test("links lists each link with the kind, the id prefix and the board", funct
     t.eq(commands.run("links", { "deadbeef" }, backend).code, 1)
 end)
 
+t.test("link takes parent, and show prints the umbrella and the children", function()
+    local backend = fake(sample())
+    local result = commands.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
+    t.eq(result.output, "linked cccccccc parent 11111111")
+    t.eq(backend.calls[1], { "link", ID_C, "parent", ID_A })
+    backend.kin = { parent = { id = ID_A, name = "Umbrella" } }
+    result = commands.run("show", { "11111111-b" }, backend)
+    t.eq(
+        result.output,
+        "11111111  Backlog  unsized  -  Fix lint\nparent: 11111111 Umbrella\n\nno description\n\nno comments"
+    )
+    backend.kin = { children = { done = 1, total = 3 } }
+    result = commands.run("show", { "11111111-b" }, backend)
+    t.eq(
+        result.output,
+        "11111111  Backlog  unsized  -  Fix lint\nchildren: 1 of 3 done\n\nno description\n\nno comments"
+    )
+end)
+
 t.test("link refuses a bad kind, a missing word and an unknown card", function()
     local backend = fake(sample())
     t.eq(commands.run("link", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
@@ -541,7 +564,7 @@ t.test("show prints the card line, its description and its comments", function()
             .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
             .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
     )
-    t.eq(backend.calls[#backend.calls], { "comments", ID_A })
+    t.eq(backend.calls[#backend.calls], { "family", ID_A })
     result = commands.run("show", { "bbbbbbbb-b" }, fake(sample()))
     t.eq(result.code, 1)
     result = commands.run("show", { "11111111-b" }, fake(sample()))

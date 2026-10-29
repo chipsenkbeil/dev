@@ -251,7 +251,7 @@ return {
         words = { "board", "link" },
         handler = "lua",
         usage = "dev board link CARD KIND OTHER",
-        desc = "Link a card to another card as blocked_by, blocks or related; OTHER is a card of this board or BOARD:CARD on another",
+        desc = "Link a card to another card as blocked_by, blocks, related or parent; OTHER is a card of this board or BOARD:CARD on another",
     },
     {
         words = { "board", "links" },

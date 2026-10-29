@@ -8,6 +8,10 @@ local SECONDS_PER_MINUTE = 60
 local COMMENT_ACTOR = "agent"
 local COMMENT_KIND = "agent"
 local NOT_YOURS = "that comment is not yours to change"
+local INVERSE = {
+    [board.LinkKind.BLOCKED_BY] = board.LinkKind.BLOCKS,
+    [board.LinkKind.PARENT] = board.LinkKind.CHILD,
+}
 local SWATCH_VALUES = { "yellow", "green", "blue", "red", "white" }
 
 ---A board kept in one JSON file: the columns, the size palette and the cards
@@ -262,6 +266,24 @@ local function depends_on(doc, from, goal, seen)
     return false
 end
 
+local function umbrella_of(card)
+    for _, held in ipairs(card.links or {}) do
+        if held.kind == board.LinkKind.PARENT then
+            return held.target_id
+        end
+    end
+end
+
+local function children_of(doc, id)
+    local found = {}
+    for _, other in ipairs(doc.cards) do
+        if umbrella_of(other) == id then
+            found[#found + 1] = other
+        end
+    end
+    return found
+end
+
 local function is_blocked(doc, card)
     for _, blocker in ipairs(blockers(card)) do
         local held = find_by_id(doc.cards, blocker)
@@ -286,6 +308,21 @@ function Backend:link(id, kind, other)
         end
         if card == target then
             return nil, "a card cannot be linked to itself"
+        end
+        if kind == board.LinkKind.PARENT then
+            local current = umbrella_of(card)
+            if current == target.id then
+                return true
+            end
+            if current then
+                return nil, "the card already has an umbrella"
+            end
+            if umbrella_of(target) then
+                return nil, "umbrellas nest one level, and the umbrella is itself a child"
+            end
+            if #children_of(doc, card.id) > 0 then
+                return nil, "umbrellas nest one level, and the card is itself an umbrella"
+            end
         end
         local holder, held_kind, held_target = card, kind, target
         if kind == board.LinkKind.BLOCKS then
@@ -331,8 +368,7 @@ function Backend:links(id)
     for _, other in ipairs(doc.cards) do
         for _, held in ipairs(other.links or {}) do
             if held.target_id == id then
-                local kind = held.kind == board.LinkKind.BLOCKED_BY and board.LinkKind.BLOCKS
-                    or held.kind
+                local kind = INVERSE[held.kind] or held.kind
                 if not seen[kind .. other.id] then
                     seen[kind .. other.id] = true
                     found[#found + 1] = { kind = kind, id = other.id }
@@ -341,6 +377,35 @@ function Backend:links(id)
         end
     end
     return found
+end
+
+function Backend:family(id)
+    local doc, message = self:__read()
+    if not doc then
+        return nil, message
+    end
+    local card = find_by_id(doc.cards, id)
+    if not card then
+        return nil, "the board has no card " .. id
+    end
+    local family = {}
+    local umbrella_id = umbrella_of(card)
+    local umbrella = umbrella_id and find_by_id(doc.cards, umbrella_id)
+    if umbrella then
+        family.parent = { id = umbrella.id, name = umbrella.name }
+    end
+    local children = children_of(doc, id)
+    if #children > 0 then
+        local done = 0
+        for _, child in ipairs(children) do
+            local column = find_by_id(doc.columns, child.column_id)
+            if column and column.is_done then
+                done = done + 1
+            end
+        end
+        family.children = { done = done, total = #children }
+    end
+    return family
 end
 
 function Backend:wait()
