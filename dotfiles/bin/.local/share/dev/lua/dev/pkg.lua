@@ -3,6 +3,7 @@ local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local manifest = require("dev.pkg.manifest")
 local lib = require("dev.pkg.lib")
+local release = require("dev.pkg.release")
 local script = require("dev.pkg.script")
 
 local stdout, stderr = io.stdout, io.stderr
@@ -116,6 +117,7 @@ local function driver_opts(opts)
         log_file = opts.log_file,
         interpreter = opts.interpreter,
         modules = opts.modules,
+        releases = fs.join(fs.dirname(opts.manifest), "releases.tsv"),
     }
 end
 
@@ -161,6 +163,9 @@ local function check_row(opts, driver, row)
     local binary = parsed.bin ~= "" and parsed.bin or row.binary
     if parsed.channel == Channel.SCRIPT and binary == NO_PROBE_BINARY then
         return check_script_row(opts, name, parsed.package)
+    end
+    if parsed.channel == Channel.RELEASE then
+        driver = release
     end
     return driver.check({
         name = row.name,

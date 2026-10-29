@@ -14,6 +14,7 @@ M.Channel = {
     CARGO = "cargo",
     FLATPAK = "flatpak",
     LUAROCKS = "luarocks",
+    RELEASE = "release",
     SCRIPT = "script",
 }
 
@@ -43,6 +44,7 @@ M.DRIVERS = {
     [M.Channel.CARGO] = true,
     [M.Channel.LUAROCKS] = true,
     [M.Channel.SCRIPT] = true,
+    [M.Channel.RELEASE] = true,
 }
 
 local C, S = M.Channel, M.Scope
@@ -50,6 +52,7 @@ local ROUTES = {
     [C.CARGO] = { scope = S.USER, driver = C.CARGO },
     [C.FLATPAK] = { scope = S.USER, driver = C.FLATPAK },
     [C.SCRIPT] = { scope = S.USER, driver = C.SCRIPT },
+    [C.RELEASE] = { scope = S.USER, driver = C.RELEASE },
     [C.LUAROCKS] = { scope = S.THIRD_PARTY, driver = C.LUAROCKS },
     [C.AUR] = { scope = S.THIRD_PARTY },
     [C.COPR] = { scope = S.THIRD_PARTY },

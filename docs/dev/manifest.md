@@ -33,7 +33,7 @@ column has no groups, so `--group` on it is an unknown group.
   error.
 - `--system`: the official package manager, which is bare packages, `cask:`
   and `tap:` rows. On Linux it needs root.
-- `--user`: `script:`, `cargo:` and `flatpak:` rows, which write into the
+- `--user`: `script:`, `cargo:`, `release:` and `flatpak:` rows, which write into the
   running user's home. It refuses to run as root.
 
 `--system` and `--user` together are a usage error. `--system` skips `aur:`,

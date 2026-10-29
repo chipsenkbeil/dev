@@ -27,6 +27,7 @@ local UNAVAILABLE_CELL = "-"
 ---@field log_file string the file the commands' output is appended to, empty for the terminal
 ---@field interpreter string the luajit that runs the driver, which runs `.lua` scripts
 ---@field modules string absolute path of the directory holding dev's modules
+---@field releases string path of the pins file `release:` rows read
 
 ---@class dev.pkg.lib
 local M = {}
