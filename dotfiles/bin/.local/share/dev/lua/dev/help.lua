@@ -113,17 +113,25 @@ local function topic_path(ctx, name)
     end
 end
 
-local function print_topic(ctx, name)
-    local path = topic_path(ctx, name)
-    if not path then
-        fail("unknown topic " .. name .. ", see dev help --topics")
-    end
+local function topic_source(path)
     local source = fs.read(path) or ""
     if ui.context({ width = TOPIC_WIDTH }).color then
         local _, cols = term.size()
         source = markdown(source, { width = math.min(cols, TOPIC_WIDTH), color = true })
     end
-    io.write(source)
+    return source
+end
+
+local function page(content, opts)
+    ui.page(content, { allowed = not (opts and opts.no_pager) and os.getenv("DEV_PAGER") ~= "0" })
+end
+
+local function print_topic(ctx, name, opts)
+    local path = topic_path(ctx, name)
+    if not path then
+        fail("unknown topic " .. name .. ", see dev help --topics")
+    end
+    page(topic_source(path), opts)
 end
 
 local function project_type(ctx)
@@ -315,7 +323,7 @@ end
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0
 function M.overview(ctx, reg)
-    io.write(overview(ctx, reg, screen(), {}))
+    io.write(M.overview_text(ctx, reg))
     return 0
 end
 
@@ -344,16 +352,29 @@ function M.usage_error(ctx, reg, message)
     os.exit(2)
 end
 
----Print the topic called `name` when the project or dev has one.
+---Return the topic called `name`, rendered as `dev help <topic>` prints it.
 ---@param ctx dev.Ctx the context of the command
 ---@param name string the topic name
----@return boolean found whether the topic exists, so whether it was printed
-function M.topic(ctx, name)
-    if not topic_path(ctx, name) then
-        return false
-    end
-    print_topic(ctx, name)
-    return true
+---@return string? text the topic, or nil when the project and dev have none
+function M.topic_text(ctx, name)
+    local path = topic_path(ctx, name)
+    return path and topic_source(path)
+end
+
+---Return the curated view as `dev help` prints it.
+---@param ctx dev.Ctx the context of the command
+---@param reg dev.Registry the project's registry
+---@return string text the curated view
+function M.overview_text(ctx, reg)
+    return overview(ctx, reg, screen(), {})
+end
+
+---Print `content` through the pager when it is taller than the screen.
+---
+---`DEV_PAGER=0` prints it directly.
+---@param content string the text to show
+function M.page(content)
+    page(content)
 end
 
 ---Print a noun's description and its subcommands.
@@ -376,13 +397,22 @@ end
 ---
 ---With no argument it prints the curated view. `-a` adds the hidden verbs,
 ---`--topics` lists the topics, `-k TOPIC` prints one, and a verb, noun or
----topic name prints its details.
+---topic name prints its details. A topic goes through the pager when it is
+---taller than the screen, unless `--no-pager` is given or `DEV_PAGER` is `0`.
 ---@param ctx dev.Ctx the context, whose `args` are the arguments after `help`
 ---@param reg dev.Registry? the project's registry, loaded when nil
 ---@return integer code 0, or the process exits 2 on a usage error
 function M.run(ctx, reg)
     reg = reg or registry.load(ctx.root)
-    local args = ctx.args
+    local args = {}
+    local no_pager = false
+    for _, arg in ipairs(ctx.args) do
+        if arg == "--no-pager" then
+            no_pager = true
+        else
+            args[#args + 1] = arg
+        end
+    end
     local first = args[1]
     if first == "-h" then
         return M.verb(ctx, reg, { words = { "help" }, short = true })
@@ -406,7 +436,7 @@ function M.run(ctx, reg)
         if #args ~= 2 then
             fail("-k needs one topic name")
         end
-        print_topic(ctx, args[2])
+        print_topic(ctx, args[2], { no_pager = no_pager })
         return 0
     elseif first and first:sub(1, 1) == "-" then
         fail("unknown flag " .. first)
@@ -420,7 +450,7 @@ function M.run(ctx, reg)
         elseif row then
             return M.verb(ctx, reg, { words = { first } })
         elseif topic_path(ctx, first) then
-            print_topic(ctx, first)
+            print_topic(ctx, first, { no_pager = no_pager })
         else
             fail("unknown verb " .. first .. ", and no topic of that name")
         end

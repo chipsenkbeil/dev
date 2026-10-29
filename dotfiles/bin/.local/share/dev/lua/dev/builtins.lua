@@ -333,8 +333,8 @@ return {
     {
         words = { "help" },
         handler = "lua",
-        flags = "-a -k --topics",
-        usage = "dev help [-a] [--topics] [-k topic] [verb or topic]",
+        flags = "-a -k --topics --no-pager",
+        usage = "dev help [-a] [--topics] [-k topic] [--no-pager] [verb or topic]",
         desc = "Show the commands, the details of one verb or a topic",
         hidden = true,
     },

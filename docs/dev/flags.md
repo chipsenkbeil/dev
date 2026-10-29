@@ -41,6 +41,8 @@ that does). Everything after a `--` reaches the verb verbatim, so
   `dev help <verb>`.
 - `dev help -a` lists every command, hidden ones included.
 - `dev help --topics` lists the topics, and `dev help -k <topic>` prints one.
+- A topic taller than the terminal opens in `$PAGER` (else `less -R`).
+  `dev help --no-pager <topic>` or `DEV_PAGER=0` prints it directly.
 
 Color is on only when the output is a terminal and `NO_COLOR` is unset.
 

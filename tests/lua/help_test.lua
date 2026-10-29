@@ -99,3 +99,10 @@ t.test("a topic that shares a verb's name is reported by the topic check", funct
     t.eq(code, 1)
     t.ok(out:find("topic a is also a verb", 1, true), out)
 end)
+
+t.test("--no-pager is accepted by help and changes nothing off a terminal", function()
+    local root = project({ ["topics/t.md"] = "# t: A topic\n\nbody\n" })
+    t.eq(dev(root, { "help", "--no-pager", "-k", "t" }), "# t: A topic\n\nbody\n")
+    t.eq(dev(root, { "help", "t", "--no-pager" }), "# t: A topic\n\nbody\n")
+    t.eq(dev(root, { "help", "-k", "t" }, { DEV_PAGER = "0" }), "# t: A topic\n\nbody\n")
+end)

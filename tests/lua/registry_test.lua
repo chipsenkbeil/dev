@@ -183,7 +183,7 @@ end)
 
 t.test("builtin flags come from the table and unknown commands give none", function()
     local reg = registry.load(support.tempdir())
-    t.eq(reg:flags({ "help" }), { "-a", "-k", "--topics" })
+    t.eq(reg:flags({ "help" }), { "-a", "-k", "--topics", "--no-pager" })
     t.eq(reg:flags({ "lint" }), {})
     t.eq(reg:flags({ "nope" }), {})
     t.eq(reg:find({ "bad word" }), nil)

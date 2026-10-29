@@ -62,6 +62,7 @@ local FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", 
 local ERASE_LINE = "\r\27[K"
 local HIDE_CURSOR = "\27[?25l"
 local SHOW_CURSOR = "\27[?25h"
+local DEFAULT_PAGER = "less -R"
 local POLL_INTERVAL_SECS = 0.1
 local POLL_DONE, POLL_RUNNING, POLL_GONE = 0, 1, 2
 local SIGINT = 2
@@ -489,6 +490,65 @@ function M.spin(ctx, label, argv)
     end
     report(err, label, code, captured)
     return code
+end
+
+---@class dev.ui.PageOpts
+---@field pager string? shell command that reads the text, defaulting to `$PAGER`, else `less -R`
+---@field allowed boolean? false to print directly, true by default
+---@field interactive boolean? whether standard output is a terminal, instead of asking the terminal
+---@field rows integer? rows the screen has, instead of asking the terminal
+
+---Decide whether `content` goes through a pager.
+---
+---It does when paging is allowed, standard output is a terminal and the text
+---has more lines than the screen has rows.
+---@param content string the text to show
+---@param opts dev.ui.PageOpts? `allowed`, `interactive` and `rows`, each read from the terminal when nil
+---@return boolean page true when the pager should show the text
+function M.should_page(content, opts)
+    opts = opts or {}
+    if opts.allowed == false then
+        return false
+    end
+    local interactive = opts.interactive
+    if interactive == nil then
+        interactive = devos.isatty(1)
+    end
+    if not interactive then
+        return false
+    end
+    local _, newlines = content:gsub("\n", "")
+    local lines = newlines + (content:find("\n$") and 0 or 1)
+    local rows = opts.rows or term.size()
+    return lines > rows
+end
+
+---Show `content` through a pager when it is taller than the screen, else print it.
+---
+---A pager that quits before it has read everything is not an error.
+---@param content string the text to show
+---@param opts dev.ui.PageOpts? the pager command, and the settings `should_page` reads
+---@return boolean paged true when the text went through the pager
+function M.page(content, opts)
+    opts = opts or {}
+    if not M.should_page(content, opts) then
+        io.write(content)
+        return false
+    end
+    local pager = opts.pager
+    if pager == nil or pager == "" then
+        pager = os.getenv("PAGER")
+    end
+    if pager == nil or pager == "" then
+        pager = DEFAULT_PAGER
+    end
+    io.flush()
+    local pipe = assert(io.popen(pager, "w"))
+    devos.without_sigpipe(function()
+        pipe:write(content)
+        pipe:close()
+    end)
+    return true
 end
 
 return M

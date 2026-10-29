@@ -5,9 +5,10 @@ flags
   -a
   -k
   --topics
+  --no-pager
 
 the built-in runs (rust project)
-  dev help [-a] [--topics] [-k topic] [verb or topic]
+  dev help [-a] [--topics] [-k topic] [--no-pager] [verb or topic]
 
 Global flags:
   -v          print each command before it runs

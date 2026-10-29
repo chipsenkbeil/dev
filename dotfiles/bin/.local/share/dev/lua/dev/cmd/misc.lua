@@ -25,8 +25,9 @@ end
 
 ---Show the overview, or ask `guide` a question about this repo's commands and topics.
 ---
----With no question it prints the `overview` topic when there is one, a blank
----line, then the curated help. With one it runs `guide dev` from the project
+---With no question it shows the `overview` topic when there is one, a blank
+---line, then the curated help, through the pager when the text is taller than
+---the screen. With one it runs `guide dev` from the project
 ---root with the project's topics read first.
 ---@param ctx dev.Ctx the verb's context, whose `args` are the question's words
 ---@param reg dev.Registry the project's registry
@@ -34,10 +35,9 @@ end
 function M.guide(ctx, reg)
     local question = table.concat(ctx.args, " ")
     if question == "" then
-        if help.topic(ctx, "overview") then
-            io.write("\n")
-        end
-        return help.overview(ctx, reg)
+        local intro = help.topic_text(ctx, "overview")
+        help.page((intro and intro .. "\n" or "") .. help.overview_text(ctx, reg))
+        return 0
     end
     verb.need("guide", "dev install guide")
     local topics = ctx.root .. "/.dev/topics"
