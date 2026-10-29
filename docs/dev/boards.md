@@ -12,6 +12,7 @@ dev board add "Name the new thing" --column backlog --description "why" --size 2
 dev board ls --size 3+
 dev board size 8af0e001 1
 dev board add "Name" --label needs:lead --label docs
+dev board add "Name" --checks "dev lint" --checks "dev test"
 dev board label 8af0e001 needs:human --remove needs:lead
 dev board stale --days 7
 dev board note 8af0e001 "Tests pass, landing now."
@@ -219,6 +220,14 @@ a card without them, names what is missing and points to `dev board edit`
 (exit 1), and `add --column ready` does the same for its description
 (exit 2). Icebox cards are free-form, so adding to or moving into Icebox is
 never checked.
+
+A card needs a checks row to enter Ready too. The checks live in the board's
+`dev.checks` field, a table with a `run` column, and `add --checks CMD`
+(repeatable) writes one row per command. `move CARD ready` refuses a card with
+no row (exit 1), `add --column ready` without `--checks` is a usage error
+(exit 2), and on a Pomb board that has no checks field both say so and point to
+`dev board init`, which defines the field once and never touches one that
+exists. `show` prints the rows under the description. Icebox is exempt.
 
 `show CARD` prints everything a runner needs to take a card: the `ls` line
 (id prefix, column, size, labels and name), then the description, then the

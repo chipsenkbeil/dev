@@ -51,6 +51,7 @@ local function fake_layout(opts)
         columns = opts.columns or {},
         colors = opts.colors or stock_palette(),
         cards = opts.cards or {},
+        has_checks = opts.has_checks ~= false,
         writes = {},
     }
     local layout = { state = state }
@@ -67,7 +68,17 @@ local function fake_layout(opts)
         return true, "agent project"
     end
     function layout:read()
-        return copy({ columns = state.columns, colors = state.colors, cards = state.cards })
+        return copy({
+            columns = state.columns,
+            colors = state.colors,
+            cards = state.cards,
+            has_checks = state.has_checks,
+        })
+    end
+    function layout:add_checks_field()
+        write("add_checks_field")
+        state.has_checks = true
+        return true
     end
     function layout:add_column(name, is_done)
         write("add_column", name, is_done)
@@ -161,6 +172,29 @@ t.test("a missing board ends in the standard state", function()
     t.eq(color(layout, "yellow").is_default, false)
     t.eq(lines[1], "created board demo from the agent project template")
     t.eq(changes, #lines)
+end)
+
+t.test("a board without the checks field gains it once and keeps it", function()
+    local layout = fake_layout({ has_checks = false, columns = template_columns() })
+    local changes, message, lines = run(layout)
+    t.eq(message, nil)
+    t.ok(changes >= 1)
+    local said = 0
+    for _, line in ipairs(lines) do
+        said = said + (line == "added the checks field dev.checks" and 1 or 0)
+    end
+    t.eq(said, 1)
+    local added = 0
+    for _, write in ipairs(layout.state.writes) do
+        added = added + (write[1] == "add_checks_field" and 1 or 0)
+    end
+    t.eq(added, 1)
+    run(layout)
+    added = 0
+    for _, write in ipairs(layout.state.writes) do
+        added = added + (write[1] == "add_checks_field" and 1 or 0)
+    end
+    t.eq(added, 1)
 end)
 
 t.test("a second run changes nothing and says nothing", function()
@@ -334,6 +368,9 @@ local function colors_json()
     return "[" .. table.concat(parts, ",") .. "]"
 end
 
+local FIELDS =
+    '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
+
 local EXPORT =
     '{"tasks":[{"id":"11111111-aaaa","name":"Keep","column_id":"col-Ready","color_id":"blue-id"}]}'
 
@@ -365,6 +402,12 @@ case "$last" in
     ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
+*/fields)
+    case " $* " in
+    *" -X POST "*) body='{"id":"field-1"}' ;;
+    *) body=$(cat "$ROOT/fields.json") ;;
+    esac
+    ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
 *) body='{"ok":true}' ;;
 esac
@@ -397,6 +440,7 @@ local function sandbox(opts)
         ["boards.json"] = BOARDS,
         ["detail.json"] = detail(),
         ["colors.json"] = colors_json(),
+        ["fields.json"] = opts.fields or FIELDS,
         ["export.json"] = EXPORT,
         ["templates.json"] = '[{"id":"tpl-1","name":"agent project","built_in":false}]',
         ["whoami.json"] = '{"kind":"token","name":"x","scope":"admin"}',
@@ -607,6 +651,29 @@ end)
 local function calls_of(root)
     return (read(root, "calls"):gsub("\n%%", " %%"))
 end
+
+t.test("init defines the checks field once with the dev definition", function()
+    local root, home, tmp = sandbox({ fields = "[]" })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.eq(out, "added the checks field dev.checks\nboard demo: 1 change\n")
+    local body = '{"columns":[{"key":"run","kind":"text","label":"Run","options":[],"required":true},'
+        .. '{"key":"on","kind":"multiselect","label":"On","options":["local"],"required":false}],'
+        .. '"key":"dev.checks","kind":"table","label":"Checks","required":true}'
+    t.ok(
+        calls_of(root):find(
+            "--data-raw " .. body .. " https://pomb.example/api/boards/board-1/fields",
+            1,
+            true
+        ),
+        calls_of(root)
+    )
+    t.eq(writes(root), 1)
+    root, home, tmp = sandbox()
+    out = dev(root, home, tmp, { "board", "init" })
+    t.eq(out, "board demo already follows the standard, nothing to change\n")
+    t.eq(writes(root), 0)
+end)
 
 t.test("init sends the changes an old board needs as the API's own calls", function()
     local root, home, tmp = sandbox()

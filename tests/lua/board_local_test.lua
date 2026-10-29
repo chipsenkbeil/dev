@@ -127,6 +127,8 @@ t.test("add, ls, next, move, size and label work on a local board", function()
         "needs:lead",
         "--description",
         V1,
+        "--checks",
+        "dev test",
     })
     t.eq(code, 0, out)
     local a = prefix_of(out)
@@ -272,6 +274,8 @@ t.test(
                 "1",
                 "--description",
                 V1,
+                "--checks",
+                "dev test",
             })))
         end
         local first, second, third = add("First"), add("Second"), add("Third")
@@ -335,24 +339,32 @@ end)
 
 t.test("stale counts the days a card sat in its column", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Old", "--column", "ready", "--size", "1", "--description", V1 }
-            )
-        )
-    )
-    prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "New", "--column", "ready", "--size", "1", "--description", V1 }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Old",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
     local doc = document(file_of(home))
     doc.cards[1].entered_at = "2020-01-01T00:00:00Z"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
@@ -365,7 +377,15 @@ t.test(
     "a local board keeps an unsized or red card out of Ready and lists the unsized in stale",
     function()
         local root, home = local_board()
-        local a = prefix_of((dev(root, home, { "board", "add", "Loose", "--description", V1 })))
+        local a = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "Loose", "--description", V1, "--checks", "dev test" }
+                )
+            )
+        )
         local out, code = dev(root, home, { "board", "move", a, "ready" })
         t.eq(code, 1)
         t.ok(out:find("dev board size", 1, true), out)
@@ -388,7 +408,9 @@ t.test(
     "a local board scaffolds the v1 headings and keeps a card without them out of Ready",
     function()
         local root, home = local_board()
-        local a = prefix_of((dev(root, home, { "board", "add", "Plain", "--size", "1" })))
+        local a = prefix_of(
+            (dev(root, home, { "board", "add", "Plain", "--size", "1", "--checks", "dev test" }))
+        )
         t.eq(
             document(file_of(home)).cards[1].description,
             "## Problem\n\n## Change\n\n## Out of scope\n\n## Done when\n"
@@ -416,15 +438,19 @@ t.test(
 
 t.test("move out of progress releases the claim and warns about nothing", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--column", "ready", "--size", "1", "--description", V1 }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
     dev(root, home, { "board", "take", a })
     t.ok(document(file_of(home)).cards[1].claim ~= nil, "claim held")
     local out, code = dev(root, home, { "board", "move", a, "review" })
@@ -435,15 +461,19 @@ end)
 
 t.test("take holds a claim with an expiry and no loop, and release gives it up", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--column", "ready", "--size", "1", "--description", V1 }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
     local out, code = dev(root, home, { "board", "take", a })
     t.eq(code, 0, out)
     t.eq(out, "took " .. a .. ", fence 1, held for 50m\n")
@@ -481,15 +511,19 @@ end)
 
 t.test("an expired claim does not block the card", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--column", "ready", "--size", "1", "--description", V1 }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
     dev(root, home, { "board", "take", a })
     local doc = document(file_of(home))
     doc.cards[1].claim.expires_at = "2020-01-01T00:00:00Z"
@@ -914,4 +948,43 @@ t.test("a local board never queues", function()
     local root, home = local_board()
     dev(root, home, { "board", "add", "One" })
     t.eq(fs.exists(home .. "/state/dev/boards/mine.queue"), false)
+end)
+
+t.test("a local board stores checks on the card and show lists them", function()
+    local root, home = local_board()
+    local out, code =
+        dev(root, home, { "board", "add", "Card", "--checks", "dev lint", "--checks", "dev test" })
+    t.eq(code, 0, out)
+    local a = prefix_of(out)
+    t.eq(document(file_of(home)).cards[1].checks, { "dev lint", "dev test" })
+    out = dev(root, home, { "board", "show", a })
+    t.ok(out:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), out)
+end)
+
+t.test("a local board keeps a card with no checks row out of Ready", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Bare", "--size", "1" })))
+    local file = root .. "/v1.md"
+    assert(fs.write(file, V1))
+    assert(dev(root, home, { "board", "edit", a, "--file", file }))
+    local out, code = dev(root, home, { "board", "move", a, "ready" })
+    t.eq(code, 1)
+    t.ok(out:find("has no checks row", 1, true), out)
+    out, code = dev(root, home, {
+        "board",
+        "add",
+        "Direct",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+    })
+    t.eq(code, 2)
+    t.ok(out:find("--checks", 1, true), out)
+    out, code = dev(root, home, { "board", "move", a, "icebox" })
+    t.eq(code, 0, out)
+    out = dev(root, home, { "board", "init" })
+    t.eq(out:find("checks field", 1, true), nil)
 end)

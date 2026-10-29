@@ -111,6 +111,22 @@ local function unready(color)
     return color == nil or color == board.SIZES.unsized or color == board.SIZES["3+"]
 end
 
+local NO_CHECKS_FIELD = "the board has no checks field, so run dev board init to add it"
+
+---Say why a card cannot take checks rows: the board has no checks field.
+---@param backend dev.board.Backend the board
+---@return string? message the reason, nil when the board has the field
+---@return dev.cmd.board.Result? err the failure when the board could not be asked
+local function checks_field_problem(backend)
+    local has, message = backend:checks_field()
+    if has == nil then
+        return nil, failure(message)
+    end
+    if not has then
+        return NO_CHECKS_FIELD
+    end
+end
+
 local function plain(label)
     if label == "" or label:find("%s") or label:find("%c") or label:sub(1, 1) == "-" then
         return nil, usage("label " .. label .. " must be one word that does not start with -")
@@ -224,11 +240,13 @@ function commands.next(backend, args)
 end
 
 function commands.add(backend, args)
-    local flags, words = parse(
-        args,
-        { ["--column"] = true, ["--description"] = true, ["--size"] = true, ["--label"] = true },
-        { ["--label"] = true }
-    )
+    local flags, words = parse(args, {
+        ["--column"] = true,
+        ["--description"] = true,
+        ["--size"] = true,
+        ["--label"] = true,
+        ["--checks"] = true,
+    }, { ["--label"] = true, ["--checks"] = true })
     if not flags then
         return words
     end
@@ -245,6 +263,13 @@ function commands.add(backend, args)
         if not index_of(labels, label) then
             labels[#labels + 1] = label
         end
+    end
+    local checks = {}
+    for _, run in ipairs(flags["--checks"] or {}) do
+        if not run:find("%S") then
+            return usage("--checks needs a command")
+        end
+        checks[#checks + 1] = run
     end
     local color
     if flags["--size"] then
@@ -281,10 +306,22 @@ function commands.add(backend, args)
             )
         end
     end
+    if #checks > 0 or column == board.READY then
+        local why, err = checks_field_problem(backend)
+        if err then
+            return err
+        end
+        if why then
+            return usage(why)
+        end
+        if #checks == 0 then
+            return usage("a card needs a checks row before it enters Ready; pass --checks CMD")
+        end
+    end
     local card, message = backend:add(
         table.concat(words, " "),
         column,
-        { description = description, color = color, labels = labels }
+        { description = description, color = color, labels = labels, checks = checks }
     )
     if not card then
         return failure(message)
@@ -403,8 +440,14 @@ function commands.show(backend, args)
     if description == "" then
         description = "no description"
     end
+    local checks = ""
+    if #card.checks > 0 then
+        checks = "checks:\n- " .. table.concat(card.checks, "\n- ") .. "\n\n"
+    end
     return {
-        output = card_line(card) .. "\n\n" .. description .. "\n\n" .. comment_lines(list),
+        output = card_line(card) .. "\n\n" .. description .. "\n\n" .. checks .. comment_lines(
+            list
+        ),
     }
 end
 
@@ -465,6 +508,19 @@ function commands.move(backend, args)
                     .. " is not in card format v1 and cannot enter Ready; it lacks "
                     .. table.concat(missing, ", ")
                     .. ", so add it with dev board edit"
+            )
+        end
+        if #card.checks == 0 then
+            local why, problem = checks_field_problem(backend)
+            if problem then
+                return problem
+            end
+            return failure(
+                why
+                    or (
+                        card.id:sub(1, board.MIN_PREFIX)
+                        .. " has no checks row and cannot enter Ready; give it one in the card's Checks field"
+                    )
             )
         end
     end

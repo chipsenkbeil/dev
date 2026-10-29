@@ -14,10 +14,12 @@ local M = {}
 ---@field labels string[] the card's labels
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds a live claim on it
+---@field checks string[] the run commands in its checks rows, empty when it has none
 
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
+---@field checks_field fun(self: dev.board.Backend): boolean?, string? whether the board has the checks field, or nil and a message
 ---@field next fun(self: dev.board.Backend): dev.board.Card?, string? the top unclaimed, unblocked Ready card, or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
 ---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card entered its column, as an RFC 3339 stamp by card id, or nil and a message
@@ -45,6 +47,7 @@ local M = {}
 ---@field description string? the card's description
 ---@field color string? the standard value of the palette colour to give it
 ---@field labels string[]? the labels to give it
+---@field checks string[] the run commands to give it, one checks row each
 
 ---@class dev.board.Layout
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a message
@@ -55,14 +58,22 @@ local M = {}
 ---@field mark_done fun(self: dev.board.Layout, id: string): boolean?, string? a column made the one of finished cards
 ---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description, default flag or enabled flag
 ---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a card's name or colour
+---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined on the board
 
 ---@class dev.board.LayoutState
 ---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
 ---@field colors {id: string, value: string, label: string, description: string, is_default: boolean, enabled: boolean}[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
+---@field has_checks boolean whether the board has the checks field
 
 ---The columns in board order.
 M.COLUMNS = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
+
+---The key of the custom field that holds a card's checks.
+M.CHECKS_FIELD = "dev.checks"
+
+---The key of the checks table column that holds the command to run.
+M.CHECKS_RUN = "run"
 
 ---The column a card is added to when none is named.
 M.DEFAULT_COLUMN = "Backlog"

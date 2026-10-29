@@ -156,6 +156,19 @@ local function columns_step(layout, state, say)
     return true
 end
 
+local function checks_step(layout, state, say)
+    if state.has_checks then
+        return true
+    end
+    local ok, message = layout:add_checks_field()
+    if not ok then
+        return nil, message
+    end
+    say("added the checks field " .. board.CHECKS_FIELD)
+    state.changes = state.changes + 1
+    return true
+end
+
 local function palette_step(layout, state, say)
     local by_value = {}
     for _, color in ipairs(state.colors) do
@@ -317,10 +330,11 @@ function M.run(layout, name, say)
     if not layout_state then
         return nil, advise(message)
     end
-    state.columns, state.colors, state.cards =
-        layout_state.columns, layout_state.colors, layout_state.cards
+    state.columns, state.colors, state.cards, state.has_checks =
+        layout_state.columns, layout_state.colors, layout_state.cards, layout_state.has_checks
     for _, step in ipairs({
         columns_step,
+        checks_step,
         palette_step,
         strip_step,
         enabled_step,

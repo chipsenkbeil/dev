@@ -161,6 +161,7 @@ local function card_view(doc, card)
         color = color and color.value or nil,
         labels = card.labels or {},
         description = card.description,
+        checks = card.checks or {},
         claimant = claim and claim.claimant or nil,
     }
 end
@@ -314,6 +315,14 @@ function Backend:other_board(name)
     return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
 end
 
+function Backend:checks_field()
+    return true
+end
+
+function Backend:add_checks_field()
+    return true
+end
+
 function Backend:next()
     local doc, message = self:__read()
     if not doc then
@@ -358,6 +367,7 @@ function Backend:add(name, column, opts)
             column_id = target.id,
             color_id = color_id,
             labels = opts and opts.labels or {},
+            checks = opts and opts.checks or {},
             comments = {},
             created_at = now,
             entered_at = now,
@@ -597,7 +607,7 @@ function Backend:read()
     for _, card in ipairs(doc.cards) do
         cards[#cards + 1] = { id = card.id, name = card.name, color_id = present(card.color_id) }
     end
-    return { columns = columns, colors = colors, cards = cards }
+    return { columns = columns, colors = colors, cards = cards, has_checks = true }
 end
 
 function Backend:add_column(name, is_done)

@@ -28,6 +28,16 @@ local PERMISSION_DENIED = "permission_denied"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NOT_YOURS = "that comment is not yours to change"
+local CHECKS_DEFINITION = {
+    key = board.CHECKS_FIELD,
+    label = "Checks",
+    kind = "table",
+    required = true,
+    columns = {
+        { key = board.CHECKS_RUN, label = "Run", kind = "text", options = {}, required = true },
+        { key = "on", label = "On", kind = "multiselect", options = { "local" }, required = false },
+    },
+}
 
 ---Pomb over its HTTP API, through curl.
 ---
@@ -54,6 +64,7 @@ local M = {}
 ---@field private __values table<string, string>? palette colour values by colour id
 ---@field private __ids table<string, string>? palette colour ids by colour value
 ---@field private __id string? the board's id, once found or created
+---@field private __has_checks boolean? whether the board has the checks field, once asked
 local Backend = {}
 Backend.__index = Backend
 
@@ -315,8 +326,61 @@ local function holder(claim)
     return claim.claimant
 end
 
+local function runs_of(task)
+    local rows = type(task.fields) == "table" and task.fields[board.CHECKS_FIELD]
+    local runs = {}
+    if type(rows) == "table" then
+        for _, row in ipairs(rows) do
+            local run = type(row) == "table" and row[board.CHECKS_RUN]
+            if type(run) == "string" then
+                runs[#runs + 1] = run
+            end
+        end
+    end
+    return runs
+end
+
+local function table_rows(runs)
+    local rows = {}
+    for index, run in ipairs(runs) do
+        rows[index] = { [board.CHECKS_RUN] = run }
+    end
+    return rows
+end
+
+function Backend:__fields(id)
+    local fields, message = self:__request("GET", "/api/boards/" .. id .. "/fields")
+    if not fields then
+        return nil, message
+    end
+    return fields
+end
+
+function Backend:checks_field()
+    if self.__has_checks ~= nil then
+        return self.__has_checks
+    end
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local fields
+    fields, message = self:__fields(self.__detail.id)
+    if not fields then
+        return nil, message
+    end
+    self.__has_checks = false
+    for _, field in ipairs(fields) do
+        if field.key == board.CHECKS_FIELD then
+            self.__has_checks = true
+        end
+    end
+    return self.__has_checks
+end
+
 function Backend:__card(task)
     return {
+        checks = runs_of(task),
         claimant = holder(task.claim),
         id = task.id,
         name = task.name,
@@ -449,6 +513,9 @@ function Backend:add(name, column, opts)
     end
     if opts and opts.labels then
         body.labels = opts.labels
+    end
+    if opts and opts.checks and #opts.checks > 0 then
+        body.fields = { [board.CHECKS_FIELD] = table_rows(opts.checks) }
     end
     local task
     task, message = self:__request("POST", "/api/tasks", body)
@@ -780,6 +847,7 @@ function Backend:create()
     end
     self.__id = made.id
     self.__detail = nil
+    self.__has_checks = nil
     return true, used
 end
 
@@ -802,6 +870,15 @@ function Backend:read()
     export, message = self:__request("GET", "/api/boards/" .. id .. "/export-data")
     if not export then
         return nil, message
+    end
+    local fields
+    fields, message = self:__fields(id)
+    if not fields then
+        return nil, message
+    end
+    local has_checks = false
+    for _, field in ipairs(fields) do
+        has_checks = has_checks or field.key == board.CHECKS_FIELD
     end
     local columns, colors, cards = {}, {}, {}
     for _, column in ipairs(detail.columns) do
@@ -828,7 +905,21 @@ function Backend:read()
             color_id = present(task.color_id),
         }
     end
-    return { columns = columns, colors = colors, cards = cards }
+    return { columns = columns, colors = colors, cards = cards, has_checks = has_checks }
+end
+
+function Backend:add_checks_field()
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local made
+    made, message = self:__request("POST", "/api/boards/" .. id .. "/fields", CHECKS_DEFINITION)
+    if not made then
+        return nil, message
+    end
+    self.__has_checks = nil
+    return true
 end
 
 function Backend:add_column(name, is_done)

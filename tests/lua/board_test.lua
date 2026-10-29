@@ -33,9 +33,20 @@ local function fake(cards, times)
     function backend:next()
         return cards[1]
     end
+    function backend:checks_field()
+        return not backend.nofield
+    end
     function backend:add(name, column, opts)
+        backend.opts = opts
         calls[#calls + 1] = { "add", name, column, opts.description, opts.color, opts.labels }
-        return { id = ID_C, name = name, column = column, size = "unsized", labels = {} }
+        return {
+            id = ID_C,
+            name = name,
+            column = column,
+            size = "unsized",
+            labels = {},
+            checks = {},
+        }
     end
     function backend:note(id, text)
         calls[#calls + 1] = { "note", id, text }
@@ -91,9 +102,24 @@ local function sample()
             column = "Ready",
             size = "1 Pomodoro",
             labels = { "docs" },
+            checks = {},
         },
-        { id = ID_B, name = "Fix lint", column = "Backlog", size = "unsized", labels = {} },
-        { id = ID_C, name = "Old thing", column = "Done", size = "unsized", labels = {} },
+        {
+            id = ID_B,
+            name = "Fix lint",
+            column = "Backlog",
+            size = "unsized",
+            labels = {},
+            checks = {},
+        },
+        {
+            id = ID_C,
+            name = "Old thing",
+            column = "Done",
+            size = "unsized",
+            labels = {},
+            checks = {},
+        },
     }
 end
 
@@ -165,7 +191,7 @@ t.test("add defaults to Backlog and joins the words of the name", function()
     t.eq(backend.calls[1], { "add", "A new card", "Backlog", SCAFFOLD, nil })
     result = commands.run(
         "add",
-        { "X", "--column", "ready", "--description", V1, "--size", "2" },
+        { "X", "--column", "ready", "--description", V1, "--size", "2", "--checks", "dev test" },
         backend
     )
     t.eq(backend.calls[2], { "add", "X", "Ready", V1, "green" })
@@ -331,6 +357,7 @@ t.test("link to BOARD:CARD resolves the card on the other board", function()
                     column = "Ready",
                     size = "unsized",
                     labels = {},
+                    checks = {},
                 },
             }
         end,
@@ -488,7 +515,8 @@ t.test(
         end
         t.eq(#backend.calls, 0)
         t.eq(commands.run("add", { "X", "--column", "backlog" }, backend).code, nil)
-        local full = { "X", "--column", "ready", "--size", "3", "--description", V1 }
+        local full =
+            { "X", "--column", "ready", "--size", "3", "--description", V1, "--checks", "dev test" }
         t.eq(commands.run("add", full, backend).code, nil)
     end
 )
@@ -501,6 +529,7 @@ local function colored(color)
         size = "x",
         labels = {},
         description = V1,
+        checks = { "dev test" },
     }
     card.color = color
     return card
@@ -548,6 +577,62 @@ t.test("add to Ready refuses a description without the headings or a Done when i
     result = commands.run("add", { "X", "--column", "ready", "--size", "1" }, backend)
     t.eq(result.code, 2)
     t.eq(#backend.calls, 0)
+end)
+
+t.test("add --checks gives the card one row per command", function()
+    local backend = fake(sample())
+    local result =
+        commands.run("add", { "X", "--checks", "dev lint", "--checks", "dev test" }, backend)
+    t.eq(result.output, "added cccccccc Backlog")
+    t.eq(backend.opts.checks, { "dev lint", "dev test" })
+    result = commands.run("add", { "X", "--checks", "  " }, backend)
+    t.eq(result.code, 2)
+    t.eq(commands.run("add", { "X", "--checks" }, backend).code, 2)
+end)
+
+t.test("add to Ready without a checks row names the missing row, or the missing field", function()
+    local backend = fake(sample())
+    local args = { "X", "--column", "ready", "--size", "1", "--description", V1 }
+    local result = commands.run("add", args, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("checks row", 1, true), result.message)
+    t.ok(result.message:find("--checks", 1, true), result.message)
+    backend.nofield = true
+    result = commands.run("add", args, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("no checks field", 1, true), result.message)
+    t.ok(result.message:find("dev board init", 1, true), result.message)
+    result = commands.run("add", { "X", "--checks", "dev test" }, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("no checks field", 1, true), result.message)
+    t.eq(#backend.calls, 0)
+    t.eq(commands.run("add", { "X", "--column", "icebox" }, backend).code, nil)
+end)
+
+t.test("move to Ready counts a card with no checks row as missing them", function()
+    local card = colored("green")
+    card.checks = {}
+    local backend = fake({ card })
+    local result = commands.run("move", { "cccccccc", "ready" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("has no checks row", 1, true), result.message)
+    backend.nofield = true
+    result = commands.run("move", { "cccccccc", "ready" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("no checks field", 1, true), result.message)
+    t.ok(result.message:find("dev board init", 1, true), result.message)
+    t.eq(#backend.calls, 0)
+    t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)
+end)
+
+t.test("show prints the checks rows under the description", function()
+    local card = colored("green")
+    card.checks = { "dev lint", "dev test" }
+    local result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.ok(result.output:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), result.output)
+    card.checks = {}
+    result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.eq(result.output:find("checks:", 1, true), nil)
 end)
 
 t.test("move to Ready refuses a card missing a heading or a Done when item", function()
@@ -612,7 +697,14 @@ local function aged(columns, days, labels)
     local cards, times = {}, {}
     for i, column in ipairs(columns) do
         local id = string.format("%08d-aaaa-4aaa-8aaa-aaaaaaaaaaaa", i)
-        cards[i] = { id = id, name = "Card " .. i, column = column, size = "unsized", labels = {} }
+        cards[i] = {
+            id = id,
+            name = "Card " .. i,
+            column = column,
+            size = "unsized",
+            labels = {},
+            checks = {},
+        }
         for _, label in ipairs(labels and labels[i] or {}) do
             cards[i].labels[#cards[i].labels + 1] = label
         end
@@ -751,13 +843,15 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"green-id","value":"green","label":"Two"},{"id":"blue-id","value":"blue","label":"Three"},'
     .. '{"id":"red-id","value":"red","label":"More"},{"id":"white-id","value":"white","label":"Unsized"}]'
+local FIELDS =
+    '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
 local EXPORT = '{"tasks":['
     .. '{"id":"'
     .. ID_B
     .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[]},'
     .. '{"id":"'
     .. ID_A
-    .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why it matters."},'
+    .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why it matters.","fields":{"dev.checks":[{"run":"dev test"},{"on":["local"],"run":"dev lint"}]}},'
     .. '{"id":"'
     .. ID_C
     .. '","name":"Early","column_id":"col-backlog","position":1,"color_id":"white-id","labels":[]}]}'
@@ -778,6 +872,7 @@ case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
+*/fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
 */tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. ID_B .. [[","column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
 */tasks\?limit=500) body='{"items":[{"id":"]] .. ID_A .. [[","column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
@@ -816,6 +911,7 @@ local function sandbox(opts)
         ["boards.json"] = BOARDS,
         ["detail.json"] = DETAIL,
         ["colors.json"] = COLORS,
+        ["fields.json"] = opts.fields or FIELDS,
         ["export.json"] = EXPORT,
         ["task.json"] = TASK,
         ["comments.json"] = COMMENTS,
@@ -1015,10 +1111,13 @@ t.test("add posts the card to the named column", function()
         V1,
         "--size",
         "1",
+        "--checks",
+        "dev test",
     })
     t.eq(code, 0)
     t.eq(out, "added 11111111 Ready\n")
     local calls = read(root, "calls")
+    t.ok(calls:find('"fields":{"dev.checks":[{"run":"dev test"}]}', 1, true), calls)
     t.ok(calls:find("-X POST", 1, true), calls)
     t.ok(
         calls:find(
@@ -1128,6 +1227,7 @@ t.test("notes, note --edit and note --delete reach pomb's comment routes", funct
     t.eq(
         out,
         "11111111  Ready  1 Pomodoro  docs  First\n\nWhy it matters.\n\n"
+            .. "checks:\n- dev test\n- dev lint\n\n"
             .. "aaaaaaaa  worker  2026-10-27 09:30  first\ndddddddd  human   2026-10-27 10:00  mine? no\n"
     )
     out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "aaaaaaaa", "better" })
@@ -1609,3 +1709,14 @@ t.test("a missing board stays plain on a token that sees every board", function(
         t.eq(out, "dev: board unavailable: pomb has no board named dotfiles\n")
     end
 end)
+
+t.test(
+    "add --checks on a Pomb board without the checks field is refused before any write",
+    function()
+        local root, home = sandbox({ fields = "[]" })
+        local out, code = dev(root, home, { "board", "add", "New", "--checks", "dev test" })
+        t.eq(code, 2)
+        t.ok(out:find("no checks field", 1, true), out)
+        t.eq(read(root, "calls"):find("-X POST", 1, true), nil)
+    end
+)

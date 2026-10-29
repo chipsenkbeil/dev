@@ -221,9 +221,9 @@ return {
     {
         words = { "board", "add" },
         handler = "lua",
-        flags = "--column --description --size --label",
-        usage = "dev board add NAME [--column C] [--description TEXT] [--size S] [--label L]...",
-        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized and any labels",
+        flags = "--column --description --size --label --checks",
+        usage = "dev board add NAME [--column C] [--description TEXT] [--size S] [--label L]... [--checks CMD]...",
+        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized, any labels and one checks row per --checks",
     },
     {
         words = { "board", "label" },
