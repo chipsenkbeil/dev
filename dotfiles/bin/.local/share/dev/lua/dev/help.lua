@@ -22,7 +22,7 @@ local TOPIC_WIDTH = 100
 local LESS = "less -R"
 local FILTER_HINT = "& filters · / searches · q quits"
 local HELP_CTX = { name = "help" }
-local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic.\n"
+local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic."
 local LISTED = { push = push, pull = pull, sync = sync }
 local HELPERS = {
     { "__verbs", "List the verbs with their descriptions, for shell completion" },
@@ -82,6 +82,13 @@ end
 ---@field width integer? the name column width to keep at least
 ---@field markw integer? the mark column width to keep at least
 ---@field compact boolean? true for the terminal layout of the curated view
+
+local function pointer(c, line)
+    local styled = line:gsub("`([^`]+)`", function(span)
+        return c.color and ui.paint(c, span, Style.CYAN) or "`" .. span .. "`"
+    end)
+    return fit_line(c, styled) .. "\n"
+end
 
 local function section(c, out, spec)
     local title, rows, compact = spec.title, spec.rows, spec.compact
@@ -148,6 +155,7 @@ end
 local function page(content, opts)
     local plan = M.page_plan(opts, os.getenv("PAGER"), os.getenv("DEV_PAGER"))
     if plan.hint and ui.should_page(content, plan.page) then
+        plan.page.fallback = content
         content = M.hinted(content, screen())
     end
     ui.page(content, plan.page)
@@ -251,9 +259,9 @@ local function overview(ctx, reg, c, opts)
         { title = "Topics", rows = listed, width = width, markw = markw, compact = true }
     )
     if all then
-        out[#out + 1] = "\nRun " .. ONE_COMMAND
+        out[#out + 1] = "\n" .. pointer(c, "Run " .. ONE_COMMAND)
     else
-        out[#out + 1] = "\nRun `dev help -a` for every command, " .. ONE_COMMAND
+        out[#out + 1] = "\n" .. pointer(c, "Run `dev help -a` for every command, " .. ONE_COMMAND)
     end
     return table.concat(out)
 end

@@ -533,6 +533,7 @@ end
 ---@field allowed boolean? false to print directly, true by default
 ---@field interactive boolean? whether standard output is a terminal, instead of asking the terminal
 ---@field rows integer? rows the screen has, instead of asking the terminal
+---@field fallback string? the text to print when the pager fails, instead of `content`
 
 ---Decide whether `content` goes through a pager.
 ---
@@ -592,7 +593,7 @@ function M.page(content, opts)
         return true
     end
     stderr:write("dev: the pager failed, so the text follows without it\n")
-    io.write(content)
+    io.write(opts.fallback or content)
     return false
 end
 

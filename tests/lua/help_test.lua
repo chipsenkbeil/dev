@@ -128,8 +128,10 @@ t.test(
         t.ok(out:find("  \27[1mt", 1, true), out)
         local text = require("dev.text")
         for line in out:gmatch("[^\n]+") do
-            t.ok(line:find("^Run ") or text.width(line) <= 40, line)
+            t.ok(text.width((line:gsub("\27%[[%d;]*m", ""))) <= 40, line)
         end
+        t.ok(out:find("\27[36mdev help -a\27[0m", 1, true), out)
+        t.ok(not styled(root, 200):find("`", 1, true))
         t.ok(out:find("…\n", 1, true), out)
         t.ok(not styled(root, 200):find("…", 1, true))
     end

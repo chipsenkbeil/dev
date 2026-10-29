@@ -185,11 +185,12 @@ local function page_output(rows, opts)
     local code = string.format(
         'package.path = %q .. package.path; local ui = require("dev.ui"); '
             .. "local paged = ui.page(string.rep('row\\n', %d), "
-            .. "{ pager = %q, interactive = true, rows = 24 }); "
+            .. "{ pager = %q, interactive = true, rows = 24, fallback = %s }); "
             .. "io.write(tostring(paged))",
         REPO .. "/dotfiles/bin/.local/share/dev/lua/?.lua;",
         rows,
-        opts.pager
+        opts.pager,
+        opts.fallback and string.format("%q", opts.fallback) or "nil"
     )
     return devos.capture({ "luajit", "-e", code }, { stderr = "stdout" })
 end
@@ -234,5 +235,13 @@ t.test("page prints nothing but the pager's own output when the pager succeeds",
     local dir = fake_pager("cat\n")
     local out = page_output(30, { pager = dir .. "/fakepager" })
     t.eq(out, lines_of(30) .. "true")
+    fs.remove(dir, { recursive = true })
+end)
+
+t.test("page prints the fallback text when the pager fails", function()
+    local dir = fake_pager("cat >/dev/null\nexit 3\n")
+    local out = page_output(30, { pager = dir .. "/fakepager", fallback = "plain\n" })
+    t.ok(out:find(WARNING .. "plain\n", 1, true), out)
+    t.ok(not out:find(lines_of(30), 1, true), out)
     fs.remove(dir, { recursive = true })
 end)
