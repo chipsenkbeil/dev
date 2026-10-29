@@ -297,6 +297,15 @@ before Pomb 0.5.7 answers 403, and dev says `that comment is not yours to
 change` (exit 1). A deleted comment is gone for good (Pomb keeps no recycle bin
 for comments).
 
+`ls` on a colour terminal prints a summary line (`12 cards · 3 backlog · 2
+ready`), a size legend and a table where the size is dots (one yellow, two
+green, three blue, four red, three dim hollow ones for unsized) and the
+outcomes are a `▰▱` meter with `2/4`. `ls --group` draws one block per column instead, with
+the column's name and card count as its heading. `--column`, `--label` and
+`--size` filter both layouts, a tall list goes through your pager, and piped
+output, `NO_COLOR` and `TERM=dumb` keep the plain aligned lines with or without
+`--group`.
+
 `size CARD S` sets a card's colour from the size word `S`: `1` is yellow, `2`
 green, `3` blue, `3+` red and `unsized` white. `add --size S` does the same
 when it makes the card, and `ls --size S` keeps only the cards of that colour,

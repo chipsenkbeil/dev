@@ -216,9 +216,9 @@ return {
     {
         words = { "board", "ls" },
         handler = "lua",
-        flags = "--column --label --size",
-        usage = "dev board ls [--column C] [--label L] [--size S]",
-        desc = "List the cards with id prefix, column, size, labels and name, Done left out unless --column Done, --size keeping one size of 1, 2, 3, 3+ or unsized",
+        flags = "--column --label --size --group",
+        usage = "dev board ls [--column C] [--label L] [--size S] [--group]",
+        desc = "List the cards with id prefix, column, size, labels and name, Done left out unless --column Done, --size keeping one size of 1, 2, 3, 3+ or unsized, and on a terminal a summary, a size legend and dots, with --group a heading per column",
     },
     {
         words = { "board", "next" },

@@ -11,6 +11,7 @@ local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
 local store = require("dev.board.store")
 local toml = require("dev.toml")
+local ui = require("dev.ui")
 local verb = require("dev.verb")
 
 local stderr = io.stderr
@@ -29,10 +30,30 @@ local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
 local KIND_FLAG = "--kind"
+local GROUP_FLAG = "--group"
 local AS_FLAG = "--as"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
+local DOT = "●"
+local HOLLOW = "○"
+local UNSIZED_CELLS = 3
+local METER_CELLS = 4
+local GROUP_INDENT = "  "
+local SIZE_ORDER = { "yellow", "green", "blue", "red" }
+local SIZE_DOTS = { yellow = 1, green = 2, blue = 3, red = 4 }
+local SIZE_WORDS = { yellow = "1", green = "2", blue = "3", red = ">3" }
+local SIZE_STYLES = {
+    yellow = ui.Style.YELLOW,
+    green = ui.Style.GREEN,
+    blue = ui.Style.BLUE,
+    red = ui.Style.RED,
+}
+local COLUMN_STYLES = {
+    [board.WORKING] = ui.Style.GREEN,
+    [board.BLOCKED] = ui.Style.YELLOW,
+}
+local HEADERS = { "ID", "COLUMN", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
 local QUEUE_RULES = {
     add = { idempotent = false },
     move = { idempotent = true },
@@ -70,6 +91,7 @@ end
 ---@field message string? what went wrong
 ---@field code integer? 2 for a usage error, 1 otherwise
 ---@field warnings string[]? lines for standard error when the change still went through
+---@field page boolean? whether the output goes through the pager when it is taller than the screen
 
 ---@class dev.cmd.board
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `board` subcommands
@@ -161,6 +183,132 @@ local function index_of(list, word)
     end
 end
 
+local function count_text(count, noun)
+    return count .. " " .. noun .. (count == 1 and "" or "s")
+end
+
+local function size_cell(screen, card)
+    local color = card.color or board.SIZES.unsized
+    local dots = SIZE_DOTS[color]
+    if not dots then
+        return ui.paint(screen, HOLLOW:rep(UNSIZED_CELLS), ui.Style.DIM)
+    end
+    return ui.paint(screen, DOT:rep(dots), SIZE_STYLES[color])
+end
+
+local function meter_cell(screen, card)
+    local total = #card.outcomes
+    if total == 0 then
+        return ui.paint(screen, "-", ui.Style.DIM)
+    end
+    local ticked = 0
+    for _, outcome in ipairs(card.outcomes) do
+        if outcome.done then
+            ticked = ticked + 1
+        end
+    end
+    local filled = math.floor(METER_CELLS * ticked / total + 0.5)
+    return ui.paint(screen, ("▰"):rep(filled), ui.Style.GREEN)
+        .. ui.paint(screen, ("▱"):rep(METER_CELLS - filled), ui.Style.DIM)
+        .. " "
+        .. ticked
+        .. "/"
+        .. total
+end
+
+---@class dev.cmd.board.LsView
+---@field holders boolean whether a claimant column is drawn
+---@field with_column boolean whether each row names its column
+
+local function terminal_cells(screen, card, view)
+    local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
+    local cells = { card.id:sub(1, board.MIN_PREFIX) }
+    if view.with_column then
+        local style = COLUMN_STYLES[card.column] or ui.Style.DIM
+        cells[#cells + 1] = ui.paint(screen, card.column, style)
+    end
+    cells[#cells + 1] = size_cell(screen, card)
+    cells[#cells + 1] =
+        ui.paint(screen, labels, #card.labels > 0 and ui.Style.YELLOW or ui.Style.DIM)
+    cells[#cells + 1] = meter_cell(screen, card)
+    if view.holders then
+        cells[#cells + 1] = card.claimant or ui.paint(screen, "-", ui.Style.DIM)
+    end
+    cells[#cells + 1] = card.name
+    return cells
+end
+
+local function terminal_table(screen, cards, view)
+    local headers = {}
+    for _, header in ipairs(HEADERS) do
+        if (header ~= "COLUMN" or view.with_column) and (header ~= "HELD BY" or view.holders) then
+            headers[#headers + 1] = header
+        end
+    end
+    local rows = {}
+    for _, card in ipairs(cards) do
+        rows[#rows + 1] = terminal_cells(screen, card, view)
+    end
+    return ui.table(screen, headers, rows)
+end
+
+local function summary_lines(screen, cards)
+    local counts = {}
+    for _, card in ipairs(cards) do
+        counts[card.column] = (counts[card.column] or 0) + 1
+    end
+    local parts = { ui.paint(screen, count_text(#cards, "card"), ui.Style.BOLD) }
+    for _, column in ipairs(board.COLUMNS) do
+        if counts[column] then
+            parts[#parts + 1] =
+                ui.paint(screen, counts[column] .. " " .. column:lower(), ui.Style.DIM)
+        end
+    end
+    local legend = { ui.paint(screen, "size", ui.Style.DIM) }
+    for _, color in ipairs(SIZE_ORDER) do
+        legend[#legend + 1] = ui.paint(screen, DOT:rep(SIZE_DOTS[color]), SIZE_STYLES[color])
+            .. " "
+            .. SIZE_WORDS[color]
+    end
+    legend[#legend + 1] = ui.paint(screen, HOLLOW:rep(UNSIZED_CELLS), ui.Style.DIM) .. " unsized"
+    return { table.concat(parts, " · "), table.concat(legend, "  ") }
+end
+
+local function terminal_flat(screen, cards, holders)
+    return terminal_table(screen, cards, { holders = holders, with_column = true })
+end
+
+local function terminal_grouped(screen, cards, opts)
+    local inner = screen:with_height(screen.height)
+    inner.width = screen.width - #GROUP_INDENT
+    local lines = terminal_table(inner, cards, { holders = opts.holders, with_column = false })
+    local groups, order = {}, {}
+    for at, card in ipairs(cards) do
+        if not groups[card.column] then
+            groups[card.column] = {}
+            order[#order + 1] = card.column
+        end
+        table.insert(groups[card.column], lines[at + 1])
+    end
+    local out = {}
+    for _, column in ipairs(order) do
+        if #out > 0 then
+            out[#out + 1] = ""
+        end
+        out[#out + 1] = ui.paint(screen, column, ui.Style.BOLD)
+            .. "  "
+            .. ui.paint(screen, count_text(#groups[column], "card"), ui.Style.DIM)
+        for _, line in ipairs(groups[column]) do
+            out[#out + 1] = GROUP_INDENT .. line
+        end
+    end
+    if not opts.shows_done then
+        out[#out + 1] = ""
+        out[#out + 1] = ui.paint(screen, "Done is left out unless --column done", ui.Style.DIM)
+    end
+    return out
+end
+
 local function card_line(card)
     return board.table_lines({ board.cells(card) })[1]
 end
@@ -188,8 +336,16 @@ end
 
 local commands = {}
 
-function commands.ls(backend, args)
-    local flags, extra = parse(args, { ["--column"] = true, ["--label"] = true, ["--size"] = true })
+function commands.ls(backend, args, _, screen)
+    local grouped, rest = false, {}
+    for _, arg in ipairs(args) do
+        if arg == GROUP_FLAG then
+            grouped = true
+        else
+            rest[#rest + 1] = arg
+        end
+    end
+    local flags, extra = parse(rest, { ["--column"] = true, ["--label"] = true, ["--size"] = true })
     if not flags then
         return extra
     end
@@ -235,12 +391,29 @@ function commands.ls(backend, args)
             progress = progress or #card.outcomes > 0
         end
     end
+    if #shown_cards == 0 then
+        return { output = "no cards" }
+    end
+    if screen and screen.color then
+        local lines = summary_lines(screen, shown_cards)
+        local body
+        if grouped then
+            body = terminal_grouped(
+                screen,
+                shown_cards,
+                { holders = holders, shows_done = want == board.DONE }
+            )
+        else
+            body = terminal_flat(screen, shown_cards, holders)
+        end
+        for _, line in ipairs(body) do
+            lines[#lines + 1] = line
+        end
+        return { output = table.concat(lines, "\n"), page = true }
+    end
     local rows = {}
     for _, card in ipairs(shown_cards) do
         rows[#rows + 1] = board.cells(card, { holders = holders, progress = progress })
-    end
-    if #rows == 0 then
-        return { output = "no cards" }
     end
     return { output = table.concat(board.table_lines(rows), "\n") }
 end
@@ -1287,9 +1460,10 @@ end
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil
+---@param screen dev.ui.Context? the terminal `ls` draws for, left nil for the plain lines
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
-function M.run(sub, args, backend, now)
-    return commands[sub](backend, args, now)
+function M.run(sub, args, backend, now, screen)
+    return commands[sub](backend, args, now, screen)
 end
 
 ---Build the backend a project's board uses.
@@ -1851,7 +2025,7 @@ for sub in pairs(commands) do
             end
         end
         local backend, pending = open_board(ctx)
-        local result = M.run(sub, args, backend)
+        local result = M.run(sub, args, backend, nil, sub == "ls" and ui.context() or nil)
         if result.message then
             local note = sub == "note" and (ctx.args[2] == EDIT_FLAG or ctx.args[2] == DELETE_FLAG)
             if
@@ -1878,7 +2052,11 @@ for sub in pairs(commands) do
         for _, line in ipairs(result.warnings or {}) do
             stderr_line("warning: " .. line)
         end
-        print(result.output)
+        if result.page then
+            ui.page(result.output .. "\n")
+        else
+            print(result.output)
+        end
         return 0
     end
 end

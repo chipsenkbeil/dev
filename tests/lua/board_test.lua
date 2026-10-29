@@ -4,6 +4,7 @@ local box = require("dev.cmd.box")
 local commands = require("dev.cmd.board")
 local devos = require("dev.os")
 local fs = require("dev.fs")
+local ui = require("dev.ui")
 local support = require("support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
@@ -200,6 +201,103 @@ t.test("ls filters by column and label", function()
     t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
     result = commands.run("ls", { "--label", "none" }, fake(sample()))
     t.eq(result.output, "no cards")
+end)
+
+local function coloured(cards, args)
+    local screen = ui.context({ color = true, interactive = true, width = 100 })
+    return commands.run("ls", args or {}, fake(cards), nil, screen)
+end
+
+local function strip(output)
+    return (output:gsub("\27%[[%d;]*m", ""))
+end
+
+local function split(output)
+    local lines, at = {}, 1
+    while at <= #output + 1 do
+        local stop = output:find("\n", at, true) or #output + 1
+        lines[#lines + 1] = output:sub(at, stop - 1)
+        at = stop + 1
+    end
+    return lines
+end
+
+local function progress_sample()
+    local cards = sample()
+    cards[1].color = "yellow"
+    cards[1].outcomes = { { done = true }, { done = false }, { done = true }, { done = false } }
+    cards[2].column = "Blocked"
+    cards[2].claimant = nil
+    return cards
+end
+
+t.test("ls on a colour terminal draws the summary, legend, dots and meter", function()
+    local result = coloured(progress_sample())
+    t.ok(result.page, "output goes through the pager")
+    local lines = {}
+    for line in strip(result.output):gmatch("[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    t.eq(lines[1], "2 cards · 1 ready · 1 blocked")
+    t.eq(lines[2], "size  ● 1  ●● 2  ●●● 3  ●●●● >3  ○○○ unsized")
+    t.ok(lines[3]:find("^ID +COLUMN +SIZE +LABELS +DONE +NAME$"), lines[3])
+    t.ok(lines[4]:find("^11111111  Ready +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[4])
+    t.ok(lines[5]:find("^11111111  Blocked +○○○ +%- +%- +Fix lint$"), lines[5])
+    t.ok(result.output:find("\27[33m", 1, true), "yellow is painted")
+end)
+
+t.test("ls shows the held by column only when a listed card is claimed", function()
+    local cards = progress_sample()
+    cards[1].claimant = "dev@host:1"
+    local result = coloured(cards)
+    t.ok(strip(result.output):find("HELD BY", 1, true), result.output)
+    t.ok(strip(result.output):find("dev@host:1", 1, true), result.output)
+end)
+
+t.test("ls --group lists the cards under a heading and count per column", function()
+    local result = coloured(progress_sample(), { "--group" })
+    local lines = split(strip(result.output))
+    t.eq(lines[3], "Ready  1 card")
+    t.ok(lines[4]:find("^  11111111 +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[4])
+    t.eq(lines[5], "")
+    t.eq(lines[6], "Blocked  1 card")
+    t.eq(lines[#lines], "Done is left out unless --column done")
+    local filtered = strip(coloured(progress_sample(), { "--group", "--column", "blocked" }).output)
+    t.ok(filtered:find("Done is left out unless --column done", 1, true), filtered)
+    t.eq(
+        coloured(sample(), { "--group", "--column", "done" }).output:find("left out", 1, true),
+        nil
+    )
+end)
+
+t.test("ls filters by column, label and size in both layouts", function()
+    for _, group in ipairs({ {}, { "--group" } }) do
+        local function run(...)
+            local args = { ... }
+            for _, word in ipairs(group) do
+                args[#args + 1] = word
+            end
+            return strip(coloured(progress_sample(), args).output)
+        end
+        t.ok(run("--column", "blocked"):find("Fix lint", 1, true))
+        t.eq(run("--column", "blocked"):find("Write docs", 1, true), nil)
+        t.ok(run("--label", "docs"):find("Write docs", 1, true))
+        t.eq(run("--label", "docs"):find("Fix lint", 1, true), nil)
+        t.ok(run("--size", "1"):find("Write docs", 1, true))
+        t.eq(run("--size", "1"):find("Fix lint", 1, true), nil)
+        t.eq(coloured(progress_sample(), { "--label", "none" }).output, "no cards")
+    end
+end)
+
+t.test("ls without colour is the plain lines, --group included", function()
+    local plain = ui.context({ color = false, interactive = false, width = 100 })
+    local expected =
+        "11111111  Ready    1 Pomodoro  docs  Write docs\n11111111  Backlog  unsized     -     Fix lint"
+    for _, args in ipairs({ {}, { "--group" } }) do
+        local result = commands.run("ls", args, fake(sample()), nil, plain)
+        t.eq(result.output, expected)
+        t.eq(result.page, nil)
+    end
 end)
 
 t.test("ls refuses an unknown column and an unknown flag with a usage error", function()
