@@ -55,13 +55,15 @@ end
 ---@field cwd string? where to run, the project root when nil
 ---@field code string? the exit code the stubs return
 ---@field env table<string, string>? more environment variables
+---@field split boolean? keep standard error apart and return it as a third value
 
 ---Run `dev` on a project with its `bin` first on PATH.
 ---@param root string the project root from `sandbox`
 ---@param args string[] the command line after `dev`
 ---@param opts support.DevOpts? where to run and what to set
----@return string output standard output and error together
+---@return string output standard output, with standard error merged in unless `opts.split` is set
 ---@return integer? code dev's exit code
+---@return string? errors standard error alone, only when `opts.split` is set
 function M.dev(root, args, opts)
     opts = opts or {}
     local argv = { "luajit", MAIN }
@@ -74,10 +76,23 @@ function M.dev(root, args, opts)
         env[name] = value
     end
     local run = { cwd = opts.cwd or root, stderr = "stdout", env = env }
-    if opts.input then
-        return devos.capture_input(argv, opts.input, run)
+    local errors
+    if opts.split then
+        errors = assert(fs.mktemp({ prefix = "stderr" }))
+        run.stderr = errors
     end
-    return devos.capture(argv, run)
+    local out, code
+    if opts.input then
+        out, code = devos.capture_input(argv, opts.input, run)
+    else
+        out, code = devos.capture(argv, run)
+    end
+    if errors then
+        local text = fs.read(errors) or ""
+        fs.remove(errors)
+        return out, code, text
+    end
+    return out, code
 end
 
 return M

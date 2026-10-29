@@ -1250,12 +1250,13 @@ local function sandbox(opts)
     return root, home
 end
 
-local function dev(root, home, args)
-    return support.dev(
-        root,
-        args,
-        { env = { HOME = home, ROOT = root, XDG_STATE_HOME = home .. "/state", CI = "" } }
-    )
+local function dev(root, home, args, opts)
+    opts = opts or {}
+    return support.dev(root, args, {
+        env = { HOME = home, ROOT = root, XDG_STATE_HOME = home .. "/state", CI = "" },
+        split = opts.split,
+        input = opts.input,
+    })
 end
 
 local function read(root, name)
@@ -1813,6 +1814,39 @@ t.test("a 403 on a comment says it is not yours and exits 1", function()
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
     t.eq(code, 1)
     t.eq(out, "dev: a comment id needs at least 8 hex characters: eeee\n")
+end)
+
+t.test("prose warnings reach standard error and the write still happens", function()
+    local root, home = sandbox()
+    local warning = "warning: card prose holds a path: src/a.lua\n"
+    local cases = {
+        {
+            args = { "board", "add", "Fresh", "--description", "look in src/a.lua" },
+            marker = "Fresh",
+            verb = "POST",
+        },
+        {
+            args = { "board", "note", "11111111-a", "look", "in", "src/a.lua" },
+            marker = "/comments",
+            verb = "POST",
+        },
+        {
+            args = { "board", "edit", "11111111-a" },
+            input = "## Problem\nlook in src/a.lua\n",
+            marker = "description",
+            verb = "PATCH",
+        },
+    }
+    for _, case in ipairs(cases) do
+        local before = #read(root, "calls")
+        local out, code, errors = dev(root, home, case.args, { split = true, input = case.input })
+        t.eq(code, 0)
+        t.eq(errors, warning)
+        t.eq(out:find("warning", 1, true), nil)
+        local calls = read(root, "calls"):sub(before + 1)
+        t.ok(calls:find("-X " .. case.verb, 1, true), calls)
+        t.ok(calls:find(case.marker, 1, true), calls)
+    end
 end)
 
 t.test("a nonexistent column on the board is reported", function()
