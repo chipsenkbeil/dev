@@ -42,6 +42,20 @@ checks its sha256 before it extracts anything, and builds into `~/.local`
 (`DEV_TOOLS_PREFIX` overrides) with the Xcode tools and the perl macOS ships.
 `--check` exits 0 when the tool is in that prefix or on PATH.
 
+The rust group on Intel macOS routes each row: cargo-binstall, cargo-deny,
+cargo-nextest and sccache are `release:` pins (cargo-nextest ships one
+universal build), rustup is `script:scripts/install-rustup-darwin.lua,bin:-` (the row is then checked by running the script, so `~/.cargo/bin` need not be on PATH),
+rustfmt-nightly keeps its script, build-tools is `system:cc`, and zig,
+cargo-zigbuild and rust-darwin-targets are `-` (only cross builds from
+Linux use them). cargo-sort is `cargo:cargo-sort`: upstream ships no x86_64
+macOS asset, so the cargo driver runs cargo-binstall, which falls back to
+quickinstall's prebuilt build or else compiles the crate. That one install
+has no sha256 pin (cargo-binstall picks the source at run time).
+The rustup script downloads the pinned `rustup-init`, checks its sha256 before
+running it and installs toolchain 1.99.1, the one the lint set pins, as the
+default. `--check` exits 0 when `rustup` is in `~/.cargo/bin` (`CARGO_HOME`
+overrides) or on PATH.
+
 ## Scopes
 
 - no scope: every row, as on a laptop or in an image build. Root is a usage
