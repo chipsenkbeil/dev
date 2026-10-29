@@ -7,7 +7,7 @@ local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = io.stderr
 local RESERVED_DIRS = { lua = true, topics = true }
 local HIDDEN_GROUP = "hidden"
-local GLOBAL_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--detach" }
+local GLOBAL_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach" }
 
 ---@class dev.Script
 ---@field path string path of the script

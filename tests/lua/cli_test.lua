@@ -26,7 +26,11 @@ local function dev(root, args, env)
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
-    return devos.capture(argv, { cwd = root, stderr = "stdout", env = env })
+    local merged = { CI = "", DEV_REMOTE = "0" }
+    for key, value in pairs(env or {}) do
+        merged[key] = value
+    end
+    return devos.capture(argv, { cwd = root, stderr = "stdout", env = merged })
 end
 
 t.test("-vvv gives level 2 and a bare -v after -- stays an argument", function()

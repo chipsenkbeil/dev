@@ -1,6 +1,7 @@
 local board = require("dev.cmd.board")
 local box = require("dev.cmd.box")
 local complete = require("dev.complete")
+local config = require("dev.config")
 local connect = require("dev.cmd.connect")
 local init = require("dev.cmd.init")
 local misc = require("dev.cmd.misc")
@@ -65,12 +66,24 @@ end
 ---@field after integer how many of them came after a `--`
 ---@field remote boolean whether `--remote` or `DEV_REMOTE` asks for a remote run
 ---@field detach boolean whether `--detach` was given
+---@field local_flag boolean whether `--local` was given
+---@field env_local boolean whether `DEV_REMOTE` says 0, no or false
+---@field conflict boolean whether `--local` and `--remote` were both given
 ---@field level integer the verbosity before the trace file is checked
 
 local function parse(argv)
-    local parsed =
-        { args = {}, after = 0, remote = enabled(os.getenv("DEV_REMOTE") or ""), detach = false }
-    local count = 0
+    local parsed = {
+        args = {},
+        after = 0,
+        remote = enabled(os.getenv("DEV_REMOTE") or ""),
+        detach = false,
+        conflict = false,
+        local_flag = false,
+        env_local = false,
+    }
+    local count, flag_remote, flag_local = 0, false, false
+    local env = os.getenv("DEV_REMOTE") or ""
+    parsed.env_local = env == "0" or env == "no" or env == "false"
     for i, word in ipairs(argv) do
         if word == "--" then
             parsed.after = #argv - i
@@ -82,6 +95,9 @@ local function parse(argv)
             count = count + 1
         elseif word == "--remote" then
             parsed.remote = true
+            flag_remote = true
+        elseif word == "--local" then
+            flag_local = true
         elseif word == "--detach" then
             parsed.detach = true
         elseif word:find("^%-v+$") then
@@ -90,8 +106,24 @@ local function parse(argv)
             parsed.args[#parsed.args + 1] = word
         end
     end
+    parsed.conflict = flag_local and flag_remote
+    parsed.local_flag = flag_local
+    if flag_local then
+        parsed.remote = false
+    end
     parsed.level = level_of(count > 0 and tostring(count) or os.getenv("VERBOSE") or "")
     return parsed
+end
+
+local function remote_default(project_root, words)
+    if devos.getuid() == 0 or remote.machine_local(words) then
+        return false
+    end
+    local setting = config.prefer_user(project_root, "remote.default")
+    if setting ~= nil and setting ~= "remote" and setting ~= "local" then
+        verb.die('dev: remote.default must be "remote" or "local", got ' .. tostring(setting))
+    end
+    return setting ~= "local" and remote.has_default_job(project_root, words)
 end
 
 local function root_gate(args)
@@ -301,6 +333,10 @@ end
 ---@return nil
 function M.main(argv)
     local parsed = parse(argv)
+    if parsed.conflict then
+        stderr:write("dev: --local and --remote cannot be used together\n")
+        os.exit(2)
+    end
     if parsed.detach and not parsed.remote then
         stderr:write("dev: --detach needs --remote\n")
         os.exit(2)
@@ -308,6 +344,10 @@ function M.main(argv)
     root_gate(parsed.args)
     if devos.getuid() == 0 then
         run_as_root(parsed)
+    end
+    local on_remote_host = remote.is_remote_host()
+    if on_remote_host then
+        parsed.remote = false
     end
     local args = parsed.args
     local name = args[1] or "help"
@@ -360,6 +400,12 @@ function M.main(argv)
         os.exit(
             remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), parsed.detach)
         )
+    end
+    if
+        not (parsed.local_flag or parsed.env_local or on_remote_host)
+        and remote_default(project_root, words)
+    then
+        os.exit(remote.run(ctx, words, rest, false))
     end
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)

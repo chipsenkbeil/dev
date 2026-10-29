@@ -38,21 +38,19 @@ local function lookup(tree, parts)
     return value
 end
 
----Look up a dotted key such as `remote.runner`.
----
----The project file wins over the user file. A malformed file ends the process
----with `dev: <path>:<line>: <reason>` and exit 1. As root no file is read.
----@param root string the project root
----@param key string dotted key
----@return any? value the value, or nil when neither file sets it
-function M.get(root, key)
+local function find(root, key, opts)
     if devos.getuid() == 0 then
         return nil
     end
     local home = os.getenv("HOME")
     local paths = { root .. "/.dev/config.toml" }
     if home and home ~= "" then
-        paths[#paths + 1] = home .. "/.config/dev/config.toml"
+        local user = home .. "/.config/dev/config.toml"
+        if opts.user_first then
+            table.insert(paths, 1, user)
+        else
+            paths[#paths + 1] = user
+        end
     end
     local parts = {}
     for part in key:gmatch("[^.]+") do
@@ -73,6 +71,26 @@ function M.get(root, key)
         end
     end
     return nil
+end
+
+---Look up a dotted key such as `remote.runner`.
+---
+---The project file wins over the user file. A malformed file ends the process
+---with `dev: <path>:<line>: <reason>` and exit 1. As root no file is read.
+---@param root string the project root
+---@param key string dotted key
+---@return any? value the value, or nil when neither file sets it
+function M.get(root, key)
+    return find(root, key, {})
+end
+
+---Look up a dotted key with the user file winning over the project file, for a
+---setting a host chooses for itself.
+---@param root string the project root
+---@param key string dotted key
+---@return any? value the value, or nil when neither file sets it
+function M.prefer_user(root, key)
+    return find(root, key, { user_first = true })
 end
 
 ---Look up a dotted key in the user file alone.

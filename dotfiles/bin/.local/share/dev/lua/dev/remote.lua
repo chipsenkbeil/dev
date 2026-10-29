@@ -33,7 +33,48 @@ local JOB_NAME = "^[A-Za-z0-9_.-]+$"
 ---@class dev.remote
 local M = {}
 
-local function has_job(root, job, pipeline)
+---Path of the file ci writes into a dev box, which `DEV_BOX_MARKER` overrides.
+M.BOX_MARKER = "/etc/ci-box"
+
+---Check whether dev runs inside a ci job (`CI=true`) or a dev box.
+---@return boolean
+function M.is_remote_host()
+    local marker = os.getenv("DEV_BOX_MARKER")
+    return os.getenv("CI") == "true"
+        or fs.exists(marker ~= nil and marker ~= "" and marker or M.BOX_MARKER)
+end
+
+---Check whether the command acts on this machine, so it never goes remote by default.
+---@param words string[] the command words
+---@return boolean
+function M.machine_local(words)
+    return MACHINE_VERBS[words[1]] == true or MACHINE_NOUNS[words[1]] == true
+end
+
+---Check whether `ci` lists a job for the command, taking a failed listing as no job.
+---Without `ci` on PATH it says so on stderr and answers no.
+---@param root string the project root
+---@param words string[] the command words
+---@return boolean
+function M.has_default_job(root, words)
+    local job = table.concat(words, ".")
+    if not job:find(JOB_NAME) then
+        return false
+    end
+    if not devos.which("ci") then
+        stderr:write("dev: ci is not on PATH, so this runs here\n")
+        return false
+    end
+    return M.has_job(root, job, nil, true)
+end
+
+---Check whether a pipeline lists a job.
+---@param root string the project root
+---@param job string the job name
+---@param pipeline string? a pipeline under `.ci/`, else the default one
+---@param quiet boolean? take a failed listing as no job instead of exiting
+---@return boolean
+function M.has_job(root, job, pipeline, quiet)
     local errfile = fs.mktemp({ prefix = "dev-remote" })
     local list = { "ci", "-C", root, "jobs" }
     if pipeline then
@@ -47,6 +88,9 @@ local function has_job(root, job, pipeline)
     end
     local doc = code == 0 and json.decode(out)
     if code ~= 0 or type(doc) ~= "table" or type(doc.jobs) ~= "table" then
+        if quiet then
+            return false
+        end
         detail = detail:gsub("%s+$", "")
         stderr:write("dev: ci jobs failed", detail ~= "" and (": " .. detail) or "", "\n")
         os.exit(code ~= 0 and code or 1)
@@ -83,7 +127,7 @@ function M.ci_runner(run, opts)
         stderr:write("WARNING: ci not found. Install with: dev install from the ci repo\n")
         return 1
     end
-    if not has_job(run.root, job, pipeline) then
+    if not M.has_job(run.root, job, pipeline) then
         verb.die(
             "dev: no job named "
                 .. job
@@ -151,7 +195,7 @@ end
 ---@param detach boolean whether to start the job and return
 ---@return integer code the runner's exit code
 function M.run(ctx, words, args, detach)
-    if MACHINE_VERBS[words[1]] or MACHINE_NOUNS[words[1]] then
+    if M.machine_local(words) then
         verb.usage_error(ctx, "runs on this machine only, so --remote does not apply")
     end
     if #ctx.args > #args then

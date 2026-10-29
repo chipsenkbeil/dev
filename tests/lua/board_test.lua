@@ -1098,7 +1098,7 @@ local function dev(root, home, args)
     return support.dev(
         root,
         args,
-        { env = { HOME = home, ROOT = root, XDG_STATE_HOME = home .. "/state" } }
+        { env = { HOME = home, ROOT = root, XDG_STATE_HOME = home .. "/state", CI = "" } }
     )
 end
 

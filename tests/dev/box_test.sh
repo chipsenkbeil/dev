@@ -7,7 +7,8 @@ set -o pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
-unset DOTFILES VERBOSE DEV_REMOTE LOGNAME
+unset DOTFILES VERBOSE CI LOGNAME
+export DEV_REMOTE=0
 export USER=tester
 
 TMP="$(mktemp -d)"
@@ -621,7 +622,7 @@ assert_contains "create help states the default lifetime" "$out" "4 hours"
 assert_contains "create help names the target and shape" "$out" "--target T] [--shape S]"
 assert_contains "create help lists --keep" "$out" "--keep"
 assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls create show stop resume extend tools delete connect"
-assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --by --ttl --keep -v --verbose -vv --remote --detach"
+assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --by --ttl --keep -v --verbose -vv --remote --local --detach"
 assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
 assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"
 assert_eq "__flags box ls" "$(box __flags box ls | sed -n 1p)" "--all"

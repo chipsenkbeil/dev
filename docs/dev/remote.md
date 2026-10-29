@@ -1,9 +1,33 @@
-# remote: Run a command somewhere else with --remote, and how to change where
+# remote: Run a command somewhere else, by default or with --remote, and how to change where
+
+A command that has a ci job runs remote by default, so a forgotten flag never
+spikes the laptop. `dev test` and `dev --remote test` are the same, and
+`dev test --local` runs here. Both flags work anywhere before a `--`, and
+together they are a usage error (exit 2).
+
+The default is `[remote] default = "remote"` or `"local"` in
+`~/.config/dev/config.toml` or the project's `.dev/config.toml`. The user file
+wins over the project file, so a host chooses its own default, and with neither
+set the default is remote. Any other value exits 1. With `"local"`, only
+`--remote` and `DEV_REMOTE` go to ci.
+
+The default applies only to a command whose job `ci jobs --json` lists, and
+never to a machine-local verb (below) or as root, which reads no config. A
+failed `ci jobs` counts as no job, and with no `ci` on PATH the default runs the
+command here and prints `dev: ci is not on PATH, so this runs here` on stderr
+(an explicit `--remote` without `ci` still fails). Such a command runs here with no message, so `dev board ls` is the same under either
+default. Unlike an explicit `--remote`, the default passes every argument to
+the job, before the `--` or after it, and a verb with no job is not an error.
+
+Inside a ci job (`CI=true`) or a dev box (the file `/etc/ci-box`, which ci
+writes at box creation, see "Dev boxes" in ci's README), dev always runs here, `--remote` included, as it is
+already the remote. A box made before ci writes the file has no marker, but it has
+no `ci` either, so the default falls back to a local run there.
 
 `--remote` runs the command on a remote runner instead of this machine. It works
 anywhere before a `--`, for every verb: `dev test --remote` and
 `dev --remote test` are the same. `DEV_REMOTE=1` in the environment is the same
-as the flag, where empty, `0`, `no` and `false` mean off.
+as the flag, where empty means unset and `0`, `no` and `false` mean `--local`.
 
 ```
 dev --remote test

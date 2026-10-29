@@ -282,6 +282,7 @@ local function verb_text(ctx, reg, c, opts)
         .. "  -v          print each command before it runs\n"
         .. "  -vv         also trace every line of dev and of each bash script\n"
         .. "  --remote    run this command on a remote runner, see `dev help remote`\n"
+        .. "  --local     run this command here, whatever the default is\n"
         .. "  --detach    with --remote, start the job and return\n"
     return table.concat(out)
 end

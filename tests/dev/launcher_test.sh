@@ -7,7 +7,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd -P)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
 SHARE_MAIN="$(cd -P "$REPO/dotfiles/bin/.local/share/dev" && pwd -P)/main.lua"
-unset DOTFILES VERBOSE DEV_UID DEV_OS LUA_INIT LUA_PATH LUA_CPATH
+unset DOTFILES VERBOSE DEV_UID DEV_OS LUA_INIT LUA_PATH LUA_CPATH CI
+export DEV_REMOTE=0
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

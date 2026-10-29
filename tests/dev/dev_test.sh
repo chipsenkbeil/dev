@@ -7,7 +7,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
 export DOTFILES="$REPO"
-unset VERBOSE
+unset VERBOSE CI
+export DEV_REMOTE=0
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -316,6 +317,7 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 --verbose
 -vv
 --remote
+--local
 --detach"
 out="$(run_dev "$rust" __flags sync)"
 assert_eq "__flags sync" "$out" "--check
@@ -325,6 +327,7 @@ assert_eq "__flags sync" "$out" "--check
 --verbose
 -vv
 --remote
+--local
 --detach"
 out="$(run_dev "$rust" help sync)"
 assert_contains "help sync lists --yes" "$out" "--yes"
@@ -861,6 +864,7 @@ assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
 --verbose
 -vv
 --remote
+--local
 --detach"
 assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
 printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/widget.sh"

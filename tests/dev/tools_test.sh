@@ -7,7 +7,8 @@ set -o pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
-unset DOTFILES VERBOSE
+unset DOTFILES VERBOSE CI
+export DEV_REMOTE=0
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

@@ -66,6 +66,7 @@ if [ "${1:-}" = bootstrap ]; then
         --)
             after_dashes=1
             ;;
+        --local) ;;
         *)
             if [[ "$arg" =~ ^-v+$ ]]; then
                 dev_flag=1

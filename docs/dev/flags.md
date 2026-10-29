@@ -1,6 +1,6 @@
-# flags: The global flags -v, -vv, --remote and --detach, and how help flags work
+# flags: The global flags -v, -vv, --remote, --local and --detach, and how help flags work
 
-Four flags work anywhere before a `--` on the line, whatever the verb.
+Five flags work anywhere before a `--` on the line, whatever the verb.
 
 - `-v` or `--verbose`: print each command before it runs, and export
   `VERBOSE=1` to it.
@@ -9,6 +9,9 @@ Four flags work anywhere before a `--` on the line, whatever the verb.
 - `--remote`: run the command on a remote runner, by default the verb's job of
   the same name from the project's default pipeline (`.ci/jobs.lua`) on
   example-box through ci. `DEV_REMOTE=1` in the environment is the same.
+- `--local`: run the command here, whatever the `[remote] default` setting says.
+  With `--remote` it is a usage error. A command with a ci job runs remote by
+  default, so see the `remote` topic.
 - `--detach`: with `--remote`, start the job and return. Alone it is a usage
   error.
 
