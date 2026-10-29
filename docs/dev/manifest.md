@@ -27,6 +27,14 @@ and `rust` (the Rust toolchain and its lint set). An unknown group, or a tool
 named outside the group, exits 2 and names it. A manifest with no `groups`
 column has no groups, so `--group` on it is an unknown group.
 
+## Intel macOS
+
+On Darwin with `uname -m` x86_64 the driver reads the `darwin-x86_64` column
+and never calls brew; Apple Silicon keeps `brew`. In that column `-` drops the
+tool, `release:`, `script:` and `cargo:` route to their drivers, `system:NAME`
+names a tool the OS ships (`install` does nothing, `check` probes PATH), and a
+bare package or any other channel is an error naming the row.
+
 ## Scopes
 
 - no scope: every row, as on a laptop or in an image build. Root is a usage

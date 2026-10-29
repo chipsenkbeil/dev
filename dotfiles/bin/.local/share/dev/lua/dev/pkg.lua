@@ -5,6 +5,7 @@ local manifest = require("dev.pkg.manifest")
 local lib = require("dev.pkg.lib")
 local release = require("dev.pkg.release")
 local script = require("dev.pkg.script")
+local system = require("dev.pkg.system")
 
 local stdout, stderr = io.stdout, io.stderr
 local Channel, Scope, NO_PROBE_BINARY = kinds.Channel, kinds.Scope, kinds.NO_PROBE_BINARY
@@ -73,15 +74,29 @@ local function refusal(row, parsed)
 end
 
 local function detect_manager()
-    local system = devos.capture({ "uname" }):gsub("\n+$", "")
-    if system == "Darwin" then
-        return kinds.Manager.BREW
-    elseif system == "Linux" then
+    local kernel = devos.capture({ "uname" }):gsub("\n+$", "")
+    if kernel == "Darwin" then
+        local machine = devos.capture({ "uname", "-m" }):gsub("\n+$", "")
+        return machine == "x86_64" and kinds.Manager.DARWIN_X86_64 or kinds.Manager.BREW
+    elseif kernel == "Linux" then
         for _, candidate in ipairs(kinds.LINUX_MANAGERS) do
             if devos.which(candidate.binary) then
                 return candidate.manager
             end
         end
+    end
+end
+
+local DARWIN_X86_64_CHANNELS = {
+    [Channel.RELEASE] = true,
+    [Channel.SCRIPT] = true,
+    [Channel.CARGO] = true,
+    [Channel.SYSTEM] = true,
+}
+
+local function misplaced(manager, parsed)
+    if manager == kinds.Manager.DARWIN_X86_64 and not DARWIN_X86_64_CHANNELS[parsed.channel] then
+        return "a " .. manager .. " cell takes release:, script:, cargo: or system:"
     end
 end
 
@@ -143,12 +158,18 @@ local function check_script_row(opts, name, package)
     return false
 end
 
-local function check_row(opts, driver, row)
+local function check_row(ctx, row)
+    local opts, manager, driver = ctx.opts, ctx.manager, ctx.driver
     local parsed = parse_cell(row.cell)
     if not parsed then
         return true
     end
     local name = printable(row.name)
+    local wrong = misplaced(manager, parsed)
+    if wrong then
+        stdout:write("[ ] ", name, "\t(", wrong, ")\n")
+        return false
+    end
     local refused = refusal(row, parsed)
     if refused then
         stdout:write(
@@ -166,6 +187,8 @@ local function check_row(opts, driver, row)
     end
     if parsed.channel == Channel.RELEASE then
         driver = release
+    elseif parsed.channel == Channel.SYSTEM or manager == kinds.Manager.DARWIN_X86_64 then
+        driver = system
     end
     return driver.check({
         name = row.name,
@@ -185,9 +208,12 @@ function M.check(opts)
         stderr:write("error: no supported package manager detected on this OS\n")
         return 1
     end
-    local driver = load_driver(manager)
-    if not driver then
-        return 1
+    local driver = system
+    if manager ~= kinds.Manager.DARWIN_X86_64 then
+        driver = load_driver(manager)
+        if not driver then
+            return 1
+        end
     end
     local rows, column = load_rows(opts, manager)
     if not rows then
@@ -203,7 +229,7 @@ function M.check(opts)
     end
     local missing = false
     for _, row in ipairs(selected) do
-        missing = not check_row(opts, driver, row) or missing
+        missing = not check_row({ opts = opts, manager = manager, driver = driver }, row) or missing
     end
     return missing and 1 or 0
 end
@@ -244,6 +270,12 @@ local function install_row(state, row)
         return
     end
     local name = printable(row.name)
+    local wrong = misplaced(state.manager, parsed)
+    if wrong then
+        stderr:write("  ! ", name, ": ", wrong, "\n")
+        state.failed[#state.failed + 1] = name
+        return
+    end
     if opts.scope == Scope.SYSTEM and row_scope == Scope.THIRD_PARTY then
         state.third_party[#state.third_party + 1] = name .. " (" .. parsed.channel .. ":)"
         return

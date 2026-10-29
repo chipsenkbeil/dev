@@ -16,10 +16,17 @@ M.Channel = {
     LUAROCKS = "luarocks",
     RELEASE = "release",
     SCRIPT = "script",
+    SYSTEM = "system",
 }
 
 ---@enum dev.pkg.Manager
-M.Manager = { BREW = "brew", PACMAN = "pacman", DNF = "dnf", APT = "apt" }
+M.Manager = {
+    BREW = "brew",
+    PACMAN = "pacman",
+    DNF = "dnf",
+    APT = "apt",
+    DARWIN_X86_64 = "darwin-x86_64",
+}
 
 ---The package manager each binary on PATH stands for, in the order they are tried on Linux.
 ---@type { binary: string, manager: dev.pkg.Manager }[]
@@ -45,6 +52,7 @@ M.DRIVERS = {
     [M.Channel.LUAROCKS] = true,
     [M.Channel.SCRIPT] = true,
     [M.Channel.RELEASE] = true,
+    [M.Channel.SYSTEM] = true,
 }
 
 local C, S = M.Channel, M.Scope
@@ -53,6 +61,7 @@ local ROUTES = {
     [C.FLATPAK] = { scope = S.USER, driver = C.FLATPAK },
     [C.SCRIPT] = { scope = S.USER, driver = C.SCRIPT },
     [C.RELEASE] = { scope = S.USER, driver = C.RELEASE },
+    [C.SYSTEM] = { scope = S.USER, driver = C.SYSTEM },
     [C.LUAROCKS] = { scope = S.THIRD_PARTY, driver = C.LUAROCKS },
     [C.AUR] = { scope = S.THIRD_PARTY },
     [C.COPR] = { scope = S.THIRD_PARTY },
