@@ -1428,9 +1428,9 @@ local EXPORT = '{"tasks":['
     .. '{"id":"'
     .. ID_C
     .. '","name":"Early","column_id":"col-backlog","position":1,"color_id":"white-id","labels":[]}]}'
-local COMMENTS = '[{"id":"aaaaaaaa-1111-4111-8111-111111111111","author":"api-token","actor_kind":"agent",'
+local COMMENTS = '[{"id":"aaaaaaaa-1111-4111-8111-111111111111","author":"api-token","actor_kind":"api_token",'
     .. '"token_name":"worker","created_at":"2026-10-27T09:30:12Z","body":"first\\nline"},'
-    .. '{"id":"dddddddd-4444-4444-8444-444444444444","author":"x","actor_kind":"human",'
+    .. '{"id":"dddddddd-4444-4444-8444-444444444444","author":"x","actor_kind":"user",'
     .. '"token_name":null,"created_at":"2026-10-27T10:00:00Z","body":"mine? no"}]'
 local TASK = '{"id":"'
     .. ID_A

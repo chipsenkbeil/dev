@@ -24,6 +24,7 @@ local HTTP_ERROR = 400
 local TOP = 0
 local COMMENT_KIND = "agent"
 local DEFAULT_AUTHOR = "api-token"
+local ACTORS = { user = "human", api_token = "agent" }
 local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
 local KEEPALIVE_SCRIPT = "/board/keepalive.sh"
 local TEMPLATE = "agent project"
@@ -669,10 +670,11 @@ function Backend:comments(id)
     local found = {}
     for _, comment in ipairs(list) do
         local author = present(comment.author)
+        local actor = ACTORS[comment.actor_kind] or present(comment.actor_kind)
         found[#found + 1] = {
             id = comment.id,
-            who = present(comment.token_name) or present(comment.actor_kind) or "unknown",
-            actor = present(comment.actor_kind),
+            who = present(comment.token_name) or actor or "unknown",
+            actor = actor,
             at = present(comment.created_at) or "",
             body = present(comment.body) or "",
             kind = present(comment.kind),
