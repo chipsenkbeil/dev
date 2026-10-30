@@ -9,6 +9,7 @@ local M = {}
 ---@field id string the card's full id
 ---@field name string the card's title
 ---@field column string the name of the column it sits in
+---@field done boolean? whether that column is one of finished cards
 ---@field size string the colour's palette label, or `unsized`
 ---@field color string? the colour's standard value (`yellow`, `green`, `blue`, `red`, `white`), nil when the card has none
 ---@field labels string[] the card's labels
@@ -34,6 +35,9 @@ local M = {}
 
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
+---@field done_columns fun(self: dev.board.Backend): string[]?, string? the names of the columns marked finished, in board order, or nil and a message
+---@field column_map table<string, string>? the `[board.columns]` map the runner resolves into `roles`
+---@field roles dev.board.Roles? the column set of this run, which the runner sets before a command
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
 ---@field checks_field fun(self: dev.board.Backend): boolean?, string? whether the board has the checks field, or nil and a message
 ---@field next fun(self: dev.board.Backend, column: string): dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human, or nil and a message when it failed
@@ -106,48 +110,14 @@ local M = {}
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 ---@field has_checks boolean whether the board has the checks field
 
----The columns in board order.
-M.COLUMNS = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
-
 ---The key of the custom field that holds a card's checks.
 M.CHECKS_FIELD = "dev.checks"
 
 ---The key of the checks table column that holds the command to run.
 M.CHECKS_RUN = "run"
 
----The column a card is added to when none is named.
-M.DEFAULT_COLUMN = "Backlog"
-
----The column of cards that are free-form, which are never scaffolded or checked.
-M.ICEBOX = "Icebox"
-
----The column of new cards, which planners size and split.
-M.BACKLOG = "Backlog"
-
----The column a worker takes cards from.
-M.READY = "Ready"
-
----The column of cards that wait on the owner.
-M.BLOCKED = "Blocked"
-
----The column of cards waiting for review.
-M.REVIEW = "In Review"
-
----The column of cards being worked, where a move keeps a claim's loop alive.
-M.WORKING = "In Progress"
-
----The columns where a card that sits untouched is stale.
-M.STALE_COLUMNS = {
-    [M.DEFAULT_COLUMN] = true,
-    [M.READY] = true,
-    [M.WORKING] = true,
-    [M.REVIEW] = true,
-}
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"
-
----The column of finished cards, which `ls` leaves out.
-M.DONE = "Done"
 
 ---Whether a card carries a label.
 ---@param card dev.board.Card the card
@@ -186,11 +156,6 @@ M.NOTE_KINDS = { "decision", "question", "blocked", "status", "done" }
 ---The most characters of the label `note --as` sends, which Pomb enforces.
 M.AUTHOR_CHARS = 80
 
-local SHORT_FORMS = {
-    progress = "In Progress",
-    review = "In Review",
-}
-
 local UNSIZED = "unsized"
 
 ---The size words a user may type, with the palette colour each names.
@@ -198,16 +163,87 @@ M.SIZES = { ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red", [
 
 local SIZE_WORDS = { "1", "2", "3", "3+", UNSIZED }
 
----Name a column from its full name or a short form, in any case.
----@param word string `ready`, `progress`, `In Review` and so on
----@return string? column the column's name, or nil when it is not one of the seven
-function M.column(word)
-    local lowered = word:lower():gsub("%s+", " ")
-    local short = SHORT_FORMS[lowered]
-    if short then
-        return short
+---The roles a column map names, in board order.
+M.ROLES = { "icebox", "backlog", "ready", "progress", "review", "blocked" }
+
+---The name each role has when the config map does not rename it.
+M.DEFAULT_NAMES = {
+    icebox = "Icebox",
+    backlog = "Backlog",
+    ready = "Ready",
+    progress = "In Progress",
+    review = "In Review",
+    blocked = "Blocked",
+    done = "Done",
+}
+
+---@class dev.board.Roles
+---@field icebox string the column of free-form cards, which are never scaffolded or checked
+---@field backlog string the column of new cards, which planners size and split
+---@field ready string the column a worker takes cards from
+---@field progress string the column of cards being worked, where a move keeps a claim's loop alive
+---@field review string the column of cards waiting for review
+---@field blocked string the column of cards that wait on the owner
+---@field done string? the mapped column of finished cards, nil when the config names none
+---@field finished string[] the names of the columns the backend marks finished, in board order
+---@field list string[] the column names in board order, the mapped or default Done last
+---@field stale table<string, boolean> the columns where a card that sits untouched is stale
+local Roles = {}
+Roles.__index = Roles
+
+---Resolve the column set of one command run.
+---@param map table<string, any>? the `[board.columns]` table, keyed by role
+---@param finished string[]? the names of the columns the backend marks finished
+---@return dev.board.Roles
+function M.roles(map, finished)
+    map = map or {}
+    local roles = setmetatable({ finished = finished or {} }, Roles)
+    local list = {}
+    for _, role in ipairs(M.ROLES) do
+        local name = map[role]
+        roles[role] = type(name) == "string" and name ~= "" and name or M.DEFAULT_NAMES[role]
+        list[#list + 1] = roles[role]
     end
-    for _, name in ipairs(M.COLUMNS) do
+    local done = map.done
+    if type(done) == "string" and done ~= "" then
+        roles.done = done
+    end
+    list[#list + 1] = roles.done or roles.finished[1] or M.DEFAULT_NAMES.done
+    roles.list = list
+    roles.stale = {
+        [roles.backlog] = true,
+        [roles.ready] = true,
+        [roles.progress] = true,
+        [roles.review] = true,
+    }
+    return roles
+end
+
+---The column `discard` moves a card to: the mapped done column, else the first finished one.
+---@return string
+function Roles:done_column()
+    return self.done or self.finished[1] or M.DEFAULT_NAMES.done
+end
+
+---Name a column from its full name or a role name, in any case.
+---@param word string `ready`, `progress`, `In Review`, a finished column's name and so on
+---@return string? column the column's name, or nil when it is not one of the board's
+function Roles:column(word)
+    local lowered = word:lower():gsub("%s+", " ")
+    for _, role in ipairs(M.ROLES) do
+        if role == lowered then
+            return self[role]
+        end
+    end
+    if lowered == "done" then
+        return self:done_column()
+    end
+    for _, name in ipairs(self.list) do
+        if name:lower() == lowered then
+            return name
+        end
+    end
+    for _, name in ipairs(self.finished) do
         if name:lower() == lowered then
             return name
         end
@@ -215,9 +251,19 @@ function M.column(word)
 end
 
 ---List the column names a user may type.
----@return string names the seven names and the short forms
-function M.column_help()
-    return table.concat(M.COLUMNS, ", ") .. " (or progress, review, in any case)"
+---@return string names the column names and the role words
+function Roles:help()
+    local names, seen = {}, {}
+    for _, name in ipairs(self.list) do
+        names[#names + 1] = name
+        seen[name] = true
+    end
+    for _, name in ipairs(self.finished) do
+        if not seen[name] then
+            names[#names + 1] = name
+        end
+    end
+    return table.concat(names, ", ") .. " (or a role such as progress or review, in any case)"
 end
 
 ---Name a palette colour from a size word.

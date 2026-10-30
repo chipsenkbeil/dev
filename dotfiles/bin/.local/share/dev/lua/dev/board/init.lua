@@ -85,9 +85,11 @@ end
 local function columns_step(layout, state, say)
     local present = by_name(state.columns)
     local added = false
-    for _, name in ipairs(board.COLUMNS) do
+    local standard = state.roles.list
+    local done_name = standard[#standard]
+    for _, name in ipairs(standard) do
         if not present[name:lower()] then
-            local ok, message = layout:add_column(name, name == board.DONE)
+            local ok, message = layout:add_column(name, name == done_name)
             if not ok then
                 return nil, message
             end
@@ -104,12 +106,12 @@ local function columns_step(layout, state, say)
         state.columns = fresh.columns
         present = by_name(state.columns)
     end
-    for _, name in ipairs(board.COLUMNS) do
+    for _, name in ipairs(standard) do
         if not present[name:lower()] then
             return nil, "the board still has no " .. name .. " column after adding it"
         end
     end
-    local done = present[board.DONE:lower()]
+    local done = present[done_name:lower()]
     if not done.is_done then
         local ok, message = layout:mark_done(done.id)
         if not ok then
@@ -119,7 +121,7 @@ local function columns_step(layout, state, say)
         state.changes = state.changes + 1
     end
     local want, used = {}, {}
-    for _, name in ipairs(board.COLUMNS) do
+    for _, name in ipairs(standard) do
         local column = present[name:lower()]
         want[#want + 1] = column
         used[column.id] = true
@@ -304,10 +306,11 @@ end
 ---@param layout dev.board.Layout the board to lay out
 ---@param name string the board's name
 ---@param say fun(line: string) prints one line
+---@param roles dev.board.Roles? the column set to lay out, the standard names when nil
 ---@return integer? changes how many changes were made
 ---@return string? message why it stopped, with the changes made so far already said
-function M.run(layout, name, say)
-    local state = { changes = 0 }
+function M.run(layout, name, say, roles)
+    local state = { changes = 0, roles = roles or board.roles() }
     local found, message = layout:find()
     if found == nil then
         return nil, advise(message)

@@ -52,10 +52,14 @@ local SIZE_STYLES = {
     blue = ui.Style.BLUE,
     red = ui.Style.RED,
 }
-local COLUMN_STYLES = {
-    [board.WORKING] = ui.Style.GREEN,
-    [board.BLOCKED] = ui.Style.YELLOW,
-}
+local function column_style(roles, column)
+    if column == roles.progress then
+        return ui.Style.GREEN
+    elseif column == roles.blocked then
+        return ui.Style.YELLOW
+    end
+    return ui.Style.DIM
+end
 local HEADERS = { "ID", "COLUMN", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
 local QUEUE_RULES = {
     add = { idempotent = false },
@@ -89,6 +93,7 @@ end
 ---@field name string the board's name
 ---@field path string? the file of a local board, in the state directory when nil
 ---@field root string? the project's root, which a tracked path is under
+---@field columns table<string, string>? the `[board.columns]` map, keyed by role
 
 ---@class dev.cmd.board.Result
 ---@field output string? what to print on success
@@ -136,10 +141,10 @@ local function parse(args, takes, many)
     return flags, positional
 end
 
-local function named_column(word)
-    local column = board.column(word)
+local function named_column(backend, word)
+    local column = backend.roles:column(word)
     if not column then
-        return nil, usage("unknown column " .. word .. ", the columns are " .. board.column_help())
+        return nil, usage("unknown column " .. word .. ", the columns are " .. backend.roles:help())
     end
     return column
 end
@@ -235,7 +240,7 @@ local function terminal_cells(screen, card, view)
     local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
     local cells = { card.id:sub(1, board.MIN_PREFIX) }
     if view.with_column then
-        local style = COLUMN_STYLES[card.column] or ui.Style.DIM
+        local style = column_style(view.roles, card.column)
         cells[#cells + 1] = ui.paint(screen, card.column, style)
     end
     cells[#cells + 1] = size_cell(screen, card)
@@ -263,14 +268,23 @@ local function terminal_table(screen, cards, view)
     return ui.table(screen, headers, rows)
 end
 
-local function summary_lines(screen, cards)
+local function summary_lines(screen, cards, roles)
     local counts = {}
     for _, card in ipairs(cards) do
         counts[card.column] = (counts[card.column] or 0) + 1
     end
     local parts = { ui.paint(screen, count_text(#cards, "card"), ui.Style.BOLD) }
-    for _, column in ipairs(board.COLUMNS) do
-        if counts[column] then
+    local shown = {}
+    for _, column in ipairs(roles.list) do
+        shown[#shown + 1] = column
+    end
+    for _, column in ipairs(roles.finished) do
+        shown[#shown + 1] = column
+    end
+    local seen = {}
+    for _, column in ipairs(shown) do
+        if counts[column] and not seen[column] then
+            seen[column] = true
             parts[#parts + 1] =
                 ui.paint(screen, counts[column] .. " " .. column:lower(), ui.Style.DIM)
         end
@@ -285,14 +299,22 @@ local function summary_lines(screen, cards)
     return { table.concat(parts, " · "), table.concat(legend, "  ") }
 end
 
-local function terminal_flat(screen, cards, holders)
-    return terminal_table(screen, cards, { holders = holders, with_column = true })
+local function terminal_flat(screen, cards, opts)
+    return terminal_table(
+        screen,
+        cards,
+        { holders = opts.holders, with_column = true, roles = opts.roles }
+    )
 end
 
 local function terminal_grouped(screen, cards, opts)
     local inner = screen:with_height(screen.height)
     inner.width = screen.width - #GROUP_INDENT
-    local lines = terminal_table(inner, cards, { holders = opts.holders, with_column = false })
+    local lines = terminal_table(
+        inner,
+        cards,
+        { holders = opts.holders, with_column = false, roles = opts.roles }
+    )
     local groups, order = {}, {}
     for at, card in ipairs(cards) do
         if not groups[card.column] then
@@ -315,7 +337,13 @@ local function terminal_grouped(screen, cards, opts)
     end
     if not opts.shows_done then
         out[#out + 1] = ""
-        out[#out + 1] = ui.paint(screen, "Done is left out unless --column done", ui.Style.DIM)
+        out[#out + 1] = ui.paint(
+            screen,
+            opts.roles:done_column()
+                .. " is left out unless --column "
+                .. opts.roles:done_column():lower(),
+            ui.Style.DIM
+        )
     end
     return out
 end
@@ -409,7 +437,7 @@ function commands.ls(backend, args, _, screen)
     end
     local want
     if flags["--column"] then
-        local column, err = named_column(flags["--column"])
+        local column, err = named_column(backend, flags["--column"])
         if not column then
             return err
         end
@@ -422,7 +450,7 @@ function commands.ls(backend, args, _, screen)
     local shown_cards = {}
     local holders, progress = false, false
     for _, card in ipairs(cards) do
-        local shown = card.column == want or (not want and card.column ~= board.DONE)
+        local shown = card.column == want or (not want and not card.done)
         if shown and flags["--label"] then
             shown = false
             for _, label in ipairs(card.labels) do
@@ -442,17 +470,21 @@ function commands.ls(backend, args, _, screen)
         return { output = "no cards" }
     end
     if screen and screen.color then
-        local lines = summary_lines(screen, shown_cards)
+        local lines = summary_lines(screen, shown_cards, backend.roles)
+        local finished = {}
+        for _, name in ipairs(backend.roles.finished) do
+            finished[name] = true
+        end
         lines[#lines + 1] = ""
         local body
         if grouped then
-            body = terminal_grouped(
-                screen,
-                shown_cards,
-                { holders = holders, shows_done = want == board.DONE }
-            )
+            body = terminal_grouped(screen, shown_cards, {
+                holders = holders,
+                shows_done = want ~= nil and finished[want],
+                roles = backend.roles,
+            })
         else
-            body = terminal_flat(screen, shown_cards, holders)
+            body = terminal_flat(screen, shown_cards, { holders = holders, roles = backend.roles })
         end
         for _, line in ipairs(body) do
             lines[#lines + 1] = line
@@ -474,13 +506,14 @@ function commands.next(backend, args)
     if #words > 0 then
         return usage("unknown argument " .. words[1])
     end
-    local column = board.READY
+    local roles = backend.roles
+    local column = roles.ready
     if flags["--column"] then
-        local named, err = named_column(flags["--column"])
+        local named, err = named_column(backend, flags["--column"])
         if not named then
             return err
         end
-        if named ~= board.READY and named ~= board.BACKLOG and named ~= board.ICEBOX then
+        if named ~= roles.ready and named ~= roles.backlog and named ~= roles.icebox then
             return usage("next --column takes Ready, Backlog or Icebox")
         end
         column = named
@@ -490,7 +523,7 @@ function commands.next(backend, args)
         if message then
             return failure(message)
         end
-        if column == board.READY then
+        if column == roles.ready then
             return { output = "no ready cards" }
         end
         return { output = "no cards in " .. column }
@@ -549,9 +582,10 @@ function commands.add(backend, args)
         end
         color = named
     end
-    local column = board.DEFAULT_COLUMN
+    local roles = backend.roles
+    local column = roles.backlog
     if flags["--column"] then
-        local named, err = named_column(flags["--column"])
+        local named, err = named_column(backend, flags["--column"])
         if not named then
             return err
         end
@@ -559,24 +593,24 @@ function commands.add(backend, args)
     end
     if
         index_of(labels or {}, board.NEEDS_HUMAN)
-        and column ~= board.BLOCKED
-        and column ~= board.ICEBOX
+        and column ~= roles.blocked
+        and column ~= roles.icebox
     then
         return usage(
             board.NEEDS_HUMAN
                 .. " lives only in Blocked or Icebox, so add the card there with --column"
         )
     end
-    if column == board.READY and unready(color) then
+    if column == roles.ready and unready(color) then
         return usage(
             "a card must be sized 1, 2 or 3 before it enters Ready, so add it with --size or to Backlog"
         )
     end
     local description = flags["--description"]
-    if column ~= board.ICEBOX then
+    if column ~= roles.icebox then
         description = board.scaffold(description)
     end
-    if column == board.READY then
+    if column == roles.ready then
         local missing = board.missing(description, #outcomes)
         if #missing > 0 then
             return usage(
@@ -586,7 +620,7 @@ function commands.add(backend, args)
             )
         end
     end
-    if #checks > 0 or column == board.READY then
+    if #checks > 0 or column == roles.ready then
         local why, err = checks_field_problem(backend)
         if err then
             return err
@@ -959,7 +993,7 @@ function commands.move(backend, args)
     if #words < 2 then
         return usage("needs a card and a column")
     end
-    local column, err = named_column(table.concat(words, " ", 2))
+    local column, err = named_column(backend, table.concat(words, " ", 2))
     if not column then
         return err
     end
@@ -972,7 +1006,8 @@ function commands.move(backend, args)
     if held_back then
         return held_back
     end
-    if column == board.READY and unready(card.color) then
+    local roles = backend.roles
+    if column == roles.ready and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
         return failure(
@@ -982,7 +1017,7 @@ function commands.move(backend, args)
                 .. " and cannot enter Ready; size it with dev board size CARD 1, 2 or 3"
         )
     end
-    if column == board.READY then
+    if column == roles.ready then
         local missing = board.missing(card.description, #card.outcomes)
         if #missing > 0 then
             return failure(
@@ -1006,7 +1041,7 @@ function commands.move(backend, args)
             )
         end
     end
-    if column == board.READY then
+    if column == roles.ready then
         local family, why = backend:family(card.id)
         if not family then
             return failure(why)
@@ -1022,7 +1057,7 @@ function commands.move(backend, args)
     end
     local held = claims.read(card.id)
     local started
-    if column == board.WORKING and not held and not card.claimant then
+    if column == roles.progress and not held and not card.claimant then
         local name, bad = agent_name()
         if bad then
             return bad
@@ -1048,7 +1083,7 @@ function commands.move(backend, args)
         end
         return failure(message)
     end
-    if held and column ~= board.WORKING then
+    if held and column ~= roles.progress then
         claims.stop(card.id)
         local released, why = backend:release(card.id, held.fence)
         if not released then
@@ -1087,7 +1122,7 @@ function commands.discard(backend, args)
         steps[#steps + 1] = { sub = "note", args = { words[1], KIND_FLAG, "decision", reason } }
     end
     steps[#steps + 1] = { sub = "label", args = { words[1], DISCARD_LABEL } }
-    steps[#steps + 1] = { sub = "move", args = { words[1], board.DONE } }
+    steps[#steps + 1] = { sub = "move", args = { words[1], backend.roles:done_column() } }
     local warnings = {}
     for i, step in ipairs(steps) do
         local result = commands[step.sub](backend, step.args)
@@ -1174,8 +1209,8 @@ function commands.label(backend, args)
             change.add
             and change.word == board.NEEDS_HUMAN
             and not index_of(labels, change.word)
-            and card.column ~= board.BLOCKED
-            and card.column ~= board.ICEBOX
+            and card.column ~= backend.roles.blocked
+            and card.column ~= backend.roles.icebox
         then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
@@ -1567,7 +1602,10 @@ end
 local function icebox_rows(backend, cards, entered, limit, now)
     local found, undated = {}, {}
     for _, card in ipairs(cards) do
-        if card.column == board.ICEBOX and index_of(card.labels, board.NEEDS_HUMAN) == nil then
+        if
+            card.column == backend.roles.icebox
+            and index_of(card.labels, board.NEEDS_HUMAN) == nil
+        then
             local latest, skipped = icebox_latest(backend, card, entered[card.id], limit, now)
             if skipped then
                 undated[#undated + 1] = skipped
@@ -1623,14 +1661,15 @@ function commands.stale(backend, args, now)
         return failure(message)
     end
     now = now or os.time()
+    local roles = backend.roles
     local found, owner, moved, undated, unsized = {}, {}, {}, {}, {}
     for _, card in ipairs(cards) do
-        if card.column == board.DEFAULT_COLUMN and board.has_color(card, board.SIZES.unsized) then
+        if card.column == roles.backlog and board.has_color(card, board.SIZES.unsized) then
             unsized[#unsized + 1] = card
         end
         local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
-        local held = mine and (card.column == board.BLOCKED or card.column == board.ICEBOX)
-        if card.column ~= board.DONE and (mine or board.STALE_COLUMNS[card.column]) then
+        local held = mine and (card.column == roles.blocked or card.column == roles.icebox)
+        if not card.done and (mine or roles.stale[card.column]) then
             local stamp = entered[card.id]
             if not stamp then
                 undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name
@@ -1698,7 +1737,7 @@ function commands.stale(backend, args, now)
             rows[#rows + 1] = { card.id:sub(1, board.MIN_PREFIX), card.column, card.name }
         end
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "unsized in " .. board.DEFAULT_COLUMN .. ":"
+        lines[#lines + 1] = "unsized in " .. roles.backlog .. ":"
         append(lines, board.table_lines(rows))
     end
     if #undated > 0 then
@@ -1765,14 +1804,12 @@ end
 ---@param screen dev.ui.Context? the terminal `ls` draws for, left nil for the plain lines
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 function M.run(sub, args, backend, now, screen)
+    local finished = backend:done_columns() or {}
+    backend.roles = board.roles(backend.column_map, finished)
     return commands[sub](backend, args, now, screen)
 end
 
----Build the backend a project's board uses.
----@param settings dev.cmd.board.Settings the board's backend and name
----@return dev.board.Backend? backend the backend
----@return string? message why there is none
-function M.open(settings)
+local function open_backend(settings)
     if settings.backend == board.Backend.LOCAL then
         if settings.path then
             return localboard.new({ name = settings.name, path = settings.path })
@@ -1796,6 +1833,28 @@ function M.open(settings)
         return nil, "dev: " .. message
     end
     return backend
+end
+
+---Build the backend a project's board uses.
+---@param settings dev.cmd.board.Settings the board's backend and name
+---@return dev.board.Backend? backend the backend
+---@return string? message why there is none
+function M.open(settings)
+    local backend, message = open_backend(settings)
+    if backend then
+        backend.column_map = settings.columns
+        backend.roles = board.roles(settings.columns)
+    end
+    return backend, message
+end
+
+local function column_map(root)
+    local columns = {}
+    for _, role in ipairs(board.ROLES) do
+        columns[role] = config.get(root, "board.columns." .. role)
+    end
+    columns.done = config.get(root, "board.columns.done")
+    return columns
 end
 
 local function settings(ctx)
@@ -1830,7 +1889,13 @@ local function settings(ctx)
         end
         path = ctx.root .. "/" .. path
     end
-    return { backend = backend, name = name, path = path, root = ctx.root }
+    return {
+        backend = backend,
+        name = name,
+        path = path,
+        root = ctx.root,
+        columns = column_map(ctx.root),
+    }
 end
 
 local function has_section(root)
@@ -1914,7 +1979,7 @@ local function init_local(ctx, flags, admin)
         verb.die(message)
     end
     local changes
-    changes, message = init.run(backend, found.name, print)
+    changes, message = init.run(backend, found.name, print, backend.roles)
     if not changes then
         verb.die("dev: " .. message)
     end
@@ -1966,6 +2031,7 @@ M.handlers["board init"] = function(ctx)
     if not backend then
         verb.die("dev: " .. message)
     end
+    backend.roles = board.roles(column_map(ctx.root))
     if admin then
         local secret
         secret, message = device.pair({
@@ -1985,7 +2051,7 @@ M.handlers["board init"] = function(ctx)
         end
     end
     local changes
-    changes, message = init.run(backend, name, print)
+    changes, message = init.run(backend, name, print, backend.roles)
     if not changes then
         verb.die("dev: " .. message)
     end
@@ -2156,16 +2222,16 @@ local function entropy()
     return n / 4294967296
 end
 
-local function wait_line(event, only)
+local function wait_line(event, only, roles)
     local id = event.task_id:sub(1, board.MIN_PREFIX)
     local added = event.kind == EventKind.ADDED
     if only == WaitFor.HUMAN then
-        if event.kind == EventKind.MOVED and event.from_column == board.BLOCKED then
-            return "moved " .. id .. " out of " .. board.BLOCKED
+        if event.kind == EventKind.MOVED and event.from_column == roles.blocked then
+            return "moved " .. id .. " out of " .. roles.blocked
         end
     elseif only == WaitFor.READY then
-        if event.column == board.READY and (added or event.kind == EventKind.MOVED) then
-            return (added and "added " or "moved ") .. id .. " to " .. board.READY
+        if event.column == roles.ready and (added or event.kind == EventKind.MOVED) then
+            return (added and "added " or "moved ") .. id .. " to " .. roles.ready
         end
     elseif added then
         return "added " .. id .. " to " .. tostring(event.column)
@@ -2209,6 +2275,7 @@ function M.wait(backend, args, opts)
     if only and not WAIT_FOR_KINDS[only] then
         return usage("unknown --for " .. only .. ", the choices are ready and human")
     end
+    local roles = backend.roles or board.roles()
     local nap = opts.nap or devos.nap
     local random = opts.random or entropy
     local notice = opts.notice or stderr_line
@@ -2233,7 +2300,8 @@ function M.wait(backend, args, opts)
             cursor = reply.cursor
             local lines = {}
             for _, event in ipairs(reply.events) do
-                lines[#lines + 1] = type(event.task_id) == "string" and wait_line(event, only)
+                lines[#lines + 1] = type(event.task_id) == "string"
+                        and wait_line(event, only, roles)
                     or nil
             end
             if #lines > 0 then

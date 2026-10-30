@@ -792,7 +792,7 @@ t.test("init adds a column with the done flag where it belongs", function()
 end)
 
 t.test("board names the columns init lays out", function()
-    t.eq(board.COLUMNS, STANDARD)
+    t.eq(board.roles().list, STANDARD)
 end)
 
 t.test("a run that stops while stripping can be repeated without losing a size", function()

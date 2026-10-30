@@ -20,12 +20,21 @@ local function executable(path, body)
     assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
-local function fake(cards, times)
+local function fake(cards, times, finished)
+    finished = finished or { "Done" }
+    local is_finished = {}
+    for _, name in ipairs(finished) do
+        is_finished[name] = true
+    end
     for _, card in ipairs(cards) do
         card.outcomes = card.outcomes or {}
+        card.done = is_finished[card.column] == true
     end
     local calls = {}
     local backend = { calls = calls }
+    function backend:done_columns()
+        return finished
+    end
     function backend:entered()
         return times or {}
     end
@@ -157,14 +166,65 @@ local function sample()
 end
 
 t.test("column takes the names and the short forms in any case", function()
-    t.eq(board.column("ready"), "Ready")
-    t.eq(board.column("PROGRESS"), "In Progress")
-    t.eq(board.column("in  review"), "In Review")
-    t.eq(board.column("review"), "In Review")
+    local roles = board.roles()
+    t.eq(roles:column("ready"), "Ready")
+    t.eq(roles:column("PROGRESS"), "In Progress")
+    t.eq(roles:column("in  review"), "In Review")
+    t.eq(roles:column("review"), "In Review")
     for _, short in ipairs({ "blocked", "done", "backlog", "icebox" }) do
-        t.eq(board.column(short):lower(), short)
+        t.eq(roles:column(short):lower(), short)
     end
-    t.eq(board.column("doing"), nil)
+    t.eq(roles:column("doing"), nil)
+end)
+
+t.test("roles take the mapped names, the role words and the finished columns", function()
+    local roles = board.roles(
+        { ready = "Next", progress = "Doing", done = "Shipped" },
+        { "Old", "Shipped" }
+    )
+    t.eq(roles:column("ready"), "Next")
+    t.eq(roles:column("PROGRESS"), "Doing")
+    t.eq(roles:column("in progress"), nil)
+    t.eq(roles:column("done"), "Shipped")
+    t.eq(roles:column("old"), "Old")
+    t.eq(roles.list, { "Icebox", "Backlog", "Next", "Doing", "In Review", "Blocked", "Shipped" })
+    t.eq(board.roles(nil, { "Old", "Shipped" }):done_column(), "Old")
+    t.eq(board.roles():done_column(), "Done")
+end)
+
+t.test("a renamed board runs through the column map", function()
+    local backend = fake({
+        { id = ID_A, name = "A", column = "Next", size = "1 Pomodoro", labels = {}, checks = {} },
+        { id = ID_B, name = "B", column = "Inbox", size = "unsized", labels = {}, checks = {} },
+    }, nil, { "Shipped" })
+    backend.column_map = { backlog = "Inbox", ready = "Next", done = "Shipped" }
+    t.eq(
+        commands.run("ls", { "--column", "ready" }, backend).output,
+        "11111111  Next  1 Pomodoro  -  A"
+    )
+    t.eq(
+        commands.run("ls", { "--column", "backlog" }, backend).output,
+        "11111111  Inbox  unsized  -  B"
+    )
+    t.eq(commands.run("ls", { "--column", "doing" }, backend).code, 2)
+    t.eq(commands.run("add", { "C" }, backend).output, "added cccccccc Inbox")
+end)
+
+t.test("ls hides every finished column and discard picks the mapped one, else the first", function()
+    local cards = sample()
+    cards[2].column = "Archive"
+    local backend = fake(cards, nil, { "Done", "Archive" })
+    t.eq(commands.run("ls", {}, backend).output, "11111111  Ready  1 Pomodoro  docs  Write docs")
+    t.eq(commands.run("ls", { "--column", "archive" }, backend).message, nil)
+    commands.run("discard", { "11111111-a" }, backend)
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
+    backend = fake(sample(), nil, { "Archive", "Done" })
+    backend.column_map = { done = "Done" }
+    commands.run("discard", { "11111111-a" }, backend)
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
+    backend = fake(sample(), nil, { "Archive", "Done" })
+    commands.run("discard", { "11111111-a" }, backend)
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Archive" })
 end)
 
 t.test("resolve takes a unique prefix of at least 8 characters", function()
@@ -487,7 +547,7 @@ t.test("discard posts the reason, labels the card and moves it to Done", functio
     t.eq(backend.calls[1], { "note", ID_A, "Not needed", { kind = "decision" } })
     t.eq(backend.calls[2][1], "set_labels")
     t.ok(table.concat(backend.calls[2][3], ","):find("discarded", 1, true) ~= nil)
-    t.eq(backend.calls[3], { "move", ID_A, board.DONE })
+    t.eq(backend.calls[3], { "move", ID_A, "Done" })
     t.eq(#backend.calls, 3)
 end)
 
@@ -496,7 +556,7 @@ t.test("discard without a reason only labels and moves, and refuses a blank one"
     local result = commands.run("discard", { "11111111-a" }, backend)
     t.eq(result.output, "discarded 11111111")
     t.eq(#backend.calls, 2)
-    t.eq(backend.calls[2], { "move", ID_A, board.DONE })
+    t.eq(backend.calls[2], { "move", ID_A, "Done" })
     t.eq(commands.run("discard", { "11111111-a", "--reason", " " }, backend).code, 2)
     t.eq(commands.run("discard", {}, backend).code, 2)
     t.eq(commands.run("discard", { "deadbeef" }, backend).code, 1)
@@ -1446,7 +1506,7 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
     .. '{"id":"col-icebox","name":"Icebox"},{"id":"col-backlog","name":"Backlog"},'
     .. '{"id":"col-ready","name":"Ready"},{"id":"col-progress","name":"In Progress"},'
     .. '{"id":"col-review","name":"In Review"},{"id":"col-blocked","name":"Blocked"},'
-    .. '{"id":"col-done","name":"Done"}]}'
+    .. '{"id":"col-done","name":"Done","is_done":true}]}'
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"green-id","value":"green","label":"Two"},{"id":"blue-id","value":"blue","label":"Three"},'
     .. '{"id":"red-id","value":"red","label":"More"},{"id":"white-id","value":"white","label":"Unsized"}]'
@@ -1527,7 +1587,7 @@ local function sandbox(opts)
     )
     for name, body in pairs({
         ["boards.json"] = BOARDS,
-        ["detail.json"] = DETAIL,
+        ["detail.json"] = opts.detail or DETAIL,
         ["colors.json"] = COLORS,
         ["fields.json"] = opts.fields or FIELDS,
         ["export.json"] = opts.export or EXPORT,
@@ -1795,7 +1855,7 @@ t.test("discard queues each step it could not take, in order, once", function()
     local note = assert(queued:find('"note"', 1, true), queued)
     local label = assert(queued:find('"label"', note, true), queued)
     local move = assert(queued:find('"move"', label, true), queued)
-    t.ok(queued:find('"Dropped"', note, true) and move > label, queued)
+    t.ok(queued:find('"Dropped"', 1, true) and move > label, queued)
 end)
 
 t.test("discard does not queue the note again once it has been posted", function()
@@ -1831,6 +1891,28 @@ t.test("outcome sends the claim's fence on the subtask call", function()
         calls
     )
     dev(root, home, { "board", "release", "11111111" })
+end)
+
+t.test("a renamed Pomb board is read through the column map and is_done", function()
+    local detail = DETAIL:gsub('"Ready"', '"Next"'):gsub(
+        '"Done","is_done":true}',
+        '"Shipped","is_done":true},{"id":"col-old","name":"Old","is_done":true}'
+    )
+    local root, home = sandbox({
+        detail = detail,
+        project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "Next"\n',
+    })
+    local out, code = dev(root, home, { "board", "next" })
+    t.eq(code, 0, out)
+    t.eq(out, "11111111  Next  1 Pomodoro  docs  First\n")
+    t.ok(read(root, "calls"):find("ready=true&column_id=col-ready", 1, true), read(root, "calls"))
+    out, code = dev(root, home, { "board", "ls", "--column", "ready" })
+    t.eq(code, 0, out)
+    t.ok(out:find("Next", 1, true), out)
+    out, code = dev(root, home, { "board", "ls", "--column", "old" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "ls", "--column", "In Progress" })
+    t.eq(code, 0, out)
 end)
 
 t.test("next asks for the unclaimed unblocked top of Ready", function()

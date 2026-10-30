@@ -162,6 +162,7 @@ local function card_view(doc, card)
         id = card.id,
         name = card.name,
         column = column and column.name or "?",
+        done = column ~= nil and column.is_done == true,
         size = board.size(color and color.label),
         color = color and color.value or nil,
         labels = card.labels or {},
@@ -422,6 +423,20 @@ end
 
 function Backend:add_checks_field()
     return true
+end
+
+function Backend:done_columns()
+    local doc, message = self:__read()
+    if not doc then
+        return nil, message
+    end
+    local names = {}
+    for _, column in ipairs(doc.columns) do
+        if column.is_done == true then
+            names[#names + 1] = column.name
+        end
+    end
+    return names
 end
 
 function Backend:next(column)

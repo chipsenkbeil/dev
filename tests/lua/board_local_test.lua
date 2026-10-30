@@ -1393,3 +1393,51 @@ t.test("wait on a local board answers at once that there is nothing to wait on",
     t.eq(got, nil)
     t.eq(message, "a local board has nothing to wait on")
 end)
+
+t.test("a local board with renamed columns works through the project map", function()
+    local root, home = local_board(
+        '[board]\nbackend = "local"\nname = "mine"\n\n[board.columns]\nbacklog = "Inbox"\nready = "Next"\nprogress = "Doing"\ndone = "Shipped"\n'
+    )
+    local doc = document(file_of(home))
+    local names = {}
+    for _, column in ipairs(doc.columns) do
+        names[#names + 1] = column.name
+    end
+    t.eq(names, { "Icebox", "Inbox", "Next", "Doing", "In Review", "Blocked", "Shipped" })
+    t.eq(doc.columns[7].is_done, true)
+    local out = dev(root, home, { "board", "add", "One" })
+    t.ok(out:find(" Inbox\n", 1, true), out)
+    local id = prefix_of(out)
+    out = dev(root, home, { "board", "move", id, "done" })
+    t.eq(out, "moved " .. id .. " to Shipped\n")
+    t.eq(dev(root, home, { "board", "ls" }), "no cards\n")
+    out = dev(root, home, { "board", "ls", "--column", "shipped" })
+    t.ok(out:find("Shipped", 1, true), out)
+    out = dev(root, home, { "board", "move", id, "ready" })
+    t.ok(
+        out:find(" to Next\n", 1, true)
+            or out:find("cannot enter Next", 1, true)
+            or out:find("cannot enter Ready", 1, true),
+        out
+    )
+end)
+
+t.test("a local board with two finished columns hides both and discards into the first", function()
+    local root, home = local_board()
+    local doc = document(file_of(home))
+    doc.columns[#doc.columns + 1] = { id = "col-archive", name = "Archive", is_done = true }
+    assert(fs.write(file_of(home), json.encode(doc)))
+    local first = prefix_of(dev(root, home, { "board", "add", "One" }))
+    local second = prefix_of(dev(root, home, { "board", "add", "Two" }))
+    t.eq(dev(root, home, { "board", "move", first, "done" }), "moved " .. first .. " to Done\n")
+    t.eq(
+        dev(root, home, { "board", "move", second, "archive" }),
+        "moved " .. second .. " to Archive\n"
+    )
+    t.eq(dev(root, home, { "board", "ls" }), "no cards\n")
+    local third = prefix_of(dev(root, home, { "board", "add", "Three" }))
+    local out = dev(root, home, { "board", "discard", third })
+    t.eq(out, "discarded " .. third .. "\n")
+    out = dev(root, home, { "board", "ls", "--column", "done" })
+    t.ok(out:find("Three", 1, true), out)
+end)

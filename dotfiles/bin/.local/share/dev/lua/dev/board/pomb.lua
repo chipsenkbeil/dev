@@ -269,6 +269,10 @@ function Backend:__request(method, path, body, fence, seconds)
     return doc
 end
 
+function Backend:__roles()
+    return self.roles or board.roles()
+end
+
 function Backend:__load()
     if self.__detail then
         return true
@@ -314,6 +318,29 @@ function Backend:__column_id(name)
             return column.id
         end
     end
+end
+
+function Backend:__column_done(id)
+    for _, column in ipairs(self.__detail.columns) do
+        if column.id == id then
+            return column.is_done == true
+        end
+    end
+    return false
+end
+
+function Backend:done_columns()
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local names = {}
+    for _, column in ipairs(self.__detail.columns) do
+        if column.is_done == true then
+            names[#names + 1] = column.name
+        end
+    end
+    return names
 end
 
 function Backend:__column_name(id)
@@ -412,6 +439,7 @@ function Backend:__card(task)
         id = task.id,
         name = task.name,
         column = self:__column_name(task.column_id),
+        done = self:__column_done(task.column_id),
         size = board.size(self.__colors[present(task.color_id)]),
         color = present(task.color_id) and (self.__values[task.color_id] or "unknown") or nil,
         labels = task.labels or {},
@@ -488,7 +516,7 @@ function Backend:next(column)
     if not id then
         return nil, unavailable("the board has no " .. column .. " column")
     end
-    local ready_filter = column == board.READY and "&ready=true" or ""
+    local ready_filter = column == self:__roles().ready and "&ready=true" or ""
     local cursor
     repeat
         local query = "/api/boards/"
@@ -554,7 +582,7 @@ function Backend:__blocked(links)
                     target = card
                 end
             end
-            if not target or target.column ~= board.DONE then
+            if not target or not target.done then
                 return true
             end
         end
@@ -581,10 +609,11 @@ function Backend:add(name, column, opts)
     end
     local outcomes = opts and opts.outcomes or {}
     local final = id
-    if #outcomes > 0 and column == board.READY then
-        id = self:__column_id(board.DEFAULT_COLUMN)
+    local roles = self:__roles()
+    if #outcomes > 0 and column == roles.ready then
+        id = self:__column_id(roles.backlog)
         if not id then
-            return nil, unavailable("the board has no " .. board.DEFAULT_COLUMN .. " column")
+            return nil, unavailable("the board has no " .. roles.backlog .. " column")
         end
     end
     local body = { name = name, column_id = id }
@@ -634,7 +663,7 @@ function Backend:add(name, column, opts)
             return nil,
                 task.id:sub(1, board.MIN_PREFIX)
                     .. " was added to "
-                    .. board.DEFAULT_COLUMN
+                    .. roles.backlog
                     .. " with its outcomes but the move to "
                     .. column
                     .. " failed: "
