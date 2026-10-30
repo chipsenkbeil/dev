@@ -1221,7 +1221,7 @@ end)
 t.test("stale marks a needs:human card whose newest comment is the owner's", function()
     local human = { "needs:human" }
     local cards, times = aged(
-        { "Ready", "Backlog", "Blocked" },
+        { "Ready", "Blocked", "Blocked" },
         { 9, 20, 50 },
         { {}, human, human }
     )
@@ -1254,7 +1254,8 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
     t.eq(
         result.output,
         "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n"
-            .. "00000003  Blocked  50d  unsized  Card 3\n"
+            .. "00000003  Blocked  50d  unsized  Card 3\n\n"
+            .. "moved by the owner, remove needs:human:\n"
             .. "00000002  Backlog  20d  unsized  Card 2\n"
             .. "00000005  Ready    1d   unsized  Card 5\n\nunsized in Backlog:\n"
             .. "00000002  Backlog  Card 2"
@@ -1263,7 +1264,7 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
     result = commands.run("stale", {}, fake(cards, times), NOW)
     t.eq(
         result.output,
-        "no stale cards\n\nfor the owner (needs:human):\n00000001  Ready  9d  unsized  Card 1"
+        "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Ready  9d  unsized  Card 1"
     )
 end)
 

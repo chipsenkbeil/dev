@@ -1573,12 +1573,13 @@ function commands.stale(backend, args, now)
         return failure(message)
     end
     now = now or os.time()
-    local found, owner, undated, unsized = {}, {}, {}, {}
+    local found, owner, moved, undated, unsized = {}, {}, {}, {}, {}
     for _, card in ipairs(cards) do
         if card.column == board.DEFAULT_COLUMN and board.has_color(card, board.SIZES.unsized) then
             unsized[#unsized + 1] = card
         end
         local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
+        local held = mine and (card.column == board.BLOCKED or card.column == board.ICEBOX)
         if card.column ~= board.DONE and (mine or board.STALE_COLUMNS[card.column]) then
             local stamp = entered[card.id]
             if not stamp then
@@ -1598,15 +1599,18 @@ function commands.stale(backend, args, now)
                         days = days,
                         at = at,
                     }
-                    if mine then
+                    local into = found
+                    if held then
                         local answered, why = answered_by_human(backend, card)
                         if answered == nil then
                             undated[#undated + 1] = why
                         else
                             item.answered = answered
                         end
+                        into = owner
+                    elseif mine then
+                        into = moved
                     end
-                    local into = mine and owner or found
                     into[#into + 1] = item
                 end
             end
@@ -1621,6 +1625,7 @@ function commands.stale(backend, args, now)
     end
     table.sort(found, oldest)
     table.sort(owner, oldest)
+    table.sort(moved, oldest)
     local lines = {}
     if #found == 0 then
         lines[1] = "no stale cards"
@@ -1631,6 +1636,11 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "for the owner (" .. board.NEEDS_HUMAN .. "):"
         append(lines, stale_rows(owner))
+    end
+    if #moved > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "moved by the owner, remove " .. board.NEEDS_HUMAN .. ":"
+        append(lines, stale_rows(moved))
     end
     if #unsized > 0 then
         local rows = {}
