@@ -2897,6 +2897,85 @@ t.test("move into progress leaves an umbrella unclaimed", function()
     t.eq(fs.exists(state_file(home)), false)
 end)
 
+local function refusing_moves(root)
+    local REFUSED_MOVE =
+        '*/move) body=\'{"message":"no room"}\'; status=409 ;;\n*/claim/release) body= ;;'
+    executable(root .. "/bin/curl", (CURL:gsub("%*/claim/release%) body= ;;", REFUSED_MOVE, 1)))
+end
+
+t.test("a move into progress that Pomb refuses releases the claim it just took", function()
+    local root, home = sandbox()
+    refusing_moves(root)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", "progress" },
+        { agent = "r/one" }
+    )
+    t.eq(code, 1)
+    t.ok(out:find("no room", 1, true), out)
+    local calls = read(root, "calls")
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/claim\n", 1, true), calls)
+    local moved = calls:match("[^\n]*/move\n?")
+    t.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/claim/release", 1, true), calls)
+    t.ok(calls:find('{"fence":7}', 1, true), calls)
+    t.eq(fs.exists(state_file(home)), false)
+end)
+
+t.test("a move into progress of a card claimed elsewhere takes no claim", function()
+    local live = '"claim":{"claimant":"dev@box:42","expires_at":"2999-01-01T00:00:00Z"}'
+    local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["docs"],' .. live, 1)
+    local root, home = sandbox({ export = export })
+    refusing_moves(root)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", "progress" },
+        { agent = "r/one" }
+    )
+    t.eq(code, 1)
+    t.ok(out:find("no room", 1, true), out)
+    local calls = read(root, "calls")
+    t.eq(calls:find("/claim", 1, true), nil)
+    t.eq(fs.exists(state_file(home)), false)
+end)
+
+t.test("move to ready refuses an umbrella before any write", function()
+    local description =
+        "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a"
+    local export = EXPORT:gsub("Why it matters%.", description, 1)
+    local root, home = sandbox({
+        export = export,
+        task = '{"id":"' .. ID_A .. '","children_total":2,"children_done":0}',
+    })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "ready" })
+    t.eq(code, 1)
+    t.ok(out:find("11111111 is an umbrella with 2 children and never enters Ready", 1, true), out)
+    local calls = read(root, "calls")
+    t.eq(calls:find("/move", 1, true), nil)
+    t.eq(calls:find("-X POST", 1, true), nil)
+    t.eq(calls:find("-X PATCH", 1, true), nil)
+end)
+
+t.test("a queued change that hits the needs:human refusal is dropped with its reason", function()
+    local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:human"]', 1)
+    local root, home = sandbox({ export = export })
+    local queue = home .. "/state/dev/boards/dotfiles.queue"
+    assert(fs.mkdir(home .. "/state/dev/boards", { parents = true }))
+    assert(
+        fs.write(
+            queue,
+            '[{"sub":"move","args":["11111111-a","review"],"at":"2026-10-30T00:00:00Z"}]\n'
+        )
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 0, out)
+    t.ok(out:find("dropped move 11111111-a: 11111111 is labelled needs:human", 1, true), out)
+    t.eq(fs.exists(queue), false)
+    t.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
 t.test("a release the server refuses after a move warns and the move succeeds", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
