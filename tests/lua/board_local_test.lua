@@ -979,9 +979,6 @@ local EXPORT = '{"tasks":[{"id":"'
     .. ID_B
     .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[]}]}'
 
-local FIELDS =
-    '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
-
 local CURL = [[#!/bin/sh
 cat >"$ROOT/stdin"
 if [ -f "$ROOT/down" ]; then exit 7; fi
@@ -1017,7 +1014,7 @@ local function pomb(opts)
         ["detail.json"] = DETAIL,
         ["colors.json"] = COLORS,
         ["export.json"] = EXPORT,
-        ["fields.json"] = FIELDS,
+        ["fields.json"] = support.FIELDS,
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
@@ -1232,6 +1229,62 @@ t.test("a queued checks replaces the rows when Pomb answers again", function()
     out = pomb_dev(root, home, { "board", "sync" })
     t.eq(out, "synced checks aaaaaaaa\nsynced\n")
     t.ok(fs.read(root .. "/bodies"):find('"dev.checks":[{"run":"dev lint"}]', 1, true))
+end)
+
+t.test("a local board stores a card's allow, tests and files and shows them", function()
+    local root, home = local_board()
+    local a =
+        prefix_of((dev(root, home, { "board", "add", "Bare", "--problem", "x", "--size", "1" })))
+    local out, code = dev(root, home, { "board", "allow", a, "ci-edits", "test-edits" })
+    t.eq(code, 0, out)
+    t.eq(out, "set allow " .. a .. ", ci-edits test-edits\n")
+    t.eq(document(file_of(home)).cards[1].allow, { "ci-edits", "test-edits" })
+    out, code = dev(root, home, { "board", "tests", a, "one", "tests::two" })
+    t.eq(code, 0, out)
+    t.eq(document(file_of(home)).cards[1].tests, "one\ntests::two")
+    out, code = dev(root, home, { "board", "files", a, "src/a.rs" })
+    t.eq(code, 0, out)
+    t.eq(document(file_of(home)).cards[1].files, "src/a.rs")
+    out = dev(root, home, { "board", "show", a })
+    t.ok(
+        out:find(
+            "allow:\n- ci-edits\n- test-edits\n\ntests:\n- one\n- tests::two\n\nfiles:\n- src/a.rs\n\n",
+            1,
+            true
+        ),
+        out
+    )
+    out, code = dev(root, home, { "board", "allow", a, "none" })
+    t.eq(code, 0, out)
+    t.eq(out, "cleared allow " .. a .. "\n")
+    t.eq(document(file_of(home)).cards[1].allow, nil)
+    out, code = dev(root, home, { "board", "allow", a, "everything" })
+    t.eq(code, 2)
+    t.eq(document(file_of(home)).cards[1].allow, nil)
+end)
+
+t.test("queued allow, tests and files replace the fields when Pomb answers again", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/down", ""))
+    local id = ID_A:sub(1, 8)
+    local out, code = pomb_dev(root, home, { "board", "allow", id, "test-edits" })
+    t.eq(out, QUEUED)
+    t.eq(code, 0)
+    out = pomb_dev(root, home, { "board", "tests", id, "one" })
+    t.eq(out, QUEUED)
+    out = pomb_dev(root, home, { "board", "files", id, "src/a.rs" })
+    t.eq(out, QUEUED)
+    local entries = document(queue_path(home))
+    t.eq(#entries, 3)
+    t.eq(entries[1].sub, "allow")
+    t.eq(entries[1].args, { id, "test-edits" })
+    assert(fs.remove(root .. "/down"))
+    out = pomb_dev(root, home, { "board", "sync" })
+    t.eq(out, "synced allow aaaaaaaa\nsynced tests aaaaaaaa\nsynced files aaaaaaaa\nsynced\n")
+    local bodies = fs.read(root .. "/bodies")
+    t.ok(bodies:find('"dev.allow":["test-edits"]', 1, true), bodies)
+    t.ok(bodies:find('"dev.tests":"one"', 1, true), bodies)
+    t.ok(bodies:find('"dev.files":"src/a.rs"', 1, true), bodies)
 end)
 
 t.test("a gateway error still queues an edit, which is safe to repeat", function()

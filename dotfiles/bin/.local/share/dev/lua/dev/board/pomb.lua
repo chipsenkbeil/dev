@@ -72,7 +72,7 @@ local M = {}
 ---@field private __values table<string, string>? palette colour values by colour id
 ---@field private __ids table<string, string>? palette colour ids by colour value
 ---@field private __id string? the board's id, once found or created
----@field private __has_checks boolean? whether the board has the checks field, once asked
+---@field private __field_keys table<string, boolean>? the keys of the board's custom fields, once asked
 local Backend = {}
 Backend.__index = Backend
 
@@ -377,6 +377,10 @@ local function runs_of(task)
     return runs
 end
 
+local function field_names(task, key)
+    return board.names(type(task.fields) == "table" and task.fields[key])
+end
+
 local function table_rows(runs)
     local rows = {}
     for index, run in ipairs(runs) do
@@ -393,26 +397,24 @@ function Backend:__fields(id)
     return fields
 end
 
-function Backend:checks_field()
-    if self.__has_checks ~= nil then
-        return self.__has_checks
-    end
-    local ok, message = self:__load()
-    if not ok then
-        return nil, message
-    end
-    local fields
-    fields, message = self:__fields(self.__detail.id)
-    if not fields then
-        return nil, message
-    end
-    self.__has_checks = false
-    for _, field in ipairs(fields) do
-        if field.key == board.CHECKS_FIELD then
-            self.__has_checks = true
+function Backend:has_field(key)
+    if not self.__field_keys then
+        local ok, message = self:__load()
+        if not ok then
+            return nil, message
         end
+        local fields
+        fields, message = self:__fields(self.__detail.id)
+        if not fields then
+            return nil, message
+        end
+        local keys = {}
+        for _, field in ipairs(fields) do
+            keys[field.key] = true
+        end
+        self.__field_keys = keys
     end
-    return self.__has_checks
+    return self.__field_keys[key] == true
 end
 
 local function outcomes_of(task)
@@ -434,6 +436,9 @@ end
 function Backend:__card(task)
     return {
         checks = runs_of(task),
+        allow = field_names(task, board.ALLOW_FIELD),
+        tests = field_names(task, board.TESTS_FIELD),
+        files = field_names(task, board.FILES_FIELD),
         outcomes = outcomes_of(task),
         claimant = holder(task.claim),
         id = task.id,
@@ -799,17 +804,17 @@ function Backend:set_name(id, name, fence)
 end
 
 function Backend:set_checks(id, runs, fence)
+    return self:set_field(id, board.CHECKS_FIELD, table_rows(runs), fence)
+end
+
+function Backend:set_field(id, key, value, fence)
     local ok, message = self:__load()
     if not ok then
         return nil, message
     end
     local done
-    done, message = self:__request(
-        "PATCH",
-        "/api/tasks/" .. id,
-        { fields = { [board.CHECKS_FIELD] = table_rows(runs) } },
-        fence
-    )
+    done, message =
+        self:__request("PATCH", "/api/tasks/" .. id, { fields = { [key] = value } }, fence)
     if not done then
         return nil, message
     end
@@ -1160,7 +1165,7 @@ function Backend:create()
     end
     self.__id = made.id
     self.__detail = nil
-    self.__has_checks = nil
+    self.__field_keys = nil
     return true, used
 end
 
@@ -1231,7 +1236,7 @@ function Backend:add_checks_field()
     if not made then
         return nil, message
     end
-    self.__has_checks = nil
+    self.__field_keys = nil
     return true
 end
 

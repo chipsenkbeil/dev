@@ -4,6 +4,7 @@ local box = require("dev.cmd.box")
 local commands = require("dev.cmd.board")
 local devos = require("dev.os")
 local fs = require("dev.fs")
+local json = require("dev.json")
 local ui = require("dev.ui")
 local support = require("support")
 
@@ -47,7 +48,7 @@ local function fake(cards, times, finished)
     function backend:next()
         return cards[1]
     end
-    function backend:checks_field()
+    function backend:has_field()
         return not backend.nofield
     end
     function backend:add(name, column, opts)
@@ -101,6 +102,10 @@ local function fake(cards, times, finished)
     end
     function backend:set_checks(id, runs, fence)
         calls[#calls + 1] = { "set_checks", id, runs, fence }
+        return true
+    end
+    function backend:set_field(id, key, value, fence)
+        calls[#calls + 1] = { "set_field", id, key, value, fence }
         return true
     end
     function backend:set_size(id, color, fence)
@@ -603,6 +608,8 @@ t.test("checks replaces the rows with one row per command", function()
     local result = commands.run("checks", { "11111111-a", "dev lint", "dev test" }, backend)
     t.eq(result.output, "set checks 11111111, 2 rows")
     t.eq(backend.calls[1], { "set_checks", ID_A, { "dev lint", "dev test" }, nil })
+    result = commands.run("checks", { "11111111-a", "dev lint" }, fake(sample()))
+    t.eq(result.output, "set checks 11111111, 1 row")
 end)
 
 t.test(
@@ -618,6 +625,72 @@ t.test(
         t.eq(result.code, 1)
         t.ok(result.message:find("no checks field", 1, true), result.message)
         t.ok(result.message:find("dev board init", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+)
+
+t.test("allow replaces the field with the words once each, and none sends null", function()
+    local backend = fake(sample())
+    local result =
+        commands.run("allow", { "11111111-a", "ci-edits", "test-edits", "ci-edits" }, backend)
+    t.eq(result.output, "set allow 11111111, ci-edits test-edits")
+    t.eq(
+        backend.calls[1],
+        { "set_field", ID_A, "dev.allow", { "ci-edits", "test-edits" }, nil }
+    )
+    result = commands.run("allow", { "11111111-a", "none" }, backend)
+    t.eq(result.output, "cleared allow 11111111")
+    t.eq(backend.calls[2], { "set_field", ID_A, "dev.allow", json.null, nil })
+end)
+
+t.test(
+    "allow refuses no word, another word, none beside a word, an unknown card and a board without the field",
+    function()
+        local backend = fake(sample())
+        t.eq(commands.run("allow", { "11111111-a" }, backend).code, 2)
+        t.eq(commands.run("allow", {}, backend).code, 2)
+        t.eq(commands.run("allow", { "11111111-a", "everything" }, backend).code, 2)
+        t.eq(commands.run("allow", { "11111111-a", "test-edits", "none" }, backend).code, 2)
+        t.eq(commands.run("allow", { "deadbeef", "none" }, backend).code, 1)
+        backend.nofield = true
+        local result = commands.run("allow", { "11111111-a", "test-edits" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("no dev.allow field", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+)
+
+t.test("tests and files replace the field with one name per line", function()
+    local backend = fake(sample())
+    local result =
+        commands.run("tests", { "11111111-a", "one_should_be_one", "tests::two" }, backend)
+    t.eq(result.output, "set tests 11111111, 2 names")
+    t.eq(
+        backend.calls[1],
+        { "set_field", ID_A, "dev.tests", "one_should_be_one\ntests::two", nil }
+    )
+    result = commands.run("files", { "11111111-a", "src/a.rs" }, backend)
+    t.eq(result.output, "set files 11111111, 1 name")
+    t.eq(backend.calls[2], { "set_field", ID_A, "dev.files", "src/a.rs", nil })
+end)
+
+t.test(
+    "tests and files refuse no name, a blank name, a line break, an unknown card and a board without the field",
+    function()
+        local backend = fake(sample())
+        for _, sub in ipairs({ "tests", "files" }) do
+            t.eq(commands.run(sub, { "11111111-a" }, backend).code, 2)
+            t.eq(commands.run(sub, {}, backend).code, 2)
+            t.eq(commands.run(sub, { "11111111-a", "a", " " }, backend).code, 2)
+            t.eq(commands.run(sub, { "11111111-a", "a\nb" }, backend).code, 2)
+            t.eq(commands.run(sub, { "deadbeef", "a" }, backend).code, 1)
+        end
+        backend.nofield = true
+        local result = commands.run("files", { "11111111-a", "a" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("no dev.files field", 1, true), result.message)
+        result = commands.run("tests", { "11111111-a", "a" }, backend)
+        t.ok(result.message:find("no dev.tests field", 1, true), result.message)
         t.eq(#backend.calls, 0)
     end
 )
@@ -1145,6 +1218,28 @@ t.test("show prints the checks rows under the description", function()
     card.checks = {}
     result = commands.run("show", { "cccccccc" }, fake({ card }))
     t.eq(result.output:find("checks:", 1, true), nil)
+end)
+
+t.test("show prints the allow, tests and files blocks when set", function()
+    local card = colored("green")
+    card.checks = { "dev lint" }
+    card.allow = { "test-edits" }
+    card.tests = { "one", "two" }
+    card.files = { "src/a.rs" }
+    local result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.ok(
+        result.output:find(
+            "\n\nchecks:\n- dev lint\n\nallow:\n- test-edits\n\ntests:\n- one\n- two\n\nfiles:\n- src/a.rs\n\n",
+            1,
+            true
+        ),
+        result.output
+    )
+    card.allow, card.tests, card.files = {}, {}, {}
+    result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.eq(result.output:find("allow:", 1, true), nil)
+    t.eq(result.output:find("tests:", 1, true), nil)
+    t.eq(result.output:find("files:", 1, true), nil)
 end)
 
 t.test("move to Ready refuses a card missing a heading or a Done when item", function()
@@ -1706,8 +1801,6 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"green-id","value":"green","label":"Two"},{"id":"blue-id","value":"blue","label":"Three"},'
     .. '{"id":"red-id","value":"red","label":"More"},{"id":"white-id","value":"white","label":"Unsized"}]'
-local FIELDS =
-    '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
 local EXPORT = '{"tasks":['
     .. '{"id":"'
     .. ID_B
@@ -1785,7 +1878,7 @@ local function sandbox(opts)
         ["boards.json"] = BOARDS,
         ["detail.json"] = opts.detail or DETAIL,
         ["colors.json"] = COLORS,
-        ["fields.json"] = opts.fields or FIELDS,
+        ["fields.json"] = opts.fields or support.FIELDS,
         ["export.json"] = opts.export or EXPORT,
         ["task.json"] = opts.task or TASK,
         ["comments.json"] = COMMENTS,
@@ -2356,6 +2449,65 @@ t.test("checks on a Pomb board without the checks field is refused before any wr
     t.eq(code, 1)
     t.ok(out:find("no checks field", 1, true), out)
     t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
+end)
+
+t.test("allow, tests and files patch the task's fields whole, with the claim's fence", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    local out, code = dev(root, home, { "board", "allow", "11111111-a", "test-edits", "ci-edits" })
+    t.eq(code, 0, out)
+    t.eq(out, "set allow 11111111, test-edits ci-edits\n")
+    out, code = dev(root, home, { "board", "tests", "11111111-a", "one", "tests::two" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "files", "11111111-a", "src/a.rs", "src/b.rs" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "allow", "11111111-a", "none" })
+    t.eq(code, 0, out)
+    t.eq(out, "cleared allow 11111111\n")
+    local calls = read(root, "calls")
+    for _, body in ipairs({
+        '--data-raw {"fields":{"dev.allow":["test-edits","ci-edits"]}}',
+        '--data-raw {"fields":{"dev.tests":"one\\ntests::two"}}',
+        '--data-raw {"fields":{"dev.files":"src/a.rs\\nsrc/b.rs"}}',
+        '--data-raw {"fields":{"dev.allow":null}}',
+    }) do
+        t.ok(calls:find(body, 1, true), calls)
+    end
+    local patched = calls:match("%-X PATCH.-/api/tasks/")
+    t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test(
+    "allow, tests and files on a Pomb board without the field are refused before any write",
+    function()
+        local root, home = sandbox({ fields = "[]" })
+        for _, case in ipairs({
+            { "allow", "test-edits", "dev.allow" },
+            { "tests", "one", "dev.tests" },
+            { "files", "src/a.rs", "dev.files" },
+        }) do
+            local out, code = dev(root, home, { "board", case[1], "11111111-a", case[2] })
+            t.eq(code, 1)
+            t.ok(out:find("no " .. case[3] .. " field", 1, true), out)
+        end
+        t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
+    end
+)
+
+t.test("show prints the allow, tests and files fields a Pomb card holds", function()
+    local root, home = sandbox({
+        export = '{"tasks":[{"id":"'
+            .. ID_A
+            .. '","name":"First","column_id":"col-ready","position":1,"color_id":null,"labels":[],'
+            .. '"fields":{"dev.allow":["ci-edits"],"dev.tests":"one\\ntwo","dev.files":"src/a.rs"}}]}',
+    })
+    local out, code = dev(root, home, { "board", "show", "11111111-a" })
+    t.eq(code, 0, out)
+    t.ok(
+        out:find("allow:\n- ci-edits\n\ntests:\n- one\n- two\n\nfiles:\n- src/a.rs\n", 1, true),
+        out
+    )
 end)
 
 t.test("note posts a comment of kind agent and move goes to the top of the column", function()

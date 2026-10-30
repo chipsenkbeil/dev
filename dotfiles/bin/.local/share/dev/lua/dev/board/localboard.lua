@@ -168,6 +168,9 @@ local function card_view(doc, card)
         labels = card.labels or {},
         description = card.description,
         checks = card.checks or {},
+        allow = board.names(card.allow),
+        tests = board.names(card.tests),
+        files = board.names(card.files),
         outcomes = card.outcomes or {},
         claimant = claim and claim.claimant or nil,
     }
@@ -417,11 +420,11 @@ function Backend:other_board(name)
     return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
 end
 
-function Backend:checks_field()
+function Backend:add_checks_field()
     return true
 end
 
-function Backend:add_checks_field()
+function Backend:has_field()
     return true
 end
 
@@ -658,12 +661,23 @@ function Backend:set_name(id, name, fence)
 end
 
 function Backend:set_checks(id, runs, fence)
+    return self:set_field(id, board.CHECKS_FIELD, runs, fence)
+end
+
+local FIELD_KEYS = {
+    [board.CHECKS_FIELD] = "checks",
+    [board.ALLOW_FIELD] = "allow",
+    [board.TESTS_FIELD] = "tests",
+    [board.FILES_FIELD] = "files",
+}
+
+function Backend:set_field(id, key, value, fence)
     return self:__update(function(doc)
         local card, message = card_of(doc, id, fence)
         if not card then
             return nil, message
         end
-        card.checks = runs
+        card[assert(FIELD_KEYS[key], key)] = value ~= json.null and value or nil
         return true
     end)
 end

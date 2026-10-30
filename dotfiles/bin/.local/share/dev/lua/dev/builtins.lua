@@ -197,7 +197,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, order, size, label, link, links, stale, take, release, wait and sync",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, allow, tests, files, move, order, size, label, link, links, stale, take, release, wait and sync",
         group = "Share it",
     },
     {
@@ -297,6 +297,24 @@ return {
         handler = "lua",
         usage = "dev board checks CARD CMD...",
         desc = "Replace a card's checks rows with one row per CMD",
+    },
+    {
+        words = { "board", "allow" },
+        handler = "lua",
+        usage = "dev board allow CARD test-edits|ci-edits...|none",
+        desc = "Replace a card's allow field with the guard rails it lifts, test-edits and ci-edits, or none to clear it",
+    },
+    {
+        words = { "board", "tests" },
+        handler = "lua",
+        usage = "dev board tests CARD NAME...",
+        desc = "Replace a card's tests field with the test names, one per line",
+    },
+    {
+        words = { "board", "files" },
+        handler = "lua",
+        usage = "dev board files CARD PATH...",
+        desc = "Replace a card's files field with the paths, one per line",
     },
     {
         words = { "board", "move" },

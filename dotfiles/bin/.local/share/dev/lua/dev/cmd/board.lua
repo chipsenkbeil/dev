@@ -6,6 +6,7 @@ local device = require("dev.board.device")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local init = require("dev.board.init")
+local json = require("dev.json")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
@@ -72,6 +73,9 @@ local QUEUE_RULES = {
     edit = { idempotent = true },
     rename = { idempotent = true },
     checks = { idempotent = true },
+    allow = { idempotent = true },
+    tests = { idempotent = true },
+    files = { idempotent = true },
     outcome = { idempotent = false },
 }
 local OutcomeMode = { ADD = "add", RENAME = "rename", TICK = "tick", UNTICK = "untick" }
@@ -162,19 +166,23 @@ local function unready(color)
     return color == nil or color == board.SIZES.unsized or color == board.SIZES["3+"]
 end
 
-local NO_CHECKS_FIELD = "the board has no checks field, so run dev board init to add it"
+local FIELD_REFUSALS = {
+    [board.CHECKS_FIELD] = "the board has no checks field, so run dev board init to add it",
+}
 
----Say why a card cannot take checks rows: the board has no checks field.
+---Say why a card cannot take a custom field: the board does not define it.
 ---@param backend dev.board.Backend the board
+---@param key string the field's key
 ---@return string? message the reason, nil when the board has the field
 ---@return dev.cmd.board.Result? err the failure when the board could not be asked
-local function checks_field_problem(backend)
-    local has, message = backend:checks_field()
+local function named_field_problem(backend, key)
+    local has, message = backend:has_field(key)
     if has == nil then
         return nil, failure(message)
     end
     if not has then
-        return NO_CHECKS_FIELD
+        return FIELD_REFUSALS[key]
+            or "the board has no " .. key .. " field, so define it on the board first"
     end
 end
 
@@ -643,7 +651,7 @@ function commands.add(backend, args)
         end
     end
     if #checks > 0 or column == roles.ready then
-        local why, err = checks_field_problem(backend)
+        local why, err = named_field_problem(backend, board.CHECKS_FIELD)
         if err then
             return err
         end
@@ -862,9 +870,12 @@ function commands.show(backend, args)
         end
         outcomes = "done when:\n" .. table.concat(lines, "\n") .. "\n\n"
     end
-    local checks = ""
-    if #card.checks > 0 then
-        checks = "checks:\n- " .. table.concat(card.checks, "\n- ") .. "\n\n"
+    local blocks = ""
+    for _, field in ipairs({ "checks", "allow", "tests", "files" }) do
+        local names = card[field]
+        if names and #names > 0 then
+            blocks = blocks .. field .. ":\n- " .. table.concat(names, "\n- ") .. "\n\n"
+        end
     end
     return {
         output = card_line(card)
@@ -874,7 +885,7 @@ function commands.show(backend, args)
             .. description
             .. "\n\n"
             .. outcomes
-            .. checks
+            .. blocks
             .. comment_lines(list, { whole = true }),
     }
 end
@@ -1063,7 +1074,7 @@ function commands.move(backend, args)
             )
         end
         if #card.checks == 0 then
-            local why, problem = checks_field_problem(backend)
+            local why, problem = named_field_problem(backend, board.CHECKS_FIELD)
             if problem then
                 return problem
             end
@@ -1530,6 +1541,41 @@ function commands.rename(backend, args)
     return { output = "renamed " .. card.id:sub(1, board.MIN_PREFIX) }
 end
 
+---Count things with the noun in the singular or the plural.
+---@param count integer how many
+---@param noun string the noun in the singular
+---@return string text the count and the noun
+local function counted(count, noun)
+    return count .. " " .. noun .. (count == 1 and "" or "s")
+end
+
+---Find a card and replace one of its custom fields under its claim's fence.
+---@param backend dev.board.Backend the board
+---@param ref string the card
+---@param key string the field's key
+---@param write fun(id: string, fence: integer?): boolean?, string? the write to send
+---@return dev.board.Card? card the card, nil on failure
+---@return string|dev.cmd.board.Result? short the card's short id, or the failure
+local function write_field(backend, ref, key, write)
+    local card, err = find_card(backend, ref)
+    if not card then
+        return nil, err
+    end
+    local why, problem = named_field_problem(backend, key)
+    if problem then
+        return nil, problem
+    end
+    if why then
+        return nil, failure(why)
+    end
+    local held = claims.read(card.id)
+    local ok, message = write(card.id, held and held.fence)
+    if not ok then
+        return nil, failure(message)
+    end
+    return card, card.id:sub(1, board.MIN_PREFIX)
+end
+
 function commands.checks(backend, args)
     if #args < 2 then
         return usage("needs a card and one or more commands to run as its checks")
@@ -1539,27 +1585,112 @@ function commands.checks(backend, args)
             return usage("a check needs a command")
         end
     end
-    local card, err = find_card(backend, args[1])
-    if not card then
-        return err
-    end
-    local why, problem = checks_field_problem(backend)
-    if problem then
-        return problem
-    end
-    if why then
-        return failure(why)
-    end
     local runs = {}
     for pos = 2, #args do
         runs[#runs + 1] = args[pos]
     end
-    local held = claims.read(card.id)
-    local ok, message = backend:set_checks(card.id, runs, held and held.fence)
-    if not ok then
-        return failure(message)
+    local card, short = write_field(backend, args[1], board.CHECKS_FIELD, function(id, fence)
+        return backend:set_checks(id, runs, fence)
+    end)
+    if not card then
+        return short
     end
-    return { output = "set checks " .. card.id:sub(1, board.MIN_PREFIX) .. ", " .. #runs .. " rows" }
+    return { output = "set checks " .. short .. ", " .. counted(#runs, "row") }
+end
+
+---Read the words of an allow command.
+---@param args string[] the card and the words
+---@return string[]? words the words to set, empty with none
+---@return boolean|dev.cmd.board.Result none whether the field is cleared, or the failure
+local function parse_allow(args)
+    if #args < 2 then
+        return nil,
+            usage(
+                "needs a card and one or more of "
+                    .. table.concat(board.ALLOW_WORDS, ", ")
+                    .. " or "
+                    .. board.ALLOW_NONE
+            )
+    end
+    local words = {}
+    local seen = {}
+    local none = false
+    for pos = 2, #args do
+        local word = args[pos]
+        if word == board.ALLOW_NONE then
+            none = true
+        elseif not index_of(board.ALLOW_WORDS, word) then
+            return nil,
+                usage(
+                    "unknown allow word "
+                        .. word
+                        .. ", the words are "
+                        .. table.concat(board.ALLOW_WORDS, ", ")
+                        .. " and "
+                        .. board.ALLOW_NONE
+                )
+        elseif not seen[word] then
+            seen[word] = true
+            words[#words + 1] = word
+        end
+    end
+    if none and #args > 2 then
+        return nil, usage(board.ALLOW_NONE .. " clears the allow field and takes no other word")
+    end
+    return words, none
+end
+
+function commands.allow(backend, args)
+    local words, none = parse_allow(args)
+    if not words then
+        return none
+    end
+    local card, short = write_field(backend, args[1], board.ALLOW_FIELD, function(id, fence)
+        return backend:set_field(id, board.ALLOW_FIELD, none and json.null or words, fence)
+    end)
+    if not card then
+        return short
+    end
+    if none then
+        return { output = "cleared allow " .. short }
+    end
+    return { output = "set allow " .. short .. ", " .. table.concat(words, " ") }
+end
+
+---Replace a card's multiline name field with one name per line.
+---@param backend dev.board.Backend the board
+---@param args string[] the card and the names
+---@param key string the field's key
+---@param noun string what a name is, for the messages
+---@return dev.cmd.board.Result result the output, or a message and the exit code
+local function set_names(backend, args, key, noun)
+    if #args < 2 then
+        return usage("needs a card and one or more " .. noun .. " names")
+    end
+    for pos = 2, #args do
+        if not args[pos]:find("%S") or args[pos]:find("%c") then
+            return usage("a " .. noun .. " name must be one line of text")
+        end
+    end
+    local names = {}
+    for pos = 2, #args do
+        names[#names + 1] = args[pos]
+    end
+    local card, short = write_field(backend, args[1], key, function(id, fence)
+        return backend:set_field(id, key, table.concat(names, "\n"), fence)
+    end)
+    if not card then
+        return short
+    end
+    return { output = "set " .. noun .. "s " .. short .. ", " .. counted(#names, "name") }
+end
+
+function commands.tests(backend, args)
+    return set_names(backend, args, board.TESTS_FIELD, "test")
+end
+
+function commands.files(backend, args)
+    return set_names(backend, args, board.FILES_FIELD, "file")
 end
 
 function commands.link(backend, args)
@@ -1891,7 +2022,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `links`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `link`, `links`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

@@ -95,4 +95,14 @@ function M.dev(root, args, opts)
     return out, code
 end
 
+---The fields JSON of a Pomb board that defines the four card fields.
+M.FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
+    .. '"options":[],"columns":[],"required":true},'
+    .. '{"id":"f2","key":"dev.allow","label":"Allow","kind":"multiselect",'
+    .. '"options":["test-edits","ci-edits"],"columns":[],"required":false},'
+    .. '{"id":"f3","key":"dev.tests","label":"Tests","kind":"multiline",'
+    .. '"options":[],"columns":[],"required":false},'
+    .. '{"id":"f4","key":"dev.files","label":"Files","kind":"multiline",'
+    .. '"options":[],"columns":[],"required":false}]'
+
 return M

@@ -16,6 +16,9 @@ local M = {}
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds a live claim on it
 ---@field checks string[] the run commands in its checks rows, empty when it has none
+---@field allow string[] the guard rails its allow field lifts, empty when it has none
+---@field tests string[] the tests its tests field names, empty when it has none
+---@field files string[] the files its files field names, empty when it has none
 ---@field outcomes dev.board.Outcome[] its Done when outcomes, empty when it has none
 
 ---@class dev.board.Outcome
@@ -39,7 +42,7 @@ local M = {}
 ---@field column_map table<string, string>? the `[board.columns]` map the runner resolves into `roles`
 ---@field roles dev.board.Roles? the column set of this run, which the runner sets before a command
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
----@field checks_field fun(self: dev.board.Backend): boolean?, string? whether the board has the checks field, or nil and a message
+---@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board defines the custom field with that key, or nil and a message
 ---@field next fun(self: dev.board.Backend, column: string): dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human, or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
 ---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card entered its column, as an RFC 3339 stamp by card id, or nil and a message
@@ -50,6 +53,7 @@ local M = {}
 ---@field set_description fun(self: dev.board.Backend, id: string, text: string, fence: integer?): boolean?, string? the card's description replaced, checked against the claim's fence when one is given
 ---@field set_name fun(self: dev.board.Backend, id: string, name: string, fence: integer?): boolean?, string? the card's title replaced, checked against the claim's fence when one is given
 ---@field set_checks fun(self: dev.board.Backend, id: string, runs: string[], fence: integer?): boolean?, string? the card's checks rows replaced by one row per command, checked against the claim's fence when one is given
+---@field set_field fun(self: dev.board.Backend, id: string, key: string, value: string|string[]|table[]|dev.json.Null, fence: integer?): boolean?, string? the custom field with that key replaced whole by the value, where json.null clears it, checked against the claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts: dev.board.NoteOpts?): boolean?, string? a comment added to the card, of kind agent unless opts names one, checked against the claim's fence when one is given
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
@@ -117,11 +121,47 @@ local M = {}
 ---The key of the custom field that holds a card's checks.
 M.CHECKS_FIELD = "dev.checks"
 
+---The key of the custom field that holds the guard rails a card lifts.
+M.ALLOW_FIELD = "dev.allow"
+
+---The key of the custom field that holds the tests a tests card names.
+M.TESTS_FIELD = "dev.tests"
+
+---The key of the custom field that holds the files a card names.
+M.FILES_FIELD = "dev.files"
+
+---The words the allow field holds, in the order dev sends them.
+M.ALLOW_WORDS = { "test-edits", "ci-edits" }
+
+---The word that clears the allow field.
+M.ALLOW_NONE = "none"
+
 ---The key of the checks table column that holds the command to run.
 M.CHECKS_RUN = "run"
 
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"
+
+---The names in a multiline text field, one per line.
+---@param value string|string[]|nil the field's value
+---@return string[] names the non-blank lines, empty for any other value
+function M.names(value)
+    local names = {}
+    if type(value) == "string" then
+        for line in value:gmatch("[^\r\n]+") do
+            if line:find("%S") then
+                names[#names + 1] = line
+            end
+        end
+    elseif type(value) == "table" then
+        for _, name in ipairs(value) do
+            if type(name) == "string" then
+                names[#names + 1] = name
+            end
+        end
+    end
+    return names
+end
 
 ---Whether a card carries a label.
 ---@param card dev.board.Card the card
