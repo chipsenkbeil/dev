@@ -59,7 +59,7 @@ local M = {}
 ---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's umbrella and the count of its children
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
 ---@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?): dev.board.Events?, string?, string?, boolean? the events after the cursor, oldest first, held up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once with none and the board's current cursor. On an expired cursor it returns nil, a message and the oldest cursor that still resumes, when Pomb holds too many open waits for the token it returns nil, a message, nil and true, and on any other failure nil and a message
----@field move fun(self: dev.board.Backend, id: string, column: string, fence: integer?): boolean?, string? the card moved to the top of a column, checked against the claim's fence when one is given
+---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.MoveOpts?): boolean?, string? the card moved to a column at a zero-based position, the top when nil, checked against the claim's fence when one is given
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
@@ -76,6 +76,10 @@ local M = {}
 ---@class dev.board.NoteOpts
 ---@field kind string? the comment's kind, lowercase
 ---@field author string? the label the comment is written under
+
+---@class dev.board.MoveOpts
+---@field fence integer? the claim fence the move is checked against
+---@field position integer? the zero-based place in the column, the top when nil
 
 ---@class dev.board.Comment
 ---@field id string the comment's full id

@@ -731,7 +731,7 @@ function Backend:delete_note(id, comment)
     return true
 end
 
-function Backend:move(id, column, fence)
+function Backend:move(id, column, opts)
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -740,12 +740,13 @@ function Backend:move(id, column, fence)
     if not target then
         return nil, unavailable("the board has no " .. column .. " column")
     end
+    opts = opts or {}
     local moved
     moved, message = self:__request(
         "POST",
         "/api/tasks/" .. id .. "/move",
-        { column_id = target, position = TOP },
-        fence
+        { column_id = target, position = opts.position or TOP },
+        opts.fence
     )
     if not moved then
         return nil, message

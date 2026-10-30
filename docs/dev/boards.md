@@ -29,6 +29,7 @@ dev board outcome 8af0e001 --convert
 dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
 dev board note 8af0e001 --delete 3ff0e006
 dev board move 8af0e001 progress
+dev board order 8af0e001 3ff0e006
 dev board take 8af0e001 --as project-alt/boardls
 dev board release 8af0e001
 dev board sync
@@ -228,10 +229,12 @@ something goes to Icebox or Blocked with `needs:human` and is left alone.
 `needs:human` means only a human can answer. No agent answers for you on such a
 card, and another agent relaying your view never counts. Agents never move,
 edit or relabel one, and the label sits only in Blocked or Icebox, never
-Backlog. dev enforces it: `move`, `edit` and `rename` refuse a card labelled
-`needs:human` (exit 1), and `label CARD needs:human` and `add --label
-needs:human` refuse a card outside Blocked and Icebox, so move it there first
-and add the label after. `label --remove needs:human` and notes stay allowed
+Backlog. dev enforces it: `edit` and `rename` refuse a card labelled
+`needs:human`, and `move` refuses one headed for another column (exit 1).
+A move within its own column, and so `order`, is allowed. `label CARD
+needs:human` and `add --label needs:human` refuse a card outside Blocked
+and Icebox, so move it there first and add the label after. `label
+--remove needs:human` and notes stay allowed
 in any column. Only you move it out. Two exceptions, both ending with an agent
 removing the label: an agent that you answered directly in its own session
 quotes you in a decision note and carries on, and once you move a card out of
@@ -271,6 +274,15 @@ Pomb replays with all its items. With `--column ready`, Pomb gets the card in
 Backlog first and the move to Ready comes after the subtasks. `note` adds a comment, of kind
 agent unless `--kind` says otherwise. `move` puts the card at the top of the
 column.
+
+`order CARD...` sets the top of one column in a single call. Every named card
+must sit in the same column. Each goes to position 0, 1, 2 and so on in the
+order named, and the cards not named keep their relative order below. It
+prints the column's cards after the change, one row each as `ls` does. A card
+that is unknown, named twice or in another column than the first fails with
+exit 1 before any move, and no card is touched. A move that fails partway
+leaves the cards before it in place. A queued `order` replays like a `move`.
+Planners keep Icebox and Backlog in priority order with it.
 
 `add`, `note` and `edit` warn on standard error, and still write, when the
 prose holds a hex id, a hash or a path, which the v2 format keeps in the

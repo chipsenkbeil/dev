@@ -197,7 +197,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, size, label, link, links, stale, take, release, wait and sync",
+        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, move, order, size, label, link, links, stale, take, release, wait and sync",
         group = "Share it",
     },
     {
@@ -302,7 +302,13 @@ return {
         words = { "board", "move" },
         handler = "lua",
         usage = "dev board move CARD COLUMN",
-        desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox",
+        desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox, and a needs:human card moves only within its own column",
+    },
+    {
+        words = { "board", "order" },
+        handler = "lua",
+        usage = "dev board order CARD...",
+        desc = "Put cards of one column first, in the order named, print the column, and keep the cards not named below in their order",
     },
     {
         words = { "board", "discard" },

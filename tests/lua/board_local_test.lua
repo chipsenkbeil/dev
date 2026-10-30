@@ -765,7 +765,7 @@ t.test(
         local a, b, c = ready("Alpha"), ready("Beta"), ready("Gamma")
         local out, code = dev(root, home, { "board", "take", a, "--as", "r/one" })
         t.eq(code, 0, out)
-        t.eq(document(file_of(home)).cards[1].claim.claimant, "r/one")
+        t.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/one")
         _, code = dev(root, home, { "board", "take", b, "--as", "bad name" })
         t.eq(code, 2)
         out, code = dev(root, home, { "board", "move", b, "progress" }, { DEV_AGENT = "r/two" })
@@ -776,11 +776,11 @@ t.test(
         dev(root, home, { "board", "link", c, "parent", a })
         out, code = dev(root, home, { "board", "move", a, "progress" }, { DEV_AGENT = "r/three" })
         t.eq(code, 0, out)
-        t.eq(document(file_of(home)).cards[1].claim.claimant, "r/one")
+        t.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/one")
         dev(root, home, { "board", "release", a })
         out, code = dev(root, home, { "board", "move", a, "progress" }, { DEV_AGENT = "r/three" })
         t.eq(code, 0, out)
-        t.eq(document(file_of(home)).cards[1].claim, nil)
+        t.eq(card_named(document(file_of(home)), "Alpha").claim, nil)
     end
 )
 
@@ -1562,4 +1562,68 @@ t.test("a local board refuses Ready for a card with an empty Change or Out of sc
     t.eq(code, 0, out)
     out, code = dev(root, home, { "board", "move", a, "ready" })
     t.eq(code, 0, out)
+end)
+
+t.test("order puts the named cards first and keeps the rest below on a local board", function()
+    local root, home = local_board()
+    local ids = {}
+    for _, name in ipairs({ "One", "Two", "Three", "Four" }) do
+        local out, code = dev(root, home, { "board", "add", name, "--problem", "x" })
+        t.eq(code, 0, out)
+        table.insert(ids, 1, (prefix_of(out)))
+    end
+    local function names(out)
+        local found = {}
+        for name in out:gmatch("(%a+)\n") do
+            found[#found + 1] = name
+        end
+        return found
+    end
+    local out = dev(root, home, { "board", "ls" })
+    t.eq(names(out), { "One", "Two", "Three", "Four" })
+    local four, three, two, one = ids[1], ids[2], ids[3], ids[4]
+    out = dev(root, home, { "board", "order", three, one })
+    t.eq(names(out), { "Three", "One", "Two", "Four" })
+    out = dev(root, home, { "board", "ls" })
+    t.eq(names(out), { "Three", "One", "Two", "Four" })
+    out = dev(root, home, { "board", "order", four })
+    t.eq(names(out), { "Four", "Three", "One", "Two" })
+    local code
+    out, code = dev(root, home, { "board", "order", one, two, one })
+    t.eq(code, 1, out)
+    t.ok(out:find("twice", 1, true), out)
+    out = dev(root, home, { "board", "ls" })
+    t.eq(names(out), { "Four", "Three", "One", "Two" })
+end)
+
+t.test("order refuses cards of two columns before any move and frees a needs:human card", function()
+    local root, home = local_board()
+    local out = dev(root, home, { "board", "add", "One", "--problem", "x" })
+    local one = prefix_of(out)
+    out = dev(root, home, { "board", "add", "Two", "--problem", "x" })
+    local two = prefix_of(out)
+    dev(root, home, { "board", "move", two, "icebox" })
+    local before = dev(root, home, { "board", "ls" })
+    local code
+    out, code = dev(root, home, { "board", "order", one, two })
+    t.eq(code, 1, out)
+    t.ok(out:find("one column", 1, true), out)
+    t.eq(dev(root, home, { "board", "ls" }), before)
+    dev(root, home, { "board", "label", two, "needs:human" })
+    out, code = dev(root, home, { "board", "order", two })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", two, "icebox" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", two, "backlog" })
+    t.eq(code, 1, out)
+    t.ok(out:find("needs:human", 1, true), out)
+end)
+
+t.test("a move into an empty column leaves ls ordered by column", function()
+    local root, home = local_board()
+    dev(root, home, { "board", "add", "One", "--problem", "x" })
+    local two = prefix_of((dev(root, home, { "board", "add", "Two", "--problem", "x" })))
+    dev(root, home, { "board", "move", two, "icebox" })
+    local out = dev(root, home, { "board", "ls" })
+    t.ok(out:find("Two", 1, true) < out:find("One", 1, true), out)
 end)

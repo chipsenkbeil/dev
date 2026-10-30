@@ -587,9 +587,11 @@ function Backend:delete_note(id, comment)
     end)
 end
 
-function Backend:move(id, column, fence)
+function Backend:move(id, column, opts)
+    opts = opts or {}
+    local position = opts.position or 0
     return self:__update(function(doc)
-        local card, message = card_of(doc, id, fence)
+        local card, message = card_of(doc, id, opts.fence)
         if not card then
             return nil, message
         end
@@ -599,7 +601,17 @@ function Backend:move(id, column, fence)
         end
         local _, index = find_by_id(doc.cards, id)
         table.remove(doc.cards, index)
-        table.insert(doc.cards, 1, card)
+        local seen, at = 0, #doc.cards + 1
+        for i, other in ipairs(doc.cards) do
+            if other.column_id == target.id then
+                if seen == position then
+                    at = i
+                    break
+                end
+                seen = seen + 1
+            end
+        end
+        table.insert(doc.cards, at, card)
         if card.column_id ~= target.id then
             card.column_id = target.id
             card.entered_at = store.stamp()

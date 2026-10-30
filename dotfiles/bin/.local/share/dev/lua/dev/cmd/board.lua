@@ -64,6 +64,7 @@ local HEADERS = { "ID", "COLUMN", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
 local QUEUE_RULES = {
     add = { idempotent = false },
     move = { idempotent = true },
+    order = { idempotent = true },
     note = { idempotent = false },
     size = { idempotent = true },
     label = { idempotent = true },
@@ -1023,9 +1024,11 @@ function commands.move(backend, args)
     if not card then
         return err
     end
-    local held_back = owner_holds(card)
-    if held_back then
-        return held_back
+    if card.column ~= column then
+        local held_back = owner_holds(card)
+        if held_back then
+            return held_back
+        end
     end
     local roles = backend.roles
     if column == roles.ready and unready(card.color) then
@@ -1107,7 +1110,7 @@ function commands.move(backend, args)
             held = { fence = fence }
         end
     end
-    local ok, message = backend:move(card.id, column, held and held.fence)
+    local ok, message = backend:move(card.id, column, { fence = held and held.fence })
     if not ok then
         if started then
             claims.stop(card.id)
@@ -1123,6 +1126,65 @@ function commands.move(backend, args)
         end
     end
     return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
+end
+
+function commands.order(backend, args)
+    local flags, words = parse(args, {})
+    if not flags then
+        return words
+    end
+    if #words == 0 then
+        return usage("needs one or more cards")
+    end
+    local cards, message = backend:cards()
+    if not cards then
+        return failure(message)
+    end
+    local named, seen, column = {}, {}, nil
+    for _, word in ipairs(words) do
+        local card, why = board.resolve(cards, word)
+        if not card then
+            return failure(why)
+        end
+        if seen[card.id] then
+            return failure(card.id:sub(1, board.MIN_PREFIX) .. " is named twice")
+        end
+        if column and card.column ~= column then
+            return failure(
+                "order takes cards of one column, but "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " is in "
+                    .. card.column
+                    .. " and "
+                    .. named[1].id:sub(1, board.MIN_PREFIX)
+                    .. " is in "
+                    .. column
+            )
+        end
+        column = card.column
+        seen[card.id] = true
+        named[#named + 1] = card
+    end
+    for position, card in ipairs(named) do
+        local held = claims.read(card.id)
+        local ok, why =
+            backend:move(card.id, column, { fence = held and held.fence, position = position - 1 })
+        if not ok then
+            return failure(why)
+        end
+    end
+    local after
+    after, message = backend:cards()
+    if not after then
+        return failure(message)
+    end
+    local rows = {}
+    for _, card in ipairs(after) do
+        if card.column == column then
+            rows[#rows + 1] = card_line(card)
+        end
+    end
+    return { output = table.concat(rows, "\n") }
 end
 
 local DISCARD_LABEL = "discarded"
@@ -1829,7 +1891,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `discard`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `links`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `links`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

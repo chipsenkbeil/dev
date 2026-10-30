@@ -126,8 +126,29 @@ local function fake(cards, times, finished)
         end
         return nil, "pomb has no board named " .. name
     end
-    function backend:move(id, column)
-        calls[#calls + 1] = { "move", id, column }
+    function backend:move(id, column, opts)
+        local position = opts and opts.position
+        calls[#calls + 1] = { "move", id, column, position }
+        if position then
+            local moved
+            for at, card in ipairs(cards) do
+                if card.id == id then
+                    moved = table.remove(cards, at)
+                    break
+                end
+            end
+            local seen, at = 0, #cards + 1
+            for i, other in ipairs(cards) do
+                if other.column == column then
+                    if seen == position then
+                        at = i
+                        break
+                    end
+                    seen = seen + 1
+                end
+            end
+            table.insert(cards, at, moved)
+        end
         return true
     end
     return backend
@@ -1336,6 +1357,61 @@ t.test("move and edit refuse a needs:human card, and label --remove still frees 
     t.eq(result.output, "labelled 11111111 -")
 end)
 
+t.test("a needs:human card moves within its own column and not out of it", function()
+    local cards = sample()
+    cards[1].labels = { "needs:human" }
+    cards[1].column = "Icebox"
+    local backend = fake(cards)
+    local result = commands.run("move", { "11111111-a", "icebox" }, backend)
+    t.eq(result.output, "moved 11111111 to Icebox")
+    t.eq(backend.calls, { { "move", ID_A, "Icebox" } })
+    result = commands.run("move", { "11111111-a", "backlog" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("needs:human", 1, true), result.message)
+    t.eq(#backend.calls, 1)
+end)
+
+local function column_of_three()
+    local cards = sample()
+    cards[2].column = "Ready"
+    cards[3].column = "Ready"
+    cards[3].labels = { "needs:human" }
+    return cards
+end
+
+t.test("order moves the named cards to positions 0, 1, 2 and prints the column", function()
+    local backend = fake(column_of_three())
+    local result = commands.run("order", { "cccccccc", "11111111-a" }, backend)
+    t.eq(result.code, nil)
+    t.eq(backend.calls, { { "move", ID_C, "Ready", 0 }, { "move", ID_A, "Ready", 1 } })
+    t.eq(
+        result.output,
+        table.concat({
+            "cccccccc  Ready  unsized  needs:human  Old thing",
+            "11111111  Ready  1 Pomodoro  docs  Write docs",
+            "11111111  Ready  unsized  -  Fix lint",
+        }, "\n")
+    )
+end)
+
+t.test("order refuses cards of two columns, an unknown card and a card named twice", function()
+    local cards = sample()
+    local backend = fake(cards)
+    local result = commands.run("order", { "11111111-a", "11111111-b", "cccccccc" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("one column", 1, true), result.message)
+    result = commands.run("order", { "11111111-a", "deadbeef" }, backend)
+    t.eq(result.code, 1)
+    cards = column_of_three()
+    backend = fake(cards)
+    result = commands.run("order", { "11111111-a", "11111111-a" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("twice", 1, true), result.message)
+    t.eq(commands.run("order", {}, backend).code, 2)
+    t.eq(commands.run("order", { "--bogus" }, backend).code, 2)
+    t.eq(#backend.calls, 0)
+end)
+
 t.test("label adds needs:human only to a card in Blocked or Icebox", function()
     local backend = fake(sample())
     local result = commands.run("label", { "11111111-a", "+needs:human" }, backend)
@@ -2305,6 +2381,23 @@ t.test("note posts a comment of kind agent and move goes to the top of the colum
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     t.ok(calls:find('"column_id":"col-review"', 1, true), calls)
     t.ok(calls:find('"position":0', 1, true), calls)
+end)
+
+t.test("order sends each position to Pomb and refuses two columns first", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "order", "11111111-b", "11111111-a" })
+    t.eq(code, 0, out)
+    local calls = read(root, "calls")
+    local first = calls:find("/api/tasks/" .. ID_B .. "/move", 1, true)
+    local second = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
+    t.ok(first and second and first < second, calls)
+    t.ok(calls:find('"position":0', 1, true), calls)
+    t.ok(calls:find('"position":1', 1, true), calls)
+    root, home = sandbox()
+    out, code = dev(root, home, { "board", "order", "11111111-a", "cccccccc" })
+    t.eq(code, 1, out)
+    t.ok(out:find("one column", 1, true), out)
+    t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
 t.test("links reads the task's links and names the board of a link to another board", function()
