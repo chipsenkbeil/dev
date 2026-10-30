@@ -182,6 +182,21 @@ t.test("edit replaces a local card's description from a file or standard input",
     t.eq(out, a .. "  Backlog  Unsized  -  Card\n\nfrom standard input\n\nno comments\n")
 end)
 
+t.test(
+    "stale does not mark a local needs:human card that only an agent has commented on",
+    function()
+        local root, home = local_board()
+        local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", "icebox" })))
+        local out, code = dev(root, home, { "board", "label", a, "needs:human" })
+        t.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "note", a, "still open" })
+        t.eq(code, 0, out)
+        out = dev(root, home, { "board", "stale" })
+        t.ok(out:find("for the owner (needs:human):", 1, true), out)
+        t.ok(not out:find("answered", 1, true), out)
+    end
+)
+
 t.test("next --column backlog skips a needs:human card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", "icebox" })))

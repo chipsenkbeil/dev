@@ -1218,6 +1218,31 @@ t.test("stale covers Backlog, Ready, In Progress and In Review only", function()
     t.eq(lines, { "Backlog", "Ready", "In Progress", "In Review", "Backlog" })
 end)
 
+t.test("stale marks a needs:human card whose newest comment is the owner's", function()
+    local human = { "needs:human" }
+    local cards, times = aged(
+        { "Ready", "Backlog", "Blocked" },
+        { 9, 20, 50 },
+        { {}, human, human }
+    )
+    local backend = fake(cards, times)
+    local replies = {
+        [cards[2].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "yes" } },
+        [cards[3].id] = { { actor = "agent", at = "2026-01-01T00:00:00Z", body = "wait" } },
+    }
+    function backend:comments(id)
+        return replies[id] or {}
+    end
+    local output = commands.run("stale", {}, backend, NOW).output
+    t.ok(output:find(cards[2].name .. " (answered, waiting for your move)", 1, true), output)
+    t.ok(not output:find(cards[3].name .. " (answered", 1, true), output)
+    function backend:comments()
+        return nil, "pomb is down"
+    end
+    output = commands.run("stale", {}, backend, NOW).output
+    t.ok(output:find("could not read the comments of " .. cards[2].id, 1, true), output)
+end)
+
 t.test("stale lists every needs:human card apart at any age, and never as stale", function()
     local human = { "needs:human" }
     local cards, times = aged(

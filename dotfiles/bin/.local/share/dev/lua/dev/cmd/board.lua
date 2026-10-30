@@ -33,6 +33,8 @@ local DELETE_FLAG = "--delete"
 local KIND_FLAG = "--kind"
 local GROUP_FLAG = "--group"
 local AS_FLAG = "--as"
+local HUMAN_ACTOR = "human"
+local ANSWERED_NOTE = " (answered, waiting for your move)"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
@@ -1451,6 +1453,20 @@ local function append(lines, more)
     end
 end
 
+---Check whether the newest comment on a needs:human card is the owner's.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@return boolean? answered whether the newest comment is the owner's, nil when they could not be read
+---@return string? why the reason the comments could not be read
+local function answered_by_human(backend, card)
+    local list = backend:comments(card.id)
+    if not list then
+        return nil, "could not read the comments of " .. card.id .. " " .. card.name
+    end
+    local newest = list[#list]
+    return newest ~= nil and newest.actor == HUMAN_ACTOR
+end
+
 local function stale_rows(cards)
     local rows = {}
     for _, card in ipairs(cards) do
@@ -1459,7 +1475,7 @@ local function stale_rows(cards)
             card.column,
             card.days .. "d",
             card.size,
-            card.name,
+            card.name .. (card.answered and ANSWERED_NOTE or ""),
         }
     end
     return board.table_lines(rows)
@@ -1582,6 +1598,14 @@ function commands.stale(backend, args, now)
                         days = days,
                         at = at,
                     }
+                    if mine then
+                        local answered, why = answered_by_human(backend, card)
+                        if answered == nil then
+                            undated[#undated + 1] = why
+                        else
+                            item.answered = answered
+                        end
+                    end
                     local into = mine and owner or found
                     into[#into + 1] = item
                 end

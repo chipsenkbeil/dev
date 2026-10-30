@@ -80,6 +80,7 @@ local M = {}
 ---@field body string its text
 ---@field kind string? its kind tag, when it has one
 ---@field author string? the role label it was written under, when it has one
+---@field actor string? the kind of actor that wrote it, `human` or `agent`, when known
 
 ---@class dev.board.AddOpts
 ---@field description string? the card's description

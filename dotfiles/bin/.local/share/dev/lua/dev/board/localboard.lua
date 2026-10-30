@@ -525,6 +525,7 @@ function Backend:comments(id)
         found[#found + 1] = {
             id = comment.id,
             who = comment.who,
+            actor = comment.who,
             at = comment.at,
             body = comment.body,
             kind = comment.kind,

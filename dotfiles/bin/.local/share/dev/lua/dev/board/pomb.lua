@@ -672,6 +672,7 @@ function Backend:comments(id)
         found[#found + 1] = {
             id = comment.id,
             who = present(comment.token_name) or present(comment.actor_kind) or "unknown",
+            actor = present(comment.actor_kind),
             at = present(comment.created_at) or "",
             body = present(comment.body) or "",
             kind = present(comment.kind),
