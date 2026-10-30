@@ -478,36 +478,87 @@ function Backend:entered()
     return times
 end
 
-function Backend:next()
+function Backend:next(column)
     local ok, message = self:__load()
     if not ok then
         return nil, message
     end
-    local ready = self:__column_id(board.READY)
-    if not ready then
-        return nil, unavailable("the board has no Ready column")
+    local id = self:__column_id(column)
+    if not id then
+        return nil, unavailable("the board has no " .. column .. " column")
     end
-    local page
-    page, message = self:__request(
-        "GET",
-        "/api/boards/"
+    local ready_filter = column == board.READY and "&ready=true" or ""
+    local cursor
+    repeat
+        local query = "/api/boards/"
             .. self.__detail.id
-            .. "/tasks?limit=1&ready=true&claimed=false&column_id="
-            .. ready
-    )
-    if not page then
-        return nil, message
+            .. "/tasks?limit=50&claimed=false"
+            .. ready_filter
+            .. "&column_id="
+            .. id
+        if cursor then
+            query = query .. "&cursor=" .. cursor
+        end
+        local page
+        page, message = self:__request("GET", query)
+        if not page then
+            return nil, message
+        end
+        for _, item in ipairs(page.items) do
+            local task
+            task, message = self:__request("GET", "/api/tasks/" .. item.id)
+            if not task then
+                return nil, message
+            end
+            local card = self:__card(task)
+            local links
+            links, message = self:links(item.id)
+            if not links then
+                return nil, message
+            end
+            local blocked
+            blocked, message = self:__blocked(links)
+            if blocked == nil then
+                return nil, message
+            end
+            if
+                not card.claimant
+                and not blocked
+                and not board.labelled(card, board.NEEDS_HUMAN)
+            then
+                return card
+            end
+        end
+        cursor = present(page.next_cursor)
+    until not cursor
+end
+
+---Whether `blocked_by` links hold a card: another board's card always does, and one of this board
+---does unless it is in Done.
+---@param links dev.board.Link[] the links the card holds
+---@return boolean? blocked, string? message
+function Backend:__blocked(links)
+    for _, link in ipairs(links) do
+        if link.kind == "blocked_by" then
+            if link.board then
+                return true
+            end
+            local cards, message = self:cards()
+            if not cards then
+                return nil, message
+            end
+            local target
+            for _, card in ipairs(cards) do
+                if card.id == link.id then
+                    target = card
+                end
+            end
+            if not target or target.column ~= board.DONE then
+                return true
+            end
+        end
     end
-    local top = page.items[1]
-    if not top then
-        return nil
-    end
-    local task
-    task, message = self:__request("GET", "/api/tasks/" .. top.id)
-    if not task then
-        return nil, message
-    end
-    return self:__card(task)
+    return false
 end
 
 function Backend:__color_id(color)

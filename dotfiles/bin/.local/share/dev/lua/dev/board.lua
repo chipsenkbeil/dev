@@ -36,7 +36,7 @@ local M = {}
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
 ---@field checks_field fun(self: dev.board.Backend): boolean?, string? whether the board has the checks field, or nil and a message
----@field next fun(self: dev.board.Backend): dev.board.Card?, string? the top unclaimed, unblocked Ready card, or nil and a message when it failed
+---@field next fun(self: dev.board.Backend, column: string): dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human, or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
 ---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card entered its column, as an RFC 3339 stamp by card id, or nil and a message
 ---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?): boolean?, string? the card given the palette colour of that value, checked against the claim's fence when one is given
@@ -120,6 +120,9 @@ M.DEFAULT_COLUMN = "Backlog"
 ---The column of cards that are free-form, which are never scaffolded or checked.
 M.ICEBOX = "Icebox"
 
+---The column of new cards, which planners size and split.
+M.BACKLOG = "Backlog"
+
 ---The column a worker takes cards from.
 M.READY = "Ready"
 
@@ -144,6 +147,19 @@ M.NEEDS_HUMAN = "needs:human"
 
 ---The column of finished cards, which `ls` leaves out.
 M.DONE = "Done"
+
+---Whether a card carries a label.
+---@param card dev.board.Card the card
+---@param label string the label to look for
+---@return boolean
+function M.labelled(card, label)
+    for _, word in ipairs(card.labels or {}) do
+        if word == label then
+            return true
+        end
+    end
+    return false
+end
 
 ---The backends a project may name.
 M.Backend = { POMB = "pomb", LOCAL = "local" }

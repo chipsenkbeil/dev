@@ -465,15 +465,33 @@ function commands.ls(backend, args, _, screen)
 end
 
 function commands.next(backend, args)
-    if #args > 0 then
-        return usage("unknown argument " .. args[1])
+    local flags, words = parse(args, { ["--column"] = true })
+    if not flags then
+        return words
     end
-    local card, message = backend:next()
+    if #words > 0 then
+        return usage("unknown argument " .. words[1])
+    end
+    local column = board.READY
+    if flags["--column"] then
+        local named, err = named_column(flags["--column"])
+        if not named then
+            return err
+        end
+        if named ~= board.READY and named ~= board.BACKLOG and named ~= board.ICEBOX then
+            return usage("next --column takes Ready, Backlog or Icebox")
+        end
+        column = named
+    end
+    local card, message = backend:next(column)
     if not card then
         if message then
             return failure(message)
         end
-        return { output = "no ready cards" }
+        if column == board.READY then
+            return { output = "no ready cards" }
+        end
+        return { output = "no cards in " .. column }
     end
     return { output = card_line(card) }
 end

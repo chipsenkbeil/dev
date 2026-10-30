@@ -424,17 +424,22 @@ function Backend:add_checks_field()
     return true
 end
 
-function Backend:next()
+function Backend:next(column)
     local doc, message = self:__read()
     if not doc then
         return nil, message
     end
-    local ready = column_named(doc, board.READY)
-    if not ready then
-        return nil, "the board has no Ready column, run dev board init"
+    local target = column_named(doc, column)
+    if not target then
+        return nil, "the board has no " .. column .. " column, run dev board init"
     end
     for _, card in ipairs(ordered(doc)) do
-        if card.column_id == ready.id and not live(card.claim) and not is_blocked(doc, card) then
+        if
+            card.column_id == target.id
+            and not live(card.claim)
+            and not is_blocked(doc, card)
+            and not board.labelled(card, board.NEEDS_HUMAN)
+        then
             return card_view(doc, card)
         end
     end

@@ -223,8 +223,9 @@ return {
     {
         words = { "board", "next" },
         handler = "lua",
-        usage = "dev board next",
-        desc = "Show the top Ready card that nobody has claimed and nothing blocks",
+        flags = "--column",
+        usage = "dev board next [--column C]",
+        desc = "Show the top Ready card nobody has claimed, nothing blocks and no needs:human label marks, or with --column Backlog or Icebox the top such card there",
     },
     {
         words = { "board", "add" },

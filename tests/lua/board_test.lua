@@ -1159,6 +1159,15 @@ t.test("next shows the top card or says none", function()
     t.eq(result.output, "no ready cards")
 end)
 
+t.test("next --column takes Backlog or Icebox and refuses other columns", function()
+    local backend = fake(sample())
+    t.eq(commands.run("next", { "--column", "backlog" }, backend).message, nil)
+    t.eq(commands.run("next", { "--column", "done" }, backend).code, 2)
+    t.eq(commands.run("next", { "--column" }, backend).code, 2)
+    t.eq(commands.run("next", { "extra" }, backend).code, 2)
+    t.eq(commands.run("next", { "--column", "backlog" }, fake({})).output, "no cards in Backlog")
+end)
+
 local NOW = assert(box.parse_time("2026-10-27T12:00:00Z"))
 
 local function aged(columns, days, labels)
@@ -1740,12 +1749,21 @@ t.test("next asks for the unclaimed unblocked top of Ready", function()
     t.eq(out, "11111111  Ready  1 Pomodoro  docs  First\n")
     t.ok(
         read(root, "calls"):find(
-            "/api/boards/board-1/tasks?limit=1&ready=true&claimed=false&column_id=col-ready",
+            "/api/boards/board-1/tasks?limit=50&claimed=false&ready=true&column_id=col-ready",
             1,
             true
         ),
         read(root, "calls")
     )
+end)
+
+t.test("next skips a card held by a blocker that is not in Done", function()
+    local root, home = sandbox({
+        links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]',
+    })
+    local out, code = dev(root, home, { "board", "next" })
+    t.ok(code == 0, out)
+    t.eq(out, "no ready cards\n")
 end)
 
 t.test("add posts the card to the named column", function()
