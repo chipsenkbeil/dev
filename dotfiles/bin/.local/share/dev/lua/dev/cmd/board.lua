@@ -535,6 +535,9 @@ function commands.add(backend, args)
     local flags, words = parse(args, {
         ["--column"] = true,
         ["--description"] = true,
+        ["--problem"] = true,
+        ["--change"] = true,
+        ["--out-of-scope"] = true,
         ["--size"] = true,
         ["--label"] = true,
         ["--checks"] = true,
@@ -545,6 +548,12 @@ function commands.add(backend, args)
     end
     if #words == 0 then
         return usage("needs a card name")
+    end
+    local sectioned = flags["--problem"] or flags["--change"] or flags["--out-of-scope"]
+    if sectioned and flags["--description"] then
+        return usage(
+            "--description holds the whole text, so it cannot go with --problem, --change or --out-of-scope"
+        )
     end
     local labels
     for _, label in ipairs(flags["--label"] or {}) do
@@ -607,8 +616,20 @@ function commands.add(backend, args)
         )
     end
     local description = flags["--description"]
-    if column ~= roles.icebox then
+    if sectioned then
+        description = board.compose(flags["--problem"], flags["--change"], flags["--out-of-scope"])
+    elseif column ~= roles.icebox then
         description = board.scaffold(description)
+    end
+    if column == roles.backlog then
+        local missing = board.backlog_missing(description)
+        if #missing > 0 then
+            return usage(
+                "a card needs card format v2 before it enters Backlog, and this one lacks "
+                    .. table.concat(missing, ", ")
+                    .. "; pass --problem, or add it to Icebox"
+            )
+        end
     end
     if column == roles.ready then
         local missing = board.missing(description, #outcomes)
@@ -616,7 +637,7 @@ function commands.add(backend, args)
             return usage(
                 "a card needs card format v2 before it enters Ready, and this one lacks "
                     .. table.concat(missing, ", ")
-                    .. "; add it to Backlog or pass a full --description and --done-when"
+                    .. "; add it to Backlog or pass --problem, --change, --out-of-scope and --done-when"
             )
         end
     end
@@ -642,7 +663,7 @@ function commands.add(backend, args)
     if not card then
         return failure(message)
     end
-    local prose = flags["--description"]
+    local prose = flags["--description"] or (sectioned and description)
     if #outcomes > 0 then
         prose = (prose or "") .. "\n## Done when\n" .. table.concat(outcomes, "\n")
     end
@@ -1016,6 +1037,17 @@ function commands.move(backend, args)
                 .. why
                 .. " and cannot enter Ready; size it with dev board size CARD 1, 2 or 3"
         )
+    end
+    if column == roles.backlog then
+        local missing = board.backlog_missing(card.description)
+        if #missing > 0 then
+            return failure(
+                card.id:sub(1, board.MIN_PREFIX)
+                    .. " is not in card format v2 and cannot enter Backlog; it lacks "
+                    .. table.concat(missing, ", ")
+                    .. "; fix the description with dev board edit"
+            )
+        end
     end
     if column == roles.ready then
         local missing = board.missing(card.description, #card.outcomes)

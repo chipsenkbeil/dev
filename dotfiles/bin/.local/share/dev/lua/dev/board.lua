@@ -461,19 +461,66 @@ function M.split_checklist(description)
     return items, rest
 end
 
----List what a card lacks of card format v2: each missing heading, and Done when outcomes. The
----outcomes are 3 to 7 subtasks, and a card with none is accepted when its description has a v1
----`## Done when` checklist item.
----@param description string? the card's description
----@param outcomes integer how many outcomes the card has
----@return string[] missing the problems, empty when the card follows the format
-function M.missing(description, outcomes)
-    local seen, items, current = {}, 0, nil
+local function sections(description)
+    local seen, filled, current = {}, {}, nil
     for line in lines_of(description) do
         local name = heading_of(line)
         if name then
             current = name
             seen[name] = true
+        elseif current and line:find("%S") then
+            filled[current] = true
+        end
+    end
+    return seen, filled
+end
+
+---Build a card format v2 description from the text of each section.
+---@param problem string? the Problem text
+---@param change string? the Change text
+---@param out_of_scope string? the Out of scope text
+---@return string description the three headings with their text
+function M.compose(problem, change, out_of_scope)
+    local texts = { problem, change, out_of_scope }
+    local parts = {}
+    for i, heading in ipairs(M.HEADINGS) do
+        local body = (texts[i] or ""):match("^%s*(.-)%s*$")
+        parts[i] = "## " .. heading .. "\n" .. (body ~= "" and body .. "\n" or "")
+    end
+    return table.concat(parts, "\n")
+end
+
+---List what a card lacks to enter Backlog: each missing v2 heading, and text under Problem.
+---@param description string? the card's description
+---@return string[] missing the problems, empty when the card may enter Backlog
+function M.backlog_missing(description)
+    local seen, filled = sections(description)
+    local missing = {}
+    for _, heading in ipairs(M.HEADINGS) do
+        if not seen[heading] then
+            missing[#missing + 1] = "## " .. heading
+        end
+    end
+    local problem = M.HEADINGS[1]
+    if seen[problem] and not filled[problem] then
+        missing[#missing + 1] = "text under ## " .. problem
+    end
+    return missing
+end
+
+---List what a card lacks of card format v2 to enter Ready: each missing or empty section, and
+---Done when outcomes. The outcomes are 3 to 7 subtasks, and a card with none is accepted when its
+---description has a v1 `## Done when` checklist item.
+---@param description string? the card's description
+---@param outcomes integer how many outcomes the card has
+---@return string[] missing the problems, empty when the card follows the format
+function M.missing(description, outcomes)
+    local seen, filled = sections(description)
+    local items, current = 0, nil
+    for line in lines_of(description) do
+        local name = heading_of(line)
+        if name then
+            current = name
         elseif current == DONE_WHEN and line:find("^%s*[-*]%s%[[ xX]%]%s+%S") then
             items = items + 1
         end
@@ -482,6 +529,8 @@ function M.missing(description, outcomes)
     for _, heading in ipairs(M.HEADINGS) do
         if not seen[heading] then
             missing[#missing + 1] = "## " .. heading
+        elseif not filled[heading] then
+            missing[#missing + 1] = "text under ## " .. heading
         end
     end
     if outcomes == 0 and items == 0 then

@@ -12,7 +12,7 @@ local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
-local SCAFFOLD = "## Problem\n\n## Change\n\n## Out of scope\n"
+local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
 
 local function executable(path, body)
@@ -207,7 +207,7 @@ t.test("a renamed board runs through the column map", function()
         "11111111  Inbox  unsized  -  B"
     )
     t.eq(commands.run("ls", { "--column", "doing" }, backend).code, 2)
-    t.eq(commands.run("add", { "C" }, backend).output, "added cccccccc Inbox")
+    t.eq(commands.run("add", { "C", "--problem", "x" }, backend).output, "added cccccccc Inbox")
 end)
 
 t.test("ls hides every finished column and discard picks the mapped one, else the first", function()
@@ -387,7 +387,7 @@ end)
 
 t.test("add defaults to Backlog and joins the words of the name", function()
     local backend = fake(sample())
-    local result = commands.run("add", { "A", "new", "card" }, backend)
+    local result = commands.run("add", { "A", "new", "card", "--problem", "x" }, backend)
     t.eq(result.output, "added cccccccc Backlog")
     t.eq(backend.calls[1], { "add", "A new card", "Backlog", SCAFFOLD, nil })
     result = commands.run(
@@ -402,10 +402,10 @@ end)
 t.test("add --size passes the colour its size word names", function()
     local backend = fake(sample())
     for word, color in pairs({ ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }) do
-        commands.run("add", { "X", "--size", word }, backend)
+        commands.run("add", { "X", "--problem", "x", "--size", word }, backend)
         t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", SCAFFOLD, color })
     end
-    commands.run("add", { "X", "--size", "UNSIZED" }, backend)
+    commands.run("add", { "X", "--problem", "x", "--size", "UNSIZED" }, backend)
     t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", SCAFFOLD, "white" })
     local result = commands.run("add", { "X", "--size", "4" }, backend)
     t.eq(result.code, 2)
@@ -459,9 +459,13 @@ end)
 
 t.test("add --label may repeat and drops a duplicate", function()
     local backend = fake(sample())
-    commands.run("add", { "X", "--label", "a", "--label", "needs:lead", "--label", "a" }, backend)
+    commands.run(
+        "add",
+        { "X", "--problem", "x", "--label", "a", "--label", "needs:lead", "--label", "a" },
+        backend
+    )
     t.eq(backend.calls[1], { "add", "X", "Backlog", SCAFFOLD, nil, { "a", "needs:lead" } })
-    commands.run("add", { "X" }, backend)
+    commands.run("add", { "X", "--problem", "x" }, backend)
     t.eq(backend.calls[2], { "add", "X", "Backlog", SCAFFOLD, nil, nil })
 end)
 
@@ -891,7 +895,10 @@ t.test(
             t.eq(commands.run("add", args, backend).code, 2)
         end
         t.eq(#backend.calls, 0)
-        t.eq(commands.run("add", { "X", "--column", "backlog" }, backend).code, nil)
+        t.eq(
+            commands.run("add", { "X", "--column", "backlog", "--problem", "x" }, backend).code,
+            nil
+        )
         local full =
             { "X", "--column", "ready", "--size", "3", "--description", V1, "--checks", "dev test" }
         t.eq(commands.run("add", full, backend).code, nil)
@@ -939,6 +946,113 @@ t.test("add scaffolds the v2 headings, fills Problem and keeps a text that has t
     t.eq(backend.calls[4], { "add", "X", "Icebox", nil, nil })
 end)
 
+t.test("add composes the three sections from --problem, --change and --out-of-scope", function()
+    local backend = fake(sample())
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "It breaks.", "--change", "- fix it", "--out-of-scope", "nothing" },
+        backend
+    )
+    t.eq(result.output, "added cccccccc Backlog")
+    t.eq(
+        backend.calls[1][4],
+        "## Problem\nIt breaks.\n\n## Change\n- fix it\n\n## Out of scope\nnothing\n"
+    )
+    commands.run("add", { "X", "--problem", "  only  " }, backend)
+    t.eq(backend.calls[2][4], "## Problem\nonly\n\n## Change\n\n## Out of scope\n")
+end)
+
+t.test("add refuses --description together with a section flag", function()
+    local backend = fake(sample())
+    for _, flag in ipairs({ "--problem", "--change", "--out-of-scope" }) do
+        local result = commands.run("add", { "X", "--description", "text", flag, "y" }, backend)
+        t.eq(result.code, 2)
+        t.ok(result.message:find("--description", 1, true), result.message)
+    end
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("add into Backlog without a Problem is refused before the backend is called", function()
+    local backend = fake(sample())
+    local result = commands.run("add", { "X" }, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("text under ## Problem", 1, true), result.message)
+    result = commands.run("add", { "X", "--change", "- do" }, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("text under ## Problem", 1, true), result.message)
+    result = commands.run("add", { "X", "--column", "backlog", "--out-of-scope", "n" }, backend)
+    t.eq(result.code, 2)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("add into Icebox stays free-form", function()
+    local backend = fake(sample())
+    t.eq(commands.run("add", { "X", "--column", "icebox" }, backend).code, nil)
+    t.eq(backend.calls[1], { "add", "X", "Icebox", nil, nil })
+    t.eq(
+        commands.run("add", { "X", "--column", "icebox", "--description", "loose" }, backend).code,
+        nil
+    )
+    t.eq(backend.calls[2], { "add", "X", "Icebox", "loose", nil })
+end)
+
+t.test("missing and backlog_missing count a heading with text, not an empty one", function()
+    t.eq(board.backlog_missing(V2), {})
+    t.eq(board.backlog_missing(SCAFFOLD), {})
+    t.eq(board.backlog_missing("## Problem\n\n## Change\nc\n## Out of scope\no"), {
+        "text under ## Problem",
+    })
+    t.eq(board.backlog_missing("## Problem\nx"), { "## Change", "## Out of scope" })
+    t.eq(board.backlog_missing(nil), { "## Problem", "## Change", "## Out of scope" })
+    t.eq(board.missing(V1, 0), {})
+    t.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3), {
+        "text under ## Change",
+    })
+    t.eq(board.missing("## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", 3), {
+        "text under ## Out of scope",
+    })
+    t.eq(board.missing(V2, 3), {})
+end)
+
+t.test("move to Ready refuses an empty Change or Out of scope and accepts all three", function()
+    for _, case in ipairs({
+        { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", "text under ## Change" },
+        { "## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", "text under ## Out of scope" },
+    }) do
+        local card = colored("green")
+        card.description = case[1]
+        card.outcomes =
+            { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
+        local backend = fake({ card })
+        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find(case[2], 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+    local card = colored("green")
+    card.description = V2
+    card.outcomes =
+        { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
+    t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+end)
+
+t.test("move to Backlog refuses a card without a Problem and names what is missing", function()
+    local card = colored("green")
+    card.description = "loose idea"
+    local backend = fake({ card })
+    local result = commands.run("move", { "cccccccc", "backlog" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("cannot enter Backlog", 1, true), result.message)
+    t.ok(result.message:find("## Problem", 1, true), result.message)
+    t.eq(#backend.calls, 0)
+    card.description = SCAFFOLD:gsub("x\n", "")
+    result = commands.run("move", { "cccccccc", "backlog" }, fake({ card }))
+    t.eq(result.code, 1)
+    t.ok(result.message:find("text under ## Problem", 1, true), result.message)
+    card.description = SCAFFOLD
+    t.eq(commands.run("move", { "cccccccc", "backlog" }, fake({ card })).code, nil)
+end)
+
 t.test("add to Ready refuses a description without the headings or a Done when item", function()
     local backend = fake(sample())
     local result = commands.run(
@@ -955,11 +1069,14 @@ end)
 
 t.test("add --checks gives the card one row per command", function()
     local backend = fake(sample())
-    local result =
-        commands.run("add", { "X", "--checks", "dev lint", "--checks", "dev test" }, backend)
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "x", "--checks", "dev lint", "--checks", "dev test" },
+        backend
+    )
     t.eq(result.output, "added cccccccc Backlog")
     t.eq(backend.opts.checks, { "dev lint", "dev test" })
-    result = commands.run("add", { "X", "--checks", "  " }, backend)
+    result = commands.run("add", { "X", "--problem", "x", "--checks", "  " }, backend)
     t.eq(result.code, 2)
     t.eq(commands.run("add", { "X", "--checks" }, backend).code, 2)
 end)
@@ -976,7 +1093,7 @@ t.test("add to Ready without a checks row names the missing row, or the missing 
     t.eq(result.code, 2)
     t.ok(result.message:find("no checks field", 1, true), result.message)
     t.ok(result.message:find("dev board init", 1, true), result.message)
-    result = commands.run("add", { "X", "--checks", "dev test" }, backend)
+    result = commands.run("add", { "X", "--problem", "x", "--checks", "dev test" }, backend)
     t.eq(result.code, 2)
     t.ok(result.message:find("no checks field", 1, true), result.message)
     t.eq(#backend.calls, 0)
@@ -1069,13 +1186,16 @@ end)
 
 t.test("add --done-when hands the outcomes to the backend and checks them", function()
     local backend = fake(sample())
-    local result =
-        commands.run("add", { "X", "--done-when", "A works", "--done-when", "B works" }, backend)
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "x", "--done-when", "A works", "--done-when", "B works" },
+        backend
+    )
     t.eq(result.output, "added cccccccc Backlog")
     t.eq(backend.opts.outcomes, { "A works", "B works" })
-    t.eq(commands.run("add", { "X", "--done-when", " " }, backend).code, 2)
+    t.eq(commands.run("add", { "X", "--problem", "x", "--done-when", " " }, backend).code, 2)
     t.eq(commands.run("add", { "X", "--done-when" }, backend).code, 2)
-    local many = { "X" }
+    local many = { "X", "--problem", "x" }
     for i = 1, 8 do
         many[#many + 1] = "--done-when"
         many[#many + 1] = "o" .. i
@@ -1102,7 +1222,7 @@ t.test("add --done-when hands the outcomes to the backend and checks them", func
     ready[#ready + 1] = "--done-when"
     ready[#ready + 1] = "c"
     t.eq(commands.run("add", ready, backend).code, nil)
-    result = commands.run("add", { "X", "--done-when", "see src/a.lua" }, backend)
+    result = commands.run("add", { "X", "--problem", "x", "--done-when", "see src/a.lua" }, backend)
     t.eq(result.warnings, { "card prose holds a path: src/a.lua" })
 end)
 
@@ -1975,6 +2095,8 @@ t.test("add --done-when posts one subtask per outcome after the card", function(
         "board",
         "add",
         "New",
+        "--problem",
+        "x",
         "--done-when",
         "A works",
         "--done-when",
@@ -2005,6 +2127,8 @@ t.test("a failed subtask names the card and what was not added, and is never que
         "board",
         "add",
         "New",
+        "--problem",
+        "x",
         "--done-when",
         "A",
         "--done-when",
@@ -2061,7 +2185,7 @@ end)
 
 t.test("add --size and size reach pomb with the id of the colour, not its label", function()
     local root, home = sandbox()
-    local out, code = dev(root, home, { "board", "add", "New", "--size", "3+" })
+    local out, code = dev(root, home, { "board", "add", "New", "--problem", "x", "--size", "3+" })
     t.eq(code, 0)
     t.eq(out, "added 11111111 Ready\n")
     local calls = read(root, "calls")
@@ -2101,7 +2225,8 @@ end)
 
 t.test("add --label and label reach pomb as the whole list", function()
     local root, home = sandbox()
-    local out, code = dev(root, home, { "board", "add", "New", "--label", "a", "--label", "b" })
+    local out, code =
+        dev(root, home, { "board", "add", "New", "--problem", "x", "--label", "a", "--label", "b" })
     t.eq(code, 0)
     t.eq(out, "added 11111111 Ready\n")
     t.ok(read(root, "calls"):find('"labels":["a","b"]', 1, true), read(root, "calls"))
@@ -2294,7 +2419,7 @@ end)
 t.test("a nonexistent column on the board is reported", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/detail.json", '{"id":"board-1","name":"dotfiles","columns":[]}'))
-    local out, code = dev(root, home, { "board", "add", "x" })
+    local out, code = dev(root, home, { "board", "add", "x", "--problem", "x" })
     t.eq(code, 1)
     t.ok(out:find("the board has no Backlog column", 1, true), out)
 end)
@@ -2791,7 +2916,8 @@ t.test(
     "add --checks on a Pomb board without the checks field is refused before any write",
     function()
         local root, home = sandbox({ fields = "[]" })
-        local out, code = dev(root, home, { "board", "add", "New", "--checks", "dev test" })
+        local out, code =
+            dev(root, home, { "board", "add", "New", "--problem", "x", "--checks", "dev test" })
         t.eq(code, 2)
         t.ok(out:find("no checks field", 1, true), out)
         t.eq(read(root, "calls"):find("-X POST", 1, true), nil)
