@@ -86,6 +86,10 @@ local function fake(cards, times)
         calls[#calls + 1] = { "set_description", id, text, fence }
         return true
     end
+    function backend:set_name(id, name, fence)
+        calls[#calls + 1] = { "set_name", id, name, fence }
+        return true
+    end
     function backend:set_checks(id, runs, fence)
         calls[#calls + 1] = { "set_checks", id, runs, fence }
         return true
@@ -461,6 +465,19 @@ t.test("edit sends the whole new description and prints one line", function()
     local result = commands.run("edit", { "11111111-a", "## Problem\nnew plan" }, backend)
     t.eq(result.output, "edited 11111111")
     t.eq(backend.calls[1], { "set_description", ID_A, "## Problem\nnew plan", nil })
+end)
+
+t.test("rename sends the new title and prints renamed", function()
+    local backend = fake(sample())
+    local result = commands.run("rename", { "11111111-a", "Better", "title" }, backend)
+    t.eq(result.output, "renamed 11111111")
+    t.eq(backend.calls[1], { "set_name", ID_A, "Better title", nil })
+    t.eq(commands.run("rename", { "11111111-a" }, backend).code, 2)
+    t.eq(commands.run("rename", { "11111111-a", "  " }, backend).code, 2)
+    t.eq(commands.run("rename", { "11111111-a", "x", "--force" }, backend).code, 2)
+    t.eq(commands.run("rename", { "11111111-a", 'say "hi"' }, backend).code, 2)
+    t.eq(commands.run("rename", { "deadbeef", "x" }, backend).code, 1)
+    t.eq(#backend.calls, 1)
 end)
 
 t.test("checks replaces the rows with one row per command", function()
@@ -1098,6 +1115,8 @@ t.test("move and edit refuse a needs:human card, and label --remove still frees 
     t.ok(result.message:find("needs:human", 1, true), result.message)
     result = commands.run("edit", { "11111111-a", "text" }, backend)
     t.eq(result.code, 1)
+    result = commands.run("rename", { "11111111-a", "text" }, backend)
+    t.eq(result.code, 1)
     t.eq(#backend.calls, 0)
     t.eq(commands.run("note", { "11111111-a", "hello" }, backend).output, "noted 11111111")
     result = commands.run("label", { "11111111-a", "--remove", "needs:human" }, backend)
@@ -1678,6 +1697,20 @@ t.test("outcome queues a tick but not an append when the write cannot reach Pomb
     t.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(home .. "/state/dev/boards/dotfiles.queue"))
     t.ok(queued:find('"outcome"', 1, true) and queued:find('"--tick"', 1, true), queued)
+end)
+
+t.test("rename is queued while Pomb is unreachable", function()
+    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    executable(
+        root .. "/bin/curl",
+        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/*) cat >/dev/null; exit 28 ;; esac\n'
+            .. CURL:gsub("^#!/bin/sh\n", "")
+    )
+    local out, code = dev(root, home, { "board", "rename", "11111111", "Better", "title" })
+    t.eq(code, 0)
+    t.eq(out, "queued: Pomb unreachable, will sync\n")
+    local queued = assert(fs.read(home .. "/state/dev/boards/dotfiles.queue"))
+    t.ok(queued:find('"rename"', 1, true) and queued:find('"Better"', 1, true), queued)
 end)
 
 t.test("outcome sends the claim's fence on the subtask call", function()

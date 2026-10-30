@@ -286,6 +286,12 @@ return {
         desc = "Replace a card's description with the text of --file PATH or of standard input",
     },
     {
+        words = { "board", "rename" },
+        handler = "lua",
+        usage = "dev board rename CARD TEXT",
+        desc = "Set a card's title to TEXT",
+    },
+    {
         words = { "board", "checks" },
         handler = "lua",
         usage = "dev board checks CARD CMD...",

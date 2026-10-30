@@ -182,6 +182,18 @@ t.test("edit replaces a local card's description from a file or standard input",
     t.eq(out, a .. "  Backlog  Unsized  -  Card\n\nfrom standard input\n\nno comments\n")
 end)
 
+t.test("rename sets a local card's title and refuses a blank one", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card" })))
+    local out, code = dev(root, home, { "board", "rename", a, "Better", "title" })
+    t.eq(code, 0, out)
+    t.eq(out, "renamed " .. a .. "\n")
+    t.eq(document(file_of(home)).cards[1].name, "Better title")
+    out, code = dev(root, home, { "board", "rename", a, " " })
+    t.eq(code, 2, out)
+    t.eq(document(file_of(home)).cards[1].name, "Better title")
+end)
+
 t.test("edit refuses empty text, a missing file and an extra word", function()
     local root, home = local_board()
     local a = prefix_of(

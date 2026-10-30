@@ -44,6 +44,7 @@ local M = {}
 ---@field add_outcome fun(self: dev.board.Backend, id: string, text: string, fence: integer?): boolean?, string? an outcome appended to the card, checked against the claim's fence when one is given
 ---@field set_outcome fun(self: dev.board.Backend, id: string, outcome: string, fields: {name: string?, done: boolean?}, fence: integer?): boolean?, string? the wording or the tick of the outcome with that id changed, checked against the claim's fence when one is given
 ---@field set_description fun(self: dev.board.Backend, id: string, text: string, fence: integer?): boolean?, string? the card's description replaced, checked against the claim's fence when one is given
+---@field set_name fun(self: dev.board.Backend, id: string, name: string, fence: integer?): boolean?, string? the card's title replaced, checked against the claim's fence when one is given
 ---@field set_checks fun(self: dev.board.Backend, id: string, runs: string[], fence: integer?): boolean?, string? the card's checks rows replaced by one row per command, checked against the claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts: dev.board.NoteOpts?): boolean?, string? a comment added to the card, of kind agent unless opts names one, checked against the claim's fence when one is given
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first

@@ -701,6 +701,19 @@ function Backend:set_description(id, text, fence)
     return true
 end
 
+function Backend:set_name(id, name, fence)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local done
+    done, message = self:__request("PATCH", "/api/tasks/" .. id, { name = name }, fence)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:set_checks(id, runs, fence)
     local ok, message = self:__load()
     if not ok then

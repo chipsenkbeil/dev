@@ -63,6 +63,7 @@ local QUEUE_RULES = {
     label = { idempotent = true },
     link = { idempotent = true },
     edit = { idempotent = true },
+    rename = { idempotent = true },
     checks = { idempotent = true },
     outcome = { idempotent = false },
 }
@@ -1295,6 +1296,39 @@ function commands.edit(backend, args)
         output = "edited " .. card.id:sub(1, board.MIN_PREFIX),
         warnings = board.prose_warnings(args[2]),
     }
+end
+
+function commands.rename(backend, args)
+    if #args < 2 then
+        return usage("needs a card and the new title")
+    end
+    for pos = 2, #args do
+        if args[pos]:sub(1, 1) == "-" then
+            return usage("unknown flag " .. args[pos])
+        end
+    end
+    local name = table.concat(args, " ", 2)
+    if not name:find("%S") or #name > NAME_CHARS or not name:find(NAME_PATTERN) then
+        return usage(
+            "a title is one line of up to "
+                .. NAME_CHARS
+                .. " characters, with no quotes or backslashes"
+        )
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held_back = owner_holds(card)
+    if held_back then
+        return held_back
+    end
+    local held = claims.read(card.id)
+    local ok, message = backend:set_name(card.id, name, held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    return { output = "renamed " .. card.id:sub(1, board.MIN_PREFIX) }
 end
 
 function commands.checks(backend, args)
