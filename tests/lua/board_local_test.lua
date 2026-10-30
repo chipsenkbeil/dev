@@ -222,6 +222,33 @@ t.test("rename sets a local card's title and refuses a blank one", function()
     t.eq(document(file_of(home)).cards[1].name, "Better title")
 end)
 
+t.test("discard notes the reason, labels the card and moves it to Done", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card" })))
+    local out, code = dev(root, home, { "board", "discard", a, "--reason", "Not needed" })
+    t.eq(code, 0, out)
+    t.eq(out, "discarded " .. a .. "\n")
+    local card = document(file_of(home)).cards[1]
+    t.eq(card.comments[1].kind, "decision")
+    t.eq(card.comments[1].body, "Not needed")
+    t.eq(card.labels[1], "discarded")
+    out = dev(root, home, { "board", "ls", "--column", "Done" })
+    t.ok(out:find(a, 1, true), out)
+end)
+
+t.test("discard refuses a needs:human card and writes nothing", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "Card", "--column", "blocked" })))
+    local out, code = dev(root, home, { "board", "label", a, "needs:human" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "discard", a, "--reason", "Dropped" })
+    t.eq(code, 1, out)
+    t.ok(out:find("needs:human", 1, true), out)
+    local card = document(file_of(home)).cards[1]
+    t.eq(#(card.comments or {}), 0)
+    t.eq(card.labels[1], "needs:human")
+end)
+
 t.test("edit refuses empty text, a missing file and an extra word", function()
     local root, home = local_board()
     local a = prefix_of(

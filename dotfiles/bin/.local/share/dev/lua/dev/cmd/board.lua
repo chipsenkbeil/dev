@@ -1058,6 +1058,56 @@ function commands.move(backend, args)
     return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
 end
 
+local DISCARD_LABEL = "discarded"
+
+---Close a card as dropped: the reason as a decision note, the label, then the move to Done.
+---Each step is a command of its own, so when Pomb cannot take a step the steps left are queued.
+function commands.discard(backend, args)
+    local flags, words = parse(args, { ["--reason"] = true })
+    if not flags then
+        return words
+    end
+    if #words ~= 1 then
+        return usage("needs a card, and an optional --reason TEXT")
+    end
+    local reason = flags["--reason"]
+    if reason and reason:find("^%s*$") then
+        return usage("--reason needs text")
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local held_back = owner_holds(card)
+    if held_back then
+        return held_back
+    end
+    local steps = {}
+    if reason then
+        steps[#steps + 1] = { sub = "note", args = { words[1], KIND_FLAG, "decision", reason } }
+    end
+    steps[#steps + 1] = { sub = "label", args = { words[1], DISCARD_LABEL } }
+    steps[#steps + 1] = { sub = "move", args = { words[1], board.DONE } }
+    local warnings = {}
+    for i, step in ipairs(steps) do
+        local result = commands[step.sub](backend, step.args)
+        if result.message then
+            local left = {}
+            for j = i, #steps do
+                left[#left + 1] = steps[j]
+            end
+            return { message = result.message, code = result.code, queue = left }
+        end
+        for _, line in ipairs(result.warnings or {}) do
+            warnings[#warnings + 1] = line
+        end
+    end
+    return {
+        output = "discarded " .. card.id:sub(1, board.MIN_PREFIX),
+        warnings = warnings,
+    }
+end
+
 function commands.size(backend, args)
     if #args ~= 2 then
         return usage("needs a card and a size")
@@ -1708,7 +1758,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `links`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `discard`, `size`, `label`, `edit`, `checks`, `outcome`, `link`, `links`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil
@@ -2280,18 +2330,30 @@ for sub in pairs(commands) do
         local result = M.run(sub, args, backend, nil, sub == "ls" and ui.context() or nil)
         if result.message then
             local note = sub == "note" and (ctx.args[2] == EDIT_FLAG or ctx.args[2] == DELETE_FLAG)
+            local queued = result.queue
             if
-                pending
+                not queued
                 and QUEUE_RULES[sub]
                 and not note
                 and not (sub == "outcome" and args[2] == CONVERT_FLAG)
-                and pomb.unreachable(result.message, idempotent(sub, args))
             then
-                local ok, why = pending:push(sub, args)
-                if not ok then
-                    verb.die(
-                        "dev: " .. result.message .. "; and the change could not be queued: " .. why
-                    )
+                queued = { { sub = sub, args = args } }
+            end
+            if
+                pending
+                and queued
+                and pomb.unreachable(result.message, idempotent(queued[1].sub, queued[1].args))
+            then
+                for _, entry in ipairs(queued) do
+                    local ok, why = pending:push(entry.sub, entry.args)
+                    if not ok then
+                        verb.die(
+                            "dev: "
+                                .. result.message
+                                .. "; and the change could not be queued: "
+                                .. why
+                        )
+                    end
                 end
                 print(QUEUED_NOTICE)
                 return 0

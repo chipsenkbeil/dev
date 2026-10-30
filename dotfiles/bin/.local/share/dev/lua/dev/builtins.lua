@@ -305,6 +305,13 @@ return {
         desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox",
     },
     {
+        words = { "board", "discard" },
+        handler = "lua",
+        flags = "--reason",
+        usage = "dev board discard CARD [--reason TEXT]",
+        desc = "Drop a card: post TEXT as a decision note, label it discarded and move it to Done",
+    },
+    {
         words = { "board", "size" },
         handler = "lua",
         usage = "dev board size CARD S",
