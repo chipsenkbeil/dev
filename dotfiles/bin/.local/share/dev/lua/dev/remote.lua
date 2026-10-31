@@ -23,6 +23,7 @@ local MACHINE_VERBS = {
 local MACHINE_NOUNS = { tools = true, box = true, board = true, pi = true, antinote = true }
 local JOB_NAME = "^[A-Za-z0-9_.-]+$"
 local LOCAL_HINT = "rerun, or pass --local to run it here"
+local AGENT_HINT = "an agent runs it on ci, so fix ci and rerun"
 
 ---@class dev.remote.Run
 ---@field words string[] the command words, a noun and its subcommand as two
@@ -54,11 +55,14 @@ end
 
 ---Check whether `ci` lists a job for the command, for the remote default.
 ---A project with no pipeline file has no job and `ci` is not asked. A missing
----`ci` or a failed listing ends the process with the `--local` hint.
+---`ci` or a failed listing ends the process with the hint, `LOCAL_HINT` unless
+---the caller passes another.
 ---@param root string the project root
 ---@param words string[] the command words
+---@param hint string? the text added to a failed ci error, else `LOCAL_HINT`
 ---@return boolean
-function M.has_default_job(root, words)
+function M.has_default_job(root, words, hint)
+    hint = hint or LOCAL_HINT
     local job = table.concat(words, ".")
     if not job:find(JOB_NAME) then
         return false
@@ -72,10 +76,19 @@ function M.has_default_job(root, words)
         return false
     end
     if not devos.which("ci") then
-        stderr:write("dev: ci is not on PATH, ", LOCAL_HINT, "\n")
+        stderr:write("dev: ci is not on PATH, ", hint, "\n")
         os.exit(1)
     end
-    return M.has_job(root, job, nil, LOCAL_HINT)
+    return M.has_job(root, job, nil, hint)
+end
+
+---Check whether an agent's local run must be refused: the command is not
+---machine-local and `ci` lists its default job, which the agent runs on ci.
+---@param root string the project root
+---@param words string[] the command words
+---@return boolean
+function M.refuses_agent_local(root, words)
+    return not M.machine_local(words) and M.has_default_job(root, words, AGENT_HINT)
 end
 
 ---Check whether a pipeline lists a job.

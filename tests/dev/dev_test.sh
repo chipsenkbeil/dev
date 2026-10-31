@@ -7,7 +7,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
 export DOTFILES="$REPO"
-unset VERBOSE CI
+unset VERBOSE CI DEV_AGENT
 export DEV_REMOTE=0
 
 TMP="$(mktemp -d)"
@@ -891,7 +891,7 @@ if [ "$1" = -C ]; then
     shift 2
 fi
 case "$1" in
-jobs) printf '{"jobs":[{"name":"lint","targets":["%s"]},{"name":"test","targets":["%s"]},{"name":"widget.save","targets":["%s"]}]}\n' "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" ;;
+jobs) printf '{"jobs":[{"name":"lint","targets":["%s"]},{"name":"test","targets":["%s"]},{"name":"widget.save","targets":["%s"]},{"name":"check","targets":["%s"]},{"name":"gadget","targets":["%s"]}]}\n' "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" ;;
 run)
     printf 'ci -C %s' "$root" >>"$STUB_LOG"
     printf ' [%s]' "$@" >>"$STUB_LOG"
@@ -982,6 +982,38 @@ assert_eq "a __remote.lua runner replaces ci" "$(log)" ""
 out="$(cirun "$cip" --remote --detach lint 2>&1)"
 assert_contains "a __remote.lua runner sees --detach" "$out" "|true|"
 rm "$cip/.dev/__remote.lua"
+
+agent="$(project agent)"
+mkdir -p "$agent/.ci" "$agent/.dev"
+printf 'return {}\n' >"$agent/.ci/jobs.lua"
+git -C "$agent" init -q
+printf '#!/usr/bin/env bash\necho check ran\n' >"$agent/.dev/check.sh"
+printf '#!/usr/bin/env bash\n# local\necho gadget ran\n' >"$agent/.dev/gadget.sh"
+printf '#!/usr/bin/env bash\necho notes ran\n' >"$agent/.dev/notes.sh"
+chmod +x "$agent/.dev/check.sh" "$agent/.dev/gadget.sh" "$agent/.dev/notes.sh"
+touch "$TMP/ci-box"
+out="$(DEV_AGENT=w cirun "$agent" --local check 2>&1)"
+assert_eq "an agent's --local run of a verb with a ci job exits 2" "$?" "2"
+assert_contains "an agent's --local refusal names dev --remote" "$out" "dev check: DEV_AGENT is set, so it runs on ci; use dev --remote check"
+assert_not_contains "an agent's --local refusal runs nothing" "$out" "check ran"
+out="$(DEV_AGENT=w cirun "$agent" check 2>&1)"
+assert_eq "an agent's DEV_REMOTE=0 run of a verb with a ci job exits 2" "$?" "2"
+assert_contains "an agent's DEV_REMOTE=0 refusal names dev --remote" "$out" "use dev --remote check"
+out="$(DEV_AGENT=w cirun "$agent" --remote check 2>&1)"
+assert_eq "an agent's --remote run still exits with ci's status" "$?" "0"
+assert_contains "an agent's --remote run still goes to ci" "$(log)" "[--job] [check]"
+out="$(DEV_AGENT=w cirun "$agent" --local gadget 2>&1)"
+assert_contains "an agent's --local run of a # local verb runs here" "$out" "gadget ran"
+out="$(DEV_AGENT=w cirun "$agent" --local notes 2>&1)"
+assert_contains "an agent's --local run of a verb with no ci job runs here" "$out" "notes ran"
+out="$(DEV_AGENT=w CI=true cirun "$agent" --local check 2>&1)"
+assert_contains "CI=true runs an agent's --local verb here" "$out" "check ran"
+out="$(DEV_AGENT=w DEV_BOX_MARKER="$TMP/ci-box" cirun "$agent" --local check 2>&1)"
+assert_contains "the box marker runs an agent's --local verb here" "$out" "check ran"
+out="$(cirun "$agent" --local check 2>&1)"
+assert_contains "DEV_AGENT unset runs --local here" "$out" "check ran"
+out="$(DEV_AGENT='' cirun "$agent" --local check 2>&1)"
+assert_contains "an empty DEV_AGENT runs --local here" "$out" "check ran"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

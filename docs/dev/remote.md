@@ -2,8 +2,9 @@
 
 A command that has a ci job runs remote by default, so a forgotten flag never
 spikes the laptop. `dev test` and `dev --remote test` are the same, and
-`dev test --local` runs here. Both flags work anywhere before a `--`, and
-together they are a usage error (exit 2).
+`dev test --local` runs here, unless `DEV_AGENT` is set (see Agents below).
+Both flags work anywhere before a `--`, and together they are a usage error
+(exit 2).
 
 The default is `[remote] default = "remote"` or `"local"` in
 `~/.config/dev/config.toml` or the project's `.dev/config.toml`. The user file
@@ -66,6 +67,17 @@ ci -C <root> run --local --follow --job <job> -- <args>
 dev checks `ci jobs --json` first. A verb with no such job exits 1 with `no job
 named <job> in the project's default pipeline (.ci/jobs.lua), add one to run it
 with --remote`, and nothing runs. It never falls back to a local run.
+
+## Agents
+
+An agent sets `DEV_AGENT` to its workspace name. Under it, a local run of a
+verb with a default ci job is refused: `--local` and `DEV_REMOTE=0` exit 2,
+print a line that names the verb and `--remote`, and run nothing. The default
+remote run and `--remote` still go to ci. The refusal does not apply to a
+`# local` verb, to a machine-local verb, or inside a ci job or dev box (`CI=true`
+or the box marker), and an unset or empty `DEV_AGENT` changes nothing. When ci
+cannot be asked, the refusal fails with ci's error and the hint
+`an agent runs it on ci, so fix ci and rerun`.
 
 ## --detach
 
