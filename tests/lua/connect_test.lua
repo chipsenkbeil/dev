@@ -78,6 +78,20 @@ t.test("a named box never asks ci connect", function()
     fs.remove(root, { recursive = true })
 end)
 
+t.test("a connectable named ci-NAME execs ssh with that name as its own alias", function()
+    local root = sandbox()
+    assert(
+        fs.write(
+            root .. "/connect.json",
+            [[{"protocol":1,"connectables":[{"name":"ci-session-x","machine":"example-box","kind":"incus","address":"10.0.0.9","user":"dev","state":"running"}],"notes":[]}]]
+        )
+    )
+    local _, code = support.dev(root, { "connect", "ci-session-x" }, env())
+    t.eq(code, 0)
+    t.eq(calls(root), "ci box ls --json\nci connect sync\nci connect ls --json\nssh ci-session-x\n")
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("a name that is neither a box nor a connectable exits 3", function()
     local root = sandbox()
     local out, code = support.dev(root, { "connect", "nope" }, env())

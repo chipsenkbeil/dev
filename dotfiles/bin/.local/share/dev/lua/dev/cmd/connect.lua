@@ -91,6 +91,16 @@ local function exec(argv)
     return devos.EXEC_FAILED
 end
 
+---Name the ssh host that ci's config reaches a connectable by.
+---@param name string the connectable's name
+---@return string alias the name itself when it starts with `ci-`, else `ci-<name>`
+local function alias(name)
+    if name:sub(1, 3) == "ci-" then
+        return name
+    end
+    return "ci-" .. name
+end
+
 ---Refuse a field of the box that is missing or not a plain value.
 ---@param name string the box's name
 ---@param field string the field, `tailnet_name` or `ssh_user`
@@ -186,7 +196,7 @@ local function attach(found, opts)
 end
 
 ---@class dev.cmd.connect.Connectable
----@field name string what `ssh ci-<name>` reaches
+---@field name string what `ssh <alias>` reaches, the alias being the name or `ci-<name>`
 ---@field machine string? the machine it runs on
 ---@field kind string? what it is, such as `incus`, `tart` or `host`
 ---@field user string? the login name
@@ -397,7 +407,7 @@ local function run(ctx)
     local found
     for _, entry in ipairs(others) do
         if entry.name == choice and not has_box(boxes, choice) then
-            return exec({ "ssh", "ci-" .. entry.name })
+            return exec({ "ssh", alias(entry.name) })
         end
     end
     if choice == NEW_VALUE then
