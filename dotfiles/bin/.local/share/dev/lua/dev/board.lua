@@ -205,7 +205,10 @@ M.AUTHOR_CHARS = 80
 ---The prefix of the comment `check` writes, which no note may begin with.
 M.CHECK_PREFIX = "dev-check:"
 
-local RESERVED_PREFIXES = { M.CHECK_PREFIX }
+---The prefix of the comment `review` writes, which no note may begin with.
+M.REVIEW_PREFIX = "dev-review:"
+
+local RESERVED_PREFIXES = { M.CHECK_PREFIX, M.REVIEW_PREFIX }
 
 ---Say whether a comment body begins with a prefix only a dev verb writes.
 ---@param body string the comment body

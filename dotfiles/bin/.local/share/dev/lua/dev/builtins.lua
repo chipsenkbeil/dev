@@ -312,6 +312,13 @@ return {
         desc = "Run every checks row of a card as a plain command on the working-copy commit and record each result and the commit on the card, refusing a dirty git tree and a tree that changed mid-run; --expect-fail records rows that must fail",
     },
     {
+        words = { "board", "review" },
+        handler = "lua",
+        flags = "--kind --by --rev",
+        usage = "dev board review CARD --kind code|style|recheck --by NAME --rev REV",
+        desc = "Record on a card that NAME reviewed the commit REV as a code, style or recheck review, with its change id and commit id, refusing the card's claimant as reviewer and a REV that is not one commit",
+    },
+    {
         words = { "board", "allow" },
         handler = "lua",
         usage = "dev board allow CARD test-edits|ci-edits...|none",

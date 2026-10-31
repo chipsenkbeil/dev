@@ -11,6 +11,7 @@ local json = require("dev.json")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
+local review = require("dev.board.review")
 local store = require("dev.board.store")
 local text_width = require("dev.text").width
 local toml = require("dev.toml")
@@ -34,11 +35,15 @@ local EXPECT_FAIL_FLAG = "--expect-fail"
 local TIMEOUT_FLAG = "--timeout"
 local RESERVED_NOTE = "a note cannot begin with "
     .. board.CHECK_PREFIX
-    .. ", which dev board check writes"
+    .. ", which dev board check writes, or "
+    .. board.REVIEW_PREFIX
+    .. ", which dev board review writes"
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
 local KIND_FLAG = "--kind"
+local BY_FLAG = "--by"
+local REV_FLAG = "--rev"
 local GROUP_FLAG = "--group"
 local AS_FLAG = "--as"
 local HUMAN_ACTOR = "human"
@@ -1935,6 +1940,72 @@ function commands.check(backend, args)
         return failure(table.concat(lines, "\n"))
     end
     return { output = table.concat(lines, "\n") }
+end
+
+function commands.review(backend, args)
+    local flags, words = parse(args, { [KIND_FLAG] = true, [BY_FLAG] = true, [REV_FLAG] = true })
+    if not flags then
+        return words
+    end
+    if #words ~= 1 then
+        return usage("needs a card")
+    end
+    for _, flag in ipairs({ KIND_FLAG, BY_FLAG, REV_FLAG }) do
+        if not flags[flag] then
+            return usage("needs " .. flag)
+        end
+    end
+    local kind = flags[KIND_FLAG]
+    if not index_of(review.KINDS, kind) then
+        return usage(
+            "unknown kind " .. kind .. ", the kinds are " .. table.concat(review.KINDS, ", ")
+        )
+    end
+    local by, why = agent_name(flags[BY_FLAG])
+    if not by then
+        return why
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    if by == card.claimant then
+        return failure(short .. " is claimed by " .. by .. ", so it cannot review its own change")
+    end
+    if not backend.root then
+        return failure("dev board review needs the project's root")
+    end
+    local rev, message = review.resolve(backend.root, flags[REV_FLAG])
+    if not rev then
+        return failure(message)
+    end
+    local held = claims.read(card.id)
+    local ok
+    ok, message = backend:note(
+        card.id,
+        review.record(kind, by, rev),
+        held and held.fence,
+        { kind = "status" }
+    )
+    if not ok then
+        return failure(
+            string.format(
+                "the review was NOT recorded on %s (%s); the board may or may not hold it, so read dev board notes before repeating it",
+                short,
+                message
+            )
+        )
+    end
+    return {
+        output = string.format(
+            "recorded %s review by %s on %s at commit %s",
+            kind,
+            by,
+            short,
+            rev.commit:sub(1, COMMIT_CHARS)
+        ),
+    }
 end
 
 ---Read the words of an allow command.

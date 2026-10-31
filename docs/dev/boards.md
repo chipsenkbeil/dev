@@ -23,6 +23,7 @@ dev board edit 8af0e001 < plan.md
 dev board checks 8af0e001 "dev --remote lint" "dev --remote test"
 dev board check 8af0e001
 dev board check 8af0e001 --expect-fail --timeout 2400
+dev board review 8af0e001 --kind code --by reviewer --rev @
 dev board allow 8af0e001 test-edits ci-edits
 dev board allow 8af0e001 none
 dev board tests 8af0e001 one_should_be_one tests::two
@@ -914,6 +915,27 @@ never handles the API.
   `note` refuses any text that begins with `dev-check:` (any case, after
   leading space), and `note --edit` and `--delete` refuse a comment that holds
   or would hold it (exit 1).
+- `review CARD --kind code|style|recheck --by NAME --rev REV`: Records that
+  NAME reviewed the commit REV, as one `status` comment on the card that begins
+  with a reserved first line and has no other:
+
+  ```
+  dev-review: kind=code by=<NAME> commit=<full commit id> change=<change id, - in git>
+  ```
+
+  All three flags are required (a missing one or an unknown kind is exit 2, and
+  the message lists the kinds). REV is a jj revset in a jj project and a git
+  revision in a git one, and it must name exactly one commit, so a revset of
+  many commits, a word that starts with `-` and a name that resolves to nothing
+  are refused (exit 1). NAME is an agent name as `take --as` takes, and the
+  card's claimant is refused as the reviewer (exit 1), to keep a claimant from
+  reviewing its own change. An unclaimed card takes any NAME. It prints
+  `recorded KIND review by NAME on <id prefix> at commit <12 characters>`. Like
+  `check`, it is never queued: if the comment cannot be written the command
+  exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
+  come after Pomb stored it, so read `notes` before repeating. `note` refuses
+  `dev-review:` as it does `dev-check:`, and `note --edit` and `--delete` refuse
+  a comment that holds it. It does not judge the review.
 - `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
   array of the words, each `test-edits` or `ci-edits` with duplicates dropped,
   and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with
