@@ -2,6 +2,8 @@
 set -u
 
 entry=$1
+pass_timeout_secs=10
+here=$(cd "$(dirname "$0")" && pwd)
 
 lock=${DEV_PASS_LOCK:-/tmp/dev-pass-$(id -u).lock}
 poll_secs=0.1
@@ -33,6 +35,16 @@ take_over() {
     fi
 }
 
+cached=$(bash "$here/keychain.sh" get "$entry" | head -n 1)
+case $cached in
+'' | *[!A-Za-z0-9._~+/=-]*) ;;
+*)
+    printf '%s\nkeychain\n' "$cached"
+    exit 0
+    ;;
+esac
+cached=
+
 n=0
 orphan=0
 until mkdir "$lock" 2>/dev/null; do
@@ -59,5 +71,23 @@ done
 held=1
 date +%s >"$lock/at"
 printf '%s\n' "$$" >"$lock/pid"
+cached=$(bash "$here/keychain.sh" get "$entry" | head -n 1)
+case $cached in
+'' | *[!A-Za-z0-9._~+/=-]*) ;;
+*)
+    printf '%s\nkeychain\n' "$cached"
+    release
+    exit 0
+    ;;
+esac
+cached=
 
-PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch" timeout 10 pass show "$entry" </dev/null 2>/dev/null
+out=$(PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch" timeout "$pass_timeout_secs" pass show "$entry" </dev/null 2>/dev/null)
+code=$?
+if [ "$code" = 0 ]; then
+    first=${out%%$'\n'*}
+    printf '%s\n' "$first"
+    printf '%s\n' "$first" | bash "$here/keychain.sh" put "$entry"
+fi
+release
+exit "$code"

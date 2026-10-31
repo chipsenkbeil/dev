@@ -9,6 +9,7 @@ local ui = require("dev.ui")
 local support = require("support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
+local OLD_TOKEN = "pomb_OLDtoken9876543210"
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
@@ -2322,6 +2323,7 @@ local function sandbox(opts)
         assert(fs.write(root .. "/" .. name, body))
     end
     executable(root .. "/bin/curl", CURL)
+    executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
     executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. devos.which("sleep") .. " 0.2\n")
     executable(
         root .. "/bin/pass",
@@ -2582,6 +2584,195 @@ t.test("a process reads each pass entry once", function()
     t.eq(code, 0, out)
     t.eq(out, "true\n")
     t.eq(select(2, read(root, "calls"):gsub("pass show", "")), 1)
+end)
+
+local SECURITY = [[#!/bin/sh
+printf 'security %s\n' "$*" >>"$ROOT/seccalls"
+case "$1" in
+find-generic-password)
+    [ -f "$ROOT/kc" ] || exit 44
+    cat "$ROOT/kc"
+    ;;
+-i)
+    read -r line
+    service=${line#*-s \"}
+    printf 'put %s\n' "${service%%\"*}" >>"$ROOT/seccalls"
+    token=${line##*-w \"}
+    printf '%s\n' "${token%\"}" >"$ROOT/kc"
+    ;;
+delete-generic-password)
+    rm -f "$ROOT/kc"
+    ;;
+esac
+]]
+
+local function with_security(root, body)
+    executable(root .. "/bin/security", body or SECURITY)
+end
+
+local function passlock_once(root, entry)
+    return shell(
+        root,
+        root .. "/pass.lock",
+        "bash " .. SHARE .. "passlock.sh " .. (entry or "Agents/x") .. "; echo code=$?"
+    )
+end
+
+local function occurrences(text, word)
+    return select(2, text:gsub(word, ""))
+end
+
+t.test("a pass read is stored in the Keychain and the next read skips pass", function()
+    local root = sandbox()
+    with_security(root)
+    local out = passlock_once(root)
+    t.eq(out, TOKEN .. "\ncode=0\n")
+    t.eq(read(root, "kc"), TOKEN .. "\n")
+    out = passlock_once(root)
+    t.eq(out, TOKEN .. "\nkeychain\ncode=0\n")
+    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+end)
+
+t.test("the token is in no argument list handed to security", function()
+    local root = sandbox()
+    with_security(root)
+    passlock_once(root)
+    passlock_once(root)
+    local seen = read(root, "seccalls")
+    t.ok(seen:find("security -i", 1, true), seen)
+    t.eq(seen:find(TOKEN, 1, true), nil)
+end)
+
+t.test("each pass entry has its own Keychain item", function()
+    local root = sandbox()
+    with_security(root)
+    passlock_once(root, "Agents/x")
+    assert(os.remove(root .. "/kc"))
+    passlock_once(root, "Agents/y")
+    local seen = read(root, "seccalls")
+    t.ok(seen:find("put dev-pomb-token:Agents/x\n", 1, true), seen)
+    t.ok(seen:find("put dev-pomb-token:Agents/y\n", 1, true), seen)
+    t.ok(seen:find(" -s dev-pomb-token:Agents/y -w\n", 1, true), seen)
+end)
+
+t.test("a failing Keychain falls back to pass and never fails the read", function()
+    local root = sandbox()
+    with_security(root, "#!/bin/sh\nexit 1\n")
+    t.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
+    t.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
+    t.eq(occurrences(read(root, "calls"), "pass show"), 2)
+end)
+
+t.test("a Keychain item that is not plain text is ignored", function()
+    local root = sandbox()
+    with_security(root)
+    assert(fs.write(root .. "/kc", "bad token; evil\n"))
+    t.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
+    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+end)
+
+t.test("a read that finds the Keychain filled after the lock releases the lock", function()
+    local root = sandbox()
+    with_security(
+        root,
+        "#!/bin/sh\n"
+            .. 'if [ "$1" = find-generic-password ]; then\n'
+            .. '    if [ -f "$ROOT/seen" ]; then echo "'
+            .. TOKEN
+            .. '"; exit 0; fi\n'
+            .. '    : >"$ROOT/seen"; exit 44\n'
+            .. "fi\n"
+    )
+    t.eq(passlock_once(root), TOKEN .. "\nkeychain\ncode=0\n")
+    t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    t.eq(fs.read(root .. "/pass.lock/pid"), nil)
+    t.eq(fs.exists(root .. "/pass.lock"), false)
+end)
+
+t.test("dropping an item that is already gone succeeds and a failing delete does not", function()
+    local root = sandbox()
+    local drop = "bash " .. SHARE .. "keychain.sh drop Agents/x; echo code=$?"
+    with_security(root, "#!/bin/sh\nexit 44\n")
+    t.eq(shell(root, root .. "/pass.lock", drop), "code=0\n")
+    with_security(root, "#!/bin/sh\nexit 1\n")
+    t.eq(shell(root, root .. "/pass.lock", drop), "code=1\n")
+end)
+
+t.test("a refused pass read stores nothing", function()
+    local root = sandbox({ locked = true })
+    with_security(root)
+    t.ok(passlock_once(root):find("code=1", 1, true))
+    t.eq(fs.read(root .. "/kc"), nil)
+end)
+
+t.test("a cached token Pomb refuses is dropped and read again from pass once", function()
+    local root, home = sandbox()
+    with_security(root)
+    assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
+    executable(root .. "/bin/curl_real", CURL)
+    executable(
+        root .. "/bin/curl",
+        "#!/bin/sh\n"
+            .. 'cat >"$ROOT/in"\n'
+            .. 'printf "curl %s\\n" "$*" >>"$ROOT/calls"\n'
+            .. 'if grep -q "'
+            .. OLD_TOKEN
+            .. '" "$ROOT/in"; then printf \'{"message":"bad"}\\n401\'; exit 0; fi\n'
+            .. 'exec "$ROOT/bin/curl_real" "$@" <"$ROOT/in"\n'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 0, out)
+    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    t.ok(read(root, "seccalls"):find("delete-generic-password", 1, true), read(root, "seccalls"))
+    t.eq(read(root, "kc"), TOKEN .. "\n")
+end)
+
+t.test("a cached token Pomb refuses stays reported when the delete fails", function()
+    local root, home = sandbox()
+    with_security(root, SECURITY:gsub('rm %-f "%$ROOT/kc"', "exit 1", 1))
+    assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
+    executable(
+        root .. "/bin/curl",
+        '#!/bin/sh\ncat >/dev/null\nprintf \'{"message":"bad"}\\n401\'\n'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.ok(out:find("pomb answered 401", 1, true), out)
+    t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+end)
+
+t.test("a token read fresh from pass that Pomb refuses is not retried", function()
+    local root, home = sandbox()
+    with_security(root)
+    executable(
+        root .. "/bin/curl",
+        '#!/bin/sh\ncat >/dev/null\nprintf \'curl %s\\n\' "$*" >>"$ROOT/calls"\n'
+            .. 'printf \'{"message":"bad"}\\n401\'\n'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.ok(out:find("pomb answered 401", 1, true), out)
+    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+end)
+
+t.test("the keep-alive loop drops a refused cached token", function()
+    local root = sandbox()
+    with_security(root)
+    assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
+    assert(fs.write(root .. "/state", "fence=7\n"))
+    executable(root .. "/bin/curl", "#!/bin/sh\ncat >/dev/null\nprintf 401\n")
+    shell(
+        root,
+        root .. "/pass.lock",
+        "bash "
+            .. SHARE
+            .. "keepalive.sh "
+            .. root
+            .. "/state card 7 3 https://pomb.example Agents/x 0",
+        "600"
+    )
+    t.ok(read(root, "seccalls"):find("delete-generic-password", 1, true), read(root, "seccalls"))
+    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
 t.test("the keep-alive loop reads the token under the same lock", function()

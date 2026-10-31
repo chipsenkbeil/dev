@@ -86,6 +86,26 @@ hardware key. It waits up to 2 minutes for the lock and then fails like a timeou
 A lock whose owner pid is gone, or that is older than 30 seconds, is taken
 over. A dev process reads each entry once, while the keep-alive loop reads it
 on every tick.
+
+On a machine with `/usr/bin/security` (macOS), the Keychain answers before
+`pass`. `board/keychain.sh` keeps the token as a generic password named
+`dev-pomb-token:<entry>`, one item per `pass` entry. `passlock.sh` reads it
+first, with no lock and no hardware key. On a miss it reads `pass` under the lock
+and stores the token.
+
+The item is created through `security -i`, which takes the command on
+standard input to keep the token out of every argument list. It is created
+with `-T /usr/bin/security` to make reading it raise no prompt.
+
+Every Keychain call runs under a 3 second timeout, and any failure, a locked
+keychain included, falls through to `pass`. A machine without `security`
+reads `pass` alone.
+
+When Pomb answers 401 to a token from the Keychain, dev deletes the item,
+reads `pass` once and repeats the request once, to replace a rotated token.
+A delete that fails ends the retry, and the 401 is reported.
+The keep-alive loop does the same on a tick.
+
 The token goes to curl on standard input as a config line. It is in no argument
 list, no environment variable, no file and no output, `-v` and `-vv` included.
 
@@ -705,10 +725,10 @@ refused release prints a warning and leaves the move done.
 
 The loop's state is a file named for the card in `$XDG_STATE_HOME/dev/board/`,
 or `~/.local/state/dev/board/`, with the card, the fence and the loop's pid at
-mode 600. It never holds the token. The loop reads the token from `pass` for
-each renewal and hands it to curl on standard input, so it is in no argument
-list, environment variable, file or output. While you hold a claim, `move` and
-`note` send its fence, and `ls` shows each live claim's holder in a column
+mode 600. It never holds the token. The loop reads the token for each
+renewal, from the Keychain or else `pass`, and hands it to curl on standard
+input to keep it out of every argument list, environment variable, file or
+output. While you hold a claim, `move` and `note` send its fence, and `ls` shows each live claim's holder in a column
 before the name.
 
 ## Reference: the subcommands in detail
@@ -1256,7 +1276,8 @@ in dev's share directory, started by `dev.board.pomb` through
 group, outlives the caller's shell and wakes no model. Every 5 minutes (`sleep`
 with the tick in seconds as its seventh argument) it checks that the state file
 still holds its fence, reads the token through the same `board/passlock.sh` as
-`dev.board.pomb`, refuses a token outside `A-Za-z0-9._~+/=-`, and sends `POST /api/tasks/{id}/claim/heartbeat` with
+`dev.board.pomb`, Keychain first, refuses a token outside `A-Za-z0-9._~+/=-`,
+and sends `POST /api/tasks/{id}/claim/heartbeat` with
 `{"fence":N}` through `curl -K -`, the token going over a `printf` builtin pipe
 into curl's stdin so it is in no argv, no environment variable, no file and no
 output. The loop ends when the state file is gone or holds another fence
@@ -1489,8 +1510,8 @@ when it is set (no hint). A board absent from `/api/boards` is
 `tests/lua/board_init_test.lua` runs the algorithm against a stateful fake
 layout and the command against a fake `curl`.
 
-The token is read by `timeout 10 pass show <entry>` through `board/passlock.sh`,
-with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"` and no stdin, so a
+On a miss in the Keychain, the token is read by `timeout 10 pass show <entry>`
+through `board/passlock.sh`, with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"` and no stdin, so a
 locked store fails at once with
 `board unavailable: pass is locked or has no entry <entry>` (a timeout says
 `pass timed out`). A token with any character outside `A-Za-z0-9._~+/=-` is

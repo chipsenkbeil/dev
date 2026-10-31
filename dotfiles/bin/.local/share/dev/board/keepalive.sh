@@ -11,10 +11,16 @@ tick=$7
 here=$(cd "$(dirname "$0")" && pwd)
 
 n=0
+healed=0
 while [ "$n" -lt "$ticks" ]; do
     sleep "$tick"
     grep -qx "fence=$fence" "$state" 2>/dev/null || exit 0
-    token=$(bash "$here/passlock.sh" "$entry" | head -n 1)
+    read_out=$(bash "$here/passlock.sh" "$entry")
+    token=${read_out%%$'\n'*}
+    origin=
+    case $read_out in
+    *$'\n'*) origin=${read_out#*$'\n'} ;;
+    esac
     case $token in
     '' | *[!A-Za-z0-9._~+/=-]*)
         n=$((n + 1))
@@ -28,7 +34,15 @@ while [ "$n" -lt "$ticks" ]; do
     token=
     code=${out##*[!0-9]}
     case $code in
-    2??) ;;
+    2??) healed=0 ;;
+    401)
+        if [ "$origin" = keychain ] && [ "$healed" = 0 ]; then
+            healed=1
+            bash "$here/keychain.sh" drop "$entry" || break
+        else
+            break
+        fi
+        ;;
     4??) break ;;
     esac
     n=$((n + 1))

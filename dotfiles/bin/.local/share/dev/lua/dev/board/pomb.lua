@@ -6,6 +6,9 @@ local project = require("dev.project")
 
 local present = json.present
 local PASSLOCK_SCRIPT = "/board/passlock.sh"
+local KEYCHAIN_SCRIPT = "/board/keychain.sh"
+local KEYCHAIN_SOURCE = "keychain"
+local UNAUTHORIZED = 401
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = 30
 local WAIT_SECONDS = 50
@@ -67,6 +70,7 @@ local M = {}
 ---@class dev.board.pomb.Backend: dev.board.Backend, dev.board.Layout
 ---@field private __opts dev.board.pomb.Opts the server, token reference and board name
 ---@field private __secret string? the token, nil until the first request
+---@field private __healed boolean? nil until a refused Keychain token is replaced
 ---@field private __detail dev.board.pomb.Detail? the board with its columns
 ---@field private __colors table<string, string>? palette labels by colour id
 ---@field private __values table<string, string>? palette colour values by colour id
@@ -147,6 +151,8 @@ end
 
 ---@type table<string, string> tokens already read in this process, by `pass` entry
 local tokens = {}
+---@type table<string, boolean> entry -> true when the token came from the macOS Keychain
+local from_keychain = {}
 
 local function entry_of(ref)
     local entry = type(ref) == "string" and ref:match("^pass:(.+)$")
@@ -155,10 +161,12 @@ local function entry_of(ref)
     end
 end
 
----Read the worker token with `pass`, without a prompt.
+---Read the worker token from the Keychain or `pass`, without a prompt.
 ---
----A locked store fails at once instead of waiting for a pinentry. Reads queue
----on one lock shared by every process, and a process reads each entry once.
+---A locked store fails at once instead of waiting for a pinentry. On a machine
+---with `security`, the Keychain answers first and `pass` runs only on a miss.
+---Reads queue on one lock shared by every process, and a process reads each
+---entry once.
 ---@param ref string `pass:<entry>`
 ---@return string? token the token
 ---@return string? message why it could not be read
@@ -180,12 +188,34 @@ function M.token(ref)
     elseif code ~= 0 then
         return nil, unavailable("pass is locked or has no entry " .. entry)
     end
-    local token = out:match("^[^\n]*")
+    local token, source = out:match("^([^\n]*)\n?([^\n]*)")
     if not token:find(TOKEN_PATTERN) then
         return nil, unavailable("pass gave a token that is empty or not plain text")
     end
     tokens[entry] = token
+    from_keychain[entry] = source == KEYCHAIN_SOURCE
     return token
+end
+
+---Forget a token that came from the Keychain, to send the next read to `pass`.
+---@param ref string `pass:<entry>`
+---@return boolean dropped true when the cached item was deleted and the token forgotten
+local function forget(ref)
+    local entry = entry_of(ref)
+    if not entry or not from_keychain[entry] then
+        return false
+    end
+    local _, code = devos.capture({ "bash", project.share .. KEYCHAIN_SCRIPT, "drop", entry }, {
+        unset = CHILD_UNSET,
+        stdin = "null",
+        stderr = "null",
+    })
+    if code ~= 0 then
+        return false
+    end
+    tokens[entry] = nil
+    from_keychain[entry] = nil
+    return true
 end
 
 ---Build a Pomb backend.
@@ -265,6 +295,11 @@ function Backend:__request(method, path, body, fence, seconds)
     status = tonumber(status)
     if not status or doc == nil then
         return nil, unavailable("pomb sent an answer dev cannot read")
+    end
+    if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
+        self.__healed = true
+        self.__secret = nil
+        return self:__request(method, path, body, fence, seconds)
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == PERMISSION_DENIED then
         return nil, denied(doc), status, doc
