@@ -1882,6 +1882,14 @@ esac
 printf '%s\n%s' "$body" "$status"
 ]]
 
+local function curl_with(root, replacement)
+    executable(root .. "/bin/curl", (CURL:gsub("%*/claim/release%) body= ;;", replacement, 1)))
+end
+
+local function queue_file(home)
+    return home .. "/state/dev/boards/dotfiles.queue"
+end
+
 local function sandbox(opts)
     opts = opts or {}
     local root = support.sandbox({
@@ -2130,11 +2138,11 @@ t.test("outcome queues a tick but not an append when the write cannot reach Pomb
     local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
     t.eq(code, 1)
     t.ok(out:find("curl exit 28", 1, true), out)
-    t.eq(fs.exists(home .. "/state/dev/boards/dotfiles.queue"), false)
+    t.eq(fs.exists(queue_file(home)), false)
     out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
     t.eq(code, 0)
     t.eq(out, "queued: Pomb unreachable, will sync\n")
-    local queued = assert(fs.read(home .. "/state/dev/boards/dotfiles.queue"))
+    local queued = assert(fs.read(queue_file(home)))
     t.ok(queued:find('"outcome"', 1, true) and queued:find('"--tick"', 1, true), queued)
 end)
 
@@ -2148,7 +2156,7 @@ t.test("rename is queued while Pomb is unreachable", function()
     local out, code = dev(root, home, { "board", "rename", "11111111", "Better", "title" })
     t.eq(code, 0)
     t.eq(out, "queued: Pomb unreachable, will sync\n")
-    local queued = assert(fs.read(home .. "/state/dev/boards/dotfiles.queue"))
+    local queued = assert(fs.read(queue_file(home)))
     t.ok(queued:find('"rename"', 1, true) and queued:find('"Better"', 1, true), queued)
 end)
 
@@ -2162,7 +2170,7 @@ t.test("discard queues each step it could not take, in order, once", function()
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
     t.eq(code, 0)
     t.eq(out, "queued: Pomb unreachable, will sync\n")
-    local queued = assert(fs.read(home .. "/state/dev/boards/dotfiles.queue"))
+    local queued = assert(fs.read(queue_file(home)))
     local note = assert(queued:find('"note"', 1, true), queued)
     local label = assert(queued:find('"label"', note, true), queued)
     local move = assert(queued:find('"move"', label, true), queued)
@@ -2179,7 +2187,7 @@ t.test("discard does not queue the note again once it has been posted", function
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
     t.eq(code, 0)
     t.eq(out, "queued: Pomb unreachable, will sync\n")
-    local queued = assert(fs.read(home .. "/state/dev/boards/dotfiles.queue"))
+    local queued = assert(fs.read(queue_file(home)))
     t.ok(not queued:find('"note"', 1, true), queued)
     t.ok(queued:find('"label"', 1, true) < queued:find('"move"', 1, true), queued)
 end)
@@ -2922,7 +2930,7 @@ end)
 local function refusing_moves(root)
     local REFUSED_MOVE =
         '*/move) body=\'{"message":"no room"}\'; status=409 ;;\n*/claim/release) body= ;;'
-    executable(root .. "/bin/curl", (CURL:gsub("%*/claim/release%) body= ;;", REFUSED_MOVE, 1)))
+    curl_with(root, REFUSED_MOVE)
 end
 
 t.test("a move into progress that Pomb refuses releases the claim it just took", function()
@@ -2983,7 +2991,7 @@ end)
 t.test("a queued change that hits the needs:human refusal is dropped with its reason", function()
     local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:human"]', 1)
     local root, home = sandbox({ export = export })
-    local queue = home .. "/state/dev/boards/dotfiles.queue"
+    local queue = queue_file(home)
     assert(fs.mkdir(home .. "/state/dev/boards", { parents = true }))
     assert(
         fs.write(
@@ -3001,10 +3009,7 @@ end)
 t.test("a release the server refuses after a move warns and the move succeeds", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
-    executable(
-        root .. "/bin/curl",
-        (CURL:gsub("%*/claim/release%) body= ;;", "*/claim/release) body=; status=503 ;;", 1))
-    )
+    curl_with(root, "*/claim/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "move", "11111111-a", "done" })
     t.eq(code, 0)
     t.ok(out:find("moved 11111111 to Done", 1, true), out)
@@ -3142,10 +3147,7 @@ end)
 t.test("a release the server refuses keeps the state so it can be retried", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
-    executable(
-        root .. "/bin/curl",
-        (CURL:gsub("%*/claim/release%) body= ;;", "*/claim/release) body=; status=503 ;;", 1))
-    )
+    curl_with(root, "*/claim/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     t.eq(code, 1)
     t.ok(out:find("pomb answered 503", 1, true), out)
