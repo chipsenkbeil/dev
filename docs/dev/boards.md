@@ -541,7 +541,9 @@ locked, are kept in a queue and print the line below. A timeout or a gateway
 error may come after Pomb applied the change, so only `move`, `size`, `label`,
 `link`, `edit` and `outcome` with `--rename`, `--tick` or `--untick`, which are
 safe to repeat, are queued for those; `add`, `note`, an `outcome` append and
-`outcome --convert` fail instead of risking a duplicate.
+`outcome --convert` fail instead of risking a duplicate. A move to Done is never
+queued: its outcome check reads the card from Pomb now, so it is refused and
+can be run again once Pomb answers.
 
 ```
 queued: Pomb unreachable, will sync
@@ -893,7 +895,8 @@ never handles the API.
   or clear it (`PATCH /api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`),
   printing `outcome <id prefix> N reworded`, `ticked by NAME` or `unticked`. A
   tick on a claimed card needs `--as NAME` (or DEV_AGENT) for someone other than
-  the claimant. The reviewer or verifier ticks. N counts from 1 in the order
+  the claimant. The reviewer or verifier ticks, and a card moves to Done only
+  once every outcome is ticked (see `move`). N counts from 1 in the order
   `show` prints the outcomes, which come from the subtasks `/export-data`
   carries (`id`, `name`, `done`), and an N
   that is not a whole number of 1 or more is exit 2, one past the last outcome
@@ -983,15 +986,26 @@ never handles the API.
   the claim first, as `take` does with `DEV_AGENT` as the name (a bad name is
   exit 2), unless the card has children, and releases it again when the move
   fails.
+  A move into Done (`move CARD done`) is refused once the card is read, before
+  the move is sent, while the card has an unticked outcome:
+  `<id prefix> cannot move to Done: N of M outcomes are unticked (1. text, 2. text); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it`
+  (exit 1, on both backends, each open outcome numbered as `show` numbers it).
+  Outcomes that Pomb sent in a form dev cannot read (`subtasks` that is not a
+  list, or an entry without a string name) refuse the move the same way:
+  `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked`.
+  A card with no outcomes, or with all of them ticked, moves as before. Neither
+  refusal is queued, nor is a move to Done that Pomb could not answer for.
 - `discard CARD [--reason TEXT]`: Drops a card in three steps, in order: with
   `--reason`, a decision note with TEXT (`note --kind decision`), then the label
-  `discarded` (`label`), then the move to Done (`move`), printing
+  `discarded` (`label`), then the move to Done (`discard_move`, the move without
+  the outcome check), printing
   `discarded <id prefix>`. A card labelled `needs:human` is refused before any
   step, as `move` refuses it, so nothing is posted. A card lookup that Pomb
   cannot answer is not queued, since the steps need the card's id. Each step is
-  the command of the same name, so its checks and its claim handling apply, and
-  when Pomb cannot take a step the steps left are queued, in order, as those
-  commands, so a reason is never posted twice. A blank `--reason` is exit 2. The
+  the command of the same name, so its checks and its claim handling apply,
+  except the move, which skips the outcome check (a dropped card is not done).
+  When Pomb cannot take a step the steps left are queued, in order, under those
+  names, so a reason is never posted twice. A blank `--reason` is exit 2. The
   card is kept, never deleted.
 - `take CARD [--as NAME]`: Claims the card (`POST /api/tasks/{id}/claim` with
   `claimant` NAME, else `DEV_AGENT`, else

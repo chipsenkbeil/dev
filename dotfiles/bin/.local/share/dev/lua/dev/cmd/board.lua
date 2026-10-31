@@ -65,6 +65,7 @@ local HEADERS = { "ID", "COLUMN", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
 local QUEUE_RULES = {
     add = { idempotent = false },
     move = { idempotent = true },
+    discard_move = { idempotent = true },
     order = { idempotent = true },
     note = { idempotent = false },
     size = { idempotent = true },
@@ -106,6 +107,7 @@ end
 ---@field code integer? 2 for a usage error, 1 otherwise
 ---@field warnings string[]? lines for standard error when the change still went through
 ---@field page boolean? whether the output goes through the pager when it is taller than the screen
+---@field unqueued boolean? true when the refusal must not be queued for a later sync, as a move to Done is not
 
 ---@class dev.cmd.board
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `board` subcommands
@@ -1018,7 +1020,55 @@ local function claim_card(backend, card, name)
         fence
 end
 
-function commands.move(backend, args)
+---Mark a refusal as one a queue must not keep.
+---@param result dev.cmd.board.Result the refusal
+---@return dev.cmd.board.Result result the same refusal, marked unqueued
+local function unqueued(result)
+    result.unqueued = true
+    return result
+end
+
+---Refuse a move to Done that the card's outcomes do not allow.
+---@param card dev.board.Card the card
+---@return dev.cmd.board.Result? err the refusal, nil when every outcome is ticked
+local function done_refusal(card)
+    local id = card.id:sub(1, board.MIN_PREFIX)
+    if card.outcomes_unreadable then
+        return unqueued(
+            failure(
+                id
+                    .. " cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked"
+            )
+        )
+    end
+    local open = {}
+    for i, outcome in ipairs(card.outcomes) do
+        if not outcome.done then
+            open[#open + 1] = i .. ". " .. outcome.name
+        end
+    end
+    if #open == 0 then
+        return nil
+    end
+    return unqueued(
+        failure(
+            string.format(
+                "%s cannot move to Done: %d of %d outcomes are unticked (%s); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it",
+                id,
+                #open,
+                #card.outcomes,
+                table.concat(open, ", ")
+            )
+        )
+    )
+end
+
+---Move a card to a column, checking its outcomes first when the column is Done.
+---@param backend dev.board.Backend the board
+---@param args string[] the card and the column
+---@param opts {drop: boolean?}? `drop` skips the outcome check, as a discard's move does
+---@return dev.cmd.board.Result result the output, or a message and the exit code
+local function move_card(backend, args, opts)
     local flags, words = parse(args, {})
     if not flags then
         return words
@@ -1026,14 +1076,16 @@ function commands.move(backend, args)
     if #words < 2 then
         return usage("needs a card and a column")
     end
+    local roles = backend.roles
     local column, err = named_column(backend, table.concat(words, " ", 2))
     if not column then
         return err
     end
+    local to_done = column == roles:done_column() and not (opts and opts.drop)
     local card
     card, err = find_card(backend, words[1])
     if not card then
-        return err
+        return to_done and unqueued(err) or err
     end
     if card.column ~= column then
         local held_back = owner_holds(card)
@@ -1041,7 +1093,12 @@ function commands.move(backend, args)
             return held_back
         end
     end
-    local roles = backend.roles
+    if to_done then
+        local refused = done_refusal(card)
+        if refused then
+            return refused
+        end
+    end
     if column == roles.ready and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
@@ -1127,7 +1184,7 @@ function commands.move(backend, args)
             claims.stop(card.id)
             backend:release(card.id, held.fence)
         end
-        return failure(message)
+        return to_done and unqueued(failure(message)) or failure(message)
     end
     if held and column ~= roles.progress then
         claims.stop(card.id)
@@ -1137,6 +1194,10 @@ function commands.move(backend, args)
         end
     end
     return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
+end
+
+function commands.move(backend, args)
+    return move_card(backend, args)
 end
 
 function commands.order(backend, args)
@@ -1227,10 +1288,10 @@ function commands.discard(backend, args)
         steps[#steps + 1] = { sub = "note", args = { words[1], KIND_FLAG, "decision", reason } }
     end
     steps[#steps + 1] = { sub = "label", args = { words[1], DISCARD_LABEL } }
-    steps[#steps + 1] = { sub = "move", args = { words[1], backend.roles:done_column() } }
+    steps[#steps + 1] = { sub = "discard_move", args = { words[1], backend.roles:done_column() } }
     local warnings = {}
     for i, step in ipairs(steps) do
-        local result = commands[step.sub](backend, step.args)
+        local result = M.run(step.sub, step.args, backend)
         if result.message then
             local left = {}
             for j = i, #steps do
@@ -1246,6 +1307,16 @@ function commands.discard(backend, args)
         output = "discarded " .. card.id:sub(1, board.MIN_PREFIX),
         warnings = warnings,
     }
+end
+
+local internal = {}
+
+---Move a card to Done without the outcome check, as a discard does.
+---@param backend dev.board.Backend the board
+---@param args string[] the card and the column
+---@return dev.cmd.board.Result result the output, or a message and the exit code
+function internal.discard_move(backend, args)
+    return move_card(backend, args, { drop = true })
 end
 
 function commands.size(backend, args)
@@ -2193,7 +2264,8 @@ end
 function M.run(sub, args, backend, now, screen)
     local finished = backend:done_columns() or {}
     backend.roles = board.roles(backend.column_map, finished)
-    return commands[sub](backend, args, now, screen)
+    local run = commands[sub] or internal[sub]
+    return run(backend, args, now, screen)
 end
 
 local function open_backend(settings)
@@ -2792,6 +2864,7 @@ for sub in pairs(commands) do
             if
                 not queued
                 and QUEUE_RULES[sub]
+                and not result.unqueued
                 and not note
                 and not (sub == "outcome" and args[2] == CONVERT_FLAG)
             then

@@ -20,6 +20,7 @@ local M = {}
 ---@field tests string[] the tests its tests field names, empty when it has none
 ---@field files string[] the files its files field names, empty when it has none
 ---@field outcomes dev.board.Outcome[] its Done when outcomes, empty when it has none
+---@field outcomes_unreadable boolean? true when the board sent outcomes dev cannot read, so `outcomes` may be short
 
 ---@class dev.board.Outcome
 ---@field id string the outcome's id

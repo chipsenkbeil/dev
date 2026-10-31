@@ -249,6 +249,32 @@ t.test("discard refuses a needs:human card and writes nothing", function()
     t.eq(card.labels[1], "needs:human")
 end)
 
+t.test(
+    "move to Done waits for every outcome to be ticked, and discard drops an open card",
+    function()
+        local root, home = local_board()
+        local a = prefix_of((dev(root, home, { "board", "add", "Card", "--problem", "x" })))
+        local out, code = dev(root, home, { "board", "outcome", a, "First works" })
+        t.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", a, "done" })
+        t.eq(code, 1, out)
+        t.ok(out:find("1 of 1 outcomes are unticked (1. First works)", 1, true), out)
+        out, code = dev(root, home, { "board", "outcome", a, "--tick", "1", "--as", "r/reviewer" })
+        t.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", a, "done" })
+        t.eq(code, 0, out)
+        t.eq(out, "moved " .. a .. " to Done\n")
+        local b = prefix_of((dev(root, home, { "board", "add", "Dropped", "--problem", "x" })))
+        out, code = dev(root, home, { "board", "outcome", b, "Never works" })
+        t.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "discard", b, "--reason", "Not needed" })
+        t.eq(code, 0, out)
+        t.eq(out, "discarded " .. b .. "\n")
+        out = dev(root, home, { "board", "ls", "--column", "Done" })
+        t.ok(out:find(b, 1, true), out)
+    end
+)
+
 t.test("edit refuses empty text, a missing file and an extra word", function()
     local root, home = local_board()
     local a = prefix_of(
@@ -1104,6 +1130,45 @@ t.test("a queued note keeps its kind and role", function()
     local args = { ID_A:sub(1, 8), "--kind", "decision", "--as", "reviewer", "kept" }
     t.eq(pomb_dev(root, home, { "board", "note", unpack(args) }), QUEUED)
     t.eq(document(queue_path(home))[1].args, args)
+end)
+
+t.test("a queued discard replays its move without the outcome check", function()
+    local root, home = pomb()
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":[{"id":"'
+                .. ID_A
+                .. '","name":"First","column_id":"col-ready","position":1,"color_id":null,"labels":[],"subtasks":[{"id":"s1","name":"Never works","done":false}]}]}'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/bin/curl",
+            '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/*) cat >/dev/null; exit 7 ;; esac\n'
+                .. CURL:gsub("^#!/bin/sh\n", "")
+        )
+    )
+    assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    local out, code =
+        pomb_dev(root, home, { "board", "discard", ID_A:sub(1, 8), "--reason", "Dropped" })
+    t.eq(code, 0, out)
+    t.eq(out, QUEUED)
+    assert(fs.write(root .. "/bin/curl", CURL))
+    assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    out, code = pomb_dev(root, home, { "board", "sync" })
+    t.eq(code, 0, out)
+    t.ok(out:find("synced discard_move aaaaaaaa", 1, true), out)
+    t.ok(calls(root):find("/move", 1, true), calls(root))
+end)
+
+t.test("a move to Done is refused and not queued while Pomb is unreachable", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/down", ""))
+    local out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), "done" })
+    t.eq(code, 1, out)
+    t.ok(out:find("board unavailable", 1, true), out)
+    t.eq(fs.exists(queue_path(home)), false)
 end)
 
 t.test("after a gateway error only a change that is safe to repeat is queued", function()

@@ -418,29 +418,45 @@ function Backend:has_field(key)
     return self.__field_keys[key] == true
 end
 
+---Read the outcomes of a task row.
+---
+---A missing or null `subtasks` is a card with none.
+---@param task table<string, any> the task row of the export
+---@return dev.board.Outcome[] outcomes the outcomes dev could read
+---@return boolean readable false when `subtasks` is not a list or one of its entries is not an outcome
 local function outcomes_of(task)
     local outcomes = {}
-    if type(task.subtasks) == "table" then
-        for _, sub in ipairs(task.subtasks) do
-            if type(sub) == "table" and type(sub.name) == "string" then
-                outcomes[#outcomes + 1] = {
-                    id = tostring(sub.id),
-                    name = sub.name,
-                    done = sub.done == true,
-                }
-            end
+    local subtasks = present(task.subtasks)
+    if subtasks == nil then
+        return outcomes, true
+    end
+    if type(subtasks) ~= "table" or (subtasks[1] == nil and next(subtasks) ~= nil) then
+        return outcomes, false
+    end
+    local readable = true
+    for _, sub in ipairs(subtasks) do
+        if type(sub) == "table" and type(sub.name) == "string" then
+            outcomes[#outcomes + 1] = {
+                id = tostring(sub.id),
+                name = sub.name,
+                done = sub.done == true,
+            }
+        else
+            readable = false
         end
     end
-    return outcomes
+    return outcomes, readable
 end
 
 function Backend:__card(task)
+    local outcomes, readable = outcomes_of(task)
     return {
         checks = runs_of(task),
         allow = field_names(task, board.ALLOW_FIELD),
         tests = field_names(task, board.TESTS_FIELD),
         files = field_names(task, board.FILES_FIELD),
-        outcomes = outcomes_of(task),
+        outcomes = outcomes,
+        outcomes_unreadable = not readable,
         claimant = holder(task.claim),
         id = task.id,
         name = task.name,

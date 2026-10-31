@@ -607,6 +607,70 @@ t.test("discard refuses a needs:human card before anything is written", function
     t.eq(#backend.calls, 0)
 end)
 
+t.test("move to Done refuses a card with unticked outcomes and names them", function()
+    local cards = sample()
+    cards[1].outcomes = {
+        { id = "s1", name = "A works", done = true },
+        { id = "s2", name = "B works", done = false },
+        { id = "s3", name = "C works", done = false },
+    }
+    local backend = fake(cards)
+    local result = commands.run("move", { "11111111-a", "done" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.unqueued, true)
+    t.eq(
+        result.message,
+        "11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it"
+    )
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("move to Done takes a card whose outcomes are all ticked or has none", function()
+    local cards = sample()
+    cards[1].outcomes = { { id = "s1", name = "A works", done = true } }
+    local backend = fake(cards)
+    t.eq(commands.run("move", { "11111111-a", "done" }, backend).output, "moved 11111111 to Done")
+    t.eq(commands.run("move", { "cccccccc", "done" }, backend).output, "moved cccccccc to Done")
+    t.eq(backend.calls[1], { "move", ID_A, "Done" })
+end)
+
+t.test("move to Done refuses outcomes dev cannot read", function()
+    local cards = sample()
+    cards[1].outcomes_unreadable = true
+    local backend = fake(cards)
+    local result = commands.run("move", { "11111111-a", "done" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.unqueued, true)
+    t.eq(
+        result.message,
+        "11111111 cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked"
+    )
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("move to Done is never queued when the card cannot be read", function()
+    local backend = fake(sample())
+    local message = "board unavailable: cannot reach pomb.example (curl exit 7)"
+    backend.cards = function()
+        return nil, message
+    end
+    local result = commands.run("move", { "11111111-a", "done" }, backend)
+    t.eq(result.message, message)
+    t.eq(result.unqueued, true)
+    result = commands.run("move", { "11111111-a", "review" }, backend)
+    t.eq(result.message, message)
+    t.eq(result.unqueued, nil)
+end)
+
+t.test("discard closes a card with unticked outcomes", function()
+    local cards = sample()
+    cards[1].outcomes = { { id = "s1", name = "A works", done = false } }
+    local backend = fake(cards)
+    local result = commands.run("discard", { "11111111-a", "--reason", "Dropped" }, backend)
+    t.eq(result.output, "discarded 11111111")
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
+end)
+
 t.test("checks replaces the rows with one row per command", function()
     local backend = fake(sample())
     local result = commands.run("checks", { "11111111-a", "dev lint", "dev test" }, backend)
@@ -2307,7 +2371,7 @@ t.test("discard queues each step it could not take, in order, once", function()
     local queued = assert(fs.read(queue_file(home)))
     local note = assert(queued:find('"note"', 1, true), queued)
     local label = assert(queued:find('"label"', note, true), queued)
-    local move = assert(queued:find('"move"', label, true), queued)
+    local move = assert(queued:find('"discard_move"', label, true), queued)
     t.ok(queued:find('"Dropped"', 1, true) and move > label, queued)
 end)
 
@@ -2323,7 +2387,32 @@ t.test("discard does not queue the note again once it has been posted", function
     t.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(queue_file(home)))
     t.ok(not queued:find('"note"', 1, true), queued)
-    t.ok(queued:find('"label"', 1, true) < queued:find('"move"', 1, true), queued)
+    t.ok(queued:find('"label"', 1, true) < queued:find('"discard_move"', 1, true), queued)
+end)
+
+t.test(
+    "move to Done on a Pomb board names the open outcomes, and discard still closes it",
+    function()
+        local root, home = sandbox({ export = SUBTASKS_EXPORT })
+        local out, code = dev(root, home, { "board", "move", "11111111", "done" })
+        t.eq(code, 1, out)
+        t.ok(out:find("1 of 2 outcomes are unticked (1. A works)", 1, true), out)
+        t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
+        out, code = dev(root, home, { "board", "discard", "11111111" })
+        t.eq(code, 0, out)
+        t.eq(out, "discarded 11111111\n")
+    end
+)
+
+t.test("move to Done on a Pomb board refuses subtasks dev cannot read", function()
+    local export = '{"tasks":[{"id":"'
+        .. ID_A
+        .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why.","subtasks":"oops"}]}'
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "move", "11111111", "done" })
+    t.eq(code, 1, out)
+    t.ok(out:find("cannot be read from Pomb", 1, true), out)
+    t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
 t.test("outcome sends the claim's fence on the subtask call", function()
