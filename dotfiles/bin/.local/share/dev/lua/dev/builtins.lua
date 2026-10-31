@@ -346,7 +346,7 @@ return {
         words = { "board", "move" },
         handler = "lua",
         usage = "dev board move CARD COLUMN",
-        desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox, and a needs:human card moves only within its own column",
+        desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox, and a needs:human card moves only within its own column. An umbrella needs no outcomes and moves to Done once every child is Done",
     },
     {
         words = { "board", "order" },

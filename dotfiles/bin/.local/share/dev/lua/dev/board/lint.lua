@@ -15,7 +15,7 @@ M.MAX_WORDS = 400
 ---@class dev.board.lint.Facts
 ---@field comments fun(): dev.board.Comment[]?, string? the card's comments, read only when a rule needs them
 ---@field links fun(): dev.board.Link[]?, string? the card's links, read only when a rule needs them
----@field children fun(): integer?, string? how many children the card has, read only when a rule needs it
+---@field children fun(): {done: integer, total: integer}?, string? the card's children, total 0 when it has none
 
 local function word_count(description)
     local count = 0
@@ -87,12 +87,29 @@ function M.card(card, opts)
     local column = card.column
     local discarded = board.labelled(card, board.DISCARDED)
     local open = not card.done and column ~= roles.icebox
+    local need_outcomes = not (discarded and card.done) and not card.outcomes_unreadable
+    local kids, kids_why
+    local function children()
+        if not kids then
+            kids, kids_why = facts.children()
+        end
+        return kids, kids_why
+    end
     if column ~= roles.icebox then
+        local child_total = 0
+        if need_outcomes and #card.outcomes == 0 then
+            local found, why = children()
+            if not found then
+                return nil, why
+            end
+            child_total = found.total
+        end
         local missing = board.unplanned({
             color = card.color,
             description = card.description,
             outcomes = #card.outcomes,
-            need_outcomes = not (discarded and card.done) and not card.outcomes_unreadable,
+            need_outcomes = need_outcomes,
+            children = child_total,
             sections = open or opts.strict == true,
         })
         for _, item in ipairs(missing) do
@@ -132,12 +149,22 @@ function M.card(card, opts)
         end
     end
     if column == roles.progress and not card.claimant then
-        local children, why = facts.children()
-        if not children then
+        local found, why = children()
+        if not found then
             return nil, why
         end
-        if children == 0 then
+        if found.total == 0 then
             add("in progress with no claimant")
+        end
+    end
+    if card.done and not discarded then
+        local found, why = children()
+        if not found then
+            return nil, why
+        end
+        local unfinished = board.open_children(found)
+        if unfinished > 0 then
+            add(unfinished .. " of " .. found.total .. " children open")
         end
     end
     if card.done and not discarded and not card.outcomes_unreadable then

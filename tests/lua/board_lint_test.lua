@@ -104,6 +104,48 @@ t.test("lint reports one line per rule a card breaks and exits 1", function()
     })
 end)
 
+t.test("lint holds an umbrella to its children and not to outcomes", function()
+    local cards = {
+        card(1, "In Progress", { outcomes = {} }),
+        card(2, "Done", { outcomes = {} }),
+        card(3, "Done", { outcomes = {} }),
+        card(4, "Backlog", { outcomes = {} }),
+    }
+    local held = { children = { [cards[1].id] = 2, [cards[2].id] = 2, [cards[3].id] = 0 } }
+    local fake = backend(cards, held)
+    function fake:family(id)
+        local total = held.children[id]
+        if id == cards[2].id then
+            return { children = { done = 1, total = total } }
+        end
+        return { children = total and total > 0 and { done = total, total = total } or nil }
+    end
+    local result = commands.run("lint", {}, fake)
+    t.eq(findings(result.output), {
+        "00000002 Done 1 of 2 children open",
+        "00000003 Done lacks Done when outcomes",
+        "00000004 Backlog lacks Done when outcomes",
+    })
+end)
+
+t.test("lint flags a Done card with outcomes and an open child", function()
+    local fake = backend({ card(1, "Done") })
+    function fake:family()
+        return { children = { done = 1, total = 2 } }
+    end
+    t.eq(findings(commands.run("lint", {}, fake).output), { "00000001 Done 1 of 2 children open" })
+end)
+
+t.test("lint fails when the children of a card cannot be read", function()
+    local fake = backend({ card(1, "Done") })
+    function fake:family()
+        return nil, "pomb is down"
+    end
+    local result = commands.run("lint", {}, fake)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("pomb is down", 1, true), result.message)
+end)
+
 t.test("lint passes a clean board with exit 0 and no code", function()
     local cards = {
         card(1, "Icebox", { description = false, color = false, outcomes = {} }),

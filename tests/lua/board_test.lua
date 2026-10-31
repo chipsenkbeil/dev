@@ -702,7 +702,7 @@ t.test("move to Done takes a planned card whose outcomes are all ticked", functi
     cards[1].outcomes = { { id = "s1", name = "A works", done = true } }
     local backend = fake(cards)
     t.eq(commands.run("move", { "11111111-a", "done" }, backend).output, "moved 11111111 to Done")
-    t.eq(backend.calls[1], { "move", ID_A, "Done" })
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
 end)
 
 t.test("move refuses an unsized card into every column but Icebox", function()
@@ -733,9 +733,63 @@ t.test("move refuses a sized card that lacks a section or outcomes outside Icebo
         result = commands.run("move", { "cccccccc", column }, backend)
         t.eq(result.code, 1, column)
         t.ok(result.message:find("Done when outcomes", 1, true), result.message)
-        t.eq(#backend.calls, 0, column)
+        t.eq(backend.calls, { { "family", ID_C } }, column)
     end
 end)
+
+t.test("an umbrella moves to Done with no outcomes once every child is Done", function()
+    local backend = fake({ planned() })
+    backend.kin = { children = { done = 3, total = 3 } }
+    local result = commands.run("move", { "cccccccc", "done" }, backend)
+    t.eq(result.output, "moved cccccccc to Done")
+    t.eq(backend.calls[#backend.calls], { "move", ID_C, "Done" })
+end)
+
+t.test("an umbrella is refused a move to Done while a child is open", function()
+    local backend = fake({ planned() })
+    backend.kin = { children = { done = 1, total = 3 } }
+    local result = commands.run("move", { "cccccccc", "done" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.unqueued, true)
+    t.eq(
+        result.message,
+        "cccccccc cannot move to Done: 2 of 3 children are open, and an umbrella is Done when every child is"
+    )
+    t.eq(backend.calls, { { "family", ID_C } })
+end)
+
+t.test("a move to Done is refused when the children cannot be read", function()
+    local backend = fake({ planned() })
+    function backend:family()
+        return nil, "pomb is down"
+    end
+    local result = commands.run("move", { "cccccccc", "done" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.unqueued, true)
+    t.ok(result.message:find("pomb is down", 1, true), result.message)
+end)
+
+t.test("discard closes an umbrella whose children are open", function()
+    local backend = fake({ planned() })
+    backend.kin = { children = { done = 0, total = 2 } }
+    local result = commands.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
+    t.eq(result.output, "discarded cccccccc")
+    for _, call in ipairs(backend.calls) do
+        t.ok(call[1] ~= "family", "discard read the children")
+    end
+end)
+
+t.test(
+    "an umbrella with no outcomes enters a working column and a card without children does not",
+    function()
+        local backend = fake({ planned() })
+        backend.kin = { children = { done = 0, total = 2 } }
+        t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
+        t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, nil)
+        backend = fake({ planned() })
+        t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, 1)
+    end
+)
 
 t.test("an unsized umbrella is refused and a red one is allowed", function()
     local card = planned()
@@ -1839,7 +1893,7 @@ t.test("move to Ready takes a sized card, and other columns take a planned one",
     for _, column in ipairs({ "backlog", "review", "blocked", "done" }) do
         local backend = fake({ colored("green") })
         t.eq(commands.run("move", { "cccccccc", column }, backend).code, nil)
-        t.eq(#backend.calls, 1)
+        t.eq(#backend.calls, column == "done" and 2 or 1)
     end
     local backend = fake({ colored("white") })
     t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)

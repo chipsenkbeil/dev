@@ -669,6 +669,7 @@ function commands.add(backend, args)
             description = description,
             outcomes = #outcomes,
             need_outcomes = true,
+            children = 0,
         })
         if #missing > 0 then
             return usage(
@@ -1077,6 +1078,27 @@ local function unqueued(result)
     return result
 end
 
+---Refuse a move to Done that the card's children do not allow.
+---@param card dev.board.Card the card
+---@param children {done: integer, total: integer}? its children, nil when it has none
+---@return dev.cmd.board.Result? err the refusal, nil when every child is Done
+local function children_refusal(card, children)
+    local unfinished = board.open_children(children)
+    if unfinished == 0 then
+        return nil
+    end
+    return unqueued(
+        failure(
+            string.format(
+                "%s cannot move to Done: %d of %d children are open, and an umbrella is Done when every child is",
+                card.id:sub(1, board.MIN_PREFIX),
+                unfinished,
+                children.total
+            )
+        )
+    )
+end
+
 ---Refuse a move to Done that the card's outcomes do not allow.
 ---@param card dev.board.Card the card
 ---@return dev.cmd.board.Result? err the refusal, nil when every outcome is ticked
@@ -1148,6 +1170,16 @@ local function move_card(backend, args, opts)
             return refused
         end
     end
+    local children, children_read
+    local function read_children()
+        if not children_read then
+            local family, why = backend:family(card.id)
+            if not family then
+                return to_done and unqueued(failure(why)) or failure(why)
+            end
+            children, children_read = family.children, true
+        end
+    end
     if column == roles.ready and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
@@ -1159,12 +1191,28 @@ local function move_card(backend, args, opts)
         )
     end
     if column ~= roles.icebox and column ~= roles.ready then
-        local missing = board.unplanned({
+        local facts = {
             color = card.color,
             description = card.description,
             outcomes = #card.outcomes,
             need_outcomes = not (opts and opts.drop) and not card.outcomes_unreadable,
-        })
+            children = 0,
+        }
+        local missing = board.unplanned(facts)
+        if #missing > 0 and facts.need_outcomes and facts.outcomes == 0 then
+            facts.need_outcomes = false
+            if #board.unplanned(facts) == 0 then
+                local failed = read_children()
+                if failed then
+                    return failed
+                end
+                facts.need_outcomes = true
+                if children then
+                    facts.children = children.total
+                end
+                missing = board.unplanned(facts)
+            end
+        end
         if #missing > 0 then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
@@ -1174,6 +1222,16 @@ local function move_card(backend, args, opts)
                     .. table.concat(missing, ", ")
                     .. "; fix it with dev board size, edit and outcome"
             )
+        end
+    end
+    if to_done then
+        local failed = read_children()
+        if failed then
+            return failed
+        end
+        local refused = children_refusal(card, children)
+        if refused then
+            return refused
         end
     end
     if column == roles.ready then
@@ -1344,6 +1402,7 @@ function commands.discard(backend, args)
         description = card.description,
         outcomes = #card.outcomes,
         need_outcomes = false,
+        children = 0,
     })
     if #missing > 0 then
         return failure(
@@ -2683,11 +2742,7 @@ function commands.lint(backend, args)
                 if not family then
                     return nil, "could not read the family of " .. card.id .. ": " .. why
                 end
-                local kids = family.children
-                if not kids then
-                    return 0
-                end
-                return kids.total
+                return family.children or { done = 0, total = 0 }
             end,
         }
         local rules, why =

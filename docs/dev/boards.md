@@ -286,7 +286,9 @@ comment is yours counts as answered and waits for your move.
 
 An umbrella waits in Backlog until its first child starts, sits in In Progress,
 and is Done when every child is Done. It is never Ready and holds no claim:
-`dev board move CARD ready` refuses a card that has children.
+`dev board move CARD ready` refuses a card that has children. It takes no
+outcomes of its own, so `move CARD done` closes it once every child is Done and
+refuses it while a child is open.
 
 To push a card later, drag it lower in Ready.
 
@@ -343,8 +345,8 @@ what is missing (exit 2), `move` does the same (exit 1), and `discard` refuses
 an unsized card or one without the headings but does not ask for outcomes (exit
 1), so a card never reaches Done unsized. `size CARD unsized` is refused outside
 Icebox (exit 1), `edit` refuses a text that drops a heading outside Icebox (exit
-1), and a move into Icebox always works. An umbrella follows the same rule, and
-a red one is allowed.
+1), and a move into Icebox always works. An umbrella follows the same rule
+except for outcomes, which it does not need, and a red one is allowed.
 
 Sizing is part of planning, so a card also cannot enter Ready as red.
 `move CARD ready` refuses a card that is unsized (white or no colour) or red,
@@ -567,6 +569,8 @@ rules:
   Done when outcome. This is `dev.board.unplanned`, the check `move` makes,
   which keeps a move and lint in agreement. A Done card gets the size and
   outcome checks only, and a Done card labelled `discarded` needs no outcome.
+  An umbrella, a card with children, needs no outcome either, so lint reads its
+  children when a card has none.
 - With `--strict`, a Done card also needs the three v2 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
@@ -575,6 +579,8 @@ rules:
 - `needs:human` sits only in Blocked or Icebox.
 - A Blocked card holds a `question` or `blocked` note or a `blocked_by` link.
 - An In Progress card holds a claimant unless it is an umbrella with children.
+- A Done umbrella that was not discarded has every child Done: `N of M children
+  open`.
 - A Done card that was not discarded has every outcome ticked.
 
 A card whose outcomes Pomb sent in a shape dev cannot read is reported as
@@ -917,10 +923,13 @@ never handles the API.
   note and no blocker`, reading `backend:comments` for a `question` or
   `blocked` kind and then `backend:links` for `blocked_by`. In In Progress it
   adds `in progress with no claimant` when `backend:family` shows no children,
-  and in Done `N of M outcomes unticked` unless discarded. A card with
-  `outcomes_unreadable` gets `outcomes unreadable` and no outcome rule. A read
-  that fails is exit 1 with the message. It writes nothing itself, but the
-  dispatcher replays the queue first, as for every Pomb command.
+  and in Done `N of M outcomes unticked` unless discarded, and `N of M children
+  open` when the card has an open child. A card with no outcomes asks
+  `backend:family` first and is not asked for outcomes when it has children. A
+  card with `outcomes_unreadable` gets `outcomes unreadable` and no outcome
+  rule. A read that fails is exit 1 with the message. It writes nothing
+  itself, but the dispatcher replays the queue first, as for every Pomb
+  command.
 - `notes CARD`: Lists the card's comments (`GET /api/tasks/{id}/comments`),
   oldest first, one line each: comment id prefix (8 characters), the token's
   name (else the actor kind), the comment's kind (`-` for none), its role label
@@ -1212,8 +1221,18 @@ never handles the API.
   Outcomes that Pomb sent in a form dev cannot read (`subtasks` that is not a
   list, or an entry without a string name) refuse the move the same way:
   `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked`.
-  A card with no outcomes, or with all of them ticked, moves as before. Neither
-  refusal is queued, nor is a move to Done that Pomb could not answer for.
+  A card with no outcomes, or with all of them ticked, moves as before. An
+  umbrella needs no outcomes, so a move into Done reads `backend:family` after
+  the outcome check and refuses while a child is open:
+  `<id prefix> cannot move to Done: N of M children are open, and an umbrella is Done when every child is`
+  (exit 1, on both backends). A failed read of the children refuses the move
+  with the read's message, so an umbrella never closes on missing data. A move
+  of a card with no outcomes into another column outside Icebox and Ready reads
+  the children the same way and skips the outcome rule for an umbrella. None
+  of these refusals is queued, nor is a move to Done that Pomb could not answer
+  for.
+  `add` cannot create a card with children and `discard` asks for no outcomes,
+  so neither reads them.
 - `discard CARD [--reason TEXT]`: Drops a card in three steps, in order: with
   `--reason`, a decision note with TEXT (`note --kind decision`), then the label
   `discarded` (`label`), then the move to Done (`discard_move`, the move without

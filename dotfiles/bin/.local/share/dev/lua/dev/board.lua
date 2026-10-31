@@ -596,11 +596,12 @@ end
 ---@field description string? the card's description
 ---@field outcomes integer how many outcomes it has
 ---@field need_outcomes boolean whether it needs one
+---@field children integer how many children it has, 0 for a card that is no umbrella
 ---@field sections boolean? whether the v2 sections are checked, true when nil
 
 ---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v2 section with text under
 ---Problem, and, when asked, at least one Done when outcome. A v1 `## Done when` checklist item
----counts as an outcome.
+---counts as an outcome, and an umbrella needs none, its children being its work.
 ---@param card dev.board.Unplanned the card's size, description and outcome facts
 ---@return string[] missing the problems, empty when the card may sit outside Icebox
 function M.unplanned(card)
@@ -614,10 +615,26 @@ function M.unplanned(card)
             missing[#missing + 1] = item
         end
     end
-    if card.need_outcomes and card.outcomes == 0 and checklist_items(description) == 0 then
+    local umbrella = card.children > 0
+    if
+        card.need_outcomes
+        and not umbrella
+        and card.outcomes == 0
+        and checklist_items(description) == 0
+    then
         missing[#missing + 1] = "Done when outcomes"
     end
     return missing
+end
+
+---Count the children of a card that are not Done.
+---@param children {done: integer, total: integer}? the card's children, nil when it has none
+---@return integer open how many children are open
+function M.open_children(children)
+    if not children then
+        return 0
+    end
+    return children.total - children.done
 end
 
 ---List what a card lacks of card format v2 to enter Ready: each missing or empty section, and
