@@ -2113,20 +2113,27 @@ function commands.land(backend, args)
             short .. " stays in " .. card.column .. ", jj land failed:\n" .. output:gsub("\n$", "")
         )
     end
-    local commit = land.short(state.commit)
+    local on_trunk = land.trunk_commit(backend.root, state.change)
+    local commit = land.short(on_trunk or state.commit)
     local held = claims.read(card.id)
-    local noted
-    noted, message = backend:note(
-        card.id,
-        string.format(
+    local text
+    if on_trunk then
+        text = string.format(
             "Landed commit %s (change %s) on trunk, run by %s.",
             commit,
             state.change,
             name
-        ),
-        held and held.fence,
-        { kind = "done" }
-    )
+        )
+    else
+        text = string.format(
+            "Landed change %s, run by %s. Trunk could not be read after the land, so %s is the commit from before it and may differ from the one on trunk.",
+            state.change,
+            name,
+            commit
+        )
+    end
+    local noted
+    noted, message = backend:note(card.id, text, held and held.fence, { kind = "done" })
     if not noted then
         return failure(
             string.format(
@@ -2148,7 +2155,15 @@ function commands.land(backend, args)
             )
         )
     end
-    return { output = string.format("landed %s at commit %s and moved it to Done", short, commit) }
+    return {
+        output = string.format(
+            "landed %s at commit %s%s and moved it to Done",
+            short,
+            commit,
+            on_trunk and ""
+                or " (the commit from before the land, which may differ: trunk could not be read)"
+        ),
+    }
 end
 
 ---Read the words of an allow command.

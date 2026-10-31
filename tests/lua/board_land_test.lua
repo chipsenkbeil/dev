@@ -13,6 +13,13 @@ local LAND_STUB = [[#!/bin/sh
 for word in "$@"; do
     if [ "$word" = land ]; then
         echo "$*" >>"$LAND_LOG"
+        if [ "$LAND_TRUNK" = rewrite ]; then
+            "$REAL_JJ" describe -m "feat: work, rewritten" >/dev/null 2>&1
+        fi
+        if [ -n "$LAND_TRUNK" ]; then
+            "$REAL_JJ" bookmark set master -r @ >/dev/null 2>&1
+            "$REAL_JJ" git push --remote origin --bookmark master >/dev/null 2>&1
+        fi
         echo "$LAND_MSG"
         exit "${LAND_CODE:-0}"
     fi
@@ -274,7 +281,7 @@ if has_jj then
         must(dev(root, home, log, { "board", "move", id, "review" }))
         approve(root, home, log, id)
         local commit = head(root)
-        local out, code = dev(root, home, log, { "board", "land", id })
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
         t.eq(code, 0, out)
         t.ok(
             out:find(
@@ -291,6 +298,46 @@ if has_jj then
         t.ok(last.body:find("Landed commit " .. commit:sub(1, 12), 1, true), last.body)
         t.eq(column_of(home), "Done")
     end)
+
+    t.test("a land that rewrites the commit notes the commit on trunk", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local before = head(root)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "rewrite" })
+        t.eq(code, 0, out)
+        local after = jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+        t.ok(before ~= after, "the stub must rewrite the commit")
+        t.ok(out:find("at commit " .. after:sub(1, 12) .. " and moved", 1, true), out)
+        t.eq(out:find(before:sub(1, 12), 1, true), nil, out)
+        local list = comments(home)
+        local last = list[#list]
+        t.ok(last.body:find("Landed commit " .. after:sub(1, 12), 1, true), last.body)
+        t.eq(last.body:find(before:sub(1, 12), 1, true), nil, last.body)
+        t.eq(column_of(home), "Done")
+    end)
+
+    t.test(
+        "a land whose trunk cannot be read notes the earlier commit and still reaches Done",
+        function()
+            local root, home, log = jj_project()
+            local id = new_card(root, home, log)
+            must(dev(root, home, log, { "board", "move", id, "review" }))
+            approve(root, home, log, id)
+            local commit = head(root)
+            local out, code = dev(root, home, log, { "board", "land", id })
+            t.eq(code, 0, out)
+            t.ok(out:find("at commit " .. commit:sub(1, 12), 1, true), out)
+            t.ok(out:find("trunk could not be read", 1, true), out)
+            local list = comments(home)
+            local last = list[#list]
+            t.eq(last.kind, "done")
+            t.ok(last.body:find(commit:sub(1, 12), 1, true), last.body)
+            t.ok(last.body:find("may differ", 1, true), last.body)
+            t.eq(column_of(home), "Done")
+        end
+    )
 
     t.test("a failed jj land leaves the card In Review and exits non-zero", function()
         local root, home, log = jj_project()

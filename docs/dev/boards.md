@@ -967,10 +967,17 @@ never handles the API.
 
   A failed `jj land` leaves the card where it is, exits 1 and prints jj's
   output. A landing whose done note or move then fails exits 1 and says what to
-  finish by hand. The done note reads
+  finish by hand. `jj land` can rewrite the commit through the forge, so after
+  it succeeds `land` fetches the remote of record and reads the commit that
+  holds the change on trunk by its change id; the `dev-check:` and `dev-review:` records keep the commit from
+  before the land. The done note reads
   `Landed commit <12 characters> (change <id>) on trunk, run by NAME.` and
   success prints `landed <id prefix> at commit <12 characters> and moved it to
-  Done`. It is never queued.
+  Done`, both naming the commit on trunk. If the fetch or the read fails after
+  the land (which does not undo it), the note reads `Landed change <id>, run by
+  NAME.` and says that the commit named is from before the land and may differ
+  from the one on trunk, the success line says the same, and the card still
+  moves to Done. It is never queued.
 - `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
   array of the words, each `test-edits` or `ci-edits` with duplicates dropped,
   and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with

@@ -190,6 +190,30 @@ function M.trunk_problem(root)
     end
 end
 
+---Read the commit that holds a change on trunk, which `jj land` may have rewritten.
+---@param root string the project root, a jj project
+---@param change string the change id, which survives the rewrite
+---@return string? commit the full commit id, nil when trunk does not hold exactly one commit of the change
+function M.trunk_commit(root, change)
+    local found = forge.resolve(root)
+    if not found then
+        return nil
+    end
+    local _, fetched =
+        devos.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "null" })
+    if fetched ~= 0 then
+        return nil
+    end
+    local out, code = devos.capture(
+        jj(root, "log", "-r", change .. " & ::trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
+        { stderr = "null" }
+    )
+    if code ~= 0 then
+        return nil
+    end
+    return out:match("^(%x+)\n$")
+end
+
 ---Land the working-copy change with `jj land`.
 ---@param root string the project root, a jj project
 ---@return boolean ok true when jj land exited 0
