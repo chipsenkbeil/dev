@@ -89,11 +89,24 @@ local function lint_lua(files)
         end
     end
     stdout:write("> Linting lua comments\n")
-    local script =
-        'source "$1"; shift; for f; do comment_spacing "$f" --; comment_runs "$f" --; done'
-    run_checked(
-        checks.with_files({ "bash", "-c", script, "bash", style .. "/../lint-lib.sh" }, files)
-    )
+    package.path = style .. "/../?.lua;" .. package.path
+    local lintset = require("lintset")
+    for _, file in ipairs(files) do
+        local text = fs.read(fs.join(root, file)) or ""
+        report(
+            file,
+            lintset.spacing(text, "--"),
+            "full-line comment directly after code, add a blank line before it"
+        )
+        for _, run in ipairs(lintset.runs(text, "--")) do
+            report(
+                file,
+                { run.line },
+                run.count
+                    .. " consecutive comment lines, restructure the code or shrink the comment"
+            )
+        end
+    end
 end
 
 if not have_shfmt then

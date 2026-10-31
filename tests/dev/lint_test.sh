@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pure-bash tests for .dev/lint.lua and the style skill's Rust and Lua lint.sh, each run on scratch files.
+# Pure-bash tests for .dev/lint.lua and the style skill's Rust and Lua lint verbs, each run on scratch files.
 # Each script is copied into a temp tree, so the repo is never linted, and the style sets run on stubbed tools.
 set -o pipefail
 
@@ -15,7 +15,7 @@ cp "$REPO/.dev/lint.lua" "$TMP/.dev/"
 cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/.dev/lua/dotfiles/"
 cp -R "$REPO/$LUA_STYLE/lua" "$TMP/$LUA_STYLE/"
 cp -R "$REPO/$LUA_STYLE/rust" "$TMP/$LUA_STYLE/"
-cp "$REPO/$LUA_STYLE/lint-lib.sh" "$TMP/$LUA_STYLE/"
+cp "$REPO/$LUA_STYLE/lintset.lua" "$TMP/$LUA_STYLE/"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n    echo ok\nfi\n' >"$TMP/scripts/clean.sh"
 
 fails=0
@@ -133,11 +133,11 @@ cp "$STUBS/cargo" "$BARE/cargo"
 style_lint() {
     local project=$1 path=$2
     shift 2
-    env -u CI -u CARGO_NET_OFFLINE PATH="$path" "$@" bash "$project/lint.sh" 2>&1
+    (cd "$project" && env -u CI -u CARGO_NET_OFFLINE PATH="$path" "$@" bash "$DEV" lint 2>&1)
 }
 
 missing_tools=""
-for tool in rg yq; do
+for tool in rg yq luajit; do
     if command -v "$tool" >/dev/null 2>&1; then
         ln -s "$(command -v "$tool")" "$BARE/$tool"
     else
@@ -152,9 +152,9 @@ else
     bare_path="$BARE:$CORE"
 
     rust="$TMP/rust"
-    mkdir -p "$rust/src" "$rust/scripts"
-    cp "$STYLE/lint-lib.sh" "$TMP/lint-lib.sh"
-    cp "$STYLE/rust/lint.sh" "$rust/lint.sh"
+    mkdir -p "$rust/src" "$rust/scripts" "$rust/.dev/lua"
+    cp "$STYLE/rust/lint.lua" "$rust/.dev/lint.lua"
+    cp "$STYLE/lintset.lua" "$rust/.dev/lua/lintset.lua"
     printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' >"$rust/Cargo.toml"
     printf 'pub fn noop() {}\n' >"$rust/src/lib.rs"
 
@@ -210,31 +210,14 @@ else
     rm "$rust/.dev/lint-ignore"
     out="$(style_lint "$rust" "$full_path")"
     assert_contains "a missing lint-ignore changes nothing" "$out" ".dev/evidence/old.rs:4: full-line comment directly after code"
-
-    gitfix="$TMP/gitfix"
-    mkdir -p "$gitfix/.dev/evidence" "$gitfix/src"
-    : >"$gitfix/.dev/evidence/old.rs"
-    : >"$gitfix/src/new.rs"
-    git -C "$gitfix" init -q
-    printf '# comment\n\n.dev/evidence/**\n' >"$gitfix/.dev/lint-ignore"
-
-    # shellcheck disable=SC1091  # the library path is only known at run time
-    out="$(cd "$gitfix" && . "$TMP/lint-lib.sh" && lint_files '*.rs' | sort)"
-    assert_eq "the git walk leaves lint-ignore paths out" "$out" "src/new.rs"
-    rm "$gitfix/.dev/lint-ignore"
-
-    # shellcheck disable=SC1091  # the library path is only known at run time
-    out="$(cd "$gitfix" && . "$TMP/lint-lib.sh" && lint_files '*.rs' | sort)"
-    assert_eq "the git walk keeps every path without a lint-ignore" "$out" ".dev/evidence/old.rs
-src/new.rs"
-    rm -rf "$rust/.dev"
+    rm -rf "$rust/.dev/evidence"
 
     printf 'use std::io;\n#[cfg(windows)]\nuse std::os::windows::process::CommandExt;\nuse std::process::Command;\n' >"$rust/src/gated.rs"
     out="$(style_lint "$rust" "$full_path")"
-    assert_contains "a top-level cfg-gated use fails" "$out" "src/gated.rs:2: a #[cfg]-gated use sits at the top level of the file"
+    assert_contains "a top-level cfg-gated use fails" "$out" "src/gated.rs:2: a #[cfg] use sits at the top level of the file"
     printf 'use std::io;\n#[cfg(unix)]\n#[expect(unused_imports, reason = "only some targets")]\nuse std::os::unix::process::CommandExt;\n' >"$rust/src/gated.rs"
     out="$(style_lint "$rust" "$full_path")"
-    assert_contains "a cfg-gated attribute run above a top-level use fails" "$out" "src/gated.rs:2: a #[cfg]-gated use"
+    assert_contains "a cfg-gated attribute run above a top-level use fails" "$out" "src/gated.rs:2: a #[cfg] use"
     printf '#[cfg(windows)]\nfn detach() {\n    use std::os::windows::process::CommandExt;\n}\n\n#[cfg(unix)]\nmod unix {\n    use std::os::unix::process::CommandExt;\n}\n' >"$rust/src/gated.rs"
     out="$(style_lint "$rust" "$full_path")"
     assert_not_contains "a cfg-gated use inside its function or mod passes" "$out" "src/gated.rs"
@@ -251,18 +234,18 @@ src/new.rs"
     assert_not_contains "a period-free one-liner, a two-line comment, a trailing comment and a doc line pass" "$out" "src/period.rs"
     rm "$rust/src/period.rs"
 
-    cp "$STYLE/rust/fmt.sh" "$rust/fmt.sh"
+    cp "$STYLE/rust/fmt.lua" "$rust/.dev/fmt.lua"
     fixture='pub fn run() {\n    // Drop the stale entry.\n    flush();\n\n    // Keep the first.\n    // Drop the second.\n    flush();\n\n    // Wait for more...\n    flush();\n}\n\n/// Runs once.\npub fn other() {}\n'
     printf '%b' "$fixture" >"$rust/src/period.rs"
     expected=$(printf '%b' "$fixture" | sed 's/stale entry\.$/stale entry/')
-    env PATH="$full_path" bash "$rust/fmt.sh" >/dev/null 2>&1
+    (cd "$rust" && env PATH="$full_path" bash "$DEV" fmt >/dev/null 2>&1)
     assert_eq "dev fmt drops the period from the one-liner only" "$(cat "$rust/src/period.rs")" "$expected"
     out="$(style_lint "$rust" "$full_path")"
     assert_not_contains "the comment periods check passes after dev fmt" "$out" "src/period.rs"
     before=$(cat "$rust/src/period.rs")
-    env PATH="$full_path" bash "$rust/fmt.sh" >/dev/null 2>&1
+    (cd "$rust" && env PATH="$full_path" bash "$DEV" fmt >/dev/null 2>&1)
     assert_eq "a second dev fmt changes nothing" "$(cat "$rust/src/period.rs")" "$before"
-    rm "$rust/src/period.rs" "$rust/fmt.sh"
+    rm "$rust/src/period.rs" "$rust/.dev/fmt.lua"
 
     printf 'pub fn run() {\n    // First line\n    // second line\n    // third line\n    flush();\n}\n' >"$rust/src/runs.rs"
     out="$(style_lint "$rust" "$full_path")"
@@ -365,8 +348,9 @@ src/new.rs"
     printf 'pub fn noop() {}\n' >"$rust/src/lib.rs"
 
     lua="$TMP/lua"
-    mkdir -p "$lua/src"
-    cp "$STYLE/lua/lint.sh" "$lua/lint.sh"
+    mkdir -p "$lua/src" "$lua/.dev/lua"
+    cp "$STYLE/lua/lint.lua" "$lua/.dev/lint.lua"
+    cp "$STYLE/lintset.lua" "$lua/.dev/lua/lintset.lua"
     printf 'local M = {}\n\nreturn M\n' >"$lua/src/mod.lua"
     out="$(style_lint "$lua" "$full_path")"
     assert_eq "the lua set passes a clean project" "$?" "0"

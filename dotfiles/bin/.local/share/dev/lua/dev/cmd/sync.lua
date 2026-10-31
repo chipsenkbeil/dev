@@ -103,7 +103,7 @@ function M.run(ctx)
     local channel = templates.channel(root)
     local drifted = false
 
-    local entries = templates.manifest(dir, kind)
+    local entries, pending = templates.skip_pending(root, templates.manifest(dir, kind))
     local rendered = {}
     for i, entry in ipairs(entries) do
         local text, err = templates.render(root, entry_opts(kind, entry, channel))
@@ -176,6 +176,13 @@ function M.run(ctx)
         end
     end
 
+    if #pending > 0 then
+        io.write(
+            "pending: ",
+            table.concat(pending, ", "),
+            " left alone until the project ports it to Lua\n"
+        )
+    end
     if not drifted then
         io.write("up to date\n")
         return 0

@@ -1,4 +1,4 @@
--- Lint and test on a linux container with .dev/lint.sh and .dev/test.sh when present
+-- Lint and test on a linux container with dev lint and dev test when the Lua verbs are present
 --
 --   ci run --local
 --   ci run --local --job test
@@ -10,13 +10,13 @@ return {
     lint = {
       matrix = { LINUX },
       run = function()
-        ci.sh("if [ -x .dev/lint.sh ]; then .dev/lint.sh; fi")
+        ci.sh("if [ -f .dev/lint.lua ]; then dev lint </dev/null; fi")
       end,
     },
     test = {
       matrix = { LINUX },
       run = function()
-        ci.sh("if [ -x .dev/test.sh ]; then .dev/test.sh; fi")
+        ci.sh("if [ -f .dev/test.lua ]; then dev test </dev/null; fi")
       end,
     },
   },

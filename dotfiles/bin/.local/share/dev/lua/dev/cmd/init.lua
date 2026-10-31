@@ -165,7 +165,11 @@ local function init_vcs(run)
 end
 
 local function init_lint_files(run, dir, channel)
-    for _, entry in ipairs(templates.manifest(dir, run.kind)) do
+    local entries, pending = templates.skip_pending(run.root, templates.manifest(dir, run.kind))
+    for _, bash in ipairs(pending) do
+        skipped(run, bash .. " exists, left on bash")
+    end
+    for _, entry in ipairs(entries) do
         local opts = { kind = run.kind, dest = entry.dest, src = entry.src, channel = channel }
         local path = run.root .. "/" .. entry.dest
         if fs.exists(path) then

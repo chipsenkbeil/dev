@@ -147,3 +147,34 @@ for _, pkg in ipairs({ "git", "nvim", "zsh" }) do
     print("+ " .. pkg)
 end
 ```
+
+## The lint set verbs
+
+`dev init` and `dev sync` write the Rust and Lua lint sets as Lua verbs:
+`.dev/lint.lua`, `.dev/fmt.lua` and, for Rust, `.dev/test.lua`, with the code
+they share in `.dev/lua/lintset.lua` (`require("lintset")`). They write no `.sh`
+file. The templates live in the style skill's `lint/` folder.
+
+A project keeps its own checks in `.dev/lint.lua` below the
+`-- --- project-specific checks below ---` line. Put them above the final
+`return lint:finish()` line, which `dev sync` keeps at the end. Inside the
+chunk `lint` is the run (`lint:check(name, argv)`, `lint:fail(name, message)`,
+`lint:have(binary, install, name)`, `lint:files(globs)`, `lint:grep(pattern,
+files)`), `ctx` is the verb context and `lint.root` the project root.
+
+A project still on bash is not forced over. While any of `.dev/lint.sh`,
+`.dev/fmt.sh` or `.dev/test.sh` exists, `dev sync` writes no Lua verb the
+project lacks, not even one whose bash file is absent, and prints one
+`pending:` line naming the bash files. A Lua verb the project already ported
+stays synced. A check-only `dev sync` exits 0 for it. To port the verbs:
+
+1. Run `dev sync` with its yes flag after moving the bash verb out of the way, or copy the
+   template from the style skill's `lint/<set>/` folder to `.dev/`, plus
+   `lint/lintset.lua` to `.dev/lua/lintset.lua`.
+2. Move the checks below the bash marker into Lua below the Lua marker.
+3. Delete `.dev/lint.sh`, `.dev/fmt.sh`, `.dev/test.sh` and `.dev/lint-lib.sh`,
+   and point the project's ci jobs at `dev lint` and `dev test`.
+
+A leftover `.sh` file keeps the `pending:` line until it is deleted. Once the
+Lua verb exists, dev runs the `.lua` verb as the section above says. `dev init`
+follows the same rule and prints `skipped: .dev/lint.sh exists, left on bash`.

@@ -6,15 +6,11 @@ local project = require("dev.project")
 local M = {}
 
 local BASE = "dotfiles/claude/.claude/skills/style/lint"
-local LINT_MARKER = "# --- project-specific checks below ---"
+local LINT_MARKER = "-- --- project-specific checks below ---"
 local DENY_MARKER = "# --- project-specific entries below (dev sync keeps them) ---"
 local LINTS_TABLE = "^%[workspace%.lints"
-local CD_OLD = 'cd "$(dirname "${BASH_SOURCE[0]}")"'
-local CD_NEW = 'cd "$(dirname "${BASH_SOURCE[0]}")/.."'
-local LIB_OLD = "/../lint-lib.sh"
-local LIB_NEW = "/lint-lib.sh"
-local SG_OLD = "--config ast-grep/sgconfig.yml"
-local SG_NEW = "--config sgconfig.yml"
+local LINT_RETURN = "return lint:finish()"
+local LIB_DEST = ".dev/lua/lintset.lua"
 
 ---The marker line that ends the guide part of a project's `docs/STYLE.md`.
 M.STYLE_MARKER = "## This project"
@@ -30,30 +26,12 @@ local function strip(text)
     return (text:gsub("\n+$", ""))
 end
 
-local function substitute(text, old, new, all)
-    local out, from = {}, 1
-    while true do
-        local first, last = text:find(old, from, true)
-        if not first then
-            break
-        end
-        out[#out + 1] = text:sub(from, first - 1)
-        out[#out + 1] = new
-        from = last + 1
-        if not all then
-            break
-        end
-    end
-    out[#out + 1] = text:sub(from)
-    return table.concat(out)
-end
-
 local function replace(text, old, new)
-    return substitute(text, old, new, false)
-end
-
-local function replace_all(text, old, new)
-    return substitute(text, old, new, true)
+    local first, last = text:find(old, 1, true)
+    if not first then
+        return text
+    end
+    return text:sub(1, first - 1) .. new .. text:sub(last + 1)
 end
 
 local function lines_of(text)
@@ -156,13 +134,13 @@ function M.manifest(dir, kind)
     local roots, scripts
     if set == RUST_SET then
         roots = { "rustfmt.toml", "rust-toolchain.toml", "clippy.toml", "deny.toml" }
-        scripts = { "lint.sh", "fmt.sh", "test.sh" }
+        scripts = { "lint.lua", "fmt.lua", "test.lua" }
     else
         roots = { "stylua.toml", "selene.toml", "luajit.yml" }
         if kind == Kind.LOVE2D then
             roots[#roots + 1] = "love.yml"
         end
-        scripts = { "lint.sh", "fmt.sh" }
+        scripts = { "lint.lua", "fmt.lua" }
     end
     local out = {}
     for _, name in ipairs(roots) do
@@ -172,7 +150,7 @@ function M.manifest(dir, kind)
     for _, name in ipairs(scripts) do
         out[#out + 1] = { dest = ".dev/" .. name, src = dir .. "/" .. name }
     end
-    out[#out + 1] = { dest = ".dev/lint-lib.sh", src = dir .. "/../lint-lib.sh" }
+    out[#out + 1] = { dest = LIB_DEST, src = dir .. "/../lintset.lua" }
     local found = devos.capture(
         { "find", "rules", "rule-test", "-type", "f" },
         { cwd = dir .. "/ast-grep", stderr = "null" }
@@ -185,17 +163,75 @@ function M.manifest(dir, kind)
     return out
 end
 
----Take the project's own checks below the marker in a project's `.dev/lint.sh`.
+---Take the project's own checks below the marker in a project's `.dev/lint.lua`.
 ---@param root string the project root
----@return string tail the checks with a leading newline, or an empty string
+---@return string tail the checks followed by a blank line, or an empty string
 local function lint_tail(root)
-    local text = fs.read(root .. "/.dev/lint.sh")
+    local text = fs.read(root .. "/.dev/lint.lua")
     local tail = text and after_marker(text, LINT_MARKER)
-    tail = tail and strip(tail)
-    if tail and tail ~= "" then
-        return "\n" .. tail
+    if not tail then
+        return ""
     end
-    return ""
+    tail = strip(tail)
+    local last = tail:match("[^\n]*$")
+    if last == LINT_RETURN then
+        tail = strip(tail:sub(1, #tail - #last))
+    end
+    tail = tail:gsub("^\n+", "")
+    if tail == "" then
+        return ""
+    end
+    return tail .. "\n\n"
+end
+
+local function lint_head(content)
+    local out = {}
+    for _, line in ipairs(lines_of(content)) do
+        out[#out + 1] = line
+        if line == LINT_MARKER then
+            break
+        end
+    end
+    return table.concat(out, "\n")
+end
+
+---Drop the Lua verbs a project still on bash has not ported.
+---
+---While any `.dev/<verb>.sh` of the manifest's verbs exists, a Lua verb the project lacks is not
+---written, and a Lua verb it already has stays synced. The shared library goes too when no verb
+---is left to use it.
+---@param root string the project root
+---@param entries dev.templates.Entry[] the manifest
+---@return dev.templates.Entry[] kept the entries a sync may write
+---@return string[] pending the bash verbs left alone, such as `.dev/lint.sh`
+function M.skip_pending(root, entries)
+    local pending = {}
+    for _, entry in ipairs(entries) do
+        local verb = entry.dest:match("^%.dev/([^/]+)%.lua$")
+        local bash = verb and ".dev/" .. verb .. ".sh"
+        if bash and fs.is_file(root .. "/" .. bash) then
+            pending[#pending + 1] = bash
+        end
+    end
+    local held = #pending > 0
+    local kept, verbs = {}, 0
+    for _, entry in ipairs(entries) do
+        local verb = entry.dest:match("^%.dev/([^/]+)%.lua$")
+        if not (held and verb and not fs.is_file(root .. "/" .. entry.dest)) then
+            kept[#kept + 1] = entry
+            verbs = verbs + (verb and 1 or 0)
+        end
+    end
+    if held and verbs == 0 then
+        local rest = {}
+        for _, entry in ipairs(kept) do
+            if entry.dest ~= LIB_DEST then
+                rest[#rest + 1] = entry
+            end
+        end
+        kept = rest
+    end
+    return kept, pending
 end
 
 local function deny_text(root, content)
@@ -230,16 +266,8 @@ function M.render(root, opts)
     if dest == "sgconfig.yml" then
         content = replace(content, "  - rules", "  - .dev/ast-grep/rules")
         content = replace(content, "testDir: rule-test", "testDir: .dev/ast-grep/rule-test")
-    elseif dest == ".dev/lint.sh" then
-        content = replace(content, CD_OLD, CD_NEW)
-        content = replace(content, LIB_OLD, LIB_NEW)
-        content = replace_all(content, SG_OLD, SG_NEW)
-        content = content .. lint_tail(root)
-    elseif dest == ".dev/fmt.sh" then
-        content = replace(content, CD_OLD, CD_NEW)
-        content = replace(content, LIB_OLD, LIB_NEW)
-    elseif dest == ".dev/test.sh" then
-        content = replace(content, CD_OLD, CD_NEW)
+    elseif dest == ".dev/lint.lua" then
+        content = lint_head(content) .. "\n\n" .. lint_tail(root) .. LINT_RETURN
     elseif dest == "deny.toml" then
         content = strip(deny_text(root, content))
     elseif dest == "rust-toolchain.toml" then
@@ -257,7 +285,7 @@ function M.render(root, opts)
     return content .. "\n"
 end
 
----Write the project's copy of a template, executable when it is a script.
+---Write the project's copy of a template.
 ---@param root string the project root
 ---@param opts dev.templates.RenderOpts which template to write
 ---@return true? ok true on success
@@ -276,11 +304,6 @@ function M.install(root, opts)
     local wrote, write_err = fs.write(path, text)
     if not wrote then
         return nil, write_err
-    end
-    if dest:find("%.sh$") then
-        if devos.run({ "chmod", "+x", path }) ~= 0 then
-            return nil, "cannot make " .. path .. " executable"
-        end
     end
     return true
 end

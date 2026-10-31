@@ -368,7 +368,7 @@ out="$(run_dev "$sync" sync --check)"
 assert_eq "sync --check exits 1 on drift" "$?" "1"
 assert_contains "sync --check reports a drifted file" "$out" "differs: clippy.toml"
 assert_contains "sync --check reports a missing file" "$out" "missing: deny.toml"
-assert_contains "sync --check reports the missing shared lint library" "$out" "missing: .dev/lint-lib.sh"
+assert_contains "sync --check reports the missing shared lint library" "$out" "missing: .dev/lua/lintset.lua"
 assert_not_contains "sync --check ignores a matching file" "$out" "rustfmt.toml"
 mkdir -p "$sync/.dev"
 printf '.dev/evidence/**\n' >"$sync/.dev/lint-ignore"
@@ -397,38 +397,31 @@ if command -v jj >/dev/null 2>&1; then
     git -C "$init" init -q
 
     out="$(run_dev "$init" init --dry-run --no-gerrit --public)"
-    assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.sh"
+    assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
     assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/jobs.lua"
     assert_contains "init --dry-run plans the workflow" "$out" "would create: .github/workflows/ci.yml"
     assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
     assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin hub:init"
     assert_eq "init --dry-run writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
     out="$(run_dev "$init" init --dry-run -v --no-gerrit --public 2>/dev/null)"
-    assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.sh"
+    assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.lua"
     assert_eq "init --dry-run -v writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 
     out="$(run_dev "$init" init --no-gerrit --public)"
-    assert_contains "init creates the lint script" "$out" "created: .dev/lint.sh"
-    assert_eq "init makes the lint script executable" "$([ -x "$init/.dev/lint.sh" ] && echo yes)" "yes"
-    assert_contains "init points the lint script cd at the root" "$(cat "$init/.dev/lint.sh")" 'BASH_SOURCE[0]}")/.."'
-    assert_contains "init points ast-grep at the root sgconfig.yml" "$(cat "$init/.dev/lint.sh")" "--config sgconfig.yml"
-    assert_contains "init copies the shared lint library" "$out" "created: .dev/lint-lib.sh"
-    assert_eq "init writes the shared lint library" "$([ -f "$init/.dev/lint-lib.sh" ] && echo yes)" "yes"
+    assert_contains "init creates the lint script" "$out" "created: .dev/lint.lua"
+    assert_eq "init writes the lint verb" "$([ -f "$init/.dev/lint.lua" ] && echo yes)" "yes"
+    assert_contains "init writes the lint verb on the shared library" "$(cat "$init/.dev/lint.lua")" 'require("lintset")'
+    assert_contains "init points ast-grep at the root sgconfig.yml" "$(cat "$init/.dev/lint.lua")" "sgconfig.yml"
+    assert_contains "init copies the shared lint library" "$out" "created: .dev/lua/lintset.lua"
+    assert_eq "init writes the shared lint library" "$([ -f "$init/.dev/lua/lintset.lua" ] && echo yes)" "yes"
     assert_eq "init does not create .dev/lint-ignore" "$([ -e "$init/.dev/lint-ignore" ] && echo yes)" ""
-
-    # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
-    assert_contains "init sources the lint library from beside the lint script" "$(cat "$init/.dev/lint.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
-    assert_not_contains "init leaves no path above .dev for the lint library" "$(cat "$init/.dev/lint.sh")" "/../lint-lib.sh"
-    assert_contains "init copies the rust fmt script" "$out" "created: .dev/fmt.sh"
-
-    # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
-    assert_contains "init sources the lint library from beside the fmt script" "$(cat "$init/.dev/fmt.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
-    assert_not_contains "init leaves no path above .dev in the fmt script" "$(cat "$init/.dev/fmt.sh")" "/../lint-lib.sh"
-    assert_contains "init points the fmt script cd at the root" "$(cat "$init/.dev/fmt.sh")" 'BASH_SOURCE[0]}")/.."'
+    assert_contains "init copies the rust fmt verb" "$out" "created: .dev/fmt.lua"
+    assert_contains "init copies the rust test verb" "$out" "created: .dev/test.lua"
+    assert_eq "init writes no shell verb" "$(find "$init/.dev" -name '*.sh' | wc -l | tr -d ' ')" "0"
     assert_contains "init relocates the ast-grep rules" "$(cat "$init/sgconfig.yml")" ".dev/ast-grep/rules"
     assert_contains "init pins the lint set channel" "$(cat "$init/rust-toolchain.toml")" "$(grep "^channel = " "$REPO/dotfiles/claude/.claude/skills/style/lint/rust/rust-toolchain.toml")"
     assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
-    assert_contains "init writes the pipeline" "$(cat "$init/.ci/jobs.lua")" ".dev/lint.sh"
+    assert_contains "init writes the pipeline" "$(cat "$init/.ci/jobs.lua")" "dev lint"
     assert_contains "init seeds a lint job" "$(cat "$init/.ci/jobs.lua")" "    lint = {"
     assert_contains "init seeds a test job" "$(cat "$init/.ci/jobs.lua")" "    test = {"
     assert_contains "init runs the jobs on the rust runner target" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { target = \"linux-x86-rust\" }"
@@ -442,15 +435,15 @@ if command -v jj >/dev/null 2>&1; then
     assert_eq "init creates .jj" "$([ -d "$init/.jj" ] && echo yes)" "yes"
     out="$(run_dev "$init" sync --check)"
     assert_eq "sync --check is clean after init" "$out" "up to date"
-    printf '\ncheck "project extra" true\n' >>"$init/.dev/lint.sh"
+    sd 'return lint:finish\(\)' 'lint:step("project extra")\n\nreturn lint:finish()' "$init/.dev/lint.lua"
     out="$(run_dev "$init" sync --check)"
-    assert_eq "sync --check keeps the project checks below the lint.sh marker" "$out" "up to date"
-    printf '# drifted above the marker\n' | cat - "$init/.dev/lint.sh" >"$init/.dev/lint.sh.new"
-    mv "$init/.dev/lint.sh.new" "$init/.dev/lint.sh"
+    assert_eq "sync --check keeps the project checks below the lint.lua marker" "$out" "up to date"
+    printf -- '-- drifted above the marker\n' | cat - "$init/.dev/lint.lua" >"$init/.dev/lint.lua.new"
+    mv "$init/.dev/lint.lua.new" "$init/.dev/lint.lua"
     out="$(run_dev "$init" sync --check)"
-    assert_contains "sync --check still sees drift above the marker" "$out" "differs: .dev/lint.sh"
-    tail -n +2 "$init/.dev/lint.sh" >"$init/.dev/lint.sh.new"
-    mv "$init/.dev/lint.sh.new" "$init/.dev/lint.sh"
+    assert_contains "sync --check still sees drift above the marker" "$out" "differs: .dev/lint.lua"
+    tail -n +2 "$init/.dev/lint.lua" >"$init/.dev/lint.lua.new"
+    mv "$init/.dev/lint.lua.new" "$init/.dev/lint.lua"
 
     marker='# --- project-specific entries below (dev sync keeps them) ---'
     assert_contains "init writes the deny.toml marker" "$(cat "$init/deny.toml")" "$marker"
@@ -484,7 +477,7 @@ if command -v jj >/dev/null 2>&1; then
     out="$(run_dev "$init" init --no-gerrit --public)"
     assert_not_contains "init rerun creates nothing" "$out" "created:"
     assert_contains "init rerun skips an existing docs/STYLE.md" "$out" "skipped: docs/STYLE.md exists"
-    assert_contains "init rerun skips existing files" "$out" "skipped: .dev/lint.sh exists"
+    assert_contains "init rerun skips existing files" "$out" "skipped: .dev/lint.lua exists"
     assert_eq "init rerun leaves Cargo.toml alone" "$(cat "$init/Cargo.toml")" "$before"
 
     # love2d gets the Lua lint set with the love std
@@ -495,22 +488,20 @@ if command -v jj >/dev/null 2>&1; then
     printf 'local M = {}\n\nreturn M\n' >"$game/src/mod.lua"
     git -C "$game" init -q
     out="$(run_dev "$game" init --dry-run --no-gerrit)"
-    assert_contains "love2d init --dry-run plans the lint script" "$out" "would create: .dev/lint.sh"
+    assert_contains "love2d init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
     assert_contains "love2d init --dry-run plans selene.toml" "$out" "would create: selene.toml"
     assert_eq "love2d init --dry-run writes nothing" "$(find "$game" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "4"
     out="$(run_dev "$game" init --no-gerrit)"
-    for f in .dev/lint.sh .dev/fmt.sh selene.toml stylua.toml luajit.yml love.yml sgconfig.yml .dev/ast-grep/rules/comment-period.yml; do
+    for f in .dev/lint.lua .dev/fmt.lua .dev/lua/lintset.lua selene.toml stylua.toml luajit.yml love.yml sgconfig.yml .dev/ast-grep/rules/comment-period.yml; do
         assert_contains "love2d init creates $f" "$out" "created: $f"
         assert_eq "love2d init writes $f" "$([ -f "$game/$f" ] && echo yes)" "yes"
     done
     assert_not_contains "love2d init writes no pending README" "$out" ".dev/README.md"
-    assert_eq "love2d init makes the lint script executable" "$([ -x "$game/.dev/lint.sh" ] && echo yes)" "yes"
-    assert_contains "love2d init points the lint script cd at the root" "$(cat "$game/.dev/lint.sh")" 'BASH_SOURCE[0]}")/.."'
-    assert_eq "love2d init writes the shared lint library" "$([ -f "$game/.dev/lint-lib.sh" ] && echo yes)" "yes"
-
-    # shellcheck disable=SC2016  # the asserted line is matched literally, not expanded
-    assert_contains "love2d init sources the lint library from beside the lint script" "$(cat "$game/.dev/lint.sh")" '. "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"'
-    assert_not_contains "love2d init repoints every ast-grep config path" "$(cat "$game/.dev/lint.sh")" "ast-grep/sgconfig.yml"
+    assert_eq "love2d init writes the lint verb" "$([ -f "$game/.dev/lint.lua" ] && echo yes)" "yes"
+    assert_eq "love2d init writes the shared lint library" "$([ -f "$game/.dev/lua/lintset.lua" ] && echo yes)" "yes"
+    assert_eq "love2d init writes no shell verb" "$(find "$game/.dev" -name '*.sh' | wc -l | tr -d ' ')" "0"
+    assert_contains "love2d init writes the lint verb on the shared library" "$(cat "$game/.dev/lint.lua")" 'require("lintset")'
+    assert_contains "love2d init points ast-grep at the root sgconfig.yml" "$(cat "$game/.dev/lint.lua")" "sgconfig.yml"
     assert_contains "love2d init relocates the ast-grep rules" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rules"
     assert_contains "love2d init relocates the ast-grep rule tests" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rule-test"
     assert_contains "love2d init picks the love std" "$(cat "$game/selene.toml")" 'std = "love"'
@@ -525,18 +516,18 @@ if command -v jj >/dev/null 2>&1; then
     cp "$REPO/dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml" "$game/stylua.toml"
     out="$(run_dev "$game" init --no-gerrit)"
     assert_not_contains "love2d init rerun creates nothing" "$out" "created:"
-    assert_contains "love2d init rerun skips an existing lint script" "$out" "skipped: .dev/lint.sh exists"
+    assert_contains "love2d init rerun skips an existing lint script" "$out" "skipped: .dev/lint.lua exists"
 
     if command -v stylua >/dev/null 2>&1 && command -v selene >/dev/null 2>&1 && command -v ast-grep >/dev/null 2>&1; then
-        out="$(cd "$game" && .dev/lint.sh 2>&1)"
-        assert_eq "installed lint.sh passes on a clean love2d project" "$?" "0"
+        out="$(cd "$game" && "$DEV" lint 2>&1)"
+        assert_eq "installed lint verb passes on a clean love2d project" "$?" "0"
         printf -- '-- Advance generation to invalidate handles.\nlocal M = {}\n\nreturn M\n' >"$game/src/mod.lua"
-        out="$(cd "$game" && .dev/lint.sh 2>&1)"
-        assert_eq "installed lint.sh exits 1 on a violation" "$?" "1"
-        assert_contains "installed lint.sh names the ast-grep rule" "$out" "error[comment-period]"
-        assert_contains "installed lint.sh lists the failed check" "$out" "FAILED: ast-grep scan"
+        out="$(cd "$game" && "$DEV" lint 2>&1)"
+        assert_eq "installed lint verb exits 1 on a violation" "$?" "1"
+        assert_contains "installed lint verb names the ast-grep rule" "$out" "error[comment-period]"
+        assert_contains "installed lint verb lists the failed check" "$out" "FAILED: ast-grep scan"
     else
-        printf 'skip - installed lua lint.sh on a love2d project (needs stylua, selene and ast-grep)\n'
+        printf 'skip - installed lua lint verb on a love2d project (needs stylua, selene and ast-grep)\n'
     fi
 
     # Plain lua gets the same set with the luajit std and no love.yml
@@ -546,7 +537,7 @@ if command -v jj >/dev/null 2>&1; then
     git -C "$lib" init -q
     out="$(run_dev "$lib" init --no-gerrit)"
     assert_contains "lua init reports the type" "$out" "type lua"
-    assert_contains "lua init creates the lint script" "$out" "created: .dev/lint.sh"
+    assert_contains "lua init creates the lint script" "$out" "created: .dev/lint.lua"
     assert_contains "lua init picks the luajit std" "$(cat "$lib/selene.toml")" 'std = "luajit"'
     assert_eq "lua init ships no love.yml" "$([ -e "$lib/love.yml" ] || echo absent)" "absent"
     assert_eq "lua init ships luajit.yml" "$([ -f "$lib/luajit.yml" ] && echo yes)" "yes"
@@ -595,7 +586,7 @@ assert_eq "sync --check exits 1 on a modified lints block" "$?" "1"
 assert_contains "sync --check reports the lints block" "$out" "differs: [workspace.lints] block in Cargo.toml"
 assert_contains "sync --check reports the removed attribute" "$out" "missing: library-register attribute in crates/lib/src/lib.rs"
 assert_not_contains "sync --check ignores the application crate" "$out" "crates/app"
-printf '\ncheck "project extra" true\n' >>"$reg/.dev/lint.sh"
+sd 'return lint:finish\(\)' 'lint:step("project extra")\n\nreturn lint:finish()' "$reg/.dev/lint.lua"
 printf '# drifted guide\n' | cat - "$reg/docs/STYLE.md" >"$reg/docs/STYLE.md.new"
 mv "$reg/docs/STYLE.md.new" "$reg/docs/STYLE.md"
 out="$(run_dev "$reg" sync --yes </dev/null 2>&1)"
@@ -604,7 +595,7 @@ assert_contains "sync --yes prints the diffs it applies" "$out" "would insert in
 assert_contains "sync --yes applies without asking" "$out" "synced"
 out="$(run_dev "$reg" sync --check)"
 assert_eq "sync --yes restores the lints block, the attribute and the guide" "$out" "up to date"
-assert_contains "sync --yes keeps the project checks below the lint.sh marker" "$(cat "$reg/.dev/lint.sh")" 'check "project extra" true'
+assert_contains "sync --yes keeps the project checks below the lint.lua marker" "$(cat "$reg/.dev/lint.lua")" 'lint:step("project extra")'
 on_tty() {
     if sv=$(script --version 2>&1) && grep -q util-linux <<<"$sv"; then
         script -qec "$(printf '%q ' "$@")" /dev/null

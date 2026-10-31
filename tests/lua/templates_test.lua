@@ -6,6 +6,7 @@ local project = require("dev.project")
 local support = require("support")
 
 local Kind = project.Kind
+local MARKER = "-- --- project-specific checks below ---"
 
 local CARGO =
     '[package]\nname = "x"\n\n[workspace.lints.rust]\nunsafe_code = "forbid"\n\n[workspace.lints.clippy]\npedantic = "warn"\n\n[dependencies]\nserde = "1"\n'
@@ -54,10 +55,10 @@ t.test("lib_attr_insert puts the snippet after the leading doc block and is idem
     )
 end)
 
-t.test("render keeps the project's text below the deny.toml and lint.sh markers", function()
+t.test("render keeps the project's text below the deny.toml and lint.lua markers", function()
     local root = support.sandbox({
         ["deny.toml"] = "old\n# --- project-specific entries below (dev sync keeps them) ---\nkept = 1\n\n",
-        [".dev/lint.sh"] = "old\n# --- project-specific checks below ---\ncheck extra\n",
+        [".dev/lint.lua"] = "old\n" .. MARKER .. "\n\ncheck extra\n\nreturn lint:finish()\n",
         ["rust-toolchain.toml"] = '[toolchain]\nchannel = "1.80.0"\n',
     }, {})
     local src = root .. "/src.toml"
@@ -65,7 +66,8 @@ t.test("render keeps the project's text below the deny.toml and lint.sh markers"
         fs.write(
             src,
             "head\n# --- project-specific entries below (dev sync keeps them) ---\ntail\n\n"
-        )
+        ),
+        "fixture setup failed"
     )
     t.eq(
         templates.render(
@@ -75,20 +77,21 @@ t.test("render keeps the project's text below the deny.toml and lint.sh markers"
         "head\n# --- project-specific entries below (dev sync keeps them) ---\nkept = 1\n"
     )
     assert(
-        fs.write(
-            src,
-            'cd "$(dirname "${BASH_SOURCE[0]}")"\nsource "$(dirname "${BASH_SOURCE[0]}")/../lint-lib.sh"\n'
-        )
+        fs.write(src, "head\n\n" .. MARKER .. "\n\nreturn lint:finish()\n"),
+        "fixture setup failed"
     )
     t.eq(
         templates.render(
             root,
-            { kind = Kind.RUST, dest = ".dev/lint.sh", src = src, channel = "stable" }
+            { kind = Kind.RUST, dest = ".dev/lint.lua", src = src, channel = "stable" }
         ),
-        'cd "$(dirname "${BASH_SOURCE[0]}")/.."\nsource "$(dirname "${BASH_SOURCE[0]}")/lint-lib.sh"\ncheck extra\n'
+        "head\n\n" .. MARKER .. "\n\ncheck extra\n\nreturn lint:finish()\n"
     )
     t.eq(templates.channel(root), "1.80.0")
-    assert(fs.write(src, '[toolchain]\nchannel = "nightly"\ncomponents = []\n'))
+    assert(
+        fs.write(src, '[toolchain]\nchannel = "nightly"\ncomponents = []\n'),
+        "fixture setup failed"
+    )
     t.eq(
         templates.render(
             root,
@@ -101,16 +104,19 @@ end)
 
 t.test("channel falls back to the lint set's pin, not the installed compiler", function()
     local root = support.sandbox({}, {})
-    local dir = assert(templates.dir(Kind.RUST))
+    local dir = assert(templates.dir(Kind.RUST), "no template dir")
     local pin = fs.read(dir .. "/rust-toolchain.toml"):match('channel = "([^"]+)"')
     t.eq(templates.channel(root), pin)
-    assert(fs.write(root .. "/rust-toolchain.toml", '[toolchain]\nchannel = "1.80.0"\n'))
+    assert(
+        fs.write(root .. "/rust-toolchain.toml", '[toolchain]\nchannel = "1.80.0"\n'),
+        "fixture setup failed"
+    )
     t.eq(templates.channel(root), "1.80.0")
     fs.remove(root, { recursive = true })
 end)
 
 t.test("the lua manifest adds love.yml for love2d only", function()
-    local dir = assert(templates.dir(Kind.LUA))
+    local dir = assert(templates.dir(Kind.LUA), "no template dir")
     local function dests(kind)
         local out = {}
         for _, entry in ipairs(templates.manifest(dir, kind)) do
@@ -130,19 +136,226 @@ t.test("lib_crates and app_crates split the member crates by publish = false", f
     end
     local root = support.tempdir()
     local function crate(name, extra)
-        assert(fs.mkdir(root .. "/crates/" .. name .. "/src", { parents = true }))
+        assert(
+            fs.mkdir(root .. "/crates/" .. name .. "/src", { parents = true }),
+            "fixture setup failed"
+        )
         assert(
             fs.write(
                 root .. "/crates/" .. name .. "/Cargo.toml",
                 '[package]\nname = "' .. name .. '"\n' .. extra
-            )
+            ),
+            "fixture setup failed"
         )
-        assert(fs.write(root .. "/crates/" .. name .. "/src/lib.rs", "pub fn f() {}\n"))
+        assert(
+            fs.write(root .. "/crates/" .. name .. "/src/lib.rs", "pub fn f() {}\n"),
+            "fixture setup failed"
+        )
     end
     crate("a", "")
     crate("b", "publish = false\n")
-    assert(fs.write(root .. "/Cargo.toml", '[workspace]\nmembers = ["crates/*"]\n'))
+    assert(
+        fs.write(root .. "/Cargo.toml", '[workspace]\nmembers = ["crates/*"]\n'),
+        "fixture setup failed"
+    )
     t.eq(templates.lib_crates(root), { "crates/a" })
     t.eq(templates.app_crates(root), { "crates/b" })
+    fs.remove(root, { recursive = true })
+end)
+
+local function dests(dir, kind)
+    local out = {}
+    for _, entry in ipairs(templates.manifest(dir, kind)) do
+        out[#out + 1] = entry.dest
+    end
+    return out
+end
+
+local function has(list, name)
+    for _, item in ipairs(list) do
+        if item == name then
+            return true
+        end
+    end
+    return false
+end
+
+t.test("the manifest names Lua verbs and the shared library for both sets", function()
+    local rust = dests(assert(templates.dir(Kind.RUST), "no template dir"), Kind.RUST)
+    for _, name in ipairs({ ".dev/lint.lua", ".dev/fmt.lua", ".dev/test.lua" }) do
+        t.ok(has(rust, name), name)
+    end
+    t.ok(has(rust, ".dev/lua/lintset.lua"))
+    local lua = dests(assert(templates.dir(Kind.LUA), "no template dir"), Kind.LUA)
+    t.ok(has(lua, ".dev/lint.lua") and has(lua, ".dev/fmt.lua"))
+    t.ok(not has(lua, ".dev/test.lua"))
+    for _, list in ipairs({ rust, lua }) do
+        for _, name in ipairs(list) do
+            t.ok(not name:find("%.sh$"), name)
+        end
+    end
+end)
+
+t.test("skip_pending leaves a verb whose bash file has no Lua verb", function()
+    local root = support.sandbox({ [".dev/lint.sh"] = "#!/bin/sh\n", [".dev/fmt.lua"] = "" }, {})
+    local entries = templates.manifest(assert(templates.dir(Kind.LUA), "no template dir"), Kind.LUA)
+    local kept, pending = templates.skip_pending(root, entries)
+    t.eq(pending, { ".dev/lint.sh" })
+    local names = {}
+    for _, entry in ipairs(kept) do
+        names[#names + 1] = entry.dest
+    end
+    t.ok(not has(names, ".dev/lint.lua"))
+    t.ok(has(names, ".dev/fmt.lua"))
+    t.ok(has(names, ".dev/lua/lintset.lua"))
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("skip_pending drops the shared library when every verb is pending", function()
+    local root = support.sandbox({ [".dev/lint.sh"] = "", [".dev/fmt.sh"] = "" }, {})
+    local entries = templates.manifest(assert(templates.dir(Kind.LUA), "no template dir"), Kind.LUA)
+    local kept, pending = templates.skip_pending(root, entries)
+    t.eq(pending, { ".dev/lint.sh", ".dev/fmt.sh" })
+    for _, entry in ipairs(kept) do
+        t.ok(entry.dest ~= ".dev/lua/lintset.lua", entry.dest)
+    end
+    fs.remove(root, { recursive = true })
+end)
+
+t.test(
+    "a rendered lint verb keeps the project's checks and renders the template unchanged",
+    function()
+        local dir = assert(templates.dir(Kind.RUST), "no template dir")
+        local template = assert(fs.read(dir .. "/lint.lua"), "read failed")
+        local root = support.sandbox({}, {})
+        local opts =
+            { kind = Kind.RUST, dest = ".dev/lint.lua", src = dir .. "/lint.lua", channel = "" }
+        t.eq(templates.render(root, opts), template)
+        local mine = template:gsub(
+            "\nreturn lint:finish%(%)\n$",
+            '\nlint:step("mine")\n\nreturn lint:finish()\n'
+        )
+        assert(fs.write(root .. "/.dev/lint.lua", mine), "fixture setup failed")
+        t.eq(templates.render(root, opts), mine)
+        fs.remove(root, { recursive = true })
+    end
+)
+
+local function synced()
+    local root = support.sandbox({ ["a.lua"] = "print(1)\n" }, {})
+    local out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    return root
+end
+
+t.test("sync writes Lua verbs and no shell file, and a second check is clean", function()
+    local root = synced()
+    t.ok(fs.is_file(root .. "/.dev/lint.lua"))
+    t.ok(fs.is_file(root .. "/.dev/fmt.lua"))
+    t.ok(fs.is_file(root .. "/.dev/lua/lintset.lua"))
+    for _, name in ipairs(fs.list(root .. "/.dev") or {}) do
+        t.ok(not name:find("%.sh$"), name)
+    end
+    local out, code = support.dev(root, { "sync", "--check" })
+    t.ok(code == 0, out)
+    t.ok(out:find("up to date", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a project's checks below the marker survive a sync", function()
+    local root = synced()
+    local path = root .. "/.dev/lint.lua"
+    local text = assert(fs.read(path), "read failed")
+    local mine =
+        text:gsub("\nreturn lint:finish%(%)\n$", '\nlint:step("mine")\n\nreturn lint:finish()\n')
+    assert(fs.write(path, mine), "fixture setup failed")
+    local out, code = support.dev(root, { "sync", "--check" })
+    t.ok(code == 0, out)
+    assert(fs.write(root .. "/.dev/fmt.lua", "-- drifted\n"), "fixture setup failed")
+    out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    t.eq(fs.read(path), mine)
+    t.ok(fs.read(root .. "/.dev/fmt.lua") ~= "-- drifted\n")
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a project still on bash verbs passes sync --check and gets no Lua verb", function()
+    local root = synced()
+    fs.remove(root .. "/.dev/lint.lua")
+    fs.remove(root .. "/.dev/fmt.lua")
+    fs.remove(root .. "/.dev/lua/lintset.lua")
+    assert(fs.write(root .. "/.dev/lint.sh", "#!/bin/sh\n"), "fixture setup failed")
+    assert(fs.write(root .. "/.dev/fmt.sh", "#!/bin/sh\n"), "fixture setup failed")
+    local out, code = support.dev(root, { "sync", "--check" })
+    t.ok(code == 0, out)
+    t.ok(out:find("pending: .dev/lint.sh, .dev/fmt.sh", 1, true), out)
+    out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    t.ok(not fs.exists(root .. "/.dev/lint.lua"))
+    t.ok(not fs.exists(root .. "/.dev/fmt.lua"))
+    t.ok(not fs.exists(root .. "/.dev/lua/lintset.lua"))
+    fs.remove(root .. "/.dev/lint.sh")
+    out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    t.ok(not fs.exists(root .. "/.dev/lint.lua"))
+    fs.remove(root .. "/.dev/fmt.sh")
+    out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    t.ok(fs.is_file(root .. "/.dev/lint.lua"))
+    t.ok(fs.is_file(root .. "/.dev/fmt.lua"))
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("skip_pending holds every missing Rust verb while lint.sh and fmt.sh exist", function()
+    local root = support.sandbox({ [".dev/lint.sh"] = "", [".dev/fmt.sh"] = "" }, {})
+    local entries =
+        templates.manifest(assert(templates.dir(Kind.RUST), "no template dir"), Kind.RUST)
+    local kept, pending = templates.skip_pending(root, entries)
+    t.eq(pending, { ".dev/lint.sh", ".dev/fmt.sh" })
+    for _, entry in ipairs(kept) do
+        t.ok(not entry.dest:find("^%.dev/[^/]+%.lua$"), entry.dest)
+        t.ok(entry.dest ~= ".dev/lua/lintset.lua", entry.dest)
+    end
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a Rust project on bash verbs without test.sh passes sync --check", function()
+    if not devos.which("yq") then
+        print("skip - yq is not installed")
+        return
+    end
+    local root = support.sandbox({ ["Cargo.toml"] = '[workspace]\nmembers = ["crates/*"]\n' }, {})
+    local out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    for _, name in ipairs({ "lint", "fmt", "test" }) do
+        fs.remove(root .. "/.dev/" .. name .. ".lua")
+    end
+    fs.remove(root .. "/.dev/lua/lintset.lua")
+    assert(fs.write(root .. "/.dev/lint.sh", "#!/bin/sh\n"), "fixture setup failed")
+    assert(fs.write(root .. "/.dev/fmt.sh", "#!/bin/sh\n"), "fixture setup failed")
+    out, code = support.dev(root, { "sync", "--check" })
+    t.ok(code == 0, out)
+    t.ok(out:find("pending: .dev/lint.sh, .dev/fmt.sh", 1, true), out)
+    out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    t.ok(not fs.exists(root .. "/.dev/test.lua"))
+    t.ok(not fs.exists(root .. "/.dev/lua/lintset.lua"))
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a Rust project synced from scratch passes sync --check", function()
+    if not devos.which("yq") then
+        print("skip - yq is not installed")
+        return
+    end
+    local root = support.sandbox({ ["Cargo.toml"] = '[workspace]\nmembers = ["crates/*"]\n' }, {})
+    local out, code = support.dev(root, { "sync", "--yes" })
+    t.ok(code == 0, out)
+    for _, name in ipairs({ "lint", "fmt", "test" }) do
+        t.ok(fs.is_file(root .. "/.dev/" .. name .. ".lua"), name)
+    end
+    out, code = support.dev(root, { "sync", "--check" })
+    t.ok(code == 0, out)
+    t.eq(out, "up to date\n")
     fs.remove(root, { recursive = true })
 end)

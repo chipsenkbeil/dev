@@ -1,4 +1,4 @@
--- Lint and test on a linux container with .dev/lint.sh and .dev/test.sh
+-- Lint and test on a linux container with dev lint and dev test
 --
 --   ci run --local
 --   ci run --local --job test
@@ -34,14 +34,14 @@ return {
       matrix = { LINUX },
       run = function()
         install_rust()
-        run(".dev/lint.sh")
+        run("dev lint </dev/null")
       end,
     },
     test = {
       matrix = { LINUX },
       run = function()
         install_rust()
-        run(".dev/test.sh")
+        run("dev test </dev/null")
       end,
     },
   },
