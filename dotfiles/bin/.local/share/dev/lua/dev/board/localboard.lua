@@ -321,11 +321,18 @@ function Backend:link(id, kind, other)
             if current then
                 return nil, "the card already has an umbrella"
             end
-            if umbrella_of(target) then
-                return nil, "umbrellas nest one level, and the umbrella is itself a child"
-            end
-            if #children_of(doc, card.id) > 0 then
-                return nil, "umbrellas nest one level, and the card is itself an umbrella"
+            local step, seen = target, {}
+            while step and not seen[step.id] do
+                if step == card then
+                    return nil,
+                        "the link would make a cycle of umbrellas between " .. card.id:sub(
+                            1,
+                            board.MIN_PREFIX
+                        ) .. " and " .. target.id:sub(1, board.MIN_PREFIX)
+                end
+                seen[step.id] = true
+                local up = umbrella_of(step)
+                step = up and find_by_id(doc.cards, up)
             end
         end
         local holder, held_kind, held_target = card, kind, target

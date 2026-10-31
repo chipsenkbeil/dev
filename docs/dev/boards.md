@@ -458,11 +458,12 @@ it, and asking again for a link it has changes nothing, so a `link` that could
 not reach Pomb is queued with the others. Pomb refuses a card linked to itself
 and a link that would make cards wait on each other.
 `dev board link CHILD parent UMBRELLA` makes the other card the umbrella of the
-first. A card has one umbrella and umbrellas nest one level, so Pomb refuses a
-second umbrella, an umbrella that is itself a child and a child that is itself
-an umbrella, and a local board refuses them too. A local board stores the links
-on its own cards, links only its own cards, and its `next` skips a card that a
-card outside Done blocks.
+first. A card has one umbrella and umbrellas nest to any depth, so Pomb
+refuses a second umbrella and a link that would make a cycle, and a local
+board refuses them too, naming the two cards the link joins. An umbrella
+counts its direct children. A local board stores the links on its own cards,
+links only its own cards, and its `next` skips a card that a card outside Done
+blocks.
 
 `links CARD` lists a card's links, one line each: the kind as the card sees it
 (`blocked_by`, `blocks`, `related` or `parent`), the other card's id prefix and
@@ -747,12 +748,11 @@ never handles the API.
 - `link CARD KIND OTHER`: Links a card to another and prints
   `linked <id prefix> <kind> <other>`. `KIND` is `blocked_by`, `blocks`,
   `related` or `parent`, else exit 2. `parent` is held by the child and names
-  the umbrella as `OTHER`; an umbrella nests one level and a card has one
-  umbrella, so Pomb answers a second umbrella, a child made an umbrella or an
-  umbrella made a child with a `400` (exit 1), and a local board refuses the
-  same itself (`the card already has an umbrella`,
-  `umbrellas nest one level, ...`) while linking the same umbrella twice changes
-  nothing. `OTHER` is a card of this board (an id or a prefix of 8 hex
+  the umbrella as `OTHER`. Umbrellas nest to any depth and a card has one
+  umbrella, so Pomb answers a second umbrella or a cycle with a `400` (exit 1),
+  and a local board refuses the same itself (`the card already has an
+  umbrella`, `the link would make a cycle of umbrellas between A and B`) while
+  linking the same umbrella twice changes nothing. `OTHER` is a card of this board (an id or a prefix of 8 hex
   characters or more) or `BOARD:PREFIX` for a card of another board of the same
   Pomb server, which dev finds by reading that board (`other_board`) and
   resolving the prefix there, then sends the other card's full id
