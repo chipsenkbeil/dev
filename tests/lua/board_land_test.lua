@@ -187,6 +187,8 @@ local function new_card(root, home, log)
         "Card",
         "--problem",
         "x",
+        "--size",
+        "1",
         "--done-when",
         "It works",
     })

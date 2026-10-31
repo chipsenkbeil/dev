@@ -35,7 +35,11 @@ end
 
 local function card_in(root, home)
     must(dev(root, home, { "board", "init" }))
-    local out = dev(root, home, { "board", "add", "Card", "--problem", "x" })
+    local out = dev(
+        root,
+        home,
+        { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
+    )
     return assert(out:match("added (%x+)"), out)
 end
 

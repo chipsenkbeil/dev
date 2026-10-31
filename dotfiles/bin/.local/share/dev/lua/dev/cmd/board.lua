@@ -661,13 +661,21 @@ function commands.add(backend, args)
     elseif column ~= roles.icebox then
         description = board.scaffold(description)
     end
-    if column == roles.backlog then
-        local missing = board.backlog_missing(description)
+    if column ~= roles.icebox and column ~= roles.ready then
+        local missing = board.unplanned({
+            color = color,
+            description = description,
+            outcomes = #outcomes,
+            need_outcomes = true,
+        })
         if #missing > 0 then
             return usage(
-                "a card needs card format v2 before it enters Backlog, and this one lacks "
+                "a card outside "
+                    .. roles.icebox
+                    .. " needs a size, card format v2 and Done when outcomes, and this one lacks "
                     .. table.concat(missing, ", ")
-                    .. "; pass --problem, or add it to Icebox"
+                    .. "; pass --size, --problem and --done-when, or add it to "
+                    .. roles.icebox
             )
         end
     end
@@ -1148,14 +1156,21 @@ local function move_card(backend, args, opts)
                 .. " and cannot enter Ready; size it with dev board size CARD 1, 2 or 3"
         )
     end
-    if column == roles.backlog then
-        local missing = board.backlog_missing(card.description)
+    if column ~= roles.icebox and column ~= roles.ready then
+        local missing = board.unplanned({
+            color = card.color,
+            description = card.description,
+            outcomes = #card.outcomes,
+            need_outcomes = not (opts and opts.drop) and not card.outcomes_unreadable,
+        })
         if #missing > 0 then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
-                    .. " is not in card format v2 and cannot enter Backlog; it lacks "
+                    .. " is not planned and cannot enter "
+                    .. column
+                    .. "; it lacks "
                     .. table.concat(missing, ", ")
-                    .. "; fix the description with dev board edit"
+                    .. "; fix it with dev board size, edit and outcome"
             )
         end
     end
@@ -1322,6 +1337,20 @@ function commands.discard(backend, args)
     if held_back then
         return held_back
     end
+    local missing = board.unplanned({
+        color = card.color,
+        description = card.description,
+        outcomes = #card.outcomes,
+        need_outcomes = false,
+    })
+    if #missing > 0 then
+        return failure(
+            card.id:sub(1, board.MIN_PREFIX)
+                .. " is not planned and cannot be discarded; it lacks "
+                .. table.concat(missing, ", ")
+                .. "; fix it with dev board size and edit"
+        )
+    end
     local steps = {}
     if reason then
         steps[#steps + 1] = { sub = "note", args = { words[1], KIND_FLAG, "decision", reason } }
@@ -1370,6 +1399,16 @@ function commands.size(backend, args)
     card, err = find_card(backend, args[1])
     if not card then
         return err
+    end
+    if color == board.SIZES.unsized and card.column ~= backend.roles.icebox then
+        return failure(
+            card.id:sub(1, board.MIN_PREFIX)
+                .. " is outside "
+                .. backend.roles.icebox
+                .. " and keeps a size; move it to "
+                .. backend.roles.icebox
+                .. " first"
+        )
     end
     local held = claims.read(card.id)
     local ok, message = backend:set_size(card.id, color, held and held.fence)
@@ -1722,6 +1761,18 @@ function commands.edit(backend, args)
     local held_back = owner_holds(card)
     if held_back then
         return held_back
+    end
+    if card.column ~= backend.roles.icebox then
+        local missing = board.backlog_missing(args[2])
+        if #missing > 0 then
+            return failure(
+                card.id:sub(1, board.MIN_PREFIX)
+                    .. " is outside "
+                    .. backend.roles.icebox
+                    .. " and keeps card format v2; that text lacks "
+                    .. table.concat(missing, ", ")
+            )
+        end
     end
     local held = claims.read(card.id)
     local ok, message = backend:set_description(card.id, args[2], held and held.fence)
@@ -2503,7 +2554,7 @@ function commands.stale(backend, args, now)
     local roles = backend.roles
     local found, owner, moved, undated, unsized = {}, {}, {}, {}, {}
     for _, card in ipairs(cards) do
-        if card.column == roles.backlog and board.has_color(card, board.SIZES.unsized) then
+        if card.column ~= roles.icebox and board.has_color(card, board.SIZES.unsized) then
             unsized[#unsized + 1] = card
         end
         local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
@@ -2576,7 +2627,7 @@ function commands.stale(backend, args, now)
             rows[#rows + 1] = { card.id:sub(1, board.MIN_PREFIX), card.column, card.name }
         end
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "unsized in " .. roles.backlog .. ":"
+        lines[#lines + 1] = "unsized outside " .. roles.icebox .. ":"
         append(lines, board.table_lines(rows))
     end
     if #undated > 0 then

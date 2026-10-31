@@ -8,11 +8,11 @@ dev board status
 dev board init
 dev board ls --column ready
 dev board next
-dev board add "Name the new thing" --column backlog --description "why" --size 2
+dev board add "Name the new thing" --column backlog --description "why" --size 2 --done-when "it works"
 dev board ls --size 3+
 dev board size 8af0e001 1
-dev board add "Name" --label needs:lead --label docs
-dev board add "Name" --checks "dev lint" --checks "dev test"
+dev board add "Name" --size 1 --problem "why" --done-when "it works" --label needs:lead --label docs
+dev board add "Name" --size 1 --problem "why" --done-when "it works" --checks "dev lint" --checks "dev test"
 dev board label 8af0e001 needs:human --remove needs:lead
 dev board stale --days 7
 dev board note 8af0e001 "Tests pass, landing now."
@@ -220,10 +220,10 @@ Every card in every column is fair game for an agent unless it is labelled
 - Icebox: an idea, maybe later. A scoping agent sharpens, sizes and promotes
   cards to Backlog. A `needs:human` card here is an idea you want to flesh out
   yourself.
-- Backlog: wanted, not ready to run. A card enters with a Problem. A planner
-  writes the card format v2 description, the outcomes and the checks, sizes it
-  (splitting a red card, which may become an umbrella over its children) and
-  moves it to Ready.
+- Backlog: wanted, not ready to run. A card enters with a size, the card
+  format v2 sections and an outcome. A planner refines the description, the
+  outcomes and the checks, re-sizes it if needed (splitting a red card, which
+  may become an umbrella over its children) and moves it to Ready.
 - Ready: an agent can run it with no questions: size 1 to 3, v2, 3 to 7 outcomes
   and a checks row, which `dev board` enforces. The top card is next, and the
   order within Ready is the priority. A runner takes it by size: yellow by a
@@ -306,18 +306,29 @@ with a digit and a letter. A path holds a `/` and starts with `~/`, `./` or `/`
 or ends in an extension. A URL is exempt. Text under `## Change` is not scanned,
 a note is all prose, an outcome is prose, and `--checks` is never scanned.
 
-Sizing is part of planning, so a card cannot enter Ready without a size.
+Only Icebox holds a card that is unsized or free-form. Every other column takes
+a card with a size of `1`, `2`, `3` or `3+`, all three v2 headings with text
+under Problem, and, for `add` and `move`, at least one Done when outcome (a v1
+`## Done when` item counts). A `move` of a card whose Pomb outcomes dev
+cannot read is not refused for missing outcomes, except into Done and Ready.
+`dev.board.unplanned` is the one check.
+`add` refuses a card without them and names
+what is missing (exit 2), `move` does the same (exit 1), and `discard` refuses
+an unsized card or one without the headings but does not ask for outcomes (exit
+1), so a card never reaches Done unsized. `size CARD unsized` is refused outside
+Icebox (exit 1), `edit` refuses a text that drops a heading outside Icebox (exit
+1), and a move into Icebox always works. An umbrella follows the same rule, and
+a red one is allowed.
+
+Sizing is part of planning, so a card also cannot enter Ready as red.
 `move CARD ready` refuses a card that is unsized (white or no colour) or red,
 more than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit
 1); a red card is split instead. `add --column ready` without `--size 1`, `2` or
-`3` is a usage error (exit 2). Every other column takes a card of any colour.
+`3` is a usage error (exit 2).
 
-A card needs a Problem to enter Backlog: all three headings, with text under
-Problem. `add` (the default column) and `move CARD backlog` refuse a card
-without them and name what is missing (add exit 2, move exit 1). A card also
-needs card format v2 to enter Ready: all three headings with text under each,
-and 3 to 7 Done when outcomes (subtasks). A card with none is still accepted
-when its description has a v1 `## Done when` checklist item, until the boards
+A card also needs card format v2 to enter Ready: all three headings with text
+under each, and 3 to 7 Done when outcomes (subtasks). A card with none is still
+accepted when its description has a v1 `## Done when` checklist item, until the boards
 are converted. `move CARD ready` refuses a card without them and names what is
 missing (exit 1), and `add --column ready` does the same for its description and
 `--done-when` items (exit 2). Icebox cards are free-form, so adding to or moving
@@ -505,9 +516,9 @@ and an agent should take the label off (per the board guide). A card in one of
 those columns, or with that label, that the tasks view did not date gets a line
 `could not date <id> <name>` after a blank line, instead of being skipped. When
 nothing is stale it prints `no stale cards`. A `--days` that is not a whole
-number of 1 or more is a usage error (exit 2). Every card in Backlog that is
-unsized (white or no colour) is also listed at any age, apart, under
-`unsized in Backlog:` with its id prefix, column and name, so a planner sees
+number of 1 or more is a usage error (exit 2). Every card that is
+unsized (white or no colour), in any column but Icebox, is also listed at any age, apart,
+under `unsized outside Icebox:` with its id prefix, column and name, so a planner sees
 what still needs a size. Last, under `icebox, untouched for N days:`, it lists
 the Icebox cards nobody has looked at: the card's time in Icebox and its latest
 comment are both `--icebox-days` days old or older (30 by default), counted from
@@ -702,9 +713,10 @@ never handles the API.
   already holds one of those headings or the v1 `## Done when` is kept as it
   is; an Icebox card gets the text as given and none otherwise.
   `--column ready` without a `--size` of `1`, `2` or `3` is a usage error (exit
-  2), by the same rule as `move`, and so is a `--column backlog` (the default)
-  whose description lacks a heading or text under Problem
-  (`a card needs card format v2 before it enters Backlog, and this one lacks ...`,
+  2), by the same rule as `move`, and so is any other column but Icebox (Backlog
+  by default) for a card with no size, a description that lacks a heading or text
+  under Problem, or no `--done-when` outcome
+  (`a card outside Icebox needs a size, card format v2 and Done when outcomes, and this one lacks ...`,
   checked before the backend adds anything), and a `--column ready` whose
   description lacks a heading or text under one, or that has neither 3 to 7
   `--done-when` outcomes nor a `- [ ]` or `- [x]` item under a v1
@@ -806,8 +818,9 @@ never handles the API.
   comment is the owner's), never among the stale ones. Every such card in any
   other column but Done is listed apart after them under the heading
   `moved by the owner, remove needs:human:` (same columns, no answer note).
-  Every Backlog card that is white or has no colour is listed apart too, at any
-  age, after a blank line and the heading `unsized in Backlog:`, one line each
+  Every card outside Icebox that is white or has no colour is listed apart
+  too, at any age, after a blank line and the heading
+  `unsized outside Icebox:`, one line each
   with id prefix, column and name, in board order; sizing happens in planning,
   so a card that waits unsized is a planner's to size. A card in those columns
   or with that label that the tasks view did not date (missing from the pages,
@@ -1078,11 +1091,13 @@ never handles the API.
   or for red
   `<id prefix> is red, more than 3 Pomodori, so split it and cannot enter Ready; ...`
   (exit 1), on both backends, so a card is sized in planning and red never
-  reaches Ready. A move into Backlog of a card whose description lacks a v2
-  heading or text under Problem is refused before the backend is called:
-  `<id prefix> is not in card format v2 and cannot enter Backlog; it lacks <what>; fix the description with dev board edit`
-  (exit 1, on both backends, `dev.board.backlog_missing`). A move into Ready of
-  a card whose description lacks one of the three v2 headings or text under one,
+  reaches Ready. A move into any other column but Icebox or Ready of a card
+  with no size, a description that lacks a v2 heading or text under Problem, or
+  no outcome is refused before the backend is called:
+  `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it with dev board size, edit and outcome`
+  (exit 1, on both backends, `dev.board.unplanned`). A `discard` is refused the
+  same way for a missing size or heading, with no outcome needed. A move into
+  Ready of a card whose description lacks one of the three v2 headings or text under one,
   or that has neither 3 to 7 outcomes (subtasks) nor, as the v1 fallback while
   boards are converted, a `- [ ]` or `- [x]` item under `## Done when`, is
   refused the same way, before the backend is called:

@@ -232,7 +232,7 @@ return {
         handler = "lua",
         flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when",
         usage = "dev board add NAME [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
-        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized, any labels, one Change line per --change, one checks row per --checks and one Done when outcome per --done-when",
+        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized, any labels, one Change line per --change, one checks row per --checks and one Done when outcome per --done-when. Outside Icebox the card needs a size, the v2 sections and an outcome",
     },
     {
         words = { "board", "label" },

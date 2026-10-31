@@ -38,7 +38,11 @@ end
 
 local function card_with(root, home, rows)
     must(dev(root, home, { "board", "init" }))
-    local out = dev(root, home, { "board", "add", "Card", "--problem", "x" })
+    local out = dev(
+        root,
+        home,
+        { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
+    )
     local id = assert(out:match("added (%x+)"), out)
     local args = { "board", "checks", id }
     for _, row in ipairs(rows) do

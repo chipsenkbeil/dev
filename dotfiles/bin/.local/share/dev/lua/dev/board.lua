@@ -557,9 +557,9 @@ function M.compose(problem, change, out_of_scope)
     return table.concat(parts, "\n")
 end
 
----List what a card lacks to enter Backlog: each missing v2 heading, and text under Problem.
+---List what a card lacks of card format v2 outside Icebox: each missing heading, and Problem text.
 ---@param description string? the card's description
----@return string[] missing the problems, empty when the card may enter Backlog
+---@return string[] missing the problems, empty when the card follows the format outside Icebox
 function M.backlog_missing(description)
     local seen, filled = sections(description)
     local missing = {}
@@ -575,14 +575,7 @@ function M.backlog_missing(description)
     return missing
 end
 
----List what a card lacks of card format v2 to enter Ready: each missing or empty section, and
----Done when outcomes. The outcomes are 3 to 7 subtasks, and a card with none is accepted when its
----description has a v1 `## Done when` checklist item.
----@param description string? the card's description
----@param outcomes integer how many outcomes the card has
----@return string[] missing the problems, empty when the card follows the format
-function M.missing(description, outcomes)
-    local seen, filled = sections(description)
+local function checklist_items(description)
     local items, current = 0, nil
     for line in lines_of(description) do
         local name = heading_of(line)
@@ -592,6 +585,38 @@ function M.missing(description, outcomes)
             items = items + 1
         end
     end
+    return items
+end
+
+---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v2 section with text under
+---Problem, and, when asked, at least one Done when outcome. A v1 `## Done when` checklist item
+---counts as an outcome.
+---@param card { color: string?, description: string?, outcomes: integer, need_outcomes: boolean }
+---@return string[] missing the problems, empty when the card may sit outside Icebox
+function M.unplanned(card)
+    local color, description = card.color, card.description
+    local missing = {}
+    if color == nil or color == M.SIZES[UNSIZED] then
+        missing[1] = "a size"
+    end
+    for _, item in ipairs(M.backlog_missing(description)) do
+        missing[#missing + 1] = item
+    end
+    if card.need_outcomes and card.outcomes == 0 and checklist_items(description) == 0 then
+        missing[#missing + 1] = "Done when outcomes"
+    end
+    return missing
+end
+
+---List what a card lacks of card format v2 to enter Ready: each missing or empty section, and
+---Done when outcomes. The outcomes are 3 to 7 subtasks, and a card with none is accepted when its
+---description has a v1 `## Done when` checklist item.
+---@param description string? the card's description
+---@param outcomes integer how many outcomes the card has
+---@return string[] missing the problems, empty when the card follows the format
+function M.missing(description, outcomes)
+    local seen, filled = sections(description)
+    local items = checklist_items(description)
     local missing = {}
     for _, heading in ipairs(M.HEADINGS) do
         if not seen[heading] then
