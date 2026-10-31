@@ -319,6 +319,12 @@ return {
         desc = "Record on a card that NAME reviewed the commit REV as a code, style or recheck review, with its change id and commit id, refusing the card's claimant as reviewer and a REV that is not one commit",
     },
     {
+        words = { "board", "land" },
+        handler = "lua",
+        usage = "dev board land CARD",
+        desc = "Land a card's change with jj land, then note the commit and move the card to Done, only when the card is In Review with every outcome ticked, code and style reviews and a passing check run are recorded for the commit, and trunk has not moved; needs DEV_AGENT and a jj project",
+    },
+    {
         words = { "board", "allow" },
         handler = "lua",
         usage = "dev board allow CARD test-edits|ci-edits...|none",

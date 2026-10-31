@@ -193,4 +193,30 @@ function M.record(state, rows, expect_fail)
     return table.concat(lines, "\n")
 end
 
+---@class dev.board.check.Record
+---@field commit string the full commit id the rows ran on
+---@field change string the change id, `-` in a git project
+---@field mode string one of `MODE`
+---@field rows {result: string, run: string}[] the rows in the order they ran
+
+---Read a comment that `record` wrote.
+---@param body string the comment body
+---@return dev.board.check.Record? record nil when the body is not a record
+function M.parse(body)
+    local head, rest = body:match("^([^\n]*)\n?(.*)$")
+    local prefix, commit, change, mode = head:match("^(%S+) commit=(%x+) change=(%S+) mode=(%S+)$")
+    if prefix ~= board.CHECK_PREFIX then
+        return nil
+    end
+    local rows = {}
+    for line in rest:gmatch("[^\n]+") do
+        local index, result, run = line:match("^(%d+) (%a+) (.+)$")
+        if not index or tonumber(index) ~= #rows + 1 then
+            return nil
+        end
+        rows[#rows + 1] = { result = result, run = run }
+    end
+    return { commit = commit, change = change, mode = mode, rows = rows }
+end
+
 return M

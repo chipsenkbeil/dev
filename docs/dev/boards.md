@@ -24,6 +24,7 @@ dev board checks 8af0e001 "dev --remote lint" "dev --remote test"
 dev board check 8af0e001
 dev board check 8af0e001 --expect-fail --timeout 2400
 dev board review 8af0e001 --kind code --by reviewer --rev @
+dev board land 8af0e001
 dev board allow 8af0e001 test-edits ci-edits
 dev board allow 8af0e001 none
 dev board tests 8af0e001 one_should_be_one tests::two
@@ -223,8 +224,8 @@ Every card in every column is fair game for an agent unless it is labelled
   haiku agent, green and blue by a sonnet agent.
 - In Progress: an agent holds the card, under its name. Only the claimant works
   it.
-- In Review: the change is under review or ci, then it lands. Still the
-  claimant's.
+- In Review: the change is under review or ci, then `dev board land` lands it
+  and moves the card to Done. Still the claimant's.
 - Blocked: waiting on an answer. `needs:human` is yours alone. `needs:lead` is
   for a higher-tier agent, which answers and moves the card out.
 - Done: landed, answered, or dropped with a note.
@@ -936,6 +937,34 @@ never handles the API.
   come after Pomb stored it, so read `notes` before repeating. `note` refuses
   `dev-review:` as it does `dev-check:`, and `note --edit` and `--delete` refuse
   a comment that holds it. It does not judge the review.
+- `land CARD`: Lands the working-copy change with `jj land --yes -r @` run in the
+  project root, writes a `done` note and moves the card to Done. It needs
+  `DEV_AGENT` (usage error, exit 2, without it) and a jj project: in plain git
+  it refuses and says so. It refuses, exit 1, and runs nothing until every
+  condition holds, and the message lists each one that fails:
+  - the card is in the review column, and its claimant, if it has one, is the
+    caller.
+  - every outcome is ticked (the same count `move CARD done` refuses on). The
+    verifier ticks after the checks pass and before `land`.
+  - the working-copy commit is non-empty, has a description and has no
+    conflicts.
+  - a `code` and a `style` review of the working-copy change are recorded. A
+    review of an earlier commit of the change counts only with a `recheck`
+    recorded at the commit that lands.
+  - the newest `dev-check:` record with `mode=run` at the landing commit has a
+    `pass` for every checks row, in the card's row order. A `mode=expect-fail`
+    record never counts.
+  - the commit's parent is the current trunk, compared after
+    `jj git fetch --remote <remote of record>`, with the remote taken from the
+    forge settings (see `forge`). A failed fetch refuses. This check
+    runs only once the other conditions hold.
+
+  A failed `jj land` leaves the card where it is, exits 1 and prints jj's
+  output. A landing whose done note or move then fails exits 1 and says what to
+  finish by hand. The done note reads
+  `Landed commit <12 characters> (change <id>) on trunk, run by NAME.` and
+  success prints `landed <id prefix> at commit <12 characters> and moved it to
+  Done`. It is never queued.
 - `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
   array of the words, each `test-edits` or `ci-edits` with duplicates dropped,
   and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with

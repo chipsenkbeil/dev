@@ -8,6 +8,7 @@ local devos = require("dev.os")
 local fs = require("dev.fs")
 local init = require("dev.board.init")
 local json = require("dev.json")
+local land = require("dev.board.land")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
@@ -16,6 +17,7 @@ local store = require("dev.board.store")
 local text_width = require("dev.text").width
 local toml = require("dev.toml")
 local ui = require("dev.ui")
+local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
 local stderr = io.stderr
@@ -2006,6 +2008,132 @@ function commands.review(backend, args)
             rev.commit:sub(1, COMMIT_CHARS)
         ),
     }
+end
+
+---@class dev.cmd.board.LandWho
+---@field name string the caller's agent name
+---@field comments {body: string}[] the card's comments, oldest first
+
+local function land_problems(backend, card, who)
+    local problems = {}
+    local roles = backend.roles
+    if card.column ~= roles.review then
+        problems[#problems + 1] = "it is in "
+            .. card.column
+            .. ", and only a card in "
+            .. roles.review
+            .. " lands"
+    end
+    if card.claimant and card.claimant ~= who.name then
+        problems[#problems + 1] = "it is claimed by "
+            .. card.claimant
+            .. ", and only that claimant lands it, not "
+            .. who.name
+    end
+    local open = done_refusal(card)
+    if open then
+        problems[#problems + 1] = open.message
+    end
+    local state, message = land.state(backend.root)
+    if not state then
+        problems[#problems + 1] = message
+        return problems
+    end
+    for _, missing in ipairs(land.missing_reviews(who.comments, state)) do
+        problems[#problems + 1] = missing
+    end
+    local unproven = land.checks_problem(who.comments, state, card.checks)
+    if unproven then
+        problems[#problems + 1] = unproven
+    end
+    if #problems == 0 then
+        local moved = land.trunk_problem(backend.root)
+        if moved then
+            problems[#problems + 1] = moved
+        end
+    end
+    return problems, state
+end
+
+function commands.land(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local name, why = agent_name()
+    if why then
+        return why
+    end
+    if not name then
+        return usage("needs DEV_AGENT, the name that lands the card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local held_back = owner_holds(card)
+    if held_back then
+        return held_back
+    end
+    if not backend.root then
+        return failure("dev board land needs the project's root")
+    end
+    if vcs.backend(backend.root) ~= vcs.JJ then
+        return failure(
+            short
+                .. " cannot land: dev board land needs a jj project, and does not land in plain git"
+        )
+    end
+    local list, message = backend:comments(card.id)
+    if not list then
+        return failure(message)
+    end
+    local problems, state = land_problems(backend, card, { name = name, comments = list })
+    if #problems > 0 then
+        return failure(short .. " cannot land:\n  - " .. table.concat(problems, "\n  - "))
+    end
+    local landed, output = land.run(backend.root)
+    if not landed then
+        return failure(
+            short .. " stays in " .. card.column .. ", jj land failed:\n" .. output:gsub("\n$", "")
+        )
+    end
+    local commit = land.short(state.commit)
+    local held = claims.read(card.id)
+    local noted
+    noted, message = backend:note(
+        card.id,
+        string.format(
+            "Landed commit %s (change %s) on trunk, run by %s.",
+            commit,
+            state.change,
+            name
+        ),
+        held and held.fence,
+        { kind = "done" }
+    )
+    if not noted then
+        return failure(
+            string.format(
+                "landed commit %s, but the done note was NOT written on %s (%s) and the card was not moved; write the note and move it to Done by hand",
+                commit,
+                short,
+                message
+            )
+        )
+    end
+    local moved = move_card(backend, { card.id, backend.roles:done_column() })
+    if moved.code then
+        return failure(
+            string.format(
+                "landed commit %s and noted it on %s, but the move to Done failed: %s",
+                commit,
+                short,
+                moved.message
+            )
+        )
+    end
+    return { output = string.format("landed %s at commit %s and moved it to Done", short, commit) }
 end
 
 ---Read the words of an allow command.

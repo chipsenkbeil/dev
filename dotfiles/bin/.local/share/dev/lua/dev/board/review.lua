@@ -5,8 +5,11 @@ local vcs = require("dev.vcs")
 ---@class dev.board.review
 local M = {}
 
+---The names of the review kinds.
+M.KIND = { CODE = "code", STYLE = "style", RECHECK = "recheck" }
+
 ---The review kinds `review --kind` accepts, in the order help lists them.
-M.KINDS = { "code", "style", "recheck" }
+M.KINDS = { M.KIND.CODE, M.KIND.STYLE, M.KIND.RECHECK }
 
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ "\\n"'
 local NO_CHANGE = "-"
@@ -74,6 +77,24 @@ function M.record(kind, by, rev)
         rev.commit,
         rev.change
     )
+end
+
+---@class dev.board.review.Record
+---@field kind string one of `KINDS`
+---@field by string the reviewer's name
+---@field commit string the full commit id reviewed
+---@field change string the change id, `-` in a git project
+
+---Read a comment that `record` wrote.
+---@param body string the comment body
+---@return dev.board.review.Record? record nil when the body is not a record
+function M.parse(body)
+    local prefix, kind, by, commit, change =
+        body:match("^(%S+) kind=(%S+) by=(%S+) commit=(%x+) change=(%S+)$")
+    if prefix ~= board.REVIEW_PREFIX then
+        return nil
+    end
+    return { kind = kind, by = by, commit = commit, change = change }
 end
 
 return M
