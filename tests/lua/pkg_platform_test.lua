@@ -112,3 +112,47 @@ t.test("Linux still reads its own manager column", function()
     t.ok(not fs.exists(dir .. "/brew.log"), "brew must not run")
     fs.remove(dir, { recursive = true })
 end)
+
+t.test("Linux with only apt-get reads the apt column", function()
+    local dir = sandbox(table.concat({
+        "name binary apt pacman groups",
+        "fresh fresh-zzz apt-fresh pacman-fresh base",
+        "present present-zzz apt-present pacman-present base",
+        "pinned pinned-zzz release:pinned pacman-pin base",
+        "dropped dropped-zzz - pacman-drop base",
+        "",
+    }, "\n"))
+    assert(devos.run({ "rm", dir .. "/stubs/pacman", dir .. "/stubs/brew" }) == 0, "rm failed")
+    executable(
+        dir .. "/stubs/dpkg-query",
+        '#!/bin/sh\ncase "$4" in apt-present) echo "install ok installed" ;; *) exit 1 ;; esac\n'
+    )
+    executable(dir .. "/stubs/apt-get", "#!/bin/sh\nexit 0\n")
+    assert(fs.mkdir(dir .. "/sys"))
+    assert(devos.run({ "ln", "-s", "/bin/sh", dir .. "/sys/sh" }) == 0, "ln failed")
+    local luajit = devos.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
+    local out, code = devos.capture({
+        luajit,
+        PKG,
+        "install",
+        "--dry-run",
+        "--manifest",
+        dir .. "/tools.tsv",
+    }, {
+        stderr = "stdout",
+        env = {
+            PATH = dir .. "/stubs:" .. dir .. "/sys",
+            FAKE_KERNEL = "Linux",
+            FAKE_ARCH = "x86_64",
+            DEV_TOOLS_BIN = dir .. "/bin",
+        },
+    })
+    t.eq(code, 0)
+    local _, updates = out:gsub("apt%-get update", "")
+    t.eq(updates, 1)
+    t.ok(out:find("apt-get install -y -- apt-fresh", 1, true), out)
+    t.ok(out:find("present already installed via apt", 1, true), out)
+    t.ok(not out:find("pacman", 1, true), out)
+    t.ok(out:find("pinned (dry-run):", 1, true), out)
+    fs.remove(dir, { recursive = true })
+end)

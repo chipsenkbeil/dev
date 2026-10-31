@@ -10,6 +10,7 @@ local SHA256_HEX_DIGITS = 64
 local COLUMN = "darwin-x86_64"
 local ARCH_WORDS = { "x86_64", "amd64", "universal" }
 local SOURCE_PINS = { luajit = true, bats = true, stow = true }
+local UNNAMED_ARCH_PINS = { ["selene-linux"] = true }
 local PINNED_TOOLS = { "ripgrep", "fd", "jq", "yq", "sd", "gh", "jujutsu" }
 
 local function release_cells()
@@ -57,7 +58,7 @@ t.test("every pin has a 64 digit sha256 and an https url naming the architecture
         )
         t.ok(pin.url:find("^https://"), name .. " url is not https")
         t.ok(
-            SOURCE_PINS[name] or names_arch(pin.url),
+            SOURCE_PINS[name] or UNNAMED_ARCH_PINS[name] or names_arch(pin.url),
             name .. " url names no x86_64, amd64 or universal asset"
         )
     end

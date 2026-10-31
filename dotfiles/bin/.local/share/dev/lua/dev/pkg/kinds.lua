@@ -48,6 +48,7 @@ M.DRIVERS = {
     [M.Manager.BREW] = true,
     [M.Manager.PACMAN] = true,
     [M.Manager.DNF] = true,
+    [M.Manager.APT] = true,
     [M.Channel.CARGO] = true,
     [M.Channel.LUAROCKS] = true,
     [M.Channel.SCRIPT] = true,
