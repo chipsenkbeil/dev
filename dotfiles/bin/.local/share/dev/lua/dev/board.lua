@@ -144,6 +144,9 @@ M.CHECKS_RUN = "run"
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"
 
+---The label `discard` puts on a card it drops, which a Done card may carry unticked.
+M.DISCARDED = "discarded"
+
 ---The names in a multiline text field, one per line.
 ---@param value string|string[]|nil the field's value
 ---@return string[] names the non-blank lines, empty for any other value
@@ -588,10 +591,17 @@ local function checklist_items(description)
     return items
 end
 
+---@class dev.board.Unplanned
+---@field color string? the card's colour
+---@field description string? the card's description
+---@field outcomes integer how many outcomes it has
+---@field need_outcomes boolean whether it needs one
+---@field sections boolean? whether the v2 sections are checked, true when nil
+
 ---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v2 section with text under
 ---Problem, and, when asked, at least one Done when outcome. A v1 `## Done when` checklist item
 ---counts as an outcome.
----@param card { color: string?, description: string?, outcomes: integer, need_outcomes: boolean }
+---@param card dev.board.Unplanned the card's size, description and outcome facts
 ---@return string[] missing the problems, empty when the card may sit outside Icebox
 function M.unplanned(card)
     local color, description = card.color, card.description
@@ -599,8 +609,10 @@ function M.unplanned(card)
     if color == nil or color == M.SIZES[UNSIZED] then
         missing[1] = "a size"
     end
-    for _, item in ipairs(M.backlog_missing(description)) do
-        missing[#missing + 1] = item
+    if card.sections ~= false then
+        for _, item in ipairs(M.backlog_missing(description)) do
+            missing[#missing + 1] = item
+        end
     end
     if card.need_outcomes and card.outcomes == 0 and checklist_items(description) == 0 then
         missing[#missing + 1] = "Done when outcomes"

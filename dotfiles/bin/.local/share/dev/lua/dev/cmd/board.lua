@@ -9,6 +9,7 @@ local fs = require("dev.fs")
 local init = require("dev.board.init")
 local json = require("dev.json")
 local land = require("dev.board.land")
+local lint = require("dev.board.lint")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
@@ -35,6 +36,7 @@ local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local EXPECT_FAIL_FLAG = "--expect-fail"
 local TIMEOUT_FLAG = "--timeout"
+local STRICT_FLAG = "--strict"
 local RESERVED_NOTE = "a note cannot begin with "
     .. board.CHECK_PREFIX
     .. ", which dev board check writes, or "
@@ -118,7 +120,7 @@ end
 ---@class dev.cmd.board.Result
 ---@field output string? what to print on success
 ---@field message string? what went wrong
----@field code integer? 2 for a usage error, 1 otherwise
+---@field code integer? 2 for a usage error, 1 for a failure or a lint finding, nil on success
 ---@field warnings string[]? lines for standard error when the change still went through
 ---@field page boolean? whether the output goes through the pager when it is taller than the screen
 ---@field unqueued boolean? true when the refusal must not be queued for a later sync, as a move to Done is not
@@ -1313,7 +1315,7 @@ function commands.order(backend, args)
     return { output = table.concat(rows, "\n") }
 end
 
-local DISCARD_LABEL = "discarded"
+local DISCARD_LABEL = board.DISCARDED
 
 ---Close a card as dropped: the reason as a decision note, the label, then the move to Done.
 ---Each step is a command of its own, so when Pomb cannot take a step the steps left are queued.
@@ -2647,6 +2649,62 @@ function commands.stale(backend, args, now)
     return { output = table.concat(lines, "\n") }
 end
 
+function commands.lint(backend, args)
+    local strict = false
+    for _, arg in ipairs(args) do
+        if arg ~= STRICT_FLAG then
+            return usage("takes only " .. STRICT_FLAG .. ", got " .. arg)
+        end
+        strict = true
+    end
+    local cards, message = backend:cards()
+    if not cards then
+        return failure(message)
+    end
+    local rows = {}
+    for _, card in ipairs(cards) do
+        local facts = {
+            comments = function()
+                local list, why = backend:comments(card.id)
+                if not list then
+                    return nil, "could not read the comments of " .. card.id .. ": " .. why
+                end
+                return list
+            end,
+            links = function()
+                local list, why = backend:links(card.id)
+                if not list then
+                    return nil, "could not read the links of " .. card.id .. ": " .. why
+                end
+                return list
+            end,
+            children = function()
+                local family, why = backend:family(card.id)
+                if not family then
+                    return nil, "could not read the family of " .. card.id .. ": " .. why
+                end
+                local kids = family.children
+                if not kids then
+                    return 0
+                end
+                return kids.total
+            end,
+        }
+        local rules, why =
+            lint.card(card, { roles = backend.roles, facts = facts, strict = strict })
+        if not rules then
+            return failure(why)
+        end
+        for _, rule in ipairs(rules) do
+            rows[#rows + 1] = { card.id:sub(1, board.MIN_PREFIX), card.column, rule }
+        end
+    end
+    if #rows == 0 then
+        return { output = "no findings" }
+    end
+    return { output = table.concat(board.table_lines(rows), "\n"), code = FAILURE }
+end
+
 function commands.take(backend, args)
     local flags, words = parse(args, { [AS_FLAG] = true })
     if not flags then
@@ -2687,7 +2745,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `link`, `links`, `unlink`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `link`, `links`, `unlink`, `stale`, `lint`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil
@@ -3289,6 +3347,16 @@ for sub in pairs(commands) do
         if sub == "outcome" then
             args = with_env_ticker(args)
         end
+        if sub == "lint" then
+            local strict = config.get(ctx.root, "board.lint.strict")
+            if strict ~= nil and type(strict) ~= "boolean" then
+                verb.die("dev: [board.lint] strict must be true or false in the config")
+            end
+            if strict and not index_of(args, STRICT_FLAG) then
+                args = { unpack(args) }
+                table.insert(args, 1, STRICT_FLAG)
+            end
+        end
         local backend, pending = open_board(ctx)
         local result = M.run(sub, args, backend, nil, sub == "ls" and ui.context() or nil)
         if result.message then
@@ -3335,7 +3403,7 @@ for sub in pairs(commands) do
         else
             print(result.output)
         end
-        return 0
+        return result.code or 0
     end
 end
 

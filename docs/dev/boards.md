@@ -15,6 +15,7 @@ dev board add "Name" --size 1 --problem "why" --done-when "it works" --label nee
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --checks "dev lint" --checks "dev test"
 dev board label 8af0e001 needs:human --remove needs:lead
 dev board stale --days 7
+dev board lint
 dev board note 8af0e001 "Tests pass, landing now."
 dev board note 8af0e001 --kind decision --as reviewer "Keep the two flags separate."
 dev board notes 8af0e001
@@ -528,6 +529,43 @@ cannot read, gets a `could not` line after the section. An orchestrator can run
 it at startup and re-plan, escalate or ice each card it lists, and scope the
 Icebox ones.
 
+`lint [--strict]` reports every card that breaks the board's rules. The guards
+in `move`, `add` and `discard` stop a bad write only when it goes through
+`dev board`, and lint also sees the cards written in the Pomb UI, by another
+client or before a guard existed. It makes no write of its own and calls no
+model. Like every board command on a Pomb board, it first replays any queued
+changes. Each finding is one line of id prefix, column and rule, in board
+order. The exit is 1 when there is any finding and 0 with `no findings`. The
+rules:
+
+- Outside Icebox: a size, the three v2 headings with text under Problem, and a
+  Done when outcome. This is `dev.board.unplanned`, the check `move` makes,
+  which keeps a move and lint in agreement. A Done card gets the size and
+  outcome checks only, and a Done card labelled `discarded` needs no outcome.
+- With `--strict`, a Done card also needs the three v2 headings with text under
+  Problem. A discarded card is held to the rule `discard` applies. Older Done
+  cards are v1 and fail it until their descriptions are rewritten.
+- Outside Icebox and Done: a description of at most 400 words. In Ready, In
+  Progress and In Review, a checks row. In Ready, no red size.
+- `needs:human` sits only in Blocked or Icebox.
+- A Blocked card holds a `question` or `blocked` note or a `blocked_by` link.
+- An In Progress card holds a claimant unless it is an umbrella with children.
+- A Done card that was not discarded has every outcome ticked.
+
+A card whose outcomes Pomb sent in a shape dev cannot read is reported as
+`outcomes unreadable`, never as having no outcomes. Fixing a finding is the
+agent's job, except on a `needs:human` card, which belongs to the owner.
+
+A project makes `--strict` its default with a `[board.lint]` table in
+`.dev/config.toml`. The file may be the project file or the user file, as with
+`[board]`. `strict` must be `true` or `false`, otherwise `dev board lint` exits
+1 and names the setting:
+
+```toml
+[board.lint]
+strict = true
+```
+
 ## Local boards
 
 `backend = "local"` keeps the board in one JSON file, so a project needs no Pomb
@@ -837,6 +875,25 @@ never handles the API.
   absent when no card qualifies. Always exit 0 unless the board cannot be read
   (1); a `--days` or `--icebox-days` that is not a whole number of 1 or more is
   exit 2.
+- `lint [--strict]`: Reads every card (`backend:cards`) and prints one line per
+  broken rule: id prefix, column and rule, aligned, in board order, and exits 1.
+  A clean board prints `no findings` and exits 0. A flag other than
+  `--strict` is exit 2. `--strict` is also on when `board.lint.strict` is
+  `true` in the config (`config.get`, project over user file), and a
+  non-boolean value is exit 1. The rules live in `dev.board.lint`, which calls
+  `dev.board.unplanned` for the size, the v2 sections and the outcomes. A Done
+  card passes `sections = false` unless strict, and a `discarded` one passes no
+  outcome check, which is what `discard`'s guard does. It adds, outside Icebox
+  and Done, `over 400 words (N)`, `no checks row` in Ready, In Progress and In
+  Review, and `red card in Ready`. Anywhere it adds `needs:human outside
+  Blocked and Icebox`. In Blocked it adds `blocked with no question or blocked
+  note and no blocker`, reading `backend:comments` for a `question` or
+  `blocked` kind and then `backend:links` for `blocked_by`. In In Progress it
+  adds `in progress with no claimant` when `backend:family` shows no children,
+  and in Done `N of M outcomes unticked` unless discarded. A card with
+  `outcomes_unreadable` gets `outcomes unreadable` and no outcome rule. A read
+  that fails is exit 1 with the message. It writes nothing itself, but the
+  dispatcher replays the queue first, as for every Pomb command.
 - `notes CARD`: Lists the card's comments (`GET /api/tasks/{id}/comments`),
   oldest first, one line each: comment id prefix (8 characters), the token's
   name (else the actor kind), the comment's kind (`-` for none), its role label

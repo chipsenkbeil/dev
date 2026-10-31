@@ -197,7 +197,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the board: status, init, ls, next, add, note, show, edit, checks, check, allow, tests, files, move, order, size, label, link, unlink, stale, take, release, wait and sync",
+        desc = "Read and update the board: status, init, ls, next, add, note, show, edit, checks, check, move, order, size, label, link, stale, lint, take, release, wait and sync",
         group = "Share it",
     },
     {
@@ -373,6 +373,13 @@ return {
         flags = "--days --icebox-days",
         usage = "dev board stale [--days N] [--icebox-days N]",
         desc = "List the cards that sat in Backlog, Ready, In Progress or In Review for N days (7 by default), oldest first, the needs:human ones apart, and the Icebox cards untouched for --icebox-days (30 by default)",
+    },
+    {
+        words = { "board", "lint" },
+        flags = "--strict",
+        handler = "lua",
+        usage = "dev board lint [--strict]",
+        desc = "Report every card that breaks the board's rules, one line each of id, column and rule, and exit 1 when there is any. It makes no write of its own. --strict, or strict = true under [board.lint] in the config, also checks the v2 sections of Done cards. The needs:human cards are the owner's to fix",
     },
     {
         words = { "board", "take" },
