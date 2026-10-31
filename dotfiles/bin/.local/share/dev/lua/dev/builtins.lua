@@ -379,7 +379,7 @@ return {
         flags = "--strict",
         handler = "lua",
         usage = "dev board lint [--strict]",
-        desc = "Report every card that breaks the board's rules, one line each of id, column and rule, and exit 1 when there is any. It makes no write of its own. --strict, or strict = true under [board.lint] in the config, also checks the v2 sections of Done cards. The needs:human cards are the owner's to fix",
+        desc = "Report every card that breaks the board's rules, one line each of id, column and rule, and exit 1 when there is any. It makes no write of its own. --strict, or strict = true under [board.lint] in the config, also checks the v2 sections of Done cards. The needs:human cards are the owner's to fix, except that an agent may set the size of one",
     },
     {
         words = { "board", "take" },

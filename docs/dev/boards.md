@@ -244,20 +244,25 @@ something goes to Icebox or Blocked with `needs:human` and is left alone.
 
 `needs:human` means only a human can answer. No agent answers for you on such a
 card, and another agent relaying your view never counts. Agents never move, edit
-or relabel one, and the label sits only in Blocked or Icebox, never Backlog. dev
-enforces it: `edit` and `rename` refuse a card labelled `needs:human`, and
-`move` refuses one headed for another column (exit 1). A move within its own
-column, and so `order`, is allowed. `label CARD needs:human` and
-`add --label needs:human` refuse a card outside Blocked and Icebox, so move it
-there first and add the label after. `label --remove needs:human` and notes stay
-allowed in any column. Only you move it out. Two exceptions, both ending with an
-agent removing the label: an agent that you answered directly in its own session
-quotes you in a decision note and carries on, and once you move a card out of
-Blocked or Icebox, the first agent to see it elsewhere removes the label and
-follows that column. `stale` lists such a card under `moved by the owner`. Your
-own comment on the card, or that session answer, counts as the answer only when
-it settles every open choice. A partial answer keeps the label. A `needs:human`
-card whose newest comment is yours counts as answered and waits for your move.
+or relabel one, except to set its size, and the label sits only in Blocked or
+Icebox, never Backlog. dev enforces it: `edit` and `rename` refuse a card
+labelled `needs:human`, and `move` refuses one headed for another column (exit
+1). A move within its own column, and so `order`, is allowed. `label CARD
+needs:human` and `add --label needs:human` refuse a card outside Blocked and
+Icebox, so move it there first and add the label after. `label --remove
+needs:human` and notes stay allowed in any column. Only you move it out.
+Setting the size is the third exception: an agent may run `dev board size CARD
+1`, `2`, `3` or `3+` on such a card and change nothing else. A size answers no
+question, and an agent may change it to another size. An agent never sets
+`unsized` on such a card. You set `unsized` yourself, with `dev board size`
+in Icebox. The other two both end with an agent removing the label: an agent
+that you answered directly in its own session quotes you in a decision note
+and carries on, and once you move a card out of Blocked or Icebox, the first
+agent to see it elsewhere removes the label and follows that column. `stale`
+lists such a card under `moved by the owner`. Your own comment on the card, or
+that session answer, counts as the answer only when it settles every open
+choice. A partial answer keeps the label. A `needs:human` card whose newest
+comment is yours counts as answered and waits for your move.
 
 An umbrella waits in Backlog until its first child starts, sits in In Progress,
 and is Done when every child is Done. It is never Ready and holds no claim:
@@ -554,7 +559,9 @@ rules:
 
 A card whose outcomes Pomb sent in a shape dev cannot read is reported as
 `outcomes unreadable`, never as having no outcomes. Fixing a finding is the
-agent's job, except on a `needs:human` card, which belongs to the owner.
+agent's job, except on a `needs:human` card, which belongs to the owner apart
+from its size: an agent may set that with `dev board size CARD 1`, `2`, `3` or
+`3+`.
 
 A project makes `--strict` its default with a `[board.lint]` table in
 `.dev/config.toml`. The file may be the project file or the user file, as with
