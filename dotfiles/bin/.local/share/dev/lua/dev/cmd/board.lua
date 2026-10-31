@@ -1368,7 +1368,49 @@ local function outcome_number(word, count)
     return number
 end
 
-local function convert_outcomes(backend, card, fence)
+local function split_ticker(args)
+    local n = #args
+    if n >= 3 and args[n - 1] == AS_FLAG then
+        local rest = {}
+        for i = 1, n - 2 do
+            rest[i] = args[i]
+        end
+        return rest, args[n]
+    end
+    return args
+end
+
+local function tick_refused(card, flag)
+    if not card.claimant and not flag then
+        return nil
+    end
+    local ticker, why = agent_name(flag)
+    if why then
+        return why
+    end
+    if not card.claimant then
+        return nil, ticker
+    end
+    if not ticker then
+        return usage(
+            "ticking an outcome on a claimed card needs the ticker's name, with "
+                .. AS_FLAG
+                .. " NAME or DEV_AGENT"
+        )
+    end
+    if ticker == card.claimant then
+        return failure(
+            card.id:sub(1, board.MIN_PREFIX)
+                .. " is claimed by "
+                .. ticker
+                .. ", so its claimant cannot tick its outcomes"
+        )
+    end
+    return nil, ticker
+end
+
+local function convert_outcomes(backend, card, opts)
+    local fence = opts.fence
     local prefix = card.id:sub(1, board.MIN_PREFIX)
     if #card.outcomes > 0 then
         return { output = "outcome " .. prefix .. " left alone: it already has outcomes" }
@@ -1376,6 +1418,14 @@ local function convert_outcomes(backend, card, fence)
     local items, rest = board.split_checklist(card.description)
     if not items then
         return { output = "outcome " .. prefix .. " left alone: it has no Done when checklist" }
+    end
+    local ticks = false
+    for _, item in ipairs(items) do
+        ticks = ticks or item.done
+    end
+    local refused = ticks and tick_refused(card, opts.flag)
+    if refused then
+        return refused
     end
     for _, item in ipairs(items) do
         local ok, message = backend:add_outcome(card.id, item.name, fence)
@@ -1413,6 +1463,28 @@ local function convert_outcomes(backend, card, fence)
     }
 end
 
+local function with_env_ticker(args)
+    if OUTCOME_FLAGS[args[2]] ~= OutcomeMode.TICK then
+        return args
+    end
+    for _, word in ipairs(args) do
+        if word == AS_FLAG then
+            return args
+        end
+    end
+    local name = agent_name()
+    if not name then
+        return args
+    end
+    local with = {}
+    for i, word in ipairs(args) do
+        with[i] = word
+    end
+    with[#with + 1] = AS_FLAG
+    with[#with + 1] = name
+    return with
+end
+
 local function misplaced_outcome_form(args)
     local number
     for i = 2, #args do
@@ -1439,6 +1511,10 @@ local function misplaced_outcome_form(args)
 end
 
 function commands.outcome(backend, args)
+    local ticker_flag
+    if #args >= 2 and (OUTCOME_FLAGS[args[2]] == OutcomeMode.TICK or args[2] == CONVERT_FLAG) then
+        args, ticker_flag = split_ticker(args)
+    end
     if #args < 2 then
         return usage(
             "needs a card and the outcome text, or --rename N TEXT, --tick N, --untick N or --convert"
@@ -1455,7 +1531,7 @@ function commands.outcome(backend, args)
             return err
         end
         local held = claims.read(card.id)
-        return convert_outcomes(backend, card, held and held.fence)
+        return convert_outcomes(backend, card, { fence = held and held.fence, flag = ticker_flag })
     elseif not mode then
         local misplaced = misplaced_outcome_form(args)
         if misplaced then
@@ -1479,6 +1555,14 @@ function commands.outcome(backend, args)
     local card, err = find_card(backend, args[1])
     if not card then
         return err
+    end
+    local ticker
+    if mode == OutcomeMode.TICK then
+        local refused
+        refused, ticker = tick_refused(card, ticker_flag)
+        if refused then
+            return refused
+        end
     end
     local held = claims.read(card.id)
     local fence = held and held.fence
@@ -1508,6 +1592,9 @@ function commands.outcome(backend, args)
         return failure(message)
     end
     local result = { output = "outcome " .. prefix .. " " .. number .. " " .. OUTCOME_SAID[mode] }
+    if mode == OutcomeMode.TICK and ticker then
+        result.output = result.output .. " by " .. ticker
+    end
     if text then
         result.warnings = board.prose_warnings(text)
     end
@@ -2693,6 +2780,9 @@ for sub in pairs(commands) do
             if not args then
                 verb.usage_error(ctx, why)
             end
+        end
+        if sub == "outcome" then
+            args = with_env_ticker(args)
         end
         local backend, pending = open_board(ctx)
         local result = M.run(sub, args, backend, nil, sub == "ls" and ui.context() or nil)

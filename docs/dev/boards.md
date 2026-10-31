@@ -406,17 +406,29 @@ is plain text. `outcome CARD --rename N TEXT` rewords the Nth, `--tick N` marks
 it done and `--untick N` clears it (`PATCH /api/tasks/{id}/subtasks/{sub_id}`
 with `name` or `done`), each printing `outcome <id prefix> N reworded`, `ticked`
 or `unticked`. N counts from 1 in the order `show` lists the outcomes, and an N
-past the last outcome is exit 1. Ticking belongs to the reviewer. dev never
-deletes or reorders an outcome (Pomb keeps both admin-only). The claim's fence
-goes along when this machine holds one, and a local board keeps the same
-outcomes on the card.
+past the last outcome is exit 1. A tick names its ticker with `--as NAME` after
+the number (`outcome CARD --tick N --as NAME`), else with DEV_AGENT, and prints
+`ticked by NAME`. On a claimed card the ticker must be a name other than the
+claimant's: no name is exit 2 and the claimant's own name is exit 1, with
+nothing written. The name is self-declared, so dev checks only that it differs
+from the claimant. An unclaimed card needs no name, and a DEV_AGENT that is not
+one word is ignored there. `--untick` takes no name and stays open to anyone.
+`--as` is read only after `--tick` and `--convert`; on the other forms it is
+ordinary text, so `--untick N --as X` is exit 2 for its extra words. A queued
+tick keeps the name it resolved, so a later sync records the same ticker. dev
+never deletes or reorders an outcome (Pomb
+keeps both admin-only). The claim's fence goes along when this machine holds
+one, and a local board keeps the same outcomes on the card.
 
 `outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
 appends one outcome per `- [ ]` or `- [x]` item, ticks the ticked ones, and only
 once all of that succeeded rewrites the description without the heading and the
-items, then prints `outcome <id prefix> converted N outcomes`. A card that
-already has outcomes, or has no checklist, is left as it is with one line saying
-why (exit 0), so a second run changes nothing.
+items, then prints `outcome <id prefix> converted N outcomes`. The ticked items
+are ticks, so on a claimed card with any `- [x]` item it takes the ticker the
+same way as `--tick` (`--as NAME` or DEV_AGENT, never the claimant's name) and
+refuses before it writes anything. A card that already has outcomes, or has no
+checklist, is left as it is with one line saying why (exit 0), so a second run
+changes nothing.
 
 `add --label L` gives a new card a label, and may be repeated. `label CARD L`
 (or `+L`) adds a label to a card and `--remove L` removes one, each as many
@@ -879,9 +891,11 @@ never handles the API.
   prints `outcome <id prefix> N added`, with N the new outcome's place.
   `--rename N TEXT` rewords the Nth and `--tick N` and `--untick N` set it done
   or clear it (`PATCH /api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`),
-  printing `outcome <id prefix> N reworded`, `ticked` or `unticked`; the
-  reviewer ticks. N counts from 1 in the order `show` prints the outcomes, which
-  come from the subtasks `/export-data` carries (`id`, `name`, `done`), and an N
+  printing `outcome <id prefix> N reworded`, `ticked by NAME` or `unticked`. A
+  tick on a claimed card needs `--as NAME` (or DEV_AGENT) for someone other than
+  the claimant. The reviewer or verifier ticks. N counts from 1 in the order
+  `show` prints the outcomes, which come from the subtasks `/export-data`
+  carries (`id`, `name`, `done`), and an N
   that is not a whole number of 1 or more is exit 2, one past the last outcome
   exit 1 naming how many the card has. `--convert` moves a v1 `## Done when`
   checklist into outcomes: it appends one outcome per `- [ ]` or `- [x]` item in

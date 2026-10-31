@@ -1454,6 +1454,57 @@ t.test("outcome refuses missing arguments, blank text and a missing card", funct
     t.eq(#backend.calls, 0)
 end)
 
+t.test(
+    "a claimant cannot tick its card's outcome, another name can, and untick stays open",
+    function()
+        local card = colored("green")
+        card.outcomes = outcomes(2)
+        card.claimant = "project-run/a"
+        local backend = fake({ card })
+        local result =
+            commands.run("outcome", { "cccccccc", "--tick", "1", "--as", "project-run/a" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+        result =
+            commands.run("outcome", { "cccccccc", "--tick", "1", "--as", "project-run/b" }, backend)
+        t.eq(result.output, "outcome cccccccc 1 ticked by project-run/b")
+        t.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { done = true }, nil })
+        result = commands.run("outcome", { "cccccccc", "--untick", "1" }, backend)
+        t.eq(result.output, "outcome cccccccc 1 unticked")
+    end
+)
+
+t.test("--as is read only on a tick or convert, and names one word", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    t.eq(commands.run("outcome", { "cccccccc", "--untick", "1", "--as", "x" }, backend).code, 2)
+    t.eq(
+        commands.run("outcome", { "cccccccc", "--tick", "1", "--as", "two words" }, backend).code,
+        2
+    )
+    t.eq(#backend.calls, 0)
+    local result = commands.run("outcome", { "cccccccc", "Text", "--as", "x" }, backend)
+    t.eq(result.output, "outcome cccccccc 3 added")
+    t.eq(backend.calls[1], { "add_outcome", ID_C, "Text --as x", nil })
+end)
+
+t.test("convert refuses a claimant's ticks but moves an unticked checklist", function()
+    local card = colored("green")
+    card.description = V1:gsub("%[ %]", "[x]")
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+    local result =
+        commands.run("outcome", { "cccccccc", "--convert", "--as", "project-run/a" }, backend)
+    t.eq(result.code, 1)
+    t.eq(#backend.calls, 0)
+    card.description = V1
+    result = commands.run("outcome", { "cccccccc", "--convert" }, backend)
+    t.ok(not (result.message or ""):find("claimed", 1, true), result.message)
+    t.eq(backend.calls[1][1], "add_outcome")
+end)
+
 t.test("outcome warns about a path in the text and still writes", function()
     local card = colored("green")
     local backend = fake({ card })
@@ -2149,6 +2200,41 @@ t.test("outcome posts a subtask and patches the Nth by its id", function()
     t.ok(calls:find('--data-raw {"done":false}', 1, true), calls)
 end)
 
+t.test("a claimed card's tick needs a name other than the claimant's", function()
+    local claimed = (
+        SUBTASKS_EXPORT:gsub(
+            '"position":1,',
+            '"position":1,"claim":{"claimant":"project-run/a","expires_at":"2999-01-01T00:00:00Z"},',
+            1
+        )
+    )
+    local root, home = sandbox({ export = claimed })
+    local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
+    t.eq(code, 2, out)
+    t.ok(out:find("needs the ticker's name", 1, true), out)
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--tick", "1" },
+        { agent = "project-run/a" }
+    )
+    t.eq(code, 1, out)
+    t.ok(out:find("claimed by project-run/a", 1, true), out)
+    t.eq(read(root, "calls"):find('--data-raw {"done":true}', 1, true), nil)
+    out, code = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
+    t.eq(out, "outcome 11111111 2 unticked\n", out)
+    t.ok(read(root, "calls"):find('--data-raw {"done":false}', 1, true), out)
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--tick", "1" },
+        { agent = "project-run/b" }
+    )
+    t.eq(code, 0, out)
+    t.eq(out, "outcome 11111111 1 ticked by project-run/b\n", out)
+    t.ok(read(root, "calls"):find('--data-raw {"done":true}', 1, true), out)
+end)
+
 t.test("outcome past the last subtask exits 1 and changes nothing", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
@@ -2168,11 +2254,30 @@ t.test("outcome queues a tick but not an append when the write cannot reach Pomb
     t.eq(code, 1)
     t.ok(out:find("curl exit 28", 1, true), out)
     t.eq(fs.exists(queue_file(home)), false)
-    out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--tick", "1" },
+        { agent = "project-run/b" }
+    )
     t.eq(code, 0)
     t.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(queue_file(home)))
     t.ok(queued:find('"outcome"', 1, true) and queued:find('"--tick"', 1, true), queued)
+    t.ok(queued:find('"--as"', 1, true) and queued:find('"project-run/b"', 1, true), queued)
+end)
+
+t.test("an unclaimed card's tick ignores an invalid DEV_AGENT", function()
+    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--tick", "1" },
+        { agent = "bad name" }
+    )
+    t.eq(code, 0, out)
+    t.eq(out, "outcome 11111111 1 ticked\n", out)
+    t.ok(read(root, "calls"):find('--data-raw {"done":true}', 1, true), out)
 end)
 
 t.test("rename is queued while Pomb is unreachable", function()
