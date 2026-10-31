@@ -1,5 +1,6 @@
 local board = require("dev.board")
 local box = require("dev.cmd.box")
+local check = require("dev.board.check")
 local claims = require("dev.board.claims")
 local config = require("dev.config")
 local device = require("dev.board.device")
@@ -28,6 +29,12 @@ local CLIENT_CHARS = 80
 local STALE_DAYS = 7
 local ICEBOX_DAYS = 30
 local STAMP_CHARS = 16
+local COMMIT_CHARS = 12
+local EXPECT_FAIL_FLAG = "--expect-fail"
+local TIMEOUT_FLAG = "--timeout"
+local RESERVED_NOTE = "a note cannot begin with "
+    .. board.CHECK_PREFIX
+    .. ", which dev board check writes"
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
@@ -718,12 +725,16 @@ local function edit_note(backend, args)
     if not comment then
         return err
     end
-    local ok, message = backend:edit_note(card.id, comment.id, table.concat(args, " ", 4))
+    local text = table.concat(args, " ", 4)
+    if board.reserved(comment.body) or board.reserved(text) then
+        return failure(RESERVED_NOTE)
+    end
+    local ok, message = backend:edit_note(card.id, comment.id, text)
     if not ok then
         return failure(message)
     end
     local result = changed("edited", card, comment)
-    result.warnings = board.prose_warnings(table.concat(args, " ", 4))
+    result.warnings = board.prose_warnings(text)
     return result
 end
 
@@ -742,6 +753,9 @@ local function delete_note(backend, args)
     comment, err = find_comment(backend, card, args[3])
     if not comment then
         return err
+    end
+    if board.reserved(comment.body) then
+        return failure(RESERVED_NOTE)
     end
     local ok, message = backend:delete_note(card.id, comment.id)
     if not ok then
@@ -956,6 +970,9 @@ function commands.note(backend, args)
         return err
     end
     local text = table.concat(words, " ", 2)
+    if board.reserved(text) then
+        return failure(RESERVED_NOTE)
+    end
     local held = claims.read(card.id)
     local ok, message = backend:note(card.id, text, held and held.fence, opts)
     if not ok then
@@ -1785,6 +1802,141 @@ function commands.checks(backend, args)
     return { output = "set checks " .. short .. ", " .. counted(#runs, "row") }
 end
 
+local function check_options(args)
+    local opts = { expect_fail = false, seconds = check.DEFAULT_SECONDS, words = {} }
+    local i = 1
+    while i <= #args do
+        local arg = args[i]
+        if arg == EXPECT_FAIL_FLAG then
+            opts.expect_fail = true
+        elseif arg == TIMEOUT_FLAG then
+            i = i + 1
+            local value = args[i] and args[i]:match("^%d+$")
+            local seconds = value and tonumber(value)
+            if not seconds or seconds < 1 or seconds > check.MAX_SECONDS then
+                return nil,
+                    usage(
+                        TIMEOUT_FLAG
+                            .. " needs a whole number of seconds from 1 to "
+                            .. check.MAX_SECONDS
+                    )
+            end
+            opts.seconds = seconds
+        elseif #arg > 1 and arg:sub(1, 1) == "-" then
+            return nil, usage("unknown flag " .. arg)
+        else
+            opts.words[#opts.words + 1] = arg
+        end
+        i = i + 1
+    end
+    if #opts.words ~= 1 then
+        return nil, usage("needs a card")
+    end
+    return opts
+end
+
+local function check_lines(rows)
+    local lines = {}
+    for i, row in ipairs(rows) do
+        lines[#lines + 1] = check.line(i, row)
+        if row.result ~= check.RESULT.PASS and row.tail ~= "" then
+            for line in row.tail:gmatch("[^\n]+") do
+                lines[#lines + 1] = "    " .. line
+            end
+        end
+    end
+    return lines
+end
+
+function commands.check(backend, args)
+    local opts, err = check_options(args)
+    if not opts then
+        return err
+    end
+    local card
+    card, err = find_card(backend, opts.words[1])
+    if not card then
+        return err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    if #card.checks == 0 then
+        return failure(short .. " has no checks rows; set them with dev board checks")
+    end
+    local argvs = {}
+    for i, run in ipairs(card.checks) do
+        local argv, why = check.argv(run)
+        if not argv then
+            return failure(short .. " checks row " .. i .. ": " .. why)
+        end
+        argvs[i] = argv
+    end
+    if not backend.root then
+        return failure("dev board check needs the project's root")
+    end
+    local before, message = check.state(backend.root)
+    if not before then
+        return failure(message)
+    end
+    local rows = {}
+    for i, argv in ipairs(argvs) do
+        stderr:write(string.format("running %d of %d: %s\n", i, #argvs, card.checks[i]))
+        rows[i] = check.run({
+            root = backend.root,
+            run = card.checks[i],
+            argv = argv,
+            seconds = opts.seconds,
+        })
+    end
+    local lines = check_lines(rows)
+    local after = check.state(backend.root)
+    if not after or after.commit ~= before.commit then
+        return failure(
+            string.format(
+                "the working copy changed while the checks ran (commit %s, then %s), so the result belongs to no commit and was NOT recorded on %s\n%s",
+                before.commit:sub(1, COMMIT_CHARS),
+                after and after.commit:sub(1, COMMIT_CHARS) or "unknown",
+                short,
+                table.concat(lines, "\n")
+            )
+        )
+    end
+    local held = claims.read(card.id)
+    local ok
+    ok, message = backend:note(
+        card.id,
+        check.record(before, rows, opts.expect_fail),
+        held and held.fence,
+        { kind = "status" }
+    )
+    if not ok then
+        return failure(
+            string.format(
+                "the result was NOT recorded on %s (%s); the board may or may not hold it, so read dev board notes before trusting or repeating it\n%s",
+                short,
+                message,
+                table.concat(lines, "\n")
+            )
+        )
+    end
+    local passed, good = check.summarize(rows, opts.expect_fail)
+    local verdict = string.format(
+        "recorded on %s at commit %s: %d of %s passed",
+        short,
+        before.commit:sub(1, COMMIT_CHARS),
+        passed,
+        count_text(#rows, "row")
+    )
+    if opts.expect_fail and passed > 0 then
+        verdict = verdict
+            .. "; with --expect-fail every row should fail, so the passing ones prove nothing"
+    end
+    lines[#lines + 1] = verdict
+    if not good then
+        return failure(table.concat(lines, "\n"))
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
 ---Read the words of an allow command.
 ---@param args string[] the card and the words
 ---@return string[]? words the words to set, empty with none
@@ -2303,6 +2455,7 @@ function M.open(settings)
     if backend then
         backend.column_map = settings.columns
         backend.roles = board.roles(settings.columns)
+        backend.root = settings.root
     end
     return backend, message
 end

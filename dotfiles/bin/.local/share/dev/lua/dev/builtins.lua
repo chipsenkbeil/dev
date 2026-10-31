@@ -197,7 +197,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the board: status, init, ls, next, add, note, show, edit, checks, allow, tests, files, move, order, size, label, link, links, unlink, stale, take, release, wait and sync",
+        desc = "Read and update the board: status, init, ls, next, add, note, show, edit, checks, check, allow, tests, files, move, order, size, label, link, unlink, stale, take, release, wait and sync",
         group = "Share it",
     },
     {
@@ -303,6 +303,13 @@ return {
         handler = "lua",
         usage = "dev board checks CARD CMD...",
         desc = "Replace a card's checks rows with one row per CMD",
+    },
+    {
+        words = { "board", "check" },
+        handler = "lua",
+        flags = "--expect-fail --timeout",
+        usage = "dev board check CARD [--expect-fail] [--timeout SECONDS]",
+        desc = "Run every checks row of a card as a plain command on the working-copy commit and record each result and the commit on the card, refusing a dirty git tree and a tree that changed mid-run; --expect-fail records rows that must fail",
     },
     {
         words = { "board", "allow" },

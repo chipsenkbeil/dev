@@ -20,7 +20,9 @@ dev board note 8af0e001 --kind decision --as reviewer "Keep the two flags separa
 dev board notes 8af0e001
 dev board show 8af0e001
 dev board edit 8af0e001 < plan.md
-dev board checks 8af0e001 "dev lint" "dev test"
+dev board checks 8af0e001 "dev --remote lint" "dev --remote test"
+dev board check 8af0e001
+dev board check 8af0e001 --expect-fail --timeout 2400
 dev board allow 8af0e001 test-edits ci-edits
 dev board allow 8af0e001 none
 dev board tests 8af0e001 one_should_be_one tests::two
@@ -537,8 +539,9 @@ written by dev can be edited or deleted. A local board has nothing to sync, so
 
 On a Pomb board, `add`, `move`, `note`, `size`, `label`, `link`, `edit` and
 `outcome` that cannot reach Pomb, or cannot read the token because `pass` is
-locked, are kept in a queue and print the line below. A timeout or a gateway
-error may come after Pomb applied the change, so only `move`, `size`, `label`,
+locked, are kept in a queue and print the line below. `check` is never
+queued. A timeout or a gateway error
+may come after Pomb applied the change, so only `move`, `size`, `label`,
 `link`, `edit` and `outcome` with `--rename`, `--tick` or `--untick`, which are
 safe to repeat, are queued for those; `add`, `note`, an `outcome` append and
 `outcome --convert` fail instead of risking a duplicate. A move to Done is never
@@ -864,6 +867,53 @@ never handles the API.
   into Ready gives (exit 1). Sending the same rows twice changes nothing more,
   so `checks` is queued while Pomb is unreachable like `edit`, timeouts and 502,
   503 and 504 included. The `on` runner names are not set.
+- `check CARD [--expect-fail] [--timeout SECONDS]`: Runs every checks row of the
+  card and records the result as one comment on the card. A row runs as a
+  plain command, split on whitespace and started without a shell, so a row
+  that holds any of `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`,
+  `?` or a line break is refused before anything runs (exit 1). Under a set
+  `DEV_AGENT`, dev refuses a local run of a verb that has a ci job, so a row
+  reads `dev --remote lint` (not `dev lint`). Each row may run for `--timeout`
+  seconds (1800 by default, at most 86400, anything else is exit 2), to cover a
+  remote test of about five minutes that waits in the ci queue. A row that
+  outlasts it is killed and recorded as `timeout`, as is a row that exits 124
+  or is killed from outside. A card with no rows is
+  exit 1.
+
+  The result belongs to one commit. In a jj project the working copy is itself
+  a commit, so a changed file is normal and the commit is `@` after jj
+  snapshots the files, recorded with its change id. In a git project the tree
+  must match `HEAD`, and a dirty one is refused (exit 1) with the count of
+  changed paths. A conflicted jj working copy is refused too. dev names the
+  commit before the first row and again after the last, and a result whose
+  two commits differ was run on a tree that moved, so it is not recorded
+  (exit 1).
+
+  The comment has the kind `status` and begins with a reserved first line,
+  then one line per row:
+
+  ```
+  dev-check: commit=<full commit id> change=<change id, - in git> mode=run
+  1 pass dev --remote lint
+  2 fail dev --remote test
+  ```
+
+  A row ends as `pass`, `fail` (any non-zero exit) or `timeout`. The command
+  prints the same lines (the last 12 lines of a row that did not pass follow
+  it, indented) and `recorded on <id prefix> at commit <12 characters>: N of M
+  rows passed`. It exits 0 when every row passed and 1 otherwise.
+  `--expect-fail` is for filing a card: it records `mode=expect-fail`, exits 0
+  when every row failed, and reports a row that passed as one that proves
+  nothing (exit 1, still recorded).
+
+  If the comment cannot be written (Pomb unreachable, a timeout, a refused
+  fence), the command exits 1 with `the result was NOT recorded` and the row
+  lines. It never prints `recorded` then, and it is never queued (a replay
+  would rerun the rows). A timeout or gateway error may come
+  after Pomb stored the comment, so read `notes` before repeating a long run.
+  `note` refuses any text that begins with `dev-check:` (any case, after
+  leading space), and `note --edit` and `--delete` refuse a comment that holds
+  or would hold it (exit 1).
 - `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
   array of the words, each `test-edits` or `ci-edits` with duplicates dropped,
   and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with

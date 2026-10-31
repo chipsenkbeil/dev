@@ -202,6 +202,24 @@ M.NOTE_KINDS = { "decision", "question", "blocked", "status", "done" }
 ---The most characters of the label `note --as` sends, which Pomb enforces.
 M.AUTHOR_CHARS = 80
 
+---The prefix of the comment `check` writes, which no note may begin with.
+M.CHECK_PREFIX = "dev-check:"
+
+local RESERVED_PREFIXES = { M.CHECK_PREFIX }
+
+---Say whether a comment body begins with a prefix only a dev verb writes.
+---@param body string the comment body
+---@return boolean reserved true when a note may not hold it
+function M.reserved(body)
+    local head = body:match("^%s*(.-)$"):lower()
+    for _, prefix in ipairs(RESERVED_PREFIXES) do
+        if head:sub(1, #prefix) == prefix then
+            return true
+        end
+    end
+    return false
+end
+
 local UNSIZED = "unsized"
 
 ---The size words a user may type, with the palette colour each names.
