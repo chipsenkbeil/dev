@@ -314,6 +314,63 @@ t.test("root asks jj for the workspace root first", function()
     fs.remove(root, { recursive = true })
 end)
 
+local function quiet(argv, dir)
+    return devos.run(argv, { cwd = dir, stdout = "null", stderr = "null" }) == 0
+end
+
+local function have_vcs()
+    if devos.which("jj") and devos.which("git") then
+        return true
+    end
+    print("skip - jj or git is not installed")
+    return false
+end
+
+t.test("root is a git worktree nested under a colocated jj checkout", function()
+    if not have_vcs() then
+        return
+    end
+    local root = support.tempdir()
+    assert(quiet({ "jj", "git", "init", "--colocate", root }), "jj init failed")
+    assert(
+        quiet({
+            "jj",
+            "--config=user.name=t",
+            "--config=user.email=t@example.com",
+            "commit",
+            "-m",
+            "x",
+        }, root),
+        "jj commit failed"
+    )
+    assert(quiet({ "git", "worktree", "add", "--detach", root .. "/wt/tree" }, root))
+    assert(fs.mkdir(root .. "/wt/tree/sub/deep", { parents = true }))
+    local want = assert(fs.realpath(root .. "/wt/tree")) .. "\n"
+    t.eq(root_from(root .. "/wt/tree", {}), want)
+    t.eq(root_from(root .. "/wt/tree/sub/deep", {}), want)
+    t.eq(root_from(root, {}), assert(fs.realpath(root)) .. "\n")
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("root keeps a jj workspace nested in a foreign git repo", function()
+    if not have_vcs() then
+        return
+    end
+    local outer = support.tempdir()
+    assert(git_repo(outer), "git init failed")
+    assert(fs.mkdir(outer .. "/main", { parents = true }))
+    assert(quiet({ "jj", "git", "init", outer .. "/main" }), "jj init failed")
+    assert(
+        quiet({ "jj", "workspace", "add", outer .. "/ws" }, outer .. "/main"),
+        "workspace failed"
+    )
+    assert(fs.mkdir(outer .. "/ws/sub", { parents = true }))
+    local want = assert(fs.realpath(outer .. "/ws")) .. "\n"
+    t.eq(root_from(outer .. "/ws", {}), want)
+    t.eq(root_from(outer .. "/ws/sub", {}), want)
+    fs.remove(outer, { recursive = true })
+end)
+
 t.test("detect_type finds a nested Lua file within the search depth only", function()
     local root = support.tempdir()
     assert(fs.write(root .. "/Makefile", ""))

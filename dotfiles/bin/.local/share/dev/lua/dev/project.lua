@@ -44,6 +44,22 @@ local function vcs_root(argv)
     end
 end
 
+local function inside(path, dir)
+    return path ~= dir and path:sub(1, #dir + 1) == dir .. "/"
+end
+
+local function deeper_root(jj, git)
+    if not (jj and git) then
+        return jj or git
+    end
+    local jj_real = fs.realpath(jj) or jj
+    local git_real = fs.realpath(git) or git
+    if inside(git_real, jj_real) then
+        return git
+    end
+    return jj
+end
+
 ---The project types dev knows.
 M.Kind = Kind
 
@@ -74,8 +90,10 @@ end
 ---
 ---1. As root we only test that `.jj`, `.git` or `.dev` exists, walking up from
 ---   the current directory, and run no command.
----2. Otherwise it is `jj root`, then `git rev-parse --show-toplevel`, then the
----   nearest directory holding `.dev`.
+---2. Otherwise it is the deeper of `jj root` and `git rev-parse --show-toplevel`
+---   when both answer, making a git worktree nested under a colocated jj
+---   checkout its own root. With one answer it is that one, and with none it is
+---   the nearest directory holding `.dev`.
 ---3. With none of those it is the current directory.
 ---@return string root absolute path of the project
 function M.root()
@@ -83,10 +101,10 @@ function M.root()
     if devos.getuid() == 0 then
         return ancestor_with({ ".jj", ".git", ".dev" }, cwd, fs.exists) or cwd
     end
-    return vcs_root({ "jj", "root" })
-        or vcs_root({ "git", "rev-parse", "--show-toplevel" })
-        or ancestor_with({ ".dev" }, cwd, fs.is_dir)
-        or cwd
+    return deeper_root(
+        vcs_root({ "jj", "root" }),
+        vcs_root({ "git", "rev-parse", "--show-toplevel" })
+    ) or ancestor_with({ ".dev" }, cwd, fs.is_dir) or cwd
 end
 
 local function has_lua_file(root)
