@@ -197,7 +197,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the project's board: status, init, ls, next, add, note, show, edit, checks, allow, tests, files, move, order, size, label, link, links, stale, take, release, wait and sync",
+        desc = "Read and update the board: status, init, ls, next, add, note, show, edit, checks, allow, tests, files, move, order, size, label, link, links, unlink, stale, take, release, wait and sync",
         group = "Share it",
     },
     {
@@ -259,6 +259,12 @@ return {
         handler = "lua",
         usage = "dev board links CARD",
         desc = "List a card's links: kind, the other card's id prefix and its board name, - for this board",
+    },
+    {
+        words = { "board", "unlink" },
+        handler = "lua",
+        usage = "dev board unlink CARD KIND OTHER",
+        desc = "Remove a link the card holds, given its kind and the other card (OTHER as for link); Pomb lets a token remove only the links it created",
     },
     {
         words = { "board", "note" },

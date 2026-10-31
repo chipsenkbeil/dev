@@ -354,6 +354,42 @@ function Backend:link(id, kind, other)
     end)
 end
 
+local function remove_link(holder, kind, target_id)
+    for index, held in ipairs(holder.links or {}) do
+        if held.kind == kind and held.target_id == target_id then
+            table.remove(holder.links, index)
+            return true
+        end
+    end
+    return false
+end
+
+function Backend:unlink(id, kind, other)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id)
+        if not card then
+            return nil, message
+        end
+        local target
+        target, message = card_of(doc, other)
+        if not target then
+            return nil, message
+        end
+        local holder, held_kind, held_target = card, kind, target
+        if kind == board.LinkKind.BLOCKS then
+            holder, held_kind, held_target = target, board.LinkKind.BLOCKED_BY, card
+        end
+        local removed = remove_link(holder, held_kind, held_target.id)
+        if not removed and kind == board.LinkKind.RELATED then
+            removed = remove_link(target, kind, card.id)
+        end
+        if not removed then
+            return nil, "the card holds no " .. kind .. " link to " .. other
+        end
+        return true
+    end)
+end
+
 function Backend:links(id)
     local doc, message = self:__read()
     if not doc then

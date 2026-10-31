@@ -33,6 +33,7 @@ local STAMP_CHARS = 19
 local PAGE_LIMIT = 500
 local FORBIDDEN = 403
 local PERMISSION_DENIED = "permission_denied"
+local LINKS_DELETE = "links.delete"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NOT_YOURS = "that comment is not yours to change"
@@ -260,7 +261,7 @@ function Backend:__request(method, path, body, fence, seconds)
         return nil, unavailable("pomb sent an answer dev cannot read")
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == PERMISSION_DENIED then
-        return nil, denied(doc), status
+        return nil, denied(doc), status, doc
     end
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
@@ -893,6 +894,58 @@ function Backend:links(id)
         found[#found + 1] = { kind = link.kind, id = link.target_id, board = name }
     end
     return found
+end
+
+---Remove the link of one kind from `source` to `target`, as the source's own tasks list it.
+---@return boolean? removed true when a link was deleted, false when the source has none, nil and a message when Pomb refused
+function Backend:__drop_link(source, kind, target)
+    local fetched, message = self:__request("GET", "/api/tasks/" .. source .. "/links")
+    if not fetched then
+        return nil, message
+    end
+    for _, link in ipairs(fetched) do
+        if link.kind == kind and link.target_id == target then
+            local gone, status, doc
+            gone, message, status, doc =
+                self:__request("DELETE", "/api/tasks/" .. source .. "/links/" .. link.id)
+            if gone then
+                return true
+            end
+            if
+                status == FORBIDDEN
+                and type(doc) == "table"
+                and doc.permission == LINKS_DELETE
+                and present(doc.board_id) == nil
+            then
+                return nil,
+                    "pomb kept the link: this token can delete only the links it created, and this one"
+                        .. " was made by another token or before Pomb 0.5.40"
+            end
+            return nil, message
+        end
+    end
+    return false
+end
+
+function Backend:unlink(id, kind, other)
+    local source, held, target = id, kind, other
+    if kind == "blocks" then
+        source, held, target = other, "blocked_by", id
+    end
+    local removed, message = self:__drop_link(source, held, target)
+    if removed == nil then
+        return nil, message
+    end
+    if not removed and kind == "related" then
+        removed, message = self:__drop_link(other, kind, id)
+        if removed == nil then
+            return nil, message
+        end
+    end
+    if not removed then
+        return nil, "pomb has no " .. kind .. " link from " .. id .. " to " .. other
+    end
+    return true
 end
 
 function Backend:family(id)

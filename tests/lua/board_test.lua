@@ -120,6 +120,10 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "links", id }
         return backend.held or {}
     end
+    function backend:unlink(id, kind, other)
+        calls[#calls + 1] = { "unlink", id, kind, other }
+        return true
+    end
     function backend:family(id)
         calls[#calls + 1] = { "family", id }
         return backend.kin or {}
@@ -761,6 +765,29 @@ t.test("links lists each link with the kind, the id prefix and the board", funct
     t.eq(commands.run("links", { "11111111-b" }, fake(sample())).output, "no links")
     t.eq(commands.run("links", {}, backend).code, 2)
     t.eq(commands.run("links", { "deadbeef" }, backend).code, 1)
+end)
+
+t.test("unlink removes the held link of that kind and target, and refuses one it lacks", function()
+    local backend = fake(sample())
+    backend.held = { { kind = "blocked_by", id = ID_C }, { kind = "related", id = ID_B } }
+    local result = commands.run("unlink", { "11111111-a", "blocked_by", "cccccccc" }, backend)
+    t.eq(result.output, "unlinked 11111111 blocked_by cccccccc")
+    t.eq(backend.calls[2], { "unlink", ID_A, "blocked_by", ID_C })
+    result = commands.run("unlink", { "11111111-a", "blocks", "cccccccc" }, backend)
+    t.eq(result.code, 1)
+    t.eq(
+        result.message,
+        "the card holds no blocks link to cccccccc, its links are\n"
+            .. "blocked_by  cccccccc  -\nrelated     11111111  -"
+    )
+    t.eq(backend.calls[3], { "links", ID_A })
+    backend.held = {}
+    result = commands.run("unlink", { "11111111-a", "related", "cccccccc" }, backend)
+    t.eq(result.message, "the card holds no related link to cccccccc, it holds no links")
+    t.eq(commands.run("unlink", { "11111111-a", "blocked_by" }, backend).code, 2)
+    t.eq(commands.run("unlink", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
+    t.eq(commands.run("unlink", { "deadbeef", "blocked_by", "cccccccc" }, backend).code, 1)
+    t.eq(commands.run("unlink", { "11111111-a", "blocked_by", "deadbeef" }, backend).code, 1)
 end)
 
 t.test("link takes parent, and show prints the umbrella and the children", function()
@@ -1857,6 +1884,7 @@ case "$last" in
 */tasks\?*) body='{"items":[{"id":"]] .. ID_A .. [["}],"next_cursor":null}' ;;
 */api/tasks/]] .. ID_A .. [[) body=$(cat "$ROOT/task.json") ;;
 */api/tasks) body=$(cat "$ROOT/task.json") ;;
+*/api/tasks/]] .. ID_C .. [[/links) body=$(cat "$ROOT/holder_links.json") ;;
 */links) body=$(cat "$ROOT/links.json") ;;
 */subtasks)
     body='{"id":"sub-1","name":"x","done":false}'
@@ -1913,6 +1941,7 @@ local function sandbox(opts)
         ["task.json"] = opts.task or TASK,
         ["comments.json"] = COMMENTS,
         ["links.json"] = opts.links or "[]",
+        ["holder_links.json"] = opts.holder_links or "[]",
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
@@ -2605,6 +2634,65 @@ t.test("links reads the task's links and names the board of a link to another bo
     out, code = dev(root, home, { "board", "links", "11111111-a" })
     t.eq(code, 0, out)
     t.eq(out, "no links\n")
+end)
+
+t.test("unlink deletes the link the token holds and reports a refused delete plainly", function()
+    local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
+        .. ID_C
+        .. '","board_id":"board-1"}]'
+    local root, home = sandbox({ links = links })
+    local out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
+    t.eq(code, 0, out)
+    t.eq(out, "unlinked 11111111 blocked_by cccccccc\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find("-X DELETE", 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
+    local _, deletes_before = read(root, "calls"):gsub("%-X DELETE", "")
+    out, code = dev(root, home, { "board", "unlink", "11111111-a", "related", "cccccccc" })
+    t.eq(code, 1, out)
+    t.ok(out:find("the card holds no related link to cccccccc, its links are", 1, true), out)
+    local _, deletes_after = read(root, "calls"):gsub("%-X DELETE", "")
+    t.eq(deletes_after, deletes_before)
+    root, home = sandbox({ links = links })
+    curl_with(
+        root,
+        [[*/links/l1) body='{"code":"permission_denied","permission":"links.delete","message":"m","board_id":null}'; status=403 ;;
+*/claim/release) body= ;;]]
+    )
+    out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
+    t.eq(code, 1, out)
+    t.eq(
+        out,
+        "dev: pomb kept the link: this token can delete only the links it created, and this one"
+            .. " was made by another token or before Pomb 0.5.40\n"
+    )
+    t.ok(
+        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links/l1", 1, true),
+        read(root, "calls")
+    )
+    root, home = sandbox({ links = links })
+    curl_with(
+        root,
+        [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.write","message":"no write","board_id":"board-9"}'; status=403 ;;
+*/claim/release) body= ;;]]
+    )
+    out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
+    t.eq(code, 1, out)
+    t.ok(not out:find("kept the link", 1, true), out)
+end)
+
+t.test("unlink of a blocks view deletes the blocked_by link on the holder's task", function()
+    local links = '[{"id":"l1","kind":"blocks","target_id":"' .. ID_C .. '","board_id":"board-1"}]'
+    local holder = '[{"id":"l9","kind":"blocked_by","target_id":"'
+        .. ID_A
+        .. '","board_id":"board-1"}]'
+    local root, home = sandbox({ links = links, holder_links = holder })
+    local out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocks", "cccccccc" })
+    t.eq(code, 0, out)
+    t.eq(out, "unlinked 11111111 blocks cccccccc\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find("/api/tasks/" .. ID_C .. "/links/l9", 1, true), calls)
+    t.ok(not calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
 end)
 
 t.test("notes, note --edit and note --delete reach pomb's comment routes", function()

@@ -1722,31 +1722,57 @@ function commands.files(backend, args)
     return set_names(backend, args, board.FILES_FIELD, "file")
 end
 
-function commands.link(backend, args)
-    if #args ~= 3 then
-        return usage("needs a card, a kind (" .. LINK_HELP .. ") and the other card")
-    end
-    if not index_of(board.LINK_KINDS, args[2]) then
-        return usage("unknown link kind " .. args[2] .. ", the kinds are " .. LINK_HELP)
-    end
-    local card, err = find_card(backend, args[1])
-    if not card then
-        return err
-    end
-    local word = args[3]
+local function other_card(backend, word)
     local other_name, prefix = word:match("^(.+):([^:]*)$")
     local home = backend
     if other_name then
         local why
         home, why = backend:other_board(other_name)
         if not home then
-            return failure(why)
+            return nil, nil, failure(why)
         end
         word = prefix
     end
-    local other
-    other, err = find_card(home, word)
+    local other, err = find_card(home, word)
     if not other then
+        return nil, nil, err
+    end
+    return other, (other_name and other_name .. ":" or "") .. other.id:sub(1, board.MIN_PREFIX)
+end
+
+local function link_rows(list)
+    local rows = {}
+    for _, link in ipairs(list) do
+        rows[#rows + 1] = { link.kind, link.id:sub(1, board.MIN_PREFIX), link.board or "-" }
+    end
+    return table.concat(board.table_lines(rows), "\n")
+end
+
+local function link_ends(backend, args)
+    if #args ~= 3 then
+        return nil, nil, nil, usage("needs a card, a kind (" .. LINK_HELP .. ") and the other card")
+    end
+    if not index_of(board.LINK_KINDS, args[2]) then
+        return nil,
+            nil,
+            nil,
+            usage("unknown link kind " .. args[2] .. ", the kinds are " .. LINK_HELP)
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return nil, nil, nil, err
+    end
+    local other, shown
+    other, shown, err = other_card(backend, args[3])
+    if not other then
+        return nil, nil, nil, err
+    end
+    return card, other, shown
+end
+
+function commands.link(backend, args)
+    local card, other, shown, err = link_ends(backend, args)
+    if not card then
         return err
     end
     local ok, message = backend:link(card.id, args[2], other.id)
@@ -1754,14 +1780,38 @@ function commands.link(backend, args)
         return failure(message)
     end
     return {
-        output = "linked "
-            .. card.id:sub(1, board.MIN_PREFIX)
-            .. " "
-            .. args[2]
-            .. " "
-            .. (other_name and other_name .. ":" or "")
-            .. other.id:sub(1, board.MIN_PREFIX),
+        output = "linked " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. args[2] .. " " .. shown,
     }
+end
+
+function commands.unlink(backend, args)
+    local card, other, shown, err = link_ends(backend, args)
+    if not card then
+        return err
+    end
+    local list, message = backend:links(card.id)
+    if not list then
+        return failure(message)
+    end
+    for _, link in ipairs(list) do
+        if link.kind == args[2] and link.id == other.id then
+            local ok
+            ok, message = backend:unlink(card.id, args[2], other.id)
+            if not ok then
+                return failure(message)
+            end
+            return {
+                output = "unlinked "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " "
+                    .. args[2]
+                    .. " "
+                    .. shown,
+            }
+        end
+    end
+    local held = #list == 0 and "it holds no links" or "its links are\n" .. link_rows(list)
+    return failure("the card holds no " .. args[2] .. " link to " .. shown .. ", " .. held)
 end
 
 function commands.links(backend, args)
@@ -1779,11 +1829,7 @@ function commands.links(backend, args)
     if #list == 0 then
         return { output = "no links" }
     end
-    local rows = {}
-    for _, link in ipairs(list) do
-        rows[#rows + 1] = { link.kind, link.id:sub(1, board.MIN_PREFIX), link.board or "-" }
-    end
-    return { output = table.concat(board.table_lines(rows), "\n") }
+    return { output = link_rows(list) }
 end
 
 local function append(lines, more)
@@ -2051,7 +2097,7 @@ function commands.release(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `link`, `links`, `stale`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `link`, `links`, `unlink`, `stale`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

@@ -452,8 +452,18 @@ the name of its board, with `-` for this board. A card with no links prints
 `no links`. It lists both sides of a link: the ones the card holds and the ones
 another card holds on it, which show as `blocks`, `related` or `child`. A link
 to a card on another board shows that board's name, so `blocks  1a2b3c4d  ci`
-reads as a card on `ci` that this one blocks. dev has no command to remove a
-link (Pomb lets only the admin scope delete one).
+reads as a card on `ci` that this one blocks. `unlink CARD KIND OTHER` removes one.
+
+`unlink CARD KIND OTHER` removes a link the card holds, named as `links CARD`
+shows it, and prints `unlinked <id prefix> <kind> <other>`. A card with no such
+link exits 1 and lists its links. A `child` line cannot be removed, because
+`child` is not a link kind; remove the other card's `parent` link instead.
+
+Pomb lets a token delete only the links it created. A link another token made,
+or one made before Pomb 0.5.40 (which records no creator), gets a 403
+`permission_denied`, which dev reports as `pomb kept the link: ...` and exits 1
+for, leaving the link in place. Unlike `link`, `unlink` is not queued while Pomb
+is unreachable.
 
 `stale [--days N] [--icebox-days N]` lists the cards that have sat in Backlog,
 Ready, In Progress or In Review for N days or more, 7 by default, oldest first.
@@ -742,7 +752,18 @@ never handles the API.
   entry for each `blocked_by` link another card holds on it a `related` entry
   for each `related` link held the other way and a `child` entry for each
   `parent` link held on it. A missing or unknown card is exit 1. Removing a link
-  is not offered (Pomb lets only the admin scope delete one).
+  is `unlink`, below.
+- `unlink CARD KIND OTHER`: Removes the link of that KIND from the card to OTHER
+  (a card of this board, or `BOARD:PREFIX`), and prints `unlinked` with the
+  same three words `link` prints. KIND and OTHER must match a line `links CARD`
+  lists, else exit 1 with that listing after the message. A `blocks` line is
+  removed as the `blocked_by` the other card holds, and a `related` line from
+  whichever card holds it. A Pomb board reads `GET /api/tasks/{id}/links` on the
+  holder for the link's id and sends `DELETE /api/tasks/{id}/links/{link_id}`.
+  A 403 `permission_denied` for `links.delete` that names no board exits 1 as
+  `pomb kept the link`, and leaves the link in place. The change is not queued
+  while Pomb is unreachable (exit 1, `board unavailable`). A local board removes
+  the link from the card that holds it.
 - `stale [--days N] [--icebox-days N]`: Lists the cards that have sat in
   Backlog, Ready, In Progress or In Review for N days or more (7 by default),
   oldest first, one line each: id prefix, column, `<days>d`, size and name,
