@@ -316,7 +316,9 @@ are converted. `move CARD ready` refuses a card without them and names what is
 missing (exit 1), and `add --column ready` does the same for its description and
 `--done-when` items (exit 2). Icebox cards are free-form, so adding to or moving
 into Icebox is never checked. `add` fills the sections from `--problem`,
-`--change` and `--out-of-scope`, and `--description` cannot go with them.
+`--change` and `--out-of-scope`, and `--description` cannot go with them. A
+repeated `--change` adds a line each, and a repeated `--problem` or
+`--out-of-scope` is refused.
 
 A card needs a checks row to enter Ready too. The checks live in the board's
 `dev.checks` field, a table with a `run` column, and `add --checks CMD`
@@ -678,7 +680,7 @@ never handles the API.
   labelled `needs:human`, in the `ls` format, else `no ready cards` (exit 0).
   `--column backlog` or `--column icebox` takes the top such card of that column
   instead, else `no cards in <column>` (exit 0). Any other column is exit 2.
-- `add NAME [--column C] [--description TEXT] [--problem TEXT] [--change TEXT] [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
+- `add NAME [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
   Creates the card, in Backlog by default, and prints
   `added <id prefix> <column>`. `--size` gives it the colour of the size, as
   `size` does, and each `--label L` (repeatable, duplicates dropped) gives it a
@@ -686,9 +688,12 @@ never handles the API.
   format v2 headings (`## Problem`, `## Change`, `## Out of scope`) with
   `--description` text filled into Problem, or each section filled from
   `--problem`, `--change` and `--out-of-scope` (these cannot go with
-  `--description`, exit 2, and `dev.board.compose` builds the text), and a text
-  that already holds one of those headings or the v1 `## Done when` is kept as
-  it is; an Icebox card gets the text as given and none otherwise.
+  `--description`, exit 2, and `dev.board.compose` builds the text). Each
+  `--change TEXT` (repeatable) is one line of the Change section, in the order
+  given, and a repeated `--problem` or `--out-of-scope` is a usage error naming
+  the flag (exit 2) to keep any text from being dropped silently. A text that
+  already holds one of those headings or the v1 `## Done when` is kept as it
+  is; an Icebox card gets the text as given and none otherwise.
   `--column ready` without a `--size` of `1`, `2` or `3` is a usage error (exit
   2), by the same rule as `move`, and so is a `--column backlog` (the default)
   whose description lacks a heading or text under Problem

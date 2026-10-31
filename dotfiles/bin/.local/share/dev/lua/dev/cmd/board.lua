@@ -567,14 +567,29 @@ function commands.add(backend, args)
         ["--label"] = true,
         ["--checks"] = true,
         ["--done-when"] = true,
-    }, { ["--label"] = true, ["--checks"] = true, ["--done-when"] = true })
+    }, {
+        ["--problem"] = true,
+        ["--change"] = true,
+        ["--out-of-scope"] = true,
+        ["--label"] = true,
+        ["--checks"] = true,
+        ["--done-when"] = true,
+    })
     if not flags then
         return words
     end
     if #words == 0 then
         return usage("needs a card name")
     end
-    local sectioned = flags["--problem"] or flags["--change"] or flags["--out-of-scope"]
+    for _, flag in ipairs({ "--problem", "--out-of-scope" }) do
+        if flags[flag] and #flags[flag] > 1 then
+            return usage(flag .. " takes one value, so give its text once")
+        end
+    end
+    local problem = flags["--problem"] and flags["--problem"][1]
+    local out_of_scope = flags["--out-of-scope"] and flags["--out-of-scope"][1]
+    local change = flags["--change"] and table.concat(flags["--change"], "\n")
+    local sectioned = problem or change or out_of_scope
     if sectioned and flags["--description"] then
         return usage(
             "--description holds the whole text, so it cannot go with --problem, --change or --out-of-scope"
@@ -642,7 +657,7 @@ function commands.add(backend, args)
     end
     local description = flags["--description"]
     if sectioned then
-        description = board.compose(flags["--problem"], flags["--change"], flags["--out-of-scope"])
+        description = board.compose(problem, change, out_of_scope)
     elseif column ~= roles.icebox then
         description = board.scaffold(description)
     end

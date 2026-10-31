@@ -1157,6 +1157,30 @@ t.test("add refuses --description together with a section flag", function()
     t.eq(#backend.calls, 0)
 end)
 
+t.test("add keeps each repeated --change as its own line, in order", function()
+    local backend = fake(sample())
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "p", "--change", "- one", "--change", "- two", "--change", "- three" },
+        backend
+    )
+    t.eq(result.output, "added cccccccc Backlog")
+    t.eq(
+        backend.calls[1][4],
+        "## Problem\np\n\n## Change\n- one\n- two\n- three\n\n## Out of scope\n"
+    )
+end)
+
+t.test("add refuses a repeated --problem or --out-of-scope by name", function()
+    local backend = fake(sample())
+    for _, flag in ipairs({ "--problem", "--out-of-scope" }) do
+        local result = commands.run("add", { "X", flag, "a", flag, "b" }, backend)
+        t.eq(result.code, 2)
+        t.ok(result.message:find(flag, 1, true), result.message)
+    end
+    t.eq(#backend.calls, 0)
+end)
+
 t.test("add into Backlog without a Problem is refused before the backend is called", function()
     local backend = fake(sample())
     local result = commands.run("add", { "X" }, backend)
