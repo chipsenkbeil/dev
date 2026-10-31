@@ -58,6 +58,40 @@ function M.fit(s, width)
     return table.concat(out)
 end
 
+---Split a string into its whitespace-separated words.
+---@param s string the text
+---@return string[] words the words in order
+function M.words(s)
+    local words = {}
+    for word in s:gmatch("%S+") do
+        words[#words + 1] = word
+    end
+    return words
+end
+
+---Fill lines with words, breaking only between words.
+---
+---A word wider than `width` gets a line of its own.
+---@param words string[] words that may hold SGR escapes
+---@param width integer columns a line may fill
+---@return string[] lines the words joined by single spaces
+function M.wrap(words, width)
+    local lines, line, used = {}, {}, 0
+    for _, word in ipairs(words) do
+        local w = M.width(word)
+        if #line > 0 and used + 1 + w > width then
+            lines[#lines + 1] = table.concat(line, " ")
+            line, used = {}, 0
+        end
+        used = used + (#line > 0 and 1 or 0) + w
+        line[#line + 1] = word
+    end
+    if #line > 0 then
+        lines[#lines + 1] = table.concat(line, " ")
+    end
+    return lines
+end
+
 ---Cut the whitespace off the end of a string.
 ---@param s string the text
 ---@return string trimmed the text without trailing whitespace

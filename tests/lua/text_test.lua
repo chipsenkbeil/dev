@@ -20,3 +20,23 @@ end)
 t.test("fit cuts by codepoint and keeps escapes", function()
     t.eq(text.fit("\27[32mééééé\27[0m", 3), "\27[32méé…\27[0m")
 end)
+
+t.test("words splits on any whitespace", function()
+    t.eq(text.words("  a bb\tc\n"), { "a", "bb", "c" })
+end)
+
+t.test("wrap fills lines up to the width", function()
+    t.eq(text.wrap({ "aa", "bb", "cc" }, 5), { "aa bb", "cc" })
+end)
+
+t.test("wrap gives a word wider than the width its own line", function()
+    t.eq(text.wrap({ "a", "bbbbbbbb", "c" }, 4), { "a", "bbbbbbbb", "c" })
+end)
+
+t.test("wrap counts columns without color escapes", function()
+    t.eq(text.wrap({ "\27[1maa\27[0m", "bb" }, 5), { "\27[1maa\27[0m bb" })
+end)
+
+t.test("wrap of no words is no lines", function()
+    t.eq(text.wrap({}, 5), {})
+end)

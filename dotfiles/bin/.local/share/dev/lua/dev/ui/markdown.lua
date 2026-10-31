@@ -81,23 +81,6 @@ local function inline_words(ctx, source, base)
     return words
 end
 
-local function wrap(words, width)
-    local lines, line, used = {}, {}, 0
-    for _, word in ipairs(words) do
-        local w = text.width(word)
-        if #line > 0 and used + 1 + w > width then
-            lines[#lines + 1] = table.concat(line, " ")
-            line, used = {}, 0
-        end
-        used = used + (#line > 0 and 1 or 0) + w
-        line[#line + 1] = word
-    end
-    if #line > 0 then
-        lines[#lines + 1] = table.concat(line, " ")
-    end
-    return lines
-end
-
 local function split_row(line)
     local cells, cell, in_code, i = {}, {}, false, 1
     line = text.trim(line:match("^%s*(.*)$"))
@@ -199,7 +182,7 @@ local function render_table(ctx, rows, width, out)
         local wrapped, height = {}, 1
         for c = 1, columns do
             local words = cells[r][c]
-            wrapped[c] = wrap(words, widths[c])
+            wrapped[c] = text.wrap(words, widths[c])
             height = math.max(height, #wrapped[c])
         end
         for h = 1, height do
@@ -303,7 +286,7 @@ local function render(source, opts)
                 local glyph = marker:match("^%d") and marker or BULLET
                 local prefix = INDENT .. lead .. glyph .. " "
                 local hang = string.rep(" ", text.width(prefix))
-                local wrapped = wrap(inline_words(ctx, rest), math.max(width - #hang, 1))
+                local wrapped = text.wrap(inline_words(ctx, rest), math.max(width - #hang, 1))
                 for n, piece in ipairs(wrapped) do
                     out[#out + 1] = (n == 1 and prefix or hang) .. piece
                 end
@@ -318,7 +301,7 @@ local function render(source, opts)
                 joined[#joined + 1] = lines[i]
                 i = i + 1
             end
-            add(wrap(inline_words(ctx, table.concat(joined, " ")), width))
+            add(text.wrap(inline_words(ctx, table.concat(joined, " ")), width))
         end
     end
 

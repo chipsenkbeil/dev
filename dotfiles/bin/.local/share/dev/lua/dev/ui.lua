@@ -275,26 +275,6 @@ function M.require_terminal(ctx, opts)
     os.exit(2)
 end
 
-local function wrap_words(s, width)
-    local lines, line, used = {}, nil, 0
-    for word in s:gmatch("%S+") do
-        local w = text.width(word)
-        if line and used + 1 + w > width then
-            lines[#lines + 1] = line
-            line = nil
-        end
-        if line then
-            line, used = line .. " " .. word, used + 1 + w
-        else
-            line, used = word, w
-        end
-    end
-    if line then
-        lines[#lines + 1] = line
-    end
-    return lines
-end
-
 ---Ask a yes or no question on the controlling terminal, where no is the default.
 ---
 ---The consequence is wrapped to the context's width on lines of its own, and the question
@@ -313,7 +293,7 @@ function M.confirm(ctx, question, consequence)
         out:close()
         error(open_err, 0)
     end
-    for _, line in ipairs(wrap_words(consequence, ctx.width)) do
+    for _, line in ipairs(text.wrap(text.words(consequence), ctx.width)) do
         out:write(line, "\n")
     end
     out:write(M.paint(ctx, question, Style.YELLOW), " [y/", M.paint(ctx, "N", Style.BOLD), "] ")
