@@ -5,8 +5,7 @@ local json = require("dev.json")
 local project = require("dev.project")
 
 local present = json.present
-local PASS_TIMEOUT_SECONDS = "10"
-local PASS_GPG_OPTS = "--pinentry-mode error --batch"
+local PASSLOCK_SCRIPT = "/board/passlock.sh"
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = 30
 local WAIT_SECONDS = 50
@@ -146,6 +145,9 @@ function M.unreachable(message, idempotent)
     return false
 end
 
+---@type table<string, string> tokens already read in this process, by `pass` entry
+local tokens = {}
+
 local function entry_of(ref)
     local entry = type(ref) == "string" and ref:match("^pass:(.+)$")
     if entry and entry:find(ENTRY_PATTERN) and not entry:find("..", 1, true) then
@@ -155,7 +157,8 @@ end
 
 ---Read the worker token with `pass`, without a prompt.
 ---
----A locked store fails at once instead of waiting for a pinentry.
+---A locked store fails at once instead of waiting for a pinentry. Reads queue
+---on one lock shared by every process, and a process reads each entry once.
 ---@param ref string `pass:<entry>`
 ---@return string? token the token
 ---@return string? message why it could not be read
@@ -164,8 +167,10 @@ function M.token(ref)
     if not entry then
         return nil, BAD_REF
     end
-    local out, code = devos.capture({ "timeout", PASS_TIMEOUT_SECONDS, "pass", "show", entry }, {
-        env = { PASSWORD_STORE_GPG_OPTS = PASS_GPG_OPTS },
+    if tokens[entry] then
+        return tokens[entry]
+    end
+    local out, code = devos.capture({ "bash", project.share .. PASSLOCK_SCRIPT, entry }, {
         unset = CHILD_UNSET,
         stdin = "null",
         stderr = "null",
@@ -179,6 +184,7 @@ function M.token(ref)
     if not token:find(TOKEN_PATTERN) then
         return nil, unavailable("pass gave a token that is empty or not plain text")
     end
+    tokens[entry] = token
     return token
 end
 

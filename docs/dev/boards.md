@@ -78,9 +78,15 @@ the token to another server.
 `token` names a `pass` entry. dev runs `pass show` under a 10 second timeout
 with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`, so a locked
 store fails at once with `board unavailable: pass is locked or has no entry ...`
-instead of waiting on a prompt. The token goes to curl on standard input as a
-config line. It is in no argument list, no environment variable, no file and no
-output, `-v` and `-vv` included.
+instead of waiting on a prompt. `board/passlock.sh` runs it under one lock, the
+directory `/tmp/dev-pass-<uid>.lock`, so
+concurrent dev calls and keep-alive ticks queue instead of crowding the
+hardware key. It waits up to 2 minutes for the lock and then fails like a timeout.
+A lock whose owner pid is gone, or that is older than 30 seconds, is taken
+over. A dev process reads each entry once, while the keep-alive loop reads it
+on every tick.
+The token goes to curl on standard input as a config line. It is in no argument
+list, no environment variable, no file and no output, `-v` and `-vv` included.
 
 ## Laying out the board
 
@@ -1170,9 +1176,8 @@ in dev's share directory, started by `dev.board.pomb` through
 `sh -c 'set -m; nohup bash <script> ... & echo $!'`, so it has its own process
 group, outlives the caller's shell and wakes no model. Every 5 minutes (`sleep`
 with the tick in seconds as its seventh argument) it checks that the state file
-still holds its fence, reads the token with the same `timeout 10 pass show` and
-`PASSWORD_STORE_GPG_OPTS` as `dev.board.pomb`, refuses a token outside
-`A-Za-z0-9._~+/=-`, and sends `POST /api/tasks/{id}/claim/heartbeat` with
+still holds its fence, reads the token through the same `board/passlock.sh` as
+`dev.board.pomb`, refuses a token outside `A-Za-z0-9._~+/=-`, and sends `POST /api/tasks/{id}/claim/heartbeat` with
 `{"fence":N}` through `curl -K -`, the token going over a `printf` builtin pipe
 into curl's stdin so it is in no argv, no environment variable, no file and no
 output. The loop ends when the state file is gone or holds another fence
@@ -1405,8 +1410,8 @@ when it is set (no hint). A board absent from `/api/boards` is
 `tests/lua/board_init_test.lua` runs the algorithm against a stateful fake
 layout and the command against a fake `curl`.
 
-The token is read by `timeout 10 pass show <entry>` with
-`PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"` and no stdin, so a
+The token is read by `timeout 10 pass show <entry>` through `board/passlock.sh`,
+with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"` and no stdin, so a
 locked store fails at once with
 `board unavailable: pass is locked or has no entry <entry>` (a timeout says
 `pass timed out`). A token with any character outside `A-Za-z0-9._~+/=-` is

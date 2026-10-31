@@ -8,12 +8,13 @@ ticks=$4
 url=$5
 entry=$6
 tick=$7
+here=$(cd "$(dirname "$0")" && pwd)
 
 n=0
 while [ "$n" -lt "$ticks" ]; do
     sleep "$tick"
     grep -qx "fence=$fence" "$state" 2>/dev/null || exit 0
-    token=$(PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch" timeout 10 pass show "$entry" </dev/null 2>/dev/null | head -n 1)
+    token=$(bash "$here/passlock.sh" "$entry" | head -n 1)
     case $token in
     '' | *[!A-Za-z0-9._~+/=-]*)
         n=$((n + 1))

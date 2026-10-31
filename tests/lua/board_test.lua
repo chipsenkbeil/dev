@@ -2103,6 +2103,7 @@ local function dev(root, home, args, opts)
             XDG_STATE_HOME = home .. "/state",
             CI = "",
             DEV_AGENT = opts.agent or "",
+            DEV_PASS_LOCK = root .. "/pass.lock",
         },
         split = opts.split,
         input = opts.input,
@@ -2199,6 +2200,169 @@ t.test("a locked store fails at once and curl never runs", function()
     t.eq(code, 1)
     t.ok(out:find("board unavailable: pass is locked", 1, true), out)
     t.eq(read(root, "calls"):find("curl", 1, true), nil)
+end)
+
+local SHARE = devos.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/board/"
+
+local function pass_stub(root, lock)
+    executable(
+        root .. "/bin/pass",
+        "#!/bin/sh\n"
+            .. 'echo "start $$ held=$([ -d "'
+            .. lock
+            .. '" ] && echo 1 || echo 0)" >>"$ROOT/events"\n'
+            .. "sleep 1\n"
+            .. 'echo "end $$" >>"$ROOT/events"\n'
+            .. 'echo "'
+            .. TOKEN
+            .. '"\n'
+    )
+end
+
+local function shell(root, lock, script, polls)
+    return devos.capture({ "sh", "-c", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            ROOT = root,
+            DEV_PASS_LOCK = lock,
+            DEV_PASS_LOCK_POLLS = polls or "600",
+        },
+        stderr = "stdout",
+    })
+end
+
+t.test("concurrent pass reads queue on one lock and none times out", function()
+    local root = sandbox()
+    local lock = root .. "/pass.lock"
+    pass_stub(root, lock)
+    local cmd = "bash " .. SHARE .. "passlock.sh Agents/x"
+    local out = shell(root, lock, "(" .. cmd .. ") & (" .. cmd .. ") & (" .. cmd .. ") & wait")
+    t.eq(select(2, out:gsub(TOKEN, "")), 3, out)
+    local order = {}
+    for kind in read(root, "events"):gmatch("(%a+) %d+") do
+        order[#order + 1] = kind
+    end
+    t.eq(order, { "start", "end", "start", "end", "start", "end" })
+    t.eq(fs.read(lock .. "/pid"), nil)
+end)
+
+t.test("a lock left by a killed process does not block a later read", function()
+    local root = sandbox()
+    local lock = root .. "/pass.lock"
+    pass_stub(root, lock)
+    local out = shell(
+        root,
+        lock,
+        "sh -c 'exit 0' & dead=$!; wait $dead; mkdir "
+            .. lock
+            .. "; echo $dead >"
+            .. lock
+            .. "/pid; bash "
+            .. SHARE
+            .. "passlock.sh Agents/x; echo code=$?",
+        "50"
+    )
+    t.ok(out:find(TOKEN, 1, true), out)
+    t.ok(out:find("code=0", 1, true), out)
+end)
+
+t.test("an old lock is taken over even when its pid is alive again", function()
+    local root = sandbox()
+    local lock = root .. "/pass.lock"
+    pass_stub(root, lock)
+    local out = shell(
+        root,
+        lock,
+        "/bin/sleep 20 & holder=$!; mkdir "
+            .. lock
+            .. "; echo 0 >"
+            .. lock
+            .. "/at; echo $holder >"
+            .. lock
+            .. "/pid; bash "
+            .. SHARE
+            .. "passlock.sh Agents/x; echo code=$?; kill $holder",
+        "50"
+    )
+    t.ok(out:find(TOKEN, 1, true), out)
+    t.ok(out:find("code=0", 1, true), out)
+end)
+
+t.test("a lock with no owner is taken over after a short wait", function()
+    local root = sandbox()
+    local lock = root .. "/pass.lock"
+    pass_stub(root, lock)
+    local out = shell(
+        root,
+        lock,
+        "mkdir " .. lock .. "; bash " .. SHARE .. "passlock.sh Agents/x; echo code=$?",
+        "100"
+    )
+    t.ok(out:find(TOKEN, 1, true), out)
+    t.ok(out:find("code=0", 1, true), out)
+end)
+
+t.test("a lock held by a live process times out with 124", function()
+    local root = sandbox()
+    local lock = root .. "/pass.lock"
+    pass_stub(root, lock)
+    local out = shell(
+        root,
+        lock,
+        "/bin/sleep 20 & holder=$!; mkdir "
+            .. lock
+            .. "; date +%s >"
+            .. lock
+            .. "/at; echo $holder >"
+            .. lock
+            .. "/pid; bash "
+            .. SHARE
+            .. "passlock.sh Agents/x; echo code=$?; kill $holder",
+        "3"
+    )
+    t.ok(out:find("code=124", 1, true), out)
+    t.eq(out:find(TOKEN, 1, true), nil)
+end)
+
+t.test("a process reads each pass entry once", function()
+    local root, home = sandbox()
+    local script = string.format(
+        "package.path = %q; local pomb = require('dev.board.pomb'); "
+            .. "local a = pomb.token('pass:secrets/worker/token/pomb'); "
+            .. "local b = pomb.token('pass:secrets/worker/token/pomb'); "
+            .. "print(a == b and a ~= nil)",
+        support.absolute_path()
+    )
+    local out, code = devos.capture({ "luajit", "-e", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            HOME = home,
+            ROOT = root,
+            DEV_PASS_LOCK = root .. "/pass.lock",
+        },
+        stderr = "stdout",
+    })
+    t.eq(code, 0, out)
+    t.eq(out, "true\n")
+    t.eq(select(2, read(root, "calls"):gsub("pass show", "")), 1)
+end)
+
+t.test("the keep-alive loop reads the token under the same lock", function()
+    local root = sandbox()
+    local lock = root .. "/pass.lock"
+    pass_stub(root, lock)
+    assert(fs.write(root .. "/state", "fence=7\n"))
+    local out = shell(
+        root,
+        lock,
+        "bash "
+            .. SHARE
+            .. "keepalive.sh "
+            .. root
+            .. "/state card 7 1 https://pomb.example Agents/x 0",
+        "600"
+    )
+    t.ok(read(root, "events"):find("held=1", 1, true), out .. read(root, "events"))
 end)
 
 t.test("a token that is not plain text is refused without echoing it", function()
@@ -3665,6 +3829,7 @@ local function waiting(root, home, call, status)
             HOME = home,
             ROOT = root,
             WAIT_STATUS = status,
+            DEV_PASS_LOCK = root .. "/pass.lock",
         },
         stderr = "stdout",
     })

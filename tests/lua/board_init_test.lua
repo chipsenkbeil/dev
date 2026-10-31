@@ -460,11 +460,15 @@ local function sandbox(opts)
 end
 
 local function dev(root, home, tmp, args)
-    return support.dev(
-        root,
-        args,
-        { env = { HOME = home, ROOT = root, TMPDIR = tmp, XDG_STATE_HOME = home .. "/state" } }
-    )
+    return support.dev(root, args, {
+        env = {
+            HOME = home,
+            ROOT = root,
+            TMPDIR = tmp,
+            XDG_STATE_HOME = home .. "/state",
+            DEV_PASS_LOCK = tmp .. "/pass.lock",
+        },
+    })
 end
 
 local function read(root, name)

@@ -26,7 +26,12 @@ local function setup(project)
 end
 
 local function env_of(home, extra)
-    local env = { HOME = home, XDG_STATE_HOME = home .. "/state", CLAUDE_SESSION_ID = "one" }
+    local env = {
+        HOME = home,
+        XDG_STATE_HOME = home .. "/state",
+        CLAUDE_SESSION_ID = "one",
+        DEV_PASS_LOCK = home .. "/pass.lock",
+    }
     for name, value in pairs(extra or {}) do
         env[name] = value
     end
