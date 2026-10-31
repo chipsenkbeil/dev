@@ -400,7 +400,11 @@ names the labels. A board missing the colour fails with
 
 `outcome CARD TEXT` appends a Done when outcome to a card that already exists
 (`POST /api/tasks/{id}/subtasks`) and prints `outcome <id prefix> N added`.
-`outcome CARD --rename N TEXT` rewords the Nth, `--tick N` marks it done and
+`outcome CARD TEXT` is exit 2 when a word of TEXT is `--tick`, `--untick`,
+`--rename` or `--convert`, or when TEXT is only a number. The message names the
+form meant, such as `outcome CARD --tick N`. A flag inside one quoted sentence
+is plain text. `outcome CARD --rename N TEXT` rewords the Nth, `--tick N` marks
+it done and
 `--untick N` clears it (`PATCH /api/tasks/{id}/subtasks/{sub_id}` with `name`
 or `done`), each printing `outcome <id prefix> N reworded`, `ticked` or
 `unticked`. N counts from 1 in the order `show` lists the outcomes, and an N

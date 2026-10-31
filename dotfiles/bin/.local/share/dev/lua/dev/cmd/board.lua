@@ -1413,6 +1413,31 @@ local function convert_outcomes(backend, card, fence)
     }
 end
 
+local function misplaced_outcome_form(args)
+    local number
+    for i = 2, #args do
+        local word = args[i]
+        if word:match("^%d+$") then
+            number = number or word
+        end
+        local mode = OUTCOME_FLAGS[word]
+        if mode or word == CONVERT_FLAG then
+            if mode and number then
+                return "put the flag before the number: dev board outcome CARD "
+                    .. word
+                    .. " "
+                    .. number
+            end
+            return "the outcome text holds the flag " .. word .. ", which goes right after the card"
+        end
+    end
+    local only = table.concat(args, " ", 2):match("^%s*(%d+)%s*$")
+    if only then
+        return "the outcome text is only a number; to tick it use dev board outcome CARD --tick "
+            .. only
+    end
+end
+
 function commands.outcome(backend, args)
     if #args < 2 then
         return usage(
@@ -1432,6 +1457,10 @@ function commands.outcome(backend, args)
         local held = claims.read(card.id)
         return convert_outcomes(backend, card, held and held.fence)
     elseif not mode then
+        local misplaced = misplaced_outcome_form(args)
+        if misplaced then
+            return usage(misplaced)
+        end
         mode, text = OutcomeMode.ADD, table.concat(args, " ", 2)
     elseif mode == OutcomeMode.RENAME then
         if #args < 4 then

@@ -1378,6 +1378,28 @@ t.test("outcome appends, rewords, ticks and unticks by number", function()
     t.eq(backend.calls[4], { "set_outcome", ID_C, "s1", { done = false }, nil })
 end)
 
+t.test(
+    "outcome refuses text that holds a flag or is only a number, and accepts a sentence",
+    function()
+        local card = colored("green")
+        card.outcomes = outcomes(3)
+        local backend = fake({ card })
+        local result = commands.run("outcome", { "cccccccc", "1", "--tick" }, backend)
+        t.eq(result.code, 2)
+        t.ok(result.message:find("dev board outcome CARD --tick 1", 1, true), result.message)
+        t.eq(commands.run("outcome", { "cccccccc", "2", "--untick" }, backend).code, 2)
+        t.eq(commands.run("outcome", { "cccccccc", "Fix", "--convert" }, backend).code, 2)
+        result = commands.run("outcome", { "cccccccc", "2" }, backend)
+        t.eq(result.code, 2)
+        t.ok(result.message:find("--tick 2", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+        result =
+            commands.run("outcome", { "cccccccc", "Use --tick 2 to mark an outcome." }, backend)
+        t.eq(result.output, "outcome cccccccc 4 added")
+        t.eq(backend.calls[1], { "add_outcome", ID_C, "Use --tick 2 to mark an outcome.", nil })
+    end
+)
+
 t.test("outcome refuses an N past the last outcome and a bad N", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
