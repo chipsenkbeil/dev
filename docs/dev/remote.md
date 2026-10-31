@@ -70,12 +70,14 @@ with --remote`, and nothing runs. It never falls back to a local run.
 
 ## Agents
 
-An agent sets `DEV_AGENT` to its workspace name. Under it, a local run of a
-verb with a default ci job is refused: `--local` and `DEV_REMOTE=0` exit 2,
-print a line that names the verb and `--remote`, and run nothing. The default
-remote run and `--remote` still go to ci. The refusal does not apply to a
-`# local` verb, to a machine-local verb, or inside a ci job or dev box (`CI=true`
-or the box marker), and an unset or empty `DEV_AGENT` changes nothing. When ci
+An agent sets `DEV_AGENT` to its workspace name. Under it, a run that would
+happen here for a verb with a default ci job is refused, whatever chose the
+laptop (`--local`, `DEV_REMOTE=0`, or `[remote] default = "local"`). The
+refusal exits 2, prints a line that names the verb and `--remote`, and runs
+nothing. The default remote run and `--remote` still go to ci. The refusal does
+not apply to a `# local` verb, to a machine-local verb, or inside a ci job or dev
+box (`CI=true` or the box marker), and an unset or empty `DEV_AGENT` changes
+nothing. When ci
 cannot be asked, the refusal fails with ci's error and the hint
 `an agent runs it on ci, so fix ci and rerun`.
 

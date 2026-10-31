@@ -132,9 +132,8 @@ local function runs_local(reg, row)
     return header ~= nil and header.runs_local
 end
 
-local function refuse_agent_local(parsed, project_root, words)
-    local agent = os.getenv("DEV_AGENT") or ""
-    if agent == "" or not (parsed.local_flag or parsed.env_local) then
+local function refuse_agent_local(project_root, words)
+    if (os.getenv("DEV_AGENT") or "") == "" then
         return
     end
     if remote.refuses_agent_local(project_root, words) then
@@ -425,14 +424,14 @@ function M.main(argv)
             remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), parsed.detach)
         )
     end
-    if not on_remote_host and not runs_local(reg, row) then
-        refuse_agent_local(parsed, project_root, words)
-    end
     if
         not (parsed.local_flag or parsed.env_local or on_remote_host or runs_local(reg, row))
         and remote_default(project_root, words)
     then
         os.exit(remote.run(ctx, words, rest, false))
+    end
+    if not on_remote_host and not runs_local(reg, row) then
+        refuse_agent_local(project_root, words)
     end
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)

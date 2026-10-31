@@ -11,8 +11,8 @@ Five flags work anywhere before a `--` on the line, whatever the verb.
   example-box through ci. `DEV_REMOTE=1` in the environment is the same.
 - `--local`: run the command here, whatever the `[remote] default` setting says.
   With `--remote` it is a usage error. A command with a ci job runs remote by
-  default, and under `DEV_AGENT` a local run of one is refused, so see the
-  `remote` topic.
+  default, and under `DEV_AGENT` a run of one that stays here is refused,
+  whatever chose it, so see the `remote` topic.
 - `--detach`: with `--remote`, start the job and return. Alone it is a usage
   error.
 
