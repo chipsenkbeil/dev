@@ -942,8 +942,9 @@ never handles the API.
   `DEV_AGENT` (usage error, exit 2, without it) and a jj project: in plain git
   it refuses and says so. It refuses, exit 1, and runs nothing until every
   condition holds, and the message lists each one that fails:
-  - the card is in the review column, and its claimant, if it has one, is the
-    caller.
+  - the card is in the review column and no other agent claims it. `move`
+    releases the claim, so `land` refuses a card claimed by another agent and
+    lets any agent with `DEV_AGENT` set land an unclaimed one.
   - every outcome is ticked (the same count `move CARD done` refuses on). The
     verifier ticks after the checks pass and before `land`.
   - the working-copy commit is non-empty, has a description and has no
