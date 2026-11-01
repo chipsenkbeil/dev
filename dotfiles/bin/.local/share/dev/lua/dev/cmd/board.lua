@@ -2261,7 +2261,7 @@ local function land_problems(backend, card, who)
     local lacking = land.missing_reviews(who.comments, state)
     local unproven = land.checks_problem(who.comments, state, card.checks)
     local carried
-    if #lacking > 0 and #problems == 0 then
+    if #lacking > 0 then
         local why
         carried, why = land.carry({
             root = backend.root,

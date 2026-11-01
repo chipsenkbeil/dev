@@ -1129,7 +1129,8 @@ never handles the API.
   - the commit's parent is the current trunk, compared after
     `jj git fetch --remote <remote of record>`, with the remote taken from the
     forge settings (see `forge`). A failed fetch refuses. This check
-    runs only once the other conditions hold.
+    runs only once the other conditions hold, but the carry attempt below
+    fetches earlier.
 
   One case keeps a check and reviews across a rebase. When the landing commit
   lacks the reviews and has no `dev-check:` record of its own, `land` looks for
@@ -1142,6 +1143,10 @@ never handles the API.
   - `jj interdiff` between the checked commit and the landing one is empty
   - the trunk commits since the checked commit's parent touch none of the
     change's files (renames count both paths)
+
+  The carry is tried whenever reviews are lacking, even when another refusal
+  stands (an unticked outcome, the wrong column), to list in the refusal only
+  what still blocks the landing.
 
   An overlap refuses and names the files. A different change id, a non-empty
   interdiff or a review never recorded at the checked commit keeps the plain

@@ -684,6 +684,68 @@ if has_jj then
         refused(root, home, log, id, { "touch files this change changes: shared.txt" })
     end)
 
+    t.test("land names only the unticked outcome after a rebase that the carry accepts", function()
+        local root, home, log, bare = jj_project()
+        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(root)
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        for _, kind in ipairs({ "code", "style" }) do
+            must(
+                dev(
+                    root,
+                    home,
+                    log,
+                    { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
+                )
+            )
+        end
+        must(dev(root, home, log, { "board", "check", id }))
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local out = refused(root, home, log, id, { "1 of 1 outcomes are unticked" })
+        t.eq(out:find("review of", 1, true), nil, out)
+        t.eq(out:find("no run of dev board check", 1, true), nil, out)
+    end)
+
+    t.test("land names the overlap beside an unticked outcome", function()
+        local root, home, log, bare = jj_project()
+        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(root)
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        for _, kind in ipairs({ "code", "style" }) do
+            must(
+                dev(
+                    root,
+                    home,
+                    log,
+                    { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
+                )
+            )
+        end
+        must(dev(root, home, log, { "board", "check", id }))
+        trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
+        rebase_onto_trunk(root)
+        refused(root, home, log, id, {
+            "1 of 1 outcomes are unticked",
+            "touch files this change changes: shared.txt",
+        })
+    end)
+
+    t.test("land names the column beside the carry after an accepted rebase", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        must(dev(root, home, log, { "board", "move", id, "progress" }))
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local out = refused(root, home, log, id, { "only a card in" })
+        t.eq(out:find("earlier commit", 1, true), nil, out)
+        t.eq(out:find("no run of dev board check", 1, true), nil, out)
+    end)
+
     t.test("land refuses a rebase of a commit that differs from the checked one", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)
