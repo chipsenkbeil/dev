@@ -110,6 +110,10 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "add_outcome", id, text, fence }
         return true
     end
+    function backend:delete_outcome(id, outcome, fence)
+        calls[#calls + 1] = { "delete_outcome", id, outcome, fence }
+        return true
+    end
     function backend:set_outcome(id, outcome, fields, fence)
         calls[#calls + 1] = { "set_outcome", id, outcome, fields, fence }
         return true
@@ -1994,6 +1998,63 @@ t.test(
     end
 )
 
+t.test("outcome --delete removes the Nth and notes its text and the reason", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3)
+    local backend = fake({ card })
+    local result = commands.run(
+        "outcome",
+        { "cccccccc", "--delete", "2", "--reason", "never", "achievable" },
+        backend
+    )
+    t.eq(result.output, "outcome cccccccc 2 deleted")
+    t.eq(backend.calls[1], { "delete_outcome", ID_C, "s2", nil })
+    t.eq(backend.calls[2][1], "note")
+    t.eq(
+        backend.calls[2][3],
+        "Deleted outcome 2: " .. card.outcomes[2].name .. " Reason: never achievable"
+    )
+    t.eq(backend.calls[2][4], { kind = "decision" })
+end)
+
+t.test("outcome --delete needs a number and a reason, and a bad number deletes nothing", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    t.eq(commands.run("outcome", { "cccccccc", "--delete" }, backend).code, 2)
+    t.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
+    t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "--reason" }, backend).code, 2)
+    t.eq(
+        commands.run("outcome", { "cccccccc", "--delete", "1", "--reason", "  " }, backend).code,
+        2
+    )
+    t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "why" }, backend).code, 2)
+    t.eq(commands.run("outcome", { "cccccccc", "--delete", "3", "--reason", "x" }, backend).code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("the claimant cannot delete an outcome under any name it is given", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+    local result = commands.run(
+        "outcome",
+        { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/a" },
+        backend
+    )
+    t.eq(result.code, 1)
+    t.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
+    t.ok(result.message:find("Pass the outcome back", 1, true), result.message)
+    t.eq(#backend.calls, 0)
+    result = commands.run(
+        "outcome",
+        { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/b" },
+        backend
+    )
+    t.eq(result.output, "outcome cccccccc 1 deleted")
+end)
+
 t.test("review refuses the claimant for every kind and says a reviewer must record it", function()
     local card = colored("green")
     card.claimant = "project-run/a"
@@ -3250,6 +3311,88 @@ t.test("a claimed card's tick needs a name other than the claimant's", function(
     t.ok(read(root, "calls"):find('--data-raw {"done":true}', 1, true), out)
 end)
 
+t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", function()
+    local claimed = (
+        SUBTASKS_EXPORT:gsub(
+            '"position":1,',
+            '"position":1,"claim":{"claimant":"project-run/a","expires_at":"2999-01-01T00:00:00Z"},',
+            1
+        )
+    )
+    local root, home = sandbox({ export = claimed })
+    local own = { agent = "project-run/a" }
+    local out, code = dev(root, home, {
+        "board",
+        "outcome",
+        "11111111",
+        "--delete",
+        "1",
+        "--reason",
+        "x",
+        "--as",
+        "project-run/b",
+    }, own)
+    t.eq(code, 1, out)
+    t.ok(out:find("claimed by project-run/a", 1, true), out)
+    out, code = dev(root, home, { "board", "outcome", "11111111", "--rename", "1", "New" }, own)
+    t.eq(code, 1, out)
+    t.ok(out:find("claimed by project-run/a", 1, true), out)
+    t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+    t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+        { agent = "project-run/b" }
+    )
+    t.eq(code, 0, out)
+    t.eq(out, "outcome 11111111 2 deleted\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find("-X DELETE", 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-b", 1, true), calls)
+    t.ok(calls:find("Deleted outcome 2: B works Reason: never possible", 1, true), calls)
+end)
+
+t.test("a refused outcome delete prints Pomb's reason, writes no note and is not queued", function()
+    local cases = {
+        {
+            body = '{"code":"permission_denied","permission":"subtasks.delete","message":"denied"}',
+            want = "may delete only an outcome that same token created",
+        },
+        {
+            body = '{"code":"permission_denied","permission":"subtasks.delete","board_id":"board-9","message":"denied"}',
+            want = "not assigned to board board-9",
+        },
+        {
+            body = '{"code":"permission_denied","permission":"subtasks.write","message":"denied"}',
+            want = "lacks the subtasks.write permission",
+        },
+        {
+            body = '{"code":"card_locked","message":"this task carries a locking label, so only the owner can change it"}',
+            want = "pomb locked this card while it is labelled needs:human",
+        },
+    }
+    for _, case in ipairs(cases) do
+        local root, home = sandbox({ export = SUBTASKS_EXPORT })
+        executable(
+            root .. "/bin/curl",
+            "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in */subtasks/*) cat >/dev/null; printf '%s\\n403' '"
+                .. case.body
+                .. "'; exit 0 ;; esac\n"
+                .. CURL:gsub("^#!/bin/sh\n", "")
+        )
+        local out, code = dev(
+            root,
+            home,
+            { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" }
+        )
+        t.eq(code, 1, out)
+        t.ok(out:find(case.want, 1, true), out)
+        t.eq(read(root, "calls"):find("/comments", 1, true), nil)
+        t.eq(fs.exists(queue_file(home)), false)
+    end
+end)
+
 t.test("outcome past the last subtask exits 1 and changes nothing", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
@@ -3266,6 +3409,14 @@ t.test("outcome queues a tick but not an append when the write cannot reach Pomb
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
+    t.eq(code, 1)
+    t.ok(out:find("curl exit 28", 1, true), out)
+    t.eq(fs.exists(queue_file(home)), false)
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" }
+    )
     t.eq(code, 1)
     t.ok(out:find("curl exit 28", 1, true), out)
     t.eq(fs.exists(queue_file(home)), false)

@@ -53,6 +53,8 @@ local BY_FLAG = "--by"
 local REV_FLAG = "--rev"
 local GROUP_FLAG = "--group"
 local AS_FLAG = "--as"
+local REASON_FLAG = "--reason"
+local NOTE_DECISION = "decision"
 local RUN_END_FLAG = "--end"
 local RUN_ORDERS_FLAG = "--orders"
 local RUN_NAME = "run "
@@ -101,18 +103,21 @@ local QUEUE_RULES = {
     files = { idempotent = true },
     outcome = { idempotent = false },
 }
-local OutcomeMode = { ADD = "add", RENAME = "rename", TICK = "tick", UNTICK = "untick" }
+local OutcomeMode =
+    { ADD = "add", RENAME = "rename", TICK = "tick", UNTICK = "untick", DELETE = "delete" }
 local OUTCOME_FLAGS = {
     ["--rename"] = OutcomeMode.RENAME,
     ["--tick"] = OutcomeMode.TICK,
     ["--untick"] = OutcomeMode.UNTICK,
+    [DELETE_FLAG] = OutcomeMode.DELETE,
 }
 local CONVERT_FLAG = "--convert"
 
 local function idempotent(sub, args)
     local rule = QUEUE_RULES[sub]
+    local flag = OUTCOME_FLAGS[args[2]]
     return (rule ~= nil and rule.idempotent)
-        or (sub == "outcome" and OUTCOME_FLAGS[args[2]] ~= nil)
+        or (sub == "outcome" and flag ~= nil and flag ~= OutcomeMode.DELETE)
         or false
 end
 
@@ -1639,6 +1644,7 @@ function commands.label(backend, args)
 end
 
 local OUTCOME_SAID = {
+    [OutcomeMode.DELETE] = "deleted",
     [OutcomeMode.RENAME] = "reworded",
     [OutcomeMode.TICK] = "ticked",
     [OutcomeMode.UNTICK] = "unticked",
@@ -1701,6 +1707,24 @@ local function tick_refused(card, flag)
         )
     end
     return nil, ticker
+end
+
+local function claimant_refused(card, what, flag)
+    if not card.claimant then
+        return nil
+    end
+    for _, name in ipairs({ flag or "", os.getenv("DEV_AGENT") or "" }) do
+        if name == card.claimant then
+            return failure(
+                card.id:sub(1, board.MIN_PREFIX)
+                    .. " is claimed by "
+                    .. name
+                    .. ", so its claimant cannot "
+                    .. what
+                    .. " its outcomes. Pass the outcome back with a note instead"
+            )
+        end
+    end
 end
 
 local function convert_outcomes(backend, card, opts)
@@ -1806,12 +1830,20 @@ end
 
 function commands.outcome(backend, args)
     local ticker_flag
-    if #args >= 2 and (OUTCOME_FLAGS[args[2]] == OutcomeMode.TICK or args[2] == CONVERT_FLAG) then
+    local flagged = OUTCOME_FLAGS[args[2]]
+    if
+        #args >= 2
+        and (
+            flagged == OutcomeMode.TICK
+            or flagged == OutcomeMode.DELETE
+            or args[2] == CONVERT_FLAG
+        )
+    then
         args, ticker_flag = split_ticker(args)
     end
     if #args < 2 then
         return usage(
-            "needs a card and the outcome text, or --rename N TEXT, --tick N, --untick N or --convert"
+            "needs a card and the outcome text, or --rename N TEXT, --tick N, --untick N, --delete N --reason TEXT or --convert"
         )
     end
     local mode = OUTCOME_FLAGS[args[2]]
@@ -1837,6 +1869,14 @@ function commands.outcome(backend, args)
             return usage("--rename needs an outcome number and the new text")
         end
         word, text = args[3], table.concat(args, " ", 4)
+    elseif mode == OutcomeMode.DELETE then
+        if #args < 5 or args[4] ~= REASON_FLAG then
+            return usage(DELETE_FLAG .. " needs an outcome number and " .. REASON_FLAG .. " TEXT")
+        end
+        word, text = args[3], table.concat(args, " ", 5)
+        if not text:find("%S") then
+            return usage(REASON_FLAG .. " needs the reason")
+        end
     else
         if #args ~= 3 then
             return usage(args[2] .. " needs one outcome number")
@@ -1851,7 +1891,12 @@ function commands.outcome(backend, args)
         return err
     end
     local ticker
-    if mode == OutcomeMode.TICK then
+    if mode == OutcomeMode.RENAME or mode == OutcomeMode.DELETE then
+        local refused = claimant_refused(card, mode, ticker_flag)
+        if refused then
+            return refused
+        end
+    elseif mode == OutcomeMode.TICK then
         local refused
         refused, ticker = tick_refused(card, ticker_flag)
         if refused then
@@ -1876,6 +1921,31 @@ function commands.outcome(backend, args)
     number, err = outcome_number(word, #card.outcomes)
     if not number then
         return err
+    end
+    if mode == OutcomeMode.DELETE then
+        local row = card.outcomes[number]
+        local deleted_text = row.name
+        ok, message = backend:delete_outcome(card.id, row.id, fence)
+        if not ok then
+            return unqueued(failure(message))
+        end
+        local body = "Deleted outcome " .. number .. ": " .. deleted_text .. " Reason: " .. text
+        ok, message = backend:note(card.id, body, fence, { kind = NOTE_DECISION })
+        if not ok then
+            return unqueued(
+                failure(
+                    "outcome "
+                        .. prefix
+                        .. " "
+                        .. number
+                        .. " was deleted but the note failed: "
+                        .. message
+                        .. ", and its text was: "
+                        .. deleted_text
+                )
+            )
+        end
+        return { output = "outcome " .. prefix .. " " .. number .. " deleted" }
     end
     local fields = { name = text }
     if mode ~= OutcomeMode.RENAME then
@@ -3915,7 +3985,7 @@ for sub in pairs(commands) do
                 and QUEUE_RULES[sub]
                 and not result.unqueued
                 and not note
-                and not (sub == "outcome" and args[2] == CONVERT_FLAG)
+                and not (sub == "outcome" and (args[2] == CONVERT_FLAG or args[2] == DELETE_FLAG))
             then
                 queued = { { sub = sub, args = args } }
             end

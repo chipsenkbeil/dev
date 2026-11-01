@@ -771,6 +771,22 @@ function Backend:set_outcome(id, outcome, fields, fence)
     end)
 end
 
+function Backend:delete_outcome(id, outcome, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        for i, row in ipairs(card.outcomes or {}) do
+            if row.id == outcome then
+                table.remove(card.outcomes, i)
+                return true
+            end
+        end
+        return nil, "the card has no outcome " .. outcome
+    end)
+end
+
 function Backend:claim(id, claimant, _, fence)
     return self:__update(function(doc)
         local card = find_by_id(doc.cards, id)

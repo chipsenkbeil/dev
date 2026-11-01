@@ -37,8 +37,11 @@ local FORBIDDEN = 403
 local PERMISSION_DENIED = "permission_denied"
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
+local SUBTASKS_DELETE = "subtasks.delete"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
+local NOT_CREATOR =
+    "pomb refused the delete. This token may delete only an outcome that same token created, and this one was made in the browser or by another token. A token with subtasks.delete deletes any outcome"
 local NOT_YOURS = "that comment is not yours to change"
 local LOCKED = "pomb locked this card while it is labelled "
     .. board.NEEDS_HUMAN
@@ -942,6 +945,23 @@ function Backend:set_outcome(id, outcome, fields, fence)
     local done, message =
         self:__request("PATCH", "/api/tasks/" .. id .. "/subtasks/" .. outcome, fields, fence)
     if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:delete_outcome(id, outcome, fence)
+    local done, message, status, doc =
+        self:__request("DELETE", "/api/tasks/" .. id .. "/subtasks/" .. outcome, nil, fence)
+    if not done then
+        local owner_only = status == FORBIDDEN
+            and type(doc) == "table"
+            and doc.code == PERMISSION_DENIED
+            and doc.permission == SUBTASKS_DELETE
+            and not present(doc.board_id)
+        if owner_only then
+            return nil, NOT_CREATOR
+        end
         return nil, message
     end
     return true

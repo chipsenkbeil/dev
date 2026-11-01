@@ -34,6 +34,7 @@ dev board outcome 8af0e001 "Two-line cards print in full."
 dev board outcome 8af0e001 --rename 2 "A tick shows in show."
 dev board outcome 8af0e001 --tick 2
 dev board outcome 8af0e001 --untick 2
+dev board outcome 8af0e001 --delete 2 --reason "never achievable"
 dev board outcome 8af0e001 --convert
 dev board note 8af0e001 --edit 3ff0e006 "Tests pass, landed as abc123."
 dev board note 8af0e001 --delete 3ff0e006
@@ -377,7 +378,8 @@ most 7) is a Done when outcome: `add` creates the card, then appends one Pomb
 subtask per item. If an append fails, `add` exits 1 and names the card and the
 outcome it stopped at, for example
 `11111111 was added to Backlog but outcome 2 of 3 was not: ...`. Nothing is
-rolled back (an agent token cannot delete a card or a subtask) and the failure
+rolled back (an agent token cannot delete a card, and deletes
+a subtask only if that token made it) and the failure
 is never queued, so a replay cannot add the card twice. A queued add that never
 reached Pomb replays with all its items. With `--column ready`, Pomb gets the
 card in Backlog first and the move to Ready comes after the subtasks. `note`
@@ -530,12 +532,29 @@ claimant's: no name is exit 2 and the claimant's own name is exit 1, with
 nothing written. The name is self-declared, so dev checks only that it differs
 from the claimant. An unclaimed card needs no name, and a DEV_AGENT that is not
 one word is ignored there. `--untick` takes no name and stays open to anyone.
-`--as` is read only after `--tick` and `--convert`; on the other forms it is
+`--as` is read only after `--tick`, `--delete` and `--convert`; on the other forms it is
 ordinary text, so `--untick N --as X` is exit 2 for its extra words. A queued
-tick keeps the name it resolved, so a later sync records the same ticker. dev
-never deletes or reorders an outcome (Pomb
-keeps both admin-only). The claim's fence goes along when this machine holds
-one, and a local board keeps the same outcomes on the card.
+tick keeps the name it resolved, so a later sync records the same ticker.
+`outcome CARD --delete N --reason TEXT [--as NAME]` removes the Nth outcome
+(`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb), so the ones after it move
+up a number, and writes a decision note holding the deleted text and the
+reason, then prints `outcome <id prefix> N deleted`. A missing number or reason
+is exit 2. `--reason` is the one way to say why an outcome that was
+never achievable is deleted and not reworded. The card's claimant is refused
+`--delete` and `--rename` with exit 1 and nothing written: the refusal compares
+the claimant with `DEV_AGENT` and with any `--as` name, so renaming alone does not
+get past it, and the builder passes an invalid outcome back with a note
+instead. Pomb lets a Work token delete only an outcome that same token
+created. Any other outcome, whether made in the browser, by another token or
+stored with no token, gets 403 `permission_denied` naming `subtasks.delete`,
+and a token holding `subtasks.delete` deletes any. A locked card gets 403
+`card_locked` for every token, and a column entry rule can refuse a delete that
+leaves the card worse. `--delete` prints Pomb's reason for each refusal, writes
+no note and changes nothing. A delete is never queued for a later sync, to keep
+its number from pointing at a different outcome by then. dev never reorders an
+outcome. The
+claim's fence goes along when this machine holds one, and a local board keeps
+the same outcomes on the card.
 
 `outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
 appends one outcome per `- [ ]` or `- [x]` item, ticks the ticked ones, and only
@@ -1293,7 +1312,7 @@ never handles the API.
   2). The words after the card, or after N, are the text, which must not be
   blank (exit 2), and the text gets the prose warnings. All five send the
   claim's fence as `If-Claim-Fence` when this machine holds one. dev never calls
-  Pomb's delete or reorder subtasks, which are admin-only. A local board keeps
+  Pomb's reorder subtasks, which is admin-only. A local board keeps
   the same rows in the card's `outcomes`, refusing a stale fence as the other
   writes do. The three flag forms are queued while Pomb is unreachable and safe
   to apply twice, and the append and `--convert` are not (N is read from the

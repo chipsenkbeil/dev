@@ -251,9 +251,9 @@ return {
     {
         words = { "board", "outcome" },
         handler = "lua",
-        flags = "--rename --tick --untick --convert --as",
-        usage = "dev board outcome CARD TEXT | CARD --rename N TEXT | CARD --tick N [--as NAME] | CARD --untick N | CARD --convert [--as NAME]",
-        desc = "Append a Done when outcome to a card, reword the Nth with --rename, or tick or untick it (N counted from 1 as show lists them), or move a v1 checklist into outcomes with --convert",
+        flags = "--rename --tick --untick --delete --reason --convert --as",
+        usage = "dev board outcome CARD TEXT | CARD --rename N TEXT | CARD --tick N [--as NAME] | CARD --untick N | CARD --delete N --reason TEXT [--as NAME] | CARD --convert [--as NAME]",
+        desc = "Append a Done when outcome to a card, reword the Nth with --rename, or tick or untick it (N counted from 1 as show lists them), delete the Nth with --delete and a --reason that a note keeps, or move a v1 checklist into outcomes with --convert",
     },
     {
         words = { "board", "link" },

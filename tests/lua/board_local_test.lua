@@ -960,6 +960,40 @@ t.test("a local board appends, rewords, ticks and unticks outcomes by number", f
     t.ok(out:find("the card has 3 outcomes, so there is no outcome 4", 1, true), out)
 end)
 
+t.test("a local board deletes an outcome, renumbers and keeps its text in a note", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "A works",
+        "--done-when",
+        "B works",
+        "--done-when",
+        "C works",
+    })
+    t.eq(code, 0, out)
+    local a = prefix_of(out)
+    out, code = dev(root, home, { "board", "outcome", a, "--delete", "2" })
+    t.eq(code, 2, out)
+    out, code =
+        dev(root, home, { "board", "outcome", a, "--delete", "2", "--reason", "never possible" })
+    t.eq(code, 0, out)
+    t.eq(out, "outcome " .. a .. " 2 deleted\n")
+    local card = document(file_of(home)).cards[1]
+    t.eq(#card.outcomes, 2)
+    t.eq(card.outcomes[1].name, "A works")
+    t.eq(card.outcomes[2].name, "C works")
+    local note = card.comments[#card.comments]
+    t.eq(note.kind, "decision")
+    t.eq(note.body, "Deleted outcome 2: B works Reason: never possible")
+end)
+
 t.test("a local board converts a v1 checklist into outcomes and ticks", function()
     local root, home = local_board()
     local v1 =
