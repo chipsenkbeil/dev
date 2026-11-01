@@ -258,9 +258,16 @@ Every card in every column is fair game for an agent unless it is labelled
 - Done: landed, answered, or dropped with a note.
 
 An agent with nothing Ready takes the top of Backlog and then Icebox, planning
-the card first. It reads each card's comments before taking one, and a card
-whose latest comment of yours defers it ("not now", "after X") or asks for
-something goes to Icebox or Blocked with `needs:human` and is left alone.
+the card first. It reads each card's comments before taking one. A steering
+comment of yours (one that gives direction) is followed. The agent folds it into
+the description and notes the decision. When it lists options, the agent picks
+the one you favour and says why in the decision note. A list with no favoured
+option is a choice only you can make.
+
+A card is parked only when one of your comments defers it ("not now", "after X")
+and no later comment lifts that deferral, or when a comment holds a choice only
+you can make. A steer does not lift a deferral unless it says so. Parking sends
+the card to Icebox or Blocked with `needs:human`, and the agent leaves it alone.
 
 `needs:human` means only a human can answer. No agent answers for you on such a
 card, and another agent relaying your view never counts. Agents never move, edit
