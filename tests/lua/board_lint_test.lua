@@ -295,3 +295,50 @@ t.test("strict adds the sections to a Done card and a discarded one, and nothing
         "00000002 Done lacks ## Out of scope",
     })
 end)
+
+t.test(
+    "lint marks a finding only the owner can fix and exits 0 when only those are left",
+    function()
+        local cards = {
+            card(1, "Blocked", { labels = { "needs:human" }, description = "## Problem\nwhy" }),
+            card(2, "Icebox", { labels = { "needs:human" } }),
+            card(3, "Backlog"),
+        }
+        local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
+        local result = commands.run("lint", {}, backend(cards, held))
+        t.eq(result.code, nil)
+        t.eq(findings(result.output), {
+            "00000001 Blocked lacks ## Change (owner)",
+            "00000001 Blocked lacks ## Out of scope (owner)",
+        })
+        result = commands.run("lint", { "--strict" }, backend(cards, held))
+        t.eq(result.code, nil)
+    end
+)
+
+t.test("lint exits 1 for a missing size or a misplaced label on a needs:human card", function()
+    local sizeless = card(1, "Blocked", { labels = { "needs:human" }, color = false })
+    local misplaced = card(2, "Ready", { labels = { "needs:human" } })
+    local held = { comments = { [sizeless.id] = { { kind = "question", body = "which?" } } } }
+    local result = commands.run("lint", {}, backend({ sizeless }, held))
+    t.eq(result.code, 1)
+    t.eq(findings(result.output), { "00000001 Blocked lacks a size" })
+    result = commands.run("lint", {}, backend({ misplaced }))
+    t.eq(result.code, 1)
+    t.eq(findings(result.output), { "00000002 Ready needs:human outside Blocked and Icebox" })
+end)
+
+t.test("lint exits 1 when an owner finding sits beside an agent finding", function()
+    local cards = {
+        card(1, "Blocked", { labels = { "needs:human" }, description = "## Problem\nwhy" }),
+        card(2, "Ready", { checks = {} }),
+    }
+    local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
+    local result = commands.run("lint", {}, backend(cards, held))
+    t.eq(result.code, 1)
+    t.eq(findings(result.output), {
+        "00000001 Blocked lacks ## Change (owner)",
+        "00000001 Blocked lacks ## Out of scope (owner)",
+        "00000002 Ready no checks row",
+    })
+end)

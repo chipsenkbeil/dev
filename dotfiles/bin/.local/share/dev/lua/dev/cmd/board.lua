@@ -25,6 +25,7 @@ local stderr = io.stderr
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
+local OWNER_MARK = " (owner)"
 local CLAIMANT_CHARS = 200
 local NAME_PATTERN = '^[^%c"\\]+$'
 local NAME_CHARS = 100
@@ -2721,6 +2722,7 @@ function commands.lint(backend, args)
         return failure(message)
     end
     local rows = {}
+    local fixable = false
     for _, card in ipairs(cards) do
         local facts = {
             comments = function()
@@ -2745,19 +2747,27 @@ function commands.lint(backend, args)
                 return family.children or { done = 0, total = 0 }
             end,
         }
-        local rules, why =
+        local rules, why, owned =
             lint.card(card, { roles = backend.roles, facts = facts, strict = strict })
         if not rules then
             return failure(why)
         end
-        for _, rule in ipairs(rules) do
+        for i, rule in ipairs(rules) do
+            if owned[i] then
+                rule = rule .. OWNER_MARK
+            else
+                fixable = true
+            end
             rows[#rows + 1] = { card.id:sub(1, board.MIN_PREFIX), card.column, rule }
         end
     end
     if #rows == 0 then
         return { output = "no findings" }
     end
-    return { output = table.concat(board.table_lines(rows), "\n"), code = FAILURE }
+    return {
+        output = table.concat(board.table_lines(rows), "\n"),
+        code = fixable and FAILURE or nil,
+    }
 end
 
 function commands.take(backend, args)

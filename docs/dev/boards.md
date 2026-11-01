@@ -562,8 +562,12 @@ in `move`, `add` and `discard` stop a bad write only when it goes through
 client or before a guard existed. It makes no write of its own and calls no
 model. Like every board command on a Pomb board, it first replays any queued
 changes. Each finding is one line of id prefix, column and rule, in board
-order. The exit is 1 when there is any finding and 0 with `no findings`. The
-rules:
+order. A finding only the owner can fix ends in `(owner)`: any finding on a
+`needs:human` card, except a missing size and a `needs:human` label outside
+Blocked and Icebox, which an agent fixes. The exit is 1 when any finding is
+left that an agent may fix, and 0 with `no findings` or when every finding is
+the owner's, so a card whose checks run lint can land while the owner has an
+open question. `--strict` exits the same way. The rules:
 
 - Outside Icebox: a size, the three v2 headings with text under Problem, and a
   Done when outcome. This is `dev.board.unplanned`, the check `move` makes,
@@ -909,8 +913,12 @@ never handles the API.
   (1); a `--days` or `--icebox-days` that is not a whole number of 1 or more is
   exit 2.
 - `lint [--strict]`: Reads every card (`backend:cards`) and prints one line per
-  broken rule: id prefix, column and rule, aligned, in board order, and exits 1.
-  A clean board prints `no findings` and exits 0. A flag other than
+  broken rule: id prefix, column and rule, aligned, in board order. A finding
+  on a `needs:human` card ends in `(owner)`, unless it is `lacks a size` or
+  `needs:human outside ...`, which `dev.board.lint.card` reports as agent
+  findings (its third return value holds the indexes of the owner's). It exits
+  1 only when a finding without the mark is left. A clean board prints
+  `no findings` and exits 0. A flag other than
   `--strict` is exit 2. `--strict` is also on when `board.lint.strict` is
   `true` in the config (`config.get`, project over user file), and a
   non-boolean value is exit 1. The rules live in `dev.board.lint`, which calls

@@ -78,11 +78,17 @@ end
 ---@param opts dev.board.lint.Opts the board's columns, the lazy reads and whether Done cards are held to the v2 sections too
 ---@return string[]? rules what is wrong with the card, empty when it follows every rule
 ---@return string? message why a read failed
+---@return table<integer, true>? owned the indexes of the rules only the owner can fix
 function M.card(card, opts)
     local roles, facts = opts.roles, opts.facts
     local rules = {}
-    local function add(rule)
+    local owned = {}
+    local human = board.labelled(card, board.NEEDS_HUMAN)
+    local function add(rule, agent)
         rules[#rules + 1] = rule
+        if human and not agent then
+            owned[#rules] = true
+        end
     end
     local column = card.column
     local discarded = board.labelled(card, board.DISCARDED)
@@ -113,7 +119,7 @@ function M.card(card, opts)
             sections = open or opts.strict == true,
         })
         for _, item in ipairs(missing) do
-            add("lacks " .. item)
+            add("lacks " .. item, item == "a size")
         end
         if card.outcomes_unreadable then
             add("outcomes unreadable")
@@ -132,12 +138,8 @@ function M.card(card, opts)
             add("over " .. M.MAX_WORDS .. " words (" .. words .. ")")
         end
     end
-    if
-        board.labelled(card, board.NEEDS_HUMAN)
-        and column ~= roles.blocked
-        and column ~= roles.icebox
-    then
-        add(board.NEEDS_HUMAN .. " outside " .. roles.blocked .. " and " .. roles.icebox)
+    if human and column ~= roles.blocked and column ~= roles.icebox then
+        add(board.NEEDS_HUMAN .. " outside " .. roles.blocked .. " and " .. roles.icebox, true)
     end
     if column == roles.blocked then
         local rule, why = blocked_rule(facts)
@@ -173,7 +175,7 @@ function M.card(card, opts)
             add(unticked_rule)
         end
     end
-    return rules
+    return rules, nil, owned
 end
 
 return M
