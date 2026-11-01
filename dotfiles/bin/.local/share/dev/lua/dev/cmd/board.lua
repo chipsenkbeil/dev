@@ -2268,6 +2268,7 @@ local function land_problems(backend, card, who)
             comments = who.comments,
             state = state,
             rows = card.checks,
+            shared = config.get(backend.root, "board.land.shared"),
         })
         if carried then
             lacking, unproven = {}, nil

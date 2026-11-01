@@ -49,11 +49,10 @@ local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
 local SHARED = "a\nb\nc\nd\ne\nf\ng\n"
 
-local function setup()
-    local root = support.sandbox(
-        { [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n' },
-        {}
-    )
+local function setup(extra)
+    local root = support.sandbox({
+        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n' .. (extra or ""),
+    }, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
     assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
@@ -339,8 +338,10 @@ if has_jj then
         must(devos.run(argv, { stdout = "null", stderr = "null" }))
     end
 
-    local function jj_project()
-        local root, home, log = setup()
+    local LIB_CONFIG = '\n[board.land]\nshared = ["lib"]\n'
+
+    local function jj_project(extra)
+        local root, home, log = setup(extra or LIB_CONFIG)
         assert(fs.write(root .. "/bin/jj", LAND_STUB), "write failed")
         must(devos.run({ "chmod", "755", root .. "/bin/jj" }))
         local bare = support.tempdir()
@@ -354,6 +355,8 @@ if has_jj then
             )
         )
         jj(root, "git", "remote", "add", "origin", bare)
+        assert(fs.mkdir(root .. "/lib", { parents = true }), "mkdir failed")
+        assert(fs.write(root .. "/lib/seed.txt", "seed\n"), "write failed")
         jj(root, "commit", "-m", "base")
         jj(root, "bookmark", "create", "master", "-r", "@-")
         jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
@@ -745,6 +748,51 @@ if has_jj then
         t.eq(out:find("earlier commit", 1, true), nil, out)
         t.eq(out:find("no run of dev board check", 1, true), nil, out)
     end)
+
+    t.test(
+        "land refuses a carry when trunk changed a shared path the change does not touch",
+        function()
+            local root, home, log, bare = jj_project()
+            local id = review_ready(root, home, log, bare)
+            trunk_moves(root, bare, { ["lib/core.txt"] = "core\n" })
+            rebase_onto_trunk(root)
+            refused(
+                root,
+                home,
+                log,
+                id,
+                { "the shared paths differ from the checked commit", "lib/core.txt" }
+            )
+        end
+    )
+
+    t.test("land carries nothing in a project that lists no shared paths", function()
+        local root, home, log, bare = jj_project("")
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        refused(root, home, log, id, { "lists no shared paths under [board.land]" })
+    end)
+
+    local BAD_LISTS = {
+        { 'shared = ["a\\\\b"]', "not a plain path" },
+        { 'shared = ["a\\"b"]', "not a plain path" },
+        { 'shared = [""]', "not a plain path" },
+        { "shared = [3]", "not a plain path" },
+        { 'shared = "lib"', "must be a list of paths" },
+        { "shared = []", "lists no shared paths" },
+        { 'shared = ["lib", "libb"]', "libb matches no file" },
+    }
+
+    for _, bad in ipairs(BAD_LISTS) do
+        t.test("land carries nothing for " .. bad[1], function()
+            local root, home, log, bare = jj_project("\n[board.land]\n" .. bad[1] .. "\n")
+            local id = review_ready(root, home, log, bare)
+            trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(root)
+            refused(root, home, log, id, { bad[2] })
+        end)
+    end
 
     t.test("land refuses a rebase of a commit that differs from the checked one", function()
         local root, home, log, bare = jj_project()

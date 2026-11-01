@@ -1143,6 +1143,23 @@ never handles the API.
   - `jj interdiff` between the checked commit and the landing one is empty
   - the trunk commits since the checked commit's parent touch none of the
     change's files (renames count both paths)
+  - every path in `shared` under `[board.land]` in the config holds the same
+    tree at the checked commit and at the landing one
+
+  A project with no list, an empty list, a `shared` that is not a list, an
+  entry that is not a plain path (empty, or holding a quote or a backslash) or
+  an entry that matches no file at either commit carries nothing, so every
+  rebase needs a new check. A listed path that differs refuses and names the
+  paths. A carried check says nothing about a dependency the list leaves out,
+  so list every path the checks read.
+
+  `shared` lists the repo-relative paths that can change what the check
+  proves, such as a crate the change depends on:
+
+  ```toml
+  [board.land]
+  shared = ["crates/physics", "Cargo.toml"]
+  ```
 
   The carry is tried whenever reviews are lacking, even when another refusal
   stands (an unticked outcome, the wrong column), to list in the refusal only
