@@ -24,6 +24,7 @@ local GERRIT_HOST = "ssh -p 29418 user@gerrit.example.com gerrit"
 local BOARD_TOKEN = "pass:secrets/worker/token/pomb.example.com"
 local BOARD_URL = "https://pomb.example.com"
 local BOARD_SECONDS = "5"
+local BOARD_REFUSED = "401"
 local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
 local STYLE_TAIL = "\n"
     .. templates.STYLE_MARKER
@@ -424,14 +425,34 @@ local function init_board_hint(run)
         return
     end
     local out, code = devos.capture_input(
-        { "curl", "-fsS", "--max-time", BOARD_SECONDS, "-K", "-", url .. "/api/boards" },
+        {
+            "curl",
+            "-fsS",
+            "--max-time",
+            BOARD_SECONDS,
+            "-w",
+            "\n%{http_code}",
+            "-K",
+            "-",
+            url .. "/api/boards",
+        },
         'header = "Authorization: Bearer ' .. token .. '"\n',
         { unset = CHILD_UNSET, stderr = "null" }
     )
-    if code ~= 0 then
+    local text, status = out:match("^(.*)\n(%d+)$")
+    if status == BOARD_REFUSED then
+        leave(
+            run,
+            "Pomb refused the worker token, so the board check was skipped. "
+                .. "A dev board command replaces a stale Keychain token, "
+                .. "but a revoked token needs a new one in pass."
+        )
         return
     end
-    local boards = json.decode(out)
+    if code ~= 0 or not text then
+        return
+    end
+    local boards = json.decode(text)
     if type(boards) ~= "table" then
         return
     end

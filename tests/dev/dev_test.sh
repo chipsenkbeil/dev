@@ -171,13 +171,14 @@ rm "$rust/.dev/init.sh"
 printf '#!/usr/bin/env bash\necho "pass $*" >>"$STUB_LOG"\necho cf_secret\n' >"$STUBS/pass"
 
 # shellcheck disable=SC2016  # $* and $BOARDS_JSON expand when the stub runs
-printf '#!/usr/bin/env bash\necho "curl $*" >>"$STUB_LOG"\ncat >>"$STUB_LOG"\n[ -n "${CURL_FAIL:-}" ] && exit 7\nprintf "%%s" "$BOARDS_JSON"\n' >"$STUBS/curl"
+printf '#!/usr/bin/env bash\necho "curl $*" >>"$STUB_LOG"\ncat >>"$STUB_LOG"\n[ -n "${CURL_FAIL:-}" ] && exit 7\nprintf "%%s\n200" "$BOARDS_JSON"\n' >"$STUBS/curl"
 chmod +x "$STUBS/pass" "$STUBS/curl"
 initdir="$(project boardinit)"
 export BOARDS_JSON='[{"id":"b1","name":"General"}]'
 out="$(run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
 assert_contains "init suggests a board when none is named after the project" "$out" "No Pomb board for proj"
-assert_contains "init asks the board with a read-only GET" "$(log)" "curl -fsS --max-time 5 -K - https://pomb.example.com/api/boards"
+assert_contains "init asks the board with a read-only GET" "$(log)" "curl -fsS --max-time 5 -w"
+assert_contains "init asks the board for the status code" "$(log)" "%{http_code} -K - https://pomb.example.com/api/boards"
 assert_contains "init reads the worker token" "$(log)" "pass show secrets/worker/token/pomb.example.com"
 assert_not_contains "init keeps the token off the command line" "$(log | grep '^curl')" "cf_secret"
 export BOARDS_JSON='[{"id":"b1","name":"General"},{"id":"b2","name":"proj"}]'

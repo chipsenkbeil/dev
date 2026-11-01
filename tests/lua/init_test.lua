@@ -168,7 +168,7 @@ t.test("init hints at a missing Pomb board and keeps the token off the command l
         "curl",
         '#!/bin/sh\necho "curl $*" >>'
             .. log
-            .. '\ncat >/dev/null\nprintf \'[{"name":"General"}]\'\n'
+            .. '\ncat >/dev/null\nprintf \'[{"name":"General"}]\\n200\'\n'
     )
     local out =
         support.dev(root, { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" })
@@ -177,8 +177,16 @@ t.test("init hints at a missing Pomb board and keeps the token off the command l
     local logged = fs.read(log) or ""
     t.ok(logged:find("-K - ", 1, true), logged)
     t.ok(not logged:find("secret-token", 1, true), logged)
-    stub(root, "curl", "#!/bin/sh\ncat >/dev/null\nprintf 'not json'\n")
+    stub(root, "curl", "#!/bin/sh\ncat >/dev/null\nprintf 'not json\\n200'\n")
     out = support.dev(root, { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" })
+    t.ok(not out:find("No Pomb board", 1, true), out)
+    stub(root, "curl", "#!/bin/sh\ncat >/dev/null\nprintf '\\n401'\nexit 22\n")
+    out = support.dev(root, { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" })
+    t.ok(out:find("Pomb refused the worker token", 1, true), out)
+    t.ok(not out:find("No Pomb board", 1, true), out)
+    stub(root, "curl", "#!/bin/sh\ncat >/dev/null\nprintf '\\n000'\nexit 7\n")
+    out = support.dev(root, { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" })
+    t.ok(not out:find("Pomb refused", 1, true), out)
     t.ok(not out:find("No Pomb board", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
