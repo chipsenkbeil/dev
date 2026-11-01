@@ -201,3 +201,25 @@ confirm_lines() {
     [ "$(cat "$OUT.status")" = 1 ]
     [[ "$(cat "$OUT.pty")" == *$'\e[33mDelete box?\e[0m [y/\e[1mN\e[0m] '* ]] || false
 }
+
+@test "dev box delete on a terminal shows the Deleting label and the Deleted line" {
+    local stubs="$BATS_TEST_TMPDIR/stubs" inner="$BATS_TEST_TMPDIR/inner.sh"
+    local dev="${BATS_TEST_DIRNAME}/../../dotfiles/bin/.local/bin/dev" out
+    mkdir -p "$stubs"
+    cat >"$stubs/ci" <<'STUB'
+#!/bin/sh
+sleep 0.5
+printf '%s\n' '{"ok":true,"box":{"name":"ci-abc","archive":null}}'
+STUB
+    chmod +x "$stubs/ci"
+    {
+        printf 'cd "%s" || exit 1\n' "$BATS_TEST_TMPDIR"
+        printf 'PATH="%s:$PATH" DEV_REMOTE=0 TERM=xterm "%s" box delete ci-abc -y\n' "$stubs" "$dev"
+        printf 'echo $? >"%s"\n' "$OUT.status"
+    } >"$inner"
+    pty_run '' 0 2 "$inner" "" "$OUT.status" >"$OUT.pty"
+    [ "$(cat "$OUT.status")" = 0 ]
+    out="$(tr '\r' '\n' <"$OUT.pty" | sd '\x1b\[[0-9;?]*[A-Za-z]' '' | grep -v '^$')"
+    [[ "$out" == *"Deleting ci-abc"* ]] || false
+    [ "$(tail -n 1 <<<"$out")" = "Deleted ci-abc · no archive" ]
+}
