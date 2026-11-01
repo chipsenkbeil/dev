@@ -22,6 +22,16 @@ for word in "$@"; do
             exit 1
         fi
         ;;
+    interdiff)
+        if [ -n "$INTERDIFF_FAIL" ]; then
+            exit 1
+        fi
+        ;;
+    *files\(\)*)
+        if [ -n "$FILES_FAIL" ]; then
+            exit 1
+        fi
+        ;;
     fetch)
         if [ -n "$FETCH_LOG" ]; then
             echo fetch >>"$FETCH_LOG"
@@ -988,6 +998,51 @@ if has_jj then
             refused(root, home, log, id, { bad[2] })
         end)
     end
+
+    t.test("land refuses the carry when jj cannot compare the checked commit", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        refused(
+            root,
+            home,
+            log,
+            id,
+            { "jj could not compare the checked commit" },
+            { INTERDIFF_FAIL = "1" }
+        )
+    end)
+
+    t.test("land refuses the carry when jj cannot list the changed files", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        refused(
+            root,
+            home,
+            log,
+            id,
+            { "jj could not list the files changed since the checked commit" },
+            { FILES_FAIL = "1" }
+        )
+    end)
+
+    t.test("land refuses the carry when the checked commit sat off trunk's ancestry", function()
+        local root, home, log, bare = jj_project()
+        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
+        jj(root, "new", "master", "-m", "side")
+        assert(fs.write(root .. "/side.txt", "side\n"), "write failed")
+        jj(root, "new", "-m", "feat: work")
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        refused(root, home, log, id, { "does not sit on a single ancestor of trunk" })
+    end)
 
     t.test("land refuses a rebase of a commit that differs from the checked one", function()
         local root, home, log, bare = jj_project()
