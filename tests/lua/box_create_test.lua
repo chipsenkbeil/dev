@@ -132,6 +132,33 @@ t.test("--shape skips the second picker only", function()
     fs.remove(root, { recursive = true })
 end)
 
+t.test("--arch passes the architecture to ci box create", function()
+    local root = sandbox({ create = CREATED })
+    local _, code = support.dev(
+        root,
+        { "box", "create", "--arch", "aarch64", "--target", "linux-dev", "proj" },
+        env(root)
+    )
+    t.eq(code, 0)
+    t.eq(
+        lines_of(root .. "/log"),
+        { "box create --target linux-dev --arch aarch64 --by human:tester --json -- proj" }
+    )
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("without --arch ci gets no --arch flag", function()
+    local root = sandbox({ create = CREATED })
+    local _, code =
+        support.dev(root, { "box", "create", "--target", "linux-dev", "proj" }, env(root))
+    t.eq(code, 0)
+    t.eq(
+        lines_of(root .. "/log"),
+        { "box create --target linux-dev --by human:tester --json -- proj" }
+    )
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("without a terminal there are no pickers and ci applies its defaults", function()
     local root = sandbox({ create = CREATED })
     local out, code = support.dev(root, { "box", "create", "proj" }, env(root, { FAKE_TTY = "0" }))

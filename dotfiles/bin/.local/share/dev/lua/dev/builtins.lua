@@ -138,8 +138,8 @@ return {
     {
         words = { "box", "create" },
         handler = "lua",
-        flags = "--target --shape --by --ttl --keep",
-        usage = "dev box create [--target T] [--shape S] [--by LABEL] [--ttl HOURS or --keep] [PROJECT...]",
+        flags = "--target --shape --arch --by --ttl --keep",
+        usage = "dev box create [--target T] [--shape S] [--arch ARCH] [--by LABEL] [--ttl HOURS or --keep] [PROJECT...]",
         desc = "Create a box and wait until it runs, picking the target and then the shape on a terminal, else the hub's defaults, 4 hours unless told otherwise, and the current project by default",
     },
     {

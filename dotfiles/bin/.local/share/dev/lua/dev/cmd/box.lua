@@ -14,7 +14,13 @@ local SECONDS_PER_MINUTE = 60
 local SECONDS_PER_HOUR = 3600
 local SECONDS_PER_DAY = 86400
 local MISSING_CI = "dev: ci not found on PATH, dev box runs ci box (install it from the ci repo)"
-local VALUE_FLAGS = { ["--target"] = true, ["--shape"] = true, ["--by"] = true, ["--ttl"] = true }
+local VALUE_FLAGS = {
+    ["--target"] = true,
+    ["--shape"] = true,
+    ["--arch"] = true,
+    ["--by"] = true,
+    ["--ttl"] = true,
+}
 
 ---@class dev.cmd.box.State
 ---@field RUNNING string a box that is up
@@ -99,6 +105,7 @@ local State, Exit = M.State, M.Exit
 ---@class dev.cmd.box.Args
 ---@field target string? the `--target` value
 ---@field shape string? the `--shape` value
+---@field arch string? the `--arch` value
 ---@field by string? the `--by` value
 ---@field ttl string? the `--ttl` hours
 ---@field keep boolean whether `--keep` was given
@@ -112,6 +119,7 @@ local State, Exit = M.State, M.Exit
 ---@class dev.cmd.box.CreateOpts
 ---@field target string? the target to create on, ci's default when nil
 ---@field shape string? the shape to create, ci's default when nil
+---@field arch string? the architecture to create on, ci's default (x86_64) when nil
 ---@field by string? who asks, `human:` and the user when nil
 ---@field ttl string? the lifetime in hours
 ---@field keep boolean whether the box is kept
@@ -525,6 +533,7 @@ function M.create(opts)
     local args = { "create" }
     append_flag(args, "--target", opts.target)
     append_flag(args, "--shape", opts.shape)
+    append_flag(args, "--arch", opts.arch)
     append_flag(args, "--by", requester(opts.by))
     append_flag(args, "--ttl", opts.ttl)
     append_flag(args, "--keep", opts.keep)
@@ -1177,7 +1186,7 @@ function M.pick_create(project)
 end
 
 M.handlers["box create"] = function(ctx)
-    local parsed = M.parse(ctx, { "--target", "--shape", "--by", "--ttl", "--keep" })
+    local parsed = M.parse(ctx, { "--target", "--shape", "--arch", "--by", "--ttl", "--keep" })
     M.need_ci()
     local projects = parsed.pos
     if #projects == 0 then
@@ -1196,6 +1205,7 @@ M.handlers["box create"] = function(ctx)
     M.create({
         target = target,
         shape = shape,
+        arch = parsed.arch,
         by = parsed.by,
         ttl = parsed.ttl,
         keep = parsed.keep,
