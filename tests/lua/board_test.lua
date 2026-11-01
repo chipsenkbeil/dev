@@ -2558,7 +2558,17 @@ case "$last" in
 */tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. ID_B .. [[","column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
 */tasks\?limit=500) body='{"items":[{"id":"]] .. ID_A .. [[","column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
 */tasks\?*) body='{"items":[{"id":"]] .. ID_A .. [["}],"next_cursor":null}' ;;
-*/api/tasks/]] .. ID_A .. [[) body=$(cat "$ROOT/task.json") ;;
+*/api/tasks/]] .. ID_A .. [[)
+    body=$(cat "$ROOT/task.json")
+    case "$*" in
+    *"-X PATCH"*)
+        if [ -f "$ROOT/label_fail" ]; then
+            body='{"message":"nope"}'
+            status=400
+        fi
+        ;;
+    esac
+    ;;
 */api/tasks) body=$(cat "$ROOT/task.json") ;;
 */api/tasks/]] .. ID_C .. [[/links) body=$(cat "$ROOT/holder_links.json") ;;
 */links) body=$(cat "$ROOT/links.json") ;;
@@ -2577,9 +2587,23 @@ case "$last" in
     if [ -f "$ROOT/hb_status" ]; then status=$(cat "$ROOT/hb_status"); fi
     ;;
 */claim/release) body= ;;
-*/comments/dddddddd*) body='{"message":"not yours"}'; status=403 ;;
+*/comments/dddddddd*)
+    body='{"message":"not yours"}'
+    status=403
+    if [ -f "$ROOT/locked" ]; then body='{"code":"card_locked","message":"locked"}'; fi
+    ;;
 */comments/*) body='{"ok":true}' ;;
-*/comments) body=$(cat "$ROOT/comments.json") ;;
+*/comments)
+    body=$(cat "$ROOT/comments.json")
+    case "$*" in
+    *"-X POST"*)
+        if [ -f "$ROOT/locked" ]; then
+            body='{"code":"card_locked","message":"locked"}'
+            status=403
+        fi
+        ;;
+    esac
+    ;;
 */claim) body='{"fence":7,"claimant":"x"}' ;;
 *) body='{"ok":true}' ;;
 esac
@@ -3524,6 +3548,94 @@ t.test("show and ls read the subtasks from the export", function()
     t.ok(out:find("1/2", 1, true), out)
 end)
 
+t.test("add --label needs:human reaches pomb after the card and its outcomes", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "A",
+        "--column",
+        "blocked",
+        "--label",
+        "needs:human",
+    })
+    t.eq(code, 0)
+    t.ok(out:find("added 11111111", 1, true), out)
+    local calls = read(root, "calls")
+    local created = calls:find("/api/tasks\n", 1, true)
+    local outcome = calls:find("/subtasks", 1, true)
+    local labelled = calls:find('--data-raw {"labels":["needs:human"]}', 1, true)
+    t.ok(created and outcome and labelled, calls)
+    t.ok(created < outcome and outcome < labelled, calls)
+    local _, hits = calls:gsub("needs:human", "")
+    t.eq(hits, 1)
+end)
+
+t.test("a failed subtask on add --label needs:human still labels the card", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/sub_fail", "1"))
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "A",
+        "--column",
+        "blocked",
+        "--label",
+        "needs:human",
+    })
+    t.eq(code, 1)
+    t.ok(out:find("outcome 1 of 1 was not", 1, true), out)
+    t.ok(read(root, "calls"):find('--data-raw {"labels":["needs:human"]}', 1, true))
+end)
+
+local function add_locked(root, home)
+    return dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "A",
+        "--column",
+        "blocked",
+        "--label",
+        "needs:human",
+    })
+end
+
+t.test("add --label needs:human names the card when its label is refused", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/label_fail", ""))
+    local out, code = add_locked(root, home)
+    t.eq(code, 1)
+    t.ok(out:find("but its labels were not set, so run dev board label on it", 1, true), out)
+end)
+
+t.test("a failed subtask and a refused label on add --label needs:human say both", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/sub_fail", "1"))
+    assert(fs.write(root .. "/label_fail", ""))
+    local out, code = add_locked(root, home)
+    t.eq(code, 1)
+    t.ok(out:find("outcome 1 of 1 was not", 1, true), out)
+    t.ok(out:find("its labels were not set either", 1, true), out)
+end)
+
 t.test("add --size and size reach pomb with the id of the colour, not its label", function()
     local root, home = sandbox()
     local out, code = dev(
@@ -3880,6 +3992,22 @@ t.test("a 403 on a comment says it is not yours and exits 1", function()
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
     t.eq(code, 1)
     t.eq(out, "dev: a comment id needs at least 8 hex characters: eeee\n")
+end)
+
+t.test("a card_locked 403 on a comment says the card is locked and exits 1", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/locked", ""))
+    for _, args in ipairs({
+        { "board", "note", "11111111-a", "--edit", "dddddddd", "x" },
+        { "board", "note", "11111111-a", "--delete", "dddddddd" },
+        { "board", "note", "11111111-a", "a new note" },
+    }) do
+        local out, code = dev(root, home, args)
+        t.eq(code, 1)
+        t.ok(out:find("labelled needs:human", 1, true), out)
+        t.ok(out:find("Reordering and resizing", 1, true), out)
+        t.eq(out:find("not yours", 1, true), nil)
+    end
 end)
 
 t.test("prose warnings reach standard error and the write still happens", function()

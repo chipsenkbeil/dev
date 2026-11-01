@@ -285,22 +285,37 @@ card, and another agent relaying your view never counts. Agents never move, edit
 or relabel one, except to set its size, and the label sits only in Blocked or
 Icebox, never Backlog. dev enforces it: `edit` and `rename` refuse a card
 labelled `needs:human`, and `move` refuses one headed for another column (exit
-1). A move within its own column, and so `order`, is allowed. `label CARD
-needs:human` and `add --label needs:human` refuse a card outside Blocked and
-Icebox, so move it there first and add the label after. `label --remove
-needs:human` and notes stay allowed in any column. Only you move it out.
+1). `label CARD needs:human` and `add --label needs:human` refuse a card
+outside Blocked and Icebox, so move it there first and add the label after.
+Only you move it out.
 Setting the size is the third exception: an agent may run `dev board size CARD
-1`, `2`, `3` or `3+` on such a card and change nothing else. A size answers no
-question, and an agent may change it to another size. An agent never sets
-`unsized` on such a card. You set `unsized` yourself, with `dev board size`
-in Icebox. The other two both end with an agent removing the label: an agent
-that you answered directly in its own session quotes you in a decision note
-and carries on, and once you move a card out of Blocked or Icebox, the first
-agent to see it elsewhere removes the label and follows that column. `stale`
-lists such a card under `moved by the owner`. Your own comment on the card, or
-that session answer, counts as the answer only when it settles every open
-choice. A partial answer keeps the label. A `needs:human` card whose newest
-comment is yours counts as answered and waits for your move.
+1`, `2`, `3` or `3+` on such a card and change nothing else (until Pomb's
+`fff0e011` ships, Pomb refuses it on a locked card and dev prints the reason).
+A size answers no question, and an agent may change it to another size. An
+agent never sets `unsized` on such a card. You set `unsized` yourself, with
+`dev board size` in Icebox. The other two both end with an agent removing the
+label: an agent that you answered directly in its own session removes the
+label, quotes you in a decision note and carries on, and once you move a card
+out of Blocked or Icebox, the first agent to see it elsewhere removes the
+label and follows that column. `stale` lists such a card under `moved by the
+owner`. Your own comment on the card, or that session answer, counts as the
+answer only when it settles every open choice. A partial answer keeps the label. A `needs:human`
+card whose newest comment is yours counts as answered and waits for your
+move.
+
+Pomb 0.5.59 locks a card labelled `needs:human`: it answers 403 `card_locked`
+to a token for a comment (create, and edit or delete of its own), a move, a
+reorder and a size change, and only a label change passes. dev prints that
+reason instead of a generic failure.
+
+The label therefore goes last. Move the card to Blocked, write the question
+note, then add the label. `add --label needs:human` creates the card and its
+outcomes, then sets the label. An agent that records your answer removes the
+label first, then writes the decision note.
+
+Until Pomb's `fff0e011` ships, `order` and `size` fail on such a card,
+whatever the rule says. `label --remove needs:human` stays allowed in any
+column.
 
 An umbrella waits in Backlog until its first child starts, sits in In Progress,
 and is Done when every child is Done. It is never Ready and holds no claim:

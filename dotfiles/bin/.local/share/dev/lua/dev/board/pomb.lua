@@ -35,10 +35,15 @@ local STAMP_CHARS = 19
 local PAGE_LIMIT = 500
 local FORBIDDEN = 403
 local PERMISSION_DENIED = "permission_denied"
+local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NOT_YOURS = "that comment is not yours to change"
+local LOCKED = "pomb locked this card while it is labelled "
+    .. board.NEEDS_HUMAN
+    .. ": comments, moves and edits are refused until the owner answers and the label is removed."
+    .. " Reordering and resizing stay refused on it until pomb ships fff0e011"
 local CHECKS_DEFINITION = {
     key = board.CHECKS_FIELD,
     label = "Checks",
@@ -303,6 +308,9 @@ function Backend:__request(method, path, body, fence, seconds)
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == PERMISSION_DENIED then
         return nil, denied(doc), status, doc
+    end
+    if status == FORBIDDEN and type(doc) == "table" and doc.code == CARD_LOCKED then
+        return nil, LOCKED, status, doc
     end
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
@@ -692,7 +700,8 @@ function Backend:add(name, column, opts)
     if opts and opts.description then
         body.description = opts.description
     end
-    if opts and opts.labels then
+    local locking = opts and opts.labels and listed(opts.labels, board.NEEDS_HUMAN)
+    if opts and opts.labels and not locking then
         body.labels = opts.labels
     end
     if opts and opts.checks and #opts.checks > 0 then
@@ -709,6 +718,10 @@ function Backend:add(name, column, opts)
         made, message =
             self:__request("POST", "/api/tasks/" .. task.id .. "/subtasks", { name = text })
         if not made then
+            local unlabelled = ""
+            if locking and not self:set_labels(task.id, opts.labels) then
+                unlabelled = " (its labels were not set either, so run dev board label on it)"
+            end
             return nil,
                 task.id:sub(1, board.MIN_PREFIX)
                     .. " was added to "
@@ -719,6 +732,7 @@ function Backend:add(name, column, opts)
                     .. #outcomes
                     .. " was not: "
                     .. message
+                    .. unlabelled
         end
         task.subtasks[index] = { id = made.id, name = text, done = false }
     end
@@ -736,6 +750,19 @@ function Backend:add(name, column, opts)
                     .. message
         end
         task.column_id = final
+    end
+    if locking then
+        local labelled
+        labelled, message = self:set_labels(task.id, opts.labels)
+        if not labelled then
+            return nil,
+                task.id:sub(1, board.MIN_PREFIX)
+                    .. " was added to "
+                    .. column
+                    .. " but its labels were not set, so run dev board label on it: "
+                    .. message
+        end
+        task.labels = opts.labels
     end
     return self:__card(task)
 end
@@ -779,20 +806,27 @@ function Backend:comments(id)
     return found
 end
 
+local function refused_comment(message, status, doc)
+    if status == FORBIDDEN and not (type(doc) == "table" and doc.code == CARD_LOCKED) then
+        return NOT_YOURS
+    end
+    return message
+end
+
 function Backend:edit_note(id, comment, body)
-    local done, message, status =
+    local done, message, status, doc =
         self:__request("PATCH", "/api/tasks/" .. id .. "/comments/" .. comment, { body = body })
     if not done then
-        return nil, status == FORBIDDEN and NOT_YOURS or message
+        return nil, refused_comment(message, status, doc)
     end
     return true
 end
 
 function Backend:delete_note(id, comment)
-    local done, message, status =
+    local done, message, status, doc =
         self:__request("DELETE", "/api/tasks/" .. id .. "/comments/" .. comment)
     if not done then
-        return nil, status == FORBIDDEN and NOT_YOURS or message
+        return nil, refused_comment(message, status, doc)
     end
     return true
 end
