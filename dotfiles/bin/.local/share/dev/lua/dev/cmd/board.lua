@@ -2176,10 +2176,26 @@ local function land_problems(backend, card, who)
         problems[#problems + 1] = message
         return problems
     end
-    for _, missing in ipairs(land.missing_reviews(who.comments, state)) do
+    local lacking = land.missing_reviews(who.comments, state)
+    local unproven = land.checks_problem(who.comments, state, card.checks)
+    local carried
+    if #lacking > 0 and #problems == 0 then
+        local why
+        carried, why = land.carry({
+            root = backend.root,
+            comments = who.comments,
+            state = state,
+            rows = card.checks,
+        })
+        if carried then
+            lacking, unproven = {}, nil
+        elseif why then
+            problems[#problems + 1] = why
+        end
+    end
+    for _, missing in ipairs(lacking) do
         problems[#problems + 1] = missing
     end
-    local unproven = land.checks_problem(who.comments, state, card.checks)
     if unproven then
         problems[#problems + 1] = unproven
     end
@@ -2189,7 +2205,7 @@ local function land_problems(backend, card, who)
             problems[#problems + 1] = moved
         end
     end
-    return problems, state
+    return problems, state, carried
 end
 
 function commands.land(backend, args)
@@ -2225,7 +2241,7 @@ function commands.land(backend, args)
     if not list then
         return failure(message)
     end
-    local problems, state = land_problems(backend, card, { name = name, comments = list })
+    local problems, state, carried = land_problems(backend, card, { name = name, comments = list })
     if #problems > 0 then
         return failure(short .. " cannot land:\n  - " .. table.concat(problems, "\n  - "))
     end
@@ -2252,6 +2268,13 @@ function commands.land(backend, args)
             state.change,
             name,
             commit
+        )
+    end
+    if carried then
+        text = string.format(
+            "%s The check and reviews were carried over from commit %s: the change id is the same, the interdiff is empty, and the trunk commits since touch none of its files.",
+            text,
+            land.short(carried)
         )
     end
     local noted

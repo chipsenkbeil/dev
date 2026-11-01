@@ -190,6 +190,138 @@ function M.trunk_problem(root)
     end
 end
 
+local function jj_out(root, ...)
+    local out, code = devos.capture(jj(root, ...), { stderr = "null" })
+    if code ~= 0 then
+        return nil
+    end
+    return out
+end
+
+local function file_set(out)
+    local set = {}
+    for line in out:gmatch("[^\n]+") do
+        set[line] = true
+    end
+    return set
+end
+
+local function checked_commit(comments, state, rows)
+    for i = #comments, 1, -1 do
+        local record = check.parse(comments[i].body)
+        if
+            record
+            and record.mode == check.MODE.RUN
+            and record.change == state.change
+            and record.commit ~= state.commit
+        then
+            local at = { commit = record.commit, change = state.change }
+            if
+                not M.checks_problem(comments, at, rows)
+                and #M.missing_reviews(comments, at) == 0
+            then
+                return record.commit
+            end
+        end
+    end
+end
+
+local function carry_problem(root, state, commit)
+    local FILES_TEMPLATE = 'self.diff().files().map(|f| f.source().path() ++ "\\n" ++ '
+        .. 'f.target().path() ++ "\\n").join("")'
+    local label = M.short(commit)
+    local change = jj_out(root, "log", "-r", commit, "--no-graph", "-T", 'change_id ++ "\\n"')
+    if change ~= state.change .. "\n" then
+        return string.format(
+            "the checked commit %s is not of change %s in this repo",
+            label,
+            state.change
+        )
+    end
+    local base = jj_out(root, "log", "-r", commit .. "-", "--no-graph", "-T", COMMIT_TEMPLATE)
+    local ancestor = base
+        and count_lines(base) == 1
+        and jj_out(root, "log", "-r", commit .. "- & ::@-", "--no-graph", "-T", COMMIT_TEMPLATE)
+    if not ancestor or ancestor ~= base then
+        return string.format(
+            "the checked commit %s does not sit on a single ancestor of trunk",
+            label
+        )
+    end
+    local interdiff = jj_out(root, "interdiff", "--from", commit, "--to", "@", "--name-only")
+    if interdiff == nil then
+        return string.format("jj could not compare the checked commit %s with this one", label)
+    end
+    if interdiff ~= "" then
+        return string.format("this commit differs from the checked commit %s", label)
+    end
+    local mine = jj_out(root, "log", "-r", "@", "--no-graph", "-T", FILES_TEMPLATE)
+    local trunk = jj_out(root, "log", "-r", commit .. "-..@-", "--no-graph", "-T", FILES_TEMPLATE)
+    if not mine or not trunk then
+        return string.format(
+            "jj could not list the files changed since the checked commit %s",
+            label
+        )
+    end
+    local own, landed, overlap = file_set(mine), file_set(trunk), {}
+    for path in pairs(own) do
+        if landed[path] then
+            overlap[#overlap + 1] = path
+        end
+    end
+    table.sort(overlap)
+    if #overlap > 0 then
+        return string.format(
+            "trunk commits since the checked commit %s touch files this change changes: %s",
+            label,
+            table.concat(overlap, ", ")
+        )
+    end
+end
+
+---@class dev.board.land.Opts
+---@field root string the project root, a jj project
+---@field comments {body: string}[] the card's comments, oldest first
+---@field state dev.board.check.State the commit that would land
+---@field rows string[] the card's checks rows
+
+---Find the checked commit whose check and reviews a rebased commit may keep.
+---
+---The rule holds when all of these are true:
+---
+---1. The change id is the same as the checked commit's.
+---2. The checked commit sits on one ancestor of trunk, and the landing commit's parent is trunk.
+---3. The interdiff against the checked commit is empty.
+---4. The trunk commits since the checked commit touch none of the change's files.
+---
+---The checked commit is the newest one of the change with a passing run and its reviews. A commit
+---with a check record of its own never carries, and every read that fails refuses.
+---@param opts dev.board.land.Opts the project, the card's records and the landing commit
+---@return string? commit the checked commit the records carry over from
+---@return string? problem why it is refused, nil when it carries or no commit was checked
+function M.carry(opts)
+    local root, comments, state, rows = opts.root, opts.comments, opts.state, opts.rows
+    for _, comment in ipairs(comments) do
+        local own = check.parse(comment.body)
+        if own and own.commit == state.commit then
+            return nil
+        end
+    end
+    local commit = checked_commit(comments, state, rows)
+    if not commit then
+        return nil
+    end
+    local moved = M.trunk_problem(root)
+    if moved then
+        return nil, moved
+    end
+    local problem = carry_problem(root, state, commit)
+    if problem then
+        return nil, problem
+    end
+    return commit
+end
+
 ---Read the commit that holds a change on trunk, which `jj land` may have rewritten.
 ---@param root string the project root, a jj project
 ---@param change string the change id, which survives the rewrite

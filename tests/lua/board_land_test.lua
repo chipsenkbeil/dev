@@ -47,6 +47,7 @@ exec "$REAL_JJ" "$@"
 ]]
 local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
+local SHARED = "a\nb\nc\nd\ne\nf\ng\n"
 
 local function setup()
     local root = support.sandbox(
@@ -552,6 +553,124 @@ if has_jj then
         git(other, "commit", "-q", "--allow-empty", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
         refused(root, home, log, id, { "trunk has moved" })
+    end)
+
+    local function trunk_moves(root, bare, files)
+        local other = support.tempdir() .. "/clone"
+        must(
+            devos.run(
+                { "git", "clone", "-q", "--branch", "master", bare, other },
+                { stdout = "null", stderr = "null" }
+            )
+        )
+        for path, body in pairs(files) do
+            assert(fs.write(other .. "/" .. path, body), "write failed")
+            git(other, "add", path)
+        end
+        git(other, "commit", "-q", "-m", "moved")
+        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        jj(root, "git", "fetch", "--remote", "origin")
+    end
+
+    local function rebase_onto_trunk(root)
+        jj(root, "rebase", "-r", "@", "-d", "master")
+    end
+
+    local function review_ready(root, home, log, bare, row)
+        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(root)
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(root, home, log)
+        if row then
+            must(dev(root, home, log, { "board", "checks", id, row }))
+        end
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        return id
+    end
+
+    t.test("land carries the check and reviews over a rebase past unrelated commits", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        local before = head(root)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        t.ok(head(root) ~= before, "the rebase must rewrite the commit")
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        local list = comments(home)
+        local last = list[#list]
+        t.eq(last.kind, "done")
+        t.ok(last.body:find("carried over from commit " .. before:sub(1, 12), 1, true), last.body)
+        t.eq(column_of(home), "Done")
+    end)
+
+    t.test("land does not carry a pass over a failed run at the rebased commit", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare, "test ! -e docs.txt")
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local out, code = dev(root, home, log, { "board", "check", id })
+        t.ok(code ~= 0, out)
+        refused(root, home, log, id, { "did not pass every row" })
+    end)
+
+    t.test("land does not carry over an expect-fail record at the rebased commit", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        dev(root, home, log, { "board", "check", id, "--expect-fail" })
+        refused(root, home, log, id, { "no run of dev board check is recorded" })
+    end)
+
+    t.test("land refuses a rebase past a commit that touches the change's file", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
+        rebase_onto_trunk(root)
+        refused(root, home, log, id, { "touch files this change changes: shared.txt" })
+    end)
+
+    t.test("land refuses a rebase of a commit that differs from the checked one", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        local before = head(root)
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        refused(root, home, log, id, { "differs from the checked commit " .. before:sub(1, 12) })
+    end)
+
+    t.test("land refuses a duplicate of the checked change under another change id", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        jj(root, "duplicate", "@")
+        local copy = jj(root, "log", "-r", "children(@-) ~ @", "--no-graph", "-T", "change_id")
+        jj(root, "edit", copy)
+        local out = refused(root, home, log, id, { "no code review of change" })
+        t.eq(out:find("carried over", 1, true), nil, out)
+    end)
+
+    t.test("land does not carry a review that was never recorded at the checked commit", function()
+        local root, home, log, bare = jj_project()
+        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(root)
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(
+            dev(
+                root,
+                home,
+                log,
+                { "board", "review", id, "--kind", "code", "--by", "rev", "--rev", "@" }
+            )
+        )
+        must(dev(root, home, log, { "board", "check", id }))
+        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        refused(root, home, log, id, { "no style review of change" })
     end)
 
     t.test("land refuses a working copy that holds conflicts", function()

@@ -1111,6 +1111,23 @@ never handles the API.
     forge settings (see `forge`). A failed fetch refuses. This check
     runs only once the other conditions hold.
 
+  One case keeps a check and reviews across a rebase. When the landing commit
+  lacks the reviews and has no `dev-check:` record of its own, `land` looks for
+  the newest commit of the same change id with a passing run and its code and
+  style reviews (a recheck counts as above). It carries those records over when
+  all of these hold:
+
+  - the commit's parent is the current trunk
+  - the checked commit sat on one ancestor of that trunk
+  - `jj interdiff` between the checked commit and the landing one is empty
+  - the trunk commits since the checked commit's parent touch none of the
+    change's files (renames count both paths)
+
+  An overlap refuses and names the files. A different change id, a non-empty
+  interdiff or a review never recorded at the checked commit keeps the plain
+  refusals, and any jj read that fails refuses too. The done note then adds
+  that the check and reviews were carried over from the checked commit.
+
   A failed `jj land` leaves the card where it is, exits 1 and prints jj's
   output. A landing whose done note or move then fails exits 1 and says what to
   finish by hand. `jj land` can rewrite the commit through the forge, so after
