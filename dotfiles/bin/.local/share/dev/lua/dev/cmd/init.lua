@@ -440,14 +440,7 @@ local function init_board_hint(run)
             return
         end
     end
-    leave(
-        run,
-        "No Pomb board for "
-            .. run.name
-            .. ", create one in "
-            .. url
-            .. " or tell agents to use General"
-    )
+    leave(run, "No Pomb board for " .. run.name .. ", create one in " .. url)
 end
 
 local function summarize(run)

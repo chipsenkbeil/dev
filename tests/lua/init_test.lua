@@ -173,6 +173,7 @@ t.test("init hints at a missing Pomb board and keeps the token off the command l
     local out =
         support.dev(root, { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" })
     t.ok(out:find("No Pomb board for zz", 1, true), out)
+    t.ok(not out:find("General", 1, true), out)
     local logged = fs.read(log) or ""
     t.ok(logged:find("-K - ", 1, true), logged)
     t.ok(not logged:find("secret-token", 1, true), logged)
