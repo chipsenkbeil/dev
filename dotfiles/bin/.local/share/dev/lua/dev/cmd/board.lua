@@ -2179,8 +2179,20 @@ function commands.review(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
-    if by == card.claimant then
-        return failure(short .. " is claimed by " .. by .. ", so it cannot review its own change")
+    local caller = agent_name()
+    local owner = card.claimant
+    if owner and (by == owner or caller == owner) then
+        return failure(
+            string.format(
+                "%s is claimed by %s, so %s cannot review its own change",
+                short,
+                owner,
+                owner
+            )
+                .. "; a reviewer other than "
+                .. owner
+                .. " must record it"
+        )
     end
     if not backend.root then
         return failure("dev board review needs the project's root")

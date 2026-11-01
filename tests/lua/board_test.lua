@@ -1988,6 +1988,33 @@ t.test(
     end
 )
 
+t.test("review refuses the claimant for every kind and says a reviewer must record it", function()
+    local card = colored("green")
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+    for _, kind in ipairs({ "code", "style", "recheck" }) do
+        local result = commands.run(
+            "review",
+            { "cccccccc", "--kind", kind, "--by", "project-run/a", "--rev", "@" },
+            backend
+        )
+        t.eq(result.code, 1)
+        t.ok(
+            result.message:find(
+                "is claimed by project-run/a, so project-run/a cannot review its own change",
+                1,
+                true
+            ),
+            result.message
+        )
+        t.ok(
+            result.message:find("; a reviewer other than project-run/a must record it", 1, true),
+            result.message
+        )
+    end
+    t.eq(#backend.calls, 0)
+end)
+
 t.test("--as is read only on a tick or convert, and names one word", function()
     local card = colored("green")
     card.outcomes = outcomes(2)

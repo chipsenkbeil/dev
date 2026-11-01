@@ -470,6 +470,58 @@ if has_jj then
         must(dev(root, home, log, { "board", "release", id }))
     end)
 
+    t.test("a claimed card's review comes from another name, never its claimant", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "take", id, "--as", "builder" }))
+        local before = #comments(home, id)
+        for _, kind in ipairs({ "code", "style", "recheck" }) do
+            local out, code = dev(root, home, log, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                kind,
+                "--by",
+                "builder",
+                "--rev",
+                "@",
+            })
+            t.eq(code, 1, out)
+            t.ok(out:find("a reviewer other than builder must record it", 1, true), out)
+        end
+        for _, kind in ipairs({ "code", "style", "recheck" }) do
+            local out, code = dev(root, home, log, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                kind,
+                "--by",
+                "rev",
+                "--rev",
+                "@",
+            }, { DEV_AGENT = "builder" })
+            t.eq(code, 1, out)
+            t.ok(out:find("a reviewer other than builder must record it", 1, true), out)
+        end
+        t.eq(#comments(home, id), before)
+        must(dev(root, home, log, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "code",
+            "--by",
+            "rev",
+            "--rev",
+            "@",
+        }))
+        local list = comments(home, id)
+        t.eq(#list, before + 1)
+        t.ok(list[#list].body:find("dev-review: kind=code by=rev", 1, true), list[#list].body)
+    end)
+
     t.test("land refuses a working copy that is empty or undescribed", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
