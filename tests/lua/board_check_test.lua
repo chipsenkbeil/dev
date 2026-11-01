@@ -154,6 +154,11 @@ t.test("check ends a row at the time limit and records a timeout", function()
     t.eq(code, 2, out)
 end)
 
+t.test("the default row limit is two hours and within the most --timeout accepts", function()
+    t.eq(check.DEFAULT_SECONDS, 7200)
+    t.ok(check.DEFAULT_SECONDS <= check.MAX_SECONDS)
+end)
+
 t.test("--expect-fail records failing rows and reports a passing one", function()
     local root, home, head = git_root()
     local id = card_with(root, home, { "false" })

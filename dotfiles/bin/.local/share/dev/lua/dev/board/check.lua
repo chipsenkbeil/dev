@@ -5,8 +5,9 @@ local vcs = require("dev.vcs")
 ---@class dev.board.check
 local M = {}
 
----The seconds a checks row may run when `--timeout` is not given.
-M.DEFAULT_SECONDS = 1800
+---The seconds a checks row may take, from its start to its end, when `--timeout` is not given.
+---The row is one `dev --remote` command, so the wait in the ci queue counts.
+M.DEFAULT_SECONDS = 7200
 
 ---The most seconds `--timeout` accepts.
 M.MAX_SECONDS = 86400

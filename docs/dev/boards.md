@@ -1134,11 +1134,12 @@ never handles the API.
   `?` or a line break is refused before anything runs (exit 1). Under a set
   `DEV_AGENT`, dev refuses a local run of a verb that has a ci job, so a row
   reads `dev --remote lint` (not `dev lint`). Each row may run for `--timeout`
-  seconds (1800 by default, at most 86400, anything else is exit 2), to cover a
-  remote test of about five minutes that waits in the ci queue. A row that
-  outlasts it is killed and recorded as `timeout`, as is a row that exits 124
-  or is killed from outside. A card with no rows is
-  exit 1.
+  seconds (7200 by default, at most 86400, anything else is exit 2), counted
+  from the row's start to its end, so the wait in the ci queue and a job that
+  ci restarts count too. The default covers a remote test of about five minutes
+  that waits behind a long queue. A row that outlasts it is killed and recorded
+  as `timeout`, as is a row that exits 124 or is killed from outside. A card
+  with no rows is exit 1.
 
   The result belongs to one commit. In a jj project the working copy is itself
   a commit, so a changed file is normal and the commit is `@` after jj
