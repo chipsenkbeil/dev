@@ -1381,6 +1381,22 @@ never handles the API.
   stands (an unticked outcome, the wrong column), to list in the refusal only
   what still blocks the landing.
 
+  This repo lists `.ci`, `.dev`, `.editorconfig` (`shfmt` reads it),
+  `.gitignore`, `bootstrap.sh`, `dotfiles` (the `restow` and clean tests link
+  every default package, and the tests read skills, hooks, agents and the style
+  lint set), `docs/dev` (the topic check reads it against the real verbs),
+  `docs/love2d` (a test needs the directory), `docs/style` (`dev init` copies
+  the guides), `scripts` and `tests`. Only `README.md`, `AGENTS.md`,
+  `CLAUDE.md`, `docs/mail.md`, `docs/aide-agent.md` and the three
+  `docs/*-provenance.md` files stay off the list (no test, lint or `.ci` job
+  opens them). `bootstrap_test.sh` checks that `bootstrap.sh` prints the name
+  `docs/mail.md`, not the file.
+
+  Two runners landing code or skill changes against the same trunk commit
+  still need a new check for the second. By convention, and not by `dev`,
+  landings in this repo go one at a time, each runner waiting for the
+  orchestrator's turn.
+
   An overlap refuses and names the files. A different change id, a non-empty
   interdiff or a review never recorded at the checked commit keeps the plain
   refusals, and any jj read that fails refuses too. The done note then adds
