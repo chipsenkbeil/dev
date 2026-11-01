@@ -70,7 +70,7 @@ ln -s "$REAL_LUAJIT" "$TMP/realjit/luajit"
 LC_REAL="$(system_launcher real "$TMP/realjit")"
 LC_NONE="$(system_launcher none "$TMP/nowhere")"
 
-missing='dev: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit or dnf install luajit'
+missing='dev: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
 out="$(PATH="$NOLUA" "$DEV" lint 2>&1)"
 assert_eq "no luajit exits 1" "$?" "1"
 assert_eq "no luajit prints the one line" "$out" "$missing"
@@ -238,7 +238,7 @@ assert_eq "DEV_REMOTE=0 dev bootstrap still runs bootstrap.sh" "$([ -e "$BOOT_MA
 rm -f "$CILOG" "$BOOT_MARK"
 
 NOJIT="$CIBIN:$NOLUA"
-remote_missing='dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit or dnf install luajit'
+remote_missing='dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
 out="$(cd "$PROJ" && PATH="$NOJIT" "$DEV" lint --remote 2>&1)"
 assert_eq "no luajit, dev lint --remote exits 1" "$?" "1"
 assert_eq "no luajit, dev lint --remote says --remote needs luajit" "$out" "$remote_missing"

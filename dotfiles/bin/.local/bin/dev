@@ -118,10 +118,10 @@ fi
 
 if [ "$luajit" = luajit ] && ! command -v luajit >/dev/null 2>&1; then
     if [ "$remote_flag" -eq 1 ]; then
-        printf 'dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit or dnf install luajit\n' >&2
+        printf 'dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit\n' >&2
         exit 1
     fi
-    printf 'dev: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit or dnf install luajit\n' >&2
+    printf 'dev: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit\n' >&2
     exit 1
 fi
 

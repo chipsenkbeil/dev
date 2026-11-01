@@ -16,6 +16,17 @@ if name then
     end
 end
 
+local hidden = os.getenv("FAKE_HIDE")
+if hidden then
+    local which = devos.which
+    devos.which = function(tool)
+        if (" " .. hidden .. " "):find(" " .. tool .. " ", 1, true) then
+            return nil
+        end
+        return which(tool)
+    end
+end
+
 local pick = os.getenv("FAKE_PICK")
 if pick then
     local picker = require("dev.ui.picker")
