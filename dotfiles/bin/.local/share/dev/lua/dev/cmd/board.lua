@@ -441,6 +441,24 @@ local function find_card(backend, word)
     return card
 end
 
+local function other_card(backend, word)
+    local other_name, prefix = word:match("^(.+):([^:]*)$")
+    local home = backend
+    if other_name then
+        local why
+        home, why = backend:other_board(other_name)
+        if not home then
+            return nil, nil, failure(why)
+        end
+        word = prefix
+    end
+    local other, err = find_card(home, word)
+    if not other then
+        return nil, nil, err
+    end
+    return other, (other_name and other_name .. ":" or "") .. other.id:sub(1, board.MIN_PREFIX)
+end
+
 local commands = {}
 
 function commands.ls(backend, args, _, screen)
@@ -579,6 +597,8 @@ function commands.add(backend, args)
         ["--label"] = true,
         ["--checks"] = true,
         ["--done-when"] = true,
+        ["--board"] = true,
+        ["--blocked-by"] = true,
     }, {
         ["--problem"] = true,
         ["--change"] = true,
@@ -586,12 +606,30 @@ function commands.add(backend, args)
         ["--label"] = true,
         ["--checks"] = true,
         ["--done-when"] = true,
+        ["--blocked-by"] = true,
     })
     if not flags then
         return words
     end
     if #words == 0 then
         return usage("needs a card name")
+    end
+    if flags["--board"] then
+        local home, why = backend:other_board(flags["--board"])
+        if not home then
+            return failure(why)
+        end
+        local found, message = home:find()
+        if found == nil then
+            return failure(message)
+        end
+        if not found then
+            return failure("pomb has no board named " .. flags["--board"])
+        end
+        home.column_map = backend.column_map
+        home.root = backend.root
+        home.roles = board.roles(backend.column_map, home:done_columns() or {})
+        backend = home
     end
     for _, flag in ipairs({ "--problem", "--out-of-scope" }) do
         if flags[flag] and #flags[flag] > 1 then
@@ -714,6 +752,17 @@ function commands.add(backend, args)
             return usage("a card needs a checks row before it enters Ready; pass --checks CMD")
         end
     end
+    local blockers, seen = {}, {}
+    for _, word in ipairs(flags["--blocked-by"] or {}) do
+        local blocker, _, err = other_card(backend, word)
+        if not blocker then
+            return err
+        end
+        if not seen[blocker.id] then
+            seen[blocker.id] = true
+            blockers[#blockers + 1] = blocker
+        end
+    end
     local card, message = backend:add(table.concat(words, " "), column, {
         description = description,
         color = color,
@@ -723,6 +772,27 @@ function commands.add(backend, args)
     })
     if not card then
         return failure(message)
+    end
+    local card_prefix = card.id:sub(1, board.MIN_PREFIX)
+    for linked, blocker in ipairs(blockers) do
+        local ok, why = backend:link(card.id, board.LinkKind.BLOCKED_BY, blocker.id)
+        if not ok then
+            return {
+                message = card_prefix
+                    .. " was added to "
+                    .. card.column
+                    .. " but its blocked_by link to "
+                    .. blocker.id:sub(1, board.MIN_PREFIX)
+                    .. " was not, and "
+                    .. (linked - 1)
+                    .. " of "
+                    .. #blockers
+                    .. " links were made before it: "
+                    .. why,
+                code = 1,
+                unqueued = true,
+            }
+        end
     end
     local prose = flags["--description"] or (sectioned and description)
     if #outcomes > 0 then
@@ -2404,24 +2474,6 @@ end
 
 function commands.files(backend, args)
     return set_names(backend, args, board.FILES_FIELD, "file")
-end
-
-local function other_card(backend, word)
-    local other_name, prefix = word:match("^(.+):([^:]*)$")
-    local home = backend
-    if other_name then
-        local why
-        home, why = backend:other_board(other_name)
-        if not home then
-            return nil, nil, failure(why)
-        end
-        word = prefix
-    end
-    local other, err = find_card(home, word)
-    if not other then
-        return nil, nil, err
-    end
-    return other, (other_name and other_name .. ":" or "") .. other.id:sub(1, board.MIN_PREFIX)
 end
 
 local function link_rows(list)

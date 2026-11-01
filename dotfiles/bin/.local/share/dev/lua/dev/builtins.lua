@@ -230,9 +230,9 @@ return {
     {
         words = { "board", "add" },
         handler = "lua",
-        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when",
-        usage = "dev board add NAME [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
-        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized, any labels, one Change line per --change, one checks row per --checks and one Done when outcome per --done-when. Outside Icebox the card needs a size, the v2 sections and an outcome",
+        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when --board --blocked-by",
+        usage = "dev board add NAME [--board B] [--blocked-by CARD]... [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
+        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized, any labels, one Change line per --change, one checks row per --checks and one Done when outcome per --done-when. --board B files on the Pomb board named B from any repo, and each --blocked-by CARD links the new card as blocked by that card. Outside Icebox the card needs a size, the v2 sections and an outcome",
     },
     {
         words = { "board", "label" },

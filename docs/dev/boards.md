@@ -803,7 +803,7 @@ never handles the API.
   unclaimed card labelled `needs:lead`, never one labelled `needs:human` and,
   like every `next`, never one that a card outside Done blocks. Any other
   column is exit 2.
-- `add NAME [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
+- `add NAME [--board B] [--blocked-by CARD]... [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
   Creates the card, in Backlog by default, and prints
   `added <id prefix> <column>`. `--size` gives it the colour of the size, as
   `size` does, and each `--label L` (repeatable, duplicates dropped) gives it a
@@ -817,6 +817,14 @@ never handles the API.
   the flag (exit 2) to keep any text from being dropped silently. A text that
   already holds one of those headings or the v1 `## Done when` is kept as it
   is; an Icebox card gets the text as given and none otherwise.
+  `--board B` files the card on the Pomb board named `B` from any repo, using
+  this repo's column names; a board Pomb does not list is refused (exit 1)
+  before anything is added, and a local board refuses it. Each
+  `--blocked-by CARD` (repeatable) links the new card as `blocked_by` that card,
+  looked up on the board the card is filed on (`BOARD:CARD` reaches another),
+  and an unknown blocker is refused before the card is added. If a link then
+  fails, `add` exits 1 naming the card and the blocker, and the refusal is not
+  queued for a later sync.
   `--column ready` without a `--size` of `1`, `2` or `3` is a usage error (exit
   2), by the same rule as `move`, and so is any other column but Icebox (Backlog
   by default) for a card with no size, a description that lacks a heading or text

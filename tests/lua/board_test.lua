@@ -41,6 +41,9 @@ local function fake(cards, times, finished)
     function backend:entered()
         return times or {}
     end
+    function backend:find()
+        return true
+    end
     function backend:describe()
         return "fake"
     end
@@ -467,6 +470,138 @@ t.test("add defaults to Backlog and joins the words of the name", function()
     )
     t.eq(backend.calls[2], { "add", "X", "Ready", V1, "green" })
     t.eq(commands.run("add", {}, backend).code, 2)
+end)
+
+t.test("add --board files on the named board and leaves this one alone", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    local result = commands.run(
+        "add",
+        { "Far", "--board", "ci", "--problem", "x", "--size", "1", "--done-when", "a" },
+        backend
+    )
+    t.eq(result.output, "added cccccccc Backlog")
+    t.eq(backend.calls[1], { "other_board", "ci" })
+    t.eq(#backend.calls, 1)
+    t.eq(sibling.calls[1], { "add", "Far", "Backlog", SCAFFOLD, "yellow" })
+end)
+
+t.test("add --board refuses a board that is not there", function()
+    local backend = fake(sample())
+    local result = commands.run("add", { "Far", "--board", "nope", "--size", "1" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    local sibling = fake(sample())
+    function sibling:find()
+        return false
+    end
+    backend.sibling = sibling
+    result = commands.run("add", { "Far", "--board", "ci", "--size", "1" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("no board named ci", 1, true), result.message)
+    t.eq(#sibling.calls, 0)
+end)
+
+t.test("add --blocked-by links the new card to each blocker", function()
+    local backend = fake(sample())
+    local result = commands.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--blocked-by",
+        "11111111-a",
+        "--blocked-by",
+        "11111111-b",
+    }, backend)
+    t.eq(result.output, "added cccccccc Backlog")
+    t.eq(backend.calls[2], { "link", ID_C, "blocked_by", ID_A })
+    t.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_B })
+    t.eq(#backend.calls, 3)
+end)
+
+t.test("add --blocked-by refuses an unknown blocker before it adds", function()
+    local backend = fake(sample())
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--blocked-by", "deadbeef" },
+        backend
+    )
+    t.eq(result.code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("add --board with --blocked-by looks the blocker up on the named board", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    commands.run("add", {
+        "X",
+        "--board",
+        "ci",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--blocked-by",
+        "11111111-a",
+    }, backend)
+    t.eq(sibling.calls[2], { "link", ID_C, "blocked_by", ID_A })
+    t.eq(#backend.calls, 1)
+end)
+
+t.test("add names the card when its blocked-by link fails", function()
+    local backend = fake(sample())
+    function backend:link()
+        return nil, "pomb refused"
+    end
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--blocked-by", "11111111-a" },
+        backend
+    )
+    t.eq(result.code, 1)
+    t.ok(
+        result.message:find("cccccccc was added to Backlog but its blocked_by link", 1, true),
+        result.message
+    )
+    t.ok(result.unqueued)
+end)
+
+t.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", function()
+    local backend = fake(sample())
+    local far = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    backend.sibling = {
+        cards = function()
+            return { { id = far, name = "Far", column = "Ready", labels = {}, checks = {} } }
+        end,
+    }
+    commands.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--blocked-by",
+        "11111111-a",
+        "--blocked-by",
+        "11111111-a",
+        "--blocked-by",
+        "ci:dddddddd",
+    }, backend)
+    t.eq(backend.calls[1], { "other_board", "ci" })
+    t.eq(backend.calls[2], { "add", "X", "Backlog", SCAFFOLD, "yellow" })
+    t.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_A })
+    t.eq(backend.calls[4], { "link", ID_C, "blocked_by", far })
+    t.eq(#backend.calls, 4)
 end)
 
 t.test("add --size passes the colour its size word names", function()
