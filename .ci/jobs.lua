@@ -1,6 +1,12 @@
 local PACMAN_PACKAGES = "git jujutsu luajit bats shellcheck shfmt stylua selene ast-grep jq go-yq dash stow ripgrep fd sd man-db zsh unzip"
 local ROOT_CLONE = "/root/dotfiles"
 
+local function real_root(file)
+  local run = "sudo bash -c 'cd " .. ROOT_CLONE .. " && bash " .. file .. " </dev/null' >$log 2>&1"
+  local check = "if grep -q '^SKIP real-root' $log; then echo 'a real-root case skipped in " .. file .. "'; exit 1; fi"
+  ci.sh("log=$(mktemp); " .. run .. "; status=$?; cat $log; [ $status -eq 0 ] || exit $status; " .. check)
+end
+
 local function prepare()
   ci.sh("missing=$(pacman -T " .. PACMAN_PACKAGES .. ") || sudo pacman -Syu --noconfirm --needed $missing")
 end
@@ -22,8 +28,8 @@ return {
         ci.group("real root", function()
           ci.sh("sudo rm -rf " .. ROOT_CLONE .. " && sudo cp -a \"$PWD\" " .. ROOT_CLONE)
           ci.sh("sudo chown -R root:root " .. ROOT_CLONE .. " && sudo chmod -R go-w " .. ROOT_CLONE)
-          ci.sh("sudo bash -c 'cd " .. ROOT_CLONE .. " && bash tests/dev/root_test.sh </dev/null'")
-          ci.sh("sudo bash -c 'cd " .. ROOT_CLONE .. " && bash tests/dev/tools_test.sh </dev/null'")
+          real_root("tests/dev/root_test.sh")
+          real_root("tests/dev/tools_test.sh")
         end)
       end,
     },

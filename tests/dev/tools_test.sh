@@ -18,7 +18,7 @@ export CALLS="$TMP/calls" RECORD="$TMP/record"
 if [ "$EUID" -eq 0 ]; then REAL_ROOT=1; else REAL_ROOT=0; fi
 
 skip_user() {
-    printf 'SKIP - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
+    printf 'SKIP user-only - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
 }
 mkdir -p "$STUBS"
 cat >"$STUBS/uname" <<'STUB'
@@ -111,7 +111,7 @@ if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_contains "--system names the skipped AUR row in one line" "$out" "skipped third-party rows (built into the image, not installed with root): aur-b (aur:)"
     assert_eq "--system prints the skip line once" "$(printf '%s\n' "$out" | grep -c 'skipped third-party')" "1"
 else
-    printf 'SKIP - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP real-root - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 
 if [ "$REAL_ROOT" = 0 ]; then
@@ -194,7 +194,7 @@ if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_contains "--system skips luarocks like aur and copr" "$out" "rock-f (luarocks:)"
     assert_not_contains "--system does not plan the rock" "$out" "luarocks install"
 else
-    printf 'SKIP - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP real-root - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$badproj" install --dry-run rock-f 2>&1)"
@@ -253,7 +253,7 @@ if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.lua"
     assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
 else
-    printf 'SKIP - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP real-root - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 assert_eq "the old manifest path is gone" "$([ -e "$REPO/tools.tsv" ] && echo present || echo gone)" "gone"
 
@@ -289,7 +289,7 @@ if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_not_contains "a project script cannot replace a built-in tools subcommand" "$out" "OVERRIDE RAN"
     assert_contains "the built-in still runs" "$out" "pacman -S --needed --noconfirm -- pkg-a"
 else
-    printf 'SKIP - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP real-root - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" --help)"
@@ -405,7 +405,7 @@ if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_eq "--system --group rust ran no package manager" "$(grep -c 'pacman -S' "$CALLS")" "0"
     assert_not_contains "--system --group rust skips no third-party row" "$out" "skipped"
 else
-    printf 'SKIP - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
+    printf 'SKIP real-root - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
 fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$gproj" install --dry-run --group "" 2>&1)"

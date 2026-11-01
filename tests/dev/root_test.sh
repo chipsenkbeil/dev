@@ -136,7 +136,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     assert_eq "root without luajit runs no project __remote.lua" "$([ -e "$TMP/remote-marker" ] && echo loaded || echo absent)" "absent"
     rm -f "$proj/.dev/__remote.lua"
 else
-    printf 'SKIP - the __remote.lua root test needs real root\n'
+    printf 'SKIP real-root - the __remote.lua root test needs real root\n'
 fi
 
 if [ "$REAL_ROOT" = 0 ]; then
@@ -145,7 +145,7 @@ if [ "$REAL_ROOT" = 0 ]; then
     assert_contains "root on another OS says Linux only" "$out" "dev: as root, dev runs only on Linux"
     assert_eq "root on another OS runs no jj or git" "$(cat "$VCSLOG")" ""
 else
-    printf 'SKIP - runs on another OS through FAKE_OS, which a real uid 0 never loads\n'
+    printf 'SKIP user-only - runs on another OS through FAKE_OS, which a real uid 0 never loads\n'
 fi
 
 out="$(dev "$proj/a" tools install 2>&1)"
@@ -369,10 +369,10 @@ if [ "$REAL_ROOT" = 1 ]; then
         assert_contains "check --group reaches the package driver as root" "$out" "zzz-in"
         assert_not_contains "check --group as root leaves out the other row" "$out" "zzz-out"
     else
-        printf 'SKIP - the --force test needs the real /usr/bin/pacman\n'
+        printf 'SKIP real-root - the --force test needs the real /usr/bin/pacman\n'
     fi
 else
-    printf 'SKIP - the root-owned-chain success tests need real root\n'
+    printf 'SKIP real-root - the root-owned-chain success tests need real root\n'
 fi
 
 : >"$VCSLOG"
@@ -380,7 +380,7 @@ if [ "$REAL_ROOT" = 0 ]; then
     (cd "$proj/a" && FAKE_UID=1000 PATH="$STUBS:$PATH" "$DEV" tools check >/dev/null 2>&1)
     assert_contains "a normal user's repo_root still runs jj root" "$(cat "$VCSLOG")" "jj root"
 else
-    printf 'SKIP - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
+    printf 'SKIP user-only - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
     out="$(FAKE_UID=1000 FAKE_OS=Darwin dev "$proj/a" foo 2>&1)"
     assert_eq "at real root the seam is inert and a fake user is refused" "$?" "2"
     assert_contains "at real root a fake user uid still gets the root refusal" "$out" "$MSG"
