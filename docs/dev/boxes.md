@@ -86,6 +86,12 @@ the projects after `--`, and skips a default project whose name starts with
 A box name is 1 to 40 of `a-z`, `0-9` and `-`, else exit 2. A null
 `tailnet_name` prints as `-`.
 
+`dev box retag BOX --target T` moves a box to another target its machine
+offers. It runs `ci box retag BOX --target T --json` and prints
+`retagged BOX to T`. A box with no `--target`, or with no name, is a usage
+error before ci runs. When ci cannot retag the box, its reason prints on
+standard error, as for the other box verbs, and dev exits with ci's code.
+
 `dev box tools install` reinstalls a running box's tools, for every project or
 the projects named after the box (`dev box tools install BOX [PROJECT...]`), and prints one line per project. A box that is
 not running exits 6.
@@ -178,6 +184,7 @@ A built-in noun for any project, and a thin client over `ci box ... --json`: it 
 | `stop [BOX]` | `stopped <name>, deleted in Nd unless resumed`, with N the days to the box's `delete_after`, rounded up. |
 | `resume [BOX] [--ttl HOURS or --keep]` | Prints `resumed <name> (<target>, <shape>, <projects>), <time left>, host <tailnet_name>`, the line `create` used to print. |
 | `extend [BOX] (--ttl HOURS or --keep)` | One of the two is required. |
+| `retag BOX --target T` | Moves the box to target T through `ci box retag BOX --target T --json` and prints `retagged BOX to T`. Both the box name and `--target` are required, and a missing one is a usage error before ci runs. When ci cannot retag the box, its reason prints on standard error, as for the other box verbs, and dev exits with ci's code. |
 | `tools install [BOX] [PROJECT...]` | Reinstalls a running box's tools through `ci box install-tools BOX --json`, with the projects after `--`, and prints `<project>: tools installed` or `<project>: no .dev/tools.tsv, nothing installed` per project, `no projects` when ci installed none. A box that is not running exits with ci's 6, and a ci error prints as dev box tools install: <message>. |
 | `delete [BOX] [-y] [--no-archive]` | Asks on `/dev/tty`, with the consequence wrapped to the terminal width on lines above the question: `Its projects are archived first.` then `Delete <box>? [y/N]`, or with `--no-archive` `Anything not pushed is lost.` then `Delete <box> without an archive? [y/N]`, and passes `--no-archive` to ci; when a tmux session of the box is attached (read from `ci box ls --json`), the consequence starts with `You're attached to it.`. With no terminal and no `-y` it is a usage error. Prints `Deleted <name> · archive <path>`, or `Deleted <name> · no archive` when ci wrote none, and dev prints no archive-days number of its own. |
 | `connect [BOX] [--ssh]` | Same as `dev connect`, below. |

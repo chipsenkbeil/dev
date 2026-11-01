@@ -170,6 +170,13 @@ return {
         desc = "Replace a running box's lifetime, counted from now",
     },
     {
+        words = { "box", "retag" },
+        handler = "lua",
+        flags = "--target",
+        usage = "dev box retag BOX --target T",
+        desc = "Move a box to another target its machine offers, in the store and its instance's config",
+    },
+    {
         words = { "box", "tools" },
         noun = true,
         desc = "Work with a running box's tools",

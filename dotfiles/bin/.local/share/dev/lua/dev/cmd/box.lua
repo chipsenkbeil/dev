@@ -428,6 +428,10 @@ function M.call(sub, args, opts)
             and doc.ok == false
             and type(doc.error) == "table"
             and doc.error.message
+        local boxes = type(doc) == "table" and doc.retagged or nil
+        if type(message) ~= "string" and type(boxes) == "table" and type(boxes[1]) == "table" then
+            message = boxes[1].error
+        end
         if type(message) == "string" then
             stderr:write("dev box ", sub, ": ", message, "\n")
         elseif out ~= "" then
@@ -1404,6 +1408,22 @@ M.handlers["box extend"] = function(ctx)
     })
     M.need_ci()
     print(M.summary("extended", M.one("extend", box_args("extend", name, parsed))))
+    return 0
+end
+
+M.handlers["box retag"] = function(ctx)
+    local parsed = M.parse(ctx, { "--target" })
+    local name = M.one_name(ctx, parsed)
+    if not parsed.target then
+        verb.usage_error(ctx, "needs --target TARGET")
+    end
+    M.need_ci()
+    local doc = M.call("retag", { "retag", name, "--target", parsed.target, "--json" })
+    local one = type(doc.retagged) == "table" and doc.retagged[1] or nil
+    if type(one) ~= "table" then
+        verb.die("dev: ci box retag printed no box")
+    end
+    print("retagged " .. interp(name) .. " to " .. interp(parsed.target))
     return 0
 end
 

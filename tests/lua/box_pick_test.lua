@@ -17,6 +17,11 @@ local ONE =
 local DELETED =
     [[{"ok":true,"box":{"name":"run-a","state":"deleted","archive":{"path":"/var/x.tar.gz"}}}]]
 
+local RETAGGED = [[{"ok":true,"retagged":[{"name":"run-a","skipped":false,"error":null}]}]]
+
+local FAILED_RETAG =
+    [[{"ok":false,"retagged":[{"name":"run-a","skipped":false,"error":"no instance"}]}]]
+
 local function sandbox()
     local root = support.sandbox({}, {})
     for name, body in pairs({
@@ -26,6 +31,7 @@ local function sandbox()
         resume = ONE,
         extend = ONE,
         delete = DELETED,
+        retag = RETAGGED,
         sync = "",
     }) do
         assert(fs.write(root .. "/" .. name .. ".json", body))
@@ -160,6 +166,43 @@ t.test("delete prints the final line with the archive", function()
     local out, code = support.dev(root, { "box", "delete", "run-a", "-y" }, env(root))
     t.eq(code, 0)
     t.eq(out, "Deleted run-a · archive /var/x.tar.gz\n")
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("retag runs ci box retag with the target and prints the move", function()
+    local root = sandbox()
+    local out, code =
+        support.dev(root, { "box", "retag", "run-a", "--target", "linux-dev" }, env(root))
+    t.eq(code, 0)
+    t.eq(out, "retagged run-a to linux-dev\n")
+    t.eq(read(root, "log"), "box retag run-a --target linux-dev --json\n")
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("retag prints the box's own error and exits with ci's code", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/retag.json", FAILED_RETAG))
+    local body = '#!/bin/sh\necho "$*" >> "'
+        .. root
+        .. '/log"\ncat "'
+        .. root
+        .. '/$2.json"\nexit 1\n'
+    assert(fs.write(root .. "/bin/ci", body))
+    assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    local out, code =
+        support.dev(root, { "box", "retag", "run-a", "--target", "linux-dev" }, env(root))
+    t.eq(code, 1)
+    t.eq(out, "dev box retag: no instance\n")
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("retag without a box name or a target is a usage error before ci runs", function()
+    local root = sandbox()
+    local _, code = support.dev(root, { "box", "retag", "--target", "linux-dev" }, env(root))
+    t.eq(code, 2)
+    _, code = support.dev(root, { "box", "retag", "run-a" }, env(root))
+    t.eq(code, 2)
+    t.eq(read(root, "log"), "")
     fs.remove(root, { recursive = true })
 end)
 
