@@ -48,6 +48,23 @@ t.test("a .lua verb gets positional args and KEY=value vars", function()
     t.ok(out:find("vars\tB=1", 1, true), out)
 end)
 
+t.test("a positional header keeps KEY=value words in args, and other verbs split them", function()
+    local body = assert(fs.read(FIXTURES .. "v.lua"))
+    local root = project({
+        ["p.lua"] = "--[[\nShow the arguments.\npositional\n]]\n" .. body,
+        ["q.lua"] = "--[[\nShow the arguments.\n]]\n" .. body,
+    })
+    local out = dev(root, { "p", "Season=1", "a", "B=2" })
+    t.ok(out:find("args\tSeason=1,a,B=2\n", 1, true), out)
+    t.ok(out:find("vars\t\n", 1, true), out)
+    out = dev(root, { "q", "Season=1", "a" })
+    t.ok(out:find("args\ta\n", 1, true), out)
+    t.ok(out:find("vars\tSeason=1\n", 1, true), out)
+    out = dev(root, { "help", "p" })
+    t.ok(not out:find("positional", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("a .lua verb's integer is the exit code", function()
     local root = project({ ["seven.lua"] = "@seven.lua" })
     local _, code = dev(root, { "seven" })

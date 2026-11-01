@@ -23,8 +23,9 @@ context. Read it with `local ctx = ...`.
 - `ctx.words`: the command words
 - `ctx.root`: the project root, an absolute path
 - `ctx.args`: the positional arguments, with every `KEY=value` word removed
+  unless the header has a `positional` line
 - `ctx.vars`: the `KEY=value` arguments whose key starts with an uppercase
-  letter, by key
+  letter, by key, and empty when the header has a `positional` line
 - `ctx.verbose`: 0, 1 or 2, after `-v`, `-vv` and `VERBOSE`
 - `ctx.interpreter`: the luajit dev runs under, as the launcher started it
 
@@ -49,11 +50,12 @@ early with another code, return it, or call `os.exit`.
 A Lua verb keeps the header lines of a shell script in one leading block
 comment. The block starts with `--[[` alone on the first line and ends with
 `]]` alone on its own line. The first line inside it that is not a `group:`,
-`hidden`, `local` or `flags:` line is the description.
+`hidden`, `local`, `positional` or `flags:` line is the description.
 
 - `group: <name>`: the heading `dev help` lists the verb under
 - `hidden`: keep the verb out of `dev help`, so only `dev help -a` lists it
 - `local`: keep the remote default from sending the verb to ci
+- `positional`: keep `KEY=value` words in `ctx.args` for a Lua verb
 - `flags: --a --b`: the flags `dev help <verb>` and completion offer, and the
   only flags dev lets through to the script before a `--`
 

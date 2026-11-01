@@ -6,7 +6,7 @@ local stderr = io.stderr
 ---@field name string the command as typed, a noun and its subcommand joined by a space
 ---@field words string[] the command words
 ---@field root string absolute path of the project root
----@field args string[] the positional arguments, with every `KEY=value` removed
+---@field args string[] positional arguments, minus `KEY=value` words unless `positional`
 ---@field vars table<string, string> the `KEY=value` arguments, whose key starts with an uppercase letter
 ---@field verbose 0|1|2 the verbosity after the flags and `VERBOSE`
 ---@field interpreter string? the program dev runs under, as the launcher started it

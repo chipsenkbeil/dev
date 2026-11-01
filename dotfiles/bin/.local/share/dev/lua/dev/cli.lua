@@ -132,6 +132,11 @@ local function runs_local(reg, row)
     return header ~= nil and header.runs_local
 end
 
+local function takes_positionals(reg, row)
+    local header = row and reg:header(row)
+    return header ~= nil and header.positional
+end
+
 local function refuse_agent_local(project_root, words)
     if (os.getenv("DEV_AGENT") or "") == "" then
         return
@@ -222,7 +227,6 @@ local function run_script(row, ctx, rest)
     end
     package.path = ctx.root .. "/.dev/lua/?.lua;" .. package.path
     devos.defaults.show = ctx.verbose >= 1
-    ctx.args, ctx.vars = split_vars(rest)
     os.exit(verb.run(row.script, ctx))
 end
 
@@ -435,6 +439,11 @@ function M.main(argv)
     end
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)
+        if takes_positionals(reg, row) then
+            ctx.args, ctx.vars = rest, {}
+        else
+            ctx.args, ctx.vars = split_vars(rest)
+        end
         run_script(row, ctx, rest)
     end
     local handler = builtin_handler(row)
