@@ -365,14 +365,19 @@ local function start_job(argv, dir, streams)
     return code == 0 and tonumber(pid) or nil
 end
 
+local STOP_POLLS = 40
+local STOP_POLL_SECS = 0.05
+
+local STOP = string.format(
+    'kill -s TERM -- "-$1" 2>/dev/null; n=0; '
+        .. 'while kill -s 0 -- "-$1" 2>/dev/null && [ $n -lt %d ]; do '
+        .. "sleep %g; n=$((n+1)); done; true",
+    STOP_POLLS,
+    STOP_POLL_SECS
+)
+
 local function stop_job(pid)
-    devos.run({
-        "sh",
-        "-c",
-        'kill -s TERM -- "-$1" 2>/dev/null; true',
-        "sh",
-        tostring(pid),
-    })
+    devos.run({ "sh", "-c", STOP, "sh", tostring(pid) })
 end
 
 local function finished_code(rc_path)

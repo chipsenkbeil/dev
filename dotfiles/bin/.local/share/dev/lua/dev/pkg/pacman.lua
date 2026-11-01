@@ -10,7 +10,8 @@ local DEFAULT_BUILD_USER = "aurbuild"
 local SUDOERS_DIR = "/etc/sudoers.d"
 local AUR_URL = "https://aur.archlinux.org/"
 local BUILD_PREREQUISITES = { "pacman", "-S", "--needed", "--noconfirm", "base-devel", "git" }
-local GUARDED_BUILD = [[s=$1; trap 'rm -f -- "$s"; kill "$pid" 2>/dev/null' EXIT INT TERM HUP
+local GUARDED_BUILD =
+    [[s=$1; trap 'rm -f -- "$s"; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null' EXIT INT TERM HUP
 (umask 077; printf '%s\n' "$2" >"$s") && chmod 0440 "$s" || exit 1
 shift 2
 "$@" & pid=$!
