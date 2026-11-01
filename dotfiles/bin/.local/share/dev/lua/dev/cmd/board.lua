@@ -47,6 +47,7 @@ local RESERVED_NOTE = "a note cannot begin with "
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
+local NO_BIN = "this board keeps no recycle bin, so dev cannot delete a card from it"
 local KIND_FLAG = "--kind"
 local BY_FLAG = "--by"
 local REV_FLAG = "--rev"
@@ -121,6 +122,9 @@ end
 ---@field path string? the file of a local board, in the state directory when nil
 ---@field root string? the project's root, which a tracked path is under
 ---@field columns table<string, string>? the `[board.columns]` map, keyed by role
+
+---@class dev.cmd.board.OpenOpts
+---@field token_key string? the `[board.pomb]` key that names the token, `token` when nil
 
 ---@class dev.cmd.board.Result
 ---@field output string? what to print on success
@@ -2533,6 +2537,52 @@ function commands.link(backend, args)
     }
 end
 
+local function delete_refusal()
+    local name = os.getenv("DEV_AGENT") or ""
+    if name:find("/", 1, true) then
+        return failure(
+            "only the lead deletes a card, and DEV_AGENT "
+                .. name
+                .. " names a runner's workspace; ask the lead, with the card and the reason"
+        )
+    end
+end
+
+function commands.delete(backend, args)
+    local flags, words = parse(args, { ["--reason"] = true })
+    if not flags then
+        return words
+    end
+    local reason = flags["--reason"]
+    if #words ~= 1 or reason == nil or reason:find("^%s*$") then
+        return usage("needs a card and --reason TEXT")
+    end
+    local refused = delete_refusal()
+    if refused then
+        return refused
+    end
+    if not backend.bin then
+        return failure(NO_BIN)
+    end
+    local text = "the lead deletes this card, reason: " .. reason
+    if board.reserved(text) then
+        return failure(RESERVED_NOTE)
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local ok, message = backend:note(card.id, text, nil, { kind = "decision" })
+    if not ok then
+        return failure(message)
+    end
+    ok, message = backend:bin(card.id)
+    if not ok then
+        return failure(message)
+    end
+    return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to the bin" }
+end
+
 function commands.unlink(backend, args)
     local card, other, shown, err = link_ends(backend, args)
     if not card then
@@ -3145,7 +3195,7 @@ function M.run(sub, args, backend, now, screen)
     return run(backend, args, now, screen)
 end
 
-local function open_backend(settings)
+local function open_backend(settings, token)
     if settings.backend == board.Backend.LOCAL then
         if settings.path then
             return localboard.new({ name = settings.name, path = settings.path })
@@ -3162,7 +3212,7 @@ local function open_backend(settings)
     end
     local backend, message = pomb.new({
         url = config.user("board.pomb.url"),
-        token = config.user("board.pomb.token"),
+        token = config.user("board.pomb." .. token),
         name = settings.name,
     })
     if not backend then
@@ -3173,10 +3223,13 @@ end
 
 ---Build the backend a project's board uses.
 ---@param settings dev.cmd.board.Settings the board's backend and name
+---@param opts dev.cmd.board.OpenOpts? the token key to read, token when nil
 ---@return dev.board.Backend? backend the backend
 ---@return string? message why there is none
-function M.open(settings)
-    local backend, message = open_backend(settings)
+function M.open(settings, opts)
+    local TOKEN_KEY = "token"
+    local token = opts and opts.token_key or TOKEN_KEY
+    local backend, message = open_backend(settings, token)
     if backend then
         backend.column_map = settings.columns
         backend.roles = board.roles(settings.columns)
@@ -3492,6 +3545,27 @@ local function open_board(ctx)
         end
     end
     return backend, pending
+end
+
+local LEAD_TOKEN_KEY = "lead_token"
+
+local function open_lead(ctx)
+    local refused = delete_refusal()
+    if refused then
+        verb.die("dev: " .. refused.message)
+    end
+    local found = settings(ctx)
+    if found.backend ~= board.Backend.POMB then
+        verb.die("dev: " .. NO_BIN)
+    end
+    if config.user("board.pomb." .. LEAD_TOKEN_KEY) == nil then
+        verb.die("dev: [board.pomb] lead_token is not set in ~/.config/dev/config.toml")
+    end
+    local backend, message = M.open(found, { token_key = LEAD_TOKEN_KEY })
+    if not backend then
+        verb.die(message)
+    end
+    return backend
 end
 
 M.handlers["board status"] = function(ctx)
@@ -3826,7 +3900,12 @@ for sub in pairs(commands) do
                 table.insert(args, 1, STRICT_FLAG)
             end
         end
-        local backend, pending = open_board(ctx)
+        local backend, pending
+        if sub == "delete" then
+            backend = open_lead(ctx)
+        else
+            backend, pending = open_board(ctx)
+        end
         local result = M.run(sub, args, backend, nil, sub == "ls" and ui.context() or nil)
         if result.message then
             local note = sub == "note" and (ctx.args[2] == EDIT_FLAG or ctx.args[2] == DELETE_FLAG)

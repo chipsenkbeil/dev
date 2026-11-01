@@ -1432,6 +1432,14 @@ function Backend:set_color(id, fields)
     return true
 end
 
+function Backend:bin(id)
+    local done, message = self:__request("DELETE", "/api/tasks/" .. id)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:set_card(id, fields)
     local done, message = self:__request("PATCH", "/api/tasks/" .. id, fields)
     if not done then

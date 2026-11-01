@@ -59,6 +59,7 @@ local M = {}
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
+---@field bin? fun(self: dev.board.Backend, id: string): boolean?, string? the card moved to the recycle bin, or nil and a message when the backend refuses
 ---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the umbrella) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
 ---@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks`, `related` or `child` entry for each link another card holds on it, in the order the backend gives them
 ---@field unlink fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? the link of that kind from the card to the card with that full id removed, or nil and a message when the card holds no such link or the backend refuses the change

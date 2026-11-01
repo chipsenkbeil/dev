@@ -268,6 +268,13 @@ return {
         desc = "List a card's links: kind, the other card's id prefix and its board name, - for this board",
     },
     {
+        words = { "board", "delete" },
+        handler = "lua",
+        flags = "--reason",
+        usage = "dev board delete CARD --reason TEXT",
+        desc = "Move a card to Pomb's recycle bin with the lead token, after a note that holds the reason. It is refused when DEV_AGENT names a runner's workspace, and Pomb's refusals are shown as they come",
+    },
+    {
         words = { "board", "unlink" },
         handler = "lua",
         usage = "dev board unlink CARD KIND OTHER",

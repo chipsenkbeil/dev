@@ -970,6 +970,19 @@ never handles the API.
   `pomb kept the link`, and leaves the link in place. The change is not queued
   while Pomb is unreachable (exit 1, `board unavailable`). A local board removes
   the link from the card that holds it.
+- `delete CARD --reason TEXT`: Moves a card to Pomb's recycle bin for the lead.
+  It reads `lead_token` from `[board.pomb]`, not `token`, adds a `decision`
+  comment `the lead deletes this card, reason: TEXT` to keep the reason on
+  the card when it is restored, then sends `DELETE /api/tasks/{id}` and prints
+  `moved <id prefix> to the bin`. A `DEV_AGENT` that holds a `/`, the
+  `<session>/<workspace>` form of a runner, is refused with exit 1 before
+  any token is read or any call is made. A local board has no bin and exits 1.
+  Pomb's refusals print as they come: a `permission_denied` 403 names the
+  permission and board, and `card_locked` says the card is locked. A locked
+  card refuses the comment first and keeps nothing. A delete Pomb refuses after
+  the comment leaves the comment on the card. The change is not queued
+  while Pomb is unreachable. Emptying the bin and deleting from it stay with
+  the owner.
 - `stale [--days N] [--icebox-days N] [--lead-hours N]`: Lists the cards that have sat in
   Backlog, Ready, In Progress or In Review for N days or more (7 by default),
   oldest first, one line each: id prefix, column, `<days>d`, size and name,

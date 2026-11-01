@@ -17,6 +17,8 @@ local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
+local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
+    .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
 
 local function executable(path, body)
     assert(fs.write(path, body))
@@ -142,6 +144,10 @@ local function fake(cards, times, finished)
     end
     function backend:unlink(id, kind, other)
         calls[#calls + 1] = { "unlink", id, kind, other }
+        return true
+    end
+    function backend:bin(id)
+        calls[#calls + 1] = { "bin", id }
         return true
     end
     function backend:family(id)
@@ -2565,6 +2571,12 @@ case "$last" in
         if [ -f "$ROOT/label_fail" ]; then
             body='{"message":"nope"}'
             status=400
+        fi
+        ;;
+    *"-X DELETE"*)
+        if [ -f "$ROOT/delete_body" ]; then
+            body=$(cat "$ROOT/delete_body")
+            status=403
         fi
         ;;
     esac
@@ -5097,4 +5109,80 @@ t.test("wait rejects an unknown --for value and a card", function()
     t.eq(result.code, 2)
     t.ok(result.message:find("ready, human and lead", 1, true), result.message)
     t.eq(waited({}, { "abc" }).code, 2)
+end)
+
+t.test("delete needs a card and a reason", function()
+    local backend = fake(sample())
+    for _, args in ipairs({
+        {},
+        { "cccccccc" },
+        { "cccccccc", "--reason", " " },
+        { "--reason", "x" },
+    }) do
+        local result = commands.run("delete", args, backend)
+        t.eq(result.code, 2)
+        t.eq(result.message, "needs a card and --reason TEXT")
+    end
+    t.eq(backend.calls, {})
+end)
+
+t.test("delete notes the reason, then moves the card to the bin with the lead token", function()
+    local root, home = sandbox({ user = LEAD_USER })
+    local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "duplicate" })
+    t.eq(code, 0, out)
+    t.eq(out, "moved 11111111 to the bin\n")
+    local calls = read(root, "calls")
+    local noted = calls:find("-X POST", 1, true)
+    local binned = calls:find("-X DELETE", 1, true)
+    t.ok(noted and binned and noted < binned, calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "\n", 1, true), calls)
+    t.ok(calls:find("pass show secrets/lead/token/pomb", 1, true), calls)
+    t.eq(calls:find("pass show secrets/worker", 1, true), nil)
+    t.ok(calls:find("the lead deletes this card, reason: duplicate", 1, true), calls)
+end)
+
+t.test("delete is refused for a runner, with no call and no token read", function()
+    local root, home = sandbox({ user = LEAD_USER })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "delete", "11111111-a", "--reason", "duplicate" },
+        { agent = "project-run/pombbin" }
+    )
+    t.eq(code, 1, out)
+    t.ok(out:find("only the lead deletes a card", 1, true), out)
+    t.ok(out:find("project-run/pombbin", 1, true), out)
+    t.eq(read(root, "calls"), "")
+end)
+
+t.test("delete without a lead token or on a local board does nothing", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    t.eq(code, 1, out)
+    t.ok(out:find("lead_token is not set", 1, true), out)
+    t.eq(read(root, "calls"), "")
+    root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "scratch"\n' })
+    out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    t.eq(code, 1, out)
+    t.ok(out:find("keeps no recycle bin", 1, true), out)
+end)
+
+t.test("delete shows Pomb's permission_denied and card_locked as they come", function()
+    local root, home = sandbox({ user = LEAD_USER })
+    assert(
+        fs.write(
+            root .. "/delete_body",
+            '{"code":"permission_denied","permission":"tasks.bin","message":"m","board_id":null}'
+        )
+    )
+    local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    t.eq(code, 1, out)
+    t.ok(out:find("tasks.bin", 1, true), out)
+    root, home = sandbox({ user = LEAD_USER })
+    assert(fs.write(root .. "/locked", ""))
+    out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    t.eq(code, 1, out)
+    t.ok(out:find("labelled needs:human", 1, true), out)
+    t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
 end)
