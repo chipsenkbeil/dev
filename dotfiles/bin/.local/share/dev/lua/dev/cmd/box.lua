@@ -31,6 +31,7 @@ local VALUE_FLAGS = { ["--target"] = true, ["--shape"] = true, ["--by"] = true, 
 ---@field Exit dev.cmd.box.Exit the exit codes dev picks itself, ci's own are passed through
 local M = {
     handlers = {},
+    SECONDS_PER_HOUR = SECONDS_PER_HOUR,
     SECONDS_PER_DAY = SECONDS_PER_DAY,
     State = { RUNNING = "running", STOPPED = "stopped" },
     Exit = { FAILED = 1, NOT_FOUND = 3, NOT_READY = 6 },

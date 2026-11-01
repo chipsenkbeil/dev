@@ -44,7 +44,7 @@ local M = {}
 ---@field roles dev.board.Roles? the column set of this run, which the runner sets before a command
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
 ---@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board defines the custom field with that key, or nil and a message
----@field next fun(self: dev.board.Backend, column: string): dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human, or nil and a message when it failed
+---@field next fun(self: dev.board.Backend, column: string, opts: dev.board.NextOpts?): dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human, or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
 ---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card entered its column, as an RFC 3339 stamp by card id, or nil and a message
 ---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?): boolean?, string? the card given the palette colour of that value, checked against the claim's fence when one is given
@@ -96,6 +96,9 @@ local M = {}
 ---@field author string? the role label it was written under, when it has one
 ---@field actor string? the kind of actor that wrote it, `human` or `agent`, when known
 
+---@class dev.board.NextOpts
+---@field label string? the label the card must carry
+
 ---@class dev.board.AddOpts
 ---@field description string? the card's description
 ---@field color string? the standard value of the palette colour to give it
@@ -143,6 +146,9 @@ M.CHECKS_RUN = "run"
 
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"
+
+---The label of a card that waits on a higher tier.
+M.NEEDS_LEAD = "needs:lead"
 
 ---The label `discard` puts on a card it drops, which a Done card may carry unticked.
 M.DISCARDED = "discarded"

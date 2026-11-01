@@ -225,7 +225,7 @@ return {
         handler = "lua",
         flags = "--column",
         usage = "dev board next [--column C]",
-        desc = "Show the top Ready card nobody has claimed, nothing blocks and no needs:human label marks, or with --column Backlog or Icebox the top such card there",
+        desc = "Show the top Ready card nobody has claimed, nothing blocks and no needs:human label marks, or with --column Backlog or Icebox the top such card there, or with --column Blocked the top unclaimed needs:lead card",
     },
     {
         words = { "board", "add" },
@@ -370,9 +370,9 @@ return {
     {
         words = { "board", "stale" },
         handler = "lua",
-        flags = "--days --icebox-days",
-        usage = "dev board stale [--days N] [--icebox-days N]",
-        desc = "List the cards that sat in Backlog, Ready, In Progress or In Review for N days (7 by default), oldest first, the needs:human ones apart, and the Icebox cards untouched for --icebox-days (30 by default)",
+        flags = "--days --icebox-days --lead-hours",
+        usage = "dev board stale [--days N] [--icebox-days N] [--lead-hours N]",
+        desc = "List the cards that sat in Backlog, Ready, In Progress or In Review for N days (7 by default), oldest first, the needs:human ones apart, the needs:lead cards in Blocked for --lead-hours (1 by default), and the Icebox cards untouched for --icebox-days (30 by default)",
     },
     {
         words = { "board", "lint" },
@@ -411,8 +411,8 @@ return {
         words = { "board", "wait" },
         handler = "lua",
         flags = "--for",
-        usage = "dev board wait [--for ready|human]",
-        desc = "Block until the board changes, then print a line per change and exit 0, so a background run wakes the session: --for ready a card added to or moved into Ready, --for human a card moved out of Blocked",
+        usage = "dev board wait [--for ready|human|lead]",
+        desc = "Block until the board changes, then print a line per change and exit 0, so a background run wakes the session: --for ready a card added to or moved into Ready, --for human a card moved out of Blocked, --for lead a needs:lead card in Blocked",
     },
     {
         words = { "bootstrap" },

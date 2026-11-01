@@ -485,7 +485,8 @@ function Backend:done_columns()
     return names
 end
 
-function Backend:next(column)
+function Backend:next(column, opts)
+    local label = opts and opts.label
     local doc, message = self:__read()
     if not doc then
         return nil, message
@@ -501,6 +502,7 @@ function Backend:next(column)
             and not is_blocked(doc, card)
             and not board.labelled(card, board.NEEDS_HUMAN)
             and not board.labelled(card, board.RUN)
+            and (not label or board.labelled(card, label))
         then
             return card_view(doc, card)
         end

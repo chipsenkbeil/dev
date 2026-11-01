@@ -227,6 +227,42 @@ t.test("next --column backlog skips a needs:human card", function()
     t.eq(out, "no cards in Backlog\n")
 end)
 
+t.test("next --column blocked returns the top unclaimed needs:lead card only", function()
+    local root, home = local_board()
+    local function blocked(name, label)
+        local out, code = dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            "blocked",
+            "--size",
+            "1",
+            "--problem",
+            "x",
+            "--done-when",
+            "a",
+            "--label",
+            label,
+        })
+        t.eq(code, 0, out)
+        return prefix_of(out)
+    end
+    blocked("Plain", "docs")
+    blocked("Human", "needs:human")
+    local claimed = blocked("Claimed", "needs:lead")
+    local free = blocked("Free", "needs:lead")
+    local out, code = dev(root, home, { "board", "take", claimed })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "next", "--column", "blocked" })
+    t.eq(code, 0, out)
+    t.ok(out:find(free, 1, true) and out:find("Free", 1, true), out)
+    out, code = dev(root, home, { "board", "label", free, "needs:human" })
+    t.eq(code, 0, out)
+    out = dev(root, home, { "board", "next", "--column", "blocked" })
+    t.eq(out, "no cards in Blocked\n")
+end)
+
 t.test("rename sets a local card's title and refuses a blank one", function()
     local root, home = local_board()
     local a = prefix_of(

@@ -570,7 +570,8 @@ function Backend:entered()
     return times
 end
 
-function Backend:next(column)
+function Backend:next(column, opts)
+    local label = opts and opts.label
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -618,6 +619,7 @@ function Backend:next(column)
                 and not blocked
                 and not board.labelled(card, board.NEEDS_HUMAN)
                 and not board.labelled(card, board.RUN)
+                and (not label or board.labelled(card, label))
             then
                 return card
             end

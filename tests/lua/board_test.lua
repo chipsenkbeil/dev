@@ -13,6 +13,7 @@ local OLD_TOKEN = "pomb_OLDtoken9876543210"
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
@@ -46,8 +47,23 @@ local function fake(cards, times, finished)
     function backend:cards()
         return cards
     end
-    function backend:next()
-        return cards[1]
+    function backend:next(column, opts)
+        local label = opts and opts.label
+        calls[#calls + 1] = { "next", column, label }
+        if not label then
+            return cards[1]
+        end
+        for _, card in ipairs(cards) do
+            local labels = table.concat(card.labels or {}, ",")
+            if
+                card.column == column
+                and not card.claimant
+                and labels:find(label, 1, true)
+                and not labels:find("needs:human", 1, true)
+            then
+                return card
+            end
+        end
     end
     function backend:has_field()
         return not backend.nofield
@@ -2174,6 +2190,73 @@ t.test("stale --days moves the limit", function()
         result.output,
         "00000002  Ready  3d  unsized  Card 2\n00000001  Ready  2d  unsized  Card 1"
     )
+end)
+
+local function lead_cards()
+    local lead, human = { "needs:lead" }, { "needs:lead", "needs:human" }
+    local cards, times = aged(
+        { "Blocked", "Blocked", "Blocked", "Ready", "Blocked", "Blocked" },
+        { 0, 0, 0, 0, 0, 0 },
+        { lead, lead, human, lead, lead, {} }
+    )
+    for index, hours in ipairs({ 3, 0.5, 5, 5, 7, 9 }) do
+        local at = NOW - hours * box.SECONDS_PER_HOUR
+        times[cards[index].id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", at)
+    end
+    return cards, times
+end
+
+t.test("stale lists a Blocked needs:lead card past an hour, oldest first", function()
+    local cards, times = lead_cards()
+    local result = commands.run("stale", {}, fake(cards, times), NOW)
+    t.eq(
+        result.output,
+        "no stale cards\n\nfor the owner (needs:human):\n00000003  Blocked  0d  unsized  Card 3\n\n"
+            .. "for a lead (needs:lead):\n00000005  Blocked  7h  unsized  Card 5\n"
+            .. "00000001  Blocked  3h  unsized  Card 1"
+    )
+end)
+
+t.test("stale --lead-hours moves the bound and refuses a bad value", function()
+    local cards, times = lead_cards()
+    local result = commands.run("stale", { "--lead-hours", "4" }, fake(cards, times), NOW)
+    t.ok(
+        result.output:find(
+            "for a lead (needs:lead):\n00000005  Blocked  7h  unsized  Card 5",
+            1,
+            true
+        )
+    )
+    t.ok(not result.output:find("Card 1", 1, true), result.output)
+    for _, word in ipairs({ "0", "x", "1.5", "" }) do
+        t.eq(commands.run("stale", { "--lead-hours", word }, fake({}), NOW).code, 2, word)
+    end
+    t.eq(commands.run("stale", { "--lead-hours" }, fake({}), NOW).code, 2)
+end)
+
+t.test("next --column blocked asks the backend for a needs:lead card", function()
+    local backend = fake(sample())
+    commands.run("next", { "--column", "blocked" }, backend)
+    t.eq(backend.calls[1], { "next", "Blocked", "needs:lead" })
+    backend = fake(sample())
+    commands.run("next", {}, backend)
+    t.eq(backend.calls[1], { "next", "Ready", nil })
+    t.eq(commands.run("next", { "--column", "done" }, fake(sample())).code, 2)
+end)
+
+t.test("next --column blocked skips a needs:human card and a claimed one", function()
+    local lead = { "needs:lead" }
+    local cards = aged(
+        { "Blocked", "Blocked", "Blocked", "Ready", "Blocked" },
+        { 0, 0, 0, 0, 0 },
+        { { "needs:lead", "needs:human" }, lead, lead, lead, lead }
+    )
+    cards[2].claimant = "someone"
+    local result = commands.run("next", { "--column", "blocked" }, fake(cards))
+    t.ok(result.output:find("00000003", 1, true), result.output)
+    cards[3].claimant = "someone"
+    cards[5].labels = {}
+    t.eq(commands.run("next", { "--column", "blocked" }, fake(cards)).output, "no cards in Blocked")
 end)
 
 t.test("stale refuses a bad --days with a usage error", function()
@@ -4487,9 +4570,15 @@ local function waiter(replies)
     return backend, seen
 end
 
-local function waited(replies, args, path)
+local function waited(replies, args, opts)
+    opts = opts or {}
     local backend, seen = waiter(replies)
-    path = path or support.tempdir() .. "/wait"
+    if opts.cards or opts.cards_error then
+        function backend:cards()
+            return opts.cards, opts.cards_error
+        end
+    end
+    local path = opts.path or support.tempdir() .. "/wait"
     local result = commands.wait(backend, args, {
         stem = path,
         nap = function(seconds)
@@ -4546,6 +4635,41 @@ t.test("wait --for human wakes on a move out of Blocked and not on a comment", f
     t.eq(seen.kinds[1], "task_moved")
 end)
 
+t.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
+    local cards = {
+        { id = ID_A, column = "Blocked", labels = { "needs:lead" } },
+        { id = ID_B, column = "Blocked", labels = { "needs:lead", "needs:human" } },
+        { id = ID_C, column = "Ready", labels = { "needs:lead" } },
+        { id = ID_D, column = "Blocked", labels = { "needs:lead" }, claimant = "x" },
+    }
+    local result, seen, path = waited({
+        got("1"),
+        got(
+            "2",
+            { kind = "task_moved", task_id = ID_C, column = "Ready" },
+            { kind = "task_added", task_id = ID_B, column = "Blocked" },
+            { kind = "task_updated", task_id = ID_D, column = "Blocked" }
+        ),
+        got(
+            "3",
+            { kind = "task_updated", task_id = ID_A, column = "Blocked" },
+            { kind = "task_added", task_id = ID_A, column = "Blocked" }
+        ),
+    }, { "--for", "lead" }, { cards = cards })
+    t.eq(result.output, "11111111 is labelled needs:lead in Blocked")
+    t.eq(seen.kinds[1], "task_added,task_moved,task_updated")
+    t.eq(fs.read(path .. ".lead.cursor"), "3\n")
+end)
+
+t.test("wait --for lead leaves the cursor alone when the board cannot be read", function()
+    local result, _, path = waited({
+        got("1"),
+        got("2", { kind = "task_added", task_id = ID_A, column = "Blocked" }),
+    }, { "--for", "lead" }, { cards_error = "pomb is down" })
+    t.eq(result.code, 1)
+    t.eq(fs.read(path .. ".lead.cursor"), "1\n")
+end)
+
 t.test("wait without --for matches every kind", function()
     local result, seen = waited({
         got("1", { kind = "comment_added", task_id = ID_A, column = "Ready" }),
@@ -4559,7 +4683,7 @@ t.test("wait resumes from the stored cursor", function()
     assert(fs.write(path .. ".ready.cursor", "41\n"))
     local result, seen = waited({
         got("42", { kind = "task_added", task_id = ID_A, column = "Ready" }),
-    }, { "--for", "ready" }, path)
+    }, { "--for", "ready" }, { path = path })
     t.eq(result.output, "added 11111111 to Ready")
     t.eq(seen.afters, { "41" })
     t.eq(fs.read(path .. ".ready.cursor"), "42\n")
@@ -4569,7 +4693,7 @@ t.test("wait resumes from the stored cursor", function()
             "10",
             { kind = "task_moved", task_id = ID_A, column = "Ready", from_column = "Blocked" }
         ),
-    }, { "--for", "human" }, path)
+    }, { "--for", "human" }, { path = path })
     t.eq(other.afters, { "none", "9" })
 end)
 
@@ -4681,6 +4805,6 @@ end)
 t.test("wait rejects an unknown --for value and a card", function()
     local result = waited({}, { "--for", "everyone" })
     t.eq(result.code, 2)
-    t.ok(result.message:find("ready and human", 1, true), result.message)
+    t.ok(result.message:find("ready, human and lead", 1, true), result.message)
     t.eq(waited({}, { "abc" }).code, 2)
 end)

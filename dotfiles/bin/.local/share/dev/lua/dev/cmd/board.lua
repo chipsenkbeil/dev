@@ -33,6 +33,7 @@ local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
 local STALE_DAYS = 7
 local ICEBOX_DAYS = 30
+local LEAD_HOURS = 1
 local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local EXPECT_FAIL_FLAG = "--expect-fail"
@@ -544,12 +545,17 @@ function commands.next(backend, args)
         if not named then
             return err
         end
-        if named ~= roles.ready and named ~= roles.backlog and named ~= roles.icebox then
-            return usage("next --column takes Ready, Backlog or Icebox")
+        local takes = named == roles.ready
+            or named == roles.backlog
+            or named == roles.icebox
+            or named == roles.blocked
+        if not takes then
+            return usage("next --column takes Ready, Backlog, Icebox or Blocked")
         end
         column = named
     end
-    local card, message = backend:next(column)
+    local card, message =
+        backend:next(column, { label = column == roles.blocked and board.NEEDS_LEAD or nil })
     if not card then
         if message then
             return failure(message)
@@ -2513,7 +2519,7 @@ local function stale_rows(cards)
         rows[#rows + 1] = {
             card.id:sub(1, board.MIN_PREFIX),
             card.column,
-            card.days .. "d",
+            card.hours and card.hours .. "h" or card.days .. "d",
             card.size,
             card.name .. (card.answered and ANSWERED_NOTE or ""),
         }
@@ -2521,13 +2527,14 @@ local function stale_rows(cards)
     return board.table_lines(rows)
 end
 
-local function day_limit(flag, value, default)
+local function whole_limit(flag, value, opts)
     if not value then
-        return default
+        return opts.default
     end
     local limit = value:find("^%d+$") and tonumber(value)
     if not limit or limit < 1 then
-        return nil, usage(flag .. " needs a whole number of days, 1 or more: " .. value)
+        return nil,
+            usage(flag .. " needs a whole number of " .. opts.unit .. ", 1 or more: " .. value)
     end
     return limit
 end
@@ -2590,20 +2597,32 @@ local function icebox_rows(backend, cards, entered, limit, now)
 end
 
 function commands.stale(backend, args, now)
-    local flags, extra = parse(args, { ["--days"] = true, ["--icebox-days"] = true })
+    local flags, extra =
+        parse(args, { ["--days"] = true, ["--icebox-days"] = true, ["--lead-hours"] = true })
     if not flags then
         return extra
     end
     if #extra > 0 then
         return usage("unknown argument " .. extra[1])
     end
-    local limit, refusal = day_limit("--days", flags["--days"], STALE_DAYS)
+    local limit, refusal =
+        whole_limit("--days", flags["--days"], { default = STALE_DAYS, unit = "days" })
     if not limit then
         return refusal
     end
     local icebox_limit
-    icebox_limit, refusal = day_limit("--icebox-days", flags["--icebox-days"], ICEBOX_DAYS)
+    icebox_limit, refusal = whole_limit(
+        "--icebox-days",
+        flags["--icebox-days"],
+        { default = ICEBOX_DAYS, unit = "days" }
+    )
     if not icebox_limit then
+        return refusal
+    end
+    local lead_limit
+    lead_limit, refusal =
+        whole_limit("--lead-hours", flags["--lead-hours"], { default = LEAD_HOURS, unit = "hours" })
+    if not lead_limit then
         return refusal
     end
     local cards, message = backend:cards()
@@ -2617,8 +2636,31 @@ function commands.stale(backend, args, now)
     end
     now = now or os.time()
     local roles = backend.roles
-    local found, owner, moved, undated, unsized = {}, {}, {}, {}, {}
+    local found, owner, moved, undated, unsized, lead = {}, {}, {}, {}, {}, {}
     for _, card in ipairs(cards) do
+        if
+            card.column == roles.blocked
+            and not card.done
+            and index_of(card.labels, board.NEEDS_LEAD)
+            and not index_of(card.labels, board.NEEDS_HUMAN)
+        then
+            local at = entered[card.id] and box.parse_time(entered[card.id])
+            if not at then
+                undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name
+            else
+                local hours = math.floor((now - at) / box.SECONDS_PER_HOUR)
+                if hours >= lead_limit then
+                    lead[#lead + 1] = {
+                        id = card.id,
+                        column = card.column,
+                        size = card.size,
+                        name = card.name,
+                        hours = hours,
+                        at = at,
+                    }
+                end
+            end
+        end
         if card.column ~= roles.icebox and board.has_color(card, board.SIZES.unsized) then
             unsized[#unsized + 1] = card
         end
@@ -2670,6 +2712,7 @@ function commands.stale(backend, args, now)
     table.sort(found, oldest)
     table.sort(owner, oldest)
     table.sort(moved, oldest)
+    table.sort(lead, oldest)
     local lines = {}
     if #found == 0 then
         lines[1] = "no stale cards"
@@ -2680,6 +2723,11 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "for the owner (" .. board.NEEDS_HUMAN .. "):"
         append(lines, stale_rows(owner))
+    end
+    if #lead > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "for a lead (" .. board.NEEDS_LEAD .. "):"
+        append(lines, stale_rows(lead))
     end
     if #moved > 0 then
         lines[#lines + 1] = ""
@@ -3382,7 +3430,7 @@ M.handlers["board status"] = function(ctx)
     return 0
 end
 
-local WaitFor = { READY = "ready", HUMAN = "human" }
+local WaitFor = { READY = "ready", HUMAN = "human", LEAD = "lead" }
 local EventKind = {
     ADDED = "task_added",
     MOVED = "task_moved",
@@ -3393,6 +3441,7 @@ local WAIT_KINDS = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED, EventK
 local WAIT_FOR_KINDS = {
     [WaitFor.READY] = { EventKind.ADDED, EventKind.MOVED },
     [WaitFor.HUMAN] = { EventKind.MOVED },
+    [WaitFor.LEAD] = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED },
 }
 local WAIT_RETRY_SECONDS = 30
 local WAIT_LIMITED_MAX_SECONDS = 300
@@ -3423,10 +3472,35 @@ local function entropy()
     return n / 4294967296
 end
 
-local function wait_line(event, only, roles)
+local function lead_cards(backend, roles)
+    local cards, message = backend:cards()
+    if not cards then
+        return nil, message
+    end
+    local waiting = {}
+    for _, card in ipairs(cards) do
+        if
+            card.column == roles.blocked
+            and not card.claimant
+            and index_of(card.labels, board.NEEDS_LEAD)
+            and not index_of(card.labels, board.NEEDS_HUMAN)
+        then
+            waiting[card.id] = true
+        end
+    end
+    return waiting
+end
+
+local function wait_line(event, opts)
+    local only, roles, leads = opts.only, opts.roles, opts.leads
     local id = event.task_id:sub(1, board.MIN_PREFIX)
     local added = event.kind == EventKind.ADDED
-    if only == WaitFor.HUMAN then
+    if only == WaitFor.LEAD then
+        if leads[event.task_id] then
+            leads[event.task_id] = nil
+            return id .. " is labelled " .. board.NEEDS_LEAD .. " in " .. roles.blocked
+        end
+    elseif only == WaitFor.HUMAN then
         if event.kind == EventKind.MOVED and event.from_column == roles.blocked then
             return "moved " .. id .. " out of " .. roles.blocked
         end
@@ -3474,7 +3548,7 @@ function M.wait(backend, args, opts)
     end
     local only = flags["--for"]
     if only and not WAIT_FOR_KINDS[only] then
-        return usage("unknown --for " .. only .. ", the choices are ready and human")
+        return usage("unknown --for " .. only .. ", the choices are ready, human and lead")
     end
     local roles = backend.roles or board.roles()
     local nap = opts.nap or devos.nap
@@ -3494,6 +3568,14 @@ function M.wait(backend, args, opts)
             if type(reply.cursor) ~= "string" then
                 return failure("pomb answered without a cursor")
             end
+            local leads
+            if only == WaitFor.LEAD and #reply.events > 0 then
+                local why
+                leads, why = lead_cards(backend, roles)
+                if not leads then
+                    return failure(why)
+                end
+            end
             local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
             if not saved then
                 return failure(why)
@@ -3502,7 +3584,7 @@ function M.wait(backend, args, opts)
             local lines = {}
             for _, event in ipairs(reply.events) do
                 lines[#lines + 1] = type(event.task_id) == "string"
-                        and wait_line(event, only, roles)
+                        and wait_line(event, { only = only, roles = roles, leads = leads })
                     or nil
             end
             if #lines > 0 then

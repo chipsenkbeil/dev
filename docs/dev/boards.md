@@ -257,7 +257,9 @@ Every card in every column is fair game for an agent unless it is labelled
 - In Review: the change is under review or ci, then `dev board land` lands it
   and moves the card to Done. Still the claimant's.
 - Blocked: waiting on an answer. `needs:human` is yours alone. `needs:lead` is
-  for a higher-tier agent, which answers and moves the card out.
+  for a higher-tier agent, which answers and moves the card out. A lead finds
+  one with `dev board next --column blocked` and parks on
+  `dev board wait --for lead`.
 - Done: landed, answered, or dropped with a note.
 
 An agent with nothing Ready takes the top of Backlog and then Icebox, planning
@@ -309,8 +311,10 @@ when outcomes, a column such as `1/3` (ticked over all) follows the labels. The
 size is the card colour's palette label, or `unsized`. `next` prints the top
 Ready card that is unclaimed, not blocked and not labelled `needs:human`, or
 `no ready cards`. `next --column backlog` and `next --column icebox` take the
-top such card of those columns instead, or print `no cards in <column>`. Any
-other column is exit 2.
+top such card of those columns instead, or print `no cards in <column>`.
+`next --column blocked` prints the top unclaimed card labelled `needs:lead`,
+never one that also carries `needs:human`, or `no cards in Blocked`. Any other
+column is exit 2.
 
 `add` puts a card in Backlog unless `--column` names another column, and writes
 the three card format v2 headings into the description (Problem, Change and Out
@@ -539,7 +543,7 @@ or one made before Pomb 0.5.40 (which records no creator), gets a 403
 for, leaving the link in place. Unlike `link`, `unlink` is not queued while Pomb
 is unreachable.
 
-`stale [--days N] [--icebox-days N]` lists the cards that have sat in Backlog,
+`stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards that have sat in Backlog,
 Ready, In Progress or In Review for N days or more, 7 by default, oldest first.
 Each line is the id prefix, the column, the days in it (`9d`), the size and the
 name. It counts whole days from the card's `column_entered_at`, which Pomb gives
@@ -554,7 +558,10 @@ and an agent should take the label off (per the board guide). A card in one of
 those columns, or with that label, that the tasks view did not date gets a line
 `could not date <id> <name>` after a blank line, instead of being skipped. When
 nothing is stale it prints `no stale cards`. A `--days` that is not a whole
-number of 1 or more is a usage error (exit 2). Every card that is
+number of 1 or more is a usage error (exit 2). Every card
+labelled `needs:lead` (and not `needs:human`) that has sat in Blocked for
+`--lead-hours` hours or more (1 by default) is listed apart under
+`for a lead (needs:lead):`, with its time as `<hours>h`. Every card that is
 unsized (white or no colour), in any column but Icebox, is also listed at any age, apart,
 under `unsized outside Icebox:` with its id prefix, column and name, so a planner sees
 what still needs a size. Last, under `icebox, untouched for N days:`, it lists
@@ -686,20 +693,25 @@ parks on it instead of polling or ending idle. Run it in the background under
 ```
 timeout 3600 dev board wait --for ready
 timeout 3600 dev board wait --for human
+timeout 3600 dev board wait --for lead
 ```
 
 `--for ready` wakes on a card added to Ready or moved into it and prints
 `added <id prefix> to Ready` or `moved <id prefix> to Ready`. `--for human`
 wakes only on a card moved out of Blocked and prints
 `moved <id prefix> out of Blocked` (a comment on a Blocked card never wakes it).
+`--for lead` wakes on a card added, moved or updated that is now in Blocked with
+the `needs:lead` label, no claim and without `needs:human`, and prints
+`<id prefix> is labelled needs:lead in Blocked`. Pomb's events carry no labels,
+so it reads the board for each batch of events.
 With no `--for`, every added card, move, update and comment wakes it. Any other
 `--for` value is a usage error, and a local board is
 `dev: a local board has nothing to wait on` (exit 1). `wait` is never queued.
 
 The command asks Pomb for events after a cursor and holds each request for up to
 50 seconds, repeating on a quiet board until a matching event arrives. It keeps
-the cursor in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`ready`, `human`
-or `all`), readable by you alone and saved after every reply, so a change made
+the cursor in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`ready`, `human`,
+`lead` or `all`), readable by you alone and saved after every reply, so a change made
 while no wait was running wakes the next one. With no cursor file the first call
 starts from now. When Pomb has dropped the events after the stored cursor,
 `wait` stores the oldest one it still has, prints
@@ -783,7 +795,10 @@ never handles the API.
   labelled `needs:human` or `run`, in the `ls` format, else `no ready cards`
   (exit 0).
   `--column backlog` or `--column icebox` takes the top such card of that column
-  instead, else `no cards in <column>` (exit 0). Any other column is exit 2.
+  instead, else `no cards in <column>` (exit 0). `--column blocked` takes the top
+  unclaimed card labelled `needs:lead`, never one labelled `needs:human` and,
+  like every `next`, never one that a card outside Done blocks. Any other
+  column is exit 2.
 - `add NAME [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
   Creates the card, in Backlog by default, and prints
   `added <id prefix> <column>`. `--size` gives it the colour of the size, as
@@ -892,7 +907,7 @@ never handles the API.
   `pomb kept the link`, and leaves the link in place. The change is not queued
   while Pomb is unreachable (exit 1, `board unavailable`). A local board removes
   the link from the card that holds it.
-- `stale [--days N] [--icebox-days N]`: Lists the cards that have sat in
+- `stale [--days N] [--icebox-days N] [--lead-hours N]`: Lists the cards that have sat in
   Backlog, Ready, In Progress or In Review for N days or more (7 by default),
   oldest first, one line each: id prefix, column, `<days>d`, size and name,
   aligned. Days are whole days from the card's `column_entered_at` (Pomb's task
@@ -1352,18 +1367,21 @@ for the others), from `claim.claimant` of `/export-data` while
 `claim.expires_at` is in the future. Moving a card keeps the loop only into In
 Progress, so `next`, `take`, `move progress` works.
 
-`dev board wait [--for ready|human]` (Pomb only) loops on `Backend:wait` until
+`dev board wait [--for ready|human|lead]` (Pomb only) loops on `Backend:wait` until
 an event matches and prints one line per matching event in the reply, then exits
 0, so a background run under `timeout` wakes the session. `--for ready` sends
 kinds `task_added,task_moved` and matches a card whose column is Ready after the
 event (`added <id prefix> to Ready`, `moved <id prefix> to Ready`),
 `--for human` sends `task_moved` and matches a move whose `from_column` is
-Blocked (`moved <id prefix> out of Blocked`), so a comment never matches it, and
-with no `--for` all four kinds match (`added <id> to <column>`,
+Blocked (`moved <id prefix> out of Blocked`), so a comment never matches it,
+`--for lead` sends `task_added,task_moved,task_updated` and, for each reply with
+events, reads `Backend:cards` and matches an event whose card is in Blocked with
+`needs:lead` and no `needs:human` (`<id prefix> is labelled needs:lead in Blocked`,
+once per card per reply), and with no `--for` all four kinds match (`added <id> to <column>`,
 `moved <id> to <column>`, `updated <id>`, `commented on <id>`). An unknown
 `--for`, a card argument or another flag is exit 2, and a local board is
 `dev: a local board has nothing to wait on` (exit 1). The cursor is
-`<state home>/dev/boards/<name>.<ready|human|all>.cursor`, one per `--for` mode
+`<state home>/dev/boards/<name>.<ready|human|lead|all>.cursor`, one per `--for` mode
 so a filtered wait never consumes another mode's events (the name with every
 character outside `A-Za-z0-9._-` turned into `_`) at mode 600, written after
 every reply, and with no file the first call asks without a cursor and starts
