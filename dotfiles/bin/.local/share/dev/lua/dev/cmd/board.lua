@@ -27,6 +27,7 @@ local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
 local OWNER_MARK = " (owner)"
+local DONE_MARK = " (done)"
 local CLAIMANT_CHARS = 200
 local NAME_PATTERN = '^[^%c"\\]+$'
 local NAME_CHARS = 100
@@ -3011,6 +3012,32 @@ function commands.unlink(backend, args)
     end
     local held = #list == 0 and "it holds no links" or "its links are\n" .. link_rows(list)
     return failure("the card holds no " .. args[2] .. " link to " .. shown .. ", " .. held)
+end
+
+function commands.boards(backend, args)
+    if #args > 0 then
+        return usage("unknown argument " .. args[1])
+    end
+    local names, message = backend:boards()
+    if not names then
+        return failure(message)
+    end
+    return { output = table.concat(names, "\n") }
+end
+
+function commands.columns(backend, args)
+    if #args > 1 then
+        return usage("takes at most one board name")
+    end
+    local rows, message = backend:columns(args[1])
+    if not rows then
+        return failure(message)
+    end
+    local lines = {}
+    for i, column in ipairs(rows) do
+        lines[i] = column.name .. (column.is_done and DONE_MARK or "")
+    end
+    return { output = table.concat(lines, "\n") }
 end
 
 function commands.links(backend, args)

@@ -122,6 +122,27 @@ t.test("the board file is private and writes leave no temporary file", function(
     t.eq(names, { "mine.json", "mine.json.lock" })
 end)
 
+t.test("boards and columns answer for a local board's own name only", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, { "board", "boards" })
+    t.eq(code, 0, out)
+    t.eq(out, "mine\n")
+    local columns = "Icebox\nBacklog\nReady\nIn Progress\nIn Review\nBlocked\nDone (done)\n"
+    out, code = dev(root, home, { "board", "columns" })
+    t.eq(code, 0, out)
+    t.eq(out, columns)
+    out, code = dev(root, home, { "board", "columns", "mine" })
+    t.eq(code, 0, out)
+    t.eq(out, columns)
+    out, code = dev(root, home, { "board", "columns", "other" })
+    t.eq(code, 1, out)
+    t.eq(out, "dev: a local board knows only its own columns, so other is not reachable\n")
+    out, code = dev(root, home, { "board", "columns", "mine", "extra" })
+    t.eq(code, 2, out)
+    out, code = dev(root, home, { "board", "boards", "extra" })
+    t.eq(code, 2, out)
+end)
+
 t.test("add, ls, next, move, size and label work on a local board", function()
     local root, home = local_board()
     local out, code = dev(root, home, {

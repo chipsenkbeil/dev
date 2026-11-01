@@ -40,6 +40,10 @@ local M = {}
 ---@field cursor string the cursor to send as `after` next
 ---@field events dev.board.Event[] the events, oldest first, empty when the wait timed out
 
+---@class dev.board.ColumnRow
+---@field name string the column's name
+---@field is_done boolean whether a card in it counts as finished
+
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
 ---@field done_columns fun(self: dev.board.Backend): string[]?, string? the names of the columns marked finished, in board order, or nil and a message
@@ -69,6 +73,8 @@ local M = {}
 ---@field unlink fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? the link of that kind from the card to the card with that full id removed, or nil and a message when the card holds no such link or the backend refuses the change
 ---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's umbrella and the count of its children
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
+---@field boards fun(self: dev.board.Backend): string[]?, string? the names of the boards the token sees, in the server's order, or nil and a message
+---@field columns fun(self: dev.board.Backend, name: string?): dev.board.ColumnRow[]?, string? the columns of the named board, or of this one when nil, in board order, or nil and a message
 ---@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?): dev.board.Events?, string?, string?, boolean? the events after the cursor, oldest first, held up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once with none and the board's current cursor. On an expired cursor it returns nil, a message and the oldest cursor that still resumes, when Pomb holds too many open waits for the token it returns nil, a message, nil and true, and on any other failure nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.MoveOpts?): boolean?, string? the card moved to a column at a zero-based position, the top when nil, checked against the claim's fence when one is given
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the claim, renewed when the caller's live fence is given

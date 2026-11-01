@@ -881,6 +881,16 @@ never handles the API.
   unclaimed card labelled `needs:lead`, never one labelled `needs:human` and,
   like every `next`, never one that a card outside Done blocks. Any other
   column is exit 2.
+- `boards`: The name of every board the token sees, one per line
+  (`GET /api/boards`, which leaves out the boards outside a fine-grained
+  token's set). On a local board it prints that board's own name. An extra
+  word is exit 2.
+- `columns [BOARD]`: The columns of the board named BOARD, else of this
+  project's board, one per line in board order, with ` (done)` after a column
+  that finishes a card (`GET /api/boards/{id}`, `columns`). A board the token
+  does not see is exit 1 and says no board has that name. A local board
+  answers only for its own name and refuses any other with exit 1. A second
+  word is exit 2.
 - `add NAME [--board B] [--blocked-by CARD]... [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
   Creates the card, in Backlog by default, and prints
   `added <id prefix> <column>`. `--size` gives it the colour of the size, as

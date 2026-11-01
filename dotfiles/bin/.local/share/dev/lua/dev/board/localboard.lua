@@ -459,6 +459,25 @@ function Backend:wait()
     return nil, "a local board has nothing to wait on"
 end
 
+function Backend:boards()
+    return { self.__opts.name }
+end
+
+function Backend:columns(name)
+    if name and name ~= self.__opts.name then
+        return nil, "a local board knows only its own columns, so " .. name .. " is not reachable"
+    end
+    local doc, message = self:read()
+    if not doc then
+        return nil, message
+    end
+    local rows = {}
+    for _, column in ipairs(doc.columns) do
+        rows[#rows + 1] = { name = column.name, is_done = column.is_done }
+    end
+    return rows
+end
+
 function Backend:other_board(name)
     return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
 end

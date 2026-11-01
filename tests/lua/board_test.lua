@@ -2678,6 +2678,7 @@ status=${HTTP_STATUS:-200}
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
+*/api/boards/board-2) body=$(cat "$ROOT/general.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
@@ -2825,6 +2826,39 @@ t.test("status prints the backend and the board without reaching out", function(
     t.eq(out, "backend: pomb\nboard: dotfiles\n")
     t.eq(code, 0)
     t.eq(read(root, "calls"), "")
+end)
+
+t.test("boards lists every board the token sees and columns reads one by name", function()
+    local boards = '[{"id":"board-1","name":"dotfiles","archived":false},'
+        .. '{"id":"board-2","name":"General","archived":false}]'
+    local root, home = sandbox()
+    assert(fs.write(root .. "/boards.json", boards))
+    assert(
+        fs.write(
+            root .. "/general.json",
+            '{"id":"board-2","name":"General","swimlanes":[],"columns":['
+                .. '{"id":"c1","name":"Todo"},{"id":"c2","name":"Doing"},'
+                .. '{"id":"c3","name":"Finished","is_done":true}]}'
+        )
+    )
+    local out, code = dev(root, home, { "board", "boards" })
+    t.eq(code, 0, out)
+    t.eq(out, "dotfiles\nGeneral\n")
+    local columns = "Icebox\nBacklog\nReady\nIn Progress\nIn Review\nBlocked\nDone (done)\n"
+    out, code = dev(root, home, { "board", "columns" })
+    t.eq(code, 0, out)
+    t.eq(out, columns)
+    out, code = dev(root, home, { "board", "columns", "General" })
+    t.eq(code, 0, out)
+    t.eq(out, "Todo\nDoing\nFinished (done)\n")
+    out, code = dev(root, home, { "board", "columns", "dotfiles" })
+    t.eq(code, 0, out)
+    t.eq(out, columns)
+    out, code = dev(root, home, { "board", "columns", "nosuch" })
+    t.eq(code, 1, out)
+    t.ok(out:find("no board named nosuch", 1, true), out)
+    out, code = dev(root, home, { "board", "columns", "dotfiles", "extra" })
+    t.eq(code, 2, out)
 end)
 
 t.test("the board name defaults to the project directory", function()

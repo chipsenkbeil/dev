@@ -204,7 +204,7 @@ return {
     {
         words = { "board" },
         noun = true,
-        desc = "Read and update the board: status, init, ls, next, add, note, show, edit, checks, check, move, order, size, label, link, stale, lint, take, release, wait and sync",
+        desc = "Read and update the board: status, init, ls, boards, columns, next, add, note, show, edit, checks, check, move, order, size, label, link, stale, lint, take, release, wait and sync",
         group = "Share it",
     },
     {
@@ -226,6 +226,18 @@ return {
         flags = "--column --label --size --group",
         usage = "dev board ls [--column C] [--label L] [--size S] [--group]",
         desc = "List the cards with id prefix, column, size, labels and name, Done left out unless --column Done, --size keeping one size of 1, 2, 3, 3+ or unsized, and on a terminal a summary, a size legend and dots, with --group a heading per column",
+    },
+    {
+        words = { "board", "boards" },
+        handler = "lua",
+        usage = "dev board boards",
+        desc = "List the names of the boards the token sees, one per line, or on a local board its own name",
+    },
+    {
+        words = { "board", "columns" },
+        handler = "lua",
+        usage = "dev board columns [BOARD]",
+        desc = "List the columns of this board, or of the Pomb board named BOARD, in board order with (done) after a column that finishes a card",
     },
     {
         words = { "board", "next" },

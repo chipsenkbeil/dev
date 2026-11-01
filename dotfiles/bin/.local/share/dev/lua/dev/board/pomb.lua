@@ -1077,6 +1077,39 @@ function Backend:family(id)
     return family
 end
 
+function Backend:boards()
+    local found, message = self:__request("GET", "/api/boards")
+    if not found then
+        return nil, message
+    end
+    local names = {}
+    for _, entry in ipairs(found) do
+        names[#names + 1] = entry.name
+    end
+    return names
+end
+
+function Backend:columns(name)
+    local home = self
+    if name and name ~= self.__opts.name then
+        home = self:other_board(name)
+    end
+    local id, message = home:__board_id()
+    if not id then
+        return nil, message
+    end
+    local detail
+    detail, message = home:__request("GET", "/api/boards/" .. id)
+    if not detail then
+        return nil, message
+    end
+    local rows = {}
+    for _, column in ipairs(detail.columns) do
+        rows[#rows + 1] = { name = column.name, is_done = column.is_done == true }
+    end
+    return rows
+end
+
 function Backend:other_board(name)
     local opts = {}
     for key, value in pairs(self.__opts) do
