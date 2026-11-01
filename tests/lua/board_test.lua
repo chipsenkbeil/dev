@@ -2079,7 +2079,9 @@ t.test("review refuses the claimant for every kind and says a reviewer must reco
             result.message
         )
     end
-    t.eq(#backend.calls, 0)
+    for _, call in ipairs(backend.calls) do
+        t.eq(call[1], "comments")
+    end
 end)
 
 t.test("--as is read only on a tick or convert, and names one word", function()

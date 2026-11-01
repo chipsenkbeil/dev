@@ -227,7 +227,33 @@ M.REVIEW_PREFIX = "dev-review:"
 
 M.TURN_PREFIX = "dev-turn:"
 
-local RESERVED_PREFIXES = { M.CHECK_PREFIX, M.REVIEW_PREFIX, M.TURN_PREFIX }
+---The prefix of the comment a claim writes, which no note may begin with.
+M.CLAIM_PREFIX = "dev-claim:"
+
+local RESERVED_PREFIXES = { M.CHECK_PREFIX, M.REVIEW_PREFIX, M.TURN_PREFIX, M.CLAIM_PREFIX }
+
+---The body of the comment that keeps who took a card after the claim lapses.
+---@param name string the claimant's name
+---@return string body the comment body
+function M.claim_record(name)
+    return M.CLAIM_PREFIX .. " by=" .. name
+end
+
+---The names that took a card, read from its claim comments.
+---@param comments {body: string}[] the card's comments
+---@return table<string, boolean> names every name with a claim comment
+function M.claimants(comments)
+    local names = {}
+    for _, comment in ipairs(comments) do
+        if comment.body:sub(1, #M.CLAIM_PREFIX) == M.CLAIM_PREFIX then
+            local name = comment.body:sub(#M.CLAIM_PREFIX + 1):match("^ by=(%S+)$")
+            if name then
+                names[name] = true
+            end
+        end
+    end
+    return names
+end
 
 ---Say whether a comment body begins with a prefix only a dev verb writes.
 ---@param body string the comment body

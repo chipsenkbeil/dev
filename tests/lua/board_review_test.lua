@@ -94,14 +94,49 @@ t.test("review refuses the claimant as the reviewer", function()
     )
     t.eq(code, 1, out)
     t.ok(out:find("cannot review its own change", 1, true), out)
-    t.eq(#comments(home), 0)
+    t.eq(#comments(home), 1)
     out, code = dev(
         root,
         home,
         { "board", "review", id, "--kind", "style", "--by", "other", "--rev", "HEAD" }
     )
     t.eq(code, 0, out)
+    t.eq(#comments(home), 2)
+end)
+
+t.test("review refuses a claimant whose claim lapsed, and a take writes one claim note", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    must(dev(root, home, { "board", "take", id, "--as", "builder" }))
+    must(dev(root, home, { "board", "take", id, "--as", "builder" }))
     t.eq(#comments(home), 1)
+    t.eq(comments(home)[1].body, "dev-claim: by=builder")
+    local file = home .. "/state/dev/boards/mine.json"
+    local doc = assert(json.decode(assert(fs.read(file))))
+    doc.cards[1].claim.expires_at = "2000-01-01T00:00:00Z"
+    assert(fs.write(file, assert(json.encode(doc))))
+    for _, kind in ipairs({ "code", "style", "recheck" }) do
+        local out, code = dev(
+            root,
+            home,
+            { "board", "review", id, "--kind", kind, "--by", "builder", "--rev", "HEAD" }
+        )
+        t.eq(code, 1, out)
+        t.ok(
+            out:find("was claimed by builder, so builder cannot review its own change", 1, true),
+            out
+        )
+    end
+    t.eq(#comments(home), 1)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "review", id, "--kind", "code", "--by", "other", "--rev", "HEAD" }
+    )
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "note", id, "dev-claim: by=other" })
+    t.eq(code, 1, out)
+    t.ok(out:find("dev-claim:", 1, true), out)
 end)
 
 t.test("review refuses a default-named claimant when DEV_AGENT is unset", function()
@@ -128,13 +163,13 @@ t.test("review refuses a default-named claimant when DEV_AGENT is unset", functi
         t.eq(code, 1, out)
         t.ok(out:find("cannot review its own change", 1, true), out)
     end
-    t.eq(#comments(home), 0)
+    t.eq(#comments(home), 1)
     local out, code = run(
         "reviewer",
         { "board", "review", id, "--kind", "code", "--by", "other", "--rev", "HEAD" }
     )
     t.eq(code, 0, out)
-    t.eq(#comments(home), 1)
+    t.eq(#comments(home), 2)
 end)
 
 t.test("review refuses an unknown kind, a missing flag and a rev that is not a commit", function()
@@ -195,6 +230,9 @@ t.test("a review that cannot be written is never reported as recorded", function
     end
     function backend:cards()
         return { card }
+    end
+    function backend:comments()
+        return {}
     end
     function backend:note()
         return nil, "curl exit 28"

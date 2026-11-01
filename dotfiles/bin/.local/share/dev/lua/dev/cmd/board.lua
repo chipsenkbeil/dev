@@ -43,9 +43,11 @@ local WAIT_FLAG = "--wait"
 local STRICT_FLAG = "--strict"
 local RESERVED_NOTE = "a note cannot begin with "
     .. board.CHECK_PREFIX
-    .. ", which dev board check writes, or "
+    .. ", which dev board check writes, "
     .. board.REVIEW_PREFIX
-    .. ", which dev board review writes"
+    .. ", which dev board review writes, or "
+    .. board.CLAIM_PREFIX
+    .. ", which taking a card writes"
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
@@ -1110,15 +1112,26 @@ end
 
 local function claim_card(backend, card, name)
     local held = claims.read(card.id)
-    local fence, message =
-        backend:claim(card.id, claimant(name), claims.TTL_SECONDS, held and held.fence)
+    local who = claimant(name)
+    local fence, message = backend:claim(card.id, who, claims.TTL_SECONDS, held and held.fence)
     if not fence then
         return failure(message)
     end
     claims.stop(card.id)
+    local past, why = backend:comments(card.id)
+    local ok
+    if past and not board.claimants(past)[who] then
+        ok, why = backend:note(card.id, board.claim_record(who), fence, { kind = "status" })
+        past = ok and past
+    end
+    if not past then
+        backend:release(card.id, fence)
+        return failure(
+            "the claim on " .. card.id:sub(1, board.MIN_PREFIX) .. " was dropped: " .. why
+        )
+    end
     local ticks, minutes = claims.cap(card.size)
     local state = { card = card.id, fence = fence }
-    local ok
     ok, message = claims.write(state)
     if not ok then
         backend:release(card.id, fence)
@@ -2256,19 +2269,27 @@ function commands.review(backend, args)
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
     local caller = agent_name() or claimant()
+    local past, comments_why = backend:comments(card.id)
+    if not past then
+        return failure(comments_why)
+    end
+    local claimed = board.claimants(past)
     local owner = card.claimant
-    if owner and (by == owner or caller == owner) then
-        return failure(
-            string.format(
-                "%s is claimed by %s, so %s cannot review its own change",
-                short,
-                owner,
-                owner
+    for _, name in ipairs({ by, caller }) do
+        if name == owner or claimed[name] then
+            return failure(
+                string.format(
+                    "%s %s claimed by %s, so %s cannot review its own change",
+                    short,
+                    name == owner and "is" or "was",
+                    name,
+                    name
+                )
+                    .. "; a reviewer other than "
+                    .. name
+                    .. " must record it"
             )
-                .. "; a reviewer other than "
-                .. owner
-                .. " must record it"
-        )
+        end
     end
     if not backend.root then
         return failure("dev board review needs the project's root")

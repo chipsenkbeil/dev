@@ -1179,9 +1179,11 @@ never handles the API.
   claimant or the caller is, which is the caller's `DEV_AGENT` or, with that
   unset, the default name a claim without a name is held under (a
   `dev@host:session` name that `take` gives), to keep a claimant from
-  reviewing its own change under either name. The message names the claimant
-  and says a reviewer other than it must record the review. An unclaimed card
-  takes any NAME. It prints
+  reviewing its own change under either name. So is every name that took the
+  card before, read from its `dev-claim:` notes, so a claim that lapsed does
+  not free its holder to review. The message names the claimant and says a
+  reviewer other than it must record the review. An unclaimed card takes any
+  NAME. It prints
   `recorded KIND review by NAME on <id prefix> at commit <12 characters>`. Like
   `check`, it is never queued: if the comment cannot be written the command
   exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
@@ -1478,7 +1480,11 @@ never handles the API.
   exit 2, `ttl_seconds` 900, and the stored fence when this machine already
   holds one, which renews) and starts the keep-alive loop. Prints
   `took <id prefix>, fence N, renewing every 5m for up to Mm`. A refused claim
-  (`claim_held`) is `board unavailable: pomb answered 409: ...`, exit 1.
+  (`claim_held`) is `board unavailable: pomb answered 409: ...`, exit 1. The
+  first claim by a name also writes a status note `dev-claim: by=NAME`, so the
+  name outlives the claim, and `review` reads those notes. If that note cannot
+  be written the claim is released and `take` exits 1. `note` refuses the
+  `dev-claim:` prefix as it does `dev-check:`.
 - `release CARD`: Stops the loop, forgets the claim and posts `/claim/release`
   with the fence. Prints `released <id prefix>`. A card with no claim taken by
   `take` is exit 1.
