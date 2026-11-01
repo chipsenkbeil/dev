@@ -48,13 +48,25 @@ local function inside(path, dir)
     return path ~= dir and path:sub(1, #dir + 1) == dir .. "/"
 end
 
-local function deeper_root(jj, git)
+local function absolute(path, cwd)
+    if path and path:sub(1, 1) ~= "/" then
+        return cwd .. "/" .. path
+    end
+    return path
+end
+
+local function owns_git_dir(jj_real, common)
+    local common_real = fs.realpath(common) or common
+    return common_real == jj_real .. "/.git" or inside(common_real, jj_real .. "/.git")
+end
+
+local function deeper_root(jj, git, common)
     if not (jj and git) then
         return jj or git
     end
     local jj_real = fs.realpath(jj) or jj
     local git_real = fs.realpath(git) or git
-    if inside(git_real, jj_real) then
+    if inside(git_real, jj_real) and common and owns_git_dir(jj_real, common) then
         return git
     end
     return jj
@@ -91,9 +103,11 @@ end
 ---1. As root we only test that `.jj`, `.git` or `.dev` exists, walking up from
 ---   the current directory, and run no command.
 ---2. Otherwise it is the deeper of `jj root` and `git rev-parse --show-toplevel`
----   when both answer, making a git worktree nested under a colocated jj
----   checkout its own root. With one answer it is that one, and with none it is
----   the nearest directory holding `.dev`.
+---   when both answer and git's common directory is the jj checkout's own
+---   `.git`, making a linked git worktree nested under a colocated jj checkout
+---   its own root, while an unrelated clone nested there leaves the jj root.
+---   With one answer it is that one, and with none it is the nearest
+---   directory holding `.dev`.
 ---3. With none of those it is the current directory.
 ---@return string root absolute path of the project
 function M.root()
@@ -103,7 +117,8 @@ function M.root()
     end
     return deeper_root(
         vcs_root({ "jj", "root" }),
-        vcs_root({ "git", "rev-parse", "--show-toplevel" })
+        vcs_root({ "git", "rev-parse", "--show-toplevel" }),
+        absolute(vcs_root({ "git", "rev-parse", "--git-common-dir" }), cwd)
     ) or ancestor_with({ ".dev" }, cwd, fs.is_dir) or cwd
 end
 

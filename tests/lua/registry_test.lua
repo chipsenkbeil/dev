@@ -352,6 +352,20 @@ t.test("root is a git worktree nested under a colocated jj checkout", function()
     fs.remove(root, { recursive = true })
 end)
 
+t.test("root keeps the jj checkout over an unrelated git clone nested in it", function()
+    if not have_vcs() then
+        return
+    end
+    local root = support.tempdir()
+    assert(quiet({ "jj", "git", "init", "--colocate", root }), "jj init failed")
+    assert(git_repo(root .. "/clone"), "git init failed")
+    assert(fs.mkdir(root .. "/clone/sub", { parents = true }))
+    local want = assert(fs.realpath(root)) .. "\n"
+    t.eq(root_from(root .. "/clone", {}), want)
+    t.eq(root_from(root .. "/clone/sub", {}), want)
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("root keeps a jj workspace nested in a foreign git repo", function()
     if not have_vcs() then
         return
