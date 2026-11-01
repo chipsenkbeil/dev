@@ -37,6 +37,10 @@ writes at box creation, see "Dev boxes" in ci's README), dev always runs here,
 `--remote` included, as it is already the remote. A box made before ci writes
 the file has no marker, so pass `--local` there.
 
+An agent command policy denies a raw test or lint run on a machine without
+the marker or `CI=true`, and the denial names only `dev --remote test` or
+`dev --remote lint`.
+
 `--remote` runs the command on a remote runner instead of this machine. It works
 anywhere before a `--`, for every verb: `dev test --remote` and
 `dev --remote test` are the same. `DEV_REMOTE=1` in the environment is the same
