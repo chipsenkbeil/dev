@@ -1,5 +1,8 @@
+local ffi = require("ffi")
+
 local t = require("testing")
 local check = require("dev.board.check")
+local commands = require("dev.cmd.board")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -11,8 +14,24 @@ local has_jj = devos.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 local LAND_STUB = [[#!/bin/sh
 for word in "$@"; do
+    case "$word" in
+    *bare*)
+        if [ -n "$SHAPE_FAIL" ]; then
+            exit 1
+        fi
+        ;;
+    fetch)
+        if [ -n "$FETCH_FAIL" ] && [ -s "$LAND_LOG" ]; then
+            echo "fetch refused"
+            exit 1
+        fi
+        ;;
+    esac
     if [ "$word" = land ]; then
         echo "$*" >>"$LAND_LOG"
+        if [ -n "$BREAK_BOARD" ]; then
+            printf '{' >"$BREAK_BOARD"
+        fi
         if [ "$LAND_TRUNK" = rewrite ]; then
             "$REAL_JJ" describe -m "feat: work, rewritten" >/dev/null 2>&1
         fi
@@ -234,6 +253,65 @@ t.test("land refuses a git project and a caller with no name", function()
     t.ok(out:find("needs DEV_AGENT", 1, true), out)
     out, code = dev(root, home, log, { "board", "land" })
     t.eq(code, 2, out)
+end)
+
+t.test("land refuses an agent name that is not one word", function()
+    local root, home, log = setup()
+    local id = new_card(root, home, log)
+    local out, code = dev(root, home, log, { "board", "land", id }, { DEV_AGENT = "two words" })
+    t.eq(code, 2, out)
+    t.ok(out:find("an agent name is one word of letters, digits and . - _ /", 1, true), out)
+    t.eq(landed_calls(log), "")
+end)
+
+local CARD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+local CARD_PREFIX = CARD_ID:sub(1, 8)
+
+local function fake_backend(root, card)
+    local backend = { root = root, column_map = {}, notes = {} }
+    card = card or {}
+    local view = {
+        id = CARD_ID,
+        name = "Card",
+        column = "In Review",
+        labels = {},
+        outcomes = { { id = "o1", name = "It works", done = true } },
+        checks = { "true" },
+    }
+    for key, value in pairs(card) do
+        view[key] = value
+    end
+    function backend:done_columns()
+        return { "Done" }
+    end
+    function backend:cards()
+        return { view }
+    end
+    function backend:comments()
+        return {}
+    end
+    function backend:note(_, text)
+        self.notes[#self.notes + 1] = text
+        return true
+    end
+    return backend
+end
+
+local function land_as_lander(backend)
+    local previous = os.getenv("DEV_AGENT") or ""
+    ffi.C.setenv("DEV_AGENT", "lander", 1)
+    local ok, result = pcall(commands.run, "land", { CARD_PREFIX }, backend)
+    ffi.C.setenv("DEV_AGENT", previous, 1)
+    assert(ok, result)
+    return result
+end
+
+t.test("land refuses a board with no project root", function()
+    local backend = fake_backend(nil)
+    local result = land_as_lander(backend)
+    t.eq(result.code, 1)
+    t.eq(result.message, "dev board land needs the project's root")
+    t.eq(backend.notes, {})
 end)
 
 if has_jj then
@@ -492,5 +570,109 @@ if has_jj then
         approve(root, home, log, id)
         jj(root, "git", "remote", "set-url", "origin", root .. "/missing-remote")
         refused(root, home, log, id, { "trunk cannot be compared", "the fetch from origin failed" })
+    end)
+
+    t.test("land refuses when the card's comments cannot be read", function()
+        local root = jj_project()
+        local backend = fake_backend(root)
+        function backend:comments()
+            return nil, "board unavailable: comments timed out"
+        end
+        local result = land_as_lander(backend)
+        t.eq(result.code, 1)
+        t.eq(result.message, "board unavailable: comments timed out")
+        t.eq(backend.notes, {})
+    end)
+
+    t.test("land names outcomes that cannot be read and does not land", function()
+        local root = jj_project()
+        local backend = fake_backend(root, { outcomes_unreadable = true })
+        local result = land_as_lander(backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find(CARD_PREFIX .. " cannot land:", 1, true), result.message)
+        t.ok(
+            result.message:find(
+                "its outcomes cannot be read from Pomb, so they cannot be checked",
+                1,
+                true
+            ),
+            result.message
+        )
+        t.eq(backend.notes, {})
+    end)
+
+    t.test("land refuses a working copy that jj cannot read", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local out = refused(
+            root,
+            home,
+            log,
+            id,
+            { "jj could not read the working-copy commit of" },
+            {
+                SHAPE_FAIL = "1",
+            }
+        )
+        t.ok(out:find(root, 1, true), out)
+    end)
+
+    t.test("land refuses a remote of record that is not a remote of the project", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        refused(root, home, log, id, {
+            "trunk cannot be compared: the remote of record gerrit is not a remote of this project",
+        }, { JJ_FORGE = "gerrit" })
+    end)
+
+    t.test("a landed commit whose done note was not written is named and exits non-zero", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local commit = head(root)
+        local out, code = dev(root, home, log, { "board", "land", id }, {
+            LAND_TRUNK = "keep",
+            BREAK_BOARD = home .. "/state/dev/boards/mine.json",
+        })
+        t.eq(code, 1, out)
+        t.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
+        t.ok(
+            out:find(
+                "landed commit " .. commit:sub(1, 12) .. ", but the done note was NOT written",
+                1,
+                true
+            ),
+            out
+        )
+        t.ok(out:find("the card was not moved", 1, true), out)
+    end)
+
+    t.test("a fetch that fails after the land falls back to the commit from before it", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local before = head(root)
+        local out, code = dev(root, home, log, { "board", "land", id }, {
+            LAND_TRUNK = "rewrite",
+            FETCH_FAIL = "1",
+        })
+        t.eq(code, 0, out)
+        local after = jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+        t.ok(before ~= after, "the stub must rewrite the commit")
+        t.ok(out:find("at commit " .. before:sub(1, 12), 1, true), out)
+        t.ok(out:find("trunk could not be read", 1, true), out)
+        t.eq(out:find(after:sub(1, 12), 1, true), nil, out)
+        local list = comments(home)
+        local last = list[#list]
+        t.eq(last.kind, "done")
+        t.ok(last.body:find(before:sub(1, 12), 1, true), last.body)
+        t.ok(last.body:find("may differ", 1, true), last.body)
+        t.eq(column_of(home), "Done")
     end)
 end
