@@ -369,8 +369,9 @@ function M.capture_input(argv, input, opts)
         error("capture_input cannot make a temporary file")
     end
     sink = sink:gsub("\n$", "")
-    local command = shell_line(argv, opts, check(opts))
-        .. " >"
+    local command = "{ "
+        .. shell_line(argv, opts, check(opts))
+        .. "; } >"
         .. M.quote(sink)
         .. [[; printf '\n%d' "$?" >>]]
         .. M.quote(sink)

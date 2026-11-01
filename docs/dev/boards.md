@@ -1527,8 +1527,15 @@ replay prints none.
 The board comes from the `[board]` section of `<root>/.dev/config.toml`:
 `backend` is `pomb` or `local`, and `name` defaults to the project directory's
 name. With no `[board]` section every subcommand prints
-`dev: no board for this project` and exits 1, which is how an agent branches. A
-`local` backend keeps the board in a file (below). Any other backend is exit 1.
+`dev: no board for this project` and exits 1, which is how an agent branches.
+Every subcommand, `edit` and `show` alike, prints
+`dev: no board for this project` from a directory outside the project (the
+root is found from the current directory). A refusal from a checkout's root or
+any directory below it means that checkout's `.dev/config.toml` has no
+`[board]` section. A refusal from elsewhere means the shell was not in the
+project, or that project has no `[board]` section.
+A `local` backend keeps the board in a file (below). Any other backend is
+exit 1.
 The Pomb server and the token reference come from `[board.pomb]` (`url`,
 `token = "pass:<entry>"` and `lead_token = "pass:<entry>"`) in the user file
 `~/.config/dev/config.toml` alone, read with `config.user`, so a project file

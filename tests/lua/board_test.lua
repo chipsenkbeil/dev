@@ -2801,6 +2801,7 @@ local function dev(root, home, args, opts)
         },
         split = opts.split,
         input = opts.input,
+        cwd = opts.cwd,
     })
 end
 
@@ -4275,6 +4276,33 @@ t.test("prose warnings reach standard error and the write still happens", functi
     end
 end)
 
+t.test("edit finds the board from a subdirectory and not from outside the project", function()
+    local root, home = sandbox()
+    local text = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n"
+    local sub = root .. "/src/deep"
+    assert(fs.mkdir(sub, { parents = true }))
+    for _, cwd in ipairs({ root, sub }) do
+        local out, code = dev(
+            root,
+            home,
+            { "board", "edit", "11111111-a" },
+            { input = text, cwd = cwd }
+        )
+        t.eq(code, 0, out)
+        t.eq(out, "edited 11111111\n")
+    end
+    for _, word in ipairs({ "edit", "show" }) do
+        local out, code = dev(
+            root,
+            home,
+            { "board", word, "11111111-a" },
+            { input = text, cwd = home }
+        )
+        t.eq(code, 1, out)
+        t.eq(out, "dev: no board for this project\n")
+    end
+end)
+
 t.test("a nonexistent column on the board is reported", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/detail.json", '{"id":"board-1","name":"dotfiles","columns":[]}'))
@@ -4303,6 +4331,16 @@ t.test("capture_input hands the input to stdin and keeps it out of argv", functi
     t.raises(function()
         devos.capture_input({ "cat" }, "x", { stdout = "null" })
     end, "standard output")
+end)
+
+t.test("capture_input merges standard error into the output when asked", function()
+    local out, code = devos.capture_input(
+        { "sh", "-c", "cat >/dev/null; echo oops >&2" },
+        "x",
+        { stderr = "stdout" }
+    )
+    t.eq(out, "oops\n")
+    t.eq(code, 0)
 end)
 
 t.test("capture_input leaves no temporary file behind", function()
