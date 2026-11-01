@@ -362,6 +362,18 @@ t.test("capture_timed stops a command and its children after the limit", functio
     t.eq(left, "")
 end)
 
+t.test("capture_timed with reap kills what a finished command left running", function()
+    local out, code = devos.capture_timed(
+        { "sh", "-c", "sleep 3781 & echo done" },
+        10,
+        { merge = true, reap = true }
+    )
+    t.eq(code, 0)
+    t.eq(out, "done\n")
+    local left = devos.capture({ "pgrep", "-f", "sleep 378[1]" }, { stderr = "null" })
+    t.eq(left, "")
+end)
+
 t.test("capture_timed reports a command killed by a signal as 124", function()
     local _, code = devos.capture_timed({ "sh", "-c", "exec kill -TERM $$" }, 10)
     t.eq(code, 124)

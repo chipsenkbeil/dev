@@ -403,6 +403,7 @@ end
 ---@field cwd string? directory to run in
 ---@field input string? what the command reads from standard input, /dev/null when nil
 ---@field merge boolean? send standard error to the collected output instead of the terminal
+---@field reap boolean? kill what the command left running in its process group once it exits on its own
 
 local function nap(secs)
     ffi.C.usleep(secs * MICROS_PER_SEC)
@@ -426,6 +427,7 @@ end
 ---Run `argv` in its own process group and collect its output, stopping it after `secs` seconds.
 ---
 ---A command that outlives the limit is sent TERM and then KILL together with everything it started.
+---With `reap`, a command that exits in time has its process group killed too.
 ---A `secs` of 0 or less sets no limit, as GNU timeout does: the command runs to completion.
 ---When this process dies first (INT, TERM or KILL), the command's process group is killed and the
 ---temporary directory removed.
@@ -505,6 +507,9 @@ function M.capture_timed(argv, secs, opts)
         M.run({ "kill", watcher }, { stderr = "null" })
         release(death_pipe, dir)
         error(failure, 0)
+    end
+    if opts.reap then
+        signal_group("KILL", pid)
     end
     if KILLED_EXITS[code] then
         code = TIMEOUT_EXIT
