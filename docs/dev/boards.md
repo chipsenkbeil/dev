@@ -274,6 +274,10 @@ and no later comment lifts that deferral, or when a comment holds a choice only
 you can make. A steer does not lift a deferral unless it says so. Parking sends
 the card to Icebox or Blocked with `needs:human`, and the agent leaves it alone.
 
+A plain question of yours is answered in a note, and the agent carries on with
+the card. It parks only if the answer needs a choice only you can make, and
+whether to defer a card is such a choice.
+
 `needs:human` means only a human can answer. No agent answers for you on such a
 card, and another agent relaying your view never counts. Agents never move, edit
 or relabel one, except to set its size, and the label sits only in Blocked or
