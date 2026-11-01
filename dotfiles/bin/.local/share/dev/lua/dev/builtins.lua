@@ -395,6 +395,13 @@ return {
         desc = "Release the claim taken with dev board take and stop its loop",
     },
     {
+        words = { "board", "run" },
+        handler = "lua",
+        flags = "--orders --end",
+        usage = "dev board run [--orders TEXT | --end]",
+        desc = "Keep a session's run on the board as one card labelled run: --orders starts it, no flag prints it with the cards the session holds and the next card, --end closes it; a private project with no board gets one, a public one stops",
+    },
+    {
         words = { "board", "sync" },
         handler = "lua",
         usage = "dev board sync",

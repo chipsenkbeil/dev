@@ -41,6 +41,9 @@ dev board move 8af0e001 progress
 dev board order 8af0e001 3ff0e006
 dev board take 8af0e001 --as project-alt/boardls
 dev board release 8af0e001
+dev board run --orders "Clear the board, then stop"
+dev board run
+dev board run --end
 dev board sync
 dev board wait --for ready
 ```
@@ -777,7 +780,8 @@ never handles the API.
   is left out unless `--column done`. Piped, with `NO_COLOR` or with `TERM=dumb`
   the output is the plain lines above and `--group` changes nothing.
 - `next [--column C]`: The top Ready card that is unclaimed, not blocked and not
-  labelled `needs:human`, in the `ls` format, else `no ready cards` (exit 0).
+  labelled `needs:human` or `run`, in the `ls` format, else `no ready cards`
+  (exit 0).
   `--column backlog` or `--column icebox` takes the top such card of that column
   instead, else `no cards in <column>` (exit 0). Any other column is exit 2.
 - `add NAME [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
@@ -1260,6 +1264,25 @@ never handles the API.
   When Pomb cannot take a step the steps left are queued, in order, under those
   names, so a reason is never posted twice. A blank `--reason` is exit 2. The
   card is kept, never deleted.
+- `run [--orders TEXT | --end]`: Keeps a session's run on the board as one card
+  labelled `run`, named `run <session>`, where the session is `DEV_AGENT` else
+  `dev@<host>:<session>`. `--orders TEXT` adds the card in In Progress,
+  size 3, claimed under the session name, with the orders quoted line by line in
+  its Change, three outcomes and a `dev board lint` checks row, and prints
+  `started <id prefix>` then the card as `show` does; orders over 250 words,
+  counting each line's quote mark, are exit 2, and a session that already has an open run card is exit 1. With no
+  flag it prints the session's open run card (claiming it again when the claim
+  lapsed), the cards the session holds and the top of `next`, and with no open
+  run card it is exit 1 with `start one with dev board run --orders TEXT`.
+  `--end` closes the card the way `discard` does, with the note `the run
+  ended`, and prints `ended <id prefix>`. Two sessions have two cards, and
+  `next` never returns a run card, and `lint` does not ask a run card for a
+  claimant, since the claim lapses after 150 minutes. Without `DEV_AGENT` or
+  `CLAUDE_SESSION_ID` the session has no stable name, so `run` is exit 2. In a
+  project with no `[board]` section, `run --orders` makes the board as
+  `init --name <directory>` does when the project is private (no origin, or an
+  origin on github.com that `gh repo view` says is private) and stops with
+  exit 1 otherwise, to leave a public project's board to the owner.
 - `take CARD [--as NAME]`: Claims the card (`POST /api/tasks/{id}/claim` with
   `claimant` NAME, else `DEV_AGENT`, else
   `dev@<host>:<CLAUDE_SESSION_ID or the pid of dev's caller>`; NAME is one word

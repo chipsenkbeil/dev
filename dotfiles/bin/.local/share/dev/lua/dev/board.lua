@@ -147,6 +147,9 @@ M.NEEDS_HUMAN = "needs:human"
 ---The label `discard` puts on a card it drops, which a Done card may carry unticked.
 M.DISCARDED = "discarded"
 
+---The label of a run card, which holds a session's orders and never comes up as the next card.
+M.RUN = "run"
+
 ---The names in a multiline text field, one per line.
 ---@param value string|string[]|nil the field's value
 ---@return string[] names the non-blank lines, empty for any other value

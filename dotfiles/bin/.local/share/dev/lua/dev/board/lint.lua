@@ -156,7 +156,7 @@ function M.card(card, opts)
             add(rule)
         end
     end
-    if column == roles.progress and not card.claimant then
+    if column == roles.progress and not card.claimant and not board.labelled(card, board.RUN) then
         local found, why = children()
         if not found then
             return nil, why

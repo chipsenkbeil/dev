@@ -500,6 +500,7 @@ function Backend:next(column)
             and not live(card.claim)
             and not is_blocked(doc, card)
             and not board.labelled(card, board.NEEDS_HUMAN)
+            and not board.labelled(card, board.RUN)
         then
             return card_view(doc, card)
         end

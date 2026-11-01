@@ -51,6 +51,9 @@ local BY_FLAG = "--by"
 local REV_FLAG = "--rev"
 local GROUP_FLAG = "--group"
 local AS_FLAG = "--as"
+local RUN_END_FLAG = "--end"
+local RUN_ORDERS_FLAG = "--orders"
+local RUN_NAME = "run "
 local HUMAN_ACTOR = "human"
 local ANSWERED_NOTE = " (answered, waiting for your move)"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
@@ -2809,6 +2812,189 @@ function commands.release(backend, args)
     return { output = "released " .. card.id:sub(1, board.MIN_PREFIX) }
 end
 
+local function run_card_for(cards, name)
+    for _, card in ipairs(cards) do
+        if board.labelled(card, board.RUN) and not card.done and card.name == RUN_NAME .. name then
+            return card
+        end
+    end
+end
+
+local function start_run(backend, name, orders)
+    local RUN_ORDERS_WORDS = 250
+    local RUN_SIZE = "3"
+    local RUN_CHECK = "dev board lint"
+    local quoted, words = {}, 0
+    for line in orders:gmatch("[^\r\n]+") do
+        if line:find("%S") then
+            quoted[#quoted + 1] = "> " .. line:match("^%s*(.-)%s*$")
+        end
+    end
+    for _ in table.concat(quoted, " "):gmatch("%S+") do
+        words = words + 1
+    end
+    if #quoted == 0 then
+        return usage(RUN_ORDERS_FLAG .. " needs the orders")
+    end
+    if words > RUN_ORDERS_WORDS then
+        return usage(
+            string.format(
+                "the orders are %d words and a run card holds at most %d; keep the rest in a file and name it in the orders",
+                words,
+                RUN_ORDERS_WORDS
+            )
+        )
+    end
+    local args = {
+        RUN_NAME .. name,
+        "--column",
+        backend.roles.progress,
+        "--size",
+        RUN_SIZE,
+        "--label",
+        board.RUN,
+        "--problem",
+        "A run keeps its orders and resume steps on the board, so a session finds them after compaction.",
+        "--out-of-scope",
+        "The work on other cards; this card holds only the run's state.",
+        "--done-when",
+        "The orders below are carried out",
+        "--done-when",
+        "Every card the run took is Done or released",
+        "--done-when",
+        "Anything left over is a card on the board",
+        "--checks",
+        RUN_CHECK,
+    }
+    for _, line in ipairs(quoted) do
+        args[#args + 1] = "--change"
+        args[#args + 1] = line
+    end
+    local added = commands.add(backend, args)
+    if added.message then
+        return added
+    end
+    local card, err = find_card(backend, added.output:match("^added (%S+)"))
+    if not card then
+        return err
+    end
+    local taken, fence = claim_card(backend, card, name)
+    if not fence then
+        taken.message = taken.message .. "; dev board run claims the new run card again"
+        return taken
+    end
+    local shown = M.run("show", { card.id }, backend)
+    if shown.message then
+        return shown
+    end
+    return {
+        output = "started " .. card.id:sub(1, board.MIN_PREFIX) .. "\n" .. shown.output,
+        warnings = added.warnings,
+    }
+end
+
+local function resume_run(backend, opts)
+    local cards, run, name = opts.cards, opts.run, opts.name
+    local warnings = {}
+    if not run.claimant then
+        local taken, fence = claim_card(backend, run, name)
+        if not fence then
+            warnings[1] = taken.message
+        end
+    end
+    local shown = M.run("show", { run.id }, backend)
+    if shown.message then
+        return shown
+    end
+    local held = {}
+    for _, card in ipairs(cards) do
+        if card.claimant == name and card.id ~= run.id and not card.done then
+            held[#held + 1] = card_line(card)
+        end
+    end
+    local upcoming, message = backend:next(backend.roles.ready)
+    if not upcoming and message then
+        return failure(message)
+    end
+    return {
+        output = table.concat({
+            shown.output,
+            "held by " .. name .. ":",
+            #held > 0 and table.concat(held, "\n") or "nothing",
+            "next:",
+            upcoming and card_line(upcoming) or "no ready cards",
+        }, "\n"),
+        warnings = warnings,
+    }
+end
+
+function commands.run(backend, args)
+    local RUN_USAGE = "start one with dev board run --orders TEXT"
+    local ending, rest = false, {}
+    for _, arg in ipairs(args) do
+        if arg == RUN_END_FLAG then
+            ending = true
+        else
+            rest[#rest + 1] = arg
+        end
+    end
+    local flags, words = parse(rest, { [RUN_ORDERS_FLAG] = true }, { [RUN_ORDERS_FLAG] = true })
+    if not flags then
+        return words
+    end
+    if flags[RUN_ORDERS_FLAG] and #flags[RUN_ORDERS_FLAG] > 1 then
+        return usage(RUN_ORDERS_FLAG .. " takes one value, so give the orders once")
+    end
+    flags[RUN_ORDERS_FLAG] = flags[RUN_ORDERS_FLAG] and flags[RUN_ORDERS_FLAG][1]
+    if #words > 0 then
+        return usage("unknown argument " .. words[1])
+    end
+    if ending and flags[RUN_ORDERS_FLAG] then
+        return usage(RUN_END_FLAG .. " and " .. RUN_ORDERS_FLAG .. " do not go together")
+    end
+    local name, why = agent_name()
+    if why then
+        return why
+    end
+    local session = os.getenv("CLAUDE_SESSION_ID")
+    if not name and (not session or session == "") then
+        return usage("run needs DEV_AGENT or CLAUDE_SESSION_ID, so the session keeps one name")
+    end
+    name = claimant(name)
+    if #RUN_NAME + #name > NAME_CHARS then
+        return usage("the session name is too long for a card name")
+    end
+    local cards, message = backend:cards()
+    if not cards then
+        return failure(message)
+    end
+    local run = run_card_for(cards, name)
+    if flags[RUN_ORDERS_FLAG] then
+        if run then
+            return failure(
+                name
+                    .. " already has the run card "
+                    .. run.id:sub(1, board.MIN_PREFIX)
+                    .. "; close it with dev board run "
+                    .. RUN_END_FLAG
+                    .. " first"
+            )
+        end
+        return start_run(backend, name, flags[RUN_ORDERS_FLAG])
+    end
+    if not run then
+        return failure("no open run card for " .. name .. "; " .. RUN_USAGE)
+    end
+    if ending then
+        local closed = M.run("discard", { run.id, "--reason", "the run ended" }, backend)
+        if closed.message then
+            return closed
+        end
+        return { output = "ended " .. run.id:sub(1, board.MIN_PREFIX), warnings = closed.warnings }
+    end
+    return resume_run(backend, { cards = cards, run = run, name = name })
+end
+
 ---Run one board subcommand against a backend.
 ---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `link`, `links`, `unlink`, `stale`, `lint`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
@@ -3399,8 +3585,56 @@ M.handlers["board sync"] = function(ctx)
     return 0
 end
 
+local function private_project(root)
+    local backend = vcs.backend(root)
+    if not backend then
+        return true
+    end
+    local origin = vcs.config(root, backend, "remote.origin.url")
+    if origin == "" then
+        return true
+    end
+    if not origin:find("github.com", 1, true) then
+        return false
+    end
+    local out, code = devos.capture(
+        { "gh", "repo", "view", "--json", "isPrivate", "-q", ".isPrivate" },
+        { cwd = root, stderr = "null" }
+    )
+    return code == 0 and out:find("^true") ~= nil
+end
+
+local function ensure_board(ctx)
+    if config.get(ctx.root, "board.backend") ~= nil then
+        return
+    end
+    if not private_project(ctx.root) then
+        verb.die(
+            "dev: this project has no board and is public or not known to be private, so ask the owner before it gets one; dev board init --name N makes it"
+        )
+    end
+    local name = fs.basename(ctx.root)
+    print("this project is private and has no board, making " .. name)
+    local making = {}
+    for key, value in pairs(ctx) do
+        making[key] = value
+    end
+    making.args = { "--name", name }
+    local code = M.handlers["board init"](making)
+    if code ~= 0 then
+        os.exit(code)
+    end
+end
+
 for sub in pairs(commands) do
     M.handlers["board " .. sub] = function(ctx)
+        if
+            sub == "run"
+            and index_of(ctx.args, RUN_ORDERS_FLAG)
+            and not index_of(ctx.args, RUN_END_FLAG)
+        then
+            ensure_board(ctx)
+        end
         local args = ctx.args
         if sub == "edit" then
             local why

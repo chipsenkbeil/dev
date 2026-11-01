@@ -617,6 +617,7 @@ function Backend:next(column)
                 not card.claimant
                 and not blocked
                 and not board.labelled(card, board.NEEDS_HUMAN)
+                and not board.labelled(card, board.RUN)
             then
                 return card
             end
