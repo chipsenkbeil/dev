@@ -362,9 +362,12 @@ on the board. `ls` prints the id prefix, column, size, labels and name, with
 Done left out unless `--column Done` asks for it. When a listed card has Done
 when outcomes, a column such as `1/3` (ticked over all) follows the labels. The
 size is the card colour's palette label, or `unsized`. `next` prints the top
-Ready card that is unclaimed, not blocked and not labelled `needs:human`, or
-`no ready cards`. `next --column backlog` and `next --column icebox` take the
-top such card of those columns instead, or print `no cards in <column>`.
+Ready card that is unclaimed, not blocked and not labelled `needs:human`, with
+its comment count and how many of those comments are the owner's after the card
+line (`2 comments, 1 the owner's`, or `1 comment` for one), or `no ready cards`.
+A local board has no owner comments, so it always counts 0 as the owner's.
+`next --column backlog` and `next --column icebox` take the top such card of
+those columns instead, or print `no cards in <column>`.
 `next --column blocked` prints the top unclaimed card labelled `needs:lead`,
 never one that also carries `needs:human`, or `no cards in Blocked`. Any other
 column is exit 2.
@@ -813,7 +816,11 @@ digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows it as the holder.
 `move CARD progress` takes the claim itself, under the same name and with the
 same keep-alive loop, when nobody holds the card, except a card with children,
 which stays unclaimed. A claim this machine already holds is kept, and one held
-by someone else leaves the move to fail as the backend answers.
+by someone else leaves the move to fail as the backend answers. After a claim
+it takes, `take` prints the card as `show` does, with every comment in full,
+and so does a `move` into In Progress that takes the claim, so the owner's
+comments are read before any work. A `move` that finds the claim already held
+prints only the `moved` line.
 
 ```
 dev board next
@@ -866,8 +873,9 @@ never handles the API.
   is left out unless `--column done`. Piped, with `NO_COLOR` or with `TERM=dumb`
   the output is the plain lines above and `--group` changes nothing.
 - `next [--column C]`: The top Ready card that is unclaimed, not blocked and not
-  labelled `needs:human` or `run`, in the `ls` format, else `no ready cards`
-  (exit 0).
+  labelled `needs:human` or `run`, in the `ls` format followed by
+  `N comments, M the owner's` (`1 comment` for one), else `no ready cards`
+  (exit 0). Comments that cannot be read are exit 1.
   `--column backlog` or `--column icebox` takes the top such card of that column
   instead, else `no cards in <column>` (exit 0). `--column blocked` takes the top
   unclaimed card labelled `needs:lead`, never one labelled `needs:human` and,
@@ -1067,8 +1075,9 @@ never handles the API.
   there are none.
 - `show CARD`: Prints the card as `ls` does (id prefix, column, size, labels,
   name), a blank line, its description (`no description` when empty), a blank
-  line and its comments as `notes` lists them, so an agent reads a whole card
-  without the API or the token. The description comes from the same
+  line and its comments as `notes` lists them with every line of each body
+  in full, the later lines indented under the first, so an agent reads a whole
+  card without the API or the token. The description comes from the same
   `/export-data` read `ls` makes, and `GET /api/tasks/{id}/comments` gives the
   comments. After the description it prints `done when:` and one
   `- [x] <outcome>` or `- [ ] <outcome>` line per outcome (Pomb's `subtasks` in
@@ -1385,10 +1394,13 @@ never handles the API.
   `that comment is not yours to change` (exit 1). A missing text, a missing
   comment or an extra word is exit 2.
 - `move CARD COLUMN`: Moves the card to the top of the column and prints
-  `moved <id prefix> to <column>`. When the card has a claim taken by `take`,
-  the move sends its fence as `If-Claim-Fence` and, for any column but In
-  Progress, stops the keep-alive loop, forgets the claim and, once the move has
-  succeeded, releases it on the backend with its fence (a refused release prints
+  `moved <id prefix> to <column>`. A move into In Progress that takes the claim
+  adds a blank line and the card as `show CARD` prints it, with the same
+  stderr warning when that read fails. When the card has a claim taken by
+  `take`, the move sends its fence as `If-Claim-Fence` and, for any column but
+  In Progress, stops the keep-alive loop, forgets the claim and, once the move
+  has succeeded, releases it on the backend with its fence (a refused release
+  prints
   `dev: moved, but the claim was not released: <reason>` on stderr and the move
   still succeeds). A move into Ready of a card that is white, has no colour or
   is red (more than 3 Pomodori) is refused before the backend is called:
@@ -1482,12 +1494,15 @@ never handles the API.
   of letters, digits and `.`, `-`, `_` and `/` of at most 200 characters, else
   exit 2, `ttl_seconds` 900, and the stored fence when this machine already
   holds one, which renews) and starts the keep-alive loop. Prints
-  `took <id prefix>, fence N, renewing every 5m for up to Mm`. A refused claim
-  (`claim_held`) is `board unavailable: pomb answered 409: ...`, exit 1. The
-  first claim by a name also writes a status note `dev-claim: by=NAME`, so the
-  name outlives the claim, and `review` reads those notes. If that note cannot
-  be written the claim is released and `take` exits 1. `note` refuses the
-  `dev-claim:` prefix as it does `dev-check:`.
+  `took <id prefix>, fence N, renewing every 5m for up to Mm` (a local board
+  needs no loop and prints `took <id prefix>, fence N, held for Mm`), a blank
+  line and the card as `show CARD` prints it. When that read fails,
+  `dev: took <id prefix>, but <reason>` goes to stderr and the claim stays. A
+  refused claim (`claim_held`) is `board unavailable: pomb answered 409: ...`,
+  exit 1. The first claim by a name also writes a status note
+  `dev-claim: by=NAME`, so the name outlives the claim, and `review` reads
+  those notes. If that note cannot be written the claim is released and `take`
+  exits 1. `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
 - `release CARD`: Stops the loop, forgets the claim and posts `/claim/release`
   with the fence. Prints `released <id prefix>`. A card with no claim taken by
   `take` is exit 1.

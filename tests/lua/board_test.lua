@@ -2282,9 +2282,34 @@ end)
 
 t.test("next shows the top card or says none", function()
     local result = commands.run("next", {}, fake(sample()))
-    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
+    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs  0 comments, 0 the owner's")
     result = commands.run("next", {}, fake({}))
     t.eq(result.output, "no ready cards")
+end)
+
+t.test("next counts the comments of the card and how many are the owner's", function()
+    local backend = fake(sample())
+    backend.listed = {
+        {
+            id = COMMENT_1,
+            who = "worker",
+            actor = "agent",
+            at = "2026-10-27T09:30:12Z",
+            body = "a",
+        },
+        { id = COMMENT_2, who = "me", actor = "human", at = "2026-10-27T10:00:00Z", body = "b" },
+    }
+    local result = commands.run("next", {}, backend)
+    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs  2 comments, 1 the owner's")
+    backend.listed = { backend.listed[2] }
+    result = commands.run("next", {}, backend)
+    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs  1 comment, 1 the owner's")
+    function backend:comments()
+        return nil, "no comments for you"
+    end
+    result = commands.run("next", {}, backend)
+    t.eq(result.code, 1)
+    t.eq(result.message, "no comments for you")
 end)
 
 t.test("next --column takes Backlog or Icebox and refuses other columns", function()
@@ -3582,7 +3607,7 @@ t.test("a renamed Pomb board is read through the column map and is_done", functi
     })
     local out, code = dev(root, home, { "board", "next" })
     t.eq(code, 0, out)
-    t.eq(out, "11111111  Next  1 Pomodoro  docs  First\n")
+    t.eq(out, "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
     t.ok(read(root, "calls"):find("ready=true&column_id=col-ready", 1, true), read(root, "calls"))
     out, code = dev(root, home, { "board", "ls", "--column", "ready" })
     t.eq(code, 0, out)
@@ -3597,7 +3622,7 @@ t.test("next asks for the unclaimed unblocked top of Ready", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "next" })
     t.eq(code, 0)
-    t.eq(out, "11111111  Ready  1 Pomodoro  docs  First\n")
+    t.eq(out, "11111111  Ready  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
     t.ok(
         read(root, "calls"):find(
             "/api/boards/board-1/tasks?limit=50&claimed=false&ready=true&column_id=col-ready",
@@ -4438,6 +4463,46 @@ t.test("move into progress does not release the claim", function()
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "move", "11111111-a", "progress" })
     t.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("take prints the card with every comment in full after the claim", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    t.eq(code, 0, out)
+    t.ok(out:find("^took 11111111, fence 7"), out)
+    t.ok(out:find("\n\n11111111  Ready  1 Pomodoro  docs  First\n", 1, true), out)
+    t.ok(out:find("first\n", 1, true) and out:find("line", 1, true), out)
+    t.ok(out:find("mine? no", 1, true), out)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("a move into progress that takes the claim prints the card and its comments", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "progress" })
+    t.eq(code, 0, out)
+    t.ok(out:find("^moved 11111111 to In Progress\n\n11111111  In Progress  "), out)
+    t.ok(out:find("mine? no", 1, true), out)
+    out, code = dev(root, home, { "board", "move", "11111111-a", "progress" })
+    t.eq(code, 0, out)
+    t.eq(out, "moved 11111111 to In Progress\n")
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("take keeps the claim and warns when the card cannot be read after it", function()
+    local root, home = sandbox()
+    executable(
+        root .. "/bin/curl",
+        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/'
+            .. ID_A
+            .. ") exit 7 ;; esac\n"
+            .. CURL:gsub("^#!/bin/sh\n", "")
+    )
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    t.eq(code, 0, out)
+    t.ok(out:find("took 11111111, fence 7", 1, true), out)
+    t.ok(out:find("dev: took 11111111, but ", 1, true), out)
+    t.eq(fs.exists(state_file(home)), true)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 

@@ -596,7 +596,25 @@ function commands.next(backend, args)
         end
         return { output = "no cards in " .. column }
     end
-    return { output = card_line(card) }
+    local list, why = backend:comments(card.id)
+    if not list then
+        return failure(why)
+    end
+    local owners = 0
+    for _, comment in ipairs(list) do
+        if comment.actor == HUMAN_ACTOR then
+            owners = owners + 1
+        end
+    end
+    return {
+        output = string.format(
+            "%s  %d %s, %d the owner's",
+            card_line(card),
+            #list,
+            #list == 1 and "comment" or "comments",
+            owners
+        ),
+    }
 end
 
 function commands.add(backend, args)
@@ -982,22 +1000,20 @@ local function kin_lines(family)
     return lines
 end
 
-function commands.show(backend, args)
-    if #args ~= 1 then
-        return usage("needs a card")
-    end
-    local card, err = find_card(backend, args[1])
-    if not card then
-        return err
-    end
+---Format a card as `show` prints it, with every comment in full.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@return string? view the card line, kin, description, outcomes, blocks and comments
+---@return dev.cmd.board.Result? err the failure when the comments or family could not be read
+local function card_view(backend, card)
     local list, message = backend:comments(card.id)
     if not list then
-        return failure(message)
+        return nil, failure(message)
     end
     local family
     family, message = backend:family(card.id)
     if not family then
-        return failure(message)
+        return nil, failure(message)
     end
     local kin = kin_lines(family)
     local description = (card.description or ""):match("^%s*(.-)%s*$")
@@ -1023,17 +1039,46 @@ function commands.show(backend, args)
             blocks = blocks .. field .. ":\n- " .. table.concat(names, "\n- ") .. "\n\n"
         end
     end
-    return {
-        output = card_line(card)
-            .. "\n"
-            .. kin
-            .. "\n"
-            .. description
-            .. "\n\n"
-            .. outcomes
-            .. blocks
-            .. comment_lines(list, { whole = true }),
-    }
+    return card_line(card)
+        .. "\n"
+        .. kin
+        .. "\n"
+        .. description
+        .. "\n\n"
+        .. outcomes
+        .. blocks
+        .. comment_lines(list, { whole = true })
+end
+
+function commands.show(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local view
+    view, err = card_view(backend, card)
+    if not view then
+        return err
+    end
+    return { output = view }
+end
+
+---Append the card as `show` prints it to the output of a claim that just succeeded.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the claimed card
+---@param result dev.cmd.board.Result the claim's result
+---@return dev.cmd.board.Result result the claim's result with the card view after its line
+local function claimed_view(backend, card, result)
+    local view, err = card_view(backend, card)
+    if not view then
+        stderr:write("dev: took ", card.id:sub(1, board.MIN_PREFIX), ", but ", err.message, "\n")
+        return result
+    end
+    result.output = result.output .. "\n\n" .. view
+    return result
 end
 
 local function note_opts(args)
@@ -1415,7 +1460,12 @@ local function move_card(backend, args, opts)
             stderr:write("dev: moved, but the claim was not released: ", why, "\n")
         end
     end
-    return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
+    local result = { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
+    if started then
+        card.column = column
+        return claimed_view(backend, card, result)
+    end
+    return result
 end
 
 function commands.move(backend, args)
@@ -3182,7 +3232,11 @@ function commands.take(backend, args)
     if not card then
         return err
     end
-    return (claim_card(backend, card, name))
+    local result, fence = claim_card(backend, card, name)
+    if not fence then
+        return result
+    end
+    return claimed_view(backend, card, result)
 end
 
 function commands.release(backend, args)
