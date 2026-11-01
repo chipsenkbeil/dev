@@ -52,7 +52,8 @@ dev --remote test -- parse
 dev --remote --detach lint
 ```
 
-dev strips `--remote` and `--detach`, then hands the runner the command words
+dev strips `--remote` and `--detach` (the launcher has already entered the
+directory of any `-C DIR`), then hands the runner the command words
 and the arguments after `--`, untouched, spaces and quotes included. The runner
 inherits the terminal, and its exit code is dev's. Any argument before the `--`
 is a usage error.

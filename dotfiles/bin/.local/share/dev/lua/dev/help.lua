@@ -355,6 +355,7 @@ local function verb_text(ctx, reg, c, opts)
         .. "  --remote    run this command on a remote runner, see `dev help remote`\n"
         .. "  --local     run this command here, whatever the default is (refused for a ci verb under DEV_AGENT)\n"
         .. "  --detach    with --remote, start the job and return\n"
+        .. "  -C DIR      run as if dev started in DIR\n"
     return table.concat(out)
 end
 

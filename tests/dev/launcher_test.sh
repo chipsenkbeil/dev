@@ -237,6 +237,13 @@ out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=0 "$DEV
 assert_eq "DEV_REMOTE=0 dev bootstrap still runs bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "ran"
 rm -f "$CILOG" "$BOOT_MARK"
 
+PATH="$RECORDER:$NOLUA" "$DEV" guide how to use -C src >/dev/null 2>&1
+out="$(cat "$ARGS_OUT")"
+assert_contains "a -C after the verb guide stays in the question" "$out" "guide how to use -C src"
+PATH="$RECORDER:$NOLUA" "$DEV" -C "$TMP" guide how >/dev/null 2>&1
+out="$(cat "$ARGS_OUT")"
+assert_eq "a -C before the verb guide is taken out" "${out#* }" "guide how"
+
 NOJIT="$CIBIN:$NOLUA"
 remote_missing='dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
 out="$(cd "$PROJ" && PATH="$NOJIT" "$DEV" lint --remote 2>&1)"

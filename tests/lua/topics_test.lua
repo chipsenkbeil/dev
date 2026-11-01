@@ -37,9 +37,10 @@ end)
 
 t.test("a fenced command is checked, a placeholder and a global flag are not", function()
     local root = project({
-        ["topics/a.md"] = "# a: A topic\n\n```\ndev -vv --remote lint\ndev <verb> --x\ndev nope\n```\n",
+        ["topics/a.md"] = "# a: A topic\n\n```\ndev -vv --remote lint\ndev -C some/dir lint\n"
+            .. "dev <verb> --x\ndev nope\n```\n",
     })
-    t.eq(problems(root), { ".dev/topics/a.md:6: no verb nope" })
+    t.eq(problems(root), { ".dev/topics/a.md:7: no verb nope" })
     fs.remove(root, { recursive = true })
 end)
 

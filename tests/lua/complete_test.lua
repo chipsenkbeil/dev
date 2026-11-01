@@ -6,7 +6,7 @@ local support = require("support")
 local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
-local GLOBAL_TAIL = "-v\n--verbose\n-vv\n--remote\n--local\n--detach\n"
+local GLOBAL_TAIL = "-v\n--verbose\n-vv\n--remote\n--local\n--detach\n-C\n"
 
 local function project(files)
     local root = support.tempdir()

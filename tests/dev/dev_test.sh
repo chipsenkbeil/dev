@@ -318,7 +318,8 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 -vv
 --remote
 --local
---detach"
+--detach
+-C"
 out="$(run_dev "$rust" __flags sync)"
 assert_eq "__flags sync" "$out" "--check
 --yes
@@ -328,7 +329,8 @@ assert_eq "__flags sync" "$out" "--check
 -vv
 --remote
 --local
---detach"
+--detach
+-C"
 out="$(run_dev "$rust" help sync)"
 assert_contains "help sync lists --yes" "$out" "--yes"
 assert_contains "help <verb> mentions the global flags" "$out" "Global flags:"
@@ -856,7 +858,8 @@ assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
 -vv
 --remote
 --local
---detach"
+--detach
+-C"
 assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
 printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/widget.sh"
 chmod +x "$nn/.dev/widget.sh"
@@ -907,6 +910,27 @@ git -C "$cip" init -q
 out="$(cirun "$sub" --remote lint 2>&1)"
 assert_eq "--remote runs the job through ci from the project root" "$out" ""
 assert_eq "--remote passes the root, job and follow flags" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--]"
+cirun "$TMP" --remote -C "$sub" lint >/dev/null 2>&1
+assert_eq "-C makes --remote run the job for that directory's project" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--]"
+cirun "$TMP" lint --remote -C "$cip" -- a >/dev/null 2>&1
+assert_eq "-C works after the verb and leaves the arguments after -- alone" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--] [a]"
+mkdir -p "$cip/.dev"
+printf '#!/usr/bin/env bash\n# Print the directory.\npwd -P\n' >"$cip/.dev/where.sh"
+chmod +x "$cip/.dev/where.sh"
+out="$(cirun "$TMP" -C "$sub" where 2>&1)"
+assert_eq "-C runs a local verb in that directory" "$out" "$(cd "$sub" && pwd -P)"
+out="$(cd "$cip" && PATH="$cistubs:$STUBS:$PATH" "$DEV" -C sub -C .. where 2>&1)"
+assert_eq "-C twice applies each in turn and a relative one starts at the current directory" "$out" "$(cd "$cip" && pwd -P)"
+rm "$cip/.dev/where.sh"
+cirun "$cip" --remote lint -- -C x >/dev/null 2>&1
+assert_eq "-C after -- reaches the job as an argument" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--] [-C] [x]"
+out="$(cirun "$cip" --remote -C "$TMP/no-such-dir" lint 2>&1)"
+assert_eq "-C with a missing directory exits 2" "$?" "2"
+assert_contains "-C with a missing directory names it" "$out" "dev: -C cannot enter $TMP/no-such-dir"
+assert_eq "-C with a missing directory runs nothing" "$(log)" ""
+out="$(cirun "$cip" --remote lint -C 2>&1)"
+assert_eq "-C with no directory exits 2" "$?" "2"
+assert_contains "-C with no directory says so" "$out" "dev: -C needs a directory"
 cirun "$cip" lint --remote >/dev/null 2>&1
 assert_contains "--remote works after the verb" "$(log)" "[--follow] [--job] [lint]"
 DEV_REMOTE=1 cirun "$cip" test >/dev/null 2>&1

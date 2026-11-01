@@ -67,7 +67,7 @@ end
 
 local function skip_global(words, i)
     while words[i] and (words[i]:find("^%-v+$") or GLOBAL_FLAGS[words[i]]) do
-        i = i + 1
+        i = i + (words[i] == "-C" and 2 or 1)
     end
     return i
 end
