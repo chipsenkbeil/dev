@@ -2282,7 +2282,7 @@ local function land_problems(backend, card, who)
     if unproven then
         problems[#problems + 1] = unproven
     end
-    if #problems == 0 then
+    if #problems == 0 and not carried then
         local moved = land.trunk_problem(backend.root)
         if moved then
             problems[#problems + 1] = moved

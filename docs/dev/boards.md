@@ -1145,7 +1145,8 @@ never handles the API.
     `jj git fetch --remote <remote of record>`, with the remote taken from the
     forge settings (see `forge`). A failed fetch refuses. This check
     runs only once the other conditions hold, but the carry attempt below
-    fetches earlier.
+    fetches earlier, and a landing that carries reads trunk once before it
+    lands.
 
   One case keeps a check and reviews across a rebase. When the landing commit
   lacks the reviews and has no `dev-check:` record of its own, `land` looks for

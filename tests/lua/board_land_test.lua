@@ -21,6 +21,9 @@ for word in "$@"; do
         fi
         ;;
     fetch)
+        if [ -n "$FETCH_LOG" ]; then
+            echo fetch >>"$FETCH_LOG"
+        fi
         if [ -n "$FETCH_FAIL" ] && [ -s "$LAND_LOG" ]; then
             echo "fetch refused"
             exit 1
@@ -658,6 +661,40 @@ if has_jj then
         t.eq(last.kind, "done")
         t.ok(last.body:find("carried over from commit " .. before:sub(1, 12), 1, true), last.body)
         t.eq(column_of(home), "Done")
+    end)
+
+    t.test("land reads trunk once before the land when it carries", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local reads = support.tempdir() .. "/fetch.log"
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = "keep", FETCH_LOG = reads }
+        )
+        t.eq(code, 0, out)
+        local list = comments(home)
+        t.ok(list[#list].body:find("carried over", 1, true), list[#list].body)
+        t.eq(fs.read(reads), "fetch\nfetch\n")
+    end)
+
+    t.test("land stays put when the push after a carry is rejected", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local out, code = dev(root, home, log, { "board", "land", id }, {
+            LAND_CODE = "1",
+            LAND_MSG = "push rejected: trunk moved",
+        })
+        t.eq(code, 1, out)
+        t.ok(out:find("jj land failed", 1, true), out)
+        t.ok(out:find("push rejected: trunk moved", 1, true), out)
+        t.eq(column_of(home), "In Review")
     end)
 
     t.test("land does not carry a pass over a failed run at the rebased commit", function()
