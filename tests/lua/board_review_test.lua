@@ -104,6 +104,39 @@ t.test("review refuses the claimant as the reviewer", function()
     t.eq(#comments(home), 1)
 end)
 
+t.test("review refuses a default-named claimant when DEV_AGENT is unset", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    local function run(session, args)
+        return support.dev(root, args, {
+            env = {
+                HOME = home,
+                XDG_STATE_HOME = home .. "/state",
+                JJ_USER = "t",
+                JJ_EMAIL = "t@example.com",
+                DEV_AGENT = "",
+                CLAUDE_SESSION_ID = session,
+            },
+        })
+    end
+    must(run("builder", { "board", "take", id }))
+    for _, kind in ipairs({ "code", "style", "recheck" }) do
+        local out, code = run(
+            "builder",
+            { "board", "review", id, "--kind", kind, "--by", "other", "--rev", "HEAD" }
+        )
+        t.eq(code, 1, out)
+        t.ok(out:find("cannot review its own change", 1, true), out)
+    end
+    t.eq(#comments(home), 0)
+    local out, code = run(
+        "reviewer",
+        { "board", "review", id, "--kind", "code", "--by", "other", "--rev", "HEAD" }
+    )
+    t.eq(code, 0, out)
+    t.eq(#comments(home), 1)
+end)
+
 t.test("review refuses an unknown kind, a missing flag and a rev that is not a commit", function()
     local root, home = git_root()
     local id = card_in(root, home)

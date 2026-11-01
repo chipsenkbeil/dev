@@ -2255,7 +2255,7 @@ function commands.review(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
-    local caller = agent_name()
+    local caller = agent_name() or claimant()
     local owner = card.claimant
     if owner and (by == owner or caller == owner) then
         return failure(

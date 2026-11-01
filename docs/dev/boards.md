@@ -1176,10 +1176,12 @@ never handles the API.
   many commits, a word that starts with `-` and a name that resolves to nothing
   are refused (exit 1). NAME is an agent name as `take --as` takes, and the
   card's claimant is refused for every kind (exit 1) whether NAME is the
-  claimant or the caller's `DEV_AGENT` is the claimant, to keep a claimant from
-  reviewing its own change under either name. The message names the claimant and
-  says a reviewer other than it must record the review. An unclaimed card takes
-  any NAME. It prints
+  claimant or the caller is, which is the caller's `DEV_AGENT` or, with that
+  unset, the default name a claim without a name is held under (a
+  `dev@host:session` name that `take` gives), to keep a claimant from
+  reviewing its own change under either name. The message names the claimant
+  and says a reviewer other than it must record the review. An unclaimed card
+  takes any NAME. It prints
   `recorded KIND review by NAME on <id prefix> at commit <12 characters>`. Like
   `check`, it is never queued: if the comment cannot be written the command
   exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
