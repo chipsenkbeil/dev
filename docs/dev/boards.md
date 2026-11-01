@@ -258,8 +258,9 @@ Every card in every column is fair game for an agent unless it is labelled
   and moves the card to Done. Still the claimant's.
 - Blocked: waiting on an answer. `needs:human` is yours alone. `needs:lead` is
   for a higher-tier agent, which answers and moves the card out. A lead finds
-  one with `dev board next --column blocked` and parks on
-  `dev board wait --for lead`.
+  one with `dev board next --column blocked`, takes it before any Ready card,
+  and parks on `dev board wait --for lead`. A lead that cannot answer adds
+  `needs:human`, removes `needs:lead` and leaves the card in Blocked for you.
 - Done: landed, answered, or dropped with a note.
 
 An agent with nothing Ready takes the top of Backlog and then Icebox, planning
