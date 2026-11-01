@@ -401,6 +401,18 @@ end
 ---@class dev.cmd.box.CallOpts
 ---@field label string? what a spinner says on a terminal while ci runs, none by default
 
+---Read the box that a `ci box` document reports as retagged.
+---@param doc any the decoded document, which may be no table
+---@return table<string, any>? entry the first `retagged` entry, or nil when the list is missing or its first entry is no table
+local function first_retagged(doc)
+    local retagged = type(doc) == "table" and doc.retagged or nil
+    local first = type(retagged) == "table" and retagged[1] or nil
+    if type(first) == "table" then
+        return first
+    end
+    return nil
+end
+
 ---Run `ci box` with `--json` and decode its document.
 ---
 ---A failure ends the run with ci's code, after its error message goes to
@@ -428,9 +440,9 @@ function M.call(sub, args, opts)
             and doc.ok == false
             and type(doc.error) == "table"
             and doc.error.message
-        local boxes = type(doc) == "table" and doc.retagged or nil
-        if type(message) ~= "string" and type(boxes) == "table" and type(boxes[1]) == "table" then
-            message = boxes[1].error
+        local first = first_retagged(doc)
+        if type(message) ~= "string" and first ~= nil then
+            message = first.error
         end
         if type(message) == "string" then
             stderr:write("dev box ", sub, ": ", message, "\n")
@@ -1419,8 +1431,8 @@ M.handlers["box retag"] = function(ctx)
     end
     M.need_ci()
     local doc = M.call("retag", { "retag", name, "--target", parsed.target, "--json" })
-    local one = type(doc.retagged) == "table" and doc.retagged[1] or nil
-    if type(one) ~= "table" then
+    local first = first_retagged(doc)
+    if first == nil then
         verb.die("dev: ci box retag printed no box")
     end
     print("retagged " .. interp(name) .. " to " .. interp(parsed.target))
