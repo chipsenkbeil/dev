@@ -29,8 +29,8 @@ jobs)
         exit 0
         ;;
     esac
-    if [ "$2" = bootstrap ]; then
-        printf '{"jobs":[{"name":"bootstrap"}]}\n'
+    if [ "$2" = bootstrap ] || [ "$2" = soak ]; then
+        printf '{"jobs":[{"name":"%s"}]}\n' "$2"
     else
         printf '{"jobs":[{"name":"test"},{"name":"widget.save"},{"name":"n.m.x"}]}\n'
     fi
@@ -412,6 +412,17 @@ t.test(
         t.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [x]\n")
     end
 )
+
+t.test("the project's __remote.lua sends soak to the soak pipeline", function()
+    local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
+    local root, base = setup({ ["__remote.lua"] = override })
+    local _, code, log = dev(root, base, { "--remote", "soak", "--", "--runs", "5" })
+    t.eq(code, 0)
+    t.eq(
+        log,
+        "ci -C " .. root .. " [run] [soak] [--local] [--follow] [--job] [soak] [--] [--runs] [5]\n"
+    )
+end)
 
 t.test("the project's __remote.lua keeps the default runner's job-not-found error", function()
     local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))

@@ -113,8 +113,9 @@ A runner can reuse the default one with
 level and `opts.pipeline` names a pipeline under `.ci/`, so the job runs from
 `.ci/<pipeline>.lua` instead of the default pipeline. This repo's
 `.dev/__remote.lua` sends `bootstrap` to `.ci/bootstrap.lua` (`dev --remote
-bootstrap`, the Arch bootstrap proof) and everything else to the default
-pipeline.
+bootstrap`, the Arch bootstrap proof), `soak` to `.ci/soak.lua` (`dev --remote
+soak`, the signal tests in a loop under CPU load) and everything else to the
+default pipeline.
 
 ## What it refuses
 
