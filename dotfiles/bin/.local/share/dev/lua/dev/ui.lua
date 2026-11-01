@@ -348,11 +348,26 @@ local function read_all(path)
     return body
 end
 
+local function capture_or_interrupted(argv)
+    local ok, result, code = pcall(devos.capture, argv)
+    if not ok then
+        local reason = tostring(result)
+        if
+            reason:find("interrupted!", 1, true)
+            or reason:find("capture lost the exit status", 1, true)
+        then
+            return "", INTERRUPTED
+        end
+        error(result, 0)
+    end
+    return result, code
+end
+
 local function start_job(argv, dir, streams)
     local launch = {
         "sh",
         "-c",
-        'set -m; dir=$1; shift; ( "$@" >"$dir/out" '
+        'trap "" INT; set -m; dir=$1; shift; ( trap - INT; "$@" >"$dir/out" '
             .. streams
             .. ' </dev/null; echo $? >"$dir/rc" ) >/dev/null 2>&1 & echo $! >"$dir/pid"; echo $!',
         "sh",
@@ -361,8 +376,8 @@ local function start_job(argv, dir, streams)
     for _, word in ipairs(argv) do
         launch[#launch + 1] = word
     end
-    local pid, code = devos.capture(launch)
-    return code == 0 and tonumber(pid) or nil
+    local pid, code = capture_or_interrupted(launch)
+    return tonumber(pid), code
 end
 
 local STOP_POLLS = 40
@@ -375,6 +390,21 @@ local STOP = string.format(
     STOP_POLLS,
     STOP_POLL_SECS
 )
+
+local PID_POLLS = 200
+local PID_POLL_SECS = 0.05
+
+local function launched_pid(dir, wait)
+    local polls = 0
+    while true do
+        local pid = tonumber(read_all(dir .. "/pid"):match("^%d+"))
+        if pid or not wait or polls >= PID_POLLS then
+            return pid
+        end
+        polls = polls + 1
+        devos.run({ "sleep", tostring(PID_POLL_SECS) })
+    end
+end
 
 local function stop_job(pid)
     devos.run({ "sh", "-c", STOP, "sh", tostring(pid) })
@@ -393,7 +423,8 @@ local POLL = string.format(
 )
 
 local function poll(rc_path, pid)
-    return devos.run({ "sh", "-c", POLL, "sh", rc_path, tostring(pid) })
+    local _, code = capture_or_interrupted({ "sh", "-c", POLL, "sh", rc_path, tostring(pid) })
+    return code
 end
 
 ---@class dev.ui.Job
@@ -480,8 +511,12 @@ function M.spin(ctx, label, argv, opts)
     stderr:write(HIDE_CURSOR)
     local ok, code = pcall(function()
         dir = make_workdir(ctx)
-        pid = start_job(argv, dir, capture and '2>"$dir/err"' or "2>&1")
-        if not pid then
+        local launched
+        pid, launched = start_job(argv, dir, capture and '2>"$dir/err"' or "2>&1")
+        if launched == INTERRUPTED then
+            return INTERRUPTED
+        end
+        if launched ~= 0 or not pid then
             return 1
         end
         return watch({ err = err, label = label, pid = pid, rc_path = dir .. "/rc" })
@@ -491,8 +526,9 @@ function M.spin(ctx, label, argv, opts)
     if dir then
         captured = read_all(dir .. (capture and "/err" or "/out"))
         output = capture and read_all(dir .. "/out") or ""
-        pid = pid or tonumber(read_all(dir .. "/pid"):match("^%d+"))
-        if pid and (not ok or code == INTERRUPTED) then
+        local stopping = not ok or code == INTERRUPTED
+        pid = pid or launched_pid(dir, stopping)
+        if pid and stopping then
             stop_job(pid)
         end
         devos.run({ "rm", "-rf", "--", dir })

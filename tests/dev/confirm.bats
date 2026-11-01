@@ -26,6 +26,24 @@ in_pty() {
     pty_run "$keys" "$delay" 2 "$inner" "${READY:-}" "$OUT.status" >"$OUT.pty"
 }
 
+status_is_130() {
+    local status
+    status="$(cat "$OUT.status")"
+    if [ "$status" != 130 ]; then
+        printf 'status %s, terminal output:\n' "$status" >&3
+        tr -d '\r' <"$OUT.pty" >&3
+        return 1
+    fi
+}
+
+process_gone() {
+    if pgrep -f "$1" >/dev/null; then
+        printf 'still running after the run ended:\n' >&3
+        ps -eo pid,ppid,pgid,stat,args | grep -F -- "$1" | grep -v grep >&3
+        return 1
+    fi
+}
+
 @test "y then enter confirms" {
     in_pty 'y\r' 1 "$CONFIRM"
     [ "$(cat "$OUT.status")" = 0 ]
@@ -43,7 +61,7 @@ in_pty() {
 
 @test "ctrl-c at the prompt ends the line and exits 130 with no traceback" {
     in_pty '\003' 1 "$CONFIRM"
-    [ "$(cat "$OUT.status")" = 130 ]
+    status_is_130
     out="$(tr -d '\r' <"$OUT.pty")"
     [[ "$out" != *traceback* ]] || false
     [[ "$out" != *interrupted* ]] || false
@@ -84,25 +102,33 @@ in_pty() {
 @test "ctrl-c with capture exits 130 without an error" {
     READY="$BATS_TEST_TMPDIR/ready"
     in_pty '\003' 0 "$SPIN_CAPTURE" sh -c 'touch "$1"; sleep 5.789' sh "$READY"
-    [ "$(cat "$OUT.status")" = 130 ]
-    run pgrep -f 'sleep 5.789'
-    [ "$status" -ne 0 ]
+    status_is_130
+    process_gone 'sleep 5.789'
 }
 
 @test "ctrl-c stops the command and exits 130" {
     READY="$BATS_TEST_TMPDIR/ready"
     in_pty '\003' 0 "$SPIN" sh -c 'touch "$1"; sleep 5.123' sh "$READY"
-    [ "$(cat "$OUT.status")" = 130 ]
-    run pgrep -f 'sleep 5.123'
-    [ "$status" -ne 0 ]
+    status_is_130
+    process_gone 'sleep 5.123'
 }
 
 @test "ctrl-c stops every process the command started" {
     READY="$BATS_TEST_TMPDIR/ready"
     in_pty '\003' 0 "$SPIN" sh -c 'touch "$1"; sleep 7.321; echo done' sh "$READY"
-    [ "$(cat "$OUT.status")" = 130 ]
-    run pgrep -f 'sleep 7.321'
-    [ "$status" -ne 0 ]
+    status_is_130
+    process_gone 'sleep 7.321'
+}
+
+@test "ctrl-c right after the command starts exits 130 on every one of eight runs" {
+    local run
+    for run in 1 2 3 4 5 6 7 8; do
+        rm -f "$OUT.status"
+        READY="$BATS_TEST_TMPDIR/ready$run"
+        in_pty '\003' 0 "$SPIN_CAPTURE" sh -c 'touch "$1"; sleep 5.987' sh "$READY"
+        status_is_130
+        process_gone 'sleep 5.987'
+    done
 }
 
 @test "spin hands every argv word to the command intact" {
@@ -169,9 +195,8 @@ with_dash_as_sh() {
     with_dash_as_sh
     READY="$BATS_TEST_TMPDIR/ready"
     in_pty '\003' 0 "$SPIN" sh -c 'touch "$1"; sleep 7.654; echo done' sh "$READY"
-    [ "$(cat "$OUT.status")" = 130 ]
-    run pgrep -f 'sleep 7.654'
-    [ "$status" -ne 0 ]
+    status_is_130
+    process_gone 'sleep 7.654'
 }
 
 confirm_lines() {
