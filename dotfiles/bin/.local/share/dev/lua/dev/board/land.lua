@@ -248,7 +248,8 @@ local function file_set(out)
     return set
 end
 
-local function checked_commit(comments, state, rows)
+local function checked_commits(comments, state, rows)
+    local found = {}
     for i = #comments, 1, -1 do
         local record = check.parse(comments[i].body)
         if
@@ -262,15 +263,19 @@ local function checked_commit(comments, state, rows)
                 not M.checks_problem(comments, at, rows)
                 and #M.missing_reviews(comments, at) == 0
             then
-                return record.commit
+                found[#found + 1] = record.commit
             end
         end
     end
+    return found
 end
 
 local function carry_problem(root, state, commit)
     local label = M.short(commit)
     local change = jj_out(root, "log", "-r", commit, "--no-graph", "-T", 'change_id ++ "\\n"')
+    if change == nil then
+        return string.format("jj could not read the checked commit %s", label), true
+    end
     if change ~= state.change .. "\n" then
         return string.format(
             "the checked commit %s is not of change %s in this repo",
@@ -279,10 +284,15 @@ local function carry_problem(root, state, commit)
         )
     end
     local base = jj_out(root, "log", "-r", commit .. "-", "--no-graph", "-T", COMMIT_TEMPLATE)
-    local ancestor = base
-        and count_lines(base) == 1
+    if base == nil then
+        return string.format("jj could not read the parent of the checked commit %s", label), true
+    end
+    local ancestor = count_lines(base) == 1
         and jj_out(root, "log", "-r", commit .. "- & ::@-", "--no-graph", "-T", COMMIT_TEMPLATE)
-    if not ancestor or ancestor ~= base then
+    if ancestor == nil then
+        return string.format("jj could not read the ancestor of the checked commit %s", label), true
+    end
+    if ancestor ~= base then
         return string.format(
             "the checked commit %s does not sit on a single ancestor of trunk",
             label
@@ -290,7 +300,8 @@ local function carry_problem(root, state, commit)
     end
     local interdiff = jj_out(root, "interdiff", "--from", commit, "--to", "@", "--name-only")
     if interdiff == nil then
-        return string.format("jj could not compare the checked commit %s with this one", label)
+        return string.format("jj could not compare the checked commit %s with this one", label),
+            true
     end
     if interdiff ~= "" then
         return string.format("this commit differs from the checked commit %s", label)
@@ -301,7 +312,8 @@ local function carry_problem(root, state, commit)
         return string.format(
             "jj could not list the files changed since the checked commit %s",
             label
-        )
+        ),
+            true
     end
     local own, landed, overlap = file_set(mine), file_set(trunk), {}
     for path in pairs(own) do
@@ -403,7 +415,7 @@ local function shared_problem(root, commit, paths)
         local here = jj_out(root, "file", "list", "-r", "@", "--", filesets[i])
         local there = jj_out(root, "file", "list", "-r", commit, "--", filesets[i])
         if here == nil or there == nil then
-            return string.format("jj could not list the shared path %s", path)
+            return string.format("jj could not list the shared path %s", path), true
         end
         if here == "" and there == "" then
             return string.format(
@@ -418,7 +430,8 @@ local function shared_problem(root, commit, paths)
         return string.format(
             "jj could not compare the shared paths with the checked commit %s",
             label
-        )
+        ),
+            true
     end
     if differ ~= "" then
         local names = {}
@@ -441,7 +454,7 @@ end
 ---@field rows string[] the card's checks rows
 ---@field shared any? the raw `board.land.shared` config value
 
----Find the checked commit whose check and reviews a rebased commit may keep.
+---Find a checked commit whose check and reviews a rebased commit may keep.
 ---
 ---The rule holds when all of these are true:
 ---
@@ -452,8 +465,10 @@ end
 ---5. The shared paths from the config hold the same tree at the checked and landing commits. A
 ---   project that lists none carries nothing.
 ---
----The checked commit is the newest one of the change with a passing run and its reviews. A commit
----with a check record of its own never carries, and every read that fails refuses.
+---The checked commits are those of the change with a passing run and their reviews. They are tried
+---newest first, the first that passes every test carries, and a refusal names the newest one's
+---reason, unless a jj read fails, which refuses at once naming that read. A commit with a check
+---record of its own never carries.
 ---@param opts dev.board.land.Opts the project, the card's records and the landing commit
 ---@return string? commit the checked commit the records carry over from
 ---@return string? problem why it is refused, nil when it carries or no commit was checked
@@ -465,8 +480,8 @@ function M.carry(opts)
             return nil
         end
     end
-    local commit = checked_commit(comments, state, rows)
-    if not commit then
+    local candidates = checked_commits(comments, state, rows)
+    if #candidates == 0 then
         return nil
     end
     local paths, refusal = shared_paths(opts.shared)
@@ -477,11 +492,21 @@ function M.carry(opts)
     if moved then
         return nil, moved
     end
-    local problem = carry_problem(root, state, commit) or shared_problem(root, commit, paths)
-    if problem then
-        return nil, problem
+    local newest_problem
+    for _, commit in ipairs(candidates) do
+        local problem, failed_read = carry_problem(root, state, commit)
+        if not problem then
+            problem, failed_read = shared_problem(root, commit, paths)
+        end
+        if not problem then
+            return commit
+        end
+        if failed_read then
+            return nil, problem
+        end
+        newest_problem = newest_problem or problem
     end
-    return commit
+    return nil, newest_problem
 end
 
 ---Read the commit that holds a change on trunk, which `jj land` may have rewritten.

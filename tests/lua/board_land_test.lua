@@ -16,6 +16,9 @@ local has_jj = devos.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 local LAND_STUB = [[#!/bin/sh
 for word in "$@"; do
+    if [ -n "$LOG_FAIL_AT" ] && [ "$word" = "$LOG_FAIL_AT" ]; then
+        exit 1
+    fi
     case "$word" in
     *bare*)
         if [ -n "$SHAPE_FAIL" ]; then
@@ -25,6 +28,11 @@ for word in "$@"; do
     interdiff)
         if [ -n "$INTERDIFF_FAIL" ]; then
             exit 1
+        fi
+        if [ -n "$INTERDIFF_FAIL_AT" ]; then
+            case "$*" in
+            *"$INTERDIFF_FAIL_AT"*) exit 1 ;;
+            esac
         fi
         ;;
     *files\(\)*)
@@ -1042,6 +1050,108 @@ if has_jj then
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(root)
         refused(root, home, log, id, { "does not sit on a single ancestor of trunk" })
+    end)
+
+    local function reviewed_and_checked(opts)
+        local root, home, log, id = opts.root, opts.home, opts.log, opts.id
+        for _, kind in ipairs({ "code", "style" }) do
+            must(
+                dev(
+                    root,
+                    home,
+                    log,
+                    { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
+                )
+            )
+        end
+        must(dev(root, home, log, { "board", "check", id }))
+        return head(root)
+    end
+
+    local function two_checked_commits(opts)
+        local root, home, log, bare = opts.root, opts.home, opts.log, opts.bare
+        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(root)
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        local older = reviewed_and_checked({ root = root, home = home, log = log, id = id })
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+        local newer = reviewed_and_checked({ root = root, home = home, log = log, id = id })
+        assert(fs.write(root .. "/shared.txt", opts.final_shared), "write failed")
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        return id, older, newer
+    end
+
+    t.test("land carries from an older checked commit when the newest one differs", function()
+        local root, home, log, bare = jj_project()
+        local id, older = two_checked_commits({
+            root = root,
+            home = home,
+            log = log,
+            bare = bare,
+            final_shared = "a\nb\nc\nd\ne\nf\nG\n",
+        })
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        local list = comments(home)
+        t.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
+    end)
+
+    t.test("land names the newest checked commit when no candidate carries", function()
+        local root, home, log, bare = jj_project()
+        local id, older, newer = two_checked_commits({
+            root = root,
+            home = home,
+            log = log,
+            bare = bare,
+            final_shared = "a\nb\nc\nd\ne\nf\nZ\n",
+        })
+        local out =
+            refused(root, home, log, id, { "differs from the checked commit " .. newer:sub(1, 12) })
+        t.eq(out:find(older:sub(1, 12), 1, true), nil, out)
+    end)
+
+    t.test("land refuses at once when jj cannot read the newest checked commit", function()
+        local root, home, log, bare = jj_project()
+        local id, older, newer = two_checked_commits({
+            root = root,
+            home = home,
+            log = log,
+            bare = bare,
+            final_shared = "a\nb\nc\nd\ne\nf\nG\n",
+        })
+        local out = refused(
+            root,
+            home,
+            log,
+            id,
+            { "jj could not compare the checked commit " .. newer:sub(1, 12) },
+            { INTERDIFF_FAIL_AT = newer }
+        )
+        t.eq(out:find(older:sub(1, 12), 1, true), nil, out)
+    end)
+
+    t.test("land refuses at once when jj cannot read the newest checked commit's change", function()
+        local root, home, log, bare = jj_project()
+        local id, older, newer = two_checked_commits({
+            root = root,
+            home = home,
+            log = log,
+            bare = bare,
+            final_shared = "a\nb\nc\nd\ne\nf\nG\n",
+        })
+        local out = refused(
+            root,
+            home,
+            log,
+            id,
+            { "jj could not read the checked commit " .. newer:sub(1, 12) },
+            { LOG_FAIL_AT = newer }
+        )
+        t.eq(out:find(older:sub(1, 12), 1, true), nil, out)
     end)
 
     t.test("land refuses a rebase of a commit that differs from the checked one", function()
