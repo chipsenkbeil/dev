@@ -112,6 +112,37 @@ The keep-alive loop does the same on a tick.
 The token goes to curl on standard input as a config line. It is in no argument
 list, no environment variable, no file and no output, `-v` and `-vv` included.
 
+## Which token each tool holds
+
+Pomb groups permissions into four presets, each holding the one before it:
+`read`, `work`, `lead` and `admin`. A token holds a preset or a custom
+permission set, on all boards or on an assigned few. Each tool holds the
+smallest preset that covers its calls, on the boards it works.
+
+| Tool | Token | Calls it needs | Deletes it holds |
+|------|-------|----------------|------------------|
+| lead session | `lead_token`, `lead` | Everything `work` does, plus `boards.create`, `columns.create`, `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and `tasks.bin`, for `init`, and for the `dev board delete` verb that card 83f0e016 adds | `tasks.bin`: a card goes to the bin for 30 days |
+| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments, links and outcomes. No card delete |
+| runner | `work` on its board | Read the board, create and move cards, set fields and labels, comment, link, claim, heartbeat and release | None. Its `init` needs `lead`, which the lead runs |
+| Aide agent | `work`, assigned boards only | The subagent's calls, notes written with `--as aide` | None. It never holds `lead` |
+
+Every delete an agent holds is of its own work, so a mistaken comment, link or
+outcome never waits for the owner. Deleting from the bin, emptying it, and every
+board, column or account delete stay with the owner, who holds `admin`.
+
+A card delete is token policy, not something dev enforces on its own. Only the
+lead decides and does one, and Pomb refuses a `work` token with a 403 naming
+`tasks.bin`. A restore from the bin needs only `tasks.write`.
+
+The calls come from `board/pomb.lua`, a runner's Pomb contract notes and
+Pomb's permission catalog. For the deletes, the table follows the Pomb 0.5.60
+report: a `work` token deletes its own comments, links and outcomes, which the
+older passages and the contract still call admin-only. Those are tracked in
+two cards, one for this file and one for the contract.
+
+The review found no preset to change. The outcome delete is a Pomb right with
+no dev call yet, and dev needs no token change for it.
+
 ## Laying out the board
 
 `dev board init` brings the project's board to the standard, whether the board
