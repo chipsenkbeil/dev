@@ -259,8 +259,9 @@ Every card in every column is fair game for an agent unless it is labelled
 - Blocked: waiting on an answer. `needs:human` is yours alone. `needs:lead` is
   for a higher-tier agent, which answers and moves the card out. A lead finds
   one with `dev board next --column blocked`, takes it before any Ready card,
-  and parks on `dev board wait --for lead`. A lead that cannot answer adds
-  `needs:human`, removes `needs:lead` and leaves the card in Blocked for you.
+  and parks on `timeout 86400 dev board wait --for lead`. A lead that cannot
+  answer adds `needs:human`, removes `needs:lead` and leaves the card in
+  Blocked for you.
 - Done: landed, answered, or dropped with a note.
 
 An agent with nothing Ready takes the top of Backlog and then Icebox, planning
@@ -692,13 +693,13 @@ queued. Fix or delete the file to go on.
 ## Waiting for the board
 
 `dev board wait` blocks until the board changes, so an agent with nothing to do
-parks on it instead of polling or ending idle. Run it in the background under
-`timeout`, and its exit wakes the session:
+parks on it instead of polling or ending idle right away. Run it in the
+background under `timeout`, and its exit wakes the session:
 
 ```
-timeout 3600 dev board wait --for ready
-timeout 3600 dev board wait --for human
-timeout 3600 dev board wait --for lead
+timeout 86400 dev board wait --for ready
+timeout 86400 dev board wait --for human
+timeout 86400 dev board wait --for lead
 ```
 
 `--for ready` wakes on a card added to Ready or moved into it and prints
@@ -731,7 +732,10 @@ failure: `wait` prints one line on standard error the first time, then retries
 with a pause that doubles from 30 seconds to 5 minutes, each pause cut by a
 random fraction of up to a quarter to keep sessions from retrying together, and
 keeps waiting until a slot frees. Any other refusal, such as a bad token, exits
-1 at once. Exit 124 from `timeout` means nothing changed, so park again.
+1 at once. Exit 124 from `timeout` means nothing changed. With nothing to do
+and no card in flight, end the session (a session started later under the same
+`DEV_AGENT` picks its open run card up with `dev board run`). Otherwise park
+again.
 
 ## Claims
 
