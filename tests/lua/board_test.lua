@@ -1910,6 +1910,38 @@ t.test("show lists the outcomes with their ticks, and ls adds a done column", fu
     t.eq(commands.run("ls", {}, fake({ plain })).output, "cccccccc  Backlog  x  -  Card")
 end)
 
+t.test("show prints the done when block once and only when a card has outcomes", function()
+    local function count(text, needle)
+        local n = 0
+        for _ in text:gmatch(needle) do
+            n = n + 1
+        end
+        return n
+    end
+    local checklist =
+        "## Problem\nwhy\n\n## Done when\n- [ ] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3"
+    local card = colored("green")
+    card.description = checklist
+    card.outcomes = outcomes(3, 1)
+    local result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.eq(count(result.output, "Outcome 1"), 1, result.output)
+    t.eq(count(result.output, "[Dd]one when"), 1, result.output)
+    t.ok(
+        result.output:find("## Problem\nwhy\n\ndone when:\n- [x] Outcome 1", 1, true),
+        result.output
+    )
+    card.description = "## Done when\n- [ ] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3"
+    result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.eq(count(result.output, "Outcome 1"), 1, result.output)
+    t.ok(result.output:find("\n\nno description\n\ndone when:\n", 1, true), result.output)
+    card.description = checklist
+    card.outcomes = {}
+    result = commands.run("show", { "cccccccc" }, fake({ card }))
+    t.eq(count(result.output, "done when:"), 0, result.output)
+    t.eq(count(result.output, "## Done when"), 1, result.output)
+    t.eq(count(result.output, "Outcome 1"), 1, result.output)
+end)
+
 t.test("outcome appends, rewords, ticks and unticks by number", function()
     local card = colored("green")
     card.outcomes = outcomes(3, 1)

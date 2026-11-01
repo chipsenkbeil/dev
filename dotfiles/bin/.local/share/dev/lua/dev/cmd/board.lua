@@ -1001,6 +1001,10 @@ function commands.show(backend, args)
     end
     local kin = kin_lines(family)
     local description = (card.description or ""):match("^%s*(.-)%s*$")
+    if #card.outcomes > 0 then
+        local _, rest = board.split_checklist(description)
+        description = rest or description
+    end
     if description == "" then
         description = "no description"
     end

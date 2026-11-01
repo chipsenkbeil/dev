@@ -1072,10 +1072,13 @@ never handles the API.
   `/export-data` read `ls` makes, and `GET /api/tasks/{id}/comments` gives the
   comments. After the description it prints `done when:` and one
   `- [x] <outcome>` or `- [ ] <outcome>` line per outcome (Pomb's `subtasks` in
-  the `/export-data` task row), then a blank line, when the card has any, and
-  then `checks:` and one `- <command>` line per checks row, then a blank line,
-  when the card has any, and the same for `allow:`, `tests:` and `files:` with
-  one `- <word or name>` line each (the `dev.allow`, `dev.tests` and
+  the `/export-data` task row), then a blank line, when the card has any. A
+  card with outcomes prints a v1 `## Done when` checklist in its description
+  only through those lines, never twice, and a card with none prints no
+  `done when:` block and keeps its description as it is. After that it prints
+  `checks:` and one `- <command>` line per checks row, then a blank line, when
+  the card has any, and the same for `allow:`, `tests:` and `files:` with one
+  `- <word or name>` line each (the `dev.allow`, `dev.tests` and
   `dev.files` fields). Links are listed by `links`. On a child it also
   prints `parent: <id prefix> <name>` under the `ls` line, and on an umbrella
   `children: N of M done`, from `GET /api/tasks/{id}` (`parent`,
