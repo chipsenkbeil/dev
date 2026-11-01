@@ -172,24 +172,33 @@ local function dev(root, home, log, args, extra)
     return support.dev(root, args, { env = env })
 end
 
-local function comments(home)
+local function board_card(doc, id)
+    for _, card in ipairs(doc.cards) do
+        if id and card.id:sub(1, #id) == id then
+            return card
+        end
+    end
+    return doc.cards[1]
+end
+
+local function comments(home, id)
     local doc = assert(
         json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
         "decode failed"
     )
-    return doc.cards[1].comments or {}
+    return board_card(doc, id).comments or {}
 end
 
 local function landed_calls(log)
     return fs.read(log) or ""
 end
 
-local function column_of(home)
+local function column_of(home, id)
     local doc = assert(
         json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
         "decode failed"
     )
-    local card = doc.cards[1]
+    local card = board_card(doc, id)
     for _, column in ipairs(doc.columns) do
         if column.id == card.column_id then
             return column.name
@@ -253,6 +262,7 @@ t.test("land refuses a git project and a caller with no name", function()
     t.ok(out:find("needs DEV_AGENT", 1, true), out)
     out, code = dev(root, home, log, { "board", "land" })
     t.eq(code, 2, out)
+    t.ok(out:find("needs a card", 1, true), out)
 end)
 
 t.test("land refuses an agent name that is not one word", function()
@@ -584,6 +594,18 @@ if has_jj then
         t.eq(backend.notes, {})
     end)
 
+    t.test("land refuses when the board's cards cannot be read", function()
+        local root = jj_project()
+        local backend = fake_backend(root)
+        function backend:cards()
+            return nil, "board unavailable: cards timed out"
+        end
+        local result = land_as_lander(backend)
+        t.eq(result.code, 1)
+        t.eq(result.message, "board unavailable: cards timed out")
+        t.eq(backend.notes, {})
+    end)
+
     t.test("land names outcomes that cannot be read and does not land", function()
         local root = jj_project()
         local backend = fake_backend(root, { outcomes_unreadable = true })
@@ -674,5 +696,34 @@ if has_jj then
         t.ok(last.body:find(before:sub(1, 12), 1, true), last.body)
         t.ok(last.body:find("may differ", 1, true), last.body)
         t.eq(column_of(home), "Done")
+    end)
+
+    t.test("a landed card whose move to Done fails is named and exits non-zero", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        local out = dev(
+            root,
+            home,
+            log,
+            { "board", "add", "Child", "--problem", "x", "--size", "1", "--done-when", "x" }
+        )
+        local child = assert(out:match("added (%x+)"), out)
+        must(dev(root, home, log, { "board", "link", child, "parent", id }))
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local commit = head(root)
+        local code
+        out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 1, out)
+        t.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
+        t.ok(
+            out:find("landed commit " .. commit:sub(1, 12) .. " and noted it on " .. id, 1, true),
+            out
+        )
+        t.ok(out:find("but the move to Done failed", 1, true), out)
+        t.ok(out:find("1 of 1 children are open", 1, true), out)
+        local list = comments(home, id)
+        t.eq(list[#list].kind, "done")
+        t.eq(column_of(home, id), "In Review")
     end)
 end
