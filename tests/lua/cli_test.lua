@@ -364,6 +364,25 @@ t.test("help for a built-in outside the type verbs runs no project detection", f
     fs.remove(root, { recursive = true })
 end)
 
+t.test("dev help over a tree deeper than the project search returns within its bound", function()
+    local bound_secs = 10
+    local levels = 8
+    local root = project({})
+    local deep = root
+    for level = 1, levels do
+        deep = deep .. "/level" .. level
+    end
+    assert(fs.mkdir(deep, { parents = true }))
+    local out, code = devos.capture_timed({ "luajit", MAIN, "help" }, bound_secs, {
+        cwd = deep,
+        merge = true,
+        env = { CI = "", DEV_REMOTE = "0" },
+    })
+    t.eq(code, 0)
+    t.ok(out:find("project at", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("a project Lua verb that is interrupted exits 130 with nothing on stderr", function()
     local root = project({ ["stop.lua"] = 'error("interrupted!", 0)\n' })
     local out, code = dev(root, { "stop" })
