@@ -926,8 +926,8 @@ never handles the API.
   card passes `sections = false` unless strict, and a `discarded` one passes no
   outcome check, which is what `discard`'s guard does. It adds, outside Icebox
   and Done, `over 400 words (N)`, `no checks row` in Ready, In Progress and In
-  Review, and `red card in Ready`. Anywhere it adds `needs:human outside
-  Blocked and Icebox`. In Blocked it adds `blocked with no question or blocked
+  Review for a card with no children, and `red card in Ready`. Anywhere it
+  adds `needs:human outside Blocked and Icebox`. In Blocked it adds `blocked with no question or blocked
   note and no blocker`, reading `backend:comments` for a `question` or
   `blocked` kind and then `backend:links` for `blocked_by`. In In Progress it
   adds `in progress with no claimant` when `backend:family` shows no children,

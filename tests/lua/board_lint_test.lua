@@ -128,6 +128,15 @@ t.test("lint holds an umbrella to its children and not to outcomes", function()
     })
 end)
 
+t.test("lint asks a card without children for a checks row and an umbrella for none", function()
+    local cards = {
+        card(1, "In Progress", { outcomes = {}, checks = {} }),
+        card(2, "In Progress", { checks = {} }),
+    }
+    local fake = backend(cards, { children = { [cards[1].id] = 2 } })
+    t.eq(findings(commands.run("lint", {}, fake).output), { "00000002 In Progress no checks row" })
+end)
+
 t.test("lint flags a Done card with outcomes and an open child", function()
     local fake = backend({ card(1, "Done") })
     function fake:family()

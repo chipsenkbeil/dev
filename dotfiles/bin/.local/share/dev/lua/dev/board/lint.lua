@@ -128,7 +128,13 @@ function M.card(card, opts)
     if open then
         local worked = column == roles.ready or column == roles.progress or column == roles.review
         if worked and #card.checks == 0 then
-            add("no checks row")
+            local found, why = children()
+            if not found then
+                return nil, why
+            end
+            if found.total == 0 then
+                add("no checks row")
+            end
         end
         if column == roles.ready and card.color == board.SIZES["3+"] then
             add("red card in " .. column)
