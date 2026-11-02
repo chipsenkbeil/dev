@@ -5,6 +5,9 @@ local text = require("dev.text")
 ---@class dev.board
 local M = {}
 
+---@class dev.board.ClaimOpts
+---@field lease boolean? true when the claim lasts the ttl, false for the card-size minutes
+
 ---@class dev.board.Card
 ---@field id string the card's full id
 ---@field name string the card's title
@@ -68,7 +71,7 @@ local M = {}
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
 ---@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?): dev.board.Events?, string?, string?, boolean? the events after the cursor, oldest first, held up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once with none and the board's current cursor. On an expired cursor it returns nil, a message and the oldest cursor that still resumes, when Pomb holds too many open waits for the token it returns nil, a message, nil and true, and on any other failure nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.MoveOpts?): boolean?, string? the card moved to a column at a zero-based position, the top when nil, checked against the claim's fence when one is given
----@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?): integer?, string? the fence of the claim taken, or renewed when the caller's live fence is given
+---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the claim, renewed when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
 
@@ -222,7 +225,9 @@ M.CHECK_PREFIX = "dev-check:"
 ---The prefix of the comment `review` writes, which no note may begin with.
 M.REVIEW_PREFIX = "dev-review:"
 
-local RESERVED_PREFIXES = { M.CHECK_PREFIX, M.REVIEW_PREFIX }
+M.TURN_PREFIX = "dev-turn:"
+
+local RESERVED_PREFIXES = { M.CHECK_PREFIX, M.REVIEW_PREFIX, M.TURN_PREFIX }
 
 ---Say whether a comment body begins with a prefix only a dev verb writes.
 ---@param body string the comment body

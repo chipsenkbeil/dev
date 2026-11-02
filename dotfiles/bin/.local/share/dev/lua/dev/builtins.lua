@@ -335,8 +335,9 @@ return {
     {
         words = { "board", "land" },
         handler = "lua",
-        usage = "dev board land CARD",
-        desc = "Land a card's change with jj land, then note the commit and move the card to Done, only when the card is In Review with every outcome ticked, code and style reviews and a passing check run are recorded for the commit, and trunk has not moved; needs DEV_AGENT and a jj project",
+        flags = "--wait",
+        usage = "dev board land CARD [--wait SECONDS]",
+        desc = "Take the landing turn, one landing at a time across runners (waiting up to SECONDS, 300 by default, then naming the holder), rebase the card's change onto trunk under it, land it with jj land, note the commit, move the card to Done and give the turn back, only when the card is In Review with every outcome ticked and code and style reviews and a passing check run are recorded for the rebased commit; needs DEV_AGENT and a jj project",
     },
     {
         words = { "board", "allow" },

@@ -160,6 +160,18 @@ function M.checks_problem(comments, state, rows)
     end
 end
 
+local function parent_on_trunk(root)
+    local parents =
+        devos.capture(jj(root, "log", "-r", "@-", "--no-graph", "-T", COMMIT_TEMPLATE), {
+            stderr = "null",
+        })
+    local on_trunk = devos.capture(
+        jj(root, "log", "-r", "@- & trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
+        { stderr = "null" }
+    )
+    return count_lines(parents) == 1 and on_trunk == parents
+end
+
 ---Fetch the remote of record and say whether the change still sits on trunk.
 ---@param root string the project root, a jj project
 ---@return string? problem what is wrong, nil when the change's parent is the current trunk
@@ -177,17 +189,45 @@ function M.trunk_problem(root)
             out
         )
     end
-    local parents =
-        devos.capture(jj(root, "log", "-r", "@-", "--no-graph", "-T", COMMIT_TEMPLATE), {
-            stderr = "null",
-        })
-    local on_trunk = devos.capture(
-        jj(root, "log", "-r", "@- & trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
-        { stderr = "null" }
-    )
-    if count_lines(parents) ~= 1 or on_trunk ~= parents then
+    if not parent_on_trunk(root) then
         return "trunk has moved since the change was built, so rebase it onto trunk(), then record the reviews and run dev board check again"
     end
+end
+
+---Fetch the remote of record and rebase the working-copy change onto trunk when it sits elsewhere.
+---@param root string the project root, a jj project
+---@return boolean? rebased true when the change moved, false when it already sat on trunk
+---@return string? problem why trunk could not be read or the rebase failed
+function M.rebase(root)
+    local found, why = forge.resolve(root)
+    if not found then
+        return nil, "trunk cannot be compared: " .. why
+    end
+    local out, code =
+        devos.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "stdout" })
+    if code ~= 0 then
+        return nil,
+            string.format(
+                "trunk cannot be compared, the fetch from %s failed: %s",
+                found.remote,
+                out
+            )
+    end
+    if parent_on_trunk(root) then
+        return false
+    end
+    local stacked = devos.capture(
+        jj(root, "log", "-r", "::@- ~ ::trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
+        { stderr = "null" }
+    )
+    if stacked ~= "" then
+        return nil, "the change sits on an unlanded parent, so land the parent first"
+    end
+    out, code = devos.capture(jj(root, "rebase", "-r", "@", "-d", "trunk()"), { stderr = "stdout" })
+    if code ~= 0 then
+        return nil, "the rebase onto trunk failed: " .. out
+    end
+    return true
 end
 
 local function jj_out(root, ...)

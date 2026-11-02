@@ -1184,13 +1184,15 @@ never handles the API.
   `check`, it is never queued: if the comment cannot be written the command
   exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
   come after Pomb stored it, so read `notes` before repeating. `note` refuses
-  `dev-review:` as it does `dev-check:`, and `note --edit` and `--delete` refuse
-  a comment that holds it. It does not judge the review.
-- `land CARD`: Lands the working-copy change with `jj land --yes -r @` run in the
-  project root, writes a `done` note and moves the card to Done. It needs
-  `DEV_AGENT` (usage error, exit 2, without it) and a jj project: in plain git
-  it refuses and says so. It refuses, exit 1, and runs nothing until every
-  condition holds, and the message lists each one that fails:
+  `dev-review:` and `dev-turn:` as it does `dev-check:`, and `note --edit`
+  and `--delete` refuse a comment that holds it. It does not judge the review.
+- `land CARD [--wait SECONDS]`: Takes the landing turn, rebases the working-copy
+  change onto trunk, lands it with `jj land --yes -r @` run in the project
+  root, writes a `done` note, moves the card to Done and gives the turn
+  back. It needs `DEV_AGENT` (usage error, exit 2, without it) and a jj
+  project: in plain git it refuses and says so. It refuses, exit 1, and
+  lands nothing until every condition holds, and the message lists each one
+  that fails. A refusal can leave the change rebased onto trunk:
   - the card is in the review column and no other agent claims it. `move`
     releases the claim, so `land` refuses a card claimed by another agent and
     lets any agent with `DEV_AGENT` set land an unclaimed one.
@@ -1206,10 +1208,41 @@ never handles the API.
     record never counts.
   - the commit's parent is the current trunk, compared after
     `jj git fetch --remote <remote of record>`, with the remote taken from the
-    forge settings (see `forge`). A failed fetch refuses. This check
-    runs only once the other conditions hold, but the carry attempt below
-    fetches earlier, and a landing that carries reads trunk once before it
-    lands.
+    forge settings (see `forge`). A failed fetch refuses. `land` rebases the
+    change onto trunk itself while it holds the turn, so this holds unless the
+    rebase failed. The conditions on the reviews and the check are then judged
+    at the rebased commit. A change that sits on an unlanded parent is
+    refused and not rebased.
+
+  The landing turn keeps one landing at a time across runners, to keep
+  trunk from moving under a landing. It is the claim on a card named
+  `landing turn`, which `land` creates in the Icebox when the board has
+  none, to keep the holder on the board and not in one session.
+
+  A card in the wrong column, with an open outcome or claimed by another
+  agent is refused before the turn is asked for. `land` then asks for the
+  turn every 5 seconds for up to `--wait` seconds (300 by default, up to
+  86400, a whole number) and, when it stays taken, refuses with
+  `the landing turn is held by NAME since STAMP`.
+
+  Cards wait in the order they asked. A card with a wait writes a
+  `dev-turn: ask` note with the time its wait ends before it asks for the
+  turn, and only the first live ask in line may take it. A later asker is
+  told whom the turn is next for. An ask ends when its card takes the turn,
+  writes a `dev-turn: left` note when its wait runs out, or passes its end
+  time, to keep a waiter that died from holding the line. Only the claim's
+  fence releases the turn, and a waiter that gives up releases nothing.
+
+  The holder writes a `dev-turn:` note on the turn card with its name, the
+  card it lands and the time it took the turn. The lease is 900 seconds and
+  `land` renews it before the `jj land`. When a holder dies, the lease ends
+  and the next asker takes the turn. A holder that comes back after that
+  gets `the landing turn was lost` or `the landing turn ran out`, writes
+  nothing and lands nothing, and has to ask again.
+
+  `land` gives the turn back on every exit, a refusal included. A local
+  board keeps the lease for its length and ignores the card-size lease that
+  `take` uses.
 
   One case keeps a check and reviews across a rebase. When the landing commit
   lacks the reviews and has no `dev-check:` record of its own, `land` looks for

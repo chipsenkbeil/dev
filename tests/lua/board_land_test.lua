@@ -7,8 +7,10 @@ local devos = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local land = require("dev.board.land")
+local localboard = require("dev.board.localboard")
 local review = require("dev.board.review")
 local support = require("support")
+local turn = require("dev.board.turn")
 
 local has_jj = devos.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
@@ -181,7 +183,11 @@ local function board_card(doc, id)
             return card
         end
     end
-    return doc.cards[1]
+    for _, card in ipairs(doc.cards) do
+        if card.name ~= turn.NAME then
+            return card
+        end
+    end
 end
 
 local function comments(home, id)
@@ -370,6 +376,41 @@ if has_jj then
 
     local function head(root)
         return jj(root, "log", "-r", "@", "--no-graph", "-T", "commit_id")
+    end
+
+    local function board_at(home)
+        local previous = os.getenv("XDG_STATE_HOME") or ""
+        ffi.C.setenv("XDG_STATE_HOME", home .. "/state", 1)
+        local backend = localboard.new({
+            name = "mine",
+            path = home .. "/state/dev/boards/mine.json",
+            private = true,
+        })
+        backend.roles = { icebox = "Icebox" }
+        return backend,
+            function()
+                ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+            end
+    end
+
+    local function hold_turn(home, name, card)
+        local backend, restore = board_at(home)
+        local held = assert(turn.take(backend, name, card))
+        restore()
+        return held
+    end
+
+    local function release_turn(home, held)
+        local backend, restore = board_at(home)
+        turn.release(backend, held)
+        restore()
+    end
+
+    local function turn_holder(home)
+        local backend, restore = board_at(home)
+        local holder = turn.holder(backend)
+        restore()
+        return holder
     end
 
     t.test("a card that meets every condition lands, gets a done note and reaches Done", function()
@@ -596,7 +637,7 @@ if has_jj then
         t.eq(code, 0, out)
     end)
 
-    t.test("land refuses when trunk has moved since the change was built", function()
+    t.test("land rebases onto trunk under the turn when trunk has moved", function()
         local root, home, log, bare = jj_project()
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "review" }))
@@ -610,7 +651,87 @@ if has_jj then
         )
         git(other, "commit", "-q", "--allow-empty", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
-        refused(root, home, log, id, { "trunk has moved" })
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        t.eq(out:find("trunk has moved", 1, true), nil, out)
+        t.eq(column_of(home), "Done")
+        t.eq(turn_holder(home), nil)
+    end)
+
+    t.test("land names the holder and since when while another card holds the turn", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local held = hold_turn(home, "other", "cccc3333")
+        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" })
+        t.eq(code, 1, out)
+        t.ok(out:find("held by other since 20", 1, true), out)
+        t.eq(column_of(home), "In Review")
+        _, code = dev(root, home, log, { "board", "land", id, "--wait", "x" })
+        t.eq(code, 2)
+        _, code = dev(root, home, log, { "board", "land", id, "--wait", "999999999" })
+        t.eq(code, 2)
+        release_turn(home, held)
+        out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id, "--wait", "0" },
+            { LAND_TRUNK = "keep" }
+        )
+        t.eq(code, 0, out)
+        t.eq(column_of(home), "Done")
+        t.eq(turn_holder(home), nil)
+    end)
+
+    t.test("land leaves a change on an unlanded parent where it is", function()
+        local root, home, log, bare = jj_project()
+        jj(root, "new", "-m", "feat: child")
+        assert(fs.write(root .. "/child.txt", "two\n"), "write failed")
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local other = support.tempdir() .. "/clone"
+        must(
+            devos.run(
+                { "git", "clone", "-q", "--branch", "master", bare, other },
+                { stdout = "null", stderr = "null" }
+            )
+        )
+        git(other, "commit", "-q", "--allow-empty", "-m", "moved")
+        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        local before = head(root)
+        refused(root, home, log, id, { "sits on an unlanded parent" })
+        t.eq(head(root), before)
+        t.eq(turn_holder(home), nil)
+    end)
+
+    t.test("land waits up to the wait and then names the holder", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        local held = hold_turn(home, "other", "cccc3333")
+        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "1" })
+        t.eq(code, 1, out)
+        t.ok(out:find("held by other since", 1, true), out)
+        t.eq(assert(turn_holder(home)).name, "other")
+        release_turn(home, held)
+    end)
+
+    t.test("land gives the turn back when it refuses", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        local out, code = dev(root, home, log, { "board", "land", id })
+        t.eq(code, 1, out)
+        t.ok(out:find("no code review", 1, true), out)
+        t.ok(
+            fs.read(home .. "/state/dev/boards/mine.json"):find("dev-turn: holder=lander", 1, true)
+        )
+        t.eq(turn_holder(home), nil)
     end)
 
     local function trunk_moves(root, bare, files)
@@ -647,6 +768,22 @@ if has_jj then
         return id
     end
 
+    t.test("land after another lander's turn ends rebases without a trunk-moved refusal", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        local held = hold_turn(home, "other", "cccc3333")
+        local first, first_code = dev(root, home, log, { "board", "land", id, "--wait", "0" })
+        t.eq(first_code, 1, first)
+        t.ok(first:find("held by other since", 1, true), first)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        release_turn(home, held)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        t.ok(not out:find("trunk has moved", 1, true), out)
+        t.eq(column_of(home), "Done")
+        t.eq(turn_holder(home), nil)
+    end)
+
     t.test("land carries the check and reviews over a rebase past unrelated commits", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)
@@ -663,7 +800,7 @@ if has_jj then
         t.eq(column_of(home), "Done")
     end)
 
-    t.test("land reads trunk once before the land when it carries", function()
+    t.test("land reads trunk under the turn, to carry and after the land", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
@@ -679,7 +816,7 @@ if has_jj then
         t.eq(code, 0, out)
         local list = comments(home)
         t.ok(list[#list].body:find("carried over", 1, true), list[#list].body)
-        t.eq(fs.read(reads), "fetch\nfetch\n")
+        t.eq(fs.read(reads), "fetch\nfetch\nfetch\n")
     end)
 
     t.test("land stays put when the push after a carry is rejected", function()

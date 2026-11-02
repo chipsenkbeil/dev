@@ -17,6 +17,7 @@ local review = require("dev.board.review")
 local store = require("dev.board.store")
 local text_width = require("dev.text").width
 local toml = require("dev.toml")
+local turn = require("dev.board.turn")
 local ui = require("dev.ui")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
@@ -38,6 +39,7 @@ local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local EXPECT_FAIL_FLAG = "--expect-fail"
 local TIMEOUT_FLAG = "--timeout"
+local WAIT_FLAG = "--wait"
 local STRICT_FLAG = "--strict"
 local RESERVED_NOTE = "a note cannot begin with "
     .. board.CHECK_PREFIX
@@ -2307,7 +2309,7 @@ end
 ---@field name string the caller's agent name
 ---@field comments {body: string}[] the card's comments, oldest first
 
-local function land_problems(backend, card, who)
+local function card_problems(backend, card, who)
     local problems = {}
     local roles = backend.roles
     if card.column ~= roles.review then
@@ -2327,6 +2329,11 @@ local function land_problems(backend, card, who)
     if open then
         problems[#problems + 1] = open.message
     end
+    return problems
+end
+
+local function land_problems(backend, card, who)
+    local problems = card_problems(backend, card, who)
     local state, message = land.state(backend.root)
     if not state then
         problems[#problems + 1] = message
@@ -2365,42 +2372,80 @@ local function land_problems(backend, card, who)
     return problems, state, carried
 end
 
-function commands.land(backend, args)
-    if #args ~= 1 then
-        return usage("needs a card")
+---@class dev.cmd.board.TurnOpts
+---@field backend dev.board.Backend the board backend
+---@field name string the caller's agent name
+---@field short string the short id of the card that lands
+---@field wait integer the seconds to keep asking
+
+---Ask for the landing turn until it is free or the wait ends.
+---@param opts dev.cmd.board.TurnOpts the board, the asker and the wait
+---@return dev.board.turn.Turn? hold the turn, nil when it stayed taken
+---@return string? message why it was not taken
+local function await_turn(opts)
+    local deadline = os.time() + opts.wait
+    local asker = { name = opts.name, card = opts.short, seconds = opts.wait }
+    if opts.wait > 0 then
+        local ok, why = turn.ask(opts.backend, asker)
+        if not ok then
+            return nil, why
+        end
     end
-    local name, why = agent_name()
-    if why then
-        return why
+    while true do
+        local hold, message = turn.take(opts.backend, opts.name, opts.short)
+        if hold or opts.wait == 0 then
+            return hold, message
+        end
+        if os.time() >= deadline then
+            turn.leave(opts.backend, opts.name, opts.short)
+            return nil, message
+        end
+        devos.nap(turn.POLL_SECONDS)
     end
-    if not name then
-        return usage("needs DEV_AGENT, the name that lands the card")
-    end
-    local card, err = find_card(backend, args[1])
-    if not card then
-        return err
-    end
+end
+
+---@class dev.cmd.board.HeldOpts
+---@field backend dev.board.Backend the board backend
+---@field card dev.board.Card the card that lands
+---@field name string the caller's agent name
+---@field hold dev.board.turn.Turn the landing turn in hand
+
+---Land the card while the turn is held.
+---@param opts dev.cmd.board.HeldOpts the card and the turn in hand
+---@return dev.cmd.board.Result result the landing's outcome
+local function land_held(opts)
+    local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold
     local short = card.id:sub(1, board.MIN_PREFIX)
-    local held_back = owner_holds(card)
-    if held_back then
-        return held_back
+    local message
+    local current = card_problems(backend, card, { name = name, comments = {} })
+    if #current > 0 then
+        return failure(short .. " cannot land:\n  - " .. table.concat(current, "\n  - "))
     end
-    if not backend.root then
-        return failure("dev board land needs the project's root")
+    local state_ok, bad = land.state(backend.root)
+    if not state_ok then
+        return failure(short .. " cannot land:\n  - " .. bad)
     end
-    if vcs.backend(backend.root) ~= vcs.JJ then
-        return failure(
-            short
-                .. " cannot land: dev board land needs a jj project, and does not land in plain git"
-        )
+    local rebased, why = land.rebase(backend.root)
+    if rebased == nil then
+        return failure(short .. " cannot land: " .. why)
     end
-    local list, message = backend:comments(card.id)
-    if not list then
+    local fresh
+    fresh, message = backend:comments(card.id)
+    if not fresh then
         return failure(message)
     end
-    local problems, state, carried = land_problems(backend, card, { name = name, comments = list })
+    local rebase_note = rebased and "\n  (the change was rebased onto trunk under the landing turn)"
+        or ""
+    local problems, state, carried = land_problems(backend, card, { name = name, comments = fresh })
     if #problems > 0 then
-        return failure(short .. " cannot land:\n  - " .. table.concat(problems, "\n  - "))
+        return failure(
+            short .. " cannot land:\n  - " .. table.concat(problems, "\n  - ") .. rebase_note
+        )
+    end
+    local renewed
+    renewed, message = turn.renew(backend, hold)
+    if not renewed then
+        return failure(short .. " cannot land: " .. message)
     end
     local landed, output = land.run(backend.root)
     if not landed then
@@ -2466,6 +2511,73 @@ function commands.land(backend, args)
                 or " (the commit from before the land, which may differ: trunk could not be read)"
         ),
     }
+end
+
+function commands.land(backend, args)
+    local flags, words = parse(args, { [WAIT_FLAG] = true })
+    if not flags then
+        return words
+    end
+    if #words ~= 1 then
+        return usage("needs a card")
+    end
+    local DEFAULT_WAIT_SECONDS = 300
+    local MAX_WAIT_SECONDS = 86400
+    local wait = DEFAULT_WAIT_SECONDS
+    if flags[WAIT_FLAG] then
+        wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
+        if not wait or wait > MAX_WAIT_SECONDS then
+            return usage(WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS)
+        end
+    end
+    local name, why = agent_name()
+    if why then
+        return why
+    end
+    if not name then
+        return usage("needs DEV_AGENT, the name that lands the card")
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local held_back = owner_holds(card)
+    if held_back then
+        return held_back
+    end
+    if not backend.root then
+        return failure("dev board land needs the project's root")
+    end
+    if vcs.backend(backend.root) ~= vcs.JJ then
+        return failure(
+            short
+                .. " cannot land: dev board land needs a jj project, and does not land in plain git"
+        )
+    end
+    local list, message = backend:comments(card.id)
+    if not list then
+        return failure(message)
+    end
+    local early = card_problems(backend, card, { name = name, comments = list })
+    if #early > 0 then
+        local all = land_problems(backend, card, { name = name, comments = list })
+        return failure(short .. " cannot land:\n  - " .. table.concat(all, "\n  - "))
+    end
+    local hold
+    hold, message = await_turn({ backend = backend, name = name, short = short, wait = wait })
+    if not hold then
+        return failure(short .. " cannot land: " .. message)
+    end
+    local current
+    current, message = find_card(backend, words[1])
+    if not current then
+        turn.release(backend, hold)
+        return message
+    end
+    local result = land_held({ backend = backend, card = current, name = name, hold = hold })
+    turn.release(backend, hold)
+    return result
 end
 
 ---Read the words of an allow command.

@@ -787,7 +787,7 @@ function Backend:delete_outcome(id, outcome, fence)
     end)
 end
 
-function Backend:claim(id, claimant, _, fence)
+function Backend:claim(id, claimant, ttl, fence, opts)
     return self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
         if not card then
@@ -800,11 +800,12 @@ function Backend:claim(id, claimant, _, fence)
         local taken = held and held.fence or (card.last_fence or 0) + 1
         local size = card_view(doc, card).size
         local _, minutes = claims.cap(size)
+        local seconds = opts and opts.lease and ttl or minutes * SECONDS_PER_MINUTE
         card.last_fence = taken
         card.claim = {
             claimant = claimant,
             fence = taken,
-            expires_at = store.stamp(os.time() + minutes * SECONDS_PER_MINUTE),
+            expires_at = store.stamp(os.time() + seconds),
         }
         return taken
     end)
