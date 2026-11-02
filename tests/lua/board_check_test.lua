@@ -101,15 +101,30 @@ t.test("check records each row and the commit, and the run is clean in git", fun
     local id = card_with(root, home, { "true", "false" })
     local out, code = dev(root, home, { "board", "check", id })
     t.eq(code, 1, out)
-    t.ok(out:find("1 pass true", 1, true) and out:find("2 fail false", 1, true), out)
+    t.ok(out:find("1 pass - true", 1, true) and out:find("2 fail - false", 1, true), out)
     t.ok(out:find("recorded on " .. id .. " at commit " .. head:sub(1, 12), 1, true), out)
     local body = comments(home)[1].body
-    t.eq(body, "dev-check: commit=" .. head .. " change=- mode=run\n1 pass true\n2 fail false")
+    t.eq(body, "dev-check: commit=" .. head .. " change=- mode=run\n1 pass - true\n2 fail - false")
     t.eq(comments(home)[1].kind, "status")
     must(dev(root, home, { "board", "checks", id, "true" }))
     out, code = dev(root, home, { "board", "check", id })
     t.eq(code, 0, out)
     t.eq(#comments(home), 2)
+end)
+
+t.test("check records the ci run id each row printed", function()
+    local root, home, head = git_root()
+    local id = card_with(root, home, { "echo run 8cb600", "echo run 1f2e3d" })
+    local out, code = dev(root, home, { "board", "check", id })
+    t.eq(code, 0, out)
+    t.ok(out:find("1 pass 8cb600 echo run 8cb600", 1, true), out)
+    t.ok(out:find("2 pass 1f2e3d echo run 1f2e3d", 1, true), out)
+    local record = check.parse(comments(home)[1].body)
+    t.eq(record.commit, head)
+    t.eq(record.rows, {
+        { result = "pass", run_id = "8cb600", run = "echo run 8cb600" },
+        { result = "pass", run_id = "1f2e3d", run = "echo run 1f2e3d" },
+    })
 end)
 
 t.test("check refuses a dirty git tree and records nothing", function()
@@ -149,7 +164,7 @@ t.test("check ends a row at the time limit and records a timeout", function()
     local id = card_with(root, home, { "sleep 30" })
     local out, code = dev(root, home, { "board", "check", id, "--timeout", "1" })
     t.eq(code, 1, out)
-    t.eq(comments(home)[1].body:match("\n(.*)$"), "1 timeout sleep 30")
+    t.eq(comments(home)[1].body:match("\n(.*)$"), "1 timeout - sleep 30")
     out, code = dev(root, home, { "board", "check", id, "--timeout", "0" })
     t.eq(code, 2, out)
 end)
@@ -166,7 +181,7 @@ t.test("--expect-fail records failing rows and reports a passing one", function(
     t.eq(code, 0, out)
     t.eq(
         comments(home)[1].body,
-        "dev-check: commit=" .. head .. " change=- mode=expect-fail\n1 fail false"
+        "dev-check: commit=" .. head .. " change=- mode=expect-fail\n1 fail - false"
     )
     must(dev(root, home, { "board", "checks", id, "true", "false" }))
     out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
@@ -225,7 +240,7 @@ t.test("a result that cannot be written is never reported as recorded", function
     t.eq(result.code, 1)
     t.ok(result.message:find("was NOT recorded", 1, true), result.message)
     t.ok(result.message:find("curl exit 28", 1, true), result.message)
-    t.ok(result.message:find("1 pass true", 1, true), result.message)
+    t.ok(result.message:find("1 pass - true", 1, true), result.message)
     t.eq(result.unqueued, nil)
 end)
 
@@ -257,7 +272,7 @@ if has_jj then
         local commit, change = want:match("^(%x+) (%a+)")
         t.eq(
             comments(home)[1].body,
-            "dev-check: commit=" .. commit .. " change=" .. change .. " mode=run\n1 pass true"
+            "dev-check: commit=" .. commit .. " change=" .. change .. " mode=run\n1 pass - true"
         )
         t.ok(out:find(commit:sub(1, 12), 1, true), out)
     end)

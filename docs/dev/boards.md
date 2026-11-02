@@ -1165,12 +1165,15 @@ never handles the API.
   (exit 1).
 
   The comment has the kind `status` and begins with a reserved first line,
-  then one line per row:
+  then one line per row: its place, its result, the ci run id it printed and
+  its command. The run id is the one from the `run <id>` line of `ci run
+  --follow`, so `ci logs <id>` reads the row's log, and `-` when
+  the row printed none:
 
   ```
   dev-check: commit=<full commit id> change=<change id, - in git> mode=run
-  1 pass dev --remote lint
-  2 fail dev --remote test
+  1 pass 8cb600 dev --remote lint
+  2 fail - dev --remote test
   ```
 
   A row ends as `pass`, `fail` (any non-zero exit) or `timeout`. The command

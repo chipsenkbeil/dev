@@ -16,6 +16,7 @@ local SHELL_CHARS = "[|&;<>()$`\\\"'*?\n]"
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "conflict", "clean")'
 local SHOWN_LINES = 12
 local NO_CHANGE = "-"
+local NO_RUN = "-"
 local TIMEOUT_EXIT = 124
 
 ---How a checks row ended.
@@ -30,6 +31,7 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 
 ---@class dev.board.check.Row
 ---@field run string the row's command as the card holds it
+---@field run_id string the ci run id the row printed, `-` when it printed none
 ---@field result string one of `RESULT`, where a timeout also covers a row killed from outside
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
@@ -144,7 +146,26 @@ function M.run(opts)
     if code == TIMEOUT_EXIT then
         result = M.RESULT.TIMEOUT
     end
-    return { run = opts.run, result = result, code = code, tail = tail_of(output) }
+    return {
+        run = opts.run,
+        run_id = M.run_id(output) or NO_RUN,
+        result = result,
+        code = code,
+        tail = tail_of(output),
+    }
+end
+
+---Find the ci run id a row printed, from the `run <id>` line of `ci run --follow`.
+---@param output string the row's output, with standard error in it
+---@return string? run_id the id, nil when no line names one
+function M.run_id(output)
+    for line in output:gmatch("[^\n]+") do
+        local id = line:match("^run (%x+)$")
+        if id then
+            return id
+        end
+    end
+    return nil
 end
 
 ---Write one row's line of a run.
@@ -152,7 +173,7 @@ end
 ---@param row dev.board.check.Row the finished row
 ---@return string line the line
 function M.line(index, row)
-    return string.format("%d %s %s", index, row.result, row.run)
+    return string.format("%d %s %s %s", index, row.result, row.run_id, row.run)
 end
 
 ---Count the rows that passed and say whether the run showed what it was meant to.
@@ -198,7 +219,7 @@ end
 ---@field commit string the full commit id the rows ran on
 ---@field change string the change id, `-` in a git project
 ---@field mode string one of `MODE`
----@field rows {result: string, run: string}[] the rows in the order they ran
+---@field rows {result: string, run_id: string, run: string}[] the rows in the order they ran
 
 ---Read a comment that `record` wrote.
 ---@param body string the comment body
@@ -211,11 +232,14 @@ function M.parse(body)
     end
     local rows = {}
     for line in rest:gmatch("[^\n]+") do
-        local index, result, run = line:match("^(%d+) (%a+) (.+)$")
+        local index, result, run_id, run = line:match("^(%d+) (%a+) (%S+) (.+)$")
         if not index or tonumber(index) ~= #rows + 1 then
             return nil
         end
-        rows[#rows + 1] = { result = result, run = run }
+        if run_id ~= NO_RUN and not run_id:match("^%x+$") then
+            return nil
+        end
+        rows[#rows + 1] = { result = result, run_id = run_id, run = run }
     end
     return { commit = commit, change = change, mode = mode, rows = rows }
 end

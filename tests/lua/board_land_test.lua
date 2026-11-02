@@ -86,20 +86,22 @@ local STATE = { commit = COMMIT, change = "chg" }
 
 t.test("check.parse reads what check.record wrote and nothing else", function()
     local rows = {
-        { run = "dev lint", result = "pass", code = 0, tail = "" },
-        { run = "dev test", result = "fail", code = 1, tail = "" },
+        { run_id = "8cb600", run = "dev lint", result = "pass", code = 0, tail = "" },
+        { run_id = "-", run = "dev test", result = "fail", code = 1, tail = "" },
     }
     local record = check.parse(check.record(STATE, rows, true))
     t.eq(record.commit, COMMIT)
     t.eq(record.change, "chg")
     t.eq(record.mode, "expect-fail")
-    t.eq(
-        record.rows,
-        { { run = "dev lint", result = "pass" }, { run = "dev test", result = "fail" } }
-    )
+    t.eq(record.rows, {
+        { run_id = "8cb600", run = "dev lint", result = "pass" },
+        { run_id = "-", run = "dev test", result = "fail" },
+    })
     t.eq(check.parse("a note"), nil)
     t.eq(check.parse("dev-check: commit=zz change=c mode=run"), nil)
     t.eq(check.parse("dev-check: commit=aa change=c mode=run\n2 pass x"), nil)
+    t.eq(check.parse("dev-check: commit=aa change=c mode=run\n1 pass dev lint"), nil)
+    t.eq(check.parse("dev-check: commit=aa change=c mode=run\n1 pass zz dev lint"), nil)
 end)
 
 t.test("review.parse reads what review.record wrote and nothing else", function()
@@ -137,24 +139,24 @@ end)
 
 t.test("checks_problem counts only the newest passing run at the commit", function()
     local rows = { "dev lint", "dev test" }
-    local pass = checked(COMMIT, "run", { "pass dev lint", "pass dev test" })
+    local pass = checked(COMMIT, "run", { "pass - dev lint", "pass - dev test" })
     t.eq(land.checks_problem({ pass }, STATE, rows), nil)
     t.ok(land.checks_problem({ pass }, STATE, {}):find("no checks rows", 1, true))
     t.ok(land.checks_problem({}, STATE, rows):find("no run of dev board check", 1, true))
     t.ok(
-        land.checks_problem({ checked(OTHER, "run", { "pass a", "pass b" }) }, STATE, rows)
+        land.checks_problem({ checked(OTHER, "run", { "pass - a", "pass - b" }) }, STATE, rows)
             :find("no run of dev board check", 1, true)
     )
-    local expect = checked(COMMIT, "expect-fail", { "fail dev lint", "fail dev test" })
+    local expect = checked(COMMIT, "expect-fail", { "fail - dev lint", "fail - dev test" })
     t.ok(land.checks_problem({ expect }, STATE, rows):find("expect-fail", 1, true))
-    local failed = checked(COMMIT, "run", { "pass dev lint", "fail dev test" })
+    local failed = checked(COMMIT, "run", { "pass - dev lint", "fail - dev test" })
     t.ok(land.checks_problem({ pass, failed }, STATE, rows):find("2 fail dev test", 1, true))
     t.eq(land.checks_problem({ failed, pass }, STATE, rows), nil)
     t.ok(land.checks_problem({ pass }, STATE, { "dev lint" }):find("has 2 rows", 1, true))
     t.ok(land.checks_problem({ pass }, STATE, { "dev lint", "dev x" }):find("dev x", 1, true))
     t.ok(
         land.checks_problem(
-            { checked(COMMIT, "run", { "timeout dev lint" }) },
+            { checked(COMMIT, "run", { "timeout - dev lint" }) },
             STATE,
             { "dev lint" }
         )
