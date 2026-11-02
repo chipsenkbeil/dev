@@ -1257,7 +1257,8 @@ never handles the API.
   gets `the landing turn was lost` or `the landing turn ran out`, writes
   nothing and lands nothing, and has to ask again.
 
-  `land` gives the turn back on every exit, a refusal included. A local
+  `land` gives the turn back on every exit, a refusal included (a hold from
+  `turn` stays through a refusal). A local
   board keeps the lease for its length and ignores the card-size lease that
   `take` uses.
 
@@ -1312,6 +1313,37 @@ never handles the API.
   NAME.` and says that the commit named is from before the land and may differ
   from the one on trunk, the success line says the same, and the card still
   moves to Done. It is never queued.
+- `turn CARD [--hold SECONDS] [--wait SECONDS] [--release]`: Takes the landing
+  turn for CARD and keeps it across the rebase, the reviews and the check, so
+  `land` lands under it and no other landing moves trunk meanwhile. It needs
+  `DEV_AGENT` (exit 2 without it) and takes the turn as `land` does, but fails
+  fast: it asks once unless `--wait` gives seconds to keep asking every 5
+  seconds, and, when the turn stays taken, refuses with `the landing turn is held by NAME since STAMP`. A
+  hold is longer than a landing's 900 second lease: `--hold` sets its lease,
+  3600 seconds by default and 7200 at most (a whole number, exit 2 otherwise),
+  so a check of 15 to 60 minutes fits. `check` does not renew the lease while
+  it runs. Running `turn CARD` again as the holder renews the lease for
+  `--hold` more seconds, until the hold has been kept without a break for 7200 seconds in all, after
+  which `turn` and `land` refuse, give the turn back and leave the holder to ask
+  again. The hold is recorded in the `dev-turn:` note with the
+  fence and the lease, so a later command finds it from the board alone, on any
+  machine under the same `DEV_AGENT`. Success prints
+  `holding the landing turn for <id prefix> for N seconds`.
+  A hold that lapsed frees the turn to the next asker, so taking it again
+  starts a new window. `--release` gives the hold back and writes a `left` note, and refuses when
+  the caller holds none for the card. A hold that ran out is cleared and reported
+  as already gone. A card in Done is refused, except to give a
+  hold back.
+
+  `land CARD` finds a hold taken by the caller for that card and lands under
+  it without asking again. It renews the lease before `jj land` and gives the
+  turn back once the card has landed. A refusal leaves the hold in place, with
+  a line that says so, so the runner fixes the cause and lands again. When the
+  hold ran out or another card took the turn, `land` writes nothing, lands
+  nothing and refuses with `the landing turn held for <id prefix> ran out or
+  was taken by another`, and `turn CARD` takes it again. A project with no
+  `shared` list still carries nothing across a rebase, so the hold is what
+  keeps trunk still while the runner rebases and checks.
 - `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
   array of the words, each `test-edits` or `ci-edits` with duplicates dropped,
   and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with

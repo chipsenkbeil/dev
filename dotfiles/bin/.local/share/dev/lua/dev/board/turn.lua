@@ -13,17 +13,53 @@ M.POLL_SECONDS = 5
 
 M.ASK_GRACE_SECONDS = 10
 
+M.HOLD_SECONDS = 3600
+
+M.MAX_HOLD_SECONDS = 7200
+
 local RECORD_PREFIX = board.TURN_PREFIX .. " "
-local HOLDER_PATTERN = "^dev%-turn: holder=(%S+) card=(%S+) taken=(%S+)$"
+local HOLDER_PATTERN =
+    "^dev%-turn: holder=(%S+) card=(%S+) taken=(%S+) fence=(%d+) lease=(%d+) hold=([01])$"
+local LEFT_PATTERN = "^dev%-turn: left holder=(%S+) card=(%S+)$"
 
 ---@class dev.board.turn.Turn
 ---@field card string the full id of the turn card
 ---@field fence integer the fence of the claim
 ---@field holder string the name that holds the turn
+---@field lease integer the seconds each renewal lasts
+---@field hold boolean whether the holder asked to keep the turn across a check
+---@field for_card string the short id of the card the turn is for
+---@field taken string when the turn was first taken, an RFC 3339 stamp
 
 ---@class dev.board.turn.Holder
 ---@field name string who holds the turn
 ---@field since string? when the holder took it, an RFC 3339 stamp
+
+---@class dev.board.turn.Record
+---@field name string who took the turn
+---@field card string the short id of the card it was taken for
+---@field taken string when it was taken, an RFC 3339 stamp
+---@field fence integer the fence of the claim
+---@field lease integer the seconds each renewal lasts
+---@field hold boolean whether it is a hold
+
+---Parse a holder record from the body of a note.
+---@param body string the text of a note
+---@return dev.board.turn.Record? record the fields, nil when the body is no holder record
+local function record(body)
+    local name, card, taken, fence, lease, hold = body:match(HOLDER_PATTERN)
+    if not name then
+        return nil
+    end
+    return {
+        name = name,
+        card = card,
+        taken = taken,
+        fence = tonumber(fence),
+        lease = tonumber(lease),
+        hold = hold == "1",
+    }
+end
 
 local function find(cards)
     local found
@@ -63,9 +99,9 @@ local function taken_at(backend, card, name)
     end
     local newest
     for _, comment in ipairs(comments) do
-        local holder, _, taken = comment.body:match(HOLDER_PATTERN)
-        if holder == name then
-            newest = taken
+        local held = record(comment.body)
+        if held and held.name == name then
+            newest = held.taken
         end
     end
     return newest or false
@@ -116,7 +152,6 @@ end
 ---@return string? message why the board could not be read
 function M.waiting(backend)
     local ASK_PATTERN = "^dev%-turn: ask holder=(%S+) card=(%S+) until=(%S+)$"
-    local LEFT_PATTERN = "^dev%-turn: left holder=(%S+) card=(%S+)$"
     local holding, message = turn_card(backend)
     if not holding then
         return nil, message
@@ -142,7 +177,8 @@ function M.waiting(backend)
         end
         name, card = comment.body:match(LEFT_PATTERN)
         if not name then
-            name, card = comment.body:match(HOLDER_PATTERN)
+            local held = record(comment.body)
+            name, card = held and held.name, held and held.card
         end
         if name then
             drop(name, card)
@@ -184,7 +220,7 @@ function M.ask(backend, opts)
             expires
         ),
         nil,
-        { kind = "status" }
+        { kind = board.NoteKind.STATUS }
     )
 end
 
@@ -199,18 +235,43 @@ function M.leave(backend, name, card)
             holding.id,
             string.format("%sleft holder=%s card=%s", RECORD_PREFIX, name, card),
             nil,
-            { kind = "status" }
+            { kind = board.NoteKind.STATUS }
         )
     end
 end
+
+local function note_holder(backend, held)
+    return backend:note(
+        held.card,
+        string.format(
+            "%sholder=%s card=%s taken=%s fence=%d lease=%d hold=%d",
+            RECORD_PREFIX,
+            held.holder,
+            held.for_card,
+            held.taken,
+            held.fence,
+            held.lease,
+            held.hold and 1 or 0
+        ),
+        held.fence,
+        { kind = board.NoteKind.STATUS }
+    )
+end
+
+---@class dev.board.turn.TakeOpts
+---@field hold boolean? whether to keep the turn across a check, which needs `seconds`
+---@field seconds integer? the lease of a hold, `LEASE_SECONDS` when nil
 
 ---Ask for the turn once, which only the first card in line gets.
 ---@param backend dev.board.Backend the board backend
 ---@param name string the name that asks
 ---@param card string the short id of the card that wants to land
+---@param opts dev.board.turn.TakeOpts? a hold and how long its lease lasts
 ---@return dev.board.turn.Turn? turn the turn, nil when it is not free
 ---@return string? message who holds it, or why the board failed
-function M.take(backend, name, card)
+function M.take(backend, name, card, opts)
+    local lease = opts and opts.seconds or M.LEASE_SECONDS
+    local hold = opts and opts.hold or false
     local holding, message = turn_card(backend)
     if not holding then
         return nil, message
@@ -227,7 +288,7 @@ function M.take(backend, name, card)
         return nil, holder and (M.describe(holder) .. ", and it is " .. ahead) or ahead
     end
     local fence
-    fence, message = backend:claim(holding.id, name, M.LEASE_SECONDS, nil, { lease = true })
+    fence, message = backend:claim(holding.id, name, lease, nil, { lease = true })
     local cards
     if fence then
         cards, message = backend:cards()
@@ -238,35 +299,108 @@ function M.take(backend, name, card)
         end
         if canonical.id ~= holding.id then
             backend:release(holding.id, fence)
-            return M.take(backend, name, card)
+            return M.take(backend, name, card, opts)
         end
     end
     if not fence then
         local holder = M.holder(backend)
         return nil, holder and M.describe(holder) or message
     end
+    local mine = {
+        card = holding.id,
+        fence = fence,
+        holder = name,
+        lease = lease,
+        hold = hold,
+        for_card = card,
+        taken = store.stamp(),
+    }
     local noted
-    noted, message = backend:note(
-        holding.id,
-        string.format("%sholder=%s card=%s taken=%s", RECORD_PREFIX, name, card, store.stamp()),
-        fence,
-        { kind = "status" }
-    )
+    noted, message = note_holder(backend, mine)
     if not noted then
         backend:release(holding.id, fence)
         return nil, "the landing turn was taken but could not be noted: " .. message
     end
-    return { card = holding.id, fence = fence, holder = name }
+    return mine
+end
+
+---Find the turn `name` took with a hold for `card`.
+---
+---A hold stays on the board until its holder lands, gives it back or loses it,
+---so a hold whose claim is gone is reported as lost, and a card that never
+---held one gets neither a turn nor a message.
+---@param backend dev.board.Backend the board backend
+---@param name string the name that holds
+---@param card string the short id of the card the hold is for
+---@return dev.board.turn.Turn? turn the turn in hand, nil with no live hold
+---@return string? message why a hold that was taken is gone, or why the board failed
+---@return boolean? lost true when the hold ran out or was taken by another, nil otherwise
+function M.held(backend, name, card)
+    local cards, message = backend:cards()
+    if not cards then
+        return nil, message
+    end
+    local holding = find(cards)
+    if not holding then
+        return nil
+    end
+    local comments
+    comments, message = backend:comments(holding.id)
+    if not comments then
+        return nil, message
+    end
+    local newest
+    for _, comment in ipairs(comments) do
+        local held = record(comment.body)
+        if held and held.name == name and held.card == card then
+            newest = held
+        end
+        local left, left_card = comment.body:match(LEFT_PATTERN)
+        if left == name and left_card == card then
+            newest = nil
+        end
+    end
+    if not newest or not newest.hold then
+        return nil
+    end
+    if holding.claimant ~= name then
+        return nil,
+            string.format(
+                "the landing turn held for %s ran out or was taken by another, so take it again with dev board turn %s",
+                card,
+                card
+            ),
+            true
+    end
+    return {
+        card = holding.id,
+        fence = newest.fence,
+        holder = name,
+        lease = newest.lease,
+        hold = true,
+        for_card = card,
+        taken = newest.taken,
+    }
 end
 
 ---Renew `turn`, which fails once another card has it.
 ---@param backend dev.board.Backend the board backend
 ---@param turn dev.board.turn.Turn the turn in hand
 ---@return true? ok true while the turn is still this holder's
----@return string? message why the turn is lost
+---@return string? message why the turn is lost or over the cap of a hold
+---@return boolean? capped true when a hold has been kept for `MAX_HOLD_SECONDS` already
 function M.renew(backend, turn)
+    if turn.hold and store.stamp(os.time() - M.MAX_HOLD_SECONDS) >= turn.taken then
+        return nil,
+            string.format(
+                "the landing turn has been held since %s, the most it may be kept (%d seconds), so it is given back and has to be asked for again",
+                turn.taken,
+                M.MAX_HOLD_SECONDS
+            ),
+            true
+    end
     local fence, message =
-        backend:claim(turn.card, turn.holder, M.LEASE_SECONDS, turn.fence, { lease = true })
+        backend:claim(turn.card, turn.holder, turn.lease, turn.fence, { lease = true })
     if not fence then
         return nil, "the landing turn was lost: " .. message
     end
@@ -277,11 +411,40 @@ function M.renew(backend, turn)
     return true
 end
 
----Give `turn` back.
+---Renew a hold for `seconds` and record that lease, so a later landing renews to it.
+---
+---Sets `held.lease` to `seconds` before renewing and keeps it when the renewal fails.
+---@param backend dev.board.Backend the board backend
+---@param held dev.board.turn.Turn the hold in hand
+---@param seconds integer the new lease
+---@return true? ok true while the hold is still this holder's
+---@return string? message why the hold is lost, over its cap or the record not written
+---@return boolean? capped true when the hold has been kept for `MAX_HOLD_SECONDS` already
+function M.extend(backend, held, seconds)
+    held.lease = seconds
+    local ok, message, capped = M.renew(backend, held)
+    if not ok then
+        return nil, message, capped
+    end
+    local noted
+    noted, message = note_holder(backend, held)
+    if not noted then
+        return nil, "the hold was renewed but its lease could not be noted: " .. message
+    end
+    return true
+end
+
+---Give `turn` back, and end a hold on the board too, so a later `held` finds nothing.
 ---@param backend dev.board.Backend the board backend
 ---@param turn dev.board.turn.Turn the turn in hand
+---@return true? ok true when the claim was released
+---@return string? message why the claim was not released
 function M.release(backend, turn)
-    backend:release(turn.card, turn.fence)
+    local released, message = backend:release(turn.card, turn.fence)
+    if released and turn.hold then
+        M.leave(backend, turn.holder, turn.for_card)
+    end
+    return released, message
 end
 
 return M

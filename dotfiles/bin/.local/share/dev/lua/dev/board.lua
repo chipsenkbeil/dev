@@ -213,8 +213,23 @@ M.LINK_KINDS = { M.LinkKind.BLOCKED_BY, M.LinkKind.BLOCKS, M.LinkKind.RELATED, M
 ---The fewest characters of a card id that name a card.
 M.MIN_PREFIX = 8
 
+---The comment kinds `note --kind` accepts.
+M.NoteKind = {
+    DECISION = "decision",
+    QUESTION = "question",
+    BLOCKED = "blocked",
+    STATUS = "status",
+    DONE = "done",
+}
+
 ---The comment kinds `note --kind` accepts, in the order help lists them.
-M.NOTE_KINDS = { "decision", "question", "blocked", "status", "done" }
+M.NOTE_KINDS = {
+    M.NoteKind.DECISION,
+    M.NoteKind.QUESTION,
+    M.NoteKind.BLOCKED,
+    M.NoteKind.STATUS,
+    M.NoteKind.DONE,
+}
 
 ---The most characters of the label `note --as` sends, which Pomb enforces.
 M.AUTHOR_CHARS = 80

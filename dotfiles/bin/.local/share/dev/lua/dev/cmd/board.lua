@@ -40,6 +40,7 @@ local COMMIT_CHARS = 12
 local EXPECT_FAIL_FLAG = "--expect-fail"
 local TIMEOUT_FLAG = "--timeout"
 local WAIT_FLAG = "--wait"
+local MAX_WAIT_SECONDS = 86400
 local STRICT_FLAG = "--strict"
 local RESERVED_NOTE = "a note cannot begin with "
     .. board.CHECK_PREFIX
@@ -142,6 +143,8 @@ end
 ---@field warnings string[]? lines for standard error when the change still went through
 ---@field page boolean? whether the output goes through the pager when it is taller than the screen
 ---@field unqueued boolean? true when the refusal must not be queued for a later sync, as a move to Done is not
+---@field lost boolean? true when the landing turn was lost before the landing
+---@field landed boolean? true when the change is on trunk although the result is a failure
 
 ---@class dev.cmd.board
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `board` subcommands
@@ -2452,6 +2455,7 @@ end
 ---@field name string the caller's agent name
 ---@field short string the short id of the card that lands
 ---@field wait integer the seconds to keep asking
+---@field take dev.board.turn.TakeOpts? a hold and the lease it asks for
 
 ---Ask for the landing turn until it is free or the wait ends.
 ---@param opts dev.cmd.board.TurnOpts the board, the asker and the wait
@@ -2467,7 +2471,7 @@ local function await_turn(opts)
         end
     end
     while true do
-        local hold, message = turn.take(opts.backend, opts.name, opts.short)
+        local hold, message = turn.take(opts.backend, opts.name, opts.short, opts.take)
         if hold or opts.wait == 0 then
             return hold, message
         end
@@ -2520,7 +2524,9 @@ local function land_held(opts)
     local renewed
     renewed, message = turn.renew(backend, hold)
     if not renewed then
-        return failure(short .. " cannot land: " .. message)
+        local lost = failure(short .. " cannot land: " .. message)
+        lost.lost = true
+        return lost
     end
     local landed, output = land.run(backend.root)
     if not landed then
@@ -2557,7 +2563,7 @@ local function land_held(opts)
     local noted
     noted, message = backend:note(card.id, text, held and held.fence, { kind = "done" })
     if not noted then
-        return failure(
+        local refused = failure(
             string.format(
                 "landed commit %s, but the done note was NOT written on %s (%s) and the card was not moved; write the note and move it to Done by hand",
                 commit,
@@ -2565,10 +2571,12 @@ local function land_held(opts)
                 message
             )
         )
+        refused.landed = true
+        return refused
     end
     local moved = move_card(backend, { card.id, backend.roles:done_column() })
     if moved.code then
-        return failure(
+        local refused = failure(
             string.format(
                 "landed commit %s and noted it on %s, but the move to Done failed: %s",
                 commit,
@@ -2576,6 +2584,8 @@ local function land_held(opts)
                 moved.message
             )
         )
+        refused.landed = true
+        return refused
     end
     return {
         output = string.format(
@@ -2588,6 +2598,14 @@ local function land_held(opts)
     }
 end
 
+local function kept_note(short)
+    return "\n  (the landing turn you hold for "
+        .. short
+        .. " stays held while its lease lasts, so fix this and land again, or give it back with dev board turn "
+        .. short
+        .. " --release)"
+end
+
 function commands.land(backend, args)
     local flags, words = parse(args, { [WAIT_FLAG] = true })
     if not flags then
@@ -2597,7 +2615,6 @@ function commands.land(backend, args)
         return usage("needs a card")
     end
     local DEFAULT_WAIT_SECONDS = 300
-    local MAX_WAIT_SECONDS = 86400
     local wait = DEFAULT_WAIT_SECONDS
     if flags[WAIT_FLAG] then
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
@@ -2637,22 +2654,148 @@ function commands.land(backend, args)
     local early = card_problems(backend, card, { name = name, comments = list })
     if #early > 0 then
         local all = land_problems(backend, card, { name = name, comments = list })
-        return failure(short .. " cannot land:\n  - " .. table.concat(all, "\n  - "))
+        local kept = turn.held(backend, name, short)
+        return failure(
+            short
+                .. " cannot land:\n  - "
+                .. table.concat(all, "\n  - ")
+                .. (kept and kept_note(short) or "")
+        )
     end
     local hold
-    hold, message = await_turn({ backend = backend, name = name, short = short, wait = wait })
+    hold, message = turn.held(backend, name, short)
+    if message then
+        return failure(short .. " cannot land: " .. message)
+    end
+    if not hold then
+        hold, message = await_turn({ backend = backend, name = name, short = short, wait = wait })
+    end
     if not hold then
         return failure(short .. " cannot land: " .. message)
     end
     local current
     current, message = find_card(backend, words[1])
     if not current then
-        turn.release(backend, hold)
+        if not hold.hold then
+            turn.release(backend, hold)
+        end
         return message
     end
     local result = land_held({ backend = backend, card = current, name = name, hold = hold })
+    if hold.hold and result.code and not result.landed and not result.lost then
+        result.message = result.message .. kept_note(short)
+        return result
+    end
     turn.release(backend, hold)
     return result
+end
+
+function commands.turn(backend, args)
+    local HOLD_FLAG = "--hold"
+    local RELEASE_FLAG = "--release"
+    local releasing = false
+    local rest = {}
+    for _, arg in ipairs(args) do
+        if arg == RELEASE_FLAG then
+            releasing = true
+        else
+            rest[#rest + 1] = arg
+        end
+    end
+    local flags, words = parse(rest, { [HOLD_FLAG] = true, [WAIT_FLAG] = true })
+    if not flags then
+        return words
+    end
+    if #words ~= 1 then
+        return usage("needs a card")
+    end
+    local seconds, wait = turn.HOLD_SECONDS, 0
+    if flags[HOLD_FLAG] then
+        seconds = flags[HOLD_FLAG]:match("^%d+$") and tonumber(flags[HOLD_FLAG])
+        if not seconds or seconds < 1 or seconds > turn.MAX_HOLD_SECONDS then
+            return usage(
+                HOLD_FLAG .. " needs a whole number of seconds up to " .. turn.MAX_HOLD_SECONDS
+            )
+        end
+    end
+    if flags[WAIT_FLAG] then
+        wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
+        if not wait or wait > MAX_WAIT_SECONDS then
+            return usage(WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS)
+        end
+    end
+    local name, why = agent_name()
+    if why then
+        return why
+    end
+    if not name then
+        return usage("needs DEV_AGENT, the name that holds the turn")
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local hold, message, lost = turn.held(backend, name, short)
+    if releasing then
+        if message and not lost then
+            return failure(message)
+        end
+        if not hold and message then
+            turn.leave(backend, name, short)
+            return { output = "the landing turn held for " .. short .. " was already gone" }
+        end
+        if not hold then
+            return failure(name .. " holds no landing turn for " .. short)
+        end
+        local released, reason = turn.release(backend, hold)
+        if not released then
+            return failure("the landing turn held for " .. short .. " was not released: " .. reason)
+        end
+        return { output = "gave back the landing turn held for " .. short }
+    end
+    if message and not lost then
+        return failure(message)
+    end
+    if card.done then
+        return failure(short .. " is done, so there is nothing to land")
+    end
+    if hold then
+        local renewed, capped
+        renewed, message, capped = turn.extend(backend, hold, seconds)
+        if capped then
+            turn.release(backend, hold)
+            return failure(message)
+        end
+        if renewed then
+            return {
+                output = string.format(
+                    "renewed the landing turn held for %s for %d more seconds",
+                    short,
+                    seconds
+                ),
+            }
+        end
+    end
+    hold, message = await_turn({
+        backend = backend,
+        name = name,
+        short = short,
+        wait = wait,
+        take = { hold = true, seconds = seconds },
+    })
+    if not hold then
+        return failure(short .. " cannot take the landing turn: " .. message)
+    end
+    return {
+        output = string.format(
+            "holding the landing turn for %s for %d seconds: rebase, review and check, then dev board land %s, which lands under it; run dev board turn %s again to renew it, or add --release to give it back",
+            short,
+            seconds,
+            short,
+            short
+        ),
+    }
 end
 
 ---Read the words of an allow command.
