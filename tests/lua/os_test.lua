@@ -340,15 +340,25 @@ end)
 
 t.test("capture_timed stops a command and its children after the limit", function()
     local started = os.time()
-    local out, code = devos.capture_timed(
-        { "sh", "-c", "echo before; sleep 3761 & sleep 3762; wait" },
-        1,
-        { merge = true }
-    )
+    local pid = devos.capture({ "sh", "-c", "echo $$" }):match("%d+")
+    local unique_secs = 1000000 + 2 * tonumber(pid)
+    local first, second = unique_secs, unique_secs + 1
+    local out, code = devos.capture_timed({
+        "sh",
+        "-c",
+        ("echo before; sleep %d >/dev/null 2>&1 & sleep %d >/dev/null 2>&1; wait"):format(
+            first,
+            second
+        ),
+    }, 1, { merge = true })
     t.eq(code, 124)
     t.eq(out, "before\n")
     t.ok(os.time() - started < 30, "the limit should not take long")
-    local left = devos.capture({ "pgrep", "-f", "sleep 376[12]" }, { stderr = "null" })
+    local left = devos.capture({
+        "pgrep",
+        "-f",
+        ("^sleep (%d|%d)$"):format(first, second),
+    }, { stderr = "null" })
     t.eq(left, "")
 end)
 
