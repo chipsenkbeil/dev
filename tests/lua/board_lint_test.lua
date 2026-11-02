@@ -104,6 +104,30 @@ t.test("lint reports one line per rule a card breaks and exits 1", function()
     })
 end)
 
+t.test("lint flags an empty Change or Out of scope and a Change: line under Problem", function()
+    local empty_change = "## Problem\nwhy\n\n## Change\n\n## Out of scope\nnone"
+    local line_in_problem =
+        "## Problem\nwhy\nChange: rewrite it\n\n## Change\nx\n\n## Out of scope\nn"
+    local scope_in_problem =
+        "## Problem\nwhy\nOut of scope: docs\n\n## Change\nx\n\n## Out of scope\nn"
+    local cards = {
+        card(1, "Backlog", { description = empty_change, outcomes = outcomes(0) }),
+        card(2, "Ready", { description = line_in_problem, outcomes = outcomes(0) }),
+        card(3, "Icebox", { description = empty_change, outcomes = {} }),
+        card(4, "Backlog", { description = scope_in_problem, outcomes = outcomes(0) }),
+        card(5, "Done", { description = empty_change }),
+    }
+    local result = commands.run("lint", {}, backend(cards))
+    t.eq(result.code, 1)
+    t.eq(findings(result.output), {
+        "00000001 Backlog lacks text under ## Change",
+        "00000002 Ready lacks a Problem free of Change: and Out of scope: lines",
+        "00000004 Backlog lacks a Problem free of Change: and Out of scope: lines",
+    })
+    result = commands.run("lint", { "--strict" }, backend({ cards[5] }))
+    t.eq(findings(result.output), { "00000005 Done lacks text under ## Change" })
+end)
+
 t.test("lint holds an umbrella to its children and not to outcomes", function()
     local cards = {
         card(1, "In Progress", { outcomes = {} }),

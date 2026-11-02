@@ -110,16 +110,22 @@ function M.card(card, opts)
             end
             child_total = found.total
         end
+        local sectioned = open or opts.strict == true
         local missing = board.unplanned({
             color = card.color,
             description = card.description,
             outcomes = #card.outcomes,
             need_outcomes = need_outcomes,
             children = child_total,
-            sections = open or opts.strict == true,
+            sections = sectioned,
         })
         for _, item in ipairs(missing) do
             add("lacks " .. item, item == "a size")
+        end
+        if sectioned then
+            for _, shape in ipairs(board.shapes(card.description)) do
+                add("lacks " .. shape)
+            end
         end
         if card.outcomes_unreadable then
             add("outcomes unreadable")

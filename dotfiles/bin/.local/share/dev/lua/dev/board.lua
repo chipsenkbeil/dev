@@ -459,7 +459,9 @@ M.HEADINGS = { "Problem", "Change", "Out of scope" }
 M.MIN_OUTCOMES = 3
 M.MAX_OUTCOMES = 7
 
+local PROBLEM = M.HEADINGS[1]
 local CHANGE = M.HEADINGS[2]
+local OUT_OF_SCOPE = M.HEADINGS[3]
 local DONE_WHEN = "Done when"
 
 local function lines_of(description)
@@ -641,6 +643,35 @@ function M.backlog_missing(description)
     return missing
 end
 
+---List the shapes card format v2 refuses outside Icebox: a Change or Out of scope section with no
+---text under it, and a Problem text with a line that starts `Change:` or `Out of scope:`.
+---@param description string? the card's description
+---@return string[] shapes the problems, empty when the sections have the right shape
+function M.shapes(description)
+    local seen, filled = sections(description)
+    local shapes = {}
+    for _, heading in ipairs({ CHANGE, OUT_OF_SCOPE }) do
+        if seen[heading] and not filled[heading] then
+            shapes[#shapes + 1] = "text under ## " .. heading
+        end
+    end
+    local current, misplaced = nil, false
+    for line in lines_of(description) do
+        local name = heading_of(line)
+        if name then
+            current = name
+        elseif
+            current == PROBLEM and (line:find("^%s*Change:") or line:find("^%s*Out of scope:"))
+        then
+            misplaced = true
+        end
+    end
+    if misplaced then
+        shapes[#shapes + 1] = "a Problem free of Change: and Out of scope: lines"
+    end
+    return shapes
+end
+
 local function checklist_items(description)
     local items, current = 0, nil
     for line in lines_of(description) do
@@ -713,9 +744,12 @@ function M.missing(description, outcomes)
     for _, heading in ipairs(M.HEADINGS) do
         if not seen[heading] then
             missing[#missing + 1] = "## " .. heading
-        elseif not filled[heading] then
+        elseif heading == PROBLEM and not filled[heading] then
             missing[#missing + 1] = "text under ## " .. heading
         end
+    end
+    for _, shape in ipairs(M.shapes(description)) do
+        missing[#missing + 1] = shape
     end
     if outcomes == 0 and items == 0 then
         missing[#missing + 1] = M.MIN_OUTCOMES .. " to " .. M.MAX_OUTCOMES .. " Done when outcomes"

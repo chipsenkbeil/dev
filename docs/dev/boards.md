@@ -426,9 +426,10 @@ more than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit
 `3` is a usage error (exit 2).
 
 A card also needs card format v2 to enter Ready: all three headings with text
-under each, and 3 to 7 Done when outcomes (subtasks). A card with none is still
-accepted when its description has a v1 `## Done when` checklist item, until the boards
-are converted. `move CARD ready` refuses a card without them and names what is
+under each, no `Change:` or `Out of scope:` line under Problem, and 3 to 7 Done
+when outcomes (subtasks). A card with none is still accepted when its
+description has a v1 `## Done when` checklist item, until the boards are
+converted. `move CARD ready` refuses a card without them and names what is
 missing (exit 1), and `add --column ready` does the same for its description and
 `--done-when` items (exit 2). Icebox cards are free-form, so adding to or moving
 into Icebox is never checked. `add` fills the sections from `--problem`,
@@ -662,10 +663,13 @@ open question. `--strict` exits the same way. The rules:
 
 - Outside Icebox: a size, the three v2 headings with text under Problem, and a
   Done when outcome. This is `dev.board.unplanned`, the check `move` makes,
-  which keeps a move and lint in agreement. A Done card gets the size and
-  outcome checks only, and a Done card labelled `discarded` needs no outcome.
-  An umbrella, a card with children, needs no outcome either, so lint reads its
-  children when a card has none.
+  which keeps a move and lint in agreement. Where a card's sections are checked
+  (outside Icebox and not Done, or every Done card under `--strict`), lint also
+  reports the shapes of `dev.board.shapes`, which `move CARD ready` shares: no
+  text under Change or Out of scope, and no `Change:` or `Out of scope:` line
+  under Problem. A Done card gets the size and outcome checks only, and a Done
+  card labelled `discarded` needs no outcome. An umbrella, a card with children,
+  needs no outcome either, so lint reads its children when a card has none.
 - With `--strict`, a Done card also needs the three v2 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.

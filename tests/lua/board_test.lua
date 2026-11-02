@@ -1641,10 +1641,33 @@ t.test("missing and backlog_missing count a heading with text, not an empty one"
     t.eq(board.missing(V2, 3), {})
 end)
 
+t.test(
+    "shapes flags an empty Change or Out of scope and a Change: or Out of scope: line",
+    function()
+        t.eq(board.shapes(V2), {})
+        t.eq(board.shapes("## Problem\nx\n\n## Change\n\n## Out of scope\n"), {
+            "text under ## Change",
+            "text under ## Out of scope",
+        })
+        t.eq(board.shapes("## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn"), {
+            "a Problem free of Change: and Out of scope: lines",
+        })
+        t.eq(board.shapes("## Problem\nChanged: y\n\n## Change\nc\n\n## Out of scope\nn"), {})
+    end
+)
+
 t.test("move to Ready refuses an empty Change or Out of scope and accepts all three", function()
     for _, case in ipairs({
         { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", "text under ## Change" },
         { "## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", "text under ## Out of scope" },
+        {
+            "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn",
+            "a Problem free of Change: and Out of scope: lines",
+        },
+        {
+            "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn",
+            "a Problem free of Change: and Out of scope: lines",
+        },
     }) do
         local card = colored("green")
         card.description = case[1]
