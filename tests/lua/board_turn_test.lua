@@ -153,12 +153,14 @@ end)
 
 t.test("a waiter that died stops holding the line after its wait", function()
     local backend = backend_at(board_home())
+    local WAIT_SECONDS = 3
     local grace = turn.ASK_GRACE_SECONDS
     turn.ASK_GRACE_SECONDS = 0
-    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 1 }))
-    t.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = WAIT_SECONDS }))
+    local early = turn.take(backend, "gamma", "cccc3333")
     devos.nap(PAST_LEASE_SECONDS)
     turn.ASK_GRACE_SECONDS = grace
+    t.eq(early, nil)
     t.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
 end)
 
