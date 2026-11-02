@@ -3,13 +3,12 @@ dev init
 
 flags
   --type
-  --public
   --name
   --dry-run
   --no-gerrit
 
 the built-in runs
-  dev init [--type T] [--public] [--name N] [--dry-run] [--no-gerrit]
+  dev init [--type T] [--name N] [--dry-run] [--no-gerrit]
 
 Global flags:
   -v          print each command before it runs

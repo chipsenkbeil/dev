@@ -17,13 +17,4 @@ function M.jobs(rust)
     return text(rust and "jobs-rust.txt" or "jobs-base.txt")
 end
 
----Make the GitHub workflow a public Rust project starts with.
----@param trunk string the branch the push trigger names
----@return string text the workflow
-function M.workflow(trunk)
-    return (text("workflow.txt"):gsub("@TRUNK@", function()
-        return trunk
-    end, 1))
-end
-
 return M

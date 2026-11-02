@@ -80,14 +80,9 @@ t.test("init names the Gerrit project after the project in a dry run", function(
     fs.remove(root, { recursive = true })
 end)
 
-t.test("init skips the lint set and the workflow for a type that has none", function()
+t.test("init skips the lint set for a type that has none", function()
     local root = project()
-    local out =
-        support.dev(root, { "init", "--type", "godot", "--dry-run", "--no-gerrit", "--public" })
-    t.ok(
-        out:find("skipped: .github/workflows/ci.yml: no workflow for godot projects", 1, true),
-        out
-    )
+    local out = support.dev(root, { "init", "--type", "godot", "--dry-run", "--no-gerrit" })
     t.ok(out:find("skipped: lint set: none yet for godot projects", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
@@ -113,10 +108,19 @@ t.test("init refuses a type it has no name for", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test("the workflow names the trunk once", function()
-    local text = pipelines.workflow("main")
-    t.ok(text:find("branches: [main]", 1, true), text)
-    t.ok(not text:find("@TRUNK@", 1, true), text)
+t.test("init plans no GitHub workflow for any type", function()
+    for _, kind in ipairs({ Kind.RUST, Kind.LOVE2D, Kind.LUA, Kind.GODOT, Kind.NODE }) do
+        local root = project()
+        local out = support.dev(root, { "init", "--type", kind, "--dry-run", "--no-gerrit" })
+        t.ok(not out:find(".github", 1, true), kind .. "\n" .. out)
+        fs.remove(root, { recursive = true })
+    end
+end)
+
+t.test("the base pipeline runs on the image that ships dev", function()
+    local text = pipelines.jobs(false)
+    t.ok(text:find('target = "linux-x86-dev"', 1, true), text)
+    t.ok(not text:find("linux-x86-base", 1, true), text)
 end)
 
 local function stub(root, name, text)

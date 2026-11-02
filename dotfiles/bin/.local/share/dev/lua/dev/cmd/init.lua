@@ -40,7 +40,6 @@ local M = { handlers = {} }
 ---@field root string the project root
 ---@field kind string the project type
 ---@field dry boolean whether nothing may be written
----@field public boolean whether to write the GitHub workflow
 ---@field gerrit boolean whether to set up the Gerrit project and remote
 ---@field name string the project's name
 ---@field hint string the command that adds a remote, `jj git remote add` or `git remote add`
@@ -49,7 +48,7 @@ local M = { handlers = {} }
 ---@field human string[] what is left for the owner
 
 local function parse(ctx, reg)
-    local opts = { public = false, dry = false, gerrit = true }
+    local opts = { dry = false, gerrit = true }
     local args = ctx.args
     local i = 1
     while i <= #args do
@@ -60,8 +59,6 @@ local function parse(ctx, reg)
             end
             opts[arg:sub(3)] = args[i + 1]
             i = i + 1
-        elseif arg == "--public" then
-            opts.public = true
         elseif arg == "--dry-run" then
             opts.dry = true
         elseif arg == "--no-gerrit" then
@@ -288,33 +285,8 @@ local function init_style(run)
     end
 end
 
-local function init_trunk(run)
-    local backend = vcs.backend(run.root)
-    local names = backend and vcs.branches(run.root, backend) or {}
-    local trunk = vcs.trunk(names)
-    if trunk then
-        return trunk
-    end
-    local out, code = devos.capture(
-        { "git", "-C", run.root, "symbolic-ref", "--short", "HEAD" },
-        { stderr = "null" }
-    )
-    local head = trimmed(out)
-    if code == 0 and head ~= "" then
-        return head
-    end
-    return "master"
-end
-
 local function init_ci(run)
     put_text(run, ".ci/jobs.lua", pipelines.jobs(run.kind == Kind.RUST))
-    if not run.public then
-        skipped(run, ".github/workflows/ci.yml: project is not public")
-    elseif run.kind == Kind.RUST then
-        put_text(run, ".github/workflows/ci.yml", pipelines.workflow(init_trunk(run)))
-    else
-        skipped(run, ".github/workflows/ci.yml: no workflow for " .. run.kind .. " projects")
-    end
 end
 
 local function remote_names(run)
@@ -480,7 +452,7 @@ end
 
 ---Seed a project with lint files, a style guide, a CI pipeline and remotes.
 ---
----It takes `--type`, `--public`, `--name`, `--dry-run` and `--no-gerrit`. Anything already in the
+---It takes `--type`, `--name`, `--dry-run` and `--no-gerrit`. Anything already in the
 ---project is skipped, and a dry run prints `would create:` lines and writes nothing.
 ---@param ctx dev.Ctx the verb's context
 ---@param reg dev.Registry the project's registry
@@ -502,7 +474,6 @@ function M.run(ctx, reg)
         root = root,
         kind = kind,
         dry = opts.dry,
-        public = opts.public,
         gerrit = opts.gerrit,
         name = (opts.name ~= nil and opts.name ~= "") and opts.name or fs.basename(root),
         hint = "git remote add",
@@ -510,17 +481,7 @@ function M.run(ctx, reg)
         skipped = {},
         human = {},
     }
-    io.write(
-        "init ",
-        run.name,
-        ": type ",
-        kind,
-        ", public ",
-        opts.public and "1" or "0",
-        ", dry run ",
-        opts.dry and "1" or "0",
-        "\n"
-    )
+    io.write("init ", run.name, ": type ", kind, ", dry run ", opts.dry and "1" or "0", "\n")
     init_vcs(run)
     init_lints(run)
     init_style(run)

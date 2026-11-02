@@ -300,7 +300,7 @@ out="$(run_dev "$rust" help)"
 assert_contains "help lists a local verb under the project's group" "$out" "$(printf '\nrust\n  install')"
 assert_contains "help shows a local verb description" "$out" "Install the thing."
 out="$(run_dev "$rust" help init)"
-for flag in --type --public --name --dry-run --no-gerrit; do
+for flag in --type --name --dry-run --no-gerrit; do
     assert_contains "help init lists $flag" "$out" "$flag"
 done
 help_out="$(run_dev "$rust" help -a)"
@@ -399,18 +399,18 @@ if command -v jj >/dev/null 2>&1; then
     printf '[package]\nname = "init"\nversion = "0.1.0"\nedition = "2024"\n' >"$init/Cargo.toml"
     git -C "$init" init -q
 
-    out="$(run_dev "$init" init --dry-run --no-gerrit --public)"
+    out="$(run_dev "$init" init --dry-run --no-gerrit)"
     assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
     assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/jobs.lua"
-    assert_contains "init --dry-run plans the workflow" "$out" "would create: .github/workflows/ci.yml"
+    assert_not_contains "init --dry-run plans no workflow" "$out" ".github/workflows"
     assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
     assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin hub:init"
     assert_eq "init --dry-run writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
-    out="$(run_dev "$init" init --dry-run -v --no-gerrit --public 2>/dev/null)"
+    out="$(run_dev "$init" init --dry-run -v --no-gerrit 2>/dev/null)"
     assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.lua"
     assert_eq "init --dry-run -v writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 
-    out="$(run_dev "$init" init --no-gerrit --public)"
+    out="$(run_dev "$init" init --no-gerrit)"
     assert_contains "init creates the lint script" "$out" "created: .dev/lint.lua"
     assert_eq "init writes the lint verb" "$([ -f "$init/.dev/lint.lua" ] && echo yes)" "yes"
     assert_contains "init writes the lint verb on the shared library" "$(cat "$init/.dev/lint.lua")" 'require("lintset")'
@@ -430,7 +430,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init runs the jobs on the rust runner target" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { target = \"linux-x86-rust\" }"
     assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/jobs.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
     assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/jobs.lua")" 'io.open("rust-toolchain.toml")'
-    assert_contains "init writes the workflow for windows" "$(cat "$init/.github/workflows/ci.yml")" "windows-latest"
+    assert_eq "init writes no workflow" "$([ -e "$init/.github" ] && echo yes)" ""
     assert_contains "init seeds docs/STYLE.md from the rust guide" "$out" "created: docs/STYLE.md"
     assert_contains "init copies the rust guide" "$(cat "$init/docs/STYLE.md")" "# Rust style"
     assert_contains "init ends docs/STYLE.md with a project section" "$(tail -n 3 "$init/docs/STYLE.md")" "Rules that apply only to this project"
@@ -477,7 +477,7 @@ if command -v jj >/dev/null 2>&1; then
     cp "$TMP/STYLE.md.orig" "$init/docs/STYLE.md"
 
     before="$(cat "$init/Cargo.toml")"
-    out="$(run_dev "$init" init --no-gerrit --public)"
+    out="$(run_dev "$init" init --no-gerrit)"
     assert_not_contains "init rerun creates nothing" "$out" "created:"
     assert_contains "init rerun skips an existing docs/STYLE.md" "$out" "skipped: docs/STYLE.md exists"
     assert_contains "init rerun skips existing files" "$out" "skipped: .dev/lint.lua exists"
