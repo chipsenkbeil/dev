@@ -213,7 +213,7 @@ function M.ask(backend, opts)
     if not holding then
         return nil, message
     end
-    local expires = store.stamp(os.time() + opts.seconds + M.ASK_GRACE_SECONDS)
+    local expires = store.stamp(store.now() + opts.seconds + M.ASK_GRACE_SECONDS)
     return backend:note(
         holding.id,
         string.format(
@@ -274,7 +274,7 @@ function M.begin_check(backend, opts)
     if not holding then
         return nil, message
     end
-    local expires = store.stamp(os.time() + opts.seconds + M.CHECK_GRACE_SECONDS)
+    local expires = store.stamp(store.now() + opts.seconds + M.CHECK_GRACE_SECONDS)
     return backend:note(
         holding.id,
         string.format(
@@ -510,7 +510,7 @@ end
 ---@return string? message why the turn is lost or over the cap of a hold
 ---@return boolean? capped true when a hold has been kept for `MAX_HOLD_SECONDS` already
 function M.renew(backend, turn)
-    if turn.hold and store.stamp(os.time() - M.MAX_HOLD_SECONDS) >= turn.taken then
+    if turn.hold and store.stamp(store.now() - M.MAX_HOLD_SECONDS) >= turn.taken then
         return nil,
             string.format(
                 "the landing turn has been held since %s, the most it may be kept (%d seconds), so it is given back and has to be asked for again",

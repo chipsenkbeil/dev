@@ -1,15 +1,21 @@
 local ffi = require("ffi")
 
 local t = require("testing")
-local devos = require("dev.os")
 local fs = require("dev.fs")
 local localboard = require("dev.board.localboard")
+local store = require("dev.board.store")
 local support = require("support")
 local turn = require("dev.board.turn")
 
 local LEASE_SECONDS = 3
-local PAST_LEASE_SECONDS = 4.2
-local PAST_HOLD_SECONDS = 2.2
+local PAST_LEASE_SECONDS = 4
+local PAST_HOLD_SECONDS = 2
+
+local clock
+
+local function advance(seconds)
+    clock = clock + seconds
+end
 
 local function board_home()
     local root = support.sandbox({
@@ -27,6 +33,10 @@ end
 
 local function backend_at(home)
     ffi.C.setenv("XDG_STATE_HOME", home .. "/state", 1)
+    clock = os.time()
+    store.now = function()
+        return clock
+    end
     local backend = localboard.new({
         name = "mine",
         path = home .. "/state/dev/boards/mine.json",
@@ -71,7 +81,7 @@ t.test("a holder that stops renewing loses the turn to the next asker", function
     assert(turn.take(backend, "alpha", "aaaa1111"))
     local early = turn.take(backend, "beta", "bbbb2222")
     t.eq(early, nil)
-    devos.nap(PAST_LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     restore()
     t.eq(second.holder, "beta")
@@ -82,7 +92,7 @@ t.test("a holder that returns after another took the turn is refused", function(
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
-    devos.nap(PAST_LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
     assert(turn.take(backend, "beta", "bbbb2222"))
     local renewed, message = turn.renew(backend, first)
     restore()
@@ -95,7 +105,7 @@ t.test("a holder that returns after its lease ran out must ask again", function(
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
-    devos.nap(PAST_LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
     local renewed, message = turn.renew(backend, first)
     restore()
     t.eq(renewed, nil)
@@ -109,9 +119,9 @@ t.test("a holder that renews in time keeps the turn past its first lease", funct
     local HALF_LEASE_SECONDS = 2
     local restore = lease(LONG_LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
-    devos.nap(HALF_LEASE_SECONDS)
+    advance(HALF_LEASE_SECONDS)
     t.eq(turn.renew(backend, first), true)
-    devos.nap(HALF_LEASE_SECONDS)
+    advance(HALF_LEASE_SECONDS)
     restore()
     t.eq(turn.take(backend, "beta", "bbbb2222"), nil)
     t.eq(assert(turn.holder(backend)).name, "alpha")
@@ -159,7 +169,7 @@ t.test("a waiter that died stops holding the line after its wait", function()
     turn.ASK_GRACE_SECONDS = 0
     assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = WAIT_SECONDS }))
     local early = turn.take(backend, "gamma", "cccc3333")
-    devos.nap(PAST_LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
     turn.ASK_GRACE_SECONDS = grace
     t.eq(early, nil)
     t.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
@@ -169,7 +179,7 @@ t.test("only the holder's fence releases the turn", function()
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
-    devos.nap(PAST_LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
     assert(turn.take(backend, "beta", "bbbb2222"))
     restore()
     turn.release(backend, first)
@@ -205,7 +215,7 @@ t.test("a hold that ran out is reported as lost, and a landing's own turn is no 
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = LEASE_SECONDS }))
-    devos.nap(PAST_LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
     local found, message = turn.held(backend, "alpha", "aaaa1111")
     restore()
     t.eq(found, nil)
@@ -222,9 +232,9 @@ t.test("renewing a hold keeps the lease it was taken with", function()
     local first = assert(
         turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = HOLD_LEASE_SECONDS })
     )
-    devos.nap(HOLD_LEASE_SECONDS - 2)
+    advance(HOLD_LEASE_SECONDS - 2)
     t.eq(turn.renew(backend, first), true)
-    devos.nap(HOLD_LEASE_SECONDS - 2)
+    advance(HOLD_LEASE_SECONDS - 2)
     local second = turn.take(backend, "beta", "bbbb2222")
     restore()
     t.eq(second, nil)
@@ -236,7 +246,7 @@ t.test("a hold cannot be extended past the most it may be kept", function()
     local previous = turn.MAX_HOLD_SECONDS
     turn.MAX_HOLD_SECONDS = 1
     local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
-    devos.nap(PAST_HOLD_SECONDS)
+    advance(PAST_HOLD_SECONDS)
     local renewed, message, capped = turn.extend(backend, first, 600)
     local landing, landing_message, landing_capped = turn.renew(backend, first)
     turn.MAX_HOLD_SECONDS = previous
@@ -251,7 +261,7 @@ end)
 t.test("extending a hold records the new lease for the next command", function()
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
-    devos.nap(PAST_LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
     t.eq(turn.extend(backend, first, 1800), true)
     local found = assert(turn.held(backend, "alpha", "aaaa1111"))
     t.eq(found.lease, 1800)

@@ -56,11 +56,14 @@ function M.id()
     )
 end
 
+---@type fun(): integer
+M.now = os.time
+
 ---Tell the time as an RFC 3339 stamp in UTC.
----@param at integer? seconds since the epoch, now when nil
+---@param at integer? seconds since the epoch, `now()` when nil
 ---@return string stamp the stamp, such as `2026-10-27T22:28:05Z`
 function M.stamp(at)
-    return os.date("!%Y-%m-%dT%H:%M:%SZ", at)
+    return os.date("!%Y-%m-%dT%H:%M:%SZ", at or M.now())
 end
 
 ---Make a directory, at mode 700 when it holds private state.

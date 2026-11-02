@@ -824,7 +824,7 @@ function Backend:claim(id, claimant, ttl, fence, opts)
         card.claim = {
             claimant = claimant,
             fence = taken,
-            expires_at = store.stamp(os.time() + seconds),
+            expires_at = store.stamp(store.now() + seconds),
         }
         return taken
     end)
