@@ -776,8 +776,14 @@ timeout 86400 dev board wait --for lead
 
 `--for ready` wakes on a card added to Ready or moved into it and prints
 `added <id prefix> to Ready` or `moved <id prefix> to Ready`. `--for human`
-wakes only on a card moved out of Blocked and prints
-`moved <id prefix> out of Blocked` (a comment on a Blocked card never wakes it).
+wakes on a card the owner moved out of Blocked (`moved <id prefix> out of
+Blocked`, and a move by an agent never wakes it) and on a card, in any column
+but Done, whose newest comment is the owner's and newer than the wait's start
+(`the owner commented on <id prefix>`). A comment of an agent never wakes it.
+The first such event opens a settle window of 60 seconds: the wait keeps
+listening until no new event from the owner has come for that long, to
+catch a second reply, then prints one line per card the owner touched, not
+one per comment. The woken agent reads every comment with `dev board show`.
 `--for lead` wakes on a card added, moved or updated that is now in Blocked with
 the `needs:lead` label, no claim and without `needs:human`, and prints
 `<id prefix> is labelled needs:lead in Blocked`. Pomb's events carry no labels,
@@ -1037,8 +1043,11 @@ never handles the API.
   the `needs:human` label in Blocked or Icebox, at any age, is listed apart,
   after a blank line and the heading `for the owner (needs:human):` (same
   columns; the name ends `(answered, waiting for your move)` when the newest
-  comment is the owner's), never among the stale ones. Every such card in any
-  other column but Done is listed apart after them under the heading
+  comment is the owner's), never among the stale ones. Every other card but
+  Done and not listed above whose newest comment is the owner's is listed
+  apart under the heading `newest comment is the owner's:` (same columns),
+  whatever its label and age. Every `needs:human` card in any other column
+  but Done is listed apart after them under the heading
   `moved by the owner, remove needs:human:` (same columns, no answer note).
   Every card outside Icebox that is white or has no colour is listed apart
   too, at any age, after a blank line and the heading
@@ -1671,8 +1680,16 @@ an event matches and prints one line per matching event in the reply, then exits
 0, so a background run under `timeout` wakes the session. `--for ready` sends
 kinds `task_added,task_moved` and matches a card whose column is Ready after the
 event (`added <id prefix> to Ready`, `moved <id prefix> to Ready`),
-`--for human` sends `task_moved` and matches a move whose `from_column` is
-Blocked (`moved <id prefix> out of Blocked`), so a comment never matches it,
+`--for human` sends `task_moved,comment_added` and matches a move whose
+`from_column` is Blocked and whose `actor` is `human` (Pomb's `actor_kind` of
+`user`, kept on each event by `Backend:wait`), printed as `moved <id prefix>
+out of Blocked`, or a comment event whose card is not Done and whose newest
+comment is the owner's and newer than the time the wait started, which it
+reads with `Backend:cards` and `Backend:comments` (`the owner commented on
+<id prefix>`). The first match opens a settle window of 60 seconds
+(`Owner.SETTLE_SECONDS`): each further call to `Backend:wait` passes the time
+left of the window as its timeout, a match restarts the window, and an
+empty reply or an elapsed window ends it with one line per card.
 `--for lead` sends `task_added,task_moved,task_updated` and, for each reply with
 events, reads `Backend:cards` and matches an event whose card is in Blocked with
 `needs:lead` and no `needs:human` (`<id prefix> is labelled needs:lead in Blocked`,

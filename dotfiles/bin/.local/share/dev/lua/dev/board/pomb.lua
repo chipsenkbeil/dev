@@ -1173,6 +1173,7 @@ function Backend:wait(after, kinds, timeout)
             task_id = event.task_id,
             column = known(column),
             from_column = known(from),
+            actor = ACTORS[event.actor_kind],
         }
     end
     return { cursor = doc.cursor, events = events }

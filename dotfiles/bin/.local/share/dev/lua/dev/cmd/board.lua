@@ -3194,18 +3194,33 @@ local function append(lines, more)
     end
 end
 
----Check whether the newest comment on a needs:human card is the owner's.
+local Owner = { SETTLE_SECONDS = 60 }
+
+---Check whether the newest comment on a card is the owner's.
+---
+---A card in Done never counts. Without `since`, a comment of any age counts.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
+---@param since integer? the time in seconds since the epoch, only a comment newer than it counts
 ---@return boolean? answered whether the newest comment is the owner's, nil when they could not be read
 ---@return string? why the reason the comments could not be read
-local function answered_by_human(backend, card)
+function Owner.commented(backend, card, since)
+    if card.done then
+        return false
+    end
     local list = backend:comments(card.id)
     if not list then
         return nil, "could not read the comments of " .. card.id .. " " .. card.name
     end
     local newest = list[#list]
-    return newest ~= nil and newest.actor == HUMAN_ACTOR
+    if newest == nil or newest.actor ~= HUMAN_ACTOR then
+        return false
+    end
+    if since == nil then
+        return true
+    end
+    local at = box.parse_time(newest.at)
+    return at ~= nil and at > since
 end
 
 local function stale_rows(cards)
@@ -3331,7 +3346,7 @@ function commands.stale(backend, args, now)
     end
     now = now or os.time()
     local roles = backend.roles
-    local found, owner, moved, undated, unsized, lead = {}, {}, {}, {}, {}, {}
+    local found, owner, moved, undated, unsized, lead, commented = {}, {}, {}, {}, {}, {}, {}
     for _, card in ipairs(cards) do
         if
             card.column == roles.blocked
@@ -3361,6 +3376,24 @@ function commands.stale(backend, args, now)
         end
         local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
         local held = mine and (card.column == roles.blocked or card.column == roles.icebox)
+        if not held then
+            local spoke, why = Owner.commented(backend, card)
+            if spoke == nil then
+                if card.column ~= roles.icebox then
+                    undated[#undated + 1] = why
+                end
+            elseif spoke then
+                local at = entered[card.id] and box.parse_time(entered[card.id]) or now
+                commented[#commented + 1] = {
+                    id = card.id,
+                    column = card.column,
+                    size = card.size,
+                    name = card.name,
+                    days = math.floor((now - at) / box.SECONDS_PER_DAY),
+                    at = at,
+                }
+            end
+        end
         if not card.done and (mine or roles.stale[card.column]) then
             local stamp = entered[card.id]
             if not stamp then
@@ -3382,7 +3415,7 @@ function commands.stale(backend, args, now)
                     }
                     local into = found
                     if held then
-                        local answered, why = answered_by_human(backend, card)
+                        local answered, why = Owner.commented(backend, card)
                         if answered == nil then
                             undated[#undated + 1] = why
                         else
@@ -3408,6 +3441,20 @@ function commands.stale(backend, args, now)
     table.sort(owner, oldest)
     table.sort(moved, oldest)
     table.sort(lead, oldest)
+    local listed = {}
+    for _, list in ipairs({ found, moved }) do
+        for _, item in ipairs(list) do
+            listed[item.id] = true
+        end
+    end
+    local fresh = {}
+    for _, item in ipairs(commented) do
+        if not listed[item.id] then
+            fresh[#fresh + 1] = item
+        end
+    end
+    commented = fresh
+    table.sort(commented, oldest)
     local lines = {}
     if #found == 0 then
         lines[1] = "no stale cards"
@@ -3428,6 +3475,11 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "moved by the owner, remove " .. board.NEEDS_HUMAN .. ":"
         append(lines, stale_rows(moved))
+    end
+    if #commented > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "newest comment is the owner's:"
+        append(lines, stale_rows(commented))
     end
     if #unsized > 0 then
         local rows = {}
@@ -4163,7 +4215,7 @@ local EventKind = {
 local WAIT_KINDS = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED, EventKind.COMMENTED }
 local WAIT_FOR_KINDS = {
     [WaitFor.READY] = { EventKind.ADDED, EventKind.MOVED },
-    [WaitFor.HUMAN] = { EventKind.MOVED },
+    [WaitFor.HUMAN] = { EventKind.MOVED, EventKind.COMMENTED },
     [WaitFor.LEAD] = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED },
 }
 local WAIT_RETRY_SECONDS = 30
@@ -4214,8 +4266,43 @@ local function lead_cards(backend, roles)
     return waiting
 end
 
+---Find the cards the owner commented on since the wait began.
+---@param backend dev.board.Backend the board
+---@param events dev.board.Event[] the events of one reply
+---@param since integer the time in seconds since the epoch a comment must be newer than
+---@return table<string, boolean>? spoke the ids of the cards, nil when the board could not be read
+---@return string? why the reason the board could not be read
+function Owner.comments(backend, events, since)
+    local spoke = {}
+    local cards
+    for _, event in ipairs(events) do
+        if event.kind == EventKind.COMMENTED and type(event.task_id) == "string" then
+            if not cards then
+                local list, message = backend:cards()
+                if not list then
+                    return nil, message
+                end
+                cards = {}
+                for _, card in ipairs(list) do
+                    cards[card.id] = card
+                end
+            end
+            local card = cards[event.task_id]
+            if card then
+                local found, why = Owner.commented(backend, card, since)
+                if found == nil then
+                    return nil, why
+                end
+                spoke[card.id] = found or nil
+            end
+        end
+    end
+    return spoke
+end
+
 local function wait_line(event, opts)
     local only, roles, leads = opts.only, opts.roles, opts.leads
+    local spoke = opts.spoke
     local id = event.task_id:sub(1, board.MIN_PREFIX)
     local added = event.kind == EventKind.ADDED
     if only == WaitFor.LEAD then
@@ -4224,8 +4311,16 @@ local function wait_line(event, opts)
             return id .. " is labelled " .. board.NEEDS_LEAD .. " in " .. roles.blocked
         end
     elseif only == WaitFor.HUMAN then
-        if event.kind == EventKind.MOVED and event.from_column == roles.blocked then
+        if
+            event.kind == EventKind.MOVED
+            and event.from_column == roles.blocked
+            and event.actor == HUMAN_ACTOR
+        then
             return "moved " .. id .. " out of " .. roles.blocked
+        end
+        if event.kind == EventKind.COMMENTED and spoke[event.task_id] then
+            spoke[event.task_id] = nil
+            return "the owner commented on " .. id
         end
     elseif only == WaitFor.READY then
         if event.column == roles.ready and (added or event.kind == EventKind.MOVED) then
@@ -4247,6 +4342,7 @@ end
 ---@field nap fun(seconds: number)? sleeps between retries, `dev.os.nap` when nil
 ---@field random (fun(): number)? a number in [0, 1) that spreads the pause, entropy from the system when nil
 ---@field notice fun(line: string)? prints the one line about too many open waits, standard error when nil
+---@field now (fun(): integer)? the clock in seconds since the epoch, `os.time` when nil
 
 ---Hold until the board changes in a way the caller asked for.
 ---
@@ -4279,17 +4375,33 @@ function M.wait(backend, args, opts)
     local notice = opts.notice or stderr_line
     local limited = 0
     local told = false
+    local clock = opts.now or os.time
+    local started = clock()
+    local held, touched, last = {}, {}, nil
+    local function flush(result)
+        if #held == 0 then
+            return result
+        end
+        local lines = table.concat(held, "\n")
+        if result.message then
+            return { message = lines .. "\n" .. result.message, code = result.code }
+        end
+        return { output = lines }
+    end
     local path = opts.stem .. "." .. (only or "all") .. ".cursor"
     local cursor = read_cursor(path)
     local failures = 0
     while true do
-        local reply, message, oldest, refused =
-            backend:wait(cursor, WAIT_FOR_KINDS[only] or WAIT_KINDS)
+        local reply, message, oldest, refused = backend:wait(
+            cursor,
+            WAIT_FOR_KINDS[only] or WAIT_KINDS,
+            last and math.max(1, Owner.SETTLE_SECONDS - (clock() - last))
+        )
         if reply then
             failures = 0
             limited = 0
             if type(reply.cursor) ~= "string" then
-                return failure("pomb answered without a cursor")
+                return flush(failure("pomb answered without a cursor"))
             end
             local leads
             if only == WaitFor.LEAD and #reply.events > 0 then
@@ -4299,26 +4411,54 @@ function M.wait(backend, args, opts)
                     return failure(why)
                 end
             end
+            local spoke
+            if only == WaitFor.HUMAN then
+                local why
+                spoke, why = Owner.comments(backend, reply.events, started)
+                if not spoke then
+                    return flush(failure(why))
+                end
+            end
             local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
             if not saved then
-                return failure(why)
+                return flush(failure(why))
             end
             cursor = reply.cursor
             local lines = {}
+            local matched = false
             for _, event in ipairs(reply.events) do
-                lines[#lines + 1] = type(event.task_id) == "string"
-                        and wait_line(event, { only = only, roles = roles, leads = leads })
-                    or nil
+                local line = type(event.task_id) == "string"
+                    and wait_line(
+                        event,
+                        { only = only, roles = roles, leads = leads, spoke = spoke }
+                    )
+                if line then
+                    matched = true
+                    if only ~= WaitFor.HUMAN then
+                        lines[#lines + 1] = line
+                    elseif not touched[event.task_id] then
+                        touched[event.task_id] = true
+                        held[#held + 1] = line
+                    end
+                end
             end
             if #lines > 0 then
                 return { output = table.concat(lines, "\n") }
             end
+            if matched then
+                last = clock()
+            end
+            if #held > 0 and not matched then
+                if #reply.events == 0 or clock() - last >= Owner.SETTLE_SECONDS then
+                    return { output = table.concat(held, "\n") }
+                end
+            end
         elseif oldest then
             local saved, why = store.write(path, oldest .. "\n", { private = true })
             if not saved then
-                return failure(why)
+                return flush(failure(why))
             end
-            return { output = WAIT_TRIMMED }
+            return flush({ output = WAIT_TRIMMED })
         elseif refused then
             failures = 0
             if not told then
@@ -4331,11 +4471,11 @@ function M.wait(backend, args, opts)
         elseif pomb.unreachable(message, true) then
             failures = failures + 1
             if failures >= WAIT_RETRIES then
-                return failure(message)
+                return flush(failure(message))
             end
             nap(WAIT_RETRY_SECONDS)
         else
-            return failure(message)
+            return flush(failure(message))
         end
     end
 end

@@ -2446,6 +2446,34 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
     )
 end)
 
+t.test("stale lists an unlabelled open card whose newest comment is the owner's", function()
+    local cards, times = aged(
+        { "Ready", "In Progress", "Blocked", "Done", "Ready" },
+        { 1, 2, 3, 4, 10 }
+    )
+    local backend = fake(cards, times)
+    local replies = {
+        [cards[1].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "1" } },
+        [cards[2].id] = {
+            { actor = "human", at = "2026-01-01T00:00:00Z", body = "1" },
+            { actor = "agent", at = "2026-01-02T00:00:00Z", body = "done" },
+        },
+        [cards[3].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "2" } },
+        [cards[4].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "3" } },
+        [cards[5].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "4" } },
+    }
+    function backend:comments(id)
+        return replies[id] or {}
+    end
+    local output = commands.run("stale", {}, backend, NOW).output
+    t.eq(
+        output,
+        "00000005  Ready  10d  unsized  Card 5\n\nnewest comment is the owner's:\n"
+            .. "00000003  Blocked  3d  unsized  Card 3\n"
+            .. "00000001  Ready    1d  unsized  Card 1"
+    )
+end)
+
 t.test(
     "stale lists the unsized cards outside Icebox at any age and leaves sized ones out",
     function()
@@ -4888,7 +4916,7 @@ t.test("stale reads column_entered_at from every page of the tasks view", functi
     t.eq(code, 0)
     t.ok(
         out:find(
-            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n\nunsized outside Icebox:\n"
+            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n\nnewest comment is the owner's:\n.-\n\nunsized outside Icebox:\n"
         ),
         out
     )
@@ -5138,7 +5166,7 @@ t.test("wait returns the events oldest first with column names and the cursor", 
     t.eq(result.got, {
         cursor = "9",
         events = {
-            { kind = "task_added", task_id = "t1", column = "Ready" },
+            { kind = "task_added", task_id = "t1", column = "Ready", actor = "human" },
             {
                 kind = "task_moved",
                 task_id = "t2",
@@ -5206,9 +5234,10 @@ t.test("wait does not flag a 429 with another code or another status as too many
 end)
 
 local function waiter(replies)
-    local seen = { afters = {}, kinds = {}, naps = {}, notices = {} }
+    local seen = { afters = {}, kinds = {}, timeouts = {}, naps = {}, notices = {} }
     local backend = {}
-    function backend:wait(after, kinds)
+    function backend:wait(after, kinds, timeout)
+        seen.timeouts[#seen.timeouts + 1] = timeout or "default"
         seen.afters[#seen.afters + 1] = after or "none"
         seen.kinds[#seen.kinds + 1] = table.concat(kinds, ",")
         local reply = table.remove(replies, 1)
@@ -5225,6 +5254,11 @@ local function waited(replies, args, opts)
             return opts.cards, opts.cards_error
         end
     end
+    if opts.comments then
+        function backend:comments(id)
+            return opts.comments[id] or {}
+        end
+    end
     local path = opts.path or support.tempdir() .. "/wait"
     local result = commands.wait(backend, args, {
         stem = path,
@@ -5233,6 +5267,9 @@ local function waited(replies, args, opts)
         end,
         random = function()
             return 0
+        end,
+        now = function()
+            return opts.now or 0
         end,
         notice = function(line)
             seen.notices[#seen.notices + 1] = line
@@ -5265,21 +5302,122 @@ t.test(
     end
 )
 
-t.test("wait --for human wakes on a move out of Blocked and not on a comment", function()
+t.test(
+    "wait --for human wakes on the owner's move out of Blocked, not an agent's move or comment",
+    function()
+        local result, seen = waited({
+            got("1"),
+            got("2", { kind = "comment_added", task_id = ID_A, column = "Blocked" }, {
+                kind = "task_moved",
+                task_id = ID_B,
+                column = "In Progress",
+                from_column = "Ready",
+            }, {
+                kind = "task_moved",
+                task_id = ID_D,
+                column = "Ready",
+                from_column = "Blocked",
+                actor = "agent",
+            }),
+            got("3", {
+                kind = "task_moved",
+                task_id = ID_C,
+                column = "Ready",
+                from_column = "Blocked",
+                actor = "human",
+            }),
+            got("4"),
+        }, { "--for", "human" }, {
+            cards = { { id = ID_A, column = "Blocked", labels = {}, done = false } },
+            comments = {
+                [ID_A] = { { actor = "agent", at = "2026-11-02T10:00:00Z", body = "wait" } },
+            },
+        })
+        t.eq(result.output, "moved cccccccc out of Blocked")
+        t.eq(seen.kinds[1], "task_moved,comment_added")
+    end
+)
+
+t.test("wait --for human wakes on the owner's comment newer than its start", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local cards = {
+        { id = ID_A, column = "Ready", labels = {}, done = false },
+        { id = ID_B, column = "Ready", labels = {}, done = false },
+        { id = ID_C, column = "In Review", labels = {}, done = false },
+        { id = ID_D, column = "Done", labels = {}, done = true },
+    }
+    local replies = {
+        [ID_A] = { { actor = "human", at = "2026-11-02T08:00:00Z", body = "old" } },
+        [ID_B] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } },
+        [ID_C] = {
+            { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" },
+            { actor = "agent", at = "2026-11-02T10:05:00Z", body = "ok" },
+        },
+        [ID_D] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "3" } },
+    }
     local result, seen = waited({
         got("1"),
         got(
             "2",
-            { kind = "comment_added", task_id = ID_A, column = "Blocked" },
-            { kind = "task_moved", task_id = ID_B, column = "In Progress", from_column = "Ready" }
+            { kind = "comment_added", task_id = ID_A, column = "Ready" },
+            { kind = "comment_added", task_id = ID_C, column = "In Review" },
+            { kind = "comment_added", task_id = ID_D, column = "Done" }
         ),
-        got(
-            "3",
-            { kind = "task_moved", task_id = ID_C, column = "Ready", from_column = "Blocked" }
-        ),
-    }, { "--for", "human" })
-    t.eq(result.output, "moved cccccccc out of Blocked")
-    t.eq(seen.kinds[1], "task_moved")
+        got("3", { kind = "comment_added", task_id = ID_B, column = "Ready" }),
+        got("4"),
+    }, { "--for", "human" }, {
+        cards = cards,
+        comments = replies,
+        now = started,
+    })
+    t.eq(result.output, "the owner commented on 11111111")
+    t.eq(seen.kinds[1], "task_moved,comment_added")
+    t.eq(seen.afters, { "none", "1", "2", "3" })
+end)
+
+t.test("wait --for human settles for 60 seconds and prints one line per card", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local at = "2026-11-02T10:00:00Z"
+    local cards = {
+        { id = ID_A, column = "Ready", labels = {}, done = false },
+        { id = ID_B, column = "Blocked", labels = {}, done = false },
+        { id = ID_C, column = "Blocked", labels = {}, done = false },
+    }
+    local replies = {
+        [ID_A] = { { actor = "human", at = at, body = "1" } },
+        [ID_C] = { { actor = "agent", at = at, body = "q" } },
+    }
+    local result, seen = waited({
+        got("1"),
+        got("2", { kind = "comment_added", task_id = ID_A, column = "Ready" }),
+        got("3", { kind = "comment_added", task_id = ID_A, column = "Ready" }, {
+            kind = "task_moved",
+            task_id = ID_B,
+            column = "Ready",
+            from_column = "Blocked",
+            actor = "human",
+        }, { kind = "comment_added", task_id = ID_C, column = "Blocked" }),
+        got("4"),
+    }, { "--for", "human" }, { cards = cards, comments = replies, now = started })
+    t.eq(result.output, "the owner commented on 11111111\nmoved 11111111 out of Blocked")
+    t.eq(seen.afters, { "none", "1", "2", "3" })
+    t.eq(seen.timeouts, { "default", "default", 60, 60 })
+end)
+
+t.test("wait --for human prints the lines it holds when the cursor is trimmed", function()
+    local cards = { { id = ID_A, column = "Blocked", labels = {}, done = false } }
+    local result = waited({
+        got("1"),
+        got("2", {
+            kind = "task_moved",
+            task_id = ID_A,
+            column = "Ready",
+            from_column = "Blocked",
+            actor = "human",
+        }),
+        { oldest = "9" },
+    }, { "--for", "human" }, { cards = cards })
+    t.eq(result.output, "moved 11111111 out of Blocked")
 end)
 
 t.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
@@ -5336,12 +5474,16 @@ t.test("wait resumes from the stored cursor", function()
     t.eq(fs.read(path .. ".ready.cursor"), "42\n")
     local _, other = waited({
         got("9"),
-        got(
-            "10",
-            { kind = "task_moved", task_id = ID_A, column = "Ready", from_column = "Blocked" }
-        ),
+        got("10", {
+            kind = "task_moved",
+            task_id = ID_A,
+            column = "Ready",
+            from_column = "Blocked",
+            actor = "human",
+        }),
+        got("11"),
     }, { "--for", "human" }, { path = path })
-    t.eq(other.afters, { "none", "9" })
+    t.eq(other.afters, { "none", "9", "10" })
 end)
 
 t.test("wait stores the oldest cursor of an expired one and says events were trimmed", function()
