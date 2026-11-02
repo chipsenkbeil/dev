@@ -17,10 +17,14 @@ M.HOLD_SECONDS = 3600
 
 M.MAX_HOLD_SECONDS = 7200
 
+M.CHECK_GRACE_SECONDS = 60
+
 local RECORD_PREFIX = board.TURN_PREFIX .. " "
 local HOLDER_PATTERN =
     "^dev%-turn: holder=(%S+) card=(%S+) taken=(%S+) fence=(%d+) lease=(%d+) hold=([01])$"
 local LEFT_PATTERN = "^dev%-turn: left holder=(%S+) card=(%S+)$"
+local CHECK_PATTERN = "^dev%-turn: check holder=(%S+) card=(%S+) commit=(%x+) until=(%S+)$"
+local CHECKED_PATTERN = "^dev%-turn: checked holder=(%S+) card=(%S+) commit=(%x+)$"
 
 ---@class dev.board.turn.Turn
 ---@field card string the full id of the turn card
@@ -238,6 +242,122 @@ function M.leave(backend, name, card)
             { kind = board.NoteKind.STATUS }
         )
     end
+end
+
+---@class dev.board.turn.CheckHold
+---@field name string who runs the check
+---@field card string the short id of the card the check is for
+---@field commit string the full id of the checked commit
+---@field expires string when the hold lapses, an RFC 3339 stamp
+
+---@class dev.board.turn.BeginOpts
+---@field name string who runs the check
+---@field card string the short id of the card the check is for
+---@field commit string the full id of the checked commit
+---@field seconds integer the longest the check may run
+
+---@class dev.board.turn.EndOpts
+---@field name string who ran the check
+---@field card string the short id of the card the check was for
+---@field commit string the full id of the checked commit
+
+---Record that a check runs on `opts.commit`, without taking the turn.
+---
+---The hold ends with `end_check`, or 60 seconds after `seconds` pass, to keep a
+---runner that died from blocking landings for good.
+---@param backend dev.board.Backend the board backend
+---@param opts dev.board.turn.BeginOpts the check and its longest run
+---@return true? ok true once the hold is on the board
+---@return string? message why it could not be written
+function M.begin_check(backend, opts)
+    local holding, message = turn_card(backend)
+    if not holding then
+        return nil, message
+    end
+    local expires = store.stamp(os.time() + opts.seconds + M.CHECK_GRACE_SECONDS)
+    return backend:note(
+        holding.id,
+        string.format(
+            "%scheck holder=%s card=%s commit=%s until=%s",
+            RECORD_PREFIX,
+            opts.name,
+            opts.card,
+            opts.commit,
+            expires
+        ),
+        nil,
+        { kind = board.NoteKind.STATUS }
+    )
+end
+
+---End the hold that `begin_check` wrote.
+---@param backend dev.board.Backend the board backend
+---@param opts dev.board.turn.EndOpts who ran the check, for which card and commit
+---@return true? ok true once the end is on the board
+---@return string? message why it could not be written
+function M.end_check(backend, opts)
+    local holding, message = turn_card(backend)
+    if not holding then
+        return nil, message
+    end
+    return backend:note(
+        holding.id,
+        string.format(
+            "%schecked holder=%s card=%s commit=%s",
+            RECORD_PREFIX,
+            opts.name,
+            opts.card,
+            opts.commit
+        ),
+        nil,
+        { kind = board.NoteKind.STATUS }
+    )
+end
+
+---List the checks that hold, the oldest first.
+---
+---A hold ends when its check reports, or when its own end time passes.
+---@param backend dev.board.Backend the board backend
+---@return dev.board.turn.CheckHold[]? holds the live holds, nil when the board cannot be read
+---@return string? message why the board could not be read
+function M.checking(backend)
+    local holding, message = turn_card(backend)
+    if not holding then
+        return nil, message
+    end
+    local comments
+    comments, message = backend:comments(holding.id)
+    if not comments then
+        return nil, message
+    end
+    local holds = {}
+    local function drop(name, card, commit)
+        for i = #holds, 1, -1 do
+            local hold = holds[i]
+            if hold.name == name and hold.card == card and hold.commit == commit then
+                table.remove(holds, i)
+            end
+        end
+    end
+    for _, comment in ipairs(comments) do
+        local name, card, commit, expires = comment.body:match(CHECK_PATTERN)
+        if name then
+            drop(name, card, commit)
+            holds[#holds + 1] = { name = name, card = card, commit = commit, expires = expires }
+        end
+        name, card, commit = comment.body:match(CHECKED_PATTERN)
+        if name then
+            drop(name, card, commit)
+        end
+    end
+    local now = store.stamp()
+    local live = {}
+    for _, hold in ipairs(holds) do
+        if hold.expires > now then
+            live[#live + 1] = hold
+        end
+    end
+    return live
 end
 
 local function note_holder(backend, held)

@@ -2209,6 +2209,106 @@ local function check_lines(rows)
     return lines
 end
 
+local function register_check(backend, card, before, opts)
+    local paths = land.shared_list(config.get(backend.root, "board.land.shared"))
+    if opts.expect_fail or not paths then
+        return nil
+    end
+    local name = agent_name() or claimant()
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local ok, why = turn.begin_check(backend, {
+        name = name,
+        card = short,
+        commit = before.commit,
+        seconds = opts.seconds * #card.checks,
+    })
+    if not ok then
+        stderr:write("the check is not held on the landing turn card: " .. why .. "\n")
+        return nil
+    end
+    return name
+end
+
+---@class dev.cmd.board.CheckFlags
+---@field expect_fail boolean whether every row should fail
+---@field seconds integer the longest each row may run
+---@field words string[] the words that are not flags
+
+---@class dev.cmd.board.CheckRowsOpts
+---@field backend dev.board.Backend the board backend
+---@field card dev.board.Card the card whose rows run
+---@field before dev.board.check.State the commit the rows run on
+---@field argvs string[][] one command per row
+---@field options dev.cmd.board.CheckFlags the parsed flags
+
+---Run the card's rows and record the result.
+---@param opts dev.cmd.board.CheckRowsOpts the card, its commit and the commands
+---@return dev.cmd.board.Result result the check's outcome
+local function check_rows(opts)
+    local backend, card, before, argvs, flags =
+        opts.backend, opts.card, opts.before, opts.argvs, opts.options
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local message
+    local rows = {}
+    for i, argv in ipairs(argvs) do
+        stderr:write(string.format("running %d of %d: %s\n", i, #argvs, card.checks[i]))
+        rows[i] = check.run({
+            root = backend.root,
+            run = card.checks[i],
+            argv = argv,
+            seconds = flags.seconds,
+        })
+    end
+    local lines = check_lines(rows)
+    local after = check.state(backend.root)
+    if not after or after.commit ~= before.commit then
+        return failure(
+            string.format(
+                "the working copy changed while the checks ran (commit %s, then %s), so the result belongs to no commit and was NOT recorded on %s\n%s",
+                before.commit:sub(1, COMMIT_CHARS),
+                after and after.commit:sub(1, COMMIT_CHARS) or "unknown",
+                short,
+                table.concat(lines, "\n")
+            )
+        )
+    end
+    local held = claims.read(card.id)
+    local ok
+    ok, message = backend:note(
+        card.id,
+        check.record(before, rows, flags.expect_fail),
+        held and held.fence,
+        { kind = "status" }
+    )
+    if not ok then
+        return failure(
+            string.format(
+                "the result was NOT recorded on %s (%s); the board may or may not hold it, so read dev board notes before trusting or repeating it\n%s",
+                short,
+                message,
+                table.concat(lines, "\n")
+            )
+        )
+    end
+    local passed, good = check.summarize(rows, flags.expect_fail)
+    local verdict = string.format(
+        "recorded on %s at commit %s: %d of %s passed",
+        short,
+        before.commit:sub(1, COMMIT_CHARS),
+        passed,
+        count_text(#rows, "row")
+    )
+    if flags.expect_fail and passed > 0 then
+        verdict = verdict
+            .. "; with --expect-fail every row should fail, so the passing ones prove nothing"
+    end
+    lines[#lines + 1] = verdict
+    if not good then
+        return failure(table.concat(lines, "\n"))
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
 function commands.check(backend, args)
     local opts, err = check_options(args)
     if not opts then
@@ -2238,64 +2338,34 @@ function commands.check(backend, args)
     if not before then
         return failure(message)
     end
-    local rows = {}
-    for i, argv in ipairs(argvs) do
-        stderr:write(string.format("running %d of %d: %s\n", i, #argvs, card.checks[i]))
-        rows[i] = check.run({
-            root = backend.root,
-            run = card.checks[i],
-            argv = argv,
-            seconds = opts.seconds,
+    local holder = register_check(backend, card, before, opts)
+    local ran, result = pcall(check_rows, {
+        backend = backend,
+        card = card,
+        before = before,
+        argvs = argvs,
+        options = opts,
+    })
+    if holder then
+        local ended, why = turn.end_check(backend, {
+            name = holder,
+            card = short,
+            commit = before.commit,
         })
-    end
-    local lines = check_lines(rows)
-    local after = check.state(backend.root)
-    if not after or after.commit ~= before.commit then
-        return failure(
-            string.format(
-                "the working copy changed while the checks ran (commit %s, then %s), so the result belongs to no commit and was NOT recorded on %s\n%s",
-                before.commit:sub(1, COMMIT_CHARS),
-                after and after.commit:sub(1, COMMIT_CHARS) or "unknown",
-                short,
-                table.concat(lines, "\n")
+        if not ended then
+            stderr:write(
+                "the check hold on "
+                    .. short
+                    .. " was not ended and lapses at its end time: "
+                    .. why
+                    .. "\n"
             )
-        )
+        end
     end
-    local held = claims.read(card.id)
-    local ok
-    ok, message = backend:note(
-        card.id,
-        check.record(before, rows, opts.expect_fail),
-        held and held.fence,
-        { kind = "status" }
-    )
-    if not ok then
-        return failure(
-            string.format(
-                "the result was NOT recorded on %s (%s); the board may or may not hold it, so read dev board notes before trusting or repeating it\n%s",
-                short,
-                message,
-                table.concat(lines, "\n")
-            )
-        )
+    if not ran then
+        error(result, 0)
     end
-    local passed, good = check.summarize(rows, opts.expect_fail)
-    local verdict = string.format(
-        "recorded on %s at commit %s: %d of %s passed",
-        short,
-        before.commit:sub(1, COMMIT_CHARS),
-        passed,
-        count_text(#rows, "row")
-    )
-    if opts.expect_fail and passed > 0 then
-        verdict = verdict
-            .. "; with --expect-fail every row should fail, so the passing ones prove nothing"
-    end
-    lines[#lines + 1] = verdict
-    if not good then
-        return failure(table.concat(lines, "\n"))
-    end
-    return { output = table.concat(lines, "\n") }
+    return result
 end
 
 function commands.review(backend, args)
@@ -2607,6 +2677,51 @@ local function kept_note(short)
         .. " --release)"
 end
 
+local function blocking_check(backend, short)
+    local root = backend.root
+    local shared = land.shared_list(config.get(root, "board.land.shared"))
+    if not shared then
+        return nil
+    end
+    local holds, why = turn.checking(backend)
+    if not holds then
+        return "the checks held on the landing turn card cannot be read: " .. why
+    end
+    local mine
+    for _, hold in ipairs(holds) do
+        if hold.card ~= short then
+            mine = mine or land.touched(root, "@")
+            local theirs = land.touched(root, hold.commit) or {}
+            if not mine then
+                return "jj could not list the files of this change"
+            end
+            local overlap = land.overlap(mine, theirs, shared)
+            if #overlap > 0 then
+                return string.format(
+                    "the check held for %s by %s at commit %s reads %s, which this change touches, "
+                        .. "so it lands after that check ends (by %s at the latest)",
+                    hold.card,
+                    hold.name,
+                    land.short(hold.commit),
+                    table.concat(overlap, ", "),
+                    hold.expires
+                )
+            end
+        end
+    end
+end
+
+local function await_check(backend, short, wait)
+    local deadline = os.time() + wait
+    while true do
+        local blocked = blocking_check(backend, short)
+        if not blocked or os.time() >= deadline then
+            return blocked
+        end
+        devos.nap(turn.POLL_SECONDS)
+    end
+end
+
 function commands.land(backend, args)
     local flags, words = parse(args, { [WAIT_FLAG] = true })
     if not flags then
@@ -2668,11 +2783,20 @@ function commands.land(backend, args)
     if message then
         return failure(short .. " cannot land: " .. message)
     end
+    local blocked = await_check(backend, short, hold and 0 or wait)
+    if blocked then
+        return failure(short .. " cannot land: " .. blocked .. (hold and kept_note(short) or ""))
+    end
     if not hold then
         hold, message = await_turn({ backend = backend, name = name, short = short, wait = wait })
     end
     if not hold then
         return failure(short .. " cannot land: " .. message)
+    end
+    blocked = not hold.hold and blocking_check(backend, short)
+    if blocked then
+        turn.release(backend, hold)
+        return failure(short .. " cannot land: " .. blocked)
     end
     local current
     current, message = find_card(backend, words[1])

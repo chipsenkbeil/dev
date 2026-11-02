@@ -1185,6 +1185,20 @@ never handles the API.
   `note` refuses any text that begins with `dev-check:` (any case, after
   leading space), and `note --edit` and `--delete` refuse a comment that holds
   or would hold it (exit 1).
+
+  In a project with a valid `shared` list, a run (not `--expect-fail`) also
+  holds its check on the landing turn card while the rows run, without taking
+  the turn.
+
+  It writes a `dev-turn: check holder=NAME card=ID commit=COMMIT until=STAMP`
+  note before the first row, and a `dev-turn: checked holder=NAME card=ID` note
+  with the same commit when the command ends, whatever its result.
+
+  `until` is the longest the rows may run (`--timeout` times the rows) plus 60
+  seconds, to stop a runner that died from holding past it. `land` reads these
+  holds (see `land`). A project with no usable list writes none, and a hold
+  that cannot be written or ended is reported on standard error and does not
+  stop the check.
 - `review CARD --kind code|style|recheck --by NAME --rev REV`: Records that
   NAME reviewed the commit REV, as one `status` comment on the card that begins
   with a reserved first line and has no other:
@@ -1241,10 +1255,37 @@ never handles the API.
     at the rebased commit. A change that sits on an unlanded parent is
     refused and not rebased.
 
+  A landing waits for a held check that it would invalidate. The paths a held
+  check reads are the files its checked commit changes (a rename counts both
+  paths) and the `shared` list, the same two sets the carry rule below
+  compares. A landing that passes while the hold stands cannot make the
+  held check's carry refuse.
+
+  `land` lists its own change's files and, for each live hold of another card,
+  refuses when one of them is a file of the held commit or is, or lies under,
+  a shared path. It waits for such a hold before it asks for the turn,
+  polling every 5 seconds for up to `--wait` seconds.
+
+  The wait never keeps the turn from a landing that touches none of those
+  paths, and the wait for the turn that follows has its own `--wait`. A
+  landing that takes the turn here looks again, and a landing that already
+  holds the turn from `turn` looks once. It then refuses with a message that
+  begins `the check held for ID by NAME at commit ... reads PATHS, which this
+  change touches`.
+
+  A hold whose commit jj cannot read counts for the shared paths only. A
+  landing that overlaps no hold goes ahead while the check runs, and the held
+  card then carries its check over the rebase. A check that starts after the
+  landing's last look can still be overlapped, which costs it a new check.
+
+  A hold ends when its check ends or its `until` passes. Only a project with
+  a `shared` list holds checks, and the rest still need `turn --hold` to keep
+  trunk still.
+
   The landing turn keeps one landing at a time across runners, to keep
   trunk from moving under a landing. It is the claim on a card named
-  `landing turn`, which `land` creates in the Icebox when the board has
-  none, to keep the holder on the board and not in one session.
+  `landing turn`, which `land` or a held check creates in the Icebox when
+  the board has none, to keep the holder on the board and not in one session.
 
   A card in the wrong column, with an open outcome or claimed by another
   agent is refused before the turn is asked for. `land` then asks for the

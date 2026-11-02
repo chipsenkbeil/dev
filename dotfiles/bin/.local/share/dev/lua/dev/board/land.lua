@@ -10,6 +10,8 @@ local M = {}
 local SHAPE_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ if(description == "", "bare", "named")'
 local COMMIT_TEMPLATE = 'commit_id ++ "\\n"'
 local COMMIT_CHARS = 12
+local FILES_TEMPLATE = 'self.diff().files().map(|f| f.source().path() ++ "\\n" ++ '
+    .. 'f.target().path() ++ "\\n").join("")'
 
 ---Shorten a commit id for a message.
 ---@param commit string the full commit id
@@ -267,8 +269,6 @@ local function checked_commit(comments, state, rows)
 end
 
 local function carry_problem(root, state, commit)
-    local FILES_TEMPLATE = 'self.diff().files().map(|f| f.source().path() ++ "\\n" ++ '
-        .. 'f.target().path() ++ "\\n").join("")'
     local label = M.short(commit)
     local change = jj_out(root, "log", "-r", commit, "--no-graph", "-T", 'change_id ++ "\\n"')
     if change ~= state.change .. "\n" then
@@ -336,6 +336,59 @@ local function shared_paths(list)
         end
     end
     return list
+end
+
+---Read the shared paths from the config value.
+---@param list any the raw `board.land.shared` value
+---@return string[]? paths the paths, nil when the list is absent or not usable
+---@return string? problem why the list is not usable
+function M.shared_list(list)
+    return shared_paths(list)
+end
+
+---List the files a commit changes, a rename counting both its paths.
+---@param root string the project root, a jj project
+---@param rev string the revset of one commit
+---@return string[]? paths the paths, nil when jj could not read them
+function M.touched(root, rev)
+    local out = jj_out(root, "log", "-r", rev, "--no-graph", "-T", FILES_TEMPLATE)
+    if not out then
+        return nil
+    end
+    local paths = {}
+    for path in pairs(file_set(out)) do
+        paths[#paths + 1] = path
+    end
+    table.sort(paths)
+    return paths
+end
+
+---Name the paths of a landing that would invalidate a held check.
+---
+---A path invalidates the check when the checked change touches it, or when it
+---is, or lies under, a shared path. A trailing slash on a shared path is ignored.
+---@param mine string[] the files the landing change touches
+---@param held string[] the files the checked change touches
+---@param shared string[] the shared paths from the config
+---@return string[] overlap the landing's paths that invalidate it, sorted
+function M.overlap(mine, held, shared)
+    local touched = {}
+    for _, path in ipairs(held) do
+        touched[path] = true
+    end
+    local overlap = {}
+    for _, path in ipairs(mine) do
+        local hit = touched[path]
+        for _, entry in ipairs(shared) do
+            local base = entry:gsub("/+$", "")
+            hit = hit or path == base or path:sub(1, #base + 1) == base .. "/"
+        end
+        if hit then
+            overlap[#overlap + 1] = path
+        end
+    end
+    table.sort(overlap)
+    return overlap
 end
 
 local function fileset(path)

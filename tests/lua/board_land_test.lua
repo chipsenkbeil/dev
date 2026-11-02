@@ -161,6 +161,20 @@ t.test("checks_problem counts only the newest passing run at the commit", functi
     )
 end)
 
+t.test("overlap names the landing paths a held check reads", function()
+    local shared = { "Cargo.lock", "crates/physics" }
+    t.eq(land.overlap({ "docs/a.md", "src/b.rs" }, { "src/c.rs" }, shared), {})
+    t.eq(land.overlap({ "lib/a.txt", "libx/b.txt" }, {}, { "lib/" }), { "lib/a.txt" })
+    t.eq(land.overlap({ "Cargo.lock", "docs/a.md" }, { "src/c.rs" }, shared), { "Cargo.lock" })
+    t.eq(land.overlap({ "crates/physics/lib.rs", "crates/physicsx" }, {}, shared), {
+        "crates/physics/lib.rs",
+    })
+    t.eq(land.overlap({ "src/c.rs", "old.rs", "docs/a.md" }, { "old.rs", "src/c.rs" }, shared), {
+        "old.rs",
+        "src/c.rs",
+    })
+end)
+
 local function dev(root, home, log, args, extra)
     local env = {
         HOME = home,
@@ -1312,5 +1326,187 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("is done", 1, true), out)
         t.eq(turn_holder(home), nil)
+    end)
+
+    local function turn_notes(home)
+        local doc = assert(
+            json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
+            "decode failed"
+        )
+        for _, card in ipairs(doc.cards) do
+            if card.name == turn.NAME then
+                return card.comments or {}
+            end
+        end
+        return {}
+    end
+
+    local function hold_check(home, commit)
+        local backend, restore = board_at(home)
+        assert(
+            turn.begin_check(
+                backend,
+                { name = "other", card = "cccc3333", commit = commit, seconds = 600 }
+            )
+        )
+        restore()
+    end
+
+    local function end_hold(home, commit)
+        local backend, restore = board_at(home)
+        turn.end_check(backend, { name = "other", card = "cccc3333", commit = commit })
+        restore()
+    end
+
+    local function sibling_commit(root, work)
+        jj(root, "new", "master", "-m", "held")
+        assert(fs.write(root .. "/held.txt", "held\n"), "write failed")
+        local commit = head(root)
+        jj(root, "edit", work)
+        return commit
+    end
+
+    local function blocked(opts)
+        local root, home, log = opts.root, opts.home, opts.log
+        local out, code = dev(root, home, log, { "board", "land", opts.id, "--wait", "0" })
+        t.eq(code, 1, out)
+        for _, text in ipairs(opts.wanted) do
+            t.ok(out:find(text, 1, true), text .. "\n" .. out)
+        end
+        t.eq(landed_calls(log), "")
+        t.eq(turn_holder(home), nil)
+        t.ok(column_of(home) ~= "Done", column_of(home))
+    end
+
+    local function lander_ready(root, home, log)
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        return id
+    end
+
+    t.test("check holds itself on the turn card while it runs and lets go when it ends", function()
+        local root, home, log = jj_project()
+        lander_ready(root, home, log)
+        local notes = turn_notes(home)
+        local seen = {}
+        for _, note in ipairs(notes) do
+            seen[#seen + 1] = note.body:match("^dev%-turn: (%a+) holder=lander card=%x+")
+        end
+        t.eq(seen, { "check", "checked" })
+        local backend, restore = board_at(home)
+        t.eq(turn.checking(backend), {})
+        restore()
+    end)
+
+    t.test("a failing check still ends its hold", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "checks", id, "false" }))
+        local _, code = dev(root, home, log, { "board", "check", id })
+        t.eq(code, 1)
+        local kinds = {}
+        for _, note in ipairs(turn_notes(home)) do
+            kinds[#kinds + 1] = note.body:match("^dev%-turn: (%a+) holder=lander")
+        end
+        t.eq(kinds, { "check", "checked" })
+    end)
+
+    t.test("check writes no hold with --expect-fail or without a shared list", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        dev(root, home, log, { "board", "check", id, "--expect-fail" })
+        t.eq(turn_notes(home), {})
+        local bare_root, bare_home, bare_log = jj_project("")
+        local bare_id = new_card(bare_root, bare_home, bare_log)
+        must(dev(bare_root, bare_home, bare_log, { "board", "check", bare_id }))
+        t.eq(turn_notes(bare_home), {})
+    end)
+
+    t.test("a landing that touches nothing a held check reads goes ahead", function()
+        local root, home, log = jj_project()
+        local id = lander_ready(root, home, log)
+        hold_check(home, sibling_commit(root, head(root)))
+        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" }, {
+            LAND_TRUNK = "keep",
+        })
+        t.eq(code, 0, out)
+        t.eq(column_of(home), "Done")
+    end)
+
+    t.test("a landing that touches a file of the held change waits for the check", function()
+        local root, home, log = jj_project()
+        local id = lander_ready(root, home, log)
+        local work_commit = head(root)
+        hold_check(home, work_commit)
+        blocked({
+            root = root,
+            home = home,
+            log = log,
+            id = id,
+            wanted = { "check held for cccc3333", "work.txt" },
+        })
+        end_hold(home, work_commit)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        t.eq(column_of(home), "Done")
+    end)
+
+    t.test("a landing polls under --wait and goes ahead once the hold lapses", function()
+        local root, home, log = jj_project()
+        local id = lander_ready(root, home, log)
+        local previous = turn.CHECK_GRACE_SECONDS
+        turn.CHECK_GRACE_SECONDS = 0
+        local backend, restore = board_at(home)
+        assert(
+            turn.begin_check(
+                backend,
+                { name = "other", card = "cccc3333", commit = head(root), seconds = 3 }
+            )
+        )
+        restore()
+        turn.CHECK_GRACE_SECONDS = previous
+        local started = os.time()
+        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "30" }, {
+            LAND_TRUNK = "keep",
+        })
+        t.eq(code, 0, out)
+        t.ok(os.time() - started >= 2, "the landing must wait for the hold")
+        t.eq(column_of(home), "Done")
+    end)
+
+    t.test("a landing on a shared path waits for a check that does not touch it", function()
+        local root, home, log = jj_project()
+        assert(fs.write(root .. "/lib/extra.txt", "extra\n"), "write failed")
+        local id = lander_ready(root, home, log)
+        hold_check(home, sibling_commit(root, head(root)))
+        blocked({
+            root = root,
+            home = home,
+            log = log,
+            id = id,
+            wanted = { "check held for cccc3333", "lib/extra.txt" },
+        })
+    end)
+
+    t.test("a held check whose runner died stops blocking once its end time passes", function()
+        local root, home, log = jj_project()
+        local id = lander_ready(root, home, log)
+        local previous = turn.CHECK_GRACE_SECONDS
+        turn.CHECK_GRACE_SECONDS = 0
+        local backend, restore = board_at(home)
+        assert(
+            turn.begin_check(
+                backend,
+                { name = "other", card = "cccc3333", commit = head(root), seconds = 3 }
+            )
+        )
+        t.eq(#assert(turn.checking(backend)), 1)
+        devos.nap(PAST_HOLD_SECONDS + 2)
+        t.eq(turn.checking(backend), {})
+        restore()
+        turn.CHECK_GRACE_SECONDS = previous
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
     end)
 end
