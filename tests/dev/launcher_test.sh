@@ -244,6 +244,24 @@ PATH="$RECORDER:$NOLUA" "$DEV" -C "$TMP" guide how >/dev/null 2>&1
 out="$(cat "$ARGS_OUT")"
 assert_eq "a -C before the verb guide is taken out" "${out#* }" "guide how"
 
+out="$(cd "$TMP" && PATH="$NOLUA" "$DEV" -C nope lint 2>&1)"
+assert_eq "-C with a relative directory it cannot enter exits 2" "$?" "2"
+assert_eq "-C names a relative directory as it was given" "$out" "dev: -C cannot enter nope"
+out="$(PATH="$NOLUA" "$DEV" -C "" lint 2>&1)"
+assert_eq "-C with an empty word exits 2" "$?" "2"
+assert_eq "-C with an empty word says it needs a directory" "$out" "dev: -C needs a directory"
+C_DOTFILES="$TMP/c-dotfiles"
+mkdir -p "$C_DOTFILES"
+
+# shellcheck disable=SC2016  # $* expands when the stub runs
+printf '#!/bin/sh\necho "args: $*"\n' >"$C_DOTFILES/bootstrap.sh"
+out="$(PATH="$NOLUA" DOTFILES="$C_DOTFILES" "$DEV" -C "$TMP" bootstrap --dry-run 2>&1)"
+assert_eq "-C beside bootstrap exits 0" "$?" "0"
+assert_contains "-C beside bootstrap passes the rest of the arguments on" "$out" "args: --dry-run"
+out="$(PATH="$ROOTID:$NOLUA" DOTFILES="$C_DOTFILES" "$DEV" -C "$TMP" bootstrap --dry-run 2>&1)"
+assert_eq "root with -C beside bootstrap is refused with exit 2" "$?" "2"
+assert_eq "root with -C beside bootstrap gets the refusal line" "$out" "dev: as root, dev runs only tools install and tools check"
+
 NOJIT="$CIBIN:$NOLUA"
 remote_missing='dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
 out="$(cd "$PROJ" && PATH="$NOJIT" "$DEV" lint --remote 2>&1)"

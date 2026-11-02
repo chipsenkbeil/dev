@@ -56,11 +56,12 @@ fi
 DEV_SELF=$(realpath "${BASH_SOURCE[0]}")
 export DEV_SELF
 for dir in ${chdirs[@]+"${chdirs[@]}"}; do
+    target=$dir
     case "$dir" in
     /*) ;;
-    *) dir=./$dir ;;
+    *) target=./$dir ;;
     esac
-    cd -P -- "$dir" 2>/dev/null || {
+    cd -P -- "$target" 2>/dev/null || {
         printf 'dev: -C cannot enter %s\n' "$dir" >&2
         exit 2
     }
