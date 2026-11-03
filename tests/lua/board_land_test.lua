@@ -362,7 +362,7 @@ local function fake_backend(root, card)
     local view = {
         id = CARD_ID,
         name = "Card",
-        column = "In Review",
+        column = "Review",
         labels = {},
         outcomes = { { id = "o1", name = "It works", done = true } },
         checks = { "true" },
@@ -547,7 +547,7 @@ if has_jj then
         end
     )
 
-    t.test("a failed jj land leaves the card In Review and exits non-zero", function()
+    t.test("a failed jj land leaves the card in Review and exits non-zero", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "review" }))
@@ -561,17 +561,17 @@ if has_jj then
             { LAND_CODE = "1", LAND_MSG = "boom" }
         )
         t.eq(code, 1, out)
-        t.ok(out:find("stays in In Review", 1, true) and out:find("boom", 1, true), out)
+        t.ok(out:find("stays in Review", 1, true) and out:find("boom", 1, true), out)
         t.ok(landed_calls(log):find("land", 1, true))
         t.eq(#comments(home), before)
-        t.eq(column_of(home), "In Review")
+        t.eq(column_of(home), "Review")
     end)
 
     t.test("land names every missing condition and runs nothing", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
         refused(root, home, log, id, {
-            "it is in Backlog, and only a card in In Review lands",
+            "it is in Backlog, and only a card in Review lands",
             "1 of 1 outcomes are unticked",
             "no code review of change",
             "no style review of change",
@@ -737,7 +737,7 @@ if has_jj then
         local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" })
         t.eq(code, 1, out)
         t.ok(out:find("held by other since 20", 1, true), out)
-        t.eq(column_of(home), "In Review")
+        t.eq(column_of(home), "Review")
         _, code = dev(root, home, log, { "board", "land", id, "--wait", "x" })
         t.eq(code, 2)
         _, code = dev(root, home, log, { "board", "land", id, "--wait", "999999999" })
@@ -905,7 +905,7 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("jj land failed", 1, true), out)
         t.ok(out:find("push rejected: trunk moved", 1, true), out)
-        t.eq(column_of(home), "In Review")
+        t.eq(column_of(home), "Review")
     end)
 
     t.test("land does not carry a pass over a failed run at the rebased commit", function()
@@ -1418,7 +1418,7 @@ if has_jj then
         t.ok(out:find("1 of 1 children are open", 1, true), out)
         local list = comments(home, id)
         t.eq(list[#list].kind, "done")
-        t.eq(column_of(home, id), "In Review")
+        t.eq(column_of(home, id), "Review")
     end)
 
     local function in_review(root, home, log)
@@ -1470,7 +1470,7 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("ran out or was taken by another", 1, true), out)
         t.eq(landed_calls(log), "")
-        t.eq(column_of(home, id), "In Review")
+        t.eq(column_of(home, id), "Review")
     end)
 
     t.test("land refuses a hold another runner took after it ran out", function()

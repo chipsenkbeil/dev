@@ -8,7 +8,17 @@ local support = require("support")
 local TOKEN = "pomb_SECRETtoken0123456789"
 local DEVICE_CODE = "DEVCODE-secret-9876"
 local ADMIN_TOKEN = "pomb_ADMINtoken0123456789"
-local STANDARD = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
+local STANDARD = {
+    "Icebox",
+    "Backlog",
+    "Ready",
+    "In Progress",
+    "Review",
+    "Verify",
+    "Release",
+    "Blocked",
+    "Done",
+}
 
 local function copy(value)
     if type(value) ~= "table" then
@@ -83,6 +93,15 @@ local function fake_layout(opts)
     function layout:add_column(name, is_done)
         write("add_column", name, is_done)
         state.columns[#state.columns + 1] = { id = "col-" .. name, name = name, is_done = is_done }
+        return true
+    end
+    function layout:rename_column(id, name)
+        write("rename_column", id, name)
+        for _, column in ipairs(state.columns) do
+            if column.id == id then
+                column.name = name
+            end
+        end
         return true
     end
     function layout:move_column(id, position)
@@ -162,7 +181,7 @@ t.test("a missing board ends in the standard state", function()
     local changes, message, lines = run(layout)
     t.eq(message, nil)
     t.eq(names(layout.state.columns), STANDARD)
-    t.eq(layout.state.columns[7].is_done, true)
+    t.eq(layout.state.columns[9].is_done, true)
     t.eq(color(layout, "yellow").label, "1 Pomodoro")
     t.eq(color(layout, "green").label, "2 Pomodori")
     t.eq(color(layout, "blue").label, "3 Pomodori")
@@ -223,13 +242,43 @@ t.test("an old board keeps its cards and gains what is missing", function()
         "Backlog",
         "ready",
         "In Progress",
-        "In Review",
+        "Review",
+        "Verify",
+        "Release",
         "Blocked",
         "Done",
     })
     t.ok(changes > 0)
     local again = run(layout)
     t.eq(again, 0)
+end)
+
+t.test("an In Review column is renamed to Review with its id and cards kept", function()
+    local layout = fake_layout({ columns = template_columns() })
+    local _, message, lines = run(layout)
+    t.eq(message, nil)
+    t.eq(names(layout.state.columns), STANDARD)
+    local review = layout.state.columns[5]
+    t.eq(review.id, "col-In Review")
+    t.eq(lines[1], "renamed column In Review to Review")
+    local renames = 0
+    for _, write in ipairs(layout.state.writes) do
+        renames = renames + (write[1] == "rename_column" and 1 or 0)
+    end
+    t.eq(renames, 1)
+    local again, _, said = run(layout)
+    t.eq(again, 0)
+    t.eq(said, {})
+end)
+
+t.test("a board with both In Review and Review renames nothing", function()
+    local columns = template_columns()
+    columns[#columns + 1] = { id = "col-Review", name = "Review", is_done = false }
+    local layout = fake_layout({ columns = columns })
+    run(layout)
+    for _, write in ipairs(layout.state.writes) do
+        t.ok(write[1] ~= "rename_column")
+    end
 end)
 
 t.test("a column init does not recognise is reported and kept where it was named", function()
@@ -261,8 +310,8 @@ t.test("a Done column that does not count as done is marked", function()
     columns[6].is_done = false
     local layout = fake_layout({ columns = columns })
     local _, _, lines = run(layout)
-    t.eq(layout.state.columns[7].is_done, true)
-    t.ok(lines[2]:find("marked Done", 1, true) or lines[1]:find("marked Done", 1, true), lines[1])
+    t.eq(layout.state.columns[9].is_done, true)
+    t.ok(table.concat(lines, "\n"):find("marked Done", 1, true), lines[1])
 end)
 
 t.test("size words come off names and set the colour of a card still at the default", function()
@@ -322,7 +371,7 @@ t.test("a refused change says to use --admin and stops with the changes so far s
     local changes, message, lines = run(layout)
     t.eq(changes, nil)
     t.ok(message:find("run dev board init --admin", 1, true), message)
-    t.eq(lines[1], "added column Icebox")
+    t.eq(lines[2], "added column Icebox")
 end)
 
 local PERMISSIONS = '[{"name":"cards.read","presets":["read","work","lead","admin"]},'
@@ -682,7 +731,17 @@ end)
 t.test("init sends the changes an old board needs as the API's own calls", function()
     local root, home, tmp = sandbox()
     local last = DETAIL
-    local ordered = { "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done", "Icebox" }
+    local ordered = {
+        "Backlog",
+        "Ready",
+        "In Progress",
+        "Review",
+        "Verify",
+        "Release",
+        "Blocked",
+        "Done",
+        "Icebox",
+    }
     local parts = {}
     for _, name in ipairs(ordered) do
         parts[#parts + 1] = string.format(
@@ -752,6 +811,41 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
     t.ok(out:find("made white the default colour\n", 1, true), out)
     t.ok(out:find('renamed card 11111111 to "Keep it" and coloured it blue\n', 1, true), out)
     t.eq(out:find(TOKEN, 1, true), nil)
+end)
+
+t.test("init renames In Review to Review through the column update", function()
+    local root, home, tmp = sandbox()
+    local parts = {}
+    for _, name in ipairs({
+        "Icebox",
+        "Backlog",
+        "Ready",
+        "In Progress",
+        "In Review",
+        "Verify",
+        "Release",
+        "Blocked",
+        "Done",
+    }) do
+        parts[#parts + 1] = string.format(
+            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s}',
+            name:gsub(" ", ""),
+            name,
+            name == "Done" and "true" or "false"
+        )
+    end
+    assert(fs.write(root .. "/detail.json", DETAIL .. table.concat(parts, ",") .. "]}"))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.ok(
+        calls_of(root):find(
+            '--data-raw {"name":"Review"} https://pomb.example/api/columns/col-InReview',
+            1,
+            true
+        ),
+        calls_of(root)
+    )
+    t.ok(out:find("renamed column In Review to Review\n", 1, true), out)
 end)
 
 t.test("init makes a missing board from the agent project template", function()

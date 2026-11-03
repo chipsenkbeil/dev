@@ -218,7 +218,7 @@ return {
         handler = "lua",
         flags = "--name --admin",
         usage = "dev board init [--name N] [--admin]",
-        desc = "Bring the board to the standard: seven columns, the size palette with White as the default, no size words in names; --admin signs in through the browser for existing boards",
+        desc = "Bring the board to the standard: nine columns, the size palette with White as the default, no size words in names; --admin signs in through the browser for existing boards",
     },
     {
         words = { "board", "ls" },
@@ -244,7 +244,7 @@ return {
         handler = "lua",
         flags = "--column --max-size",
         usage = "dev board next [--column C] [--max-size N]",
-        desc = "Show the top Ready card nobody has claimed, nothing blocks and no needs:human label marks, or with --column Backlog or Icebox the top such card there, or with --column Blocked the top unclaimed needs:lead card",
+        desc = "Show the top Ready card nobody has claimed, nothing blocks and no needs:human label marks, or with --column Backlog, Icebox, Review, Verify or Release the top such card there, or with --column Blocked the top unclaimed needs:lead card",
     },
     {
         words = { "board", "add" },
@@ -356,7 +356,7 @@ return {
         handler = "lua",
         flags = "--wait",
         usage = "dev board land CARD [--wait SECONDS]",
-        desc = "Take the landing turn (or land under the one dev board turn holds), one landing at a time across runners (waiting up to SECONDS, 300 by default, then naming the holder), rebase the card's change onto trunk under it, land it with jj land, note the commit, move the card to Done and give the turn back, only when the card is In Review with every outcome ticked and code and style reviews and a passing check run are recorded for the rebased commit; needs DEV_AGENT and a jj project",
+        desc = "Take the landing turn (or land under the one dev board turn holds), one landing at a time across runners (waiting up to SECONDS, 300 by default, then naming the holder), rebase the card's change onto trunk under it, land it with jj land, note the commit, move the card to Done and give the turn back, only when the card is in Review with every outcome ticked and code and style reviews and a passing check run are recorded for the rebased commit; needs DEV_AGENT and a jj project",
     },
     {
         words = { "board", "turn" },
@@ -387,7 +387,7 @@ return {
         words = { "board", "move" },
         handler = "lua",
         usage = "dev board move CARD COLUMN",
-        desc = "Move a card to the top of a column, given by name or as ready, progress, review, blocked, done, backlog or icebox, and a needs:human card moves only within its own column. An umbrella needs no outcomes and moves to Done once every child is Done",
+        desc = "Move a card to the top of a column, given by name or as ready, progress, review, verify, release, blocked, done, backlog or icebox, and a needs:human card moves only within its own column. An umbrella needs no outcomes and moves to Done once every child is Done",
     },
     {
         words = { "board", "order" },
@@ -413,7 +413,7 @@ return {
         handler = "lua",
         flags = "--days --icebox-days --lead-hours",
         usage = "dev board stale [--days N] [--icebox-days N] [--lead-hours N]",
-        desc = "List the cards that sat in Backlog, Ready, In Progress or In Review for N days (7 by default), oldest first, the needs:human ones apart, the other cards whose newest comment is the owner's apart, the needs:lead cards in Blocked for --lead-hours (1 by default), and the Icebox cards untouched for --icebox-days (30 by default)",
+        desc = "List the cards that sat in Backlog, Ready, In Progress, Review, Verify or Release for N days (7 by default), oldest first, the needs:human ones apart, the other cards whose newest comment is the owner's apart, the needs:lead cards in Blocked for --lead-hours (1 by default), and the Icebox cards untouched for --icebox-days (30 by default)",
     },
     {
         words = { "board", "lint" },
@@ -452,8 +452,8 @@ return {
         words = { "board", "wait" },
         handler = "lua",
         flags = "--for",
-        usage = "dev board wait [--for ready|human|lead]",
-        desc = "Block until the board changes, then print a line per change and exit 0 to wake a background run: --for ready a card added to or moved into Ready, --for human a card moved out of Blocked or one the owner comments on, once he is quiet for 60 seconds, --for lead a needs:lead card in Blocked",
+        usage = "dev board wait [--for ready|review|verify|release|human|lead]",
+        desc = "Block until the board changes, then print a line per change and exit 0 to wake a background run: --for ready, review, verify or release an unclaimed card added to or moved into that column, --for human a card moved out of Blocked or one the owner comments on, once he is quiet for 60 seconds, --for lead a needs:lead card in Blocked",
     },
     {
         words = { "bootstrap" },

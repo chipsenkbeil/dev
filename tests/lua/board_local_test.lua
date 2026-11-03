@@ -71,7 +71,7 @@ local function mode(path)
     return string.format("%o", bit.band(assert(fs.stat(path)).mode, 511))
 end
 
-t.test("init lays out the seven columns and the palette and is idempotent", function()
+t.test("init lays out the nine columns and the palette and is idempotent", function()
     local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
     local out, code = dev(root, home, { "board", "init" })
     t.eq(code, 0, out)
@@ -81,7 +81,9 @@ t.test("init lays out the seven columns and the palette and is idempotent", func
         "Backlog",
         "Ready",
         "In Progress",
-        "In Review",
+        "Review",
+        "Verify",
+        "Release",
         "Blocked",
         "Done",
     }) do
@@ -95,8 +97,18 @@ t.test("init lays out the seven columns and the palette and is idempotent", func
     for _, column in ipairs(doc.columns) do
         names[#names + 1] = column.name
     end
-    t.eq(names, { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" })
-    t.eq(doc.columns[7].is_done, true)
+    t.eq(names, {
+        "Icebox",
+        "Backlog",
+        "Ready",
+        "In Progress",
+        "Review",
+        "Verify",
+        "Release",
+        "Blocked",
+        "Done",
+    })
+    t.eq(doc.columns[9].is_done, true)
     local labels = {}
     for _, color in ipairs(doc.colors) do
         labels[#labels + 1] = color.value .. "=" .. color.label
@@ -127,7 +139,8 @@ t.test("boards and columns answer for a local board's own name only", function()
     local out, code = dev(root, home, { "board", "boards" })
     t.eq(code, 0, out)
     t.eq(out, "mine\n")
-    local columns = "Icebox\nBacklog\nReady\nIn Progress\nIn Review\nBlocked\nDone (done)\n"
+    local columns =
+        "Icebox\nBacklog\nReady\nIn Progress\nReview\nVerify\nRelease\nBlocked\nDone (done)\n"
     out, code = dev(root, home, { "board", "columns" })
     t.eq(code, 0, out)
     t.eq(out, columns)
@@ -186,7 +199,7 @@ t.test("add, ls, next, move, size and label work on a local board", function()
     out = dev(root, home, { "board", "next" })
     t.eq(out, a .. "  Ready  2 Pomodori  docs,needs:lead  Write docs  0 comments, 0 the owner's\n")
     out = dev(root, home, { "board", "move", a, "review" })
-    t.eq(out, "moved " .. a .. " to In Review\n")
+    t.eq(out, "moved " .. a .. " to Review\n")
     out = dev(root, home, { "board", "next" })
     t.eq(out, "no ready cards\n")
     out = dev(root, home, { "board", "size", b, "1" })
@@ -1164,7 +1177,7 @@ t.test("move out of progress releases the claim and warns about nothing", functi
     t.ok(document(file_of(home)).cards[1].claim ~= nil, "claim held")
     local out, code = dev(root, home, { "board", "move", a, "review" })
     t.eq(code, 0, out)
-    t.eq(out, "moved " .. a .. " to In Review\n")
+    t.eq(out, "moved " .. a .. " to Review\n")
     t.eq(document(file_of(home)).cards[1].claim, nil)
 end)
 
@@ -1343,7 +1356,7 @@ end)
 local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"dotfiles","columns":['
     .. '{"id":"col-backlog","name":"Backlog"},{"id":"col-ready","name":"Ready"},'
-    .. '{"id":"col-review","name":"In Review"},{"id":"col-done","name":"Done"}]}'
+    .. '{"id":"col-review","name":"Review"},{"id":"col-done","name":"Done"}]}'
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"white-id","value":"white","label":"Unsized"}]'
 local EXPORT = '{"tasks":[{"id":"'
@@ -1959,8 +1972,18 @@ t.test("a local board with renamed columns works through the project map", funct
     for _, column in ipairs(doc.columns) do
         names[#names + 1] = column.name
     end
-    t.eq(names, { "Icebox", "Inbox", "Next", "Doing", "In Review", "Blocked", "Shipped" })
-    t.eq(doc.columns[7].is_done, true)
+    t.eq(names, {
+        "Icebox",
+        "Inbox",
+        "Next",
+        "Doing",
+        "Review",
+        "Verify",
+        "Release",
+        "Blocked",
+        "Shipped",
+    })
+    t.eq(doc.columns[9].is_done, true)
     local out = dev(
         root,
         home,

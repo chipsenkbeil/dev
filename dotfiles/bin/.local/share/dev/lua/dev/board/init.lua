@@ -1,13 +1,14 @@
 local board = require("dev.board")
 
+local RENAMED_FROM = "In Review"
 local NEEDS_ADMIN = "pomb answered 403"
 local LEFT_ENABLED = "left the colours enabled as they are, since this token may not change them; "
     .. "run dev board init --admin"
 local ADMIN_HINT = "; this token may not change this board, run dev board init --admin"
 
----The standard board: the seven columns, the size palette and names without
+---The standard board: the nine columns, the size palette and names without
 ---size words, laid out one step at a time. Each step adds or fixes what is
----missing and never deletes or renames. The default colour changes last, so
+---missing, renames only In Review and never deletes. The default colour changes last, so
 ---a run that stops early can be repeated and still tell the old default.
 ---@class dev.board.init
 local M = {}
@@ -86,6 +87,20 @@ local function columns_step(layout, state, say)
     local present = by_name(state.columns)
     local added = false
     local standard = state.roles.list
+    local review = state.roles.review
+    local from, to = RENAMED_FROM:lower(), review:lower()
+    local old = present[from]
+    if old and not present[to] and to ~= from then
+        local ok, message = layout:rename_column(old.id, review)
+        if not ok then
+            return nil, message
+        end
+        say("renamed column " .. old.name .. " to " .. review)
+        state.changes = state.changes + 1
+        present[from] = nil
+        old.name = review
+        present[to] = old
+    end
     local done_name = standard[#standard]
     for _, name in ipairs(standard) do
         if not present[name:lower()] then

@@ -161,12 +161,15 @@ dev board init --admin
 
 What it lays out:
 
-- The columns Icebox, Backlog, Ready, In Progress, In Review, Blocked and Done,
-  in that order, with Done counting as done. A missing board is made from Pomb's
-  `agent project` template, and the missing columns are added and moved into
-  place. A column it does not know stays, comes after Done and is reported as
-  `kept column "X", which is not part of the standard board`. It never renames a
-  column.
+- The columns Icebox, Backlog, Ready, In Progress, Review, Verify, Release,
+  Blocked and Done, in that order, with Done counting as done. A missing board
+  is made from Pomb's `agent project` template, and the missing columns are
+  added and moved into place. A column named In Review is renamed to Review
+  with its cards kept, through `PATCH /api/columns/{id}`, so no card is left in
+  a column that no longer exists. A rerun changes nothing. A column it does
+  not know stays, comes after Done and is reported as
+  `kept column "X", which is not part of the standard board`. It renames
+  no column but In Review.
 - The palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`,
   red `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps
   its colour in every column, so the colour is the only record of its size.
@@ -244,13 +247,13 @@ cd ~/projects/demo && dev board init --admin --name demo
 
 ## Columns, cards and sizes
 
-The standard columns are Icebox, Backlog, Ready, In Progress, In Review, Blocked
-and Done. A finished column is any column the backend marks done (`is_done` on
-Pomb, the same flag in a local board's file), and a board may have several: `ls`
-hides all of them, `stale` never lists their cards, and a blocker in one no
-longer blocks. The other roles come from a `[board.columns]` table, read with
-the project file over the user file, and each role defaults to its standard
-name, which `dotfiles/bin/.config/dev/config.toml` ships:
+The standard columns are Icebox, Backlog, Ready, In Progress, Review, Verify,
+Release, Blocked and Done. A finished column is any column the backend marks
+done (`is_done` on Pomb, the same flag in a local board's file), and a board may
+have several: `ls` hides all of them, `stale` never lists their cards, and a
+blocker in one no longer blocks. The other roles come from a `[board.columns]`
+table, read with the project file over the user file, and each role defaults to
+its standard name, which `dotfiles/bin/.config/dev/config.toml` ships:
 
 ```toml
 [board.columns]
@@ -258,7 +261,9 @@ icebox = "Icebox"
 backlog = "Backlog"
 ready = "Ready"
 progress = "In Progress"
-review = "In Review"
+review = "Review"
+verify = "Verify"
+release = "Release"
 blocked = "Blocked"
 ```
 
@@ -266,10 +271,10 @@ A project whose board renames a column sets the role to the new name, and may
 add `done = "Shipped"` to name the finished column `discard` moves a card to,
 else `discard` uses the first finished column in board order. A column argument
 is a column's name in any case, a finished column's name or a role word:
-`icebox`, `backlog`, `ready`, `progress`, `review`, `blocked` or `done`.
-`dev board init` lays out the mapped names, with the mapped `done` (else Done)
-marked finished. The rules in this guide say Ready, Blocked and the rest for the
-roles, whatever the board calls them.
+`icebox`, `backlog`, `ready`, `progress`, `review`, `verify`, `release`,
+`blocked` or `done`. `dev board init` lays out the mapped names, with the mapped
+`done` (else Done) marked finished. The rules in this guide say Ready, Blocked
+and the rest for the roles, whatever the board calls them.
 
 Every card in every column is fair game for an agent unless it is labelled
 `needs:human`. What each column means, in the order a card travels:
@@ -287,8 +292,13 @@ Every card in every column is fair game for an agent unless it is labelled
   haiku agent, green and blue by a sonnet agent.
 - In Progress: an agent holds the card, under its name. Only the claimant works
   it.
-- In Review: the change is under review or ci, then `dev board land` lands it
+- Review: the change is under review or ci, then `dev board land` lands it
   and moves the card to Done. Still the claimant's.
+- Verify: the review passed and a verifier ticks the outcomes from the ci logs.
+- Release: verified and waiting to reach main and, where the project deploys,
+  go live. `stale` lists a card that sits here for `--days` days or more.
+  A card in Review, Verify or Release with no claim waits for that stage's
+  role. A claim means the role is working it.
 - Blocked: waiting on an answer.
   - `needs:human` is yours alone.
   - `needs:lead` is for a higher-tier agent, which answers and moves the card
@@ -297,7 +307,8 @@ Every card in every column is fair game for an agent unless it is labelled
     any Ready card, and parks on `timeout 86400 dev board wait --for lead`.
   - A lead that cannot answer adds `needs:human`, removes `needs:lead` and
     leaves the card in Blocked for you.
-- Done: landed, answered, or dropped with a note.
+- Done: on main (and live where the project deploys), answered, or
+  dropped with a note.
 
 An agent with nothing Ready takes the top of Backlog and then Icebox, planning
 the card first. It reads each card's comments before taking one. A steering
@@ -369,8 +380,8 @@ Ready card that is unclaimed, not blocked and not labelled `needs:human`, with
 its comment count and how many of those comments are the owner's after the card
 line (`2 comments, 1 the owner's`, or `1 comment` for one), or `no ready cards`.
 A local board has no owner comments, so it always counts 0 as the owner's.
-`next --column backlog` and `next --column icebox` take the top such card of
-those columns instead, or print `no cards in <column>`.
+`next --column backlog`, `icebox`, `review`, `verify` and `release` take the top
+such card of those columns instead, or print `no cards in <column>`.
 `next --column blocked` prints the top unclaimed card labelled `needs:lead`,
 never one that also carries `needs:human`, or `no cards in Blocked`. Any other
 column is exit 2.
@@ -622,35 +633,34 @@ or one made before Pomb 0.5.40 (which records no creator), gets a 403
 for, leaving the link in place. Unlike `link`, `unlink` is not queued while Pomb
 is unreachable.
 
-`stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards that have sat in Backlog,
-Ready, In Progress or In Review for N days or more, 7 by default, oldest first.
-Each line is the id prefix, the column, the days in it (`9d`), the size and the
-name. It counts whole days from the card's `column_entered_at`, which Pomb gives
-every task view, so a card at 6 days is fresh and one at 7 is stale. Icebox,
-Blocked and Done are never stale. Every card with the `needs:human` label in
-Blocked or Icebox, at any age, is listed apart under
-`for the owner (needs:human):` with its column and days in column, and never
-among the stale ones (it waits on the owner, not on an agent). A card with that
-label in any other column but Done is listed apart under
-`moved by the owner, remove needs:human:`, to show that the owner moved it out
-and an agent should take the label off (per the board guide). A card in one of
-those columns, or with that label, that the tasks view did not date gets a line
-`could not date <id> <name>` after a blank line, instead of being skipped. When
-nothing is stale it prints `no stale cards`. A `--days` that is not a whole
-number of 1 or more is a usage error (exit 2). Every card
-labelled `needs:lead` (and not `needs:human`) that has sat in Blocked for
-`--lead-hours` hours or more (1 by default) is listed apart under
-`for a lead (needs:lead):`, with its time as `<hours>h`. Every card that is
-unsized (white or no colour), in any column but Icebox, is also listed at any age, apart,
-under `unsized outside Icebox:` with its id prefix, column and name, so a planner sees
-what still needs a size. Last, under `icebox, untouched for N days:`, it lists
-the Icebox cards nobody has looked at: the card's time in Icebox and its latest
-comment are both `--icebox-days` days old or older (30 by default), counted from
-the later of the two. Cards labelled `needs:human` are left out, and the section
-is absent when no card qualifies. A card it cannot date, or whose comments it
-cannot read, gets a `could not` line after the section. An orchestrator can run
-it at startup and re-plan, escalate or ice each card it lists, and scope the
-Icebox ones.
+`stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards that have
+sat in Backlog, Ready, In Progress, Review, Verify or Release for N days or
+more, 7 by default, oldest first. Each line is the id prefix, the column, the
+days in it (`9d`), the size and the name. It counts whole days from the card's
+`column_entered_at`, which Pomb gives every task view, so a card at 6 days is
+fresh and one at 7 is stale. Icebox, Blocked and Done are never stale. Every
+card with the `needs:human` label in Blocked or Icebox, at any age, is listed
+apart under `for the owner (needs:human):` with its column and days in column,
+and never among the stale ones (it waits on the owner, not on an agent). A card
+with that label in any other column but Done is listed apart under `moved by the
+owner, remove needs:human:`, to show that the owner moved it out and an agent
+should take the label off (per the board guide). A card in one of those
+columns, or with that label, that the tasks view did not date gets a line `could
+not date <id> <name>` after a blank line, instead of being skipped. When nothing
+is stale it prints `no stale cards`. A `--days` that is not a whole number of 1
+or more is a usage error (exit 2). Every card labelled `needs:lead` (and not
+`needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
+default) is listed apart under `for a lead (needs:lead):`, with its time as
+`<hours>h`. Every card that is unsized (white or no colour), in any column but
+Icebox, is also listed at any age, apart, under `unsized outside Icebox:` with
+its id prefix, column and name, so a planner sees what still needs a size. Last,
+under `icebox, untouched for N days:`, it lists the Icebox cards nobody has
+looked at: the card's time in Icebox and its latest comment are both
+`--icebox-days` days old or older (30 by default), counted from the later of the
+two. Cards labelled `needs:human` are left out, and the section is absent when
+no card qualifies. A card it cannot date, or whose comments it cannot read, gets
+a `could not` line after the section. An orchestrator can run it at startup and
+re-plan, escalate or ice each card it lists, and scope the Icebox ones.
 
 `lint [--strict]` reports every card that breaks the board's rules. The guards
 in `move`, `add` and `discard` stop a bad write only when it goes through
@@ -678,7 +688,7 @@ open question. `--strict` exits the same way. The rules:
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
 - Outside Icebox and Done: a description of at most 400 words. In Ready, In
-  Progress and In Review, a checks row. In Ready, no red size.
+  Progress and Review, a checks row. In Ready, no red size.
 - `needs:human` sits only in Blocked or Icebox.
 - A Blocked card holds a `question` or `blocked` note or a `blocked_by` link.
 - An In Progress card holds a claimant unless it is an umbrella with children.
@@ -705,7 +715,7 @@ strict = true
 ## Local boards
 
 `backend = "local"` keeps the board in one JSON file, so a project needs no Pomb
-server. Every command works on it, with the same seven columns, size colours and
+server. Every command works on it, with the same nine columns, size colours and
 labels as a Pomb board, so a board reads the same either way.
 
 ```toml
@@ -779,23 +789,24 @@ timeout 86400 dev board wait --for human
 timeout 86400 dev board wait --for lead
 ```
 
-`--for ready` wakes on a card added to Ready or moved into it and prints
-`added <id prefix> to Ready` or `moved <id prefix> to Ready`. `--for human`
-wakes on a card the owner moved out of Blocked (`moved <id prefix> out of
-Blocked`, and a move by an agent never wakes it) and on a card, in any column
-but Done, whose newest comment is the owner's and newer than the wait's start
-(`the owner commented on <id prefix>`). A comment of an agent never wakes it.
-The first such event opens a settle window of 60 seconds: the wait keeps
-listening until no new event from the owner has come for that long, to
-catch a second reply, then prints one line per card the owner touched, not
-one per comment. The woken agent reads every comment with `dev board show`.
+`--for ready` wakes on a card added to Ready or moved into it and prints `added
+<id prefix> to Ready` or `moved <id prefix> to Ready`. `--for review`, `--for
+verify` and `--for release` do the same for that column, but only for a card
+nobody has claimed. `--for human` wakes on a card the owner moved out of Blocked
+(`moved <id prefix> out of Blocked`, and a move by an agent never wakes it) and
+on a card, in any column but Done, whose newest comment is the owner's and newer
+than the wait's start (`the owner commented on <id prefix>`). A comment of an
+agent never wakes it. The first such event opens a settle window of 60 seconds:
+the wait keeps listening until no new event from the owner has come for that
+long, to catch a second reply, then prints one line per card the owner touched,
+not one per comment. The woken agent reads every comment with `dev board show`.
 `--for lead` wakes on a card added, moved or updated that is now in Blocked with
-the `needs:lead` label, no claim and without `needs:human`, and prints
-`<id prefix> is labelled needs:lead in Blocked`. Pomb's events carry no labels,
-so it reads the board for each batch of events.
-With no `--for`, every added card, move, update and comment wakes it. Any other
-`--for` value is a usage error, and a local board is
-`dev: a local board has nothing to wait on` (exit 1). `wait` is never queued.
+the `needs:lead` label, no claim and without `needs:human`, and prints `<id
+prefix> is labelled needs:lead in Blocked`. Pomb's events carry no labels, so it
+reads the board for each batch of events. With no `--for`, every added card,
+move, update and comment wakes it. Any other `--for` value is a usage error, and
+a local board is `dev: a local board has nothing to wait on` (exit 1).
+`wait` is never queued.
 
 The command asks Pomb for events after a cursor and holds each request for up to
 50 seconds, repeating on a quiet board until a matching event arrives. It keeps
@@ -887,18 +898,18 @@ never handles the API.
   under a bold column heading with a dim `N cards`, and a dim line saying Done
   is left out unless `--column done`. Piped, with `NO_COLOR` or with `TERM=dumb`
   the output is the plain lines above and `--group` changes nothing.
-- `next [--column C] [--max-size N]`: The top Ready card that is unclaimed,
-  not blocked and not labelled `needs:human` or `run`, in the `ls` format
-  followed by `N comments, M the owner's` (`1 comment` for one), else
-  `no ready cards` (exit 0). Comments that cannot be read are exit 1.
-  `--column backlog` or `--column icebox` takes the top such card of that column
-  instead, else `no cards in <column>` (exit 0). `--column blocked` takes the top
-  unclaimed card labelled `needs:lead`, never one labelled `needs:human` and,
-  like every `next`, never one that a card outside Done blocks. Any other
+- `next [--column C] [--max-size N]`: The top Ready card that is unclaimed, not
+  blocked and not labelled `needs:human` or `run`, in the `ls` format followed
+  by `N comments, M the owner's` (`1 comment` for one), else `no ready cards`
+  (exit 0). Comments that cannot be read are exit 1. `--column backlog`,
+  `icebox`, `review`, `verify` or `release` takes the top such card of that
+  column instead, else `no cards in <column>` (exit 0). `--column blocked` takes
+  the top unclaimed card labelled `needs:lead`, never one labelled `needs:human`
+  and, like every `next`, never one that a card outside Done blocks. Any other
   column is exit 2. `--max-size N` (1, 2 or 3, else exit 2), or `DEV_MAX_SIZE`
-  when the flag is absent, skips a card bigger than N Pomodori to keep a
-  small model from taking a bigger card. A card with no size passes. With
-  neither set, nothing is skipped.
+  when the flag is absent, skips a card bigger than N Pomodori to keep a small
+  model from taking a bigger card. A card with no size passes. With neither
+  set, nothing is skipped.
 - `boards`: The name of every board the token sees, one per line
   (`GET /api/boards`, which leaves out the boards outside a fine-grained
   token's set). On a local board it prints that board's own name. An extra
@@ -1060,36 +1071,35 @@ never handles the API.
   the comment leaves the comment on the card. The change is not queued
   while Pomb is unreachable. Emptying the bin and deleting from it stay with
   the owner.
-- `stale [--days N] [--icebox-days N] [--lead-hours N]`: Lists the cards that have sat in
-  Backlog, Ready, In Progress or In Review for N days or more (7 by default),
-  oldest first, one line each: id prefix, column, `<days>d`, size and name,
-  aligned. Days are whole days from the card's `column_entered_at` (Pomb's task
-  view, RFC 3339, read with `dev.cmd.box.parse_time`) to now, so 6 days is fresh
-  and 7 is stale. Icebox, Blocked and Done are never stale. Every card carrying
-  the `needs:human` label in Blocked or Icebox, at any age, is listed apart,
-  after a blank line and the heading `for the owner (needs:human):` (same
-  columns; the name ends `(answered, waiting for your move)` when the newest
-  comment is the owner's), never among the stale ones. Every other card but
-  Done and not listed above whose newest comment is the owner's is listed
-  apart under the heading `newest comment is the owner's:` (same columns),
-  whatever its label and age. Every `needs:human` card in any other column
-  but Done is listed apart after them under the heading
-  `moved by the owner, remove needs:human:` (same columns, no answer note).
-  Every card outside Icebox that is white or has no colour is listed apart
-  too, at any age, after a blank line and the heading
-  `unsized outside Icebox:`, one line each
-  with id prefix, column and name, in board order; sizing happens in planning,
-  so a card that waits unsized is a planner's to size. A card in those columns
-  or with that label that the tasks view did not date (missing from the pages,
-  or no `column_entered_at`) gets one line `could not date <id> <name>` after a
-  blank line. `no stale cards` when the first list is empty. Last comes the
-  Icebox section: every Icebox card without `needs:human` whose column time and
-  latest comment (`backend:comments`) are both `--icebox-days` days old or more
-  (30 by default) is listed after a blank line and the heading
-  `icebox, untouched for N days:`, oldest first, with the same columns as the
-  first list, the days counted from the later of the two times. A card with no
-  comment counts by its column time. A card the tasks view did not date, or
-  whose comments could not be read, gets a `could not date` or
+- `stale [--days N] [--icebox-days N] [--lead-hours N]`: Lists the cards that
+  have sat in Backlog, Ready, In Progress, Review, Verify or Release for N days
+  or more (7 by default), oldest first, one line each: id prefix, column,
+  `<days>d`, size and name, aligned. Days are whole days from the card's
+  `column_entered_at` (Pomb's task view, RFC 3339, read with
+  `dev.cmd.box.parse_time`) to now, so 6 days is fresh and 7 is stale. Icebox,
+  Blocked and Done are never stale. Every card carrying the `needs:human` label
+  in Blocked or Icebox, at any age, is listed apart, after a blank line and the
+  heading `for the owner (needs:human):` (same columns; the name ends
+  `(answered, waiting for your move)` when the newest comment is the owner's),
+  never among the stale ones. Every other card but Done and not listed above
+  whose newest comment is the owner's is listed apart under the heading `newest
+  comment is the owner's:` (same columns), whatever its label and age. Every
+  `needs:human` card in any other column but Done is listed apart after them
+  under the heading `moved by the owner, remove needs:human:` (same columns, no
+  answer note). Every card outside Icebox that is white or has no colour is
+  listed apart too, at any age, after a blank line and the heading `unsized
+  outside Icebox:`, one line each with id prefix, column and name, in board
+  order; sizing happens in planning, so a card that waits unsized is a planner's
+  to size. A card in those columns or with that label that the tasks view did
+  not date (missing from the pages, or no `column_entered_at`) gets one line
+  `could not date <id> <name>` after a blank line. `no stale cards` when the
+  first list is empty. Last comes the Icebox section: every Icebox card without
+  `needs:human` whose column time and latest comment (`backend:comments`) are
+  both `--icebox-days` days old or more (30 by default) is listed after a blank
+  line and the heading `icebox, untouched for N days:`, oldest first, with the
+  same columns as the first list, the days counted from the later of the two
+  times. A card with no comment counts by its column time. A card the tasks view
+  did not date, or whose comments could not be read, gets a `could not date` or
   `could not read the comments of` line after the section, and the section is
   absent when no card qualifies. Always exit 0 unless the board cannot be read
   (1); a `--days` or `--icebox-days` that is not a whole number of 1 or more is
@@ -1747,48 +1757,47 @@ for the others), from `claim.claimant` of `/export-data` while
 `claim.expires_at` is in the future. Moving a card keeps the loop only into In
 Progress, so `next`, `take`, `move progress` works.
 
-`dev board wait [--for ready|human|lead]` (Pomb only) loops on `Backend:wait` until
-an event matches and prints one line per matching event in the reply, then exits
-0, so a background run under `timeout` wakes the session. `--for ready` sends
-kinds `task_added,task_moved` and matches a card whose column is Ready after the
-event (`added <id prefix> to Ready`, `moved <id prefix> to Ready`),
-`--for human` sends `task_moved,comment_added` and matches a move whose
-`from_column` is Blocked and whose `actor` is `human` (Pomb's `actor_kind` of
-`user`, kept on each event by `Backend:wait`), printed as `moved <id prefix>
-out of Blocked`, or a comment event whose card is not Done and whose newest
-comment is the owner's and newer than the time the wait started, which it
-reads with `Backend:cards` and `Backend:comments` (`the owner commented on
-<id prefix>`). The first match opens a settle window of 60 seconds
+`dev board wait [--for ready|review|verify|release|human|lead]` (Pomb only)
+loops on `Backend:wait` until an event matches and prints one line per matching
+event in the reply, then exits 0, so a background run under `timeout` wakes the
+session. `--for ready` sends kinds `task_added,task_moved` and matches a card
+whose column is Ready after the event (`added <id prefix> to Ready`, `moved <id
+prefix> to Ready`), `--for human` sends `task_moved,comment_added` and matches a
+move whose `from_column` is Blocked and whose `actor` is `human` (Pomb's
+`actor_kind` of `user`, kept on each event by `Backend:wait`), printed as `moved
+<id prefix> out of Blocked`, or a comment event whose card is not Done and whose
+newest comment is the owner's and newer than the time the wait started, which it
+reads with `Backend:cards` and `Backend:comments` (`the owner commented on <id
+prefix>`). The first match opens a settle window of 60 seconds
 (`Owner.SETTLE_SECONDS`): each further call to `Backend:wait` passes the time
-left of the window as its timeout, a match restarts the window, and an
-empty reply or an elapsed window ends it with one line per card.
-`--for lead` sends `task_added,task_moved,task_updated` and, for each reply with
-events, reads `Backend:cards` and matches an event whose card is in Blocked with
-`needs:lead` and no `needs:human` (`<id prefix> is labelled needs:lead in Blocked`,
-once per card per reply), and with no `--for` all four kinds match (`added <id> to <column>`,
-`moved <id> to <column>`, `updated <id>`, `commented on <id>`). An unknown
-`--for`, a card argument or another flag is exit 2, and a local board is
-`dev: a local board has nothing to wait on` (exit 1). The cursor is
-`<state home>/dev/boards/<name>.<ready|human|lead|all>.cursor`, one per `--for` mode
-so a filtered wait never consumes another mode's events (the name with every
-character outside `A-Za-z0-9._-` turned into `_`) at mode 600, written after
-every reply, and with no file the first call asks without a cursor and starts
-from the cursor Pomb answers. An expired cursor (410) stores the backend's
-oldest cursor and prints `events were trimmed, check the board` (exit 0). A
-failure `pomb.unreachable` counts (idempotent rules) is retried after a 30
-second nap, and the tenth in a row exits 1 with its message (an endless silent
-retry would hide a dead Pomb from the session). A 429 whose body has the code
-`too_many_waits` (4 open waits per token, and every session shares the token)
-makes `Backend:wait` return a fourth value, `true`, and is never a failure:
-`wait` prints
-`dev: pomb holds too many open waits for this token, waiting for one to end` on
-standard error once per call, resets the failure count, and retries with a pause
-of 30, 60, 120, 240 and then 300 seconds, each cut by up to a quarter with a
-random fraction, until a reply comes (a reply starts the pause over). A 429 with
-another code is a plain refusal. Any other refusal exits 1 at once. `wait` is
-not in the queue rules, and a reply with no matching event loops again.
-`tests/lua/board_test.lua` covers it with a fake backend and stub `nap`,
-`random` and `notice` options.
+left of the window as its timeout, a match restarts the window, and an empty
+reply or an elapsed window ends it with one line per card. `--for lead` sends
+`task_added,task_moved,task_updated` and, for each reply with events, reads
+`Backend:cards` and matches an event whose card is in Blocked with `needs:lead`
+and no `needs:human` (`<id prefix> is labelled needs:lead in Blocked`, once per
+card per reply), and with no `--for` all four kinds match (`added <id> to
+<column>`, `moved <id> to <column>`, `updated <id>`, `commented on <id>`). An
+unknown `--for`, a card argument or another flag is exit 2, and a local board is
+`dev: a local board has nothing to wait on` (exit 1). The cursor is `<state
+home>/dev/boards/<name>.<ready|review|verify|release|human|lead|all>.cursor`,
+one per `--for` mode so a filtered wait never consumes another mode's events
+(the name with every character outside `A-Za-z0-9._-` turned into `_`) at mode
+600, written after every reply, and with no file the first call asks without a
+cursor and starts from the cursor Pomb answers. An expired cursor (410) stores
+the backend's oldest cursor and prints `events were trimmed, check the board`
+(exit 0). A failure `pomb.unreachable` counts (idempotent rules) is retried
+after a 30 second nap, and the tenth in a row exits 1 with its message (an
+endless silent retry would hide a dead Pomb from the session). A 429 whose body
+has the code `too_many_waits` (4 open waits per token, and every session shares
+the token) makes `Backend:wait` return a fourth value, `true`, and is never a
+failure: `wait` prints `dev: pomb holds too many open waits for this token,
+waiting for one to end` on standard error once per call, resets the failure
+count, and retries with a pause of 30, 60, 120, 240 and then 300 seconds, each
+cut by up to a quarter with a random fraction, until a reply comes (a reply
+starts the pause over). A 429 with another code is a plain refusal. Any other
+refusal exits 1 at once. `wait` is not in the queue rules, and a reply with no
+matching event loops again. `tests/lua/board_test.lua` covers it with a fake
+backend and stub `nap`, `random` and `notice` options.
 
 `dev board sync` is the one subcommand outside the board's own commands. On a
 Pomb board it replays the queue below and prints `synced <sub> <first argument>`
@@ -1897,55 +1906,55 @@ out the same columns and palette in the board's file (making the file when it is
 missing, from the five colours with their plain names), takes no `--admin`
 (usage error), and refuses a `--name` that differs from the section's. It runs
 through `dev.board.init` over the `dev.board.Layout` seam that `dev.board.pomb`
-implements, and does, in this order: create a missing board with
-`POST /api/boards`, using the template named `agent project` when
-`GET /api/templates` lists it and no template otherwise; add each missing column
-with `POST /api/columns` (Done with `is_done`), then re-read the board, mark an
-existing Done column done with `PATCH /api/columns/{id}` when it is not, and
-reorder with `POST /api/columns/{id}/move` (`{"position": N}`, 0 first) so the
-seven standard columns come first in the order Icebox, Backlog, Ready, In
-Progress, In Review, Blocked, Done and any other column follows, kept and
-reported as `kept column "X", which is not part of the standard board` on every
-run; then define the checks field when the board lacks it
-(`GET /api/boards/{id}/fields` lists the keys, and
-`POST /api/boards/{id}/fields` sends `dev.checks`: label `Checks`, kind
-`table`, `required` true, columns `run` (text, required) and `on` (multiselect,
-optional, with the one option `local`, since Pomb refuses a multiselect without
-options and runner names are set elsewhere), copied from the dev board's
-definition, one line `added the checks field dev.checks`, never a change to
-an existing field, and nothing on a local board); then name the palette through
-`PATCH /api/boards/{id}/colors/{color_id}` (the colours are found by `value`):
-yellow `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`, red `>3 Pomodori`
-and white `Unsized`, each with a legend description; then, with the palette
-named, strip a trailing `(yellow)`, `(green)`, `(blue)`, `(red)` or
-`(red, split)` from every card name with `PATCH /api/tasks/{id}`, setting the
-colour from the word in the same call when the card's colour is white, unset or
-the colour that was the default when the run began (so a card Pomb painted with
-the old yellow default gets its real colour), and leaving the colour of any
-other card alone, and repeating that for a name with several size words; then
-enable exactly white, yellow, green, blue and red and disable every other colour
-(orange, purple, magenta, cyan, brown and any other value) with
-`PATCH /api/boards/{id}/colors/{color_id}` and `{"enabled": bool}`, enabling
-first, one line per colour (`enabled white`, `disabled orange`), never deleting
-a colour, and reporting each card that wears a disabled colour in one line
-(`card <id prefix> wears the disabled colour orange, left as it is`, on every
-run, the card's colour untouched); Pomb keeps `enabled` admin-only, so a 403 on
-it prints one line
-(`left the colours enabled as they are, since this token may not change them; run dev board init --admin`)
-and the run carries on instead of exiting 1; last, make white the default, so a
-run that stops early can be repeated and still know the old default. A name that
-is only a size word is kept and reported. Labels are plain strings on cards in
-Pomb, so `needs:lead` and `needs:human` need no creation. Each change prints one
-line (`created board X from the agent project template`, `added column X`,
-`moved column X to position N`, `marked Done as the column of finished cards`,
-`named yellow "1 Pomodoro"`, `made white the default colour`,
-`renamed card <id prefix> to "..." and coloured it blue`), and the last line is
-`board X already follows the standard, nothing to change` or
-`board X: N changes`. A failure prints `dev: <message>` with exit 1 after the
-lines of the changes already made, and a `403` adds
-`; this token may not change this board, run dev board init --admin`. Pomb 0.5.5
-lets the lead token name colours, set the default and reorder columns only on
-boards it created after 0.5.5, so the default token is the lead token
+implements, and does, in this order: create a missing board with `POST
+/api/boards`, using the template named `agent project` when `GET /api/templates`
+lists it and no template otherwise; rename an In Review column to Review with
+`PATCH /api/columns/{id}` (`{"name": "Review"}`) when no Review column exists,
+add each missing column with `POST /api/columns` (Done with `is_done`), then
+re-read the board, mark an existing Done column done with `PATCH
+/api/columns/{id}` when it is not, and reorder with `POST
+/api/columns/{id}/move` (`{"position": N}`, 0 first) so the nine standard
+columns come first in the order Icebox, Backlog, Ready, In Progress, Review,
+Verify, Release, Blocked, Done and any other column follows, kept and reported
+as `kept column "X", which is not part of the standard board` on every run; then
+define the checks field when the board lacks it (`GET /api/boards/{id}/fields`
+lists the keys, and `POST /api/boards/{id}/fields` sends `dev.checks`:
+label `Checks`, kind `table`, `required` true, columns `run` (text, required)
+and `on` (multiselect, optional, with the one option `local`, since Pomb refuses
+a multiselect without options and runner names are set elsewhere), copied from
+the dev board's definition, one line `added the checks field
+dev.checks`, never a change to an existing field, and nothing on a local
+board); then name the palette through `PATCH /api/boards/{id}/colors/{color_id}`
+(the colours are found by `value`): yellow `1 Pomodoro`, green `2 Pomodori`,
+blue `3 Pomodori`, red `>3 Pomodori` and white `Unsized`, each with a legend
+description; then, with the palette named, strip a trailing `(yellow)`,
+`(green)`, `(blue)`, `(red)` or `(red, split)` from every card name with `PATCH
+/api/tasks/{id}`, setting the colour from the word in the same call when the
+card's colour is white, unset or the colour that was the default when the run
+began (so a card Pomb painted with the old yellow default gets its real colour),
+and leaving the colour of any other card alone, and repeating that for a name
+with several size words; then enable exactly white, yellow, green, blue and red
+and disable every other colour (orange, purple, magenta, cyan, brown and any
+other value) with `PATCH /api/boards/{id}/colors/{color_id}` and `{"enabled":
+bool}`, enabling first, one line per colour (`enabled white`, `disabled
+orange`), never deleting a colour, and reporting each card that wears a disabled
+colour in one line (`card <id prefix> wears the disabled colour orange, left as
+it is`, on every run, the card's colour untouched); Pomb keeps `enabled`
+admin-only, so a 403 on it prints one line (`left the colours enabled as they
+are, since this token may not change them; run dev board init --admin`) and the
+run carries on instead of exiting 1; last, make white the default, so a run that
+stops early can be repeated and still know the old default. A name that is only
+a size word is kept and reported. Labels are plain strings on cards in Pomb, so
+`needs:lead` and `needs:human` need no creation. Each change prints one line
+(`created board X from the agent project template`, `added column X`, `moved
+column X to position N`, `marked Done as the column of finished cards`, `named
+yellow "1 Pomodoro"`, `made white the default colour`, `renamed card <id prefix>
+to "..." and coloured it blue`), and the last line is `board X already follows
+the standard, nothing to change` or `board X: N changes`. A failure prints `dev:
+<message>` with exit 1 after the lines of the changes already made, and a `403`
+adds `; this token may not change this board, run dev board init --admin`. Pomb
+0.5.5 lets the lead token name colours, set the default and reorder columns only
+on boards it created after 0.5.5, so the default token is the lead token
 (`[board.pomb] lead_token = "pass:<entry>"` in the user file, read like `token`,
 else exit 1 saying to set it or pass `--admin`), and `--admin` uses Pomb's
 device sign-in instead (`dev.board.device`): `POST /api/v1/auth/device` with
@@ -1964,15 +1973,15 @@ must say `admin` or the run stops before any change: on a server that returns
 `scope` it must be `admin`, and on one that returns `permissions` and `boards`
 the token must hold every permission `GET /api/v1/auth/permissions` lists with
 `admin` in its `presets` and `boards` must be `all` (`Backend:admin`). A 403
-with `code` `permission_denied` is
-`pomb answered 403: this token lacks the <permission> permission on every board; use a token that has it`
-when `board_id` is null (the `--admin` hint applies) and
-`this token has the <permission> permission but is not assigned to board <id>; add the board to the token`
-when it is set (no hint). A board absent from `/api/boards` is
-`pomb lists no board named X for this token, which is assigned only to ...` when
-`whoami` returns a `boards` list, else `pomb has no board named X`.
-`tests/lua/board_init_test.lua` runs the algorithm against a stateful fake
-layout and the command against a fake `curl`.
+with `code` `permission_denied` is `pomb answered 403: this token lacks the
+<permission> permission on every board; use a token that has it` when `board_id`
+is null (the `--admin` hint applies) and `this token has the <permission>
+permission but is not assigned to board <id>; add the board to the token` when
+it is set (no hint). A board absent from `/api/boards` is `pomb lists no board
+named X for this token, which is assigned only to ...` when `whoami` returns a
+`boards` list, else `pomb has no board named X`. `tests/lua/board_init_test.lua`
+runs the algorithm against a stateful fake layout and the command against
+a fake `curl`.
 
 On a miss in the Keychain, the token is read by `timeout 10 pass show <entry>`
 through `board/passlock.sh`, with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"` and no stdin, so a

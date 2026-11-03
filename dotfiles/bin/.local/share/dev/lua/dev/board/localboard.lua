@@ -929,6 +929,17 @@ function Backend:add_column(name, is_done)
     end)
 end
 
+function Backend:rename_column(id, name)
+    return self:__update(function(doc)
+        local column = find_by_id(doc.columns, id)
+        if not column then
+            return nil, "the board has no column " .. id
+        end
+        column.name = name
+        return true
+    end)
+end
+
 function Backend:move_column(id, position)
     return self:__update(function(doc)
         local column, index = find_by_id(doc.columns, id)

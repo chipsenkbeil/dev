@@ -631,8 +631,13 @@ function commands.next(backend, args)
             or named == roles.backlog
             or named == roles.icebox
             or named == roles.blocked
+            or named == roles.review
+            or named == roles.verify
+            or named == roles.release
         if not takes then
-            return usage("next --column takes Ready, Backlog, Icebox or Blocked")
+            return usage(
+                "next --column takes Ready, Backlog, Icebox, Review, Verify, Release or Blocked"
+            )
         end
         column = named
     end
@@ -4417,7 +4422,15 @@ M.handlers["board status"] = function(ctx)
     return 0
 end
 
-local WaitFor = { READY = "ready", HUMAN = "human", LEAD = "lead" }
+local WaitFor = {
+    READY = "ready",
+    HUMAN = "human",
+    LEAD = "lead",
+    REVIEW = "review",
+    VERIFY = "verify",
+    RELEASE = "release",
+}
+WaitFor.STAGES = { [WaitFor.REVIEW] = true, [WaitFor.VERIFY] = true, [WaitFor.RELEASE] = true }
 local EventKind = {
     ADDED = "task_added",
     MOVED = "task_moved",
@@ -4430,6 +4443,9 @@ local WAIT_FOR_KINDS = {
     [WaitFor.HUMAN] = { EventKind.MOVED, EventKind.COMMENTED },
     [WaitFor.LEAD] = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED },
 }
+for stage in pairs(WaitFor.STAGES) do
+    WAIT_FOR_KINDS[stage] = WAIT_FOR_KINDS[WaitFor.READY]
+end
 local WAIT_RETRY_SECONDS = 30
 local WAIT_LIMITED_MAX_SECONDS = 300
 local WAIT_JITTER = 0.25
@@ -4501,6 +4517,25 @@ function Owner.comments(backend, events, since)
     return spoke
 end
 
+---Collect the unclaimed cards of a column.
+---@param backend dev.board.Backend the board
+---@param column string the column's name
+---@return table<string, boolean>? waiting the ids of the unclaimed cards, nil when the board could not be read
+---@return string? why the reason the board could not be read
+function Owner.stage_cards(backend, column)
+    local cards, message = backend:cards()
+    if not cards then
+        return nil, message
+    end
+    local waiting = {}
+    for _, card in ipairs(cards) do
+        if card.column == column and not card.claimant then
+            waiting[card.id] = true
+        end
+    end
+    return waiting
+end
+
 local function wait_line(event, opts)
     local only, roles, leads = opts.only, opts.roles, opts.leads
     local spoke = opts.spoke
@@ -4522,6 +4557,14 @@ local function wait_line(event, opts)
         if event.kind == EventKind.COMMENTED and spoke[event.task_id] then
             spoke[event.task_id] = nil
             return "the owner commented on " .. id
+        end
+    elseif WaitFor.STAGES[only] then
+        if
+            event.column == roles[only]
+            and (added or event.kind == EventKind.MOVED)
+            and opts.stage[event.task_id]
+        then
+            return (added and "added " or "moved ") .. id .. " to " .. roles[only]
         end
     elseif only == WaitFor.READY then
         if event.column == roles.ready and (added or event.kind == EventKind.MOVED) then
@@ -4568,7 +4611,11 @@ function M.wait(backend, args, opts)
     end
     local only = flags["--for"]
     if only and not WAIT_FOR_KINDS[only] then
-        return usage("unknown --for " .. only .. ", the choices are ready, human and lead")
+        return usage(
+            "unknown --for "
+                .. only
+                .. ", the choices are ready, review, verify, release, human and lead"
+        )
     end
     local roles = backend.roles or board.roles()
     local nap = opts.nap or devos.nap
@@ -4612,6 +4659,14 @@ function M.wait(backend, args, opts)
                     return failure(why)
                 end
             end
+            local stage
+            if WaitFor.STAGES[only] and #reply.events > 0 then
+                local why
+                stage, why = Owner.stage_cards(backend, roles[only])
+                if not stage then
+                    return failure(why)
+                end
+            end
             local spoke
             if only == WaitFor.HUMAN then
                 local why
@@ -4631,7 +4686,7 @@ function M.wait(backend, args, opts)
                 local line = type(event.task_id) == "string"
                     and wait_line(
                         event,
-                        { only = only, roles = roles, leads = leads, spoke = spoke }
+                        { only = only, roles = roles, leads = leads, spoke = spoke, stage = stage }
                     )
                 if line then
                     matched = true

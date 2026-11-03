@@ -1469,6 +1469,14 @@ function Backend:add_column(name, is_done)
     return true
 end
 
+function Backend:rename_column(id, name)
+    local renamed, message = self:__request("PATCH", "/api/columns/" .. id, { name = name })
+    if not renamed then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:move_column(id, position)
     local moved, message = self:__request("POST", "/api/columns/" .. id .. "/move", {
         position = position,

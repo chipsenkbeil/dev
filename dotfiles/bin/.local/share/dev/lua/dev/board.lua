@@ -125,6 +125,7 @@ local M = {}
 ---@field create fun(self: dev.board.Layout): boolean?, string? the board made, with the name of the template it came from
 ---@field read fun(self: dev.board.Layout): dev.board.LayoutState?, string? the board's columns, colours and cards
 ---@field add_column fun(self: dev.board.Layout, name: string, is_done: boolean): boolean?, string? a column at the end
+---@field rename_column fun(self: dev.board.Layout, id: string, name: string): boolean?, string? a column given a new name, its cards kept
 ---@field move_column fun(self: dev.board.Layout, id: string, position: integer): boolean?, string? a column moved, 0 first
 ---@field mark_done fun(self: dev.board.Layout, id: string): boolean?, string? a column made the one of finished cards
 ---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description, default flag or enabled flag
@@ -315,7 +316,7 @@ function M.fits(card, limit)
 end
 
 ---The roles a column map names, in board order.
-M.ROLES = { "icebox", "backlog", "ready", "progress", "review", "blocked" }
+M.ROLES = { "icebox", "backlog", "ready", "progress", "review", "verify", "release", "blocked" }
 
 ---The name each role has when the config map does not rename it.
 M.DEFAULT_NAMES = {
@@ -323,7 +324,9 @@ M.DEFAULT_NAMES = {
     backlog = "Backlog",
     ready = "Ready",
     progress = "In Progress",
-    review = "In Review",
+    review = "Review",
+    verify = "Verify",
+    release = "Release",
     blocked = "Blocked",
     done = "Done",
 }
@@ -334,6 +337,8 @@ M.DEFAULT_NAMES = {
 ---@field ready string the column a worker takes cards from
 ---@field progress string the column of cards being worked, where a move keeps a claim's loop alive
 ---@field review string the column of cards waiting for review
+---@field verify string the column of cards waiting for a verifier
+---@field release string the column of cards waiting to reach main and go live
 ---@field blocked string the column of cards that wait on the owner
 ---@field done string? the mapped column of finished cards, nil when the config names none
 ---@field finished string[] the names of the columns the backend marks finished, in board order
@@ -366,6 +371,8 @@ function M.roles(map, finished)
         [roles.ready] = true,
         [roles.progress] = true,
         [roles.review] = true,
+        [roles.verify] = true,
+        [roles.release] = true,
     }
     return roles
 end
@@ -377,7 +384,7 @@ function Roles:done_column()
 end
 
 ---Name a column from its full name or a role name, in any case.
----@param word string `ready`, `progress`, `In Review`, a finished column's name and so on
+---@param word string `ready`, `progress`, `Review`, a finished column's name and so on
 ---@return string? column the column's name, or nil when it is not one of the board's
 function Roles:column(word)
     local lowered = word:lower():gsub("%s+", " ")

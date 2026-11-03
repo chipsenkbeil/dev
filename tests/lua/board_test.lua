@@ -245,8 +245,7 @@ t.test("column takes the names and the short forms in any case", function()
     local roles = board.roles()
     t.eq(roles:column("ready"), "Ready")
     t.eq(roles:column("PROGRESS"), "In Progress")
-    t.eq(roles:column("in  review"), "In Review")
-    t.eq(roles:column("review"), "In Review")
+    t.eq(roles:column("review"), "Review")
     for _, short in ipairs({ "blocked", "done", "backlog", "icebox" }) do
         t.eq(roles:column(short):lower(), short)
     end
@@ -263,7 +262,17 @@ t.test("roles take the mapped names, the role words and the finished columns", f
     t.eq(roles:column("in progress"), nil)
     t.eq(roles:column("done"), "Shipped")
     t.eq(roles:column("old"), "Old")
-    t.eq(roles.list, { "Icebox", "Backlog", "Next", "Doing", "In Review", "Blocked", "Shipped" })
+    t.eq(roles.list, {
+        "Icebox",
+        "Backlog",
+        "Next",
+        "Doing",
+        "Review",
+        "Verify",
+        "Release",
+        "Blocked",
+        "Shipped",
+    })
     t.eq(board.roles(nil, { "Old", "Shipped" }):done_column(), "Old")
     t.eq(board.roles():done_column(), "Done")
 end)
@@ -1325,8 +1334,8 @@ t.test("note and move resolve the card by prefix", function()
     result = commands.run("move", { "cccccccc", "blocked" }, backend)
     t.eq(result.output, "moved cccccccc to Blocked")
     t.eq(backend.calls[2], { "move", ID_C, "Blocked" })
-    result = commands.run("move", { "cccccccc", "in", "review" }, backend)
-    t.eq(backend.calls[3], { "move", ID_C, "In Review" })
+    result = commands.run("move", { "cccccccc", "review" }, backend)
+    t.eq(backend.calls[3], { "move", ID_C, "Review" })
 end)
 
 local COMMENT_1 = "aaaaaaaa-1111-4111-8111-111111111111"
@@ -2569,6 +2578,15 @@ t.test("next --column takes Backlog or Icebox and refuses other columns", functi
     t.eq(commands.run("next", { "extra" }, backend).code, 2)
     t.eq(commands.run("next", { "--column", "backlog" }, fake({})).output, "no cards in Backlog")
 end)
+t.test("next --column takes the Review, Verify and Release stage columns", function()
+    for _, column in ipairs({ "Review", "Verify", "Release" }) do
+        local backend = fake({})
+        local result = commands.run("next", { "--column", column:lower() }, backend)
+        t.eq(result.output, "no cards in " .. column)
+        t.eq(backend.calls[#backend.calls], { "next", column, nil })
+    end
+    t.eq(commands.run("next", { "--column", "progress" }, fake({})).code, 2)
+end)
 
 local NOW = assert(box.parse_time("2026-10-27T12:00:00Z"))
 
@@ -2610,15 +2628,25 @@ t.test("stale counts a card entered just under the limit as fresh", function()
     t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
 end)
 
-t.test("stale covers Backlog, Ready, In Progress and In Review only", function()
-    local columns = { "Icebox", "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }
-    local cards, times = aged(columns, { 5, 40, 40, 40, 40, 40, 40 })
+t.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release only", function()
+    local columns = {
+        "Icebox",
+        "Backlog",
+        "Ready",
+        "In Progress",
+        "Review",
+        "Verify",
+        "Release",
+        "Blocked",
+        "Done",
+    }
+    local cards, times = aged(columns, { 5, 40, 40, 40, 40, 40, 40, 40, 40 })
     local result = commands.run("stale", {}, fake(cards, times), NOW)
     local lines = {}
     for line in result.output:gmatch("[^\n]+") do
         lines[#lines + 1] = line:match("^%d+%s+(%a+[ %a]-)%s%s")
     end
-    t.eq(lines, { "Backlog", "Ready", "In Progress", "In Review" })
+    t.eq(lines, { "Backlog", "Ready", "In Progress", "Review", "Verify", "Release" })
 end)
 
 t.test("stale marks a needs:human card whose newest comment is the owner's", function()
@@ -2920,7 +2948,7 @@ local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
     .. '{"id":"col-icebox","name":"Icebox"},{"id":"col-backlog","name":"Backlog"},'
     .. '{"id":"col-ready","name":"Ready"},{"id":"col-progress","name":"In Progress"},'
-    .. '{"id":"col-review","name":"In Review"},{"id":"col-blocked","name":"Blocked"},'
+    .. '{"id":"col-review","name":"Review"},{"id":"col-blocked","name":"Blocked"},'
     .. '{"id":"col-done","name":"Done","is_done":true}]}'
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"green-id","value":"green","label":"Two"},{"id":"blue-id","value":"blue","label":"Three"},'
@@ -3121,7 +3149,7 @@ t.test("boards lists every board the token sees and columns reads one by name", 
     local out, code = dev(root, home, { "board", "boards" })
     t.eq(code, 0, out)
     t.eq(out, "dotfiles\nGeneral\n")
-    local columns = "Icebox\nBacklog\nReady\nIn Progress\nIn Review\nBlocked\nDone (done)\n"
+    local columns = "Icebox\nBacklog\nReady\nIn Progress\nReview\nBlocked\nDone (done)\n"
     out, code = dev(root, home, { "board", "columns" })
     t.eq(code, 0, out)
     t.eq(out, columns)
@@ -4392,7 +4420,7 @@ t.test("note posts a comment of kind agent and move goes to the top of the colum
     t.ok(calls:find('"kind":"decision"', 1, true), calls)
     t.ok(calls:find('"author":"reviewer"', 1, true), calls)
     out = dev(root, home, { "board", "move", "11111111-a", "review" })
-    t.eq(out, "moved 11111111 to In Review\n")
+    t.eq(out, "moved 11111111 to Review\n")
     calls = read(root, "calls")
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     t.ok(calls:find('"column_id":"col-review"', 1, true), calls)
@@ -4817,7 +4845,7 @@ t.test("move out of progress stops the loop and sends the fence", function()
     local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
     t.eq(code, 0)
-    t.eq(out, "moved 11111111 to In Review\n")
+    t.eq(out, "moved 11111111 to Review\n")
     local moved = read(root, "calls"):match("[^\n]*/move\n?")
     t.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
     t.ok(
@@ -5592,7 +5620,7 @@ t.test("wait --for human wakes on the owner's comment newer than its start", fun
     local cards = {
         { id = ID_A, column = "Ready", labels = {}, done = false },
         { id = ID_B, column = "Ready", labels = {}, done = false },
-        { id = ID_C, column = "In Review", labels = {}, done = false },
+        { id = ID_C, column = "Review", labels = {}, done = false },
         { id = ID_D, column = "Done", labels = {}, done = true },
     }
     local replies = {
@@ -5609,7 +5637,7 @@ t.test("wait --for human wakes on the owner's comment newer than its start", fun
         got(
             "2",
             { kind = "comment_added", task_id = ID_A, column = "Ready" },
-            { kind = "comment_added", task_id = ID_C, column = "In Review" },
+            { kind = "comment_added", task_id = ID_C, column = "Review" },
             { kind = "comment_added", task_id = ID_D, column = "Done" }
         ),
         got("3", { kind = "comment_added", task_id = ID_B, column = "Ready" }),
@@ -5693,6 +5721,36 @@ t.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
     t.eq(result.output, "11111111 is labelled needs:lead in Blocked")
     t.eq(seen.kinds[1], "task_added,task_moved,task_updated")
     t.eq(fs.read(path .. ".lead.cursor"), "3\n")
+end)
+
+for _, stage in ipairs({ "Review", "Verify", "Release" }) do
+    t.test(
+        "wait --for " .. stage:lower() .. " prints the unclaimed card that reached " .. stage,
+        function()
+            local cards = {
+                { id = ID_A, column = stage },
+                { id = ID_B, column = stage, claimant = "x" },
+                { id = ID_C, column = "Ready" },
+            }
+            local result, seen, path = waited({
+                got("1"),
+                got(
+                    "2",
+                    { kind = "task_moved", task_id = ID_B, column = stage },
+                    { kind = "task_moved", task_id = ID_C, column = "Ready" }
+                ),
+                got("3", { kind = "task_moved", task_id = ID_A, column = stage }),
+            }, { "--for", stage:lower() }, { cards = cards })
+            t.eq(result.output, "moved 11111111 to " .. stage)
+            t.eq(seen.kinds[1], "task_added,task_moved")
+            t.eq(fs.read(path .. "." .. stage:lower() .. ".cursor"), "3\n")
+        end
+    )
+end
+
+t.test("wait refuses a --for that names no stage", function()
+    local result = waited({}, { "--for", "verifier" })
+    t.eq(result.code, 2)
 end)
 
 t.test("wait --for lead leaves the cursor alone when the board cannot be read", function()
@@ -5843,7 +5901,7 @@ end)
 t.test("wait rejects an unknown --for value and a card", function()
     local result = waited({}, { "--for", "everyone" })
     t.eq(result.code, 2)
-    t.ok(result.message:find("ready, human and lead", 1, true), result.message)
+    t.ok(result.message:find("release, human and lead", 1, true), result.message)
     t.eq(waited({}, { "abc" }).code, 2)
 end)
 
