@@ -82,12 +82,10 @@ local KILL_GRACE_SECS = 1
 local POLL_SECS = 0.1
 local MICROS_PER_SEC = 1000000
 local TIMED_WRAPPER = table.concat({
-    'set -m; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } & pid=$!;',
-    '( while [ -d "$4" ]; do',
-    'kill -0 "$3" 2>/dev/null || break;',
-    "sleep 0.2; done;",
-    '[ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
-    'rm -rf -- "$4" ) </dev/null >/dev/null 2>&1 & echo $pid $!',
+    'set -m; exec 3<&0; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } 3<&- & pid=$!;',
+    '( read -r _ <&3; [ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
+    'rm -rf -- "$3" ) >/dev/null 2>&1 &',
+    'echo $pid $! >"$3/pids.tmp"; mv "$3/pids.tmp" "$3/pids"',
 }, " ")
 
 ---@alias dev.os.Kind "file"|"dir"|"link"|"other"
@@ -420,6 +418,11 @@ local function signal_group(signal, pid)
     M.run({ "sh", "-c", "kill -" .. signal .. ' -- "-$1"', "sh", pid }, { stderr = "null" })
 end
 
+local function release(death_pipe, dir)
+    death_pipe:close()
+    M.run({ "rm", "-rf", "--", dir })
+end
+
 ---Run `argv` in its own process group and collect its output, stopping it after `secs` seconds.
 ---
 ---A command that outlives the limit is sent TERM and then KILL together with everything it started.
@@ -461,22 +464,22 @@ function M.capture_timed(argv, secs, opts)
         .. (opts.merge and " 2>&1" or "")
     announce(argv)
     flush_output()
-    local pipe = assert(io.popen(
-        M.command({
-            "sh",
-            "-c",
-            TIMED_WRAPPER,
-            "sh",
-            inner,
-            status,
-            tostring(ffi.C.getpid()),
-            dir,
-        }),
-        "r"
-    ))
-    local pid, watcher = (pipe:read("*l") or ""):match("^(%d+) (%d+)$")
-    pipe:close()
+    local START_POLLS = 2000
+    local START_POLL_SECS = 0.005
+    local death_pipe =
+        assert(io.popen(M.command({ "sh", "-c", TIMED_WRAPPER, "sh", inner, status, dir }), "w"))
+    local pid, watcher
+    for _ = 1, START_POLLS do
+        local file = io.open(dir .. "/pids", "rb")
+        if file then
+            pid, watcher = (file:read("*l") or ""):match("^(%d+) (%d+)$")
+            file:close()
+            break
+        end
+        nap(START_POLL_SECS)
+    end
     if not pid then
+        release(death_pipe, dir)
         error("capture_timed could not start " .. argv[1])
     end
     local started = os.time()
@@ -500,7 +503,7 @@ function M.capture_timed(argv, secs, opts)
     if not polled then
         signal_group("KILL", pid)
         M.run({ "kill", watcher }, { stderr = "null" })
-        M.run({ "rm", "-rf", "--", dir })
+        release(death_pipe, dir)
         error(failure, 0)
     end
     if KILLED_EXITS[code] then
@@ -512,7 +515,7 @@ function M.capture_timed(argv, secs, opts)
         file:close()
     end
     M.run({ "kill", watcher }, { stderr = "null" })
-    M.run({ "rm", "-rf", "--", dir })
+    release(death_pipe, dir)
     return text, code
 end
 

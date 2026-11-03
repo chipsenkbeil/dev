@@ -420,10 +420,9 @@ t.test("capture_timed cleans up when its process is terminated", function()
     t.eq(dirs, "")
 end)
 
-t.test("capture_timed ends its command when its temporary directory is removed", function()
-    local tmp = assert(fs.mktemp({ dir = true }))
+local function launch_capture_timed(command, tmp)
     local snippet = ("package.path = %q; "):format(package.path)
-        .. 'require("dev.os").capture_timed({ "sh", "-c", "sleep 3775 & sleep 3776; wait" }, 600)'
+        .. ("require('dev.os').capture_timed({ 'sh', '-c', %q }, 600)"):format(command)
     local pid = devos.capture({
         "sh",
         "-c",
@@ -432,29 +431,93 @@ t.test("capture_timed ends its command when its temporary directory is removed",
         snippet,
         tmp,
     })
-    pid = pid:gsub("%s+$", "")
-    local function sleeping()
-        local out = devos.capture({ "sh", "-c", "ps -axo args=" })
-        return ("\n" .. out):find("\nsleep 3775\n", 1, true) ~= nil
-    end
-    for _ = 1, 50 do
-        if sleeping() then
-            break
+    return (pid:gsub("%s+$", ""))
+end
+
+local function process_listed(needle)
+    local out = devos.capture({ "sh", "-c", "ps -axo args=" })
+    return ("\n" .. out):find("\n" .. needle .. "\n", 1, true) ~= nil
+end
+
+local WAIT_POLL_SECS = "0.1"
+
+local function wait_until(predicate)
+    local WAIT_POLLS = 50
+    for _ = 1, WAIT_POLLS do
+        if predicate() then
+            return true
         end
-        devos.run({ "sleep", "0.1" })
+        devos.run({ "sleep", WAIT_POLL_SECS })
     end
-    t.ok(sleeping(), "the command should be running")
-    fs.remove(tmp .. "/" .. devos.capture({ "ls", tmp }):gsub("%s+$", ""), { recursive = true })
-    for _ = 1, 50 do
-        if not sleeping() then
-            break
-        end
-        devos.run({ "sleep", "0.1" })
-    end
-    local gone = not sleeping()
-    devos.run({ "kill", "-KILL", pid }, { stderr = "null" })
+    return predicate()
+end
+
+t.test("capture_timed cleans up when its process is killed", function()
+    local tmp = assert(fs.mktemp({ dir = true }))
+    local pid = launch_capture_timed("sleep 3777 & sleep 3778; wait", tmp)
+    t.ok(
+        wait_until(function()
+            return process_listed("sleep 3777")
+        end),
+        "the command should be running"
+    )
+    devos.run({ "kill", "-KILL", pid })
+    local gone = wait_until(function()
+        return not process_listed("sleep 3777") and not process_listed("sleep 3778")
+    end)
+    local removed = wait_until(function()
+        return devos.capture({ "ls", tmp }) == ""
+    end)
     fs.remove(tmp, { recursive = true })
-    t.ok(gone, "the command should end once its directory is removed")
+    t.ok(gone, "the command and its children should be killed")
+    t.ok(removed, "the temporary directory should be removed")
+end)
+
+local function children_of(marker)
+    local out = devos.capture({ "sh", "-c", "ps -axo pid=,ppid=,args=" })
+    local owners, found = {}, {}
+    local rows = {}
+    for pid, ppid, args in out:gmatch("(%d+)%s+(%d+)%s+([^\n]*)") do
+        rows[#rows + 1] = { pid = pid, ppid = ppid, args = args }
+        if args:find("^sh %-c") and args:find(marker, 1, true) then
+            owners[pid] = true
+        end
+    end
+    for _, row in ipairs(rows) do
+        if
+            owners[row.ppid]
+            and not row.args:find(marker, 1, true)
+            and not row.args:find("^mv ")
+        then
+            found[#found + 1] = row.args
+        end
+    end
+    return found
+end
+
+t.test("capture_timed starts no process while its command runs", function()
+    local tmp = assert(fs.mktemp({ dir = true }))
+    local pid = launch_capture_timed("sleep 3779", tmp)
+    t.ok(
+        wait_until(function()
+            return process_listed("sleep 3779")
+        end),
+        "the command should be running"
+    )
+    local WATCH_POLLS = 15
+    local polled = false
+    for _ = 1, WATCH_POLLS do
+        if #children_of("sleep 3779") > 0 then
+            polled = true
+        end
+        devos.run({ "sleep", WAIT_POLL_SECS })
+    end
+    devos.run({ "kill", "-KILL", pid }, { stderr = "null" })
+    wait_until(function()
+        return not process_listed("sleep 3779")
+    end)
+    fs.remove(tmp, { recursive = true })
+    t.eq(polled, false)
 end)
 
 t.test("capture_timed with no seconds sets no limit and runs to completion", function()
