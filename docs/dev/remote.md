@@ -90,7 +90,7 @@ cannot be asked, the refusal fails with ci's error and the hint
 
 `--detach` needs `--remote` (alone it is a usage error). The ci runner then
 passes `--detach` in place of `--follow`: ci prints the run id and returns. Read
-the run later with `ci attach <id>`, `ci logs <id>` or `ci status <id>`.
+the run later with `ci ps <run> -w`, `ci logs <run>` or `ci ps <run>`.
 
 ## Replacing the runner
 
