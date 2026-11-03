@@ -644,6 +644,7 @@ function Backend:next(column, opts)
                 and not board.labelled(card, board.NEEDS_HUMAN)
                 and not board.labelled(card, board.RUN)
                 and (not label or board.labelled(card, label))
+                and board.fits(card, opts and opts.max_size)
             then
                 return card
             end

@@ -535,7 +535,10 @@ function Backend:next(column, opts)
             and not board.labelled(card, board.RUN)
             and (not label or board.labelled(card, label))
         then
-            return card_view(doc, card)
+            local view = card_view(doc, card)
+            if board.fits(view, opts and opts.max_size) then
+                return view
+            end
         end
     end
 end

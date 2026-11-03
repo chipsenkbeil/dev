@@ -26,6 +26,7 @@ local stderr = io.stderr
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
+local runner = { FLAG = "--max-size" }
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
 local CLAIMANT_CHARS = 200
@@ -438,6 +439,44 @@ local function agent_name(flag)
     return name
 end
 
+---Read a runner's size limit from the flag, else DEV_MAX_SIZE.
+---@param flag string? the value of --max-size
+---@return integer? limit the most Pomodori the runner takes, nil when it has no limit
+---@return dev.cmd.board.Result? err the usage error for a limit that is not 1, 2 or 3
+function runner.limit(flag)
+    local word = flag
+    if word == nil then
+        word = os.getenv("DEV_MAX_SIZE")
+        if word == nil or word == "" then
+            return nil
+        end
+    end
+    local limit = board.SIZE_LIMITS[word]
+    if not limit then
+        return nil, usage((flag and runner.FLAG or "DEV_MAX_SIZE") .. " is 1, 2 or 3, not " .. word)
+    end
+    return limit
+end
+
+---Refuse a card bigger than the runner's size limit.
+---
+---@param card dev.board.Card the card
+---@param limit integer? the most Pomodori the runner takes
+---@return dev.cmd.board.Result? err the refusal, nil when the card fits
+function runner.refusal(card, limit)
+    if board.fits(card, limit) then
+        return nil
+    end
+    return failure(
+        card.id:sub(1, board.MIN_PREFIX)
+            .. " is "
+            .. card.size
+            .. ", above this runner's limit of "
+            .. limit
+            .. " Pomodori (DEV_MAX_SIZE)"
+    )
+end
+
 local function claimant(name)
     if name then
         return name
@@ -570,12 +609,16 @@ function commands.ls(backend, args, _, screen)
 end
 
 function commands.next(backend, args)
-    local flags, words = parse(args, { ["--column"] = true })
+    local flags, words = parse(args, { ["--column"] = true, [runner.FLAG] = true })
     if not flags then
         return words
     end
     if #words > 0 then
         return usage("unknown argument " .. words[1])
+    end
+    local limit, bad = runner.limit(flags[runner.FLAG])
+    if bad then
+        return bad
     end
     local roles = backend.roles
     local column = roles.ready
@@ -593,8 +636,10 @@ function commands.next(backend, args)
         end
         column = named
     end
-    local card, message =
-        backend:next(column, { label = column == roles.blocked and board.NEEDS_LEAD or nil })
+    local card, message = backend:next(column, {
+        label = column == roles.blocked and board.NEEDS_LEAD or nil,
+        max_size = limit,
+    })
     if not card then
         if message then
             return failure(message)
@@ -1433,6 +1478,16 @@ local function move_card(backend, args, opts)
                     .. family.children.total
                     .. " children and never enters Ready; its children are the work"
             )
+        end
+    end
+    if column == roles.progress then
+        local limit, bad = runner.limit()
+        if bad then
+            return bad
+        end
+        local refused = runner.refusal(card, limit)
+        if refused then
+            return refused
         end
     end
     local held = claims.read(card.id)
@@ -3600,9 +3655,17 @@ function commands.take(backend, args)
     if why then
         return why
     end
+    local limit, bad = runner.limit()
+    if bad then
+        return bad
+    end
     local card, err = find_card(backend, words[1])
     if not card then
         return err
+    end
+    local refused = runner.refusal(card, limit)
+    if refused then
+        return refused
     end
     local result, fence = claim_card(backend, card, name)
     if not fence then

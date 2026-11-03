@@ -111,6 +111,7 @@ local M = {}
 
 ---@class dev.board.NextOpts
 ---@field label string? the label the card must carry
+---@field max_size integer? the most Pomodori the card may be, nil for any size
 
 ---@class dev.board.AddOpts
 ---@field description string? the card's description
@@ -297,6 +298,21 @@ local UNSIZED = "unsized"
 M.SIZES = { ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red", [UNSIZED] = "white" }
 
 local SIZE_WORDS = { "1", "2", "3", "3+", UNSIZED }
+
+local SIZE_RANKS =
+    { [M.SIZES["1"]] = 1, [M.SIZES["2"]] = 2, [M.SIZES["3"]] = 3, [M.SIZES["3+"]] = 4 }
+
+---The size limits a runner may set, as the word it types and the most Pomodori it covers.
+---@type table<string, integer>
+M.SIZE_LIMITS = { ["1"] = 1, ["2"] = 2, ["3"] = 3 }
+
+---Report whether a card is no bigger than a runner's size limit.
+---@param card dev.board.Card the card
+---@param limit integer? the most Pomodori the runner takes, nil for no limit
+---@return boolean fits true when there is no limit or the card is within it
+function M.fits(card, limit)
+    return limit == nil or (SIZE_RANKS[card.color] or 0) <= limit
+end
 
 ---The roles a column map names, in board order.
 M.ROLES = { "icebox", "backlog", "ready", "progress", "review", "blocked" }

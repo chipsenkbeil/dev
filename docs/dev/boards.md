@@ -882,15 +882,18 @@ never handles the API.
   under a bold column heading with a dim `N cards`, and a dim line saying Done
   is left out unless `--column done`. Piped, with `NO_COLOR` or with `TERM=dumb`
   the output is the plain lines above and `--group` changes nothing.
-- `next [--column C]`: The top Ready card that is unclaimed, not blocked and not
-  labelled `needs:human` or `run`, in the `ls` format followed by
-  `N comments, M the owner's` (`1 comment` for one), else `no ready cards`
-  (exit 0). Comments that cannot be read are exit 1.
+- `next [--column C] [--max-size N]`: The top Ready card that is unclaimed,
+  not blocked and not labelled `needs:human` or `run`, in the `ls` format
+  followed by `N comments, M the owner's` (`1 comment` for one), else
+  `no ready cards` (exit 0). Comments that cannot be read are exit 1.
   `--column backlog` or `--column icebox` takes the top such card of that column
   instead, else `no cards in <column>` (exit 0). `--column blocked` takes the top
   unclaimed card labelled `needs:lead`, never one labelled `needs:human` and,
   like every `next`, never one that a card outside Done blocks. Any other
-  column is exit 2.
+  column is exit 2. `--max-size N` (1, 2 or 3, else exit 2), or `DEV_MAX_SIZE`
+  when the flag is absent, skips a card bigger than N Pomodori to keep a
+  small model from taking a bigger card. A card with no size passes. With
+  neither set, nothing is skipped.
 - `boards`: The name of every board the token sees, one per line
   (`GET /api/boards`, which leaves out the boards outside a fine-grained
   token's set). On a local board it prints that board's own name. An extra
@@ -1623,6 +1626,11 @@ never handles the API.
   `dev-claim: by=NAME`, so the name outlives the claim, and `review` reads
   those notes. If that note cannot be written the claim is released and `take`
   exits 1. `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
+  With `DEV_MAX_SIZE` set to 1, 2 or 3 (else exit 2), `take` and `move CARD
+  progress` refuse a card bigger than that many Pomodori with
+  `<id prefix> is <size>, above this runner's limit of N Pomodori
+  (DEV_MAX_SIZE)` (exit 1). `run` takes its own run card and is not held
+  to the limit.
 - `release CARD`: Stops the loop, forgets the claim and posts `/claim/release`
   with the fence. Prints `released <id prefix>`. A card with no claim taken by
   `take` is exit 1.
