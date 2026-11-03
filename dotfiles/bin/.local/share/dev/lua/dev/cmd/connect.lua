@@ -204,7 +204,7 @@ end
 ---@class dev.cmd.connect.ConnectablesOpts
 ---@field strict boolean whether a failure must end the run
 
----Print what ci said when `ci connect` or `ci ssh` failed, as one line.
+---Print what ci said when `ci ssh config` or `ci ssh ls` failed, as one line.
 ---@param raw string ci's output
 local function connect_failed(raw)
     local out = raw:gsub("\n+$", "")
@@ -233,15 +233,15 @@ local function plain(text)
     return (text:gsub("[^\32-\126]", " "))
 end
 
----Sync ci's ssh_config and list the hosts of `ci ssh ls`, apart from boxes and sessions.
+---Write ci's ssh_config and list the hosts of `ci ssh ls`, apart from boxes and sessions.
 ---
----A ci with no `ssh` exits 2, which shows boxes only, with one note.
+---A ci with no `ssh config` exits 2, which shows boxes only, with one note.
 ---Any other failure prints ci's message as one line, then ends the run with
 ---ci's code when `strict` is set and lists boxes only otherwise.
 ---@param opts dev.cmd.connect.ConnectablesOpts how to treat a failure
 ---@return dev.cmd.connect.Connectable[] found the connectables, in ci's order
 local function connectables(opts)
-    local raw, code = devos.capture({ "ci", "connect", "sync" })
+    local raw, code = devos.capture({ "ci", "ssh", "config" })
     if code == 0 then
         raw, code = devos.capture({ "ci", "ssh", "ls", "--json" })
     end

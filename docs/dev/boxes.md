@@ -98,10 +98,10 @@ not running exits 6.
 
 ## Plain ssh
 
-ci writes a Host block for every box into `~/.local/state/ci/ssh_config`
-(`$XDG_STATE_HOME/ci/ssh_config`), with the host key file and strict checking.
-`~/.ssh/config` is not in this repo, so add this as its first line, before any
-`Host *`, for plain `ssh <box>` to work:
+`ci ssh config` writes a Host block for every box into
+`~/.local/state/ci/ssh_config` (`$XDG_STATE_HOME/ci/ssh_config`), with the host
+key file and strict checking. `~/.ssh/config` is not in this repo, so add this
+as its first line, before any `Host *`, for plain `ssh <box>` to work:
 
 ```
 Include ~/.local/state/ci/ssh_config
@@ -138,25 +138,24 @@ tmux command, which checks the same host keys.
 
 ## Connecting to machines that are not boxes
 
-Infra can mark a machine or an instance as connectable: an Incus instance,
-a tart VM, the Mac host or example-box. `dev connect` reaches them too, and it
-never talks to Incus or accepts a host key on first use. After listing boxes
-it runs `ci connect sync`, which writes a `Host ci-<name>` block for each
-connectable into ci's ssh_config include, then reads `ci ssh ls --json` and
-keeps its host rows. The picker shows the connectables after the boxes, one
-row each with the name, state, kind, machine and login user.
+Infra can mark a machine or an instance as connectable: an Incus instance, a
+tart VM, the Mac host or example-box. `dev connect` reaches them too, and it never
+talks to Incus or accepts a host key on first use. After listing boxes it runs
+`ci ssh config`, which writes a `Host` block for each box and host into ci's
+ssh_config include, then reads `ci ssh ls --json` and keeps its host rows. The
+picker shows the connectables after the boxes, one row each with the name,
+state, kind, machine and login user.
 
 ```
 dev connect host-a
 ```
 
-`dev connect NAME` takes a box or a connectable. A box name goes the way
-above, without asking `ci connect`. Any other name that ci lists as a
-connectable runs `ssh ci-NAME`, which relays through the hub and checks the
-host key ci pinned. A ci that has no `connect` command makes dev list boxes
-only, with one note. Any other ci failure prints ci's message as one line and
-the picker still offers the boxes, while a name that is no box exits with ci's
-code.
+`dev connect NAME` takes a box or a connectable. A box name goes the way above,
+without asking `ci ssh config` or `ci ssh ls`. Any other name that ci lists as a
+connectable runs `ssh ci-NAME`, which relays through the hub and checks the host
+key ci pinned. A ci that has no `ssh config` command makes dev list boxes only,
+with one note. Any other ci failure prints ci's message as one line and the
+picker still offers the boxes, while a name that is no box exits with ci's code.
 
 ## Errors
 
@@ -191,9 +190,9 @@ A built-in noun for any project, and a thin client over `ci box ... --json`: it 
 
 When the box is left out, `show`, `stop`, `resume`, `extend`, `tools install` and `delete` pick one with the shared picker (`dev.ui.picker`, rows as in `ls`, titled `Show which box?`, `Stop which box?` and so on) when standard input and output are both terminals, listing only the boxes the verb can act on: running ones for `stop`, `extend` and `tools install`, stopped ones for `resume`, every box for `show` and `delete`. `stop` and `delete` always show the screen, the others skip it when one row is left. With no such box it prints `dev <verb>: no running boxes to stop` (or the matching words) and exits 1. Without a terminal a missing name is a usage error, the line ending `no box given and no terminal to pick one; pass a name, like dev box delete ci-abc -y` (the verb's own words, and `-y` only for `delete`), exit 2.
 
-When ci exits non-zero with an `{"ok":false,...}` document, `dev box <sub>` prints `error.message` to stderr and exits with ci's code (2 to 11, 10 and 11 included). Output that is not JSON, such as clap usage text, passes through with ci's exit code. Progress lines ci writes to stderr reach the terminal. A box that has no `tailnet_name` yet (null from ci) shows `-` as its host. ci gives `projects` as a list of `{name, path}` objects and dev shows the names. ci writes a Host block per box into `~/.local/state/ci/ssh_config`, which `~/.ssh/config` includes as its first line, and takes the ssh options from `[box] ssh_options` in `dotfiles/ci/.config/ci/config.toml`. A box name must match `^[a-z0-9-]{1,40}$`, else exit 2.  Times are computed in Lua from the RFC 3339 stamps, so macOS and Linux agree. `dev --remote` refuses every `box` subcommand.
+When ci exits non-zero with an `{"ok":false,...}` document, `dev box <sub>` prints `error.message` to stderr and exits with ci's code (2 to 11, 10 and 11 included). Output that is not JSON, such as clap usage text, passes through with ci's exit code. Progress lines ci writes to stderr reach the terminal. A box that has no `tailnet_name` yet (null from ci) shows `-` as its host. ci gives `projects` as a list of `{name, path}` objects and dev shows the names. `ci ssh config` writes a Host block per box into `~/.local/state/ci/ssh_config`, which `~/.ssh/config` includes as its first line, and takes the ssh options from `[box] ssh_options` in `dotfiles/ci/.config/ci/config.toml`. A box name must match `^[a-z0-9-]{1,40}$`, else exit 2.  Times are computed in Lua from the RFC 3339 stamps, so macOS and Linux agree. `dev --remote` refuses every `box` subcommand.
 
 `dev connect [BOX] [--ssh]` is the same handler as `dev box connect`. With no box it lists them as `ls` does, the current project's boxes first, picks one with the shared picker (`dev.ui.picker`, titled `Connect to a box`, which skips the screen when exactly one row would be left outside a project) and, inside a project, offers a last item `new box for <project>` that asks for the target and the shape with the pickers of `create` and then creates and attaches. With no name and no terminal, once boxes exist, it is a usage error like the other box verbs (exit 2). With no boxes outside a project it prints `no boxes; create one with dev box create` and exits 1. A stopped box is resumed first, and any state other than running or stopped exits 6, as does a box whose `tailnet_name` is still null. It then runs `ci box show <box> --json`, which writes the box's host keys to ci's known_hosts (`$XDG_STATE_HOME/ci/known_hosts` when `XDG_STATE_HOME` is absolute, else `~/.local/state/ci/known_hosts`), and execs `et --ssh-option UserKnownHostsFile=<that file> --ssh-option StrictHostKeyChecking=yes -c "tmux new -A -s <session> -c <dir>" <ssh_user>@<tailnet_name>`, so no host key is trusted on first use and a shown box with no `tailnet_name` or `ssh_user` exits 6. The session is the first project's name or the box name with every character outside `A-Za-z0-9_-` (so `.` and `:`, which tmux reserves) turned into `_`, and the directory is the first project's `path` or `BOX_PROJECTS_DIR` (`/srv/projects`) for a box with no project, so a session never starts in `$HOME`. `dir` must match `^/srv/projects(/[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$`, the names ci can produce, else exit 1, and a running box whose first project has a null `path` exits 6. `--ssh`, or a missing `et` with one warning, execs `ci ssh <box> -- tmux new -A -s <session> -c <dir>` instead, which checks the same host keys and allocates a terminal.
 
-`dev connect` also reaches what infra marks as connectable (Incus instances, tart VMs, the Mac host, example-box), through `ci connect`. After `ci box ls --json` it runs `ci connect sync`, which writes a `Host ci-<name>` block per connectable into ci's ssh_config include, then `ci ssh ls --json`, read as `{protocol, things:[{name, kind, machine, state, address, user}], notes}`, where `kind` is `box`, `session` or `host` and rows are ordered boxes, sessions, hosts. dev keeps only the rows of kind `host` and takes the boxes from `ci box ls --json`. The picker shows the connectables after the boxes and before the new-box item, a row being name, state, kind, machine and user, and `dev connect NAME` takes either. A name that ci lists as a box takes the box path above and never calls `ci connect` or `ci ssh ls`. A name that is no box asks `ci ssh ls` and, when it finds the name, execs `ssh ci-<name>` (`ssh <name>` when the name already starts with `ci-`, which ci uses as its own alias) through `dev.os` exec with no shell, so ci's ProxyCommand and pinned known_hosts decide the host key and `--ssh` changes nothing. Each string in `notes` goes to standard error as "dev connect: <note>", and a host whose name is not 1 to 40 of a-z, 0-9 and `-` is skipped with one line. A ci with no `connect` or no `ssh` exits 2 from `sync` or `ssh ls`, and dev then lists boxes only with one note, "dev connect: this ci has no ssh command, listing boxes only". Any other non-zero exit prints ci's `error.message` (or the first line of its output) as one line, "dev connect: <message>". The picker then still offers the boxes, and a name that is no box exits with ci's code. `tests/lua/connect_test.lua` and `tests/dev/box_test.sh` run all of it against a fake `ci` and `ssh`.
+`dev connect` also reaches what infra marks as connectable (Incus instances, tart VMs, the Mac host, example-box), through `ci ssh`. After `ci box ls --json` it runs `ci ssh config`, which writes a `Host` block per box and host into ci's ssh_config include (the blocks of hosts run `ci ssh proxy NAME` as their ProxyCommand), then `ci ssh ls --json`, read as `{protocol, things:[{name, kind, machine, state, address, user}], notes}`, where `kind` is `box`, `session` or `host` and rows are ordered boxes, sessions, hosts. dev keeps only the rows of kind `host` and takes the boxes from `ci box ls --json`. The picker shows the connectables after the boxes and before the new-box item, a row being name, state, kind, machine and user, and `dev connect NAME` takes either. A name that ci lists as a box takes the box path above and never calls `ci ssh config` or `ci ssh ls`. A name that is no box asks `ci ssh ls` and, when it finds the name, execs `ssh ci-<name>` (`ssh <name>` when the name already starts with `ci-`, which ci uses as its own alias) through `dev.os` exec with no shell, so ci's ProxyCommand and pinned known_hosts decide the host key and `--ssh` changes nothing. Each string in `notes` goes to standard error as "dev connect: <note>", and a host whose name is not 1 to 40 of a-z, 0-9 and `-` is skipped with one line. A ci that lacks either command exits 2 from `ssh config` or `ssh ls`, which makes dev list boxes only with one note, "dev connect: this ci has no ssh command, listing boxes only". Any other non-zero exit prints ci's `error.message` (or the first line of its output) as one line, "dev connect: <message>". The picker then still offers the boxes, and a name that is no box exits with ci's code. `tests/lua/connect_test.lua` and `tests/dev/box_test.sh` run all of it against a fake `ci` and `ssh`.
 

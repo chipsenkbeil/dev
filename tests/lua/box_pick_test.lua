@@ -32,7 +32,7 @@ local function sandbox()
         extend = ONE,
         delete = DELETED,
         retag = RETAGGED,
-        sync = "",
+        config = "",
     }) do
         assert(fs.write(root .. "/" .. name .. ".json", body))
     end

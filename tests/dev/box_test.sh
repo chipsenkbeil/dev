@@ -32,8 +32,8 @@ cat >"$STUBS/ci" <<'STUB'
 #!/bin/sh
 { echo ci; printf '%s\n' "$@"; echo '#'; } >>"$LOG"
 sub=$2
-if [ "$1" = connect ]; then
-    sub=connect.$2
+if [ "$1" = ssh ] && [ "$2" = config ]; then
+    sub=ssh.config
 elif [ "$1" = ssh ] && [ "$2" = ls ]; then
     sub=ssh.ls
     if [ ! -f "$FX/$sub.json" ]; then
@@ -528,7 +528,7 @@ scratch-a1b	scratch-a1b	running	$TARGET	-	kept
 ci-abc	ci-abc	stopped	$TARGET	ci,dotfiles	$STOP_LEFT
 __new__	new box for myproject"
 assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
-ci connect sync
+ci ssh config
 ci ssh ls --json
 ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
@@ -543,7 +543,7 @@ fx targets "$TARGETS_DOC"
 fx shapes "$SHAPES_DOC"
 out="$(FAKE_TTY=1 FAKE_PICK="__new__ $TARGET medium" inproj connect)"
 assert_eq "the new-box item runs the create pickers, creates for the project then attaches" "$(calls)" "ci box ls --json
-ci connect sync
+ci ssh config
 ci ssh ls --json
 ci box targets --json
 ci box shapes --json
@@ -564,7 +564,7 @@ fx ls "$(lsdoc "$RUNNING")"
 FAKE_TTY=1 FAKE_PICK=CANCEL box connect >/dev/null 2>&1
 assert_eq "cancelling the picker exits 1" "$?" "1"
 assert_eq "cancelling the picker calls ci only for the lists" "$(calls)" "ci box ls --json
-ci connect sync
+ci ssh config
 ci ssh ls --json"
 CONNECTABLES='{"protocol":1,"things":[{"name":"myproject-k3x","machine":"example-box","kind":"box","address":"10.0.0.3","user":"dev","state":"running"},{"name":"s-1","machine":"example-box","kind":"session","address":"10.0.0.4","user":"dev","state":"running"},{"name":"host-a","machine":"host-a","kind":"host","address":"10.0.0.5","user":"chip","state":"running"},{"name":"scratch-vm","machine":"example-box","kind":"host","address":"10.0.0.9","user":"dev","state":"stopped"}],"notes":[]}'
 reset
@@ -575,8 +575,8 @@ assert_eq "the picker lists the connectables after the boxes, with their kind" "
 myproject-k3x	myproject-k3x	running	$TARGET	myproject	$RUN_LEFT
 host-a	host-a	running	host	host-a	chip
 scratch-vm	scratch-vm	stopped	host	example-box	dev"
-assert_eq "picking a connectable syncs, lists and runs ssh ci-NAME" "$(calls)" "ci box ls --json
-ci connect sync
+assert_eq "picking a connectable writes the config, lists and runs ssh ci-NAME" "$(calls)" "ci box ls --json
+ci ssh config
 ci ssh ls --json
 ssh ci-host-a"
 reset
@@ -584,7 +584,7 @@ fx ls "$(lsdoc "$RUNNING")"
 fx ssh.ls "$CONNECTABLES"
 box connect scratch-vm
 assert_eq "a named connectable runs ssh ci-NAME" "$(calls)" "ci box ls --json
-ci connect sync
+ci ssh config
 ci ssh ls --json
 ssh ci-scratch-vm"
 reset
@@ -592,7 +592,7 @@ fx ls "$(lsdoc)"
 fx ssh.ls "$CONNECTABLES"
 FAKE_TTY=1 FAKE_PICK=host-a box connect
 assert_eq "connectables alone fill the picker when there are no boxes" "$(calls)" "ci box ls --json
-ci connect sync
+ci ssh config
 ci ssh ls --json
 ssh ci-host-a"
 reset
@@ -611,10 +611,10 @@ assert_contains "ci's notes are shown" "$out" "dev connect: example-box is unrea
 assert_contains "the good connectable still connects" "$(calls)" "ssh ci-ok-vm"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-echo 2 >"$FX/connect.sync.rc"
+echo 2 >"$FX/ssh.config.rc"
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
-assert_eq "an old ci without connect still connects a box" "$(calls)" "ci box ls --json
-ci connect sync
+assert_eq "an old ci without ssh config still connects a box" "$(calls)" "ci box ls --json
+ci ssh config
 ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
 assert_eq "an old ci gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
@@ -622,25 +622,25 @@ reset
 fx ls "$(lsdoc "$RUNNING")"
 fx ssh.ls "error: unrecognized subcommand 'ssh'" 2
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
-assert_eq "a ci with connect but no ssh lists boxes only" "$(calls)" "ci box ls --json
-ci connect sync
+assert_eq "a ci with ssh config but no ssh ls lists boxes only" "$(calls)" "ci box ls --json
+ci ssh config
 ci ssh ls --json
 ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
-assert_eq "a ci with no ssh gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
+assert_eq "a ci with no ssh ls gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 fx ssh.ls 'hub unreachable' 1
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
-assert_eq "a failing ci connect still lets the picker attach a box" "$?" "0"
-assert_contains "a failing ci connect prints ci's message" "$out" "dev connect: hub unreachable"
-assert_contains "a failing ci connect still offers the boxes" "$(cat "$ITEMS")" "myproject-k3x"
+assert_eq "a failing ci ssh config or ls still lets the picker attach a box" "$?" "0"
+assert_contains "a failing ci ssh config or ls prints ci's message" "$out" "dev connect: hub unreachable"
+assert_contains "a failing ci ssh config or ls still offers the boxes" "$(cat "$ITEMS")" "myproject-k3x"
 assert_contains "the box attaches over et" "$(calls)" "et --ssh-option"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 fx ssh.ls 'hub unreachable' 1
 out="$(box connect host-a 2>&1)"
-assert_eq "a named non-box keeps ci's code when ci connect fails" "$?" "1"
+assert_eq "a named non-box keeps ci's code when ci ssh ls fails" "$?" "1"
 assert_contains "a named non-box prints ci's message" "$out" "dev connect: hub unreachable"
 reset
 out="$(box connect __new__ 2>&1)"
