@@ -249,9 +249,9 @@ return {
     {
         words = { "board", "add" },
         handler = "lua",
-        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when --board --blocked-by --id-only",
-        usage = "dev board add NAME [--board B] [--blocked-by CARD]... [--id-only] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
-        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized, any labels, one Change line per --change, one checks row per --checks and one Done when outcome per --done-when. --board B files on the Pomb board named B from any repo, and each --blocked-by CARD links the new card as blocked by that card. --id-only prints the full id alone on standard output. Outside Icebox the card needs a size, the v2 sections and an outcome",
+        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when --board --blocked-by --from --id-only",
+        usage = "dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD] [--id-only] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
+        desc = "Add a card, to Backlog unless --column names another column, with the colour of a size 1, 2, 3, 3+ or unsized, any labels, one Change line per --change, one checks row per --checks and one Done when outcome per --done-when. --board B files on the Pomb board named B from any repo, and each --blocked-by CARD links the new card as blocked by that card, and --from CARD links it as related to the card it came from. --id-only prints the full id alone on standard output. Outside Icebox the card needs a size, the v2 sections and an outcome",
     },
     {
         words = { "board", "label" },

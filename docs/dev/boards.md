@@ -909,7 +909,7 @@ never handles the API.
   does not see is exit 1 and says no board has that name. A local board
   answers only for its own name and refuses any other with exit 1. A second
   word is exit 2.
-- `add NAME [--board B] [--blocked-by CARD]... [--id-only] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
+- `add NAME [--board B] [--blocked-by CARD]... [--from CARD] [--id-only] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
   Creates the card, in Backlog by default, and prints
   `added <id prefix> <column>`. `--size` gives it the colour of the size, as
   `size` does, and each `--label L` (repeatable, duplicates dropped) gives it a
@@ -928,9 +928,11 @@ never handles the API.
   before anything is added, and a local board refuses it. Each
   `--blocked-by CARD` (repeatable) links the new card as `blocked_by` that card,
   looked up on the board the card is filed on (`BOARD:CARD` reaches another),
-  and an unknown blocker is refused before the card is added. If a link then
-  fails, `add` exits 1 naming the card and the blocker, and the refusal is not
-  queued for a later sync.
+  and an unknown blocker is refused before the card is added. `--from CARD`
+  links the new card as `related` to the card it came from, looked up the same
+  way, and an unknown card is refused before anything is added. If a link then
+  fails, `add` exits 1 naming the card and the other card, and the refusal is
+  not queued for a later sync.
   `--id-only` prints the full card id alone on standard output in place of that
   line, for a script to capture. Warnings still go to standard error, and a
   failed add prints nothing on standard output. An `add --id-only` that cannot

@@ -683,6 +683,7 @@ function commands.add(backend, args)
         ["--done-when"] = true,
         ["--board"] = true,
         ["--blocked-by"] = true,
+        ["--from"] = true,
         [ID_ONLY_FLAG] = SWITCH,
     }, {
         ["--problem"] = true,
@@ -848,6 +849,14 @@ function commands.add(backend, args)
             blockers[#blockers + 1] = blocker
         end
     end
+    local origin
+    if flags["--from"] then
+        local found, _, err = other_card(backend, flags["--from"])
+        if not found then
+            return err
+        end
+        origin = found
+    end
     local card, message = backend:add(table.concat(words, " "), column, {
         description = description,
         color = color,
@@ -873,6 +882,22 @@ function commands.add(backend, args)
                     .. " of "
                     .. #blockers
                     .. " links were made before it: "
+                    .. why,
+                code = 1,
+                unqueued = true,
+            }
+        end
+    end
+    if origin then
+        local ok, why = backend:link(card.id, board.LinkKind.RELATED, origin.id)
+        if not ok then
+            return {
+                message = card_prefix
+                    .. " was added to "
+                    .. card.column
+                    .. " but its related link to "
+                    .. origin.id:sub(1, board.MIN_PREFIX)
+                    .. " was not: "
                     .. why,
                 code = 1,
                 unqueued = true,

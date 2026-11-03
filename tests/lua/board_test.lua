@@ -534,6 +534,35 @@ t.test("add --blocked-by links the new card to each blocker", function()
     t.eq(#backend.calls, 3)
 end)
 
+t.test("add --from links the new card as related to the card it came from", function()
+    local backend = fake(sample())
+    local result = commands.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--from",
+        "11111111-a",
+    }, backend)
+    t.eq(result.output, "added cccccccc Backlog")
+    t.eq(backend.calls[2], { "link", ID_C, "related", ID_A })
+    t.eq(#backend.calls, 2)
+end)
+
+t.test("add --from refuses an unknown card before it adds", function()
+    local backend = fake(sample())
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--from", "deadbeef" },
+        backend
+    )
+    t.eq(result.code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
 t.test("add --blocked-by refuses an unknown blocker before it adds", function()
     local backend = fake(sample())
     local result = commands.run(
@@ -582,6 +611,45 @@ t.test("add names the card when its blocked-by link fails", function()
         result.message
     )
     t.ok(result.unqueued)
+end)
+
+t.test("add names the card when its from link fails", function()
+    local backend = fake(sample())
+    function backend:link()
+        return nil, "pomb refused"
+    end
+    local result = commands.run(
+        "add",
+        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--from", "11111111-a" },
+        backend
+    )
+    t.eq(result.code, 1)
+    t.ok(
+        result.message:find("cccccccc was added to Backlog but its related link", 1, true),
+        result.message
+    )
+    t.ok(result.unqueued)
+end)
+
+t.test("add --board with --from looks the card up on the named board", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    commands.run("add", {
+        "X",
+        "--board",
+        "ci",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--from",
+        "11111111-a",
+    }, backend)
+    t.eq(sibling.calls[2], { "link", ID_C, "related", ID_A })
+    t.eq(#backend.calls, 1)
 end)
 
 t.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", function()
