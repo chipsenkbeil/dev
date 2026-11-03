@@ -2269,3 +2269,87 @@ t.test("run on a private project with no board starts making one", function()
     t.ok(out:find("private and has no board", 1, true), out)
     t.ok(out:find("lead_token", 1, true), out)
 end)
+
+t.test("add --id-only prints the full id alone and sends warnings to standard error", function()
+    local root, home = local_board()
+    local out, code, errors = support.dev(root, {
+        "board",
+        "add",
+        "Fresh",
+        "--id-only",
+        "--description",
+        "look in src/a.lua",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, { env = env_of(home), split = true })
+    t.eq(code, 0, out)
+    t.ok(out:match("^%x+%-%x+%-%x+%-%x+%-%x+\n$"), out)
+    t.eq(errors, "warning: card prose holds a path: src/a.lua\n")
+    local plain = dev(root, home, {
+        "board",
+        "add",
+        "Plain",
+        "--size",
+        "1",
+        "--problem",
+        "why",
+        "--done-when",
+        "a",
+    })
+    t.ok(plain:find("^added %x+ Backlog\n$"), plain)
+end)
+
+t.test("a failed add --id-only prints nothing on standard output and exits non-zero", function()
+    local root, home = local_board()
+    local out, code, errors = support.dev(root, {
+        "board",
+        "add",
+        "Bad",
+        "--id-only",
+        "--column",
+        "nowhere",
+    }, { env = env_of(home), split = true })
+    t.ok(code ~= 0, out)
+    t.eq(out, "")
+    t.ok(errors ~= "", errors)
+end)
+
+t.test("add --id-only is refused while Pomb is unreachable and never queued", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/down", ""))
+    local out, code = pomb_dev(root, home, {
+        "board",
+        "add",
+        "Later",
+        "--id-only",
+        "--problem",
+        "x",
+        "--size",
+        "2",
+        "--done-when",
+        "a",
+    })
+    t.ok(code ~= 0, out)
+    t.eq(out:find(QUEUED, 1, true), nil)
+    t.eq(fs.exists(queue_path(home)), false)
+end)
+
+t.test("add takes --id-only as a value when a flag is waiting for one", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Odd",
+        "--id-only",
+        "--size",
+        "1",
+        "--problem",
+        "--id-only",
+        "--done-when",
+        "a",
+    })
+    t.eq(code, 0, out)
+    t.ok(out:find("^%x+%-%x+%-%x+%-%x+%-%x+\n$"), out)
+end)

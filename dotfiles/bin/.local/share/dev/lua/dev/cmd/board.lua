@@ -41,6 +41,8 @@ local COMMIT_CHARS = 12
 local EXPECT_FAIL_FLAG = "--expect-fail"
 local TIMEOUT_FLAG = "--timeout"
 local WAIT_FLAG = "--wait"
+local ID_ONLY_FLAG = "--id-only"
+local SWITCH = "switch"
 local MAX_WAIT_SECONDS = 86400
 local STRICT_FLAG = "--strict"
 local RESERVED_NOTE = "a note cannot begin with "
@@ -166,7 +168,9 @@ local function parse(args, takes, many)
     while i <= #args do
         local arg = args[i]
         i = i + 1
-        if takes[arg] then
+        if takes[arg] == SWITCH then
+            flags[arg] = true
+        elseif takes[arg] then
             if i > #args then
                 return nil, usage(arg .. " needs a value")
             end
@@ -634,6 +638,7 @@ function commands.add(backend, args)
         ["--done-when"] = true,
         ["--board"] = true,
         ["--blocked-by"] = true,
+        [ID_ONLY_FLAG] = SWITCH,
     }, {
         ["--problem"] = true,
         ["--change"] = true,
@@ -834,7 +839,8 @@ function commands.add(backend, args)
         prose = (prose or "") .. "\n## Done when\n" .. table.concat(outcomes, "\n")
     end
     return {
-        output = "added " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. card.column,
+        output = flags[ID_ONLY_FLAG] and card.id
+            or "added " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. card.column,
         warnings = board.prose_warnings(prose),
     }
 end
@@ -4470,6 +4476,7 @@ for sub in pairs(commands) do
                 and QUEUE_RULES[sub]
                 and not result.unqueued
                 and not note
+                and not (sub == "add" and index_of(args, ID_ONLY_FLAG))
                 and not (sub == "outcome" and (args[2] == CONVERT_FLAG or args[2] == DELETE_FLAG))
             then
                 queued = { { sub = sub, args = args } }

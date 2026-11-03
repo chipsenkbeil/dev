@@ -895,7 +895,7 @@ never handles the API.
   does not see is exit 1 and says no board has that name. A local board
   answers only for its own name and refuses any other with exit 1. A second
   word is exit 2.
-- `add NAME [--board B] [--blocked-by CARD]... [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
+- `add NAME [--board B] [--blocked-by CARD]... [--id-only] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
   Creates the card, in Backlog by default, and prints
   `added <id prefix> <column>`. `--size` gives it the colour of the size, as
   `size` does, and each `--label L` (repeatable, duplicates dropped) gives it a
@@ -917,6 +917,10 @@ never handles the API.
   and an unknown blocker is refused before the card is added. If a link then
   fails, `add` exits 1 naming the card and the blocker, and the refusal is not
   queued for a later sync.
+  `--id-only` prints the full card id alone on standard output in place of that
+  line, for a script to capture. Warnings still go to standard error, and a
+  failed add prints nothing on standard output. An `add --id-only` that cannot
+  reach Pomb is refused and never queued (a queued add has no id to print).
   `--column ready` without a `--size` of `1`, `2` or `3` is a usage error (exit
   2), by the same rule as `move`, and so is any other column but Icebox (Backlog
   by default) for a card with no size, a description that lacks a heading or text
