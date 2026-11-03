@@ -126,7 +126,7 @@ local function idempotent(sub, args)
     local rule = QUEUE_RULES[sub]
     local flag = OUTCOME_FLAGS[args[2]]
     return (rule ~= nil and rule.idempotent)
-        or (sub == "outcome" and flag ~= nil and flag ~= OutcomeMode.DELETE)
+        or (sub == "outcome" and flag ~= nil and flag ~= OutcomeMode.DELETE and flag ~= OutcomeMode.RENAME)
         or false
 end
 
@@ -1977,11 +1977,11 @@ function commands.outcome(backend, args)
     end
     if #args < 2 then
         return usage(
-            "needs a card and the outcome text, or --rename N TEXT, --tick N, --untick N, --delete N --reason TEXT or --convert"
+            "needs a card and the outcome text, or --rename N TEXT --reason TEXT, --tick N, --untick N, --delete N --reason TEXT or --convert"
         )
     end
     local mode = OUTCOME_FLAGS[args[2]]
-    local text, word
+    local text, word, reason
     if args[2] == CONVERT_FLAG then
         if #args ~= 2 then
             return usage(CONVERT_FLAG .. " takes only the card")
@@ -2002,7 +2002,21 @@ function commands.outcome(backend, args)
         if #args < 4 then
             return usage("--rename needs an outcome number and the new text")
         end
-        word, text = args[3], table.concat(args, " ", 4)
+        local at
+        for i = 5, #args do
+            if args[i] == REASON_FLAG then
+                at = i
+                break
+            end
+        end
+        if not at then
+            return usage("--rename needs " .. REASON_FLAG .. " TEXT")
+        end
+        word, text = args[3], table.concat(args, " ", 4, at - 1)
+        reason = table.concat(args, " ", at + 1)
+        if not reason:find("%S") then
+            return usage(REASON_FLAG .. " needs the reason")
+        end
     elseif mode == OutcomeMode.DELETE then
         if #args < 5 or args[4] ~= REASON_FLAG then
             return usage(DELETE_FLAG .. " needs an outcome number and " .. REASON_FLAG .. " TEXT")
@@ -2085,9 +2099,37 @@ function commands.outcome(backend, args)
     if mode ~= OutcomeMode.RENAME then
         fields = { done = mode == OutcomeMode.TICK }
     end
+    local old_text = card.outcomes[number].name
     ok, message = backend:set_outcome(card.id, card.outcomes[number].id, fields, fence)
     if not ok then
         return failure(message)
+    end
+    if mode == OutcomeMode.RENAME then
+        local body = "Renamed outcome "
+            .. number
+            .. " from: "
+            .. old_text
+            .. " to: "
+            .. text
+            .. " Reason: "
+            .. reason
+        ok, message = backend:note(card.id, body, fence, { kind = NOTE_DECISION })
+        if not ok then
+            return unqueued(
+                failure(
+                    "outcome "
+                        .. prefix
+                        .. " "
+                        .. number
+                        .. " was renamed but the note failed: "
+                        .. message
+                        .. ", and its old text was: "
+                        .. old_text
+                        .. ", and its reason was: "
+                        .. reason
+                )
+            )
+        end
     end
     local result = { output = "outcome " .. prefix .. " " .. number .. " " .. OUTCOME_SAID[mode] }
     if mode == OutcomeMode.TICK and ticker then

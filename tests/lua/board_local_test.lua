@@ -965,7 +965,11 @@ t.test("a local board appends, rewords, ticks and unticks outcomes by number", f
     t.eq(out, "outcome " .. a .. " 3 added\n")
     out = dev(root, home, { "board", "outcome", a, "--tick", "2" })
     t.eq(out, "outcome " .. a .. " 2 ticked\n")
-    out = dev(root, home, { "board", "outcome", a, "--rename", "1", "A holds" })
+    out = dev(
+        root,
+        home,
+        { "board", "outcome", a, "--rename", "1", "A holds", "--reason", "clearer" }
+    )
     t.eq(out, "outcome " .. a .. " 1 reworded\n")
     out = dev(root, home, { "board", "show", a })
     t.ok(out:find("done when:\n- [ ] A holds\n- [x] B works\n- [ ] C works\n", 1, true), out)

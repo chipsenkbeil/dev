@@ -31,7 +31,7 @@ dev board allow 8af0e001 none
 dev board tests 8af0e001 one_should_be_one tests::two
 dev board files 8af0e001 src/a.rs src/b.rs
 dev board outcome 8af0e001 "Two-line cards print in full."
-dev board outcome 8af0e001 --rename 2 "A tick shows in show."
+dev board outcome 8af0e001 --rename 2 "A tick shows in show." --reason "it was vague"
 dev board outcome 8af0e001 --tick 2
 dev board outcome 8af0e001 --untick 2
 dev board outcome 8af0e001 --delete 2 --reason "never achievable"
@@ -527,8 +527,9 @@ labels. A board missing the colour fails with
 `outcome CARD TEXT` is exit 2 when a word of TEXT is `--tick`, `--untick`,
 `--rename` or `--convert`, or when TEXT is only a number. The message names the
 form meant, such as `outcome CARD --tick N`. A flag inside one quoted sentence
-is plain text. `outcome CARD --rename N TEXT` rewords the Nth, `--tick N` marks
-it done and `--untick N` clears it (`PATCH /api/tasks/{id}/subtasks/{sub_id}`
+is plain text. `outcome CARD --rename N TEXT --reason TEXT` rewords the Nth
+(the first `--reason` ends the new text), `--tick N` marks it done and
+`--untick N` clears it (`PATCH /api/tasks/{id}/subtasks/{sub_id}`
 with `name` or `done`), each printing `outcome <id prefix> N reworded`, `ticked`
 or `unticked`. N counts from 1 in the order `show` lists the outcomes, and an N
 past the last outcome is exit 1. A tick names its ticker with `--as NAME` after
@@ -736,8 +737,9 @@ On a Pomb board, `add`, `move`, `note`, `size`, `label`, `link`, `edit` and
 locked, are kept in a queue and print the line below. `check` is never
 queued. A timeout or a gateway error
 may come after Pomb applied the change, so only `move`, `size`, `label`,
-`link`, `edit` and `outcome` with `--rename`, `--tick` or `--untick`, which are
-safe to repeat, are queued for those; `add`, `note`, an `outcome` append and
+`link`, `edit` and `outcome` with `--tick` or `--untick`, which are safe to
+repeat, are queued for those, whereas `add`, `note`, an `outcome` append,
+`outcome --rename` (a replay would note the new text as the old) and
 `outcome --convert` fail instead of risking a duplicate. A move to Done is never
 queued: its outcome check reads the card from Pomb now, so it is refused and
 can be run again once Pomb answers.
@@ -1478,11 +1480,14 @@ never handles the API.
   text in the card's `tests`.
 - `files CARD PATH...`: The same as `tests`, for the `dev.files` field:
   prints `set files <id prefix>, N names` (`1 name` for one).
-- `outcome CARD TEXT`, `outcome CARD --rename N TEXT`, `outcome CARD --tick N`,
-  `outcome CARD --untick N`, `outcome CARD --convert`: Appends a Done when
-  outcome to an existing card (`POST /api/tasks/{id}/subtasks` with `name`) and
+- `outcome CARD TEXT`, `outcome CARD --rename N TEXT --reason TEXT`,
+  `outcome CARD --tick N`, `outcome CARD --untick N`,
+  `outcome CARD --convert`: Appends a Done when outcome to an existing card
+  (`POST /api/tasks/{id}/subtasks` with `name`) and
   prints `outcome <id prefix> N added`, with N the new outcome's place.
-  `--rename N TEXT` rewords the Nth and `--tick N` and `--untick N` set it done
+  `--rename N TEXT --reason TEXT` rewords the Nth and posts one decision note
+  with the old text, the new text and the reason. A missing or empty `--reason`
+  is exit 2 and writes nothing. `--tick N` and `--untick N` set it done
   or clear it (`PATCH /api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`),
   printing `outcome <id prefix> N reworded`, `ticked by NAME` or `unticked`. A
   tick on a claimed card needs `--as NAME` (or DEV_AGENT) for someone other than
@@ -1805,11 +1810,12 @@ or `--delete`), `size`, `label`, `link`, `edit`, `rename` or `outcome` on a Pomb
 board fails because Pomb could not be asked (`dev.board.pomb.unreachable`:
 `pass` timed out or is locked, or curl could not resolve or connect, exit 5, 6
 or 7; for `move`, `size`, `label`, `link`, `edit`, `rename` and `outcome` with
-`--rename`, `--tick` or `--untick`, which are safe to apply twice, also a curl
+`--tick` or `--untick`, which are safe to apply twice, also a curl
 timeout, a 502, 503 or 504, or an answer that is not JSON, since those may
 follow an applied change and `add` or `note` would then be doubled, so an
-`outcome` append or `--convert` is never queued for those), the command appends
-itself to the queue, prints `queued: Pomb unreachable, will sync` and exits 0.
+`outcome` append, `--rename` or `--convert` is never queued for those), the
+command appends itself to the queue, prints
+`queued: Pomb unreachable, will sync` and exits 0.
 Usage errors, refusals and every read are not queued. Every other `dev board`
 command on a Pomb board, `status` included, first replays a non-empty queue (its
 `synced` and `dropped` lines go to standard error), so a card prefix is resolved

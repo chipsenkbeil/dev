@@ -1972,15 +1972,19 @@ t.test("outcome appends, rewords, ticks and unticks by number", function()
     local result = commands.run("outcome", { "cccccccc", "Fourth", "works" }, backend)
     t.eq(result.output, "outcome cccccccc 4 added")
     t.eq(backend.calls[1], { "add_outcome", ID_C, "Fourth works", nil })
-    result = commands.run("outcome", { "cccccccc", "--rename", "2", "New", "words" }, backend)
+    result = commands.run(
+        "outcome",
+        { "cccccccc", "--rename", "2", "New", "words", "--reason", "it was vague" },
+        backend
+    )
     t.eq(result.output, "outcome cccccccc 2 reworded")
     t.eq(backend.calls[2], { "set_outcome", ID_C, "s2", { name = "New words" }, nil })
     result = commands.run("outcome", { "cccccccc", "--tick", "2" }, backend)
     t.eq(result.output, "outcome cccccccc 2 ticked")
-    t.eq(backend.calls[3], { "set_outcome", ID_C, "s2", { done = true }, nil })
+    t.eq(backend.calls[4], { "set_outcome", ID_C, "s2", { done = true }, nil })
     result = commands.run("outcome", { "cccccccc", "--untick", "1" }, backend)
     t.eq(result.output, "outcome cccccccc 1 unticked")
-    t.eq(backend.calls[4], { "set_outcome", ID_C, "s1", { done = false }, nil })
+    t.eq(backend.calls[5], { "set_outcome", ID_C, "s1", { done = false }, nil })
 end)
 
 t.test(
@@ -2012,12 +2016,89 @@ t.test("outcome refuses an N past the last outcome and a bad N", function()
     local result = commands.run("outcome", { "cccccccc", "--tick", "3" }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("the card has 2 outcomes, so there is no outcome 3", 1, true))
-    t.eq(commands.run("outcome", { "cccccccc", "--rename", "9", "x" }, backend).code, 1)
+    t.eq(
+        commands.run("outcome", { "cccccccc", "--rename", "9", "x", "--reason", "y" }, backend).code,
+        1
+    )
     for _, word in ipairs({ "0", "-1", "x", "1.5" }) do
         t.eq(commands.run("outcome", { "cccccccc", "--tick", word }, backend).code, 2)
     end
     t.eq(#backend.calls, 0)
 end)
+
+t.test("outcome --rename without --reason is refused and changes nothing", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    local result = commands.run("outcome", { "cccccccc", "--rename", "1", "New" }, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("--rename needs --reason TEXT", 1, true), result.message)
+    t.eq(
+        commands.run("outcome", { "cccccccc", "--rename", "1", "New", "--reason" }, backend).code,
+        2
+    )
+    t.eq(
+        commands.run("outcome", { "cccccccc", "--rename", "1", "--reason", "why" }, backend).code,
+        2
+    )
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("outcome --rename ends the new text at the first --reason", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    local result = commands.run(
+        "outcome",
+        { "cccccccc", "--rename", "1", "New", "--reason", "use", "--reason", "flag" },
+        backend
+    )
+    t.eq(result.output, "outcome cccccccc 1 reworded")
+    t.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { name = "New" }, nil })
+    t.ok(backend.calls[2][3]:find("Reason: use --reason flag", 1, true), backend.calls[2][3])
+end)
+
+t.test("outcome --rename names the old text and the reason when the note fails", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local old = card.outcomes[2].name
+    local backend = fake({ card })
+    function backend:note()
+        return nil, "board unavailable: cannot reach pomb"
+    end
+    local result =
+        commands.run("outcome", { "cccccccc", "--rename", "2", "New", "--reason", "why" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.unqueued, true)
+    t.ok(result.message:find("was renamed but the note failed", 1, true), result.message)
+    t.ok(result.message:find(old, 1, true) and result.message:find("why", 1, true), result.message)
+    result =
+        commands.run("outcome", { "cccccccc", "--rename", "1", "New", "--reason", " " }, backend)
+    t.eq(result.code, 2)
+end)
+
+t.test(
+    "outcome --rename posts one decision note with the old text, the new text and the reason",
+    function()
+        local card = colored("green")
+        card.outcomes = outcomes(2)
+        local old = card.outcomes[2].name
+        local backend = fake({ card })
+        local result = commands.run(
+            "outcome",
+            { "cccccccc", "--rename", "2", "New", "words", "--reason", "it", "was", "vague" },
+            backend
+        )
+        t.eq(result.output, "outcome cccccccc 2 reworded")
+        t.eq(#backend.calls, 2)
+        t.eq(backend.calls[2], {
+            "note",
+            ID_C,
+            "Renamed outcome 2 from: " .. old .. " to: New words Reason: it was vague",
+            { kind = "decision" },
+        })
+    end
+)
 
 t.test("outcome refuses missing arguments, blank text and a missing card", function()
     local card = colored("green")
@@ -3403,7 +3484,11 @@ t.test("outcome posts a subtask and patches the Nth by its id", function()
     t.eq(out, "outcome 11111111 3 added\n")
     out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
     t.eq(out, "outcome 11111111 1 ticked\n")
-    out = dev(root, home, { "board", "outcome", "11111111", "--rename", "2", "B holds" })
+    out = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--rename", "2", "B holds", "--reason", "clearer" }
+    )
     t.eq(out, "outcome 11111111 2 reworded\n")
     out = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
     t.eq(out, "outcome 11111111 2 unticked\n")
@@ -3479,7 +3564,12 @@ t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", fu
     }, own)
     t.eq(code, 1, out)
     t.ok(out:find("claimed by project-run/a", 1, true), out)
-    out, code = dev(root, home, { "board", "outcome", "11111111", "--rename", "1", "New" }, own)
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--rename", "1", "New", "--reason", "r" },
+        own
+    )
     t.eq(code, 1, out)
     t.ok(out:find("claimed by project-run/a", 1, true), out)
     t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
@@ -3576,6 +3666,20 @@ t.test("outcome queues a tick but not an append when the write cannot reach Pomb
     local queued = assert(fs.read(queue_file(home)))
     t.ok(queued:find('"outcome"', 1, true) and queued:find('"--tick"', 1, true), queued)
     t.ok(queued:find('"--as"', 1, true) and queued:find('"project-run/b"', 1, true), queued)
+end)
+
+t.test("outcome --rename is never queued when the write cannot reach Pomb", function()
+    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    executable(
+        root .. "/bin/curl",
+        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */subtasks*) cat >/dev/null; exit 28 ;; esac\n'
+            .. CURL:gsub("^#!/bin/sh\n", "")
+    )
+    local out, code =
+        dev(root, home, { "board", "outcome", "11111111", "--rename", "1", "New", "--reason", "r" })
+    t.eq(code, 1, out)
+    t.ok(out:find("curl exit 28", 1, true), out)
+    t.eq(fs.exists(queue_file(home)), false)
 end)
 
 t.test("an unclaimed card's tick ignores an invalid DEV_AGENT", function()
