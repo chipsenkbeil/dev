@@ -33,9 +33,13 @@ local LISTING = [[{"ok":true,"boxes":[
 local function sandbox(files)
     local root = support.sandbox({}, {})
     for name, body in pairs(files) do
-        assert(fs.write(root .. "/" .. name .. ".json", body))
+        assert(fs.write(root .. "/" .. name .. ".json", (body:gsub("\n", "")) .. "\n"))
     end
-    local body = '#!/bin/sh\necho "$*" >> "' .. root .. '/log"\ncat "' .. root .. '/$2.json"\n'
+    local body = ([[#!/bin/sh
+echo "$*" >> "%s/log"
+cat "%s/$2.json"
+[ "$1" != fleet ] || cat "%s/shapes.json"
+]]):format(root, root, root)
     assert(fs.write(root .. "/bin/ci", body))
     assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     return root
@@ -74,9 +78,8 @@ t.test("create asks for the target, then the shape, then creates", function()
     t.eq(code, 0)
     t.eq(out, "Created proj-x1 · linux-dev @ example-box · medium · kept · dev connect proj-x1\n")
     t.eq(lines_of(root .. "/log"), {
-        "box targets --json",
-        "box shapes --json",
-        "box shapes --target linux-dev --json",
+        "fleet targets --box --json",
+        "fleet targets --box --target linux-dev --json",
         "box create --target linux-dev --shape medium --by human:tester --keep --json -- proj",
     })
     t.eq(lines_of(root .. "/picks"), {
@@ -128,7 +131,7 @@ t.test("--shape skips the second picker only", function()
     t.eq(code, 0)
     local log = lines_of(root .. "/log")
     t.eq(log[#log], "box create --target linux-dev --shape large --by human:tester --json -- proj")
-    t.eq(#log, 3)
+    t.eq(#log, 2)
     fs.remove(root, { recursive = true })
 end)
 

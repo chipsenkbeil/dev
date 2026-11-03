@@ -413,6 +413,26 @@ local function first_retagged(doc)
     return nil
 end
 
+---Print a failed ci document's message, or its raw text, to standard error.
+---@param sub string the subcommand's name, for the messages
+---@param doc any the decoded document, which may be no table
+---@param out string the text the document was decoded from
+local function report_failure(sub, doc, out)
+    local message = type(doc) == "table"
+        and doc.ok == false
+        and type(doc.error) == "table"
+        and doc.error.message
+    local first = first_retagged(doc)
+    if type(message) ~= "string" and first ~= nil then
+        message = first.error
+    end
+    if type(message) == "string" then
+        stderr:write("dev box ", sub, ": ", message, "\n")
+    elseif out ~= "" then
+        stderr:write(out, "\n")
+    end
+end
+
 ---Run `ci box` with `--json` and decode its document.
 ---
 ---A failure ends the run with ci's code, after its error message goes to
@@ -436,25 +456,56 @@ function M.call(sub, args, opts)
     local out = raw:gsub("\n+$", "")
     local doc = json.decode(out)
     if code ~= 0 then
-        local message = type(doc) == "table"
-            and doc.ok == false
-            and type(doc.error) == "table"
-            and doc.error.message
-        local first = first_retagged(doc)
-        if type(message) ~= "string" and first ~= nil then
-            message = first.error
-        end
-        if type(message) == "string" then
-            stderr:write("dev box ", sub, ": ", message, "\n")
-        elseif out ~= "" then
-            stderr:write(out, "\n")
-        end
+        report_failure(sub, doc, out)
         os.exit(code or Exit.FAILED)
     end
     if type(doc) ~= "table" or doc.ok ~= true then
         verb.die("dev: ci box " .. args[1] .. " printed no ok document")
     end
     return doc, raw
+end
+
+---Run `ci fleet targets --box --json`, which prints the targets document
+---and then the shapes document, one per line.
+---
+---A failure ends the run with ci's code, after each failing request's error
+---message goes to standard error.
+---@param sub string the subcommand's name, for the messages
+---@param opts { target: string? }? the target the shapes document is limited to
+---@return dev.cmd.box.Doc targets the decoded targets document
+---@return dev.cmd.box.Doc shapes the decoded shapes document
+---@return string raw ci's output exactly as it printed it
+function M.fleet(sub, opts)
+    local argv = { "ci", "fleet", "targets", "--box" }
+    local target = opts and opts.target
+    if target then
+        argv[#argv + 1] = "--target"
+        argv[#argv + 1] = target
+    end
+    argv[#argv + 1] = "--json"
+    local raw, code = devos.capture(argv)
+    local docs, texts = {}, {}
+    for line in raw:gmatch("[^\n]+") do
+        texts[#texts + 1] = line
+        docs[#texts] = json.decode(line)
+    end
+    if code ~= 0 then
+        if #texts == 0 then
+            report_failure(sub, nil, "")
+        end
+        for i, line in ipairs(texts) do
+            if type(docs[i]) ~= "table" or docs[i].ok ~= true then
+                report_failure(sub, docs[i], line)
+            end
+        end
+        os.exit(code or Exit.FAILED)
+    end
+    for i = 1, 2 do
+        if type(docs[i]) ~= "table" or docs[i].ok ~= true then
+            verb.die("dev: ci fleet targets --box printed no ok document")
+        end
+    end
+    return docs[1], docs[2], raw
 end
 
 ---Run `ci box` for a subcommand that answers with one box.
@@ -934,9 +985,9 @@ M.handlers["box targets"] = function(ctx)
         verb.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
     end
     M.need_ci()
-    local doc, raw = M.call("targets", { "targets", "--json" })
+    local doc, sized, raw = M.fleet("targets")
     if parsed.json then
-        io.write(raw)
+        io.write(raw:match("^[^\n]*\n?"))
         return 0
     end
     local targets = doc.targets or {}
@@ -944,7 +995,6 @@ M.handlers["box targets"] = function(ctx)
         print("no targets")
         return 0
     end
-    local sized = M.call("targets", { "shapes", "--json" })
     local screen = ui.context()
     if not screen.interactive then
         screen.width = math.huge
@@ -1099,8 +1149,8 @@ end
 ---@param project string? the project the box is for
 ---@return string target the picked target's name
 local function pick_target(project)
-    local targets = M.call("create", { "targets", "--json" }).targets or {}
-    local sized = M.call("create", { "shapes", "--json" })
+    local doc, sized = M.fleet("create")
+    local targets = doc.targets or {}
     local items, enabled = {}, 0
     for i, target in ipairs(targets) do
         local fits = target_fit(target, sized.shapes or {})
@@ -1138,7 +1188,7 @@ end
 ---@param target string the target the box runs
 ---@return string shape the picked shape's name
 local function pick_shape(target)
-    local doc = M.call("create", { "shapes", "--target", target, "--json" })
+    local _, doc = M.fleet("create", { target = target })
     local items, enabled, initial = {}, 0, nil
     local names = {}
     for i, shape in ipairs(doc.shapes or {}) do

@@ -53,6 +53,7 @@ if [ "$sub" = show ] && [ ! -f "$FX/show.json" ]; then
 fi
 [ ! -f "$FX/$sub.err" ] || cat "$FX/$sub.err" >&2
 [ ! -f "$FX/$sub.json" ] || cat "$FX/$sub.json"
+[ "$1" != fleet ] || [ ! -f "$FX/shapes.json" ] || cat "$FX/shapes.json"
 exit "$(cat "$FX/$sub.rc" 2>/dev/null || echo 0)"
 STUB
 for tool in et ssh; do
@@ -200,8 +201,17 @@ assert_eq "ls rejects an argument" "$?" "2"
 
 reset
 fx targets '{"ok":true,"targets":[]}'
-assert_eq "targets --json prints ci's document" "$(box box targets --json)" "$(cat "$FX/targets.json")"
-assert_eq "targets reads the structured list" "$(calls)" "ci box targets --json"
+fx shapes "$SHAPES_DOC"
+assert_eq "targets --json prints the targets document only" "$(box box targets --json)" "$(cat "$FX/targets.json")"
+assert_eq "targets reads the structured list" "$(calls)" "ci fleet targets --box --json"
+
+reset
+fx shapes "$SHAPES_DOC"
+fx targets '{"ok":false,"error":{"code":"no_server","message":"cannot reach the server"}}' 3
+out="$(box box targets --json 2>&1)"
+assert_eq "targets exits with ci's code" "$?" "3"
+assert_contains "targets names the failing request's error" "$out" "dev box targets: cannot reach the server"
+assert_not_contains "a succeeding document is not echoed" "$out" "default_shape"
 
 # --- create ---
 
@@ -545,9 +555,8 @@ out="$(FAKE_TTY=1 FAKE_PICK="__new__ $TARGET medium" inproj connect)"
 assert_eq "the new-box item runs the create pickers, creates for the project then attaches" "$(calls)" "ci box ls --json
 ci ssh config
 ci ssh ls --json
-ci box targets --json
-ci box shapes --json
-ci box shapes --target $TARGET --json
+ci fleet targets --box --json
+ci fleet targets --box --target $TARGET --json
 ci box create --target $TARGET --shape medium --by human:tester --json -- myproject
 ci box show myproject-n3w --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-n3w"

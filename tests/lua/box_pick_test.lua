@@ -37,7 +37,11 @@ local function sandbox()
         assert(fs.write(root .. "/" .. name .. ".json", body))
     end
     assert(fs.write(root .. "/install-tools.json", '{"ok":true,"installed":[]}'))
-    local body = '#!/bin/sh\necho "$*" >> "' .. root .. '/log"\ncat "' .. root .. '/$2.json"\n'
+    local body = ([[#!/bin/sh
+echo "$*" >> "%s/log"
+cat "%s/$2.json"
+[ "$1" != fleet ] || cat "%s/shapes.json"
+]]):format(root, root, root)
     assert(fs.write(root .. "/bin/ci", body))
     assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     return root
@@ -212,8 +216,8 @@ t.test("connect runs the two create pickers when it makes a box", function()
         [[{"ok":true,"targets":[{"target":"linux-dev","os":"linux","machines":["example-box"],"image":"devbox","min_shape":null,"can_take_box_now":true,"reason":null}]}]]
     local SHAPES =
         [[{"ok":true,"default_shape":"medium","shapes":[{"name":"medium","cpu":8,"memory_gib":16,"default":true,"targets":[{"target":"linux-dev","below_min":false,"machines":[{"machine":"example-box","fits":"start","reason":null,"warning":null}]}]}],"cap":{"running":1,"running_max":3,"memory_limits_gib":16,"memory_max_gib":32},"machines":[{"name":"example-box","running":1,"memory_limits_gib":16,"new_box_room_gib":8,"reachable":true}]}]]
-    assert(fs.write(root .. "/targets.json", TARGETS))
-    assert(fs.write(root .. "/shapes.json", SHAPES))
+    assert(fs.write(root .. "/targets.json", TARGETS .. "\n"))
+    assert(fs.write(root .. "/shapes.json", SHAPES .. "\n"))
     assert(fs.write(root .. "/create.json", ONE))
     local project = root:match("([^/]+)/*$")
     support.dev(root, { "connect", "--ssh" }, env(root, { FAKE_PICK = "__new__ linux-dev medium" }))

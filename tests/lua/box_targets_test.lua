@@ -20,9 +20,13 @@ local SHAPES = [[{"ok":true,"default_shape":"medium","shapes":[
 local function sandbox(files)
     local root = support.sandbox({}, {})
     for name, body in pairs(files) do
-        assert(fs.write(root .. "/" .. name .. ".json", body))
+        assert(fs.write(root .. "/" .. name .. ".json", (body:gsub("\n", "")) .. "\n"))
     end
-    local body = '#!/bin/sh\necho "$*" >> "' .. root .. '/log"\ncat "' .. root .. '/$2.json"\n'
+    local body = ([[#!/bin/sh
+echo "$*" >> "%s/log"
+cat "%s/$2.json"
+[ "$1" != fleet ] || cat "%s/shapes.json"
+]]):format(root, root, root)
     assert(fs.write(root .. "/bin/ci", body))
     assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     return root
@@ -69,14 +73,14 @@ t.test("targets reads the structured list and --json prints ci's document", func
     local root = sandbox({ targets = TARGETS, shapes = SHAPES })
     local out, code = support.dev(root, { "box", "targets", "--json" }, ENV)
     t.eq(code, 0)
-    t.eq(out, TARGETS)
+    t.eq(out, (TARGETS:gsub("\n", "")) .. "\n")
     local log = assert(fs.read(root .. "/log"))
-    t.eq(log, "box targets --json\n")
+    t.eq(log, "fleet targets --box --json\n")
     fs.remove(root, { recursive = true })
 end)
 
 t.test("targets says when ci lists none", function()
-    local root = sandbox({ targets = '{"ok":true,"targets":[]}' })
+    local root = sandbox({ targets = '{"ok":true,"targets":[]}', shapes = SHAPES })
     local out, code = support.dev(root, { "box", "targets" }, ENV)
     t.eq(code, 0)
     t.eq(out, "no targets\n")
@@ -84,7 +88,7 @@ t.test("targets says when ci lists none", function()
 end)
 
 t.test("targets refuses an argument", function()
-    local root = sandbox({ targets = TARGETS })
+    local root = sandbox({ targets = TARGETS, shapes = SHAPES })
     local _, code = support.dev(root, { "box", "targets", "extra" }, ENV)
     t.eq(code, 2)
     fs.remove(root, { recursive = true })
