@@ -2530,6 +2530,7 @@ end
 ---@class dev.cmd.board.TurnOpts
 ---@field backend dev.board.Backend the board backend
 ---@field name string the caller's agent name
+---@field id string the full id of the card that lands
 ---@field short string the short id of the card that lands
 ---@field wait integer the seconds to keep asking
 ---@field take dev.board.turn.TakeOpts? a hold and the lease it asks for
@@ -2539,7 +2540,7 @@ end
 ---@return dev.board.turn.Turn? hold the turn, nil when it stayed taken
 ---@return string? message why it was not taken
 local function await_turn(opts)
-    local deadline = os.time() + opts.wait
+    local deadline = store.now() + opts.wait
     local asker = { name = opts.name, card = opts.short, seconds = opts.wait }
     if opts.wait > 0 then
         local ok, why = turn.ask(opts.backend, asker)
@@ -2549,11 +2550,18 @@ local function await_turn(opts)
     end
     local poll = turn.poller()
     while true do
+        if opts.wait > 0 then
+            local current = opts.backend:card(opts.id)
+            if current and current.done then
+                turn.leave(opts.backend, opts.name, opts.short)
+                return nil, opts.short .. " is done, so there is nothing to wait for"
+            end
+        end
         local hold, message, place = turn.take(opts.backend, opts.name, opts.short, opts.take)
         if hold or opts.wait == 0 then
             return hold, message
         end
-        local left = deadline - os.time()
+        local left = deadline - store.now()
         if left <= 0 then
             turn.leave(opts.backend, opts.name, opts.short)
             return nil, message
@@ -2798,7 +2806,13 @@ function commands.land(backend, args)
         return failure(short .. " cannot land: " .. blocked .. (hold and kept_note(short) or ""))
     end
     if not hold then
-        hold, message = await_turn({ backend = backend, name = name, short = short, wait = wait })
+        hold, message = await_turn({
+            backend = backend,
+            name = name,
+            id = card.id,
+            short = short,
+            wait = wait,
+        })
     end
     if not hold then
         return failure(short .. " cannot land: " .. message)
@@ -2881,6 +2895,7 @@ function commands.turn(backend, args)
             return { output = "the landing turn held for " .. short .. " was already gone" }
         end
         if not hold then
+            turn.leave(backend, name, short)
             return failure(name .. " holds no landing turn for " .. short)
         end
         local released, reason = turn.release(backend, hold)
@@ -2915,6 +2930,7 @@ function commands.turn(backend, args)
     hold, message = await_turn({
         backend = backend,
         name = name,
+        id = card.id,
         short = short,
         wait = wait,
         take = { hold = true, seconds = seconds },

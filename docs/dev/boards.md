@@ -1321,6 +1321,10 @@ never handles the API.
   place in line and holder, up to 30 seconds. A change in either starts over at
   5 seconds. Each sleep is shortened by up to 20% at random.
 
+  Each poll also reads the waiting card. A waiter whose card has moved to
+  Done writes its `left` note and stops with `<id prefix> is done, so there is
+  nothing to wait for`.
+
   Cards wait in the order they asked. A card with a wait writes a
   `dev-turn: ask` note with the time its wait ends before it asks for the
   turn, and only the first live ask in line may take it. A later asker is
@@ -1411,9 +1415,11 @@ never handles the API.
   machine under the same `DEV_AGENT`. Success prints
   `holding the landing turn for <id prefix> for N seconds`.
   A hold that lapsed frees the turn to the next asker, so taking it again
-  starts a new window. `--release` gives the hold back and writes a `left` note, and refuses when
-  the caller holds none for the card. A hold that ran out is cleared and reported
-  as already gone. A card in Done is refused, except to give a
+  starts a new window. `--release` gives the hold back and writes a `left`
+  note. When the caller holds none for the card it still writes the `left`
+  note, which drops a queued ask and creates the `landing turn` card when the
+  board has none, and refuses. A hold that ran out is cleared
+  and reported as already gone. A card in Done is refused, except to give a
   hold back.
 
   `land CARD` finds a hold taken by the caller for that card and lands under

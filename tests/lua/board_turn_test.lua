@@ -2,6 +2,8 @@ local ffi = require("ffi")
 
 local t = require("testing")
 local board = require("dev.board")
+local commands = require("dev.cmd.board")
+local devos = require("dev.os")
 local fs = require("dev.fs")
 local localboard = require("dev.board.localboard")
 local store = require("dev.board.store")
@@ -366,4 +368,77 @@ t.test("a claim lost after the turn card was read still names the holder", funct
     backend.card = card
     t.eq(taken, nil)
     t.ok(message:find("held by alpha", 1, true), message)
+end)
+
+local function as_agent(name, run)
+    local previous = os.getenv("DEV_AGENT") or ""
+    ffi.C.setenv("DEV_AGENT", name, 1)
+    local ok, err = pcall(run)
+    ffi.C.setenv("DEV_AGENT", previous, 1)
+    assert(ok, err)
+end
+
+local function landing_card(backend)
+    local id = assert(backend:add("work", board.DEFAULT_NAMES.review, {})).id
+    return id, id:sub(1, board.MIN_PREFIX)
+end
+
+t.test("a waiter whose card moves to Done leaves the queue within one retry", function()
+    local backend = backend_at(board_home())
+    local id, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    local naps = 0
+    local result
+    local nap = devos.nap
+    devos.nap = function(seconds)
+        naps = naps + 1
+        assert(naps == 1, "the waiter kept polling after its card was done")
+        advance(seconds)
+        assert(backend:move(id, board.DEFAULT_NAMES.done))
+    end
+    local ok, err = pcall(as_agent, "beta", function()
+        result = commands.run("turn", { short, "--wait", "600" }, backend)
+    end)
+    devos.nap = nap
+    assert(ok, err)
+    t.eq(naps, 1)
+    t.eq(result.code, 1)
+    t.ok(result.message:find(short .. " is done", 1, true), result.message)
+    turn.release(backend, first)
+    t.ok(turn.take(backend, "gamma", "cccc3333"), "the done card's ask kept the line")
+end)
+
+t.test("a waiter whose card is done is not handed a turn that frees meanwhile", function()
+    local backend = backend_at(board_home())
+    local id, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    local nap = devos.nap
+    devos.nap = function(seconds)
+        advance(seconds)
+        turn.release(backend, first)
+        assert(backend:move(id, board.DEFAULT_NAMES.done))
+    end
+    local result
+    local ok, err = pcall(as_agent, "beta", function()
+        result = commands.run("turn", { short, "--wait", "600" }, backend)
+    end)
+    devos.nap = nap
+    assert(ok, err)
+    t.eq(result.code, 1)
+    t.ok(result.message:find(short .. " is done", 1, true), result.message)
+    t.eq(turn.holder(backend), nil)
+end)
+
+t.test("release drops the queued ask of a caller that holds no turn", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    assert(turn.ask(backend, { name = "beta", card = short, seconds = 600 }))
+    local result
+    as_agent("beta", function()
+        result = commands.run("turn", { short, "--release" }, backend)
+    end)
+    t.eq(result.code, 1)
+    turn.release(backend, first)
+    t.ok(turn.take(backend, "gamma", "cccc3333"), "the released ask kept the line")
 end)
