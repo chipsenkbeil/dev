@@ -2300,6 +2300,83 @@ t.test("move and edit refuse a needs:human card, and label --remove still frees 
     t.eq(result.output, "labelled 11111111 -")
 end)
 
+local function blocked_cards()
+    local cards = sample()
+    cards[1].labels = { "needs:human", "docs" }
+    cards[1].column = "Blocked"
+    return cards
+end
+
+t.test("answer posts the decision note with the quote and removes only needs:human", function()
+    local backend = fake(blocked_cards())
+    local result = commands.run(
+        "answer",
+        { "11111111-a", "--choice", "2", "--quote", "go", "with", "two" },
+        backend
+    )
+    t.eq(result.output, "answered 11111111 with choice 2")
+    t.eq(#backend.calls, 2)
+    t.eq(backend.calls[1], { "set_labels", ID_A, { "docs" }, nil })
+    t.eq(backend.calls[2], {
+        "note",
+        ID_A,
+        "Owner's answer, typed in this session: choice 2, quote: go with two",
+        { kind = "decision" },
+    })
+end)
+
+t.test("answer refuses a card without needs:human and writes nothing", function()
+    local cards = sample()
+    local backend = fake(cards)
+    local result =
+        commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("is not needs:human", 1, true), result.message)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("answer refuses an empty quote, a bad choice and missing flags", function()
+    local backend = fake(blocked_cards())
+    for _, args in ipairs({
+        { "11111111-a", "--choice", "1", "--quote" },
+        { "11111111-a", "--choice", "1", "--quote", "  " },
+        { "11111111-a", "--choice", "0", "--quote", "yes" },
+        { "11111111-a", "--choice", "x", "--quote", "yes" },
+        { "11111111-a", "--quote", "yes" },
+        { "11111111-a" },
+    }) do
+        t.eq(commands.run("answer", args, backend).code, 2, table.concat(args, " "))
+    end
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("answer posts no note when the label write fails", function()
+    local backend = fake(blocked_cards())
+    function backend:set_labels()
+        return nil, "board unavailable: cannot reach pomb"
+    end
+    local result =
+        commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
+    t.eq(result.code, 1)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("answer prints the note to post by hand when the note fails after the label", function()
+    local backend = fake(blocked_cards())
+    function backend:note()
+        return nil, "board unavailable: cannot reach pomb"
+    end
+    local result =
+        commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.unqueued, true)
+    t.ok(
+        result.message:find('dev board note 11111111 --kind decision "Owner', 1, true),
+        result.message
+    )
+    t.ok(result.message:find("choice 1, quote: yes", 1, true), result.message)
+end)
+
 t.test("a needs:human card moves within its own column and not out of it", function()
     local cards = sample()
     cards[1].labels = { "needs:human" }

@@ -1777,6 +1777,68 @@ function commands.label(backend, args)
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
 end
 
+function commands.answer(backend, args)
+    local choice, quote_at
+    if args[2] == "--choice" then
+        choice = args[3]
+        if args[4] == "--quote" then
+            quote_at = 4
+        end
+    end
+    if #args < 2 or not choice or not quote_at then
+        return usage("needs a card, --choice N and --quote TEXT")
+    end
+    if not choice:match("^%d+$") or tonumber(choice) < 1 then
+        return usage("--choice counts from 1, not " .. choice)
+    end
+    local quote = table.concat(args, " ", quote_at + 1)
+    if not quote:find("%S") then
+        return usage("--quote needs the owner's words")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local prefix = card.id:sub(1, board.MIN_PREFIX)
+    local at = index_of(card.labels, board.NEEDS_HUMAN)
+    if not at then
+        return failure(
+            prefix .. " is not " .. board.NEEDS_HUMAN .. ", so nothing waits on an answer"
+        )
+    end
+    local held = claims.read(card.id)
+    local fence = held and held.fence
+    local labels = {}
+    for index, label in ipairs(card.labels) do
+        if index ~= at then
+            labels[#labels + 1] = label
+        end
+    end
+    local ok, message = backend:set_labels(card.id, labels, fence)
+    if not ok then
+        return failure(message)
+    end
+    local body = "Owner's answer, typed in this session: choice " .. choice .. ", quote: " .. quote
+    ok, message = backend:note(card.id, body, fence, { kind = NOTE_DECISION })
+    if not ok then
+        return unqueued(
+            failure(
+                board.NEEDS_HUMAN
+                    .. " is removed from "
+                    .. prefix
+                    .. " but the decision note failed: "
+                    .. message
+                    .. ", so post it with dev board note "
+                    .. prefix
+                    .. ' --kind decision "'
+                    .. body
+                    .. '"'
+            )
+        )
+    end
+    return { output = "answered " .. prefix .. " with choice " .. choice }
+end
+
 local OUTCOME_SAID = {
     [OutcomeMode.DELETE] = "deleted",
     [OutcomeMode.RENAME] = "reworded",

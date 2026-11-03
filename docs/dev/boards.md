@@ -14,6 +14,7 @@ dev board size 8af0e001 1
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --label needs:lead --label docs
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --checks "dev lint" --checks "dev test"
 dev board label 8af0e001 needs:human --remove needs:lead
+dev board answer 8af0e001 --choice 2 --quote "Take the second one."
 dev board stale --days 7
 dev board lint
 dev board note 8af0e001 "Tests pass, landing now."
@@ -985,6 +986,22 @@ never handles the API.
   (`<id prefix> is in <column>, and needs:human lives only in Blocked or Icebox; move it there first`,
   exit 1, on both backends and on a queued replay); removing it is allowed in
   any column.
+- `answer CARD --choice N --quote TEXT`: Records the owner's answer, typed
+  in this session, on a `needs:human` card. It removes `needs:human`
+  from the card's labels (the other labels and the column stay), then posts
+  one decision note, `Owner's answer, typed in this session: choice N, quote:
+  TEXT`, both with the claim's fence when this machine holds one, and
+  prints `answered <id prefix> with choice N`. The words after `--quote` are
+  the quote. A card without `needs:human`, a missing flag, a `--choice` that
+  is not a whole number from 1 and an empty quote are refused (exit 1 for
+  the card, exit 2 for the rest) before anything is written. Pomb refuses a
+  comment on a labelled card, so the label goes first. A note that
+  fails after the label is gone is exit 1 and prints the `dev board note
+  CARD --kind decision` command with the full text, so the quote is not
+  lost. `answer` is never queued, to keep a replay from posting the note
+  twice. dev cannot tell a typed answer from a
+  relayed one, so the verb is for the agent whose own session the owner
+  answered in.
 - `link CARD KIND OTHER`: Links a card to another and prints
   `linked <id prefix> <kind> <other>`. `KIND` is `blocked_by`, `blocks`,
   `related` or `parent`, else exit 2. `parent` is held by the child and names

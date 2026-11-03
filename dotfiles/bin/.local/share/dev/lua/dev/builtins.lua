@@ -261,6 +261,13 @@ return {
         desc = "Add labels to a card, L or +L, and remove them with --remove L",
     },
     {
+        words = { "board", "answer" },
+        handler = "lua",
+        flags = "--choice --quote",
+        usage = "dev board answer CARD --choice N --quote TEXT",
+        desc = "Record the owner's answer typed in this session on a needs:human card: a decision note with the choice and the quote, then the needs:human label removed, the column left alone",
+    },
+    {
         words = { "board", "outcome" },
         handler = "lua",
         flags = "--rename --tick --untick --delete --reason --convert --as",

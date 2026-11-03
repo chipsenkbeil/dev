@@ -235,6 +235,21 @@ t.test(
     end
 )
 
+t.test("answer posts the quote and frees a local needs:human card", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", "icebox" })))
+    local out, code = dev(root, home, { "board", "label", a, "needs:human" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "answer", a, "--choice", "2", "--quote", "go ahead" })
+    t.eq(code, 0, out)
+    t.eq(out, "answered " .. a .. " with choice 2\n")
+    out = dev(root, home, { "board", "show", a })
+    t.ok(out:find("Owner's answer, typed in this session: choice 2, quote: go ahead", 1, true), out)
+    t.ok(not out:find("needs:human", 1, true), out)
+    out, code = dev(root, home, { "board", "answer", a, "--choice", "2", "--quote", "again" })
+    t.eq(code, 1, out)
+end)
+
 t.test("next --column backlog skips a needs:human card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", "icebox" })))
