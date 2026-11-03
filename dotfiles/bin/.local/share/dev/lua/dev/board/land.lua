@@ -117,12 +117,20 @@ function M.checks_problem(comments, state, rows)
     if #rows == 0 then
         return "the card has no checks rows, so nothing proves the change"
     end
-    local latest
+    local latest, unreadable
     for _, comment in ipairs(comments) do
         local record = check.parse(comment.body)
         if record and record.commit == state.commit and record.mode == check.MODE.RUN then
-            latest = record
+            latest, unreadable = record, false
+        elseif not record and check.unreadable(comment.body) == state.commit then
+            latest, unreadable = nil, true
         end
+    end
+    if not latest and unreadable then
+        return string.format(
+            "a check record exists at commit %s but could not be read, so it proves nothing; run dev board check again",
+            M.short(state.commit)
+        )
     end
     if not latest then
         return string.format(

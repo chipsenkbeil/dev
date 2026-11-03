@@ -1269,7 +1269,10 @@ never handles the API.
     recorded at the commit that lands.
   - the newest `dev-check:` record with `mode=run` at the landing commit has a
     `pass` for every checks row, in the card's row order. A `mode=expect-fail`
-    record never counts.
+    record never counts. When the newest such record at the commit does not
+    parse, as with one written before rows carried run ids, `land` refuses it
+    as unreadable and says to run `dev board check` again, not that no record
+    exists.
   - the commit's parent is the current trunk, compared after
     `jj git fetch --remote <remote of record>`, with the remote taken from the
     forge settings (see `forge`). A failed fetch refuses. `land` rebases the

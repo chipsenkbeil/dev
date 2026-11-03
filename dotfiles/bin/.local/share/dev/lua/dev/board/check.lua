@@ -244,4 +244,14 @@ function M.parse(body)
     return { commit = commit, change = change, mode = mode, rows = rows }
 end
 
+---Read the commit of a comment that carries a record's head but does not parse.
+---@param body string the comment body
+---@return string? commit the full commit id, nil when the body has no record head or parses as a record
+function M.unreadable(body)
+    local prefix, commit = body:match("^(%S+) commit=(%x+)")
+    if prefix == board.CHECK_PREFIX and not M.parse(body) then
+        return commit
+    end
+end
+
 return M

@@ -181,6 +181,24 @@ t.test("checks_problem counts only the newest passing run at the commit", functi
     )
 end)
 
+t.test("checks_problem says a record it cannot read is unreadable, not missing", function()
+    local rows = { "dev lint", "dev test" }
+    local unreadable =
+        { body = checked(COMMIT, check.MODE.RUN, { "pass dev lint", "pass dev test" }).body }
+    local problem = land.checks_problem({ unreadable }, STATE, rows)
+    t.ok(problem:find("could not be read", 1, true), problem)
+    t.ok(problem:find(land.short(COMMIT), 1, true), problem)
+    t.ok(problem:find("run dev board check again", 1, true), problem)
+    t.eq(check.unreadable(unreadable.body), COMMIT)
+    local other = checked(OTHER, check.MODE.RUN, { "pass dev lint", "pass dev test" })
+    t.ok(land.checks_problem({ other }, STATE, rows):find("no run of dev board check", 1, true))
+    local pass = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "pass - dev test" })
+    t.eq(land.checks_problem({ unreadable, pass }, STATE, rows), nil)
+    t.ok(land.checks_problem({ pass, unreadable }, STATE, rows):find("could not be read", 1, true))
+    t.eq(check.unreadable(pass.body), nil)
+    t.eq(check.unreadable("a note"), nil)
+end)
+
 t.test("overlap names the landing paths a held check reads", function()
     local shared = { "Cargo.lock", "crates/physics" }
     t.eq(land.overlap({ "docs/a.md", "src/b.rs" }, { "src/c.rs" }, shared), {})
