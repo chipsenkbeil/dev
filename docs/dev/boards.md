@@ -1322,7 +1322,10 @@ never handles the API.
   card before, read from its `dev-claim:` notes, so a claim that lapsed does
   not free its holder to review. The message names the claimant and says a
   reviewer other than it must record the review. An unclaimed card takes any
-  NAME. It prints
+  NAME. The reviewer records its own review, only for a final CLEAN or MINOR
+  ISSUES verdict, so it is the recorder the board allowance for `review`
+  covers. A NEEDS WORK verdict records nothing: the reviewer notes the
+  findings and returns the card to Ready. It prints
   `recorded KIND review by NAME on <id prefix> at commit <12 characters>`. Like
   `check`, it is never queued: if the comment cannot be written the command
   exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
