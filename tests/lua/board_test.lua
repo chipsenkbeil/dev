@@ -1,3 +1,5 @@
+local ffi = require("ffi")
+
 local t = require("testing")
 local board = require("dev.board")
 local box = require("dev.cmd.box")
@@ -2258,14 +2260,79 @@ t.test("the claimant cannot delete an outcome under any name it is given", funct
     )
     t.eq(result.code, 1)
     t.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
-    t.ok(result.message:find("Pass the outcome back", 1, true), result.message)
-    t.eq(#backend.calls, 0)
+    t.ok(result.message:find("Pass the change back", 1, true), result.message)
+    for _, call in ipairs(backend.calls) do
+        t.eq(call[1], "comments")
+    end
     result = commands.run(
         "outcome",
         { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/b" },
         backend
     )
     t.eq(result.output, "outcome cccccccc 1 deleted")
+end)
+
+local function as_agent(name, run)
+    local previous = os.getenv("DEV_AGENT") or ""
+    ffi.C.setenv("DEV_AGENT", name, 1)
+    local ok, err = pcall(run)
+    ffi.C.setenv("DEV_AGENT", previous, 1)
+    assert(ok, err)
+end
+
+local function released_by(name, claimant)
+    local card = colored("green")
+    card.claimant = claimant
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    backend.listed = { { id = COMMENT_1, who = "human", body = board.claim_record(name) } }
+    return backend
+end
+
+t.test("a name that released the card cannot reclaim the finish line", function()
+    local released = "project-run/a"
+    local backend = released_by(released)
+    as_agent(released, function()
+        local runs = {
+            { "outcome", { "cccccccc", "A", "new", "outcome" } },
+            { "outcome", { "cccccccc", "--rename", "1", "New", "--reason", "x" } },
+            { "outcome", { "cccccccc", "--delete", "1", "--reason", "x" } },
+            { "checks", { "cccccccc", "dev test" } },
+            { "outcome", { "cccccccc", "--convert" } },
+        }
+        for _, run in ipairs(runs) do
+            local result = commands.run(run[1], run[2], backend)
+            t.eq(result.code, 1, run[2][2])
+            t.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
+        end
+    end)
+    for _, call in ipairs(backend.calls) do
+        t.eq(call[1], "comments")
+    end
+end)
+
+t.test("a name that never claimed the card and the lead can still change it", function()
+    local backend = released_by("project-run/a")
+    as_agent("project-run/b", function()
+        t.eq(commands.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
+    end)
+    as_agent("lead", function()
+        local result = commands.run(
+            "outcome",
+            { "cccccccc", "--rename", "1", "New", "--reason", "x" },
+            backend
+        )
+        t.eq(result.code, nil)
+    end)
+    backend = released_by("lead", "lead")
+    as_agent("lead", function()
+        local result = commands.run(
+            "outcome",
+            { "cccccccc", "--rename", "1", "New", "--reason", "x" },
+            backend
+        )
+        t.eq(result.code, nil)
+    end)
 end)
 
 t.test("review refuses the claimant for every kind and says a reviewer must record it", function()
@@ -2320,11 +2387,13 @@ t.test("convert refuses a claimant's ticks but moves an unticked checklist", fun
     local result =
         commands.run("outcome", { "cccccccc", "--convert", "--as", "project-run/a" }, backend)
     t.eq(result.code, 1)
-    t.eq(#backend.calls, 0)
+    for _, call in ipairs(backend.calls) do
+        t.eq(call[1], "comments")
+    end
     card.description = V1
     result = commands.run("outcome", { "cccccccc", "--convert" }, backend)
     t.ok(not (result.message or ""):find("claimed", 1, true), result.message)
-    t.eq(backend.calls[1][1], "add_outcome")
+    t.eq(backend.calls[#backend.calls][1], "add_outcome")
 end)
 
 t.test("outcome warns about a path in the text and still writes", function()

@@ -1970,19 +1970,35 @@ local function tick_refused(card, flag)
     return nil, ticker
 end
 
-local function claimant_refused(card, what, flag)
-    if not card.claimant then
+local function claimant_refused(backend, card, opts)
+    local names = {}
+    local given, env = opts.as, os.getenv("DEV_AGENT")
+    if given and given:find("/", 1, true) then
+        names[#names + 1] = given
+    end
+    if env and env:find("/", 1, true) then
+        names[#names + 1] = env
+    end
+    if #names == 0 then
         return nil
     end
-    for _, name in ipairs({ flag or "", os.getenv("DEV_AGENT") or "" }) do
-        if name == card.claimant then
+    local past, why = backend:comments(card.id)
+    if not past then
+        return failure(why)
+    end
+    local claimed = board.claimants(past)
+    for _, name in ipairs(names) do
+        if name == card.claimant or claimed[name] then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
-                    .. " is claimed by "
+                    .. (name == card.claimant and " is" or " was")
+                    .. " claimed by "
                     .. name
-                    .. ", so its claimant cannot "
-                    .. what
-                    .. " its outcomes. Pass the outcome back with a note instead"
+                    .. ", so "
+                    .. name
+                    .. " cannot "
+                    .. opts.what
+                    .. ". Pass the change back with a note instead"
             )
         end
     end
@@ -2117,6 +2133,11 @@ function commands.outcome(backend, args)
         if not card then
             return err
         end
+        local refused =
+            claimant_refused(backend, card, { what = "add its outcomes", as = ticker_flag })
+        if refused then
+            return refused
+        end
         local held = claims.read(card.id)
         return convert_outcomes(backend, card, { fence = held and held.fence, flag = ticker_flag })
     elseif not mode then
@@ -2166,8 +2187,9 @@ function commands.outcome(backend, args)
         return err
     end
     local ticker
-    if mode == OutcomeMode.RENAME or mode == OutcomeMode.DELETE then
-        local refused = claimant_refused(card, mode, ticker_flag)
+    if mode == OutcomeMode.ADD or mode == OutcomeMode.RENAME or mode == OutcomeMode.DELETE then
+        local refused =
+            claimant_refused(backend, card, { what = mode .. " its outcomes", as = ticker_flag })
         if refused then
             return refused
         end
@@ -2383,6 +2405,14 @@ function commands.checks(backend, args)
     local runs = {}
     for pos = 2, #args do
         runs[#runs + 1] = args[pos]
+    end
+    local found, err = find_card(backend, args[1])
+    if not found then
+        return err
+    end
+    local refused = claimant_refused(backend, found, { what = "change its checks" })
+    if refused then
+        return refused
     end
     local card, short = write_field(backend, args[1], board.CHECKS_FIELD, function(id, fence)
         return backend:set_checks(id, runs, fence)

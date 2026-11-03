@@ -559,14 +559,11 @@ tick keeps the name it resolved, so a later sync records the same ticker.
 up a number, and writes a decision note holding the deleted text and the
 reason, then prints `outcome <id prefix> N deleted`. A missing number or reason
 is exit 2. `--reason` is the one way to say why an outcome that was
-never achievable is deleted and not reworded. The card's claimant is refused
-`--delete` and `--rename` with exit 1 and nothing written: the refusal compares
-the claimant with `DEV_AGENT` and with any `--as` name, so renaming alone does not
-get past it, and the builder passes an invalid outcome back with a note
-instead. Pomb lets a Work token delete only an outcome that same token
-created. Any other outcome, whether made in the browser, by another token or
-stored with no token, gets 403 `permission_denied` naming `subtasks.delete`,
-and a token holding `subtasks.delete` deletes any. A locked card gets 403
+never achievable is deleted and not reworded. Pomb lets a Work token delete
+only an outcome that same token created. Any other outcome, whether made in
+the browser, by another token or stored with no token, gets 403
+`permission_denied` naming `subtasks.delete`, and a token holding
+`subtasks.delete` deletes any. A locked card gets 403
 `card_locked` for every token, and a column entry rule can refuse a delete that
 leaves the card worse. `--delete` prints Pomb's reason for each refusal, writes
 no note and changes nothing. A delete is never queued for a later sync, to keep
@@ -574,6 +571,17 @@ its number from pointing at a different outcome by then. dev never reorders an
 outcome. The
 claim's fence goes along when this machine holds one, and a local board keeps
 the same outcomes on the card.
+
+The card's claimant and every name in its claim history (the `dev-claim:`
+notes that `review` reads) are refused an outcome add, `--convert`,
+`--delete`, `--rename` and `dev board checks`, with exit 1 and nothing
+written. The builder passes a change back with a note instead, to stop a
+released runner from rewording the card and taking it back. The
+refusal compares the names with `DEV_AGENT` and, after `--delete` and
+`--convert`, with the `--as` name.
+`checks` reads `DEV_AGENT` only. The lead
+(a name with no `/`) and any name that never claimed the card may change
+outcomes and checks. A session with no `DEV_AGENT` is not checked.
 
 `outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
 appends one outcome per `- [ ]` or `- [x]` item, ticks the ticked ones, and only
@@ -1196,10 +1204,11 @@ never handles the API.
   `{"fields":{"dev.checks":[{"run":CMD},...]}}`, which Pomb merges by key
   so the sent rows replace the field's whole value, with the claim's fence when
   this machine holds one). A local board sets the card's `checks` under the same
-  fence rule. No command, a blank command, a missing card or an unknown option
-  word is exit 2 (so nobody clears the rows by accident, and no subcommand
-  clears them), and an unknown card is exit 1. A Pomb board with no checks field
-  is refused before any write with the message
+  fence rule. A name in the card's claim history is refused with exit 1 and
+  nothing written. No command, a blank command, a missing card or an unknown
+  option word is exit 2 (so nobody clears the rows by accident, and no
+  subcommand clears them), and an unknown card is exit 1. A Pomb board with no
+  checks field is refused before any write with the message
   `the board has no checks field, so run dev board init to add it`, as a move
   into Ready gives (exit 1). Sending the same rows twice changes nothing more,
   so `checks` is queued while Pomb is unreachable like `edit`, timeouts and 502,
