@@ -1290,10 +1290,11 @@ never handles the API.
     recorded at the commit that lands.
   - the newest `dev-check:` record with `mode=run` at the landing commit has a
     `pass` for every checks row, in the card's row order. A `mode=expect-fail`
-    record never counts. When the newest such record at the commit does not
-    parse, as with one written before rows carried run ids, `land` refuses it
-    as unreadable and says to run `dev board check` again, not that no record
-    exists.
+    record never counts, even when it does not parse. When the newest
+    `dev-check:` record at the commit does not parse and its mode is not
+    `expect-fail`, as with one written before rows carried run ids, `land`
+    refuses it as unreadable and says to run `dev board check` again, not
+    that no record exists.
   - the commit's parent is the current trunk, compared after
     `jj git fetch --remote <remote of record>`, with the remote taken from the
     forge settings (see `forge`). A failed fetch refuses. `land` rebases the
@@ -1374,10 +1375,11 @@ never handles the API.
 
   One case keeps a check and reviews across a rebase. When the landing commit
   lacks the reviews and has no `dev-check:` record of its own (one that does
-  not parse is its own, and `land` refuses it as unreadable), `land` looks for
-  the commits of the same change id with a passing run and their code and style
-  reviews (a recheck counts as above). It tries them newest first and carries
-  the records of the first one for which all of these hold:
+  not parse is its own, and `land` refuses one not marked `expect-fail` as
+  unreadable), `land` looks for the commits of the same change id with a
+  passing run and their code and style reviews (a recheck counts as above).
+  It tries them newest first and carries the records of the first one for
+  which all of these hold:
 
   - the commit's parent is the current trunk
   - the checked commit sat on one ancestor of that trunk

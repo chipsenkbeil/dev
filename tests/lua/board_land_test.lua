@@ -199,6 +199,19 @@ t.test("checks_problem says a record it cannot read is unreadable, not missing",
     t.eq(check.unreadable("a note"), nil)
 end)
 
+t.test("an unreadable expect-fail record never refuses a landing", function()
+    local rows = { "dev lint", "dev test" }
+    local pass = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "pass - dev test" })
+    local skipped = checked(COMMIT, check.MODE.EXPECT_FAIL, { "fail dev lint", "fail dev test" })
+    t.eq(check.unreadable(skipped.body), COMMIT)
+    t.eq(select(2, check.unreadable(skipped.body)), check.MODE.EXPECT_FAIL)
+    t.eq(land.checks_problem({ pass, skipped }, STATE, rows), nil)
+    t.eq(land.checks_problem({ skipped, pass }, STATE, rows), nil)
+    local unreadable = checked(COMMIT, check.MODE.RUN, { "pass dev lint", "pass dev test" })
+    t.ok(land.checks_problem({ pass, unreadable }, STATE, rows):find("could not be read", 1, true))
+    t.ok(land.checks_problem({ skipped }, STATE, rows):find("no run of dev board check", 1, true))
+end)
+
 t.test("overlap names the landing paths a held check reads", function()
     local shared = { "Cargo.lock", "crates/physics" }
     t.eq(land.overlap({ "docs/a.md", "src/b.rs" }, { "src/c.rs" }, shared), {})

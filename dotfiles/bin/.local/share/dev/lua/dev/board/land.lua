@@ -122,8 +122,11 @@ function M.checks_problem(comments, state, rows)
         local record = check.parse(comment.body)
         if record and record.commit == state.commit and record.mode == check.MODE.RUN then
             latest, unreadable = record, false
-        elseif not record and check.unreadable(comment.body) == state.commit then
-            latest, unreadable = nil, true
+        elseif not record then
+            local commit, mode = check.unreadable(comment.body)
+            if commit == state.commit and mode ~= check.MODE.EXPECT_FAIL then
+                latest, unreadable = nil, true
+            end
         end
     end
     if not latest and unreadable then
