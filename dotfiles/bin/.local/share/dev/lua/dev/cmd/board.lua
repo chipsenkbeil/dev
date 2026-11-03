@@ -609,7 +609,8 @@ function commands.ls(backend, args, _, screen)
 end
 
 function commands.next(backend, args)
-    local flags, words = parse(args, { ["--column"] = true, [runner.FLAG] = true })
+    local flags, words =
+        parse(args, { ["--column"] = true, ["--for"] = true, [runner.FLAG] = true })
     if not flags then
         return words
     end
@@ -641,8 +642,12 @@ function commands.next(backend, args)
         end
         column = named
     end
+    local asked = flags["--for"] and flags["--for"]:lower()
+    if asked and (column ~= roles.blocked or not board.BLOCKED_LABELS[asked]) then
+        return usage("next --for takes planner or lead, with --column Blocked")
+    end
     local card, message = backend:next(column, {
-        label = column == roles.blocked and board.NEEDS_LEAD or nil,
+        label = column == roles.blocked and board.BLOCKED_LABELS[asked or "lead"] or nil,
         max_size = limit,
     })
     if not card then
@@ -1902,6 +1907,64 @@ function commands.answer(backend, args)
         )
     end
     return { output = "answered " .. prefix .. " with choice " .. choice }
+end
+
+function commands.escalate(backend, args)
+    local words = {}
+    for index = 2, #args do
+        words[#words + 1] = args[index]
+    end
+    local why = table.concat(words, " ")
+    if #args < 2 or not why:find("%S") then
+        return usage("needs a card and the reason")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local prefix = card.id:sub(1, board.MIN_PREFIX)
+    local at = index_of(card.labels, board.NEEDS_PLANNER)
+    if not at then
+        return failure(
+            prefix .. " is not " .. board.NEEDS_PLANNER .. ", so there is nothing to escalate"
+        )
+    end
+    if board.reserved(why) then
+        return failure(RESERVED_NOTE)
+    end
+    local held = claims.read(card.id)
+    local fence = held and held.fence
+    local labels = {}
+    for index, label in ipairs(card.labels) do
+        if index ~= at then
+            labels[#labels + 1] = label
+        end
+    end
+    if not index_of(labels, board.NEEDS_LEAD) then
+        labels[#labels + 1] = board.NEEDS_LEAD
+    end
+    local ok, message = backend:note(card.id, why, fence, { kind = board.NoteKind.QUESTION })
+    if not ok then
+        return failure(message)
+    end
+    ok, message = backend:set_labels(card.id, labels, fence)
+    if not ok then
+        return unqueued(
+            failure(
+                "the note is posted on "
+                    .. prefix
+                    .. " but the label change failed: "
+                    .. message
+                    .. ", so run dev board label "
+                    .. prefix
+                    .. " "
+                    .. board.NEEDS_LEAD
+                    .. " --remove "
+                    .. board.NEEDS_PLANNER
+            )
+        )
+    end
+    return { output = "escalated " .. prefix .. " to " .. board.NEEDS_LEAD }
 end
 
 local OUTCOME_SAID = {
@@ -3620,12 +3683,15 @@ function commands.stale(backend, args, now)
     end
     now = now or os.time()
     local roles = backend.roles
-    local found, owner, moved, undated, unsized, lead, commented = {}, {}, {}, {}, {}, {}, {}
+    local found, owner, moved, undated, unsized, commented = {}, {}, {}, {}, {}, {}
+    local lead, planner = {}, {}
     for _, card in ipairs(cards) do
+        local asks = index_of(card.labels, board.NEEDS_LEAD) and lead
+            or index_of(card.labels, board.NEEDS_PLANNER) and planner
         if
             card.column == roles.blocked
             and not card.done
-            and index_of(card.labels, board.NEEDS_LEAD)
+            and asks
             and not index_of(card.labels, board.NEEDS_HUMAN)
         then
             local at = entered[card.id] and box.parse_time(entered[card.id])
@@ -3634,7 +3700,7 @@ function commands.stale(backend, args, now)
             else
                 local hours = math.floor((now - at) / box.SECONDS_PER_HOUR)
                 if hours >= lead_limit then
-                    lead[#lead + 1] = {
+                    asks[#asks + 1] = {
                         id = card.id,
                         column = card.column,
                         size = card.size,
@@ -3715,6 +3781,7 @@ function commands.stale(backend, args, now)
     table.sort(owner, oldest)
     table.sort(moved, oldest)
     table.sort(lead, oldest)
+    table.sort(planner, oldest)
     local listed = {}
     for _, list in ipairs({ found, moved }) do
         for _, item in ipairs(list) do
@@ -3744,6 +3811,11 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "for a lead (" .. board.NEEDS_LEAD .. "):"
         append(lines, stale_rows(lead))
+    end
+    if #planner > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "for a planner (" .. board.NEEDS_PLANNER .. "):"
+        append(lines, stale_rows(planner))
     end
     if #moved > 0 then
         lines[#lines + 1] = ""
@@ -4491,6 +4563,7 @@ local WaitFor = {
     READY = "ready",
     HUMAN = "human",
     LEAD = "lead",
+    PLANNER = "planner",
     REVIEW = "review",
     VERIFY = "verify",
     RELEASE = "release",
@@ -4508,6 +4581,7 @@ local WAIT_FOR_KINDS = {
     [WaitFor.HUMAN] = { EventKind.MOVED, EventKind.COMMENTED },
     [WaitFor.LEAD] = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED },
 }
+WAIT_FOR_KINDS[WaitFor.PLANNER] = WAIT_FOR_KINDS[WaitFor.LEAD]
 for stage in pairs(WaitFor.STAGES) do
     WAIT_FOR_KINDS[stage] = WAIT_FOR_KINDS[WaitFor.READY]
 end
@@ -4529,7 +4603,7 @@ local function read_cursor(path)
     return text ~= "" and text or nil
 end
 
-local function lead_cards(backend, roles)
+local function lead_cards(backend, roles, label)
     local cards, message = backend:cards()
     if not cards then
         return nil, message
@@ -4539,7 +4613,7 @@ local function lead_cards(backend, roles)
         if
             card.column == roles.blocked
             and not card.claimant
-            and index_of(card.labels, board.NEEDS_LEAD)
+            and index_of(card.labels, label)
             and not index_of(card.labels, board.NEEDS_HUMAN)
         then
             waiting[card.id] = true
@@ -4606,10 +4680,10 @@ local function wait_line(event, opts)
     local spoke = opts.spoke
     local id = event.task_id:sub(1, board.MIN_PREFIX)
     local added = event.kind == EventKind.ADDED
-    if only == WaitFor.LEAD then
+    if only == WaitFor.LEAD or only == WaitFor.PLANNER then
         if leads[event.task_id] then
             leads[event.task_id] = nil
-            return id .. " is labelled " .. board.NEEDS_LEAD .. " in " .. roles.blocked
+            return id .. " is labelled " .. board.BLOCKED_LABELS[only] .. " in " .. roles.blocked
         end
     elseif only == WaitFor.HUMAN then
         if
@@ -4679,7 +4753,7 @@ function M.wait(backend, args, opts)
         return usage(
             "unknown --for "
                 .. only
-                .. ", the choices are ready, review, verify, release, human and lead"
+                .. ", the choices are ready, review, verify, release, human, lead and planner"
         )
     end
     local roles = backend.roles or board.roles()
@@ -4717,9 +4791,9 @@ function M.wait(backend, args, opts)
                 return flush(failure("pomb answered without a cursor"))
             end
             local leads
-            if only == WaitFor.LEAD and #reply.events > 0 then
+            if board.BLOCKED_LABELS[only] and #reply.events > 0 then
                 local why
-                leads, why = lead_cards(backend, roles)
+                leads, why = lead_cards(backend, roles, board.BLOCKED_LABELS[only])
                 if not leads then
                     return failure(why)
                 end

@@ -185,8 +185,8 @@ What it lays out:
   colour, or has the colour that was the default when the run began (Pomb gave
   that to every card nobody coloured), the card takes the colour the word names.
   A card with any other colour keeps it.
-- Labels need nothing: `needs:lead` and `needs:human` are plain strings on a
-  card, and Pomb makes them when a card first carries one.
+- Labels need nothing: `needs:planner`, `needs:lead` and `needs:human` are
+  plain strings on a card, and Pomb makes them when a card first carries one.
 
 The board's name comes from `[board]`. In a project with no `[board]` section,
 `--name N` names the board and `init` appends the section to `.dev/config.toml`
@@ -301,12 +301,22 @@ Every card in every column is fair game for an agent unless it is labelled
   role. A claim means the role is working it.
 - Blocked: waiting on an answer.
   - `needs:human` is yours alone.
+  - `needs:planner` is for a planner. An implementer or reviewer who doubts a
+    card's plan, an outcome above all, writes why in a question note and labels
+    the card, and never rewords or deletes the outcome. A planner who did not
+    build the card finds it with `dev board next --column blocked --for
+    planner`, parks on `timeout 86400 dev board wait --for planner`, moves it to
+    Backlog and keeps, rewords or deletes the outcome there, then moves it back
+    to Ready. The agent that writes the outcomes never ticks them, a verifier
+    does. A planner who cannot settle it runs `dev board escalate CARD TEXT`,
+    which becomes `needs:lead`.
   - `needs:lead` is for a higher-tier agent, which answers and moves the card
     out.
   - A lead finds one with `dev board next --column blocked`, takes it before
     any Ready card, and parks on `timeout 86400 dev board wait --for lead`.
   - A lead that cannot answer adds `needs:human`, removes `needs:lead` and
-    leaves the card in Blocked for you.
+    leaves the card in Blocked for you. The chain is `needs:planner`,
+    `needs:lead`, `needs:human`.
 - Done: on main (and live where the project deploys), answered, or
   dropped with a note.
 
@@ -383,7 +393,8 @@ A local board has no owner comments, so it always counts 0 as the owner's.
 `next --column backlog`, `icebox`, `review`, `verify` and `release` take the top
 such card of those columns instead, or print `no cards in <column>`.
 `next --column blocked` prints the top unclaimed card labelled `needs:lead`,
-never one that also carries `needs:human`, or `no cards in Blocked`. Any other
+never one that also carries `needs:human`, or `no cards in Blocked`, and with
+`--for planner` the top such card labelled `needs:planner`. Any other
 column is exit 2.
 
 `add` puts a card in Backlog unless `--column` names another column, and writes
@@ -600,8 +611,8 @@ label list on a change, so `label` reads the current labels, applies the edits
 and sends the full list, with the claim's fence when this machine holds one.
 Adding a label the card has, or removing one it lacks, changes nothing and sends
 nothing. A label is one word with no spaces and no leading `-`, and anything
-else is a usage error (exit 2). The escalation labels `needs:lead` and
-`needs:human` are plain labels to dev. Two agents editing the same card's labels
+else is a usage error (exit 2). The escalation labels `needs:planner`,
+`needs:lead` and `needs:human` are plain labels to dev. Two agents editing the same card's labels
 at the same moment can lose one edit, because pomb has no add or remove call and
 takes the whole list.
 
@@ -659,7 +670,8 @@ is stale it prints `no stale cards`. A `--days` that is not a whole number of 1
 or more is a usage error (exit 2). Every card labelled `needs:lead` (and not
 `needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
 default) is listed apart under `for a lead (needs:lead):`, with its time as
-`<hours>h`. Every card that is unsized (white or no colour), in any column but
+`<hours>h`. A card labelled `needs:planner` in Blocked for as long is listed the
+same way under `for a planner (needs:planner):`. Every card that is unsized (white or no colour), in any column but
 Icebox, is also listed at any age, apart, under `unsized outside Icebox:` with
 its id prefix, column and name, so a planner sees what still needs a size. Last,
 under `icebox, untouched for N days:`, it lists the Icebox cards nobody has
@@ -795,6 +807,7 @@ background under `timeout`, and its exit wakes the session:
 timeout 86400 dev board wait --for ready
 timeout 86400 dev board wait --for human
 timeout 86400 dev board wait --for lead
+timeout 86400 dev board wait --for planner
 ```
 
 `--for ready` wakes on a card added to Ready or moved into it and prints `added
@@ -810,8 +823,9 @@ long, to catch a second reply, then prints one line per card the owner touched,
 not one per comment. The woken agent reads every comment with `dev board show`.
 `--for lead` wakes on a card added, moved or updated that is now in Blocked with
 the `needs:lead` label, no claim and without `needs:human`, and prints `<id
-prefix> is labelled needs:lead in Blocked`. Pomb's events carry no labels, so it
-reads the board for each batch of events. With no `--for`, every added card,
+prefix> is labelled needs:lead in Blocked`. `--for planner` does the same for
+`needs:planner` and prints `<id prefix> is labelled needs:planner in Blocked`.
+Pomb's events carry no labels, so it reads the board for each batch of events. With no `--for`, every added card,
 move, update and comment wakes it. Any other `--for` value is a usage error, and
 a local board is `dev: a local board has nothing to wait on` (exit 1).
 `wait` is never queued.
@@ -920,13 +934,14 @@ never handles the API.
   under a bold column heading with a dim `N cards`, and a dim line saying Done
   is left out unless `--column done`. Piped, with `NO_COLOR` or with `TERM=dumb`
   the output is the plain lines above and `--group` changes nothing.
-- `next [--column C] [--max-size N]`: The top Ready card that is unclaimed, not
+- `next [--column C] [--for planner|lead] [--max-size N]`: The top Ready card that is unclaimed, not
   blocked and not labelled `needs:human` or `run`, in the `ls` format followed
   by `N comments, M the owner's` (`1 comment` for one), else `no ready cards`
   (exit 0). Comments that cannot be read are exit 1. `--column backlog`,
   `icebox`, `review`, `verify` or `release` takes the top such card of that
   column instead, else `no cards in <column>` (exit 0). `--column blocked` takes
-  the top unclaimed card labelled `needs:lead`, never one labelled `needs:human`
+  the top unclaimed card labelled `needs:lead`, or with `--for planner`
+  `needs:planner`, never one labelled `needs:human`
   and, like every `next`, never one that a card outside Done blocks. Any other
   column is exit 2. `--max-size N` (1, 2 or 3, else exit 2), or `DEV_MAX_SIZE`
   when the flag is absent, skips a card bigger than N Pomodori to keep a small
@@ -1021,6 +1036,14 @@ never handles the API.
   (`<id prefix> is in <column>, and needs:human lives only in Blocked or Icebox; move it there first`,
   exit 1, on both backends and on a queued replay); removing it is allowed in
   any column.
+- `escalate CARD TEXT`: Hands a `needs:planner` card up. It posts TEXT as a
+  question note, then replaces `needs:planner` with `needs:lead` in the
+  card's labels, both with the claim's fence when this machine holds one, and
+  prints `escalated <id prefix> to needs:lead`. The column stays. A card
+  without `needs:planner` and an empty TEXT are refused before anything is
+  written (exit 1 for the card, exit 2 for the text). A label change that
+  fails after the note is exit 1 and prints the `dev board label` command
+  that finishes it.
 - `answer CARD --choice N --quote TEXT`: Records the owner's answer, typed
   in this session, on a `needs:human` card. It removes `needs:human`
   from the card's labels (the other labels and the column stay), then posts
@@ -1797,12 +1820,13 @@ left of the window as its timeout, a match restarts the window, and an empty
 reply or an elapsed window ends it with one line per card. `--for lead` sends
 `task_added,task_moved,task_updated` and, for each reply with events, reads
 `Backend:cards` and matches an event whose card is in Blocked with `needs:lead`
+(`--for planner`, which sends the same kinds, `needs:planner`)
 and no `needs:human` (`<id prefix> is labelled needs:lead in Blocked`, once per
 card per reply), and with no `--for` all four kinds match (`added <id> to
 <column>`, `moved <id> to <column>`, `updated <id>`, `commented on <id>`). An
 unknown `--for`, a card argument or another flag is exit 2, and a local board is
 `dev: a local board has nothing to wait on` (exit 1). The cursor is `<state
-home>/dev/boards/<name>.<ready|review|verify|release|human|lead|all>.cursor`,
+home>/dev/boards/<name>.<ready|review|verify|release|human|lead|planner|all>.cursor`,
 one per `--for` mode so a filtered wait never consumes another mode's events
 (the name with every character outside `A-Za-z0-9._-` turned into `_`) at mode
 600, written after every reply, and with no file the first call asks without a

@@ -165,6 +165,12 @@ M.NEEDS_HUMAN = "needs:human"
 ---The label of a card that waits on a higher tier.
 M.NEEDS_LEAD = "needs:lead"
 
+---The label of a card whose plan a planner must check, which escalates to `needs:lead`.
+M.NEEDS_PLANNER = "needs:planner"
+
+---The Blocked escalation label that each `--for` word of `next` and `wait` matches.
+M.BLOCKED_LABELS = { planner = M.NEEDS_PLANNER, lead = M.NEEDS_LEAD }
+
 ---The label `discard` puts on a card it drops, which a Done card may carry unticked.
 M.DISCARDED = "discarded"
 

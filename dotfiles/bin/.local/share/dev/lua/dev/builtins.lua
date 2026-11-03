@@ -242,9 +242,9 @@ return {
     {
         words = { "board", "next" },
         handler = "lua",
-        flags = "--column --max-size",
-        usage = "dev board next [--column C] [--max-size N]",
-        desc = "Show the top Ready card nobody has claimed, nothing blocks and no needs:human label marks, or with --column Backlog, Icebox, Review, Verify or Release the top such card there, or with --column Blocked the top unclaimed needs:lead card",
+        flags = "--column --for --max-size",
+        usage = "dev board next [--column C] [--for planner|lead] [--max-size N]",
+        desc = "Show the top Ready card nobody has claimed, nothing blocks and no needs:human label marks, or with --column Backlog, Icebox, Review, Verify or Release the top such card there, or with --column Blocked the top unclaimed needs:lead card, or needs:planner card with --for planner",
     },
     {
         words = { "board", "add" },
@@ -266,6 +266,12 @@ return {
         flags = "--choice --quote",
         usage = "dev board answer CARD --choice N --quote TEXT",
         desc = "Record the owner's answer typed in this session on a needs:human card: a decision note with the choice and the quote, then the needs:human label removed, the column left alone",
+    },
+    {
+        words = { "board", "escalate" },
+        handler = "lua",
+        usage = "dev board escalate CARD TEXT",
+        desc = "Hand a needs:planner card up to a lead: a question note with the reason, then the needs:planner label swapped for needs:lead, the column left alone",
     },
     {
         words = { "board", "outcome" },
@@ -413,7 +419,7 @@ return {
         handler = "lua",
         flags = "--days --icebox-days --lead-hours",
         usage = "dev board stale [--days N] [--icebox-days N] [--lead-hours N]",
-        desc = "List the cards that sat in Backlog, Ready, In Progress, Review, Verify or Release for N days (7 by default), oldest first, the needs:human ones apart, the other cards whose newest comment is the owner's apart, the needs:lead cards in Blocked for --lead-hours (1 by default), and the Icebox cards untouched for --icebox-days (30 by default)",
+        desc = "List the cards that sat in Backlog, Ready, In Progress, Review, Verify or Release for N days (7 by default), oldest first, the needs:human ones apart, the other cards whose newest comment is the owner's apart, the needs:lead and needs:planner cards in Blocked for --lead-hours (1 by default), and the Icebox cards untouched for --icebox-days (30 by default)",
     },
     {
         words = { "board", "lint" },
@@ -452,8 +458,8 @@ return {
         words = { "board", "wait" },
         handler = "lua",
         flags = "--for",
-        usage = "dev board wait [--for ready|review|verify|release|human|lead]",
-        desc = "Block until the board changes, then print a line per change and exit 0 to wake a background run: --for ready, review, verify or release an unclaimed card added to or moved into that column, --for human a card moved out of Blocked or one the owner comments on, once he is quiet for 60 seconds, --for lead a needs:lead card in Blocked",
+        usage = "dev board wait [--for ready|review|verify|release|human|lead|planner]",
+        desc = "Block until the board changes, then print a line per change and exit 0 to wake a background run: --for ready, review, verify or release an unclaimed card added to or moved into that column, --for human a card moved out of Blocked or one the owner comments on, once he is quiet for 60 seconds, --for lead a needs:lead card, --for planner a needs:planner card in Blocked",
     },
     {
         words = { "bootstrap" },
