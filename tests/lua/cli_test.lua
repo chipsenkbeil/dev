@@ -367,19 +367,25 @@ end)
 t.test("dev help over a tree deeper than the project search returns within its bound", function()
     local bound_secs = 10
     local levels = 8
+    local lua_level = 6
     local root = project({})
     local deep = root
+    local lua_dir
     for level = 1, levels do
         deep = deep .. "/level" .. level
+        if level == lua_level then
+            lua_dir = deep
+        end
     end
     assert(fs.mkdir(deep, { parents = true }))
+    assert(fs.write(lua_dir .. "/below_the_cap.lua", "return {}\n"))
     local out, code = devos.capture_timed({ "luajit", MAIN, "help" }, bound_secs, {
         cwd = deep,
         merge = true,
         env = { CI = "", DEV_REMOTE = "0" },
     })
     t.eq(code, 0)
-    t.ok(out:find("project at", 1, true), out)
+    t.ok(out:find("dev: project at", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
 
