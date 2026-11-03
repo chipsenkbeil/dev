@@ -910,6 +910,22 @@ if has_jj then
         refused(root, home, log, id, { "no run of dev board check is recorded" })
     end)
 
+    t.test("land does not carry over an unreadable record at the rebased commit", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local record = "dev-check: commit=" .. head(root) .. " change=chg mode=run\n1 pass dev lint"
+        local backend, restore = board_at(home)
+        for _, card in ipairs(assert(backend:cards())) do
+            if card.id:sub(1, #id) == id then
+                assert(backend:note(card.id, record))
+            end
+        end
+        restore()
+        refused(root, home, log, id, { "could not be read", "run dev board check again" })
+    end)
+
     t.test("land refuses a rebase past a commit that touches the change's file", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)

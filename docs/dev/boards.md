@@ -1356,7 +1356,8 @@ never handles the API.
   `take` uses.
 
   One case keeps a check and reviews across a rebase. When the landing commit
-  lacks the reviews and has no `dev-check:` record of its own, `land` looks for
+  lacks the reviews and has no `dev-check:` record of its own (one that does
+  not parse is its own, and `land` refuses it as unreadable), `land` looks for
   the commits of the same change id with a passing run and their code and style
   reviews (a recheck counts as above). It tries them newest first and carries
   the records of the first one for which all of these hold:

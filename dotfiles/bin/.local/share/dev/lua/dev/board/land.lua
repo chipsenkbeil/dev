@@ -476,7 +476,7 @@ end
 ---The checked commits are those of the change with a passing run and their reviews. They are tried
 ---newest first, the first that passes every test carries, and a refusal names the newest one's
 ---reason, unless a jj read fails, which refuses at once naming that read. A commit with a check
----record of its own never carries.
+---record of its own, readable or not, never carries.
 ---@param opts dev.board.land.Opts the project, the card's records and the landing commit
 ---@return string? commit the checked commit the records carry over from
 ---@return string? problem why it is refused, nil when it carries or no commit was checked
@@ -484,7 +484,10 @@ function M.carry(opts)
     local root, comments, state, rows = opts.root, opts.comments, opts.state, opts.rows
     for _, comment in ipairs(comments) do
         local own = check.parse(comment.body)
-        if own and own.commit == state.commit then
+        if
+            (own and own.commit == state.commit)
+            or check.unreadable(comment.body) == state.commit
+        then
             return nil
         end
     end
