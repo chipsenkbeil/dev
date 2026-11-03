@@ -34,8 +34,10 @@ cat >"$STUBS/ci" <<'STUB'
 sub=$2
 if [ "$1" = connect ]; then
     sub=connect.$2
-    if [ "$2" = ls ] && [ ! -f "$FX/$sub.json" ]; then
-        echo '{"protocol":1,"connectables":[],"notes":[]}'
+elif [ "$1" = ssh ] && [ "$2" = ls ]; then
+    sub=ssh.ls
+    if [ ! -f "$FX/$sub.json" ]; then
+        echo '{"protocol":1,"things":[],"notes":[]}'
         exit 0
     fi
 fi
@@ -471,7 +473,7 @@ reset
 fx ls "$(lsdoc "$RUNNING")"
 box box connect myproject-k3x --ssh
 assert_eq "--ssh runs ssh" "$(calls)" "ci box ls --json
-ci box ssh myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+ci ssh myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
 reset
 fx ls "$(lsdoc "$KEPT")"
 box connect scratch-a1b --ssh
@@ -499,7 +501,7 @@ fi
 out="$(cd "$NOPROJ" && PATH="$TMP/noet" "$DEV" connect myproject-k3x 2>&1)"
 assert_contains "a missing et warns once" "$out" "et not found, using ssh"
 assert_eq "a missing et falls back to ssh" "$(calls)" "ci box ls --json
-ci box ssh myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
+ci ssh myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
 reset
 fx ls "$(lsdoc "$CREATING")"
 out="$(box connect new-111 2>&1)"
@@ -527,7 +529,7 @@ ci-abc	ci-abc	stopped	$TARGET	ci,dotfiles	$STOP_LEFT
 __new__	new box for myproject"
 assert_eq "picking a box attaches to it" "$(calls)" "ci box ls --json
 ci connect sync
-ci connect ls --json
+ci ssh ls --json
 ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
 reset
@@ -542,7 +544,7 @@ fx shapes "$SHAPES_DOC"
 out="$(FAKE_TTY=1 FAKE_PICK="__new__ $TARGET medium" inproj connect)"
 assert_eq "the new-box item runs the create pickers, creates for the project then attaches" "$(calls)" "ci box ls --json
 ci connect sync
-ci connect ls --json
+ci ssh ls --json
 ci box targets --json
 ci box shapes --json
 ci box shapes --target $TARGET --json
@@ -563,45 +565,45 @@ FAKE_TTY=1 FAKE_PICK=CANCEL box connect >/dev/null 2>&1
 assert_eq "cancelling the picker exits 1" "$?" "1"
 assert_eq "cancelling the picker calls ci only for the lists" "$(calls)" "ci box ls --json
 ci connect sync
-ci connect ls --json"
-CONNECTABLES='{"protocol":1,"connectables":[{"name":"host-a","machine":"host-a","kind":"host","address":"10.0.0.5","user":"chip","state":"running"},{"name":"scratch-vm","machine":"example-box","kind":"incus","address":"10.0.0.9","user":"dev","state":"stopped"}],"notes":[]}'
+ci ssh ls --json"
+CONNECTABLES='{"protocol":1,"things":[{"name":"myproject-k3x","machine":"example-box","kind":"box","address":"10.0.0.3","user":"dev","state":"running"},{"name":"s-1","machine":"example-box","kind":"session","address":"10.0.0.4","user":"dev","state":"running"},{"name":"host-a","machine":"host-a","kind":"host","address":"10.0.0.5","user":"chip","state":"running"},{"name":"scratch-vm","machine":"example-box","kind":"host","address":"10.0.0.9","user":"dev","state":"stopped"}],"notes":[]}'
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx connect.ls "$CONNECTABLES"
+fx ssh.ls "$CONNECTABLES"
 FAKE_TTY=1 FAKE_PICK=host-a box connect
 assert_eq "the picker lists the connectables after the boxes, with their kind" "$(cat "$ITEMS")" "picker title=Connect to a box auto=true
 myproject-k3x	myproject-k3x	running	$TARGET	myproject	$RUN_LEFT
 host-a	host-a	running	host	host-a	chip
-scratch-vm	scratch-vm	stopped	incus	example-box	dev"
+scratch-vm	scratch-vm	stopped	host	example-box	dev"
 assert_eq "picking a connectable syncs, lists and runs ssh ci-NAME" "$(calls)" "ci box ls --json
 ci connect sync
-ci connect ls --json
+ci ssh ls --json
 ssh ci-host-a"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx connect.ls "$CONNECTABLES"
+fx ssh.ls "$CONNECTABLES"
 box connect scratch-vm
 assert_eq "a named connectable runs ssh ci-NAME" "$(calls)" "ci box ls --json
 ci connect sync
-ci connect ls --json
+ci ssh ls --json
 ssh ci-scratch-vm"
 reset
 fx ls "$(lsdoc)"
-fx connect.ls "$CONNECTABLES"
+fx ssh.ls "$CONNECTABLES"
 FAKE_TTY=1 FAKE_PICK=host-a box connect
 assert_eq "connectables alone fill the picker when there are no boxes" "$(calls)" "ci box ls --json
 ci connect sync
-ci connect ls --json
+ci ssh ls --json
 ssh ci-host-a"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx connect.ls "$CONNECTABLES"
+fx ssh.ls "$CONNECTABLES"
 out="$(box connect nope 2>&1)"
 assert_eq "an unknown name among connectables exits 3" "$?" "3"
 assert_not_contains "no ssh for an unknown name" "$(calls)" "ssh ci-"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx connect.ls '{"protocol":1,"connectables":[{"name":"-oProxyCommand=x","machine":"m","kind":"host","user":"u","state":"running"},{"name":"ok-vm","machine":"m","kind":"host","user":"u","state":"running"}],"notes":["example-box is unreachable"]}'
+fx ssh.ls '{"protocol":1,"things":[{"name":"-oProxyCommand=x","machine":"m","kind":"host","user":"u","state":"running"},{"name":"ok-vm","machine":"m","kind":"host","user":"u","state":"running"}],"notes":["example-box is unreachable"]}'
 out="$(FAKE_TTY=1 FAKE_PICK=ok-vm box connect 2>&1)"
 assert_not_contains "a connectable with a bad name is not offered" "$(cat "$ITEMS")" "ProxyCommand"
 assert_contains "a bad connectable name is reported" "$out" "skipping a connectable with an invalid name"
@@ -615,10 +617,20 @@ assert_eq "an old ci without connect still connects a box" "$(calls)" "ci box ls
 ci connect sync
 ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
-assert_eq "an old ci gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no connect command, listing boxes only')" "1"
+assert_eq "an old ci gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx connect.ls '{"ok":false,"error":{"message":"hub unreachable"}}' 5
+fx ssh.ls "error: unrecognized subcommand 'ssh'" 2
+out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
+assert_eq "a ci with connect but no ssh lists boxes only" "$(calls)" "ci box ls --json
+ci connect sync
+ci ssh ls --json
+ci box show myproject-k3x --json
+et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
+assert_eq "a ci with no ssh gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
+reset
+fx ls "$(lsdoc "$RUNNING")"
+fx ssh.ls 'hub unreachable' 1
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
 assert_eq "a failing ci connect still lets the picker attach a box" "$?" "0"
 assert_contains "a failing ci connect prints ci's message" "$out" "dev connect: hub unreachable"
@@ -626,9 +638,9 @@ assert_contains "a failing ci connect still offers the boxes" "$(cat "$ITEMS")" 
 assert_contains "the box attaches over et" "$(calls)" "et --ssh-option"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx connect.ls '{"ok":false,"error":{"message":"hub unreachable"}}' 5
+fx ssh.ls 'hub unreachable' 1
 out="$(box connect host-a 2>&1)"
-assert_eq "a named non-box keeps ci's code when ci connect fails" "$?" "5"
+assert_eq "a named non-box keeps ci's code when ci connect fails" "$?" "1"
 assert_contains "a named non-box prints ci's message" "$out" "dev connect: hub unreachable"
 reset
 out="$(box connect __new__ 2>&1)"
@@ -658,7 +670,7 @@ reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
 box connect myproject-k3x --ssh
 assert_eq "ssh starts tmux in the first project's path" "$(calls)" "ci box ls --json
-ci box ssh myproject-k3x -- tmux new -A -s myproject -c /srv/projects/dotfiles"
+ci ssh myproject-k3x -- tmux new -A -s myproject -c /srv/projects/dotfiles"
 LONG65="$(printf '%065d' 0 | tr 0 a)"
 for bad in '/srv/projects/x; rm -rf ~' '/srv' '/home/user/projects' '/home/user/projects/myproject' '/srv/projects/a/b' "/srv/projects/\$(id)" '/srv/projects/.hidden' '/srv/projects/-x' '/srv/projects/..' "/srv/projects/$LONG65"; do
     reset

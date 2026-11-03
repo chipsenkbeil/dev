@@ -21,7 +21,7 @@ local NO_CONNECT = 2
 local M = { handlers = {} }
 
 ---@class dev.cmd.connect.AttachOpts
----@field ssh boolean whether to go through `ci box ssh` instead of `et`
+---@field ssh boolean whether to go through `ci ssh` instead of `et`
 
 ---Say why connecting stops, in the voice of `dev box connect`.
 ---@param message string what is wrong
@@ -118,7 +118,7 @@ local function checked(name, field, value, valid)
     return value
 end
 
----Attach to a running box, over `et` or over `ci box ssh`.
+---Attach to a running box, over `et` or over `ci ssh`.
 ---@param found dev.cmd.box.Box the box to attach to
 ---@param opts dev.cmd.connect.AttachOpts how to attach
 ---@return integer code the exit code of a hand-off that could not start
@@ -152,7 +152,6 @@ local function attach(found, opts)
         end
         return exec({
             "ci",
-            "box",
             "ssh",
             name,
             "--",
@@ -198,14 +197,14 @@ end
 ---@class dev.cmd.connect.Connectable
 ---@field name string what `ssh <alias>` reaches, the alias being the name or `ci-<name>`
 ---@field machine string? the machine it runs on
----@field kind string? what it is, such as `incus`, `tart` or `host`
+---@field kind string? what it is, always `host` for the rows dev keeps
 ---@field user string? the login name
 ---@field state string? what ci says it is doing
 
 ---@class dev.cmd.connect.ConnectablesOpts
 ---@field strict boolean whether a failure must end the run
 
----Print what ci said when `ci connect` failed, as one line.
+---Print what ci said when `ci connect` or `ci ssh` failed, as one line.
 ---@param raw string ci's output
 local function connect_failed(raw)
     local out = raw:gsub("\n+$", "")
@@ -234,9 +233,9 @@ local function plain(text)
     return (text:gsub("[^\32-\126]", " "))
 end
 
----Sync ci's ssh_config and list what it can reach apart from boxes.
+---Sync ci's ssh_config and list the hosts of `ci ssh ls`, apart from boxes and sessions.
 ---
----A ci with no `connect` exits 2, which shows boxes only, with one note.
+---A ci with no `ssh` exits 2, which shows boxes only, with one note.
 ---Any other failure prints ci's message as one line, then ends the run with
 ---ci's code when `strict` is set and lists boxes only otherwise.
 ---@param opts dev.cmd.connect.ConnectablesOpts how to treat a failure
@@ -244,10 +243,10 @@ end
 local function connectables(opts)
     local raw, code = devos.capture({ "ci", "connect", "sync" })
     if code == 0 then
-        raw, code = devos.capture({ "ci", "connect", "ls", "--json" })
+        raw, code = devos.capture({ "ci", "ssh", "ls", "--json" })
     end
     if code == NO_CONNECT then
-        stderr:write("dev connect: this ci has no connect command, listing boxes only\n")
+        stderr:write("dev connect: this ci has no ssh command, listing boxes only\n")
         return {}
     end
     if code ~= 0 then
@@ -259,7 +258,7 @@ local function connectables(opts)
     end
     local doc = json.decode((raw:gsub("\n+$", "")))
     if type(doc) ~= "table" then
-        verb.die("dev: ci connect ls printed no document")
+        verb.die("dev: ci ssh ls printed no document")
     end
     for _, note in ipairs(type(doc.notes) == "table" and doc.notes or {}) do
         if type(note) == "string" then
@@ -267,11 +266,13 @@ local function connectables(opts)
         end
     end
     local found = {}
-    for _, entry in ipairs(type(doc.connectables) == "table" and doc.connectables or {}) do
-        if type(entry) == "table" and safe_name(entry.name) then
-            found[#found + 1] = entry
-        else
-            stderr:write("dev connect: skipping a connectable with an invalid name\n")
+    for _, entry in ipairs(type(doc.things) == "table" and doc.things or {}) do
+        if type(entry) == "table" and entry.kind == "host" then
+            if safe_name(entry.name) then
+                found[#found + 1] = entry
+            else
+                stderr:write("dev connect: skipping a connectable with an invalid name\n")
+            end
         end
     end
     return found
