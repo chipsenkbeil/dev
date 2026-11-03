@@ -553,6 +553,19 @@ function Backend:cards()
     return cards
 end
 
+function Backend:card(id)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local task
+    task, message = self:__request("GET", "/api/tasks/" .. id)
+    if not task then
+        return nil, message
+    end
+    return self:__card(task)
+end
+
 function Backend:entered()
     local ok, message = self:__load()
     if not ok then

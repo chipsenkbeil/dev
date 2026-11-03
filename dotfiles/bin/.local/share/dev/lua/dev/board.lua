@@ -50,6 +50,7 @@ local M = {}
 ---@field done_columns fun(self: dev.board.Backend): string[]?, string? the names of the columns marked finished, in board order, or nil and a message
 ---@field column_map table<string, string>? the `[board.columns]` map the runner resolves into `roles`
 ---@field roles dev.board.Roles? the column set of this run, which the runner sets before a command
+---@field card fun(self: dev.board.Backend, id: string): dev.board.Card?, string? the card with that id, or nil and a message
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
 ---@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board defines the custom field with that key, or nil and a message
 ---@field next fun(self: dev.board.Backend, column: string, opts: dev.board.NextOpts?): dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human, or nil and a message when it failed

@@ -1284,7 +1284,7 @@ never handles the API.
   `land` lists its own change's files and, for each live hold of another card,
   refuses when one of them is a file of the held commit or is, or lies under,
   a shared path. It waits for such a hold before it asks for the turn,
-  polling every 5 seconds for up to `--wait` seconds.
+  polling for up to `--wait` seconds.
 
   The wait never keeps the turn from a landing that touches none of those
   paths, and the wait for the turn that follows has its own `--wait`. A
@@ -1309,9 +1309,17 @@ never handles the API.
 
   A card in the wrong column, with an open outcome or claimed by another
   agent is refused before the turn is asked for. `land` then asks for the
-  turn every 5 seconds for up to `--wait` seconds (300 by default, up to
-  86400, a whole number) and, when it stays taken, refuses with
+  turn for up to `--wait` seconds (300 by default, up to 86400, a whole number)
+  and, when it stays taken, refuses with
   `the landing turn is held by NAME since STAMP`.
+
+  After its first look, a waiting poll reads only the turn card and its
+  comments. It reads the card list again only when the turn card cannot be read
+  or has ended, or when it wins the claim.
+
+  It sleeps 5 seconds, then 1.5 times longer after each poll that sees the same
+  place in line and holder, up to 30 seconds. A change in either starts over at
+  5 seconds. Each sleep is shortened by up to 20% at random.
 
   Cards wait in the order they asked. A card with a wait writes a
   `dev-turn: ask` note with the time its wait ends before it asks for the
@@ -1388,9 +1396,9 @@ never handles the API.
   turn for CARD and keeps it across the rebase, the reviews and the check, so
   `land` lands under it and no other landing moves trunk meanwhile. It needs
   `DEV_AGENT` (exit 2 without it) and takes the turn as `land` does, but fails
-  fast: it asks once unless `--wait` gives seconds to keep asking every 5
-  seconds, and, when the turn stays taken, refuses with `the landing turn is held by NAME since STAMP`. A
-  hold is longer than a landing's 900 second lease: `--hold` sets its lease,
+  fast: it asks once unless `--wait` gives seconds to keep asking, and, when the
+  turn stays taken, refuses with `the landing turn is held by NAME since STAMP`.
+  A hold is longer than a landing's 900 second lease: `--hold` sets its lease,
   3600 seconds by default and 7200 at most (a whole number, exit 2 otherwise),
   so a check of 15 to 60 minutes fits. `check` does not renew the lease while
   it runs. Running `turn CARD` again as the holder renews the lease for

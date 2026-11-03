@@ -1,6 +1,7 @@
 local ffi = require("ffi")
 
 local t = require("testing")
+local board = require("dev.board")
 local fs = require("dev.fs")
 local localboard = require("dev.board.localboard")
 local store = require("dev.board.store")
@@ -267,4 +268,102 @@ t.test("extending a hold records the new lease for the next command", function()
     t.eq(found.lease, 1800)
     t.eq(found.taken, first.taken)
     t.eq(assert(turn.holder(backend)).since, first.taken)
+end)
+
+t.test("a waiting poll reads the turn card and its comments and never the card list", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local _, _, first = turn.take(backend, "beta", "bbbb2222")
+    local listed, single = 0, 0
+    local cards, card = backend.cards, backend.card
+    function backend:cards()
+        listed = listed + 1
+        return cards(self)
+    end
+    function backend:card(id)
+        single = single + 1
+        return card(self, id)
+    end
+    for _ = 1, 3 do
+        local taken, message, place = turn.take(backend, "beta", "bbbb2222")
+        t.eq(taken, nil)
+        t.ok(message:find("held by alpha", 1, true), message)
+        t.eq(place, first)
+    end
+    t.eq(listed, 0)
+    t.eq(single, 6)
+end)
+
+t.test(
+    "the poll backs off while the place in line is unchanged and starts over when it moves",
+    function()
+        local poll = turn.poller({
+            random = function()
+                return 0
+            end,
+        })
+        local slept = {}
+        for _ = 1, 8 do
+            slept[#slept + 1] = poll:pace("2:alpha")
+        end
+        t.eq(slept[1], turn.POLL_SECONDS)
+        t.eq(slept[2], turn.POLL_SECONDS * turn.POLL_BACKOFF)
+        t.ok(slept[3] > slept[2], "the third sleep did not grow")
+        t.eq(slept[8], turn.POLL_MAX_SECONDS)
+        t.eq(poll:pace("1:alpha"), turn.POLL_SECONDS)
+        t.eq(poll:pace("1:alpha"), turn.POLL_SECONDS * turn.POLL_BACKOFF)
+    end
+)
+
+t.test("jitter only shortens a sleep and never below its share", function()
+    local MIN_JITTERED_SECONDS = 4
+    local poll = turn.poller({
+        random = function()
+            return 0.999
+        end,
+    })
+    local seconds = poll:pace("1:alpha")
+    t.ok(seconds < turn.POLL_SECONDS, seconds)
+    t.ok(seconds >= MIN_JITTERED_SECONDS, seconds)
+end)
+
+t.test("a poll falls back to the card list when the cached turn card cannot be read", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local card = backend.card
+    function backend:card()
+        return nil, "board unavailable: card timed out"
+    end
+    local taken, message = turn.take(backend, "beta", "bbbb2222")
+    backend.card = card
+    t.eq(taken, nil)
+    t.ok(message:find("held by alpha", 1, true), message)
+end)
+
+t.test("a poll finds a new turn card once the cached one is done", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    assert(backend:move(first.card, board.DEFAULT_NAMES.done))
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    t.ok(second.card ~= first.card, "the done turn card was reused")
+end)
+
+t.test("a claim lost after the turn card was read still names the holder", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local card = backend.card
+    local reads = 0
+    function backend:card(id)
+        reads = reads + 1
+        local read, message = card(self, id)
+        if read and reads == 1 then
+            read.claimant = nil
+        end
+        return read, message
+    end
+    local taken, message = turn.take(backend, "beta", "bbbb2222")
+    backend.card = card
+    t.eq(taken, nil)
+    t.ok(message:find("held by alpha", 1, true), message)
 end)

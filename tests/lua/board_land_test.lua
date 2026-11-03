@@ -730,9 +730,13 @@ if has_jj then
         must(dev(root, home, log, { "board", "move", id, "review" }))
         approve(root, home, log, id)
         local held = hold_turn(home, "other", "cccc3333")
+        local PAST_DEADLINE_SECONDS = 4
+        local started = os.time()
         local out, code = dev(root, home, log, { "board", "land", id, "--wait", "1" })
+        local elapsed = os.time() - started
         t.eq(code, 1, out)
         t.ok(out:find("held by other since", 1, true), out)
+        t.ok(elapsed < PAST_DEADLINE_SECONDS, "the wait slept past its deadline: " .. elapsed)
         t.eq(assert(turn_holder(home)).name, "other")
         release_turn(home, held)
     end)

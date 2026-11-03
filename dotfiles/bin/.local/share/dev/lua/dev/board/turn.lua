@@ -11,6 +11,12 @@ M.LEASE_SECONDS = 900
 
 M.POLL_SECONDS = 5
 
+M.POLL_MAX_SECONDS = 30
+
+M.POLL_BACKOFF = 1.5
+
+M.POLL_JITTER = 0.2
+
 M.ASK_GRACE_SECONDS = 10
 
 M.HOLD_SECONDS = 3600
@@ -34,6 +40,18 @@ local CHECKED_PATTERN = "^dev%-turn: checked holder=(%S+) card=(%S+) commit=(%x+
 ---@field hold boolean whether the holder asked to keep the turn across a check
 ---@field for_card string the short id of the card the turn is for
 ---@field taken string when the turn was first taken, an RFC 3339 stamp
+
+---A source of numbers in [0, 1).
+---@alias dev.board.turn.Random fun(): number
+
+---@class dev.board.turn.PollOpts
+---@field random dev.board.turn.Random? `M.entropy` when nil
+
+---@class dev.board.turn.Poll
+---@field private __delay number the sleep before jitter, in seconds
+---@field private __random dev.board.turn.Random the jitter source of this waiter
+---@field private __key string? the line last seen by a poll, nil before the first
+---@field private __started boolean whether a poll has been paced yet, false until the first
 
 ---@class dev.board.turn.Holder
 ---@field name string who holds the turn
@@ -75,25 +93,47 @@ local function find(cards)
     return found
 end
 
-local function turn_card(backend)
+local turn_card_ids = setmetatable({}, { __mode = "k" })
+
+local function fresh(backend)
     local cards, message = backend:cards()
     if not cards then
         return nil, message
     end
     local card = find(cards)
+    turn_card_ids[backend] = card and card.id
+    return card
+end
+
+local function lookup(backend)
+    local id = turn_card_ids[backend]
+    if id then
+        local card = backend:card(id)
+        if card and card.name == M.NAME and not card.done then
+            return card
+        end
+    end
+    return fresh(backend)
+end
+
+local function turn_card(backend)
+    local card, message = lookup(backend)
     if card then
         return card
+    end
+    if message then
+        return nil, message
     end
     local added
     added, message = backend:add(M.NAME, backend.roles.icebox, {})
     if not added then
         return nil, message
     end
-    cards, message = backend:cards()
-    if not cards then
-        return nil, message
+    card, message = fresh(backend)
+    if card then
+        return card
     end
-    return find(cards), "the landing turn card could not be read"
+    return nil, message or "the landing turn card could not be read"
 end
 
 local function taken_at(backend, card, name)
@@ -111,25 +151,27 @@ local function taken_at(backend, card, name)
     return newest or false
 end
 
+local function holder_of(backend, card)
+    if not card or not card.claimant then
+        return nil
+    end
+    local taken, message = taken_at(backend, card, card.claimant)
+    if taken == nil then
+        return nil, message
+    end
+    return { name = card.claimant, since = taken or nil }
+end
+
 ---Read who holds the turn.
 ---@param backend dev.board.Backend the board backend
 ---@return dev.board.turn.Holder? holder who holds it, nil when no one does
 ---@return string? message why the board could not be read
 function M.holder(backend)
-    local cards, message = backend:cards()
-    if not cards then
+    local card, message = lookup(backend)
+    if not card then
         return nil, message
     end
-    local card = find(cards)
-    if not card or not card.claimant then
-        return nil
-    end
-    local taken
-    taken, message = taken_at(backend, card, card.claimant)
-    if taken == nil then
-        return nil, message
-    end
-    return { name = card.claimant, since = taken or nil }
+    return holder_of(backend, card)
 end
 
 ---Describe `holder` for a refusal.
@@ -148,20 +190,9 @@ end
 ---@field card string the short id of the card that wants to land
 ---@field expires string when the wait ends, an RFC 3339 stamp
 
----List the cards waiting for the turn, the one that asked first at the top.
----
----An ask ends when its card takes the turn, leaves, or passes its own wait.
----@param backend dev.board.Backend the board backend
----@return dev.board.turn.Asker[]? line the waiting cards, oldest ask first
----@return string? message why the board could not be read
-function M.waiting(backend)
+local function queue(backend, holding)
     local ASK_PATTERN = "^dev%-turn: ask holder=(%S+) card=(%S+) until=(%S+)$"
-    local holding, message = turn_card(backend)
-    if not holding then
-        return nil, message
-    end
-    local comments
-    comments, message = backend:comments(holding.id)
+    local comments, message = backend:comments(holding.id)
     if not comments then
         return nil, message
     end
@@ -389,6 +420,7 @@ end
 ---@param opts dev.board.turn.TakeOpts? a hold and how long its lease lasts
 ---@return dev.board.turn.Turn? turn the turn, nil when it is not free
 ---@return string? message who holds it, or why the board failed
+---@return string? place a key for `Poll:pace` that changes with the line or the holder, nil when this card takes the turn or the board could not be read
 function M.take(backend, name, card, opts)
     local lease = opts and opts.seconds or M.LEASE_SECONDS
     local hold = opts and opts.hold or false
@@ -397,22 +429,30 @@ function M.take(backend, name, card, opts)
         return nil, message
     end
     local line
-    line, message = M.waiting(backend)
+    line, message = queue(backend, holding)
     if not line then
         return nil, message
     end
+    local place = #line + 1
+    for index, asker in ipairs(line) do
+        if asker.name == name and asker.card == card then
+            place = index
+            break
+        end
+    end
     local first = line[1]
     if first and not (first.name == name and first.card == card) then
-        local holder = M.holder(backend)
+        local holder = holder_of(backend, holding)
         local ahead = "next for " .. first.name
-        return nil, holder and (M.describe(holder) .. ", and it is " .. ahead) or ahead
+        return nil,
+            holder and (M.describe(holder) .. ", and it is " .. ahead) or ahead,
+            place .. ":" .. (holder and holder.name or "")
     end
     local fence
     fence, message = backend:claim(holding.id, name, lease, nil, { lease = true })
-    local cards
     if fence then
-        cards, message = backend:cards()
-        local canonical = cards and find(cards)
+        local canonical
+        canonical, message = fresh(backend)
         if not canonical then
             backend:release(holding.id, fence)
             return nil, message or "the landing turn card could not be read"
@@ -423,8 +463,10 @@ function M.take(backend, name, card, opts)
         end
     end
     if not fence then
-        local holder = M.holder(backend)
-        return nil, holder and M.describe(holder) or message
+        local holder = holder_of(backend, lookup(backend) or holding)
+        return nil,
+            holder and M.describe(holder) or message,
+            place .. ":" .. (holder and holder.name or "")
     end
     local mine = {
         card = holding.id,
@@ -442,6 +484,47 @@ function M.take(backend, name, card, opts)
         return nil, "the landing turn was taken but could not be noted: " .. message
     end
     return mine
+end
+
+local Poll = {}
+Poll.__index = Poll
+
+---Draw a number in [0, 1) from the system's random bytes.
+---@return number fraction the number drawn
+function M.entropy()
+    local file = assert(io.open("/dev/urandom", "rb"))
+    local bytes = file:read(4)
+    file:close()
+    local n = 0
+    for i = 1, 4 do
+        n = n * 256 + bytes:byte(i)
+    end
+    return n / 4294967296
+end
+
+---Start pacing the polls of one waiter.
+---@param opts dev.board.turn.PollOpts? the source of jitter
+---@return dev.board.turn.Poll poll the state `Poll:pace` advances
+function M.poller(opts)
+    local random = opts and opts.random or M.entropy
+    return setmetatable({ __delay = M.POLL_SECONDS, __random = random, __started = false }, Poll)
+end
+
+---Say how long to sleep before the next poll.
+---
+---The delay grows from `POLL_SECONDS` toward `POLL_MAX_SECONDS` while `key` stays the
+---same and starts over when it changes, and jitter shortens each sleep by up to `POLL_JITTER`.
+---@param key string? the place `take` returned, nil when the board failed
+---@return number seconds how long to sleep
+function Poll:pace(key)
+    if self.__started and key == self.__key then
+        self.__delay = math.min(self.__delay * M.POLL_BACKOFF, M.POLL_MAX_SECONDS)
+    else
+        self.__delay = M.POLL_SECONDS
+    end
+    self.__started = true
+    self.__key = key
+    return self.__delay * (1 - M.POLL_JITTER * self.__random())
 end
 
 ---Find the turn `name` took with a hold for `card`.

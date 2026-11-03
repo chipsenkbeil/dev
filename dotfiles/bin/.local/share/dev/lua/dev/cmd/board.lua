@@ -2547,16 +2547,18 @@ local function await_turn(opts)
             return nil, why
         end
     end
+    local poll = turn.poller()
     while true do
-        local hold, message = turn.take(opts.backend, opts.name, opts.short, opts.take)
+        local hold, message, place = turn.take(opts.backend, opts.name, opts.short, opts.take)
         if hold or opts.wait == 0 then
             return hold, message
         end
-        if os.time() >= deadline then
+        local left = deadline - os.time()
+        if left <= 0 then
             turn.leave(opts.backend, opts.name, opts.short)
             return nil, message
         end
-        devos.nap(turn.POLL_SECONDS)
+        devos.nap(math.min(poll:pace(place), left))
     end
 end
 
@@ -2719,12 +2721,14 @@ end
 
 local function await_check(backend, short, wait)
     local deadline = os.time() + wait
+    local poll = turn.poller()
     while true do
         local blocked = blocking_check(backend, short)
-        if not blocked or os.time() >= deadline then
+        local left = deadline - os.time()
+        if not blocked or left <= 0 then
             return blocked
         end
-        devos.nap(turn.POLL_SECONDS)
+        devos.nap(math.min(poll:pace(blocked), left))
     end
 end
 
@@ -4236,17 +4240,6 @@ local function read_cursor(path)
     return text ~= "" and text or nil
 end
 
-local function entropy()
-    local file = assert(io.open("/dev/urandom", "rb"))
-    local bytes = file:read(4)
-    file:close()
-    local n = 0
-    for i = 1, 4 do
-        n = n * 256 + bytes:byte(i)
-    end
-    return n / 4294967296
-end
-
 local function lead_cards(backend, roles)
     local cards, message = backend:cards()
     if not cards then
@@ -4371,7 +4364,7 @@ function M.wait(backend, args, opts)
     end
     local roles = backend.roles or board.roles()
     local nap = opts.nap or devos.nap
-    local random = opts.random or entropy
+    local random = opts.random or turn.entropy
     local notice = opts.notice or stderr_line
     local limited = 0
     local told = false

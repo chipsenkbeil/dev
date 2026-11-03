@@ -231,6 +231,18 @@ function Backend:cards()
     return cards
 end
 
+function Backend:card(id)
+    local doc, message = self:__read()
+    if not doc then
+        return nil, message
+    end
+    local card = find_by_id(doc.cards, id)
+    if not card then
+        return nil, "the board has no card " .. id
+    end
+    return card_view(doc, card)
+end
+
 function Backend:entered()
     local doc, message = self:__read()
     if not doc then
