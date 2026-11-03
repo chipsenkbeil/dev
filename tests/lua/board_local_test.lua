@@ -1175,10 +1175,71 @@ t.test("move out of progress releases the claim and warns about nothing", functi
     })))
     dev(root, home, { "board", "take", a })
     t.ok(document(file_of(home)).cards[1].claim ~= nil, "claim held")
+    dev(root, home, { "board", "note", a, "built it, tried it, learned it" })
     local out, code = dev(root, home, { "board", "move", a, "review" })
     t.eq(code, 0, out)
     t.eq(out, "moved " .. a .. " to Review\n")
     t.eq(document(file_of(home)).cards[1].claim, nil)
+end)
+
+t.test("move out of progress waits for a note of what was built, tried and learned", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    dev(root, home, { "board", "take", a })
+    dev(root, home, { "board", "move", a, "progress" })
+    for _, column in ipairs({ "review", "ready", "blocked" }) do
+        local out, code = dev(root, home, { "board", "move", a, column })
+        t.eq(code, 1, out)
+        t.ok(out:find("built, tried and learned", 1, true), out)
+        t.ok(document(file_of(home)).cards[1].claim ~= nil, "claim kept")
+    end
+    dev(root, home, { "board", "note", a, "--kind", "decision", "ruled" })
+    local out, code = dev(root, home, { "board", "move", a, "review" })
+    t.eq(code, 1, out)
+    out, code = dev(root, home, { "board", "note", a, "built, tried, learned" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", a, "review" })
+    t.eq(code, 0, out)
+    t.eq(document(file_of(home)).cards[1].claim, nil)
+end)
+
+t.test("a second claim needs a fresh note of what was built, tried and learned", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    dev(root, home, { "board", "take", a })
+    dev(root, home, { "board", "move", a, "progress" })
+    dev(root, home, { "board", "note", a, "built, tried, learned" })
+    local out, code = dev(root, home, { "board", "move", a, "ready" })
+    t.eq(code, 0, out)
+    dev(root, home, { "board", "take", a })
+    dev(root, home, { "board", "move", a, "progress" })
+    out, code = dev(root, home, { "board", "move", a, "review" })
+    t.eq(code, 1, out)
+    t.ok(out:find("built, tried and learned", 1, true), out)
 end)
 
 t.test("take holds a claim with an expiry and no loop, and release gives it up", function()
@@ -2277,6 +2338,7 @@ t.test("run gives each session its own card and next never returns one", functio
     out = dev(root, home, { "board", "run" }, one)
     t.ok(not out:find("> b", 1, true), out)
     local id = assert(out:match("^(%x+)"), out)
+    dev(root, home, { "board", "note", id, "built, tried, learned" }, one)
     out, code = dev(root, home, { "board", "move", id, "ready" }, one)
     t.eq(code, 0, out)
     dev(
@@ -2455,6 +2517,8 @@ t.test("with no size limit set next, take and move change nothing", function()
         { "board", "take", big },
         { DEV_AGENT = "r/one", DEV_MAX_SIZE = "" }
     )
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "note", big, "built it" }, { DEV_AGENT = "r/one" })
     t.eq(code, 0, out)
     out, code = dev(
         root,

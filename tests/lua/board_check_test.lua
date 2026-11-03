@@ -286,3 +286,23 @@ if has_jj then
         t.eq(#comments(home), 0)
     end)
 end
+
+t.test("the claimant's note is found by the token that posted the claim", function()
+    local STATUS, DECISION = board.NoteKind.STATUS, board.NoteKind.DECISION
+    local function note(who, body, kind)
+        return { who = who, body = body, kind = kind }
+    end
+    local claim = note("agents", board.claim_record("r/one"), STATUS)
+    local function noted(...)
+        return board.noted_since_claim({ ... }, "r/one")
+    end
+    t.eq(noted(note("agents", "built it")), nil)
+    t.eq(noted(claim), false)
+    t.eq(noted(claim, note("agents", "[dev agent] done")), true)
+    t.eq(noted(note("agents", "early"), claim), false)
+    t.eq(noted(claim, note("other", "built it")), false)
+    t.eq(noted(claim, note("agents", "ruled", DECISION)), false)
+    t.eq(noted(claim, note("agents", "dev-check: x", STATUS)), false)
+    t.eq(noted(claim, note("agents", "dev-review: x", STATUS)), false)
+    t.eq(noted(claim, note("agents", "old"), claim), false)
+end)

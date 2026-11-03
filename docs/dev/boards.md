@@ -848,6 +848,20 @@ and so does a `move` into In Progress that takes the claim, so the owner's
 comments are read before any work. A `move` that finds the claim already held
 prints only the `moved` line.
 
+`move` refuses to take a claimed card out of In Progress to Review, Ready or
+Blocked (exit 1) until its claimant has left a note since claiming it, and the
+refusal says the note holds what was built, tried and learned. dev finds the
+note by who posted it, never by its text or `--as` label. The claim writes a
+`dev-claim: by=NAME` comment.
+
+The claimant's note is any later comment posted by the same Pomb token as the
+latest such record for the claimant, unless its body
+begins with a prefix a dev verb writes (`dev-check:`, `dev-review:`,
+`dev-turn:`, `dev-claim:`) or its kind is decision. A client that posts through
+the claim's token satisfies it with any text. A card with
+no claim record for its claimant is not checked. A move after the note releases
+the claim as before.
+
 ```
 dev board next
 dev board take 8af0e001

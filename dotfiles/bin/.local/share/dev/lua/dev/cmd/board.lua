@@ -1254,7 +1254,7 @@ local function claim_card(backend, card, name)
     claims.stop(card.id)
     local past, why = backend:comments(card.id)
     local ok
-    if past and not board.claimants(past)[who] then
+    if past and card.claimant ~= who then
         ok, why = backend:note(card.id, board.claim_record(who), fence, { kind = "status" })
         past = ok and past
     end
@@ -1370,6 +1370,37 @@ local function done_refusal(card)
             )
         )
     )
+end
+
+---Refuse a move that takes a card out of In Progress before its claimant has noted.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card being moved
+---@param column string the column it moves to
+---@return dev.cmd.board.Result? refused the failure, nil when the move may go on
+local function unnoted(backend, card, column)
+    local roles = backend.roles
+    local leaving = card.column == roles.progress
+        and (column == roles.review or column == roles.ready or column == roles.blocked)
+    if not (leaving and card.claimant) then
+        return nil
+    end
+    local past, why = backend:comments(card.id)
+    if not past then
+        return failure(why)
+    end
+    if board.noted_since_claim(past, card.claimant) == false then
+        local short = card.id:sub(1, board.MIN_PREFIX)
+        return failure(
+            string.format(
+                "%s has no note from its claimant %s since the claim, "
+                    .. "so it cannot leave In Progress; "
+                    .. "note what you built, tried and learned first: dev board note %s TEXT",
+                short,
+                card.claimant,
+                short
+            )
+        )
+    end
 end
 
 ---Move a card to a column, checking its outcomes first when the column is Done.
@@ -1519,6 +1550,10 @@ local function move_card(backend, args, opts)
         if refused then
             return refused
         end
+    end
+    local missing_note = unnoted(backend, card, column)
+    if missing_note then
+        return missing_note
     end
     local held = claims.read(card.id)
     local started

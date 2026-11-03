@@ -293,6 +293,32 @@ function M.reserved(body)
     return false
 end
 
+---Say whether a note followed the claimant's claim record, posted by the token that wrote it.
+---@param comments {who: string, body: string, kind: string?}[] the card's comments, oldest first
+---@param claimant string the name the claim record holds
+---@return boolean? noted nil when no claim record names the claimant
+function M.noted_since_claim(comments, claimant)
+    local record = M.claim_record(claimant)
+    local at
+    for i, comment in ipairs(comments) do
+        if comment.body == record then
+            at = i
+        end
+    end
+    if not at then
+        return nil
+    end
+    local who = comments[at].who
+    for i = at + 1, #comments do
+        local comment = comments[i]
+        local decision = comment.kind == M.NoteKind.DECISION
+        if comment.who == who and not decision and not M.reserved(comment.body) then
+            return true
+        end
+    end
+    return false
+end
+
 local UNSIZED = "unsized"
 
 ---The size words a user may type, with the palette colour each names.
