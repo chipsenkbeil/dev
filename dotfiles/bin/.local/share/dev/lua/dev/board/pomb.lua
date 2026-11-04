@@ -963,6 +963,24 @@ function Backend:note(id, body, fence, opts)
     return true
 end
 
+function Backend:escalate(id, tier, reason, fence)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local made
+    made, message = self:__request(
+        "POST",
+        "/api/tasks/" .. id .. "/escalate",
+        { tier = tier, reason = reason },
+        fence
+    )
+    if not made then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:ask(id, question, fence)
     local ok, message = self:__load()
     if not ok then

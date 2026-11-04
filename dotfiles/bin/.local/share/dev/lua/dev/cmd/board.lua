@@ -1922,8 +1922,7 @@ function commands.escalate(backend, args)
         return err
     end
     local prefix = card.id:sub(1, board.MIN_PREFIX)
-    local at = index_of(card.labels, board.NEEDS_PLANNER)
-    if not at then
+    if not index_of(card.labels, board.NEEDS_PLANNER) then
         return failure(
             prefix .. " is not " .. board.NEEDS_PLANNER .. ", so there is nothing to escalate"
         )
@@ -1933,35 +1932,9 @@ function commands.escalate(backend, args)
     end
     local held = claims.read(card.id)
     local fence = held and held.fence
-    local labels = {}
-    for index, label in ipairs(card.labels) do
-        if index ~= at then
-            labels[#labels + 1] = label
-        end
-    end
-    if not index_of(labels, board.NEEDS_LEAD) then
-        labels[#labels + 1] = board.NEEDS_LEAD
-    end
-    local ok, message = backend:note(card.id, why, fence, { kind = board.NoteKind.BLOCKED })
+    local ok, message = backend:escalate(card.id, "lead", why, fence)
     if not ok then
         return failure(message)
-    end
-    ok, message = backend:set_labels(card.id, labels, fence)
-    if not ok then
-        return unqueued(
-            failure(
-                "the note is posted on "
-                    .. prefix
-                    .. " but the label change failed: "
-                    .. message
-                    .. ", so run dev board label "
-                    .. prefix
-                    .. " "
-                    .. board.NEEDS_LEAD
-                    .. " --remove "
-                    .. board.NEEDS_PLANNER
-            )
-        )
     end
     return { output = "escalated " .. prefix .. " to " .. board.NEEDS_LEAD }
 end

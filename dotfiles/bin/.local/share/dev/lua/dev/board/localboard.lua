@@ -620,6 +620,35 @@ function Backend:note(id, body, fence, opts)
     end)
 end
 
+function Backend:escalate(id, tier, reason, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        local target = board.BLOCKED_LABELS[tier]
+        if not target then
+            return nil, "no escalation tier " .. tostring(tier)
+        end
+        local labels = {}
+        for _, label in ipairs(card.labels) do
+            if label ~= board.NEEDS_PLANNER and label ~= target then
+                labels[#labels + 1] = label
+            end
+        end
+        labels[#labels + 1] = target
+        card.labels = labels
+        card.comments[#card.comments + 1] = {
+            id = store.id(),
+            who = COMMENT_ACTOR,
+            at = store.stamp(),
+            body = reason,
+            kind = board.NoteKind.BLOCKED,
+        }
+        return true
+    end)
+end
+
 function Backend:ask()
     return nil, "a local board holds no structured questions; use dev board note"
 end

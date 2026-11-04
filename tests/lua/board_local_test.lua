@@ -530,6 +530,28 @@ t.test("note --kind and --as are stored on a local comment and notes prints them
     t.ok(out:find("decision  reviewer  ", 1, true) and out:find("changed", 1, true), out)
 end)
 
+t.test("local escalate swaps the label in one write", function()
+    local root, home = local_board()
+    local a = prefix_of(
+        (
+            dev(
+                root,
+                home,
+                { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
+            )
+        )
+    )
+    dev(root, home, { "board", "label", a, "+docs", "+needs:planner" })
+    local out, code = dev(root, home, { "board", "escalate", a, "pick", "one" })
+    t.eq(code, 0, out)
+    t.eq(out, "escalated " .. a .. " to needs:lead\n")
+    local card = document(file_of(home)).cards[1]
+    t.eq(card.labels, { "docs", "needs:lead" })
+    t.eq(#card.comments, 1)
+    t.eq(card.comments[1].kind, "blocked")
+    t.eq(card.comments[1].body, "pick one")
+end)
+
 t.test(
     "link stores blocked_by, blocks and related on a local board and keeps next honest",
     function()

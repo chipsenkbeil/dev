@@ -107,6 +107,10 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "ask", id, question, fence }
         return backend.refusal == nil, backend.refusal
     end
+    function backend:escalate(id, tier, reason, fence)
+        calls[#calls + 1] = { "escalate", id, tier, reason, fence }
+        return backend.refusal == nil, backend.refusal
+    end
     function backend:answer(id, choice, quote, fence)
         calls[#calls + 1] = { "answer", id, choice, quote, fence }
         return backend.refusal == nil, backend.refusal
@@ -3201,15 +3205,14 @@ t.test("next --column blocked --for planner asks for a needs:planner card", func
     t.eq(commands.run("next", { "--column", "blocked", "--for", "x" }, fake(sample())).code, 2)
 end)
 
-t.test("escalate posts a blocked note and swaps the label", function()
+t.test("escalate posts the tier and reason to the endpoint", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner", "docs" }
     local backend = fake(cards)
     local result =
         commands.run("escalate", { "11111111-a", "outcome", "2", "is", "bogus" }, backend)
     t.eq(result.output, "escalated 11111111 to needs:lead")
-    t.eq(backend.calls[1], { "note", ID_A, "outcome 2 is bogus", { kind = "blocked" } })
-    t.eq(backend.calls[2], { "set_labels", ID_A, { "docs", "needs:lead" }, nil })
+    t.eq(backend.calls, { { "escalate", ID_A, "lead", "outcome 2 is bogus", nil } })
 end)
 
 t.test("escalate refuses a card without needs:planner and an empty reason", function()
@@ -3236,20 +3239,16 @@ t.test("escalate refuses the ask flags and points to dev board ask", function()
     t.eq(#backend.calls, 0)
 end)
 
-t.test("escalate prints the label command when the label change fails", function()
+t.test("escalate prints the refusal and writes nothing", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner" }
     local backend = fake(cards)
-    function backend:set_labels()
-        return nil, "board unavailable: cannot reach pomb"
-    end
+    backend.refusal = "pomb answered 403: card_locked"
     local result = commands.run("escalate", { "11111111-a", "why" }, backend)
     t.eq(result.code, 1)
-    t.eq(result.unqueued, true)
-    t.ok(
-        result.message:find("dev board label 11111111 needs:lead --remove needs:planner", 1, true),
-        result.message
-    )
+    t.eq(result.message, "pomb answered 403: card_locked")
+    t.eq(#backend.calls, 1)
+    t.eq(backend.calls[1][1], "escalate")
 end)
 
 t.test("stale refuses a bad --days with a usage error", function()
@@ -4811,6 +4810,22 @@ t.test("label sends the fence of a claim this machine holds", function()
     t.eq(code, 0)
     local patched = read(root, "calls"):match("%-X PATCH.-/api/tasks/")
     t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("pomb escalate posts the tier and reason with the fence", function()
+    local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:planner"]', 1)
+    local root, home = sandbox({ export = export })
+    dev(root, home, { "board", "take", "11111111-a" })
+    local out, code = dev(root, home, { "board", "escalate", "11111111-a", "pick", "one" })
+    t.eq(out, "escalated 11111111 to needs:lead\n")
+    t.eq(code, 0)
+    local calls = read(root, "calls")
+    local posted = calls:match("[^\n]*\n[^\n]*/api/tasks/" .. ID_A:gsub("%-", "%%-") .. "/escalate")
+    t.ok(posted and posted:find("If-Claim-Fence: 7", 1, true), calls)
+    t.ok(posted:find('"tier":"lead"', 1, true), calls)
+    t.ok(posted:find('"reason":"pick one"', 1, true), calls)
+    t.ok(not calls:find("-X PATCH", 1, true), calls)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 

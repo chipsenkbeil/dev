@@ -1180,16 +1180,20 @@ never handles the API.
   (`<id prefix> is in <column>, and needs:human lives only in Blocked or Icebox; move it there first`,
   exit 1, on both backends and on a queued replay); removing it is allowed in
   any column.
-- `escalate CARD TEXT`: Hands a `needs:planner` card up. It posts TEXT, which holds
-  the numbered menu of choices, as a blocked note, then replaces `needs:planner` with `needs:lead` in the
-  card's labels, both with the claim's fence when this machine holds one, and
-  prints `escalated <id prefix> to needs:lead`. The column stays. A card
-  without `needs:planner` and an empty TEXT are refused before anything is
-  written (exit 1 for the card, exit 2 for the text). A label change that
-  fails after the note is exit 1 and prints the `dev board label` command
-  that finishes it. It refuses `--question`, `--choice`, `--recommend` and
-  `--why` (exit 2) and points to `dev board ask`, which only the owner's
-  questions use.
+- `escalate CARD TEXT`: Hands a `needs:planner` card up to `needs:lead`. On
+  Pomb it is one `POST /api/tasks/<id>/escalate` with `{tier, reason}`, where
+  TEXT, which holds the numbered menu of choices, is the reason. Pomb writes
+  the blocked note and swaps the tier label in that one write, so the call
+  needs only `comments.write` and the implementer, reviewer, verifier and
+  release roles may use it. The claim's fence goes along when this machine
+  holds one. A local board appends the blocked note and swaps the label in one
+  update. It prints `escalated <id prefix> to needs:lead`. The column stays.
+  A card without `needs:planner` and an empty TEXT are refused before anything
+  is written (exit 1 for the card, exit 2 for the text). A refusal from Pomb
+  (a locked card, a stale fence, a missing permission) is exit 1 with Pomb's
+  message, and nothing is written. It refuses `--question`, `--choice`,
+  `--recommend` and `--why` (exit 2) and points to `dev board ask`, which only
+  the owner's questions use.
 - `answer CARD --choice N --quote TEXT`: Records the owner's answer, typed
   in this session, on a `needs:human` card. It removes `needs:human`
   from the card's labels (the other labels and the column stay), then posts
