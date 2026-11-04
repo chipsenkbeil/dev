@@ -402,11 +402,13 @@ Until Pomb's `fff0e011` ships, `order` and `size` fail on such a card,
 whatever the rule says. `label --remove needs:human` stays allowed in any
 column.
 
-An umbrella waits in Backlog until its first child starts, sits in In Progress,
-and is Done when every child is Done. It is never Ready and holds no claim:
-`dev board move CARD ready` refuses a card that has children. It takes no
-outcomes of its own, so `move CARD done` closes it once every child is Done and
-refuses it while a child is open.
+An epic is a card with children, which Pomb also calls kind epic. `ls` and
+`next` print `[epic N of M open] ` before its name, and `[epic] ` while it has
+no children, and `show` prints `kind: epic, N open` above the `parent` and
+`children` lines. Once every child is Done it enters Ready and takes a claim
+like any card. While a child is open, `next` never offers it, in any column, on
+Pomb or a local board. It takes no outcomes of its own, so `move CARD done`
+closes it once every child is Done and refuses it while a child is open.
 
 To push a card later, drag it lower in Ready.
 
@@ -976,7 +978,8 @@ never handles the API.
   column instead, else `no cards in <column>` (exit 0). `--column blocked` takes
   the top unclaimed card labelled `needs:lead`, or with `--for planner`
   `needs:planner`, never one labelled `needs:human`
-  and, like every `next`, never one that a card outside Done blocks. Any other
+  and, like every `next`, never one that a card outside Done blocks, nor an epic
+  with a child that is not Done. Any other
   column is exit 2. `--max-size N` (1, 2 or 3, else exit 2), or `DEV_MAX_SIZE`
   when the flag is absent, skips a card bigger than N Pomodori to keep a small
   model from taking a bigger card. A card with no size passes. With neither
@@ -1231,8 +1234,8 @@ never handles the API.
   the card has any, and the same for `allow:`, `tests:` and `files:` with one
   `- <word or name>` line each (the `dev.allow`, `dev.tests` and
   `dev.files` fields). Links are listed by `links`. On a child it also
-  prints `parent: <id prefix> <name>` under the `ls` line, and on an umbrella
-  `children: N of M done`, from `GET /api/tasks/{id}` (`parent`,
+  prints `parent: <id prefix> <name>` under the `ls` line, and on an epic
+  `kind: epic, N open` above it and `children: N of M done`, from `GET /api/tasks/{id}` (`parent`,
   `children_done`, `children_total`) on Pomb and from the `parent` links of the
   cards on a local board (done meaning in a done column).
 - `edit CARD [--file PATH]`: Replaces the card's description with the text of
@@ -1706,17 +1709,14 @@ never handles the API.
   or on a Pomb board with no checks field
   `the board has no checks field, so run dev board init to add it` (exit 1, on
   both backends, which `checks_field` tells apart; a local board always has it).
-  A move into Ready of a card that has children (`children_total` on Pomb,
-  `parent` links on a local board, as `show` reads them) is refused after the
-  checks above, still before the move:
-  `<id prefix> is an umbrella with N children and never enters Ready; its children are the work`
-  (exit 1, on both backends, and on a queued replay). `move` refuses any card
+  A card with children is an epic (`kind` epic or `children_total` on Pomb,
+  `parent` links on a local board) and enters Ready under the same checks as any
+  card. `move` refuses any card
   labelled `needs:human` first, whatever the column. A move into any other
   column, Icebox included, is never checked for the Ready rules. A move into In
   Progress of a card nobody holds and that this machine holds no claim on takes
   the claim first, as `take` does with `DEV_AGENT` as the name (a bad name is
-  exit 2), unless the card has children, and releases it again when the move
-  fails.
+  exit 2), an epic included, and releases it again when the move fails.
   A move into Done (`move CARD done`) is refused once the card is read, before
   the move is sent, while the card has an unticked outcome:
   `<id prefix> cannot move to Done: N of M outcomes are unticked (1. text, 2. text); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it`

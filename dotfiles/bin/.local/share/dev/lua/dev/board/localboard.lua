@@ -154,11 +154,45 @@ local function live(claim)
     return claim
 end
 
+local function umbrella_of(card)
+    for _, held in ipairs(card.links or {}) do
+        if held.kind == board.LinkKind.PARENT then
+            return held.target_id
+        end
+    end
+end
+
+local function children_of(doc, id)
+    local found = {}
+    for _, other in ipairs(doc.cards) do
+        if umbrella_of(other) == id then
+            found[#found + 1] = other
+        end
+    end
+    return found
+end
+
+local function child_counts(doc, id)
+    local children = children_of(doc, id)
+    if #children == 0 then
+        return nil
+    end
+    local done = 0
+    for _, child in ipairs(children) do
+        local column = find_by_id(doc.columns, child.column_id)
+        if column and column.is_done then
+            done = done + 1
+        end
+    end
+    return { done = done, total = #children }
+end
+
 local function card_view(doc, card)
     local color = card.color_id and find_by_id(doc.colors, card.color_id)
     local column = find_by_id(doc.columns, card.column_id)
     local claim = live(card.claim)
     return {
+        epic = child_counts(doc, card.id),
         id = card.id,
         name = card.name,
         column = column and column.name or "?",
@@ -280,24 +314,6 @@ local function depends_on(doc, from, goal, seen)
         end
     end
     return false
-end
-
-local function umbrella_of(card)
-    for _, held in ipairs(card.links or {}) do
-        if held.kind == board.LinkKind.PARENT then
-            return held.target_id
-        end
-    end
-end
-
-local function children_of(doc, id)
-    local found = {}
-    for _, other in ipairs(doc.cards) do
-        if umbrella_of(other) == id then
-            found[#found + 1] = other
-        end
-    end
-    return found
 end
 
 local function is_blocked(doc, card)
@@ -453,17 +469,8 @@ function Backend:family(id)
     if umbrella then
         family.parent = { id = umbrella.id, name = umbrella.name }
     end
-    local children = children_of(doc, id)
-    if #children > 0 then
-        local done = 0
-        for _, child in ipairs(children) do
-            local column = find_by_id(doc.columns, child.column_id)
-            if column and column.is_done then
-                done = done + 1
-            end
-        end
-        family.children = { done = done, total = #children }
-    end
+    family.children = child_counts(doc, id)
+    family.epic = family.children ~= nil
     return family
 end
 
@@ -540,7 +547,7 @@ function Backend:next(column, opts)
             and (not label or board.labelled(card, label))
         then
             local view = card_view(doc, card)
-            if board.fits(view, opts and opts.max_size) then
+            if board.open_children(view.epic) == 0 and board.fits(view, opts and opts.max_size) then
                 return view
             end
         end

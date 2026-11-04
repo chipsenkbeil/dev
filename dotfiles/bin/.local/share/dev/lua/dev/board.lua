@@ -18,6 +18,7 @@ local M = {}
 ---@field labels string[] the card's labels
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds a live claim on it
+---@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not one
 ---@field checks string[] the run commands in its checks rows, empty when it has none
 ---@field allow string[] the guard rails its allow field lifts, empty when it has none
 ---@field tests string[] the tests its tests field names, empty when it has none
@@ -90,6 +91,7 @@ local M = {}
 
 ---@class dev.board.Family
 ---@field parent {id: string, name: string}? the umbrella the card is part of
+---@field epic boolean whether the card is an epic, Pomb's kind epic or a card with children
 ---@field children {done: integer, total: integer}? how many of the card's children are done, nil when it has none
 
 ---@class dev.board.NoteOpts
@@ -789,6 +791,20 @@ function M.open_children(children)
     return children.total - children.done
 end
 
+---The mark an epic carries before its name in a listing.
+---@param card dev.board.Card the card
+---@return string mark `[epic]` with the open-children count when there are children, else empty
+function M.epic_mark(card)
+    local epic = card.epic
+    if not epic then
+        return ""
+    end
+    if epic.total == 0 then
+        return "[epic] "
+    end
+    return "[epic " .. M.open_children(epic) .. " of " .. epic.total .. " open] "
+end
+
 ---List what a card lacks of card format v2 to enter Ready: each missing or empty section, and
 ---Done when outcomes. The outcomes are 3 to 7 subtasks, and a card with none is accepted when its
 ---description has a v1 `## Done when` checklist item.
@@ -858,7 +874,7 @@ function M.cells(card, opts)
     if opts.holders then
         cells[#cells + 1] = card.claimant or "-"
     end
-    cells[#cells + 1] = card.name
+    cells[#cells + 1] = M.epic_mark(card) .. card.name
     return cells
 end
 

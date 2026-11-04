@@ -568,9 +568,18 @@ local function outcomes_of(task)
     return outcomes, readable
 end
 
+local function epic_counts(task)
+    local total = type(task.children_total) == "number" and task.children_total or 0
+    if task.kind ~= "epic" and total == 0 then
+        return nil
+    end
+    return { done = task.children_done or 0, total = total }
+end
+
 function Backend:__card(task)
     local outcomes, readable = outcomes_of(task)
     return {
+        epic = epic_counts(task),
         checks = runs_of(task),
         allow = field_names(task, board.ALLOW_FIELD),
         tests = field_names(task, board.TESTS_FIELD),
@@ -709,6 +718,7 @@ function Backend:next(column, opts)
             if
                 not card.claimant
                 and not blocked
+                and board.open_children(card.epic) == 0
                 and not board.labelled(card, board.NEEDS_HUMAN)
                 and not board.labelled(card, board.RUN)
                 and (not label or board.labelled(card, label))
@@ -1153,6 +1163,7 @@ function Backend:family(id)
     if type(task.parent) == "table" and type(task.parent.id) == "string" then
         family.parent = { id = task.parent.id, name = tostring(task.parent.name) }
     end
+    family.epic = epic_counts(task) ~= nil
     if type(task.children_total) == "number" and task.children_total > 0 then
         family.children = { done = task.children_done or 0, total = task.children_total }
     end

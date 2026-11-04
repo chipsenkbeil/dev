@@ -2602,13 +2602,11 @@ t.test("label adds needs:human only to a card in Blocked or Icebox", function()
     end
 end)
 
-t.test("move to Ready refuses an umbrella and allows a card without children", function()
+t.test("move to Ready allows an epic and a card without children", function()
     local backend = fake({ colored("green") })
     backend.kin = { children = { done = 0, total = 2 } }
     local result = commands.run("move", { "cccccccc", "ready" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("never enters Ready", 1, true), result.message)
-    t.eq(backend.calls[#backend.calls], { "family", ID_C })
+    t.eq(result.output, "moved cccccccc to Ready")
     result = commands.run("move", { "cccccccc", "backlog" }, backend)
     t.eq(result.output, "moved cccccccc to Backlog")
 end)
@@ -4156,6 +4154,40 @@ t.test("next asks for the unclaimed unblocked top of Ready", function()
     )
 end)
 
+local EPIC_TASK = '{"id":"'
+    .. ID_A
+    .. '","name":"First","column_id":"col-ready","color_id":"yellow-id","labels":["docs"],"kind":"epic","children_total":3,"children_done":%d}'
+
+t.test("epic_next_skips_open_child", function()
+    local root, home = sandbox({ task = EPIC_TASK:format(1) })
+    for _, args in ipairs({ { "board", "next" }, { "board", "next", "--column", "review" } }) do
+        local out, code = dev(root, home, args)
+        t.eq(code, 0, out)
+        t.ok(out:find("^no ", 1), out)
+    end
+    root, home = sandbox({ task = EPIC_TASK:format(3) })
+    local out, code = dev(root, home, { "board", "next" })
+    t.eq(code, 0, out)
+    t.ok(out:find("First", 1, true), out)
+end)
+
+t.test("epic_ls_marks", function()
+    local export = EXPORT:gsub(
+        '"name":"First"',
+        '"name":"First","kind":"epic","children_total":3,"children_done":1',
+        1
+    )
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 0, out)
+    t.ok(out:find("[epic 2 of 3 open] First", 1, true), out)
+    t.eq(out:find("[epic", out:find("Second", 1, true), true), nil)
+    out, code = dev(root, home, { "board", "show", "11111111-a" })
+    t.eq(code, 0, out)
+    t.ok(out:find("kind: epic, 2 open\n", 1, true), out)
+    t.ok(out:find("children: 1 of 3 done\n", 1, true), out)
+end)
+
 t.test("next skips a card held by a blocker that is not in Done", function()
     local root, home = sandbox({
         links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]',
@@ -5106,15 +5138,23 @@ t.test("move into progress takes the claim of an unclaimed card under the agent 
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("move into progress leaves an umbrella unclaimed", function()
+t.test("epic_done_children_claim", function()
     local root, home = sandbox({
         export = PLANNED_EXPORT,
-        task = '{"id":"' .. ID_A .. '","children_total":2,"children_done":0}',
+        task = EPIC_TASK:format(3),
     })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "progress" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", "progress" },
+        { agent = "r/one" }
+    )
     t.eq(code, 0, out)
-    t.eq(read(root, "calls"):find("/claim", 1, true), nil)
-    t.eq(fs.exists(state_file(home)), false)
+    local calls = read(root, "calls")
+    t.ok(calls:find("/claim", 1, true), calls)
+    t.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
+    t.eq(fs.exists(state_file(home)), true)
+    dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 local function refusing_moves(root)
@@ -5161,21 +5201,17 @@ t.test("a move into progress of a card claimed elsewhere takes no claim", functi
     t.eq(fs.exists(state_file(home)), false)
 end)
 
-t.test("move to ready refuses an umbrella before any write", function()
+t.test("move to ready takes an epic like any card", function()
     local description =
         "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a"
     local export = EXPORT:gsub("Why it matters%.", description, 1)
     local root, home = sandbox({
         export = export,
-        task = '{"id":"' .. ID_A .. '","children_total":2,"children_done":0}',
+        task = EPIC_TASK:format(3),
     })
     local out, code = dev(root, home, { "board", "move", "11111111-a", "ready" })
-    t.eq(code, 1)
-    t.ok(out:find("11111111 is an umbrella with 2 children and never enters Ready", 1, true), out)
-    local calls = read(root, "calls")
-    t.eq(calls:find("/move", 1, true), nil)
-    t.eq(calls:find("-X POST", 1, true), nil)
-    t.eq(calls:find("-X PATCH", 1, true), nil)
+    t.eq(code, 0, out)
+    t.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
 t.test("a queued change that hits the needs:human refusal is dropped with its reason", function()

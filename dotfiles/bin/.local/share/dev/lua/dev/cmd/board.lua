@@ -304,7 +304,7 @@ local function terminal_cells(screen, card, view)
     if view.holders then
         cells[#cells + 1] = card.claimant or ui.paint(screen, "-", ui.Style.DIM)
     end
-    cells[#cells + 1] = card.name
+    cells[#cells + 1] = board.epic_mark(card) .. card.name
     return cells
 end
 
@@ -1106,6 +1106,10 @@ local function card_view(backend, card)
         return nil, failure(message)
     end
     local kin = kin_lines(family)
+    if family.epic then
+        local open = board.open_children(family.children)
+        kin = "kind: epic" .. (open > 0 and ", " .. open .. " open" or "") .. "\n" .. kin
+    end
     local description = (card.description or ""):match("^%s*(.-)%s*$")
     if #card.outcomes > 0 then
         local _, rest = board.split_checklist(description)
@@ -1532,20 +1536,6 @@ local function move_card(backend, args, opts)
             )
         end
     end
-    if column == roles.ready then
-        local family, why = backend:family(card.id)
-        if not family then
-            return failure(why)
-        end
-        if family.children and family.children.total > 0 then
-            return failure(
-                card.id:sub(1, board.MIN_PREFIX)
-                    .. " is an umbrella with "
-                    .. family.children.total
-                    .. " children and never enters Ready; its children are the work"
-            )
-        end
-    end
     if column == roles.progress then
         local limit, bad = runner.limit()
         if bad then
@@ -1567,18 +1557,12 @@ local function move_card(backend, args, opts)
         if bad then
             return bad
         end
-        local family, why = backend:family(card.id)
-        if not family then
-            return failure(why)
+        local result, fence = claim_card(backend, card, name)
+        if not fence then
+            return result
         end
-        if not (family.children and family.children.total > 0) then
-            local result, fence = claim_card(backend, card, name)
-            if not fence then
-                return result
-            end
-            started = true
-            held = { fence = fence }
-        end
+        started = true
+        held = { fence = fence }
     end
     local ok, message = backend:move(card.id, column, { fence = held and held.fence })
     if not ok then

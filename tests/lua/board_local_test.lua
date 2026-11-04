@@ -779,8 +779,7 @@ t.test("a local board refuses what the needs:human and umbrella rules forbid", f
     t.eq(code, 0, out)
     dev(root, home, { "board", "link", child, "parent", umbrella })
     out, code = dev(root, home, { "board", "move", umbrella, "ready" })
-    t.eq(code, 1, out)
-    t.ok(out:find("never enters Ready", 1, true), out)
+    t.eq(code, 0, out)
 end)
 
 t.test("link parent sets one umbrella and show and links report it", function()
@@ -1118,7 +1117,7 @@ local function card_named(doc, name)
 end
 
 t.test(
-    "take --as and move into progress name the holder, and an umbrella stays unclaimed",
+    "take --as and move into progress name the holder, and an epic is claimed like any card",
     function()
         local root, home = local_board()
         local function ready(name)
@@ -1154,7 +1153,7 @@ t.test(
         dev(root, home, { "board", "release", a })
         out, code = dev(root, home, { "board", "move", a, "progress" }, { DEV_AGENT = "r/three" })
         t.eq(code, 0, out)
-        t.eq(card_named(document(file_of(home)), "Alpha").claim, nil)
+        t.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/three")
     end
 )
 
@@ -2542,4 +2541,39 @@ t.test("take and move refuse a DEV_MAX_SIZE that is not 1, 2 or 3", function()
     t.eq(code, 2, out)
     out, code = dev(root, home, { "board", "move", big, "progress" }, env)
     t.eq(code, 2, out)
+end)
+
+t.test("epic_local_next", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            "ready",
+            "--size",
+            "1",
+            "--description",
+            V1,
+            "--checks",
+            "dev test",
+        })))
+    end
+    local epic, child = add("Epic"), add("Child")
+    dev(root, home, { "board", "link", child, "parent", epic })
+    local out = dev(root, home, { "board", "ls" })
+    t.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
+    out = dev(root, home, { "board", "show", epic })
+    t.ok(out:find("\nkind: epic, 1 open\n", 1, true), out)
+    out = dev(root, home, { "board", "next" })
+    t.ok(out:find(child .. "  Ready", 1, true), out)
+    out = dev(root, home, { "board", "next", "--column", "ready" })
+    t.ok(out:find(child, 1, true) and not out:find(epic, 1, true), out)
+    out = dev(root, home, { "board", "move", child, "done" })
+    out = dev(root, home, { "board", "next" })
+    t.ok(out:find(epic .. "  Ready", 1, true), out)
+    out = dev(root, home, { "board", "move", epic, "progress" }, { DEV_AGENT = "r/one" })
+    t.ok(out:find("r/one", 1, true), out)
+    t.eq(card_named(document(file_of(home)), "Epic").claim.claimant, "r/one")
 end)
