@@ -187,6 +187,13 @@ What it lays out:
   `permission_denied` is shown with the missing permission, and an
   `exceeds_grant` as `the token does not hold board X`, with nothing created. A
   local board has no roles, so it says nothing.
+- Role refusals: a refusal reads the token's `role_name` from
+  `GET /api/v1/auth/whoami`, once, and only then. A `permission_denied` 403 and
+  an `exceeds_grant` 403 name the refused permission or action and the role, as
+  `this token (role implementer) lacks the tasks.write permission`. A token
+  with no role gets the plain text with no role named. A 401 with the code
+  `token_expired`, matched on the code and never the message, prints `the role
+  token expired; mint it again from its issuer`.
 - The palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`,
   red `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps
   its colour in every column, so the colour is the only record of its size.

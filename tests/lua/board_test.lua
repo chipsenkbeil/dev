@@ -5412,6 +5412,69 @@ t.test("a permission_denied with a board says the board is not assigned", functi
     )
 end)
 
+local function refusing(root, who, status_line)
+    answering(
+        root,
+        "*/api/v1/auth/whoami) printf '"
+            .. who
+            .. "\\n200' ;;\n*) printf '"
+            .. status_line
+            .. "' ;;\n"
+    )
+end
+
+t.test("role-refusal-denied names the refused permission and the role", function()
+    local root, home = sandbox()
+    refusing(
+        root,
+        '{"role_name":"implementer","permissions":[]}',
+        '{"code":"permission_denied","permission":"tasks.write","message":"m","board_id":null}\\n403'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(
+        out,
+        "dev: board unavailable: pomb answered 403: this token (role implementer) lacks the "
+            .. "tasks.write permission on every board; use a token that has it\n"
+    )
+end)
+
+t.test("role-refusal-exceeds-grant names the refused action and the role", function()
+    local root, home = sandbox()
+    refusing(
+        root,
+        '{"role_name":"implementer"}',
+        '{"code":"exceeds_grant","action":"tasks.bin","message":"m"}\\n403'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(out, "dev: board unavailable: pomb answered 403: the implementer role cannot tasks.bin\n")
+end)
+
+t.test("role-refusal-norole keeps the refusal text with no role named", function()
+    local root, home = sandbox()
+    refusing(
+        root,
+        '{"role_name":null}',
+        '{"code":"exceeds_grant","action":"tasks.bin","message":"too much"}\\n403'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(out, "dev: board unavailable: pomb answered 403: too much\n")
+end)
+
+t.test("role-refusal-expired says the role token expired and to mint it again", function()
+    local root, home = sandbox()
+    answering(
+        root,
+        [[*) printf '{"code":"token_expired","message":"whatever"}\n401' ;;
+]]
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 1)
+    t.eq(out, "dev: board unavailable: the role token expired; mint it again from its issuer\n")
+end)
+
 t.test("an insufficient_scope 403 still reports the server's message", function()
     local root, home = sandbox()
     answering(

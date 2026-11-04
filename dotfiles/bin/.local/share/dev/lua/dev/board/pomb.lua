@@ -39,6 +39,9 @@ local PAGE_LIMIT = 500
 local FORBIDDEN = 403
 local PERMISSION_DENIED = "permission_denied"
 local EXCEEDS_GRANT = "exceeds_grant"
+local TOKEN_EXPIRED = "token_expired"
+local WHOAMI_PATH = "/api/v1/auth/whoami"
+local EXPIRED = "the role token expired; mint it again from its issuer"
 local ROLES_PATH = "/api/v1/agent-roles/standard"
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
@@ -106,12 +109,14 @@ local function listed(list, word)
     return false
 end
 
-local function denied(doc)
+local function denied(doc, role)
     local permission = present(doc.permission) or "needed"
     local board_id = present(doc.board_id)
+    local token = role and ("this token (role " .. role .. ")") or "this token"
     if board_id then
         return unavailable(
-            "this token has the "
+            token
+                .. " has the "
                 .. permission
                 .. " permission but is not assigned to board "
                 .. board_id
@@ -119,7 +124,9 @@ local function denied(doc)
         )
     end
     return unavailable(
-        "pomb answered 403: this token lacks the "
+        "pomb answered 403: "
+            .. token
+            .. " lacks the "
             .. permission
             .. " permission on every board; use a token that has it"
     )
@@ -330,16 +337,33 @@ function Backend:__request(method, path, body, fence, seconds)
     if not status or doc == nil then
         return nil, unavailable("pomb sent an answer dev cannot read")
     end
+    local expired = status == UNAUTHORIZED and type(doc) == "table" and doc.code == TOKEN_EXPIRED
     if status == UNAUTHORIZED and self.__issued then
-        return nil, ISSUED_REFUSED, status, doc
+        return nil, expired and unavailable(EXPIRED) or ISSUED_REFUSED, status, doc
     end
     if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
         self.__healed = true
         self.__secret = nil
         return self:__request(method, path, body, fence, seconds)
     end
+    if expired then
+        return nil, unavailable(EXPIRED), status, doc
+    end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == PERMISSION_DENIED then
-        return nil, denied(doc), status, doc
+        return nil, denied(doc, self:__role()), status, doc
+    end
+    if status == FORBIDDEN and type(doc) == "table" and doc.code == EXCEEDS_GRANT then
+        local role = self:__role()
+        if role then
+            local action = present(doc.action)
+                or present(doc.permission)
+                or present(doc.message)
+                or "that"
+            return nil,
+                unavailable("pomb answered 403: the " .. role .. " role cannot " .. action),
+                status,
+                doc
+        end
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == CARD_LOCKED then
         return nil, LOCKED, status, doc
@@ -349,6 +373,21 @@ function Backend:__request(method, path, body, fence, seconds)
         return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail)), status, doc
     end
     return doc
+end
+
+---Read the token's role name from whoami, once, and only for a refusal.
+---@private
+---@return string? role the role name, or nil when the token has none
+function Backend:__role()
+    if self.__who ~= nil then
+        return self.__who or nil
+    end
+    self.__who = false
+    local who = self:__request("GET", WHOAMI_PATH)
+    if type(who) == "table" then
+        self.__who = present(who.role_name) or false
+    end
+    return self.__who or nil
 end
 
 function Backend:__roles()
@@ -1285,7 +1324,7 @@ end
 ---@return boolean? ok true when the token is admin
 ---@return string? message why not, or why it could not be read
 function Backend:admin()
-    local who, message = self:__request("GET", "/api/v1/auth/whoami")
+    local who, message = self:__request("GET", WHOAMI_PATH)
     if not who then
         return nil, message
     end
@@ -1338,7 +1377,7 @@ end
 ---@return string message the reason
 function Backend:__missing()
     local name = self.__opts.name
-    local who = self:__request("GET", "/api/v1/auth/whoami")
+    local who = self:__request("GET", WHOAMI_PATH)
     if type(who) == "table" and type(who.boards) == "table" then
         local names = {}
         for _, entry in ipairs(who.boards) do
@@ -1495,7 +1534,9 @@ function Backend:add_roles()
         if status == FORBIDDEN and type(doc) == "table" and doc.code == EXCEEDS_GRANT then
             return nil,
                 unavailable(
-                    "the token does not hold board "
+                    "the token"
+                        .. (self:__role() and (" (role " .. self:__role() .. ")") or "")
+                        .. " does not hold board "
                         .. self.__opts.name
                         .. " ("
                         .. id
