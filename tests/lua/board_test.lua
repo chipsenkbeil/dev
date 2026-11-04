@@ -2318,7 +2318,7 @@ t.test("outcome delete refuses a name that is not a lead", function()
 end)
 
 t.test("outcome delete by a lead notes the reason and the text", function()
-    for _, column in ipairs({ "Backlog", "In Progress", "Done" }) do
+    for _, column in ipairs({ "Backlog", "Blocked", "Icebox" }) do
         local card = colored("green")
         card.column = column
         card.outcomes = outcomes(3)
@@ -2337,6 +2337,74 @@ t.test("outcome delete by a lead notes the reason and the text", function()
             calls[2][3],
             "Deleted outcome 2: " .. card.outcomes[2].name .. " Reason: never achievable"
         )
+        t.eq(calls[2][4], { kind = "decision" })
+    end
+end)
+
+local function delete_in(backend, id)
+    local result
+    as_agent(LEAD, function()
+        result = commands.run(
+            "outcome",
+            { id, "--delete", "1", "--reason", "never", "achievable" },
+            backend
+        )
+    end)
+    return result
+end
+
+local function card_in(column)
+    local card = colored("green")
+    card.column = column
+    card.outcomes = outcomes(2)
+    return card
+end
+
+t.test("outcome delete refuses a card in a ready-role column", function()
+    for _, column in ipairs({ "Ready", "In Progress", "Review", "Verify", "Release" }) do
+        local backend = fake({ card_in(column) })
+        local result = delete_in(backend, "cccccccc")
+        t.eq(result.code, 1)
+        t.ok(result.message:find(column, 1, true), result.message)
+        t.ok(result.message:find("fixed from Ready on", 1, true), result.message)
+        t.eq(result.unqueued, true)
+        t.eq(#writes(backend), 0)
+    end
+end)
+
+t.test("outcome delete refuses a card in a finished column", function()
+    for _, column in ipairs({ "Done", "Archive" }) do
+        local backend = fake({ card_in(column) }, nil, { "Done", "Archive" })
+        local result = delete_in(backend, "cccccccc")
+        t.eq(result.code, 1)
+        t.ok(result.message:find(column, 1, true), result.message)
+        t.eq(#writes(backend), 0)
+    end
+end)
+
+t.test("outcome delete reads the renamed role columns", function()
+    local map = { ready = "Next", progress = "Doing", review = "Looking", done = "Shipped" }
+    for _, column in ipairs({ "Next", "Doing", "Looking", "Shipped" }) do
+        local backend = fake({ card_in(column) }, nil, { "Shipped" })
+        backend.column_map = map
+        local result = delete_in(backend, "cccccccc")
+        t.eq(result.code, 1, column)
+        t.ok(result.message:find(column, 1, true), result.message)
+        t.eq(#writes(backend), 0)
+    end
+    for _, column in ipairs({ "Ready", "In Progress" }) do
+        local backend = fake({ card_in(column) }, nil, { "Shipped" })
+        backend.column_map = map
+        t.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
+    end
+end)
+
+t.test("outcome delete is allowed in Blocked and Backlog", function()
+    for _, column in ipairs({ "Blocked", "Backlog", "Icebox" }) do
+        local backend = fake({ card_in(column) })
+        t.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
+        local calls = writes(backend)
+        t.eq(calls[1], { "delete_outcome", ID_C, "s1", nil })
         t.eq(calls[2][4], { kind = "decision" })
     end
 end)
@@ -3964,6 +4032,8 @@ local SUBTASKS_EXPORT = '{"tasks":['
     .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"## Problem\\nWhy.\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",'
     .. '"subtasks":[{"id":"sub-a","name":"A works","done":false},{"id":"sub-b","name":"B works","done":true}]}]}'
 
+local BACKLOG_EXPORT = (SUBTASKS_EXPORT:gsub("col%-ready", "col-backlog"))
+
 t.test("outcome posts a subtask and patches the Nth by its id", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
@@ -4030,7 +4100,7 @@ end)
 
 t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", function()
     local claimed = (
-        SUBTASKS_EXPORT:gsub(
+        BACKLOG_EXPORT:gsub(
             '"position":1,',
             '"position":1,"claim":{"claimant":"project-run/a","expires_at":"2999-01-01T00:00:00Z"},',
             1
@@ -4095,7 +4165,7 @@ t.test("a refused outcome delete prints Pomb's reason, writes no note and is not
         },
     }
     for _, case in ipairs(cases) do
-        local root, home = sandbox({ export = SUBTASKS_EXPORT })
+        local root, home = sandbox({ export = BACKLOG_EXPORT })
         executable(
             root .. "/bin/curl",
             "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in */subtasks/*) cat >/dev/null; printf '%s\\n403' '"
@@ -4124,7 +4194,7 @@ t.test("outcome past the last subtask exits 1 and changes nothing", function()
 end)
 
 t.test("outcome queues a tick but not an append when the write cannot reach Pomb", function()
-    local root, home = sandbox({ export = SUBTASKS_EXPORT })
+    local root, home = sandbox({ export = BACKLOG_EXPORT })
     executable(
         root .. "/bin/curl",
         '#!/bin/sh\nfor last; do :; done\ncase "$last" in */subtasks*) cat >/dev/null; exit 28 ;; esac\n'

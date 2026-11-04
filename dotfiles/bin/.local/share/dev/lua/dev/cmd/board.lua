@@ -2271,6 +2271,12 @@ function commands.outcome(backend, args)
             return refused
         end
     end
+    if mode == OutcomeMode.DELETE then
+        local locked = require("dev.board.outcome_lock").refusal(backend.roles, card.column)
+        if locked then
+            return unqueued(failure(locked))
+        end
+    end
     local held = claims.read(card.id)
     local fence = held and held.fence
     local prefix = card.id:sub(1, board.MIN_PREFIX)

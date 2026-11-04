@@ -199,7 +199,7 @@ smallest preset that covers its calls, on the boards it works.
 | Tool | Token | Calls it needs | Deletes it holds |
 |------|-------|----------------|------------------|
 | lead session | `lead_token`, `lead` | Everything `work` does, plus `boards.create`, `columns.create`, `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and `tasks.bin`, for `init`, and for the `dev board delete` verb that card 83f0e016 adds | `tasks.bin`: a card goes to the bin for 30 days |
-| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete, which only the lead does |
+| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete, which only the lead does, and never from Ready on, where outcomes are fixed |
 | runner | `work` on its board | Read the board, create and move cards, set fields and labels, comment, link, claim, heartbeat and release | None. Its `init` needs `lead`, which the lead runs |
 | Aide agent | `work`, assigned boards only | The subagent's calls, notes written with `--as aide` | None. It never holds `lead` |
 
@@ -685,7 +685,11 @@ one word is ignored there. `--untick` takes no name and stays open to anyone.
 ordinary text, so `--untick N --as X` is exit 2 for its extra words. A queued
 tick keeps the name it resolved, so a later sync records the same ticker.
 `outcome CARD --delete N --reason TEXT [--as NAME]` removes the Nth outcome
-(`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) in any column. Only the
+(`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) from a card in Blocked,
+Backlog or Icebox. Outcomes are fixed from Ready on. A card in a column mapped
+to the ready, progress, review, verify or release role, or in a finished column,
+is refused with exit 1 naming the column, with nothing written or queued. The
+roles come from `[board.columns]` and `is_done`, never from a column name. Only the
 lead deletes an outcome: a `DEV_AGENT` whose role segment is not lead is
 refused with exit 1 and nothing written, before any backend call, and a
 runner, implementer, planner or reviewer asks the lead with the card, the

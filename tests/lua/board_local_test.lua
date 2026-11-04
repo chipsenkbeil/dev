@@ -1063,6 +1063,45 @@ t.test(
     end
 )
 
+t.test("outcome delete refuses from Ready on on a local board", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "A works",
+        "--done-when",
+        "B works",
+        "--done-when",
+        "C works",
+        "--change",
+        "y",
+        "--out-of-scope",
+        "z",
+        "--checks",
+        "dev test",
+    })
+    t.eq(code, 0, out)
+    local a = prefix_of(out)
+    local lead = { DEV_AGENT = "dotfiles/lead/1" }
+    out, code = dev(root, home, { "board", "move", a, "ready" }, lead)
+    t.eq(code, 0, out)
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", a, "--delete", "1", "--reason", "never possible" },
+        lead
+    )
+    t.eq(code, 1, out)
+    t.ok(out:find("Ready", 1, true) and out:find("fixed from Ready on", 1, true), out)
+    t.eq(#document(file_of(home)).cards[1].outcomes, 3)
+end)
+
 t.test("a local board converts a v1 checklist into outcomes and ticks", function()
     local root, home = local_board()
     local v1 =
