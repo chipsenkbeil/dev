@@ -74,10 +74,10 @@ local M = {}
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
 ---@field bin? fun(self: dev.board.Backend, id: string): boolean?, string? the card moved to the recycle bin, or nil and a message when the backend refuses
----@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the umbrella) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
+---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the epic) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
 ---@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks`, `related` or `child` entry for each link another card holds on it, in the order the backend gives them
 ---@field unlink fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? the link of that kind from the card to the card with that full id removed, or nil and a message when the card holds no such link or the backend refuses the change
----@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's umbrella and the count of its children
+---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's epic and the count of its children
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
 ---@field boards fun(self: dev.board.Backend): string[]?, string? the names of the boards the token sees, in the server's order, or nil and a message
 ---@field columns fun(self: dev.board.Backend, name: string?): dev.board.ColumnRow[]?, string? the columns of the named board, or of this one when nil, in board order, or nil and a message
@@ -93,7 +93,7 @@ local M = {}
 ---@field board string? the other card's board name, nil for the card's own board
 
 ---@class dev.board.Family
----@field parent {id: string, name: string}? the umbrella the card is part of
+---@field parent {id: string, name: string}? the epic the card is part of
 ---@field epic boolean whether the card is an epic, Pomb's kind epic or a card with children
 ---@field children {done: integer, total: integer}? how many of the card's children are done, nil when it has none
 
@@ -532,6 +532,8 @@ M.HEADINGS = { "Problem", "Change", "Out of scope" }
 ---The fewest and the most Done when outcomes a planned card has.
 M.MIN_OUTCOMES = 3
 M.MAX_OUTCOMES = 7
+M.MIN_EPIC_OUTCOMES = 1
+M.MAX_EPIC_OUTCOMES = 3
 
 local PROBLEM = M.HEADINGS[1]
 local CHANGE = M.HEADINGS[2]
@@ -764,12 +766,23 @@ end
 ---@field description string? the card's description
 ---@field outcomes integer how many outcomes it has
 ---@field need_outcomes boolean whether it needs one
----@field children integer how many children it has, 0 for a card that is no umbrella
+---@field children integer how many children it has, 0 for a card that is no epic
 ---@field sections boolean? whether the v2 sections are checked, true when nil
+
+---The refusal for an epic whose outcome count is out of range.
+---@param outcomes integer how many outcomes the epic has
+---@return string problem the epic rule and the count
+local function epic_outcomes(outcomes)
+    return M.MIN_EPIC_OUTCOMES
+        .. " to "
+        .. M.MAX_EPIC_OUTCOMES
+        .. " Done when outcomes for an epic, not "
+        .. outcomes
+end
 
 ---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v2 section with text under
 ---Problem, and, when asked, at least one Done when outcome. A v1 `## Done when` checklist item
----counts as an outcome, and an umbrella needs none, its children being its work.
+---counts as an outcome. An epic, a card with children, needs 1 to 3 outcomes as its final check.
 ---@param card dev.board.Unplanned the card's size, description and outcome facts
 ---@return string[] missing the problems, empty when the card may sit outside Icebox
 function M.unplanned(card)
@@ -783,14 +796,12 @@ function M.unplanned(card)
             missing[#missing + 1] = item
         end
     end
-    local umbrella = card.children > 0
-    if
-        card.need_outcomes
-        and not umbrella
-        and card.outcomes == 0
-        and checklist_items(description) == 0
-    then
-        missing[#missing + 1] = "Done when outcomes"
+    if card.need_outcomes then
+        if card.outcomes == 0 and checklist_items(description) == 0 then
+            missing[#missing + 1] = "Done when outcomes"
+        elseif card.children > 0 and card.outcomes > M.MAX_EPIC_OUTCOMES then
+            missing[#missing + 1] = epic_outcomes(card.outcomes)
+        end
     end
     return missing
 end
@@ -820,12 +831,13 @@ function M.epic_mark(card)
 end
 
 ---List what a card lacks of card format v2 to enter Ready: each missing or empty section, and
----Done when outcomes. The outcomes are 3 to 7 subtasks, and a card with none is accepted when its
----description has a v1 `## Done when` checklist item.
+---Done when outcomes. The outcomes are 3 to 7 subtasks, or 1 to 3 for an epic, and a card with none
+---is accepted when its description has a v1 `## Done when` checklist item.
 ---@param description string? the card's description
 ---@param outcomes integer how many outcomes the card has
+---@param children integer how many children the card has
 ---@return string[] missing the problems, empty when the card follows the format
-function M.missing(description, outcomes)
+function M.missing(description, outcomes, children)
     local seen, filled = sections(description)
     local items = checklist_items(description)
     local missing = {}
@@ -839,7 +851,16 @@ function M.missing(description, outcomes)
     for _, shape in ipairs(M.shapes(description)) do
         missing[#missing + 1] = shape
     end
-    if outcomes == 0 and items == 0 then
+    if children > 0 then
+        if outcomes == 0 and items == 0 then
+            missing[#missing + 1] = M.MIN_EPIC_OUTCOMES
+                .. " to "
+                .. M.MAX_EPIC_OUTCOMES
+                .. " Done when outcomes for an epic"
+        elseif outcomes > M.MAX_EPIC_OUTCOMES then
+            missing[#missing + 1] = epic_outcomes(outcomes)
+        end
+    elseif outcomes == 0 and items == 0 then
         missing[#missing + 1] = M.MIN_OUTCOMES .. " to " .. M.MAX_OUTCOMES .. " Done when outcomes"
     elseif outcomes > 0 and (outcomes < M.MIN_OUTCOMES or outcomes > M.MAX_OUTCOMES) then
         missing[#missing + 1] = M.MIN_OUTCOMES

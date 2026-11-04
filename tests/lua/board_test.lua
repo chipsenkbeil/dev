@@ -991,13 +991,16 @@ t.test("move refuses a sized card that lacks a section or outcomes outside Icebo
         result = commands.run("move", { "cccccccc", column }, backend)
         t.eq(result.code, 1, column)
         t.ok(result.message:find("Done when outcomes", 1, true), result.message)
-        t.eq(backend.calls, { { "family", ID_C } }, column)
+        t.eq(#backend.calls, 0, column)
     end
 end)
 
-t.test("an umbrella moves to Done with no outcomes once every child is Done", function()
-    local backend = fake({ planned() })
-    backend.kin = { children = { done = 3, total = 3 } }
+t.test("an epic moves to Done once every child is Done and its outcome is ticked", function()
+    local card = planned()
+    card.epic = { done = 3, total = 3 }
+    card.outcomes = { { id = "s1", name = "a", done = true } }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
     local result = commands.run("move", { "cccccccc", "done" }, backend)
     t.eq(result.output, "moved cccccccc to Done")
     t.eq(backend.calls[#backend.calls], { "move", ID_C, "Done" })
@@ -1007,6 +1010,7 @@ t.test("epic_move_refused", function()
     local card = planned()
     card.column = "Ready"
     card.epic = { done = 1, total = 3 }
+    card.outcomes = { { id = "s1", name = "a", done = true } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
     backend.limited = { "Review" }
@@ -1029,18 +1033,7 @@ t.test("epic_move_refused", function()
     t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
 end)
 
-t.test("a move to Done is refused when the children cannot be read", function()
-    local backend = fake({ planned() })
-    function backend:family()
-        return nil, "pomb is down"
-    end
-    local result = commands.run("move", { "cccccccc", "done" }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.unqueued, true)
-    t.ok(result.message:find("pomb is down", 1, true), result.message)
-end)
-
-t.test("discard closes an umbrella whose children are open", function()
+t.test("discard closes an epic whose children are open", function()
     local backend = fake({ planned() })
     backend.kin = { children = { done = 0, total = 2 } }
     local result = commands.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
@@ -1050,28 +1043,30 @@ t.test("discard closes an umbrella whose children are open", function()
     end
 end)
 
-t.test(
-    "an umbrella with no outcomes enters a working column and a card without children does not",
-    function()
-        local backend = fake({ planned() })
-        backend.kin = { children = { done = 0, total = 2 } }
-        t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
-        t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, nil)
-        backend = fake({ planned() })
-        t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, 1)
-    end
-)
+t.test("an epic needs an outcome to enter a working column like a card without children", function()
+    local card = planned()
+    card.epic = { done = 0, total = 2 }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, 1)
+    card.outcomes = { { id = "s1", name = "a", done = false } }
+    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, nil)
+    backend = fake({ planned() })
+    t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, 1)
+end)
 
-t.test("an unsized umbrella is refused and a red one is allowed", function()
+t.test("an unsized epic is refused and a red one is allowed", function()
     local card = planned()
     card.color = nil
+    card.epic = { done = 0, total = 2 }
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
-    backend.kin = { children = { done = 0, total = 2 } }
+    backend.kin = { children = card.epic }
     t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, 1)
     card.color = "red"
     backend = fake({ card })
-    backend.kin = { children = { done = 0, total = 2 } }
+    backend.kin = { children = card.epic }
     t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
 end)
 
@@ -1326,16 +1321,16 @@ t.test("unlink removes the held link of that kind and target, and refuses one it
     t.eq(commands.run("unlink", { "11111111-a", "blocked_by", "deadbeef" }, backend).code, 1)
 end)
 
-t.test("link takes parent, and show prints the umbrella and the children", function()
+t.test("link takes parent, and show prints the epic and the children", function()
     local backend = fake(sample())
     local result = commands.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
     t.eq(result.output, "linked cccccccc parent 11111111")
     t.eq(backend.calls[1], { "link", ID_C, "parent", ID_A })
-    backend.kin = { parent = { id = ID_A, name = "Umbrella" } }
+    backend.kin = { parent = { id = ID_A, name = "Epic" } }
     result = commands.run("show", { "11111111-b" }, backend)
     t.eq(
         result.output,
-        "11111111  Backlog  unsized  -  Fix lint\nparent: 11111111 Umbrella\n\nno description\n\nno comments"
+        "11111111  Backlog  unsized  -  Fix lint\nparent: 11111111 Epic\n\nno description\n\nno comments"
     )
     backend.kin = { children = { done = 1, total = 3 } }
     result = commands.run("show", { "11111111-b" }, backend)
@@ -1741,14 +1736,14 @@ t.test("missing and backlog_missing count a heading with text, not an empty one"
     })
     t.eq(board.backlog_missing("## Problem\nx"), { "## Change", "## Out of scope" })
     t.eq(board.backlog_missing(nil), { "## Problem", "## Change", "## Out of scope" })
-    t.eq(board.missing(V1, 0), {})
-    t.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3), {
+    t.eq(board.missing(V1, 0, 0), {})
+    t.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3, 0), {
         "text under ## Change",
     })
-    t.eq(board.missing("## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", 3), {
+    t.eq(board.missing("## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", 3, 0), {
         "text under ## Out of scope",
     })
-    t.eq(board.missing(V2, 3), {})
+    t.eq(board.missing(V2, 3, 0), {})
 end)
 
 t.test(
@@ -1977,6 +1972,49 @@ t.test("move to Ready counts 3 to 7 outcomes, and a v1 checklist when there are 
     local card = colored("green")
     card.outcomes = {}
     t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+end)
+
+t.test("an epic with 1 to 3 outcomes enters Ready", function()
+    for _, count in ipairs({ 1, 2, 3 }) do
+        local card = colored("green")
+        card.description = V2
+        card.epic = { done = 2, total = 2 }
+        card.outcomes = outcomes(count)
+        local backend = fake({ card })
+        t.eq(commands.run("move", { "cccccccc", "ready" }, backend).code, nil, count)
+        t.eq(backend.calls[#backend.calls], { "move", ID_C, "Ready" })
+    end
+end)
+
+t.test("an epic with no outcomes or more than 3 is refused with the epic rule", function()
+    for _, count in ipairs({ 0, 4, 7 }) do
+        local card = colored("green")
+        card.description = V2
+        card.epic = { done = 2, total = 2 }
+        card.outcomes = outcomes(count)
+        local backend = fake({ card })
+        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("1 to 3 Done when outcomes for an epic", 1, true), result.message)
+        if count > 0 then
+            t.ok(result.message:find("not " .. count, 1, true), result.message)
+        end
+        t.eq(#backend.calls, 0)
+    end
+end)
+
+t.test("a card without children is still held to 3 to 7 outcomes at Ready", function()
+    for _, count in ipairs({ 1, 2, 8 }) do
+        local card = colored("green")
+        card.description = V2
+        card.outcomes = outcomes(count)
+        local backend = fake({ card })
+        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+        t.eq(result.message:find("epic", 1, true), nil, result.message)
+        t.eq(#backend.calls, 0)
+    end
 end)
 
 t.test("add --done-when hands the outcomes to the backend and checks them", function()

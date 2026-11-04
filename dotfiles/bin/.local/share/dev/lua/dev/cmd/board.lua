@@ -827,7 +827,7 @@ function commands.add(backend, args)
         end
     end
     if column == roles.ready then
-        local missing = board.missing(description, #outcomes)
+        local missing = board.missing(description, #outcomes, 0)
         if #missing > 0 then
             return usage(
                 "a card needs card format v2 before it enters Ready, and this one lacks "
@@ -1460,16 +1460,7 @@ local function move_card(backend, args, opts)
             return refused
         end
     end
-    local children, children_read
-    local function read_children()
-        if not children_read then
-            local family, why = backend:family(card.id)
-            if not family then
-                return to_done and unqueued(failure(why)) or failure(why)
-            end
-            children, children_read = family.children, true
-        end
-    end
+    local children = card.epic and card.epic.total or 0
     if column == roles.ready and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
@@ -1486,23 +1477,9 @@ local function move_card(backend, args, opts)
             description = card.description,
             outcomes = #card.outcomes,
             need_outcomes = not (opts and opts.drop) and not card.outcomes_unreadable,
-            children = 0,
+            children = children,
         }
         local missing = board.unplanned(facts)
-        if #missing > 0 and facts.need_outcomes and facts.outcomes == 0 then
-            facts.need_outcomes = false
-            if #board.unplanned(facts) == 0 then
-                local failed = read_children()
-                if failed then
-                    return failed
-                end
-                facts.need_outcomes = true
-                if children then
-                    facts.children = children.total
-                end
-                missing = board.unplanned(facts)
-            end
-        end
         if #missing > 0 then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
@@ -1521,7 +1498,7 @@ local function move_card(backend, args, opts)
         end
     end
     if column == roles.ready then
-        local missing = board.missing(card.description, #card.outcomes)
+        local missing = board.missing(card.description, #card.outcomes, children)
         if #missing > 0 then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)

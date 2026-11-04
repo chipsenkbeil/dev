@@ -103,7 +103,7 @@ function M.card(card, opts)
     end
     if column ~= roles.icebox then
         local child_total = 0
-        if need_outcomes and #card.outcomes == 0 then
+        if need_outcomes then
             local found, why = children()
             if not found then
                 return nil, why
@@ -163,13 +163,7 @@ function M.card(card, opts)
         end
     end
     if column == roles.progress and not card.claimant and not board.labelled(card, board.RUN) then
-        local found, why = children()
-        if not found then
-            return nil, why
-        end
-        if found.total == 0 then
-            add("in progress with no claimant")
-        end
+        add("in progress with no claimant")
     end
     if card.done and not discarded then
         local found, why = children()

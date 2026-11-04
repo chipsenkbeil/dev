@@ -377,8 +377,8 @@ Every card in every column is fair game for an agent unless it is labelled
   format v2 sections and an outcome. A planner refines the description, the
   outcomes and the checks, re-sizes it if needed (splitting a red card, which
   may become an epic over its children) and moves it to Ready.
-- Ready: an agent can run it with no questions: size 1 to 3, v2, 3 to 7 outcomes
-  and a checks row, which `dev board` enforces. The top card is next, and the
+- Ready: an agent can run it with no questions: size 1 to 3, v2, 3 to 7 outcomes (1 to 3 for an
+  epic) and a checks row, which `dev board` enforces. The top card is next, and the
   order within Ready is the priority. A runner takes it by size: yellow by a
   haiku agent, green and blue by a sonnet agent.
 - In Progress: an agent holds the card, under its name. Only the claimant works
@@ -489,9 +489,10 @@ An epic is a card with children, which Pomb also calls kind epic. `ls` and
 no children, and `show` prints `kind: epic, N open` above the `parent` and
 `children` lines. Once every child is Done it enters Ready and takes a claim
 like any card. While a child is open, `next` never offers it, in any column, on
-Pomb or a local board. Its outcomes are its final check. dev asks none of an epic with
-children, so `move CARD done` closes it once every child is Done and refuses it
-while a child is open.
+Pomb or a local board. It needs 1 to 3 outcomes as its final check, where any
+other card needs 3 to 7, and it is claimed like any card once its children are
+done. `move CARD done` closes it once every child is Done and refuses it while a
+child is open.
 
 To push a card later, drag it lower in Ready.
 
@@ -556,7 +557,7 @@ an unsized card or one without the headings but does not ask for outcomes (exit
 1), so a card never reaches Done unsized. `size CARD unsized` is refused outside
 Icebox (exit 1), `edit` refuses a text that drops a heading outside Icebox (exit
 1), and a move into Icebox always works. An epic follows the same rule
-except for outcomes, which dev does not ask of one with children.
+with 1 to 3 outcomes in place of 3 to 7.
 
 Sizing is part of planning, so a card also cannot enter Ready as red.
 `move CARD ready` refuses a card that is unsized (white or no colour) or red,
@@ -817,7 +818,8 @@ open question. `--strict` exits the same way. The rules:
   text under Change or Out of scope, and no `Change:` or `Out of scope:` line
   under Problem. A Done card gets the size and outcome checks only, and a Done
   card labelled `discarded` needs no outcome. An epic, a card with children,
-  needs no outcome either, so lint reads its children when a card has none.
+  needs 1 to 3 outcomes, so lint reads the children of every card it checks for
+  outcomes.
 - With `--strict`, a Done card also needs the three v2 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
@@ -825,7 +827,7 @@ open question. `--strict` exits the same way. The rules:
   Progress and Review, a checks row. In Ready, no red size.
 - `needs:human` sits only in Blocked or Icebox.
 - A Blocked card holds a `question` or `blocked` note or a `blocked_by` link.
-- An In Progress card holds a claimant unless it is an epic with children.
+- An In Progress card holds a claimant, an epic too.
 - A Done epic that was not discarded has every child Done: `N of M children
   open`.
 - A Done card that was not discarded has every outcome ticked.
@@ -1199,7 +1201,7 @@ never handles the API.
   the epic as `OTHER`. Epics nest to any depth and a card has one
   epic, so Pomb answers a second epic or a cycle with a `400` (exit 1),
   and a local board refuses the same itself (`the card already has an
-  umbrella`, `the link would make a cycle of umbrellas between A and B`) while
+  epic`, `the link would make a cycle of epics between A and B`) while
   linking the same epic twice changes nothing. `OTHER` is a card of this board (an id or a prefix of 8 hex
   characters or more) or `BOARD:PREFIX` for a card of another board of the same
   Pomb server, which dev finds by reading that board (`other_board`) and
@@ -1302,10 +1304,9 @@ never handles the API.
   adds `needs:human outside Blocked and Icebox`. In Blocked it adds `blocked with no question or blocked
   note and no blocker`, reading `backend:comments` for a `question` or
   `blocked` kind and then `backend:links` for `blocked_by`. In In Progress it
-  adds `in progress with no claimant` when `backend:family` shows no children,
-  and in Done `N of M outcomes unticked` unless discarded, and `N of M children
-  open` when the card has an open child. A card with no outcomes asks
-  `backend:family` first and is not asked for outcomes when it has children. A
+  adds `in progress with no claimant`, and in Done `N of M outcomes unticked` unless discarded, and `N of M children
+  open` when the card has an open child. Every card asked for outcomes reads
+  `backend:family` for its child count, which sets the 1 to 3 an epic needs. A
   card with `outcomes_unreadable` gets `outcomes unreadable` and no outcome
   rule. A read that fails is exit 1 with the message. It writes nothing
   itself, but the dispatcher replays the queue first, as for every Pomb

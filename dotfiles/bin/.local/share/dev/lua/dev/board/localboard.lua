@@ -154,7 +154,7 @@ local function live(claim)
     return claim
 end
 
-local function umbrella_of(card)
+local function epic_of(card)
     for _, held in ipairs(card.links or {}) do
         if held.kind == board.LinkKind.PARENT then
             return held.target_id
@@ -165,7 +165,7 @@ end
 local function children_of(doc, id)
     local found = {}
     for _, other in ipairs(doc.cards) do
-        if umbrella_of(other) == id then
+        if epic_of(other) == id then
             found[#found + 1] = other
         end
     end
@@ -342,24 +342,24 @@ function Backend:link(id, kind, other)
             return nil, "a card cannot be linked to itself"
         end
         if kind == board.LinkKind.PARENT then
-            local current = umbrella_of(card)
+            local current = epic_of(card)
             if current == target.id then
                 return true
             end
             if current then
-                return nil, "the card already has an umbrella"
+                return nil, "the card already has an epic"
             end
             local step, seen = target, {}
             while step and not seen[step.id] do
                 if step == card then
                     return nil,
-                        "the link would make a cycle of umbrellas between " .. card.id:sub(
+                        "the link would make a cycle of epics between " .. card.id:sub(
                             1,
                             board.MIN_PREFIX
                         ) .. " and " .. target.id:sub(1, board.MIN_PREFIX)
                 end
                 seen[step.id] = true
-                local up = umbrella_of(step)
+                local up = epic_of(step)
                 step = up and find_by_id(doc.cards, up)
             end
         end
@@ -464,10 +464,10 @@ function Backend:family(id)
         return nil, "the board has no card " .. id
     end
     local family = {}
-    local umbrella_id = umbrella_of(card)
-    local umbrella = umbrella_id and find_by_id(doc.cards, umbrella_id)
-    if umbrella then
-        family.parent = { id = umbrella.id, name = umbrella.name }
+    local epic_id = epic_of(card)
+    local epic = epic_id and find_by_id(doc.cards, epic_id)
+    if epic then
+        family.parent = { id = epic.id, name = epic.name }
     end
     family.children = child_counts(doc, id)
     family.epic = family.children ~= nil

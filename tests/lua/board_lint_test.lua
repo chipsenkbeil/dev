@@ -128,14 +128,31 @@ t.test("lint flags an empty Change or Out of scope and a Change: line under Prob
     t.eq(findings(result.output), { "00000005 Done lacks text under ## Change" })
 end)
 
-t.test("lint holds an umbrella to its children and not to outcomes", function()
+t.test("lint holds an epic to 1 to 3 outcomes and to its children", function()
     local cards = {
-        card(1, "In Progress", { outcomes = {} }),
+        card(1, "Backlog", { outcomes = {} }),
         card(2, "Done", { outcomes = {} }),
         card(3, "Done", { outcomes = {} }),
         card(4, "Backlog", { outcomes = {} }),
+        card(5, "Backlog", {
+            outcomes = {
+                { id = "o1", name = "a" },
+                { id = "o2", name = "b" },
+                { id = "o3", name = "c" },
+                { id = "o4", name = "d" },
+            },
+        }),
+        card(6, "Backlog", { outcomes = outcomes(2) }),
     }
-    local held = { children = { [cards[1].id] = 2, [cards[2].id] = 2, [cards[3].id] = 0 } }
+    local held = {
+        children = {
+            [cards[1].id] = 2,
+            [cards[2].id] = 2,
+            [cards[3].id] = 0,
+            [cards[5].id] = 2,
+            [cards[6].id] = 2,
+        },
+    }
     local fake = backend(cards, held)
     function fake:family(id)
         local total = held.children[id]
@@ -146,16 +163,31 @@ t.test("lint holds an umbrella to its children and not to outcomes", function()
     end
     local result = commands.run("lint", {}, fake)
     t.eq(findings(result.output), {
+        "00000001 Backlog lacks Done when outcomes",
+        "00000002 Done lacks Done when outcomes",
         "00000002 Done 1 of 2 children open",
         "00000003 Done lacks Done when outcomes",
         "00000004 Backlog lacks Done when outcomes",
+        "00000005 Backlog lacks 1 to 3 Done when outcomes for an epic, not 4",
     })
 end)
 
-t.test("lint asks a card without children for a checks row and an umbrella for none", function()
+t.test("lint gives an epic no claimant exemption", function()
     local cards = {
-        card(1, "In Progress", { outcomes = {}, checks = {} }),
-        card(2, "In Progress", { checks = {} }),
+        card(1, "In Progress", { claimant = false, outcomes = outcomes(2) }),
+        card(2, "In Progress", { claimant = false, outcomes = outcomes(3) }),
+    }
+    local fake = backend(cards, { children = { [cards[1].id] = 2 } })
+    t.eq(findings(commands.run("lint", {}, fake).output), {
+        "00000001 In Progress in progress with no claimant",
+        "00000002 In Progress in progress with no claimant",
+    })
+end)
+
+t.test("lint asks a card without children for a checks row and an epic for none", function()
+    local cards = {
+        card(1, "In Progress", { outcomes = outcomes(2), checks = {} }),
+        card(2, "In Progress", { outcomes = outcomes(3), checks = {} }),
     }
     local fake = backend(cards, { children = { [cards[1].id] = 2 } })
     t.eq(findings(commands.run("lint", {}, fake).output), { "00000002 In Progress no checks row" })
@@ -187,7 +219,7 @@ t.test("lint passes a clean board with exit 0 and no code", function()
         card(4, "Done", { description = false, claimant = false }),
         card(5, "Blocked", { labels = { "needs:human" } }),
         card(6, "Blocked"),
-        card(7, "In Progress", { claimant = false }),
+        card(7, "In Progress"),
         card(8, "Ready", { checks = { "dev test" } }),
         card(9, "Icebox", { labels = { "needs:human" } }),
     }
@@ -211,7 +243,7 @@ t.test("lint reads comments only for a Blocked card and writes nothing", functio
     }
     local fake = backend(cards, { children = {} })
     commands.run("lint", {}, fake)
-    t.eq(fake.calls, { "comments", "links", "family" })
+    t.eq(fake.calls, { "family", "family", "comments", "links", "family", "family" })
 end)
 
 t.test("lint refuses an argument", function()

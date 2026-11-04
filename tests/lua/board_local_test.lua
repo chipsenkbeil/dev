@@ -733,7 +733,7 @@ t.test("link refuses itself, a cycle, another board and a bad kind on a local bo
     t.eq(links, 2)
 end)
 
-t.test("a local board refuses what the needs:human and umbrella rules forbid", function()
+t.test("a local board refuses what the needs:human and epic rules forbid", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of(
@@ -747,10 +747,10 @@ t.test("a local board refuses what the needs:human and umbrella rules forbid", f
         )
     end
     local card, child = add("Card"), add("Child")
-    local umbrella = prefix_of((dev(root, home, {
+    local epic = prefix_of((dev(root, home, {
         "board",
         "add",
-        "Umbrella",
+        "Epic",
         "--size",
         "2",
         "--description",
@@ -777,12 +777,12 @@ t.test("a local board refuses what the needs:human and umbrella rules forbid", f
     t.eq(code, 0, out)
     out, code = dev(root, home, { "board", "move", card, "backlog" })
     t.eq(code, 0, out)
-    dev(root, home, { "board", "link", child, "parent", umbrella })
-    out, code = dev(root, home, { "board", "move", umbrella, "ready" })
+    dev(root, home, { "board", "link", child, "parent", epic })
+    out, code = dev(root, home, { "board", "move", epic, "ready" })
     t.eq(code, 0, out)
 end)
 
-t.test("link parent sets one umbrella and show and links report it", function()
+t.test("link parent sets one epic and show and links report it", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of(
@@ -795,28 +795,28 @@ t.test("link parent sets one umbrella and show and links report it", function()
             )
         )
     end
-    local umbrella, one, two, other = add("Umbrella"), add("One"), add("Two"), add("Other")
-    local out, code = dev(root, home, { "board", "link", one, "parent", umbrella })
-    t.eq(out, "linked " .. one .. " parent " .. umbrella .. "\n")
+    local epic, one, two, other = add("Epic"), add("One"), add("Two"), add("Other")
+    local out, code = dev(root, home, { "board", "link", one, "parent", epic })
+    t.eq(out, "linked " .. one .. " parent " .. epic .. "\n")
     t.eq(code, 0)
-    t.eq(dev(root, home, { "board", "link", one, "parent", umbrella }), out)
-    dev(root, home, { "board", "link", two, "parent", umbrella })
+    t.eq(dev(root, home, { "board", "link", one, "parent", epic }), out)
+    dev(root, home, { "board", "link", two, "parent", epic })
     out, code = dev(root, home, { "board", "link", one, "parent", other })
     t.eq(code, 1, out)
-    t.ok(out:find("already has an umbrella", 1, true), out)
+    t.ok(out:find("already has an epic", 1, true), out)
     out, code = dev(root, home, { "board", "link", other, "parent", one })
     t.eq(code, 0, out)
     out = dev(root, home, { "board", "show", one })
     t.ok(out:find("\nchildren: 0 of 1 done\n", 1, true), out)
-    out, code = dev(root, home, { "board", "link", umbrella, "parent", other })
+    out, code = dev(root, home, { "board", "link", epic, "parent", other })
     t.eq(code, 1, out)
-    t.ok(out:find("cycle of umbrellas", 1, true), out)
-    t.ok(out:find(umbrella, 1, true) and out:find(other, 1, true), out)
-    out, code = dev(root, home, { "board", "link", umbrella, "parent", umbrella })
+    t.ok(out:find("cycle of epics", 1, true), out)
+    t.ok(out:find(epic, 1, true) and out:find(other, 1, true), out)
+    out, code = dev(root, home, { "board", "link", epic, "parent", epic })
     t.eq(code, 1, out)
     out = dev(root, home, { "board", "show", one })
-    t.ok(out:find("\nparent: " .. umbrella .. " Umbrella\n", 1, true), out)
-    out = dev(root, home, { "board", "show", umbrella })
+    t.ok(out:find("\nparent: " .. epic .. " Epic\n", 1, true), out)
+    out = dev(root, home, { "board", "show", epic })
     t.ok(out:find("\nchildren: 0 of 2 done\n", 1, true), out)
     tick_first(root, home, one)
     out, code = dev(root, home, { "board", "move", one, "done" })
@@ -826,11 +826,11 @@ t.test("link parent sets one umbrella and show and links report it", function()
     dev(root, home, { "board", "move", other, "done" })
     out, code = dev(root, home, { "board", "move", one, "done" })
     t.eq(code, 0, out)
-    out = dev(root, home, { "board", "show", umbrella })
+    out = dev(root, home, { "board", "show", epic })
     t.ok(out:find("\nchildren: 1 of 2 done\n", 1, true), out)
     out = dev(root, home, { "board", "links", one })
-    t.ok(out:find("parent", 1, true) and out:find(umbrella, 1, true), out)
-    out = dev(root, home, { "board", "links", umbrella })
+    t.ok(out:find("parent", 1, true) and out:find(epic, 1, true), out)
+    out = dev(root, home, { "board", "links", epic })
     t.ok(out:find("child", 1, true) and out:find(one, 1, true), out)
 end)
 
@@ -1454,7 +1454,7 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
-*/api/tasks/aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa) body='{"id":"aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa","parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Umbrella"},"children_done":1,"children_total":3}' ;;
+*/api/tasks/aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa) body='{"id":"aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa","parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Epic"},"children_done":1,"children_total":3}' ;;
 */api/tasks) body='{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"x","column_id":"col-backlog"}' ;;
 *) body='{"ok":true}' ;;
 esac
@@ -1619,11 +1619,11 @@ t.test("a tracked board leaves no lock file in the project", function()
     t.eq(fs.list(root .. "/.dev"), { "board.json", "config.toml" })
 end)
 
-t.test("show reads the umbrella and the children of a card from the task view", function()
+t.test("show reads the epic and the children of a card from the task view", function()
     local root, home = pomb()
     local out, code = pomb_dev(root, home, { "board", "show", ID_A:sub(1, 8) })
     t.eq(code, 0, out)
-    t.ok(out:find("\nparent: bbbbbbbb Umbrella\nchildren: 1 of 3 done\n\n", 1, true), out)
+    t.ok(out:find("\nparent: bbbbbbbb Epic\nchildren: 1 of 3 done\n\n", 1, true), out)
 end)
 
 t.test("a locked pass queues a write the same way", function()
