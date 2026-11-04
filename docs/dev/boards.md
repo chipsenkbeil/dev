@@ -1051,6 +1051,17 @@ never handles the API.
   (`GET /api/boards`, which leaves out the boards outside a fine-grained
   token's set). On a local board it prints that board's own name. An extra
   word is exit 2.
+- `whoami`: `dev board whoami` shows the credential dev board uses, one
+  `key: value` line each, from `GET /api/v1/auth/whoami`: `name`, `kind`,
+  `scope`, `role`, `label`, `issuer`, `expires` (UTC, `never` when the
+  credential does not expire),
+  `boards` (`all`, or the board names) and `permissions`. A token issued as no
+  role shows `none` for `role`, `label` and `issuer`. `issuer` is the name of
+  the lead token that issued it, as it was then. The token is never printed. A
+  401 reads as every other refusal does, with `mint it again` for an expired
+  role token, and a local board holds no credential, so it is exit 1. An extra
+  word is exit 2. The drift of a role token from its template is not listed
+  (Pomb's whoami does not return it).
 - `columns [BOARD]`: The columns of the board named BOARD, else of this
   project's board, one per line in board order, with ` (done)` after a column
   that finishes a card (`GET /api/boards/{id}`, `columns`). A board the token

@@ -429,6 +429,40 @@ function Backend:__role()
     return self.__who or nil
 end
 
+---Read the credential behind the token in use from whoami.
+---@return {name: string, kind: string, scope: string, role: string?, label: string?, issuer: string?, expires: integer?, boards: string[]|string, permissions: string[]}? who the credential, never its token
+---@return string? message why nothing was read
+function Backend:whoami()
+    local doc, message = self:__request("GET", WHOAMI_PATH)
+    if not doc then
+        return nil, message
+    end
+    if type(doc) ~= "table" then
+        return nil, unavailable("pomb sent an answer dev cannot read")
+    end
+    local boards = {}
+    if type(doc.boards) == "table" then
+        for _, entry in ipairs(doc.boards) do
+            boards[#boards + 1] = present(type(entry) == "table" and entry.name or entry) or "?"
+        end
+    end
+    local permissions = {}
+    for _, name in ipairs(type(doc.permissions) == "table" and doc.permissions or {}) do
+        permissions[#permissions + 1] = tostring(name)
+    end
+    return {
+        name = present(doc.name) or "?",
+        kind = present(doc.kind) or "?",
+        scope = present(doc.scope) or "?",
+        role = present(doc.role_name),
+        label = present(doc.label),
+        issuer = type(doc.parent_token) == "table" and present(doc.parent_token.name) or nil,
+        expires = tonumber(doc.expires_at),
+        boards = doc.boards == "all" and "all" or boards,
+        permissions = permissions,
+    }
+end
+
 function Backend:__roles()
     return self.roles or board.roles()
 end

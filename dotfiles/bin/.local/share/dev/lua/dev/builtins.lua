@@ -234,6 +234,12 @@ return {
         desc = "List the names of the boards the token sees, one per line, or on a local board its own name",
     },
     {
+        words = { "board", "whoami" },
+        handler = "lua",
+        usage = "dev board whoami",
+        desc = "Show the Pomb credential dev board uses: its name, kind, scope, role, agent-N label, the name of the lead token that issued it, expiry, boards and permissions, with none for the role, label and issuer of a token issued as no role, and never the token. A refused or expired token is shown in plain words",
+    },
+    {
         words = { "board", "columns" },
         handler = "lua",
         usage = "dev board columns [BOARD]",

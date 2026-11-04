@@ -3540,6 +3540,35 @@ function commands.boards(backend, args)
     return { output = table.concat(names, "\n") }
 end
 
+function commands.whoami(backend, args)
+    if #args > 0 then
+        return usage("unknown argument " .. args[1])
+    end
+    if not backend.whoami then
+        return failure("this board holds no credential, so there is nobody to show")
+    end
+    local who, message = backend:whoami()
+    if not who then
+        return failure(message)
+    end
+    local function list(items)
+        return type(items) == "string" and items
+            or (#items > 0 and table.concat(items, ", ") or "none")
+    end
+    local lines = {
+        "name: " .. who.name,
+        "kind: " .. who.kind,
+        "scope: " .. who.scope,
+        "role: " .. (who.role or "none"),
+        "label: " .. (who.label or "none"),
+        "issuer: " .. (who.issuer or "none"),
+        "expires: " .. (who.expires and os.date("!%Y-%m-%dT%H:%M:%SZ", who.expires) or "never"),
+        "boards: " .. list(who.boards),
+        "permissions: " .. list(who.permissions),
+    }
+    return { output = table.concat(lines, "\n") }
+end
+
 function commands.columns(backend, args)
     if #args > 1 then
         return usage("takes at most one board name")
