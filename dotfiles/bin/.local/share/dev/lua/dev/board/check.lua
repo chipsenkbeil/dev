@@ -12,7 +12,8 @@ M.DEFAULT_SECONDS = 7200
 ---The most seconds `--timeout` accepts.
 M.MAX_SECONDS = 86400
 
-local SHELL_CHARS = "[|&;<>()$`\\\"'*?\n]"
+local SHELL_CHARS = "[|&;<>()$`\\\"'*?!\n]"
+local NEGATED = "^%s*!%s+(.*)$"
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "conflict", "clean")'
 local SHOWN_LINES = 12
 local NO_CHANGE = "-"
@@ -39,10 +40,12 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---Split a checks row into the words of one command.
 ---
 ---A row is a command and never shell text, so a character the shell would act on is refused.
+---A leading `! ` marks a negated row and is dropped, since `run` reads it from the row.
 ---@param row string the row as the card holds it
 ---@return string[]? argv the command and its arguments
 ---@return string? message why the row is not a plain command
 function M.argv(row)
+    row = row:match(NEGATED) or row
     local bad = row:match(SHELL_CHARS)
     if bad then
         return nil,
@@ -133,7 +136,7 @@ end
 ---@class dev.board.check.RunOpts
 ---@field root string the project root the row runs in
 ---@field run string the row
----@field argv string[] the row's words from `argv`
+---@field argv string[] the row's words from `argv`, without a leading `! `
 ---@field seconds integer how long the row may run
 
 ---Run one checks row to its end or its time limit.
@@ -142,7 +145,18 @@ end
 function M.run(opts)
     local output, code =
         devos.capture_timed(opts.argv, opts.seconds, { cwd = opts.root, merge = true })
-    local result = code == 0 and M.RESULT.PASS or M.RESULT.FAIL
+    local negated = opts.run:match(NEGATED) ~= nil
+    local passed = code == 0
+    local note
+    if negated then
+        passed = code == 1
+        if code == 0 then
+            note = "a match was found"
+        elseif code ~= 1 and code ~= TIMEOUT_EXIT then
+            note = string.format("the command failed with exit %d, which is an error", code)
+        end
+    end
+    local result = passed and M.RESULT.PASS or M.RESULT.FAIL
     if code == TIMEOUT_EXIT then
         result = M.RESULT.TIMEOUT
     end
@@ -151,7 +165,7 @@ function M.run(opts)
         run_id = M.run_id(output) or NO_RUN,
         result = result,
         code = code,
-        tail = tail_of(output),
+        tail = note and (note .. "\n" .. tail_of(output)) or tail_of(output),
     }
 end
 

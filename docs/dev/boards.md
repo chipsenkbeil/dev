@@ -1258,7 +1258,11 @@ never handles the API.
   card and records the result as one comment on the card. A row runs as a
   plain command, split on whitespace and started without a shell, so a row
   that holds any of `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`,
-  `?` or a line break is refused before anything runs (exit 1). Under a set
+  `?`, `!` or a line break is refused before anything runs (exit 1). One `!`
+  is allowed, as the first word: a row `! rg -n PATTERN FILE` runs the rest as
+  the command and passes only when it exits 1 (a search that found nothing).
+  Exit 0 fails the row as a match found, and any other exit fails it as an
+  error, so rg's exit 2 never passes. Under a set
   `DEV_AGENT`, dev refuses a local run of a verb that has a ci job, so a row
   reads `dev --remote lint` (not `dev lint`). Each row may run for `--timeout`
   seconds (7200 by default, at most 86400, anything else is exit 2), counted

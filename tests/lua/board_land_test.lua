@@ -1039,7 +1039,7 @@ if has_jj then
 
     t.test("land does not carry a pass over a failed run at the rebased commit", function()
         local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare, "test ! -e docs.txt")
+        local id = review_ready(root, home, log, bare, "! test -e docs.txt")
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(root)
         local out, code = dev(root, home, log, { "board", "check", id })
