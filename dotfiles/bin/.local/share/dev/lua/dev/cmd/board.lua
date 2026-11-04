@@ -4610,6 +4610,27 @@ M.handlers["board token mint"] = function(ctx)
     return 0
 end
 
+M.handlers["board token revoke"] = function(ctx)
+    local flags, extra = parse(ctx.args, { ["--as"] = true })
+    if not flags then
+        verb.usage_error(ctx, extra.message)
+    elseif #extra > 0 then
+        verb.usage_error(ctx, "unknown argument " .. extra[1])
+    elseif not flags["--as"] or flags["--as"] == "" then
+        verb.usage_error(ctx, "needs --as NAME")
+    end
+    local backend = open_lead(ctx, "revokes a role token")
+    local done, message = backend:revoke(flags["--as"])
+    if not done then
+        verb.die("dev: " .. message)
+    end
+    print(
+        done.revoked and ("revoked the role token of " .. flags["--as"])
+            or ("nothing was left to revoke for " .. flags["--as"])
+    )
+    return 0
+end
+
 M.handlers["board status"] = function(ctx)
     verb.no_args(ctx)
     local found = settings(ctx)

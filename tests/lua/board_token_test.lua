@@ -33,6 +33,10 @@ case "$last" in
 */api/boards/board-1) body='{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":[{"id":"c1","name":"Ready"},{"id":"c2","name":"Done","is_done":true}]}' ;;
 */auth/whoami) body='{"role_name":null}' ;;
 */agent-roles) body=$(cat "$ROOT/roles.json") ;;
+*/auth/tokens/children/*)
+    body=$(cat "$ROOT/revoke.json" 2>/dev/null || echo '{}')
+    status=$(cat "$ROOT/revoke_status" 2>/dev/null || echo 200)
+    ;;
 */auth/tokens/children)
     body=$(cat "$ROOT/children.json")
     status=$(cat "$ROOT/children_status" 2>/dev/null || echo 200)
@@ -304,4 +308,82 @@ t.test("token-lookup-refused never retries a refused file token with pass", func
     t.ok(code == 1, out)
     t.ok(out:find("expired", 1, true), out)
     t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+end)
+
+local CHILD_ID = "tok-child-7"
+
+local function revoke(root, home, opts)
+    return dev(root, home, { "board", "token", "revoke", "--as", NAME }, opts)
+end
+
+local function listed(root, name)
+    assert(
+        fs.write(
+            root .. "/children.json",
+            '[{"id":"tok-other","name":"dotfiles/reviewer/other/1"},{"id":"'
+                .. CHILD_ID
+                .. '","name":"'
+                .. name
+                .. '"}]'
+        )
+    )
+end
+
+t.test("token-revoke-issue finds the child by NAME in the lead's list and revokes it", function()
+    local root, home = minted()
+    listed(root, NAME)
+    local out, code = revoke(root, home)
+    t.ok(code == 0, out)
+    t.eq(out, "revoked the role token of " .. NAME .. "\n")
+    local calls = read(root, "calls")
+    local listing = calls:find("-X GET", 1, true)
+    local revoking = calls:find("-X DELETE", 1, true)
+    t.ok(listing and revoking and listing < revoking, calls)
+    t.ok(calls:find("/api/v1/auth/tokens/children/" .. CHILD_ID .. "\n", 1, true), calls)
+    t.eq(calls:find("tok-other", 1, true), nil, calls)
+    t.ok(read(root, "stdin"):find("Bearer " .. LEAD, 1, true), read(root, "stdin"))
+    t.eq(read(root, "stdin"):find(RAW, 1, true), nil)
+    out, code = revoke(root, home, { agent = "dotfiles/implementer/other/1" })
+    t.ok(code == 1, out)
+    t.ok(out:find("only the lead revokes a role token", 1, true), out)
+    out, code = dev(root, home, { "board", "token", "revoke" })
+    t.ok(code == 2, out)
+end)
+
+t.test(
+    "token-revoke-file deletes the file after Pomb accepts and keeps it when Pomb refuses",
+    function()
+        local root, home = minted()
+        listed(root, NAME)
+        local dir = home .. "/state/dev/tokens"
+        assert(fs.write(root .. "/revoke_status", "403"))
+        assert(fs.write(root .. "/revoke.json", '{"code":"permission_denied","message":"no"}'))
+        local out, code = revoke(root, home)
+        t.ok(code == 1, out)
+        t.eq(#token_files(dir), 1)
+        assert(fs.remove(root .. "/revoke_status"))
+        assert(fs.write(root .. "/revoke.json", '{"revoked":"' .. CHILD_ID .. '"}'))
+        out, code = revoke(root, home)
+        t.ok(code == 0, out)
+        t.eq(#token_files(dir), 0)
+    end
+)
+
+t.test("token-revoke-none exits 0 for an unknown or already revoked name", function()
+    local root, home = minted()
+    local dir = home .. "/state/dev/tokens"
+    listed(root, "dotfiles/reviewer/another/1")
+    local out, code = revoke(root, home)
+    t.ok(code == 0, out)
+    t.eq(out, "nothing was left to revoke for " .. NAME .. "\n")
+    t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+    t.eq(#token_files(dir), 0)
+    root, home = minted()
+    listed(root, NAME)
+    assert(fs.write(root .. "/revoke_status", "404"))
+    assert(fs.write(root .. "/revoke.json", '{"message":"no such child token"}'))
+    out, code = revoke(root, home)
+    t.ok(code == 0, out)
+    t.eq(out, "nothing was left to revoke for " .. NAME .. "\n")
+    t.eq(#token_files(home .. "/state/dev/tokens"), 0)
 end)

@@ -146,12 +146,29 @@ holds no slash. Any other role is refused.
 
 Pomb refuses a name that a live token holds with a 409, and a name frees once
 its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`
-in plain words. Revoking a token and minting again on expiry are not part of
-this verb.
+in plain words. Minting again on expiry is not part of this verb, and
+`token revoke` ends a token early.
 
 The token goes to curl on standard input as a config line. It is in no argument
 list, no file and no output, `-v` and `-vv` included, and in no environment
 variable but `DEV_BOARD_TOKEN` itself.
+
+### Ending a role token: token-revoke
+
+`dev board token revoke --as NAME` ends the token that `token mint` issued as
+NAME, once its run is over. It reads the lead token's own child tokens from
+`GET /api/v1/auth/tokens/children`, finds the one named NAME, and revokes it
+with `DELETE /api/v1/auth/tokens/children/{id}`. Pomb lists and revokes only
+the children the calling token issued, so a token the lead did not issue is
+out of reach. The lead is refused as `mint` and `delete` are, by the one lead
+helper.
+
+Pomb answers 200 once the token is revoked, and dev then deletes the file named
+by the hash of NAME and prints `revoked the role token of NAME`. A NAME that no
+live child holds, or a token Pomb answers 404 for because it is already gone,
+leaves nothing to revoke: dev exits 0, prints `nothing was left to revoke for
+NAME` and deletes a stale file for NAME. When Pomb refuses the revoke, dev
+prints the reason, exits 1 and keeps the file.
 
 ## Which token each tool holds
 

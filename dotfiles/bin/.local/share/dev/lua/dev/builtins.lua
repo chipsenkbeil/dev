@@ -309,7 +309,7 @@ return {
     {
         words = { "board", "token" },
         noun = true,
-        desc = "Give a runner a Pomb role token: mint",
+        desc = "Give a runner a Pomb role token: mint, and end it with revoke",
     },
     {
         words = { "board", "token", "mint" },
@@ -317,6 +317,13 @@ return {
         flags = "--role --as",
         usage = "dev board token mint --role ROLE --as NAME",
         desc = "Issue a role token to a runner the lead starts by hand, with the lead token, and keep it in a 0600 file named by a hash of NAME, in $XDG_RUNTIME_DIR/dev/tokens when that is set, else in dev/tokens under the state directory. It prints the role, the agent-N label and the expiry, never the token, and deletes the expired token files. A runner started with DEV_AGENT set to NAME reads the file, and dev board looks for a token in DEV_BOARD_TOKEN, then that file, then pass, and a refused env or file token never falls back. It is refused unless DEV_AGENT is a lead name, as delete is. dev help boards, section token-mint, has the details",
+    },
+    {
+        words = { "board", "token", "revoke" },
+        handler = "lua",
+        flags = "--as",
+        usage = "dev board token revoke --as NAME",
+        desc = "Revoke the role token that dev board token mint issued as NAME, found by name among the lead token's own child tokens, and delete its file. A NAME no live child holds, or a token Pomb no longer knows, exits 0 and says nothing was left to revoke, and a revoke Pomb refuses keeps the file. It is refused unless DEV_AGENT is a lead name, as mint is. dev help boards, section token-revoke, has the details",
     },
     {
         words = { "board", "unlink" },

@@ -110,6 +110,26 @@ function M.read(name)
     return found
 end
 
+---Delete an agent's token file.
+---@param name string the agent's name
+---@return true? ok true when the file is gone, or there was none
+---@return string? message why it could not be deleted
+function M.remove(name)
+    local path, message = M.path(name)
+    if not path then
+        return nil, message
+    end
+    if not fs.exists(path) then
+        return true
+    end
+    local ok
+    ok, message = fs.remove(path)
+    if not ok then
+        return nil, "cannot delete " .. path
+    end
+    return true
+end
+
 ---Delete every token file whose expiry has passed.
 ---@param now integer the time in Unix seconds
 ---@return integer removed how many files went

@@ -19,6 +19,7 @@ local AGENT_VARIABLE = "DEV_AGENT"
 local ROLES_LIST_PATH = "/api/v1/agent-roles"
 local CHILDREN_PATH = "/api/v1/auth/tokens/children"
 local CONFLICT = 409
+local NOT_FOUND = 404
 local UNKNOWN_ROLE = "unknown_role"
 local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text"
 local CONNECT_SECONDS = "10"
@@ -1483,6 +1484,45 @@ function Backend:mint(role, name)
         label = present(reply.label) or "none",
         expires = expires,
     }
+end
+
+---Revoke the child token of the token in use that was issued as `name`, and
+---delete the file of `name`.
+---
+---A name that no live child holds, or a token Pomb no longer knows, leaves
+---nothing to revoke, and the file goes all the same. Pomb refusing the revoke
+---keeps the file.
+---@param name string the agent name the token was issued as
+---@return {revoked: boolean}? done whether a token was revoked, false when none was left
+---@return string? message why it failed
+function Backend:revoke(name)
+    local children, message = self:__request("GET", CHILDREN_PATH)
+    if not children then
+        return nil, message
+    end
+    local id
+    for _, row in ipairs(type(children) == "table" and children or {}) do
+        if row.name == name then
+            id = present(row.id)
+            break
+        end
+    end
+    local revoked = false
+    if id then
+        local reply, status
+        reply, message, status = self:__request("DELETE", CHILDREN_PATH .. "/" .. id)
+        if reply then
+            revoked = true
+        elseif status ~= NOT_FOUND then
+            return nil, message
+        end
+    end
+    local ok
+    ok, message = tokenfile.remove(name)
+    if not ok then
+        return nil, "revoked the token but " .. message
+    end
+    return { revoked = revoked }
 end
 
 ---Use a token already in hand instead of reading one with `pass`.
