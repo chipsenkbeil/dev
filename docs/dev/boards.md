@@ -1319,17 +1319,18 @@ never handles the API.
   holds (see `land`). A project with no usable list writes none, and a hold
   that cannot be written or ended is reported on standard error and does not
   stop the check.
-- `review CARD --kind code|style|recheck --by NAME --rev REV`: Records that
-  NAME reviewed the commit REV, as one `status` comment on the card that begins
-  with a reserved first line and has no other:
+- `review CARD --kind code|style|recheck --by NAME --rev REV --verdict clean|minor|needs-work`:
+  Records that NAME reviewed the commit REV with that verdict, as one `status`
+  comment on the card that begins with a reserved first line and has no other:
 
   ```
-  dev-review: kind=code by=<NAME> commit=<full commit id> change=<change id, - in git>
+  dev-review: kind=code by=<NAME> commit=<full commit id> change=<change id, - in git> verdict=<clean|minor|needs-work>
   ```
 
-  All three flags are required (a missing one or an unknown kind is exit 2, and
-  the message lists the kinds). REV is a jj revset in a jj project and a git
-  revision in a git one, and it must name exactly one commit, so a revset of
+  All four flags are required (a missing one, an unknown kind or an unknown
+  verdict is exit 2, and the message lists the kinds or the verdicts). A record
+  written before verdicts has no `verdict=` and is read as it was.
+  REV is a jj revset in a jj project and a git revision in a git one, and it must name exactly one commit, so a revset of
   many commits, a word that starts with `-` and a name that resolves to nothing
   are refused (exit 1). NAME is an agent name as `take --as` takes, and the
   card's claimant is refused for every kind (exit 1) whether NAME is the
@@ -1340,16 +1341,17 @@ never handles the API.
   card before, read from its `dev-claim:` notes, so a claim that lapsed does
   not free its holder to review. The message names the claimant and says a
   reviewer other than it must record the review. An unclaimed card takes any
-  NAME. The reviewer records its own review, only for a final CLEAN or MINOR
-  ISSUES verdict, so it is the recorder the board allowance for `review`
-  covers. A NEEDS WORK verdict records nothing: the reviewer notes the
-  findings and returns the card to Ready. It prints
+  NAME. The reviewer records its own review with its final verdict, `clean` for
+  CLEAN, `minor` for MINOR ISSUES and `needs-work` for NEEDS WORK, so it is the
+  recorder the board allowance for `review` covers. After a needs-work record
+  the reviewer notes the findings and returns the card to Ready. It prints
   `recorded KIND review by NAME on <id prefix> at commit <12 characters>`. Like
   `check`, it is never queued: if the comment cannot be written the command
   exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
   come after Pomb stored it, so read `notes` before repeating. `note` refuses
   `dev-review:` and `dev-turn:` as it does `dev-check:`, and `note --edit`
-  and `--delete` refuse a comment that holds it. It does not judge the review.
+  and `--delete` refuse a comment that holds it. `review` does not judge the
+  verdict: `land` does.
 - `land CARD [--wait SECONDS]`: Takes the landing turn, rebases the working-copy
   change onto trunk, lands it with `jj land --yes -r @` run in the project
   root, writes a `done` note, moves the card to Release when
@@ -1368,6 +1370,10 @@ never handles the API.
   - a `code` and a `style` review of the working-copy change are recorded. A
     review of an earlier commit of the change counts only with a `recheck`
     recorded at the commit that lands.
+  - no `code`, `style` or `recheck` review at the landing commit has `needs-work`
+    as its latest verdict. The refusal names the kind and the reviewer, and a
+    later `clean` or `minor` review of that kind at the commit lifts it. A record
+    with no verdict never refuses.
   - the newest `dev-check:` record with `mode=run` at the landing commit has a
     `pass` for every checks row, in the card's row order. A `mode=expect-fail`
     record never counts, even when it does not parse. When the newest

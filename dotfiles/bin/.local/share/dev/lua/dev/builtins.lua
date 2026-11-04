@@ -353,16 +353,16 @@ return {
     {
         words = { "board", "review" },
         handler = "lua",
-        flags = "--kind --by --rev",
-        usage = "dev board review CARD --kind code|style|recheck --by NAME --rev REV",
-        desc = "Record on a card that NAME reviewed the commit REV as a code, style or recheck review, with its change id and commit id, refusing the card's claimant as reviewer and a REV that is not one commit",
+        flags = "--kind --by --rev --verdict",
+        usage = "dev board review CARD --kind code|style|recheck --by NAME --rev REV --verdict clean|minor|needs-work",
+        desc = "Record on a card that NAME reviewed the commit REV as a code, style or recheck review with a clean, minor or needs-work verdict, with its change id and commit id, refusing the card's claimant as reviewer and a REV that is not one commit",
     },
     {
         words = { "board", "land" },
         handler = "lua",
         flags = "--wait",
         usage = "dev board land CARD [--wait SECONDS]",
-        desc = "Take the landing turn (or land under the one dev board turn holds), one landing at a time across runners (waiting up to SECONDS, 300 by default, then naming the holder), rebase the card's change onto trunk under it, land it with jj land, note the commit, move the card to Release when [board.land] deploys is true and to Done otherwise, and give the turn back, only when the card is in Verify with every outcome ticked and code and style reviews and a passing check run are recorded for the rebased commit; needs DEV_AGENT and a jj project",
+        desc = "Take the landing turn (or land under the one dev board turn holds), one landing at a time across runners (waiting up to SECONDS, 300 by default, then naming the holder), rebase the card's change onto trunk under it, land it with jj land, note the commit, move the card to Release when [board.land] deploys is true and to Done otherwise, and give the turn back, only when the card is in Verify with every outcome ticked and code and style reviews, none of them needs-work, and a passing check run are recorded for the rebased commit; needs DEV_AGENT and a jj project",
     },
     {
         words = { "board", "turn" },

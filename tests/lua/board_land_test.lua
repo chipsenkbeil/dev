@@ -123,8 +123,15 @@ t.test("check.parse reads what check.record wrote and nothing else", function()
 end)
 
 t.test("review.parse reads what review.record wrote and nothing else", function()
-    local text = review.record("style", "rev1", { commit = COMMIT, change = "chg" })
-    t.eq(review.parse(text), { kind = "style", by = "rev1", commit = COMMIT, change = "chg" })
+    local text = review.record("style", "rev1", { commit = COMMIT, change = "chg" }, "minor")
+    t.eq(
+        review.parse(text),
+        { kind = "style", by = "rev1", commit = COMMIT, change = "chg", verdict = "minor" }
+    )
+    t.eq(
+        review.parse("dev-review: kind=code by=r commit=" .. COMMIT .. " change=chg"),
+        { kind = "code", by = "r", commit = COMMIT, change = "chg" }
+    )
     t.eq(review.parse("dev-review: kind=style"), nil)
     t.eq(review.parse("a note"), nil)
 end)
@@ -142,6 +149,32 @@ t.test("missing_reviews wants a code and a style review of the change", function
         ),
         2
     )
+end)
+
+local function judged(kind, commit, by, verdict)
+    return {
+        body = review.record(kind, by, { commit = commit, change = "chg" }, verdict),
+    }
+end
+
+t.test("refused_reviews names the reviewer whose latest verdict is needs-work", function()
+    t.eq(land.refused_reviews({ judged("code", COMMIT, "r1", "clean") }, STATE), {})
+    t.eq(land.refused_reviews({ judged("style", COMMIT, "r2", "minor") }, STATE), {})
+    t.eq(land.refused_reviews({ reviewed("code", COMMIT) }, STATE), {})
+    local refused = land.refused_reviews({ judged("style", COMMIT, "r2", "needs-work") }, STATE)
+    t.eq(#refused, 1)
+    t.ok(refused[1]:find("style review by r2", 1, true), refused[1])
+    t.ok(refused[1]:find("needs-work", 1, true), refused[1])
+    refused = land.refused_reviews({ judged("recheck", COMMIT, "r3", "needs-work") }, STATE)
+    t.ok(refused[1]:find("recheck review by r3", 1, true), refused[1])
+    t.eq(
+        land.refused_reviews({
+            judged("code", COMMIT, "r1", "needs-work"),
+            judged("code", COMMIT, "r4", "clean"),
+        }, STATE),
+        {}
+    )
+    t.eq(land.refused_reviews({ judged("code", OTHER, "r1", "needs-work") }, STATE), {})
 end)
 
 t.test("a review of an earlier commit needs a recheck at the landing commit", function()
@@ -306,14 +339,19 @@ end
 
 local function approve(root, home, log, id)
     for _, kind in ipairs({ "code", "style" }) do
-        must(
-            dev(
-                root,
-                home,
-                log,
-                { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
-            )
-        )
+        must(dev(root, home, log, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            kind,
+            "--by",
+            "rev",
+            "--rev",
+            "@",
+            "--verdict",
+            "clean",
+        }))
     end
     must(dev(root, home, log, { "board", "check", id }))
     must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
@@ -594,6 +632,34 @@ if has_jj then
         end
     )
 
+    t.test("land verdict refuses needs-work, names the reviewer, and accepts minor", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
+        approve(root, home, log, id)
+        local function judge(by, verdict)
+            must(dev(root, home, log, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                "code",
+                "--by",
+                by,
+                "--rev",
+                "@",
+                "--verdict",
+                verdict,
+            }))
+        end
+        judge("picky", "needs-work")
+        refused(root, home, log, id, { "code review by picky", "needs-work" })
+        judge("kind", "minor")
+        local out, code = dev(root, home, log, { "board", "land", id })
+        t.eq(code, 0, out)
+        t.eq(column_of(home), "Done")
+    end)
+
     t.test("a failed jj land leaves the card in Verify and exits non-zero", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
@@ -650,6 +716,8 @@ if has_jj then
                 "builder",
                 "--rev",
                 "@",
+                "--verdict",
+                "clean",
             })
             t.eq(code, 1, out)
             t.ok(out:find("a reviewer other than builder must record it", 1, true), out)
@@ -665,6 +733,8 @@ if has_jj then
                 "rev",
                 "--rev",
                 "@",
+                "--verdict",
+                "clean",
             }, { DEV_AGENT = "builder" })
             t.eq(code, 1, out)
             t.ok(out:find("a reviewer other than builder must record it", 1, true), out)
@@ -680,6 +750,8 @@ if has_jj then
             "rev",
             "--rev",
             "@",
+            "--verdict",
+            "clean",
         }))
         local list = comments(home, id)
         t.eq(#list, before + 1)
@@ -720,14 +792,19 @@ if has_jj then
         must(dev(root, home, log, { "board", "checks", id, "false" }))
         must(dev(root, home, log, { "board", "move", id, "verify" }))
         for _, kind in ipairs({ "code", "style" }) do
-            must(
-                dev(
-                    root,
-                    home,
-                    log,
-                    { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
-                )
-            )
+            must(dev(root, home, log, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                kind,
+                "--by",
+                "rev",
+                "--rev",
+                "@",
+                "--verdict",
+                "clean",
+            }))
         end
         must(dev(root, home, log, { "board", "check", id, "--expect-fail" }))
         must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
@@ -742,14 +819,19 @@ if has_jj then
         assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
         must(dev(root, home, log, { "board", "check", id }))
         refused(root, home, log, id, { "earlier commit than", "dev board review --kind recheck" })
-        must(
-            dev(
-                root,
-                home,
-                log,
-                { "board", "review", id, "--kind", "recheck", "--by", "rev", "--rev", "@" }
-            )
-        )
+        must(dev(root, home, log, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "recheck",
+            "--by",
+            "rev",
+            "--rev",
+            "@",
+            "--verdict",
+            "clean",
+        }))
         local out, code = dev(root, home, log, { "board", "land", id })
         t.eq(code, 0, out)
     end)
@@ -1006,14 +1088,19 @@ if has_jj then
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "verify" }))
         for _, kind in ipairs({ "code", "style" }) do
-            must(
-                dev(
-                    root,
-                    home,
-                    log,
-                    { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
-                )
-            )
+            must(dev(root, home, log, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                kind,
+                "--by",
+                "rev",
+                "--rev",
+                "@",
+                "--verdict",
+                "clean",
+            }))
         end
         must(dev(root, home, log, { "board", "check", id }))
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
@@ -1031,14 +1118,19 @@ if has_jj then
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "verify" }))
         for _, kind in ipairs({ "code", "style" }) do
-            must(
-                dev(
-                    root,
-                    home,
-                    log,
-                    { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
-                )
-            )
+            must(dev(root, home, log, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                kind,
+                "--by",
+                "rev",
+                "--rev",
+                "@",
+                "--verdict",
+                "clean",
+            }))
         end
         must(dev(root, home, log, { "board", "check", id }))
         trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
@@ -1153,14 +1245,19 @@ if has_jj then
     local function reviewed_and_checked(opts)
         local root, home, log, id = opts.root, opts.home, opts.log, opts.id
         for _, kind in ipairs({ "code", "style" }) do
-            must(
-                dev(
-                    root,
-                    home,
-                    log,
-                    { "board", "review", id, "--kind", kind, "--by", "rev", "--rev", "@" }
-                )
-            )
+            must(dev(root, home, log, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                kind,
+                "--by",
+                "rev",
+                "--rev",
+                "@",
+                "--verdict",
+                "clean",
+            }))
         end
         must(dev(root, home, log, { "board", "check", id }))
         return head(root)
@@ -1278,14 +1375,19 @@ if has_jj then
         rebase_onto_trunk(root)
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "verify" }))
-        must(
-            dev(
-                root,
-                home,
-                log,
-                { "board", "review", id, "--kind", "code", "--by", "rev", "--rev", "@" }
-            )
-        )
+        must(dev(root, home, log, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "code",
+            "--by",
+            "rev",
+            "--rev",
+            "@",
+            "--verdict",
+            "clean",
+        }))
         must(dev(root, home, log, { "board", "check", id }))
         must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })

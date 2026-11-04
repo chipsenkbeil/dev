@@ -2692,14 +2692,17 @@ function commands.check(backend, args)
 end
 
 function commands.review(backend, args)
-    local flags, words = parse(args, { [KIND_FLAG] = true, [BY_FLAG] = true, [REV_FLAG] = true })
+    local flags, words = parse(
+        args,
+        { [KIND_FLAG] = true, [BY_FLAG] = true, [REV_FLAG] = true, [review.VERDICT_FLAG] = true }
+    )
     if not flags then
         return words
     end
     if #words ~= 1 then
         return usage("needs a card")
     end
-    for _, flag in ipairs({ KIND_FLAG, BY_FLAG, REV_FLAG }) do
+    for _, flag in ipairs({ KIND_FLAG, BY_FLAG, REV_FLAG, review.VERDICT_FLAG }) do
         if not flags[flag] then
             return usage("needs " .. flag)
         end
@@ -2708,6 +2711,15 @@ function commands.review(backend, args)
     if not index_of(review.KINDS, kind) then
         return usage(
             "unknown kind " .. kind .. ", the kinds are " .. table.concat(review.KINDS, ", ")
+        )
+    end
+    local verdict = flags[review.VERDICT_FLAG]
+    if not index_of(review.VERDICTS, verdict) then
+        return usage(
+            "unknown verdict "
+                .. verdict
+                .. ", the verdicts are "
+                .. table.concat(review.VERDICTS, ", ")
         )
     end
     local by, why = agent_name(flags[BY_FLAG])
@@ -2753,7 +2765,7 @@ function commands.review(backend, args)
     local ok
     ok, message = backend:note(
         card.id,
-        review.record(kind, by, rev),
+        review.record(kind, by, rev, verdict),
         held and held.fence,
         { kind = "status" }
     )
@@ -2812,6 +2824,7 @@ local function land_problems(backend, card, who)
         return problems
     end
     local lacking = land.missing_reviews(who.comments, state)
+    local refused = land.refused_reviews(who.comments, state)
     local unproven = land.checks_problem(who.comments, state, card.checks)
     local carried
     if #lacking > 0 then
@@ -2831,6 +2844,9 @@ local function land_problems(backend, card, who)
     end
     for _, missing in ipairs(lacking) do
         problems[#problems + 1] = missing
+    end
+    for _, line in ipairs(refused) do
+        problems[#problems + 1] = line
     end
     if unproven then
         problems[#problems + 1] = unproven

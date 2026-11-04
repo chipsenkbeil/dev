@@ -11,6 +11,15 @@ M.KIND = { CODE = "code", STYLE = "style", RECHECK = "recheck" }
 ---The review kinds `review --kind` accepts, in the order help lists them.
 M.KINDS = { M.KIND.CODE, M.KIND.STYLE, M.KIND.RECHECK }
 
+---The names of the verdicts `review --verdict` accepts.
+M.VERDICT = { CLEAN = "clean", MINOR = "minor", NEEDS_WORK = "needs-work" }
+
+---The flag that carries the verdict.
+M.VERDICT_FLAG = "--verdict"
+
+---The verdicts in the order help lists them.
+M.VERDICTS = { M.VERDICT.CLEAN, M.VERDICT.MINOR, M.VERDICT.NEEDS_WORK }
+
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ "\\n"'
 local NO_CHANGE = "-"
 
@@ -67,15 +76,17 @@ end
 ---@param kind string one of `KINDS`
 ---@param by string the reviewer's name
 ---@param rev dev.board.review.Rev the commit reviewed
+---@param verdict string one of `VERDICTS`
 ---@return string text the comment body, which is one line that begins with the reserved prefix
-function M.record(kind, by, rev)
+function M.record(kind, by, rev, verdict)
     return string.format(
-        "%s kind=%s by=%s commit=%s change=%s",
+        "%s kind=%s by=%s commit=%s change=%s verdict=%s",
         board.REVIEW_PREFIX,
         kind,
         by,
         rev.commit,
-        rev.change
+        rev.change,
+        verdict
     )
 end
 
@@ -84,17 +95,22 @@ end
 ---@field by string the reviewer's name
 ---@field commit string the full commit id reviewed
 ---@field change string the change id, `-` in a git project
+---@field verdict string? one of `VERDICTS`, nil in a record written before verdicts
 
 ---Read a comment that `record` wrote.
 ---@param body string the comment body
 ---@return dev.board.review.Record? record nil when the body is not a record
 function M.parse(body)
-    local prefix, kind, by, commit, change =
-        body:match("^(%S+) kind=(%S+) by=(%S+) commit=(%x+) change=(%S+)$")
+    local prefix, kind, by, commit, change, verdict =
+        body:match("^(%S+) kind=(%S+) by=(%S+) commit=(%x+) change=(%S+) verdict=(%S+)$")
+    if not prefix then
+        prefix, kind, by, commit, change =
+            body:match("^(%S+) kind=(%S+) by=(%S+) commit=(%x+) change=(%S+)$")
+    end
     if prefix ~= board.REVIEW_PREFIX then
         return nil
     end
-    return { kind = kind, by = by, commit = commit, change = change }
+    return { kind = kind, by = by, commit = commit, change = change, verdict = verdict }
 end
 
 return M

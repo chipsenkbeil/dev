@@ -2340,11 +2340,17 @@ t.test("review refuses the claimant for every kind and says a reviewer must reco
     card.claimant = "project-run/a"
     local backend = fake({ card })
     for _, kind in ipairs({ "code", "style", "recheck" }) do
-        local result = commands.run(
-            "review",
-            { "cccccccc", "--kind", kind, "--by", "project-run/a", "--rev", "@" },
-            backend
-        )
+        local result = commands.run("review", {
+            "cccccccc",
+            "--kind",
+            kind,
+            "--by",
+            "project-run/a",
+            "--rev",
+            "@",
+            "--verdict",
+            "clean",
+        }, backend)
         t.eq(result.code, 1)
         t.ok(
             result.message:find(

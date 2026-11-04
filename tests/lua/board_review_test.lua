@@ -65,11 +65,19 @@ end
 t.test("review records the kind, the name and the commit in git", function()
     local root, home, head = git_root()
     local id = card_in(root, home)
-    local out, code = dev(
-        root,
-        home,
-        { "board", "review", id, "--kind", "code", "--by", "rev1", "--rev", "HEAD" }
-    )
+    local out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "code",
+        "--by",
+        "rev1",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
     t.eq(code, 0, out)
     t.ok(
         out:find(
@@ -79,27 +87,90 @@ t.test("review records the kind, the name and the commit in git", function()
         ),
         out
     )
-    t.eq(comments(home)[1].body, "dev-review: kind=code by=rev1 commit=" .. head .. " change=-")
+    t.eq(
+        comments(home)[1].body,
+        "dev-review: kind=code by=rev1 commit=" .. head .. " change=- verdict=clean"
+    )
     t.eq(comments(home)[1].kind, "status")
+end)
+
+t.test("review verdict is required, must be known and is written on the record", function()
+    local root, home, head = git_root()
+    local id = card_in(root, home)
+    local out, code =
+        dev(root, home, { "board", "review", id, "--kind", "code", "--by", "r", "--rev", "HEAD" })
+    t.eq(code, 2, out)
+    out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "code",
+        "--by",
+        "r",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "bad",
+    })
+    t.eq(code, 2, out)
+    t.ok(out:find("the verdicts are clean, minor, needs-work", 1, true), out)
+    t.eq(#comments(home), 0)
+    for i, verdict in ipairs({ "clean", "minor", "needs-work" }) do
+        out, code = dev(root, home, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "code",
+            "--by",
+            "r",
+            "--rev",
+            "HEAD",
+            "--verdict",
+            verdict,
+        })
+        t.eq(code, 0, out)
+        t.eq(
+            comments(home)[i].body,
+            "dev-review: kind=code by=r commit=" .. head .. " change=- verdict=" .. verdict
+        )
+    end
 end)
 
 t.test("review refuses the claimant as the reviewer", function()
     local root, home = git_root()
     local id = card_in(root, home)
     must(dev(root, home, { "board", "take", id, "--as", "builder" }))
-    local out, code = dev(
-        root,
-        home,
-        { "board", "review", id, "--kind", "style", "--by", "builder", "--rev", "HEAD" }
-    )
+    local out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "style",
+        "--by",
+        "builder",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
     t.eq(code, 1, out)
     t.ok(out:find("cannot review its own change", 1, true), out)
     t.eq(#comments(home), 1)
-    out, code = dev(
-        root,
-        home,
-        { "board", "review", id, "--kind", "style", "--by", "other", "--rev", "HEAD" }
-    )
+    out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "style",
+        "--by",
+        "other",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
     t.eq(code, 0, out)
     t.eq(#comments(home), 2)
 end)
@@ -116,11 +187,19 @@ t.test("review refuses a claimant whose claim lapsed, and a take writes one clai
     doc.cards[1].claim.expires_at = "2000-01-01T00:00:00Z"
     assert(fs.write(file, assert(json.encode(doc))))
     for _, kind in ipairs({ "code", "style", "recheck" }) do
-        local out, code = dev(
-            root,
-            home,
-            { "board", "review", id, "--kind", kind, "--by", "builder", "--rev", "HEAD" }
-        )
+        local out, code = dev(root, home, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            kind,
+            "--by",
+            "builder",
+            "--rev",
+            "HEAD",
+            "--verdict",
+            "clean",
+        })
         t.eq(code, 1, out)
         t.ok(
             out:find("was claimed by builder, so builder cannot review its own change", 1, true),
@@ -128,11 +207,19 @@ t.test("review refuses a claimant whose claim lapsed, and a take writes one clai
         )
     end
     t.eq(#comments(home), 1)
-    local out, code = dev(
-        root,
-        home,
-        { "board", "review", id, "--kind", "code", "--by", "other", "--rev", "HEAD" }
-    )
+    local out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "code",
+        "--by",
+        "other",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
     t.eq(code, 0, out)
     out, code = dev(root, home, { "board", "note", id, "dev-claim: by=other" })
     t.eq(code, 1, out)
@@ -156,18 +243,36 @@ t.test("review refuses a default-named claimant when DEV_AGENT is unset", functi
     end
     must(run("builder", { "board", "take", id }))
     for _, kind in ipairs({ "code", "style", "recheck" }) do
-        local out, code = run(
-            "builder",
-            { "board", "review", id, "--kind", kind, "--by", "other", "--rev", "HEAD" }
-        )
+        local out, code = run("builder", {
+            "board",
+            "review",
+            id,
+            "--kind",
+            kind,
+            "--by",
+            "other",
+            "--rev",
+            "HEAD",
+            "--verdict",
+            "clean",
+        })
         t.eq(code, 1, out)
         t.ok(out:find("cannot review its own change", 1, true), out)
     end
     t.eq(#comments(home), 1)
-    local out, code = run(
-        "reviewer",
-        { "board", "review", id, "--kind", "code", "--by", "other", "--rev", "HEAD" }
-    )
+    local out, code = run("reviewer", {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "code",
+        "--by",
+        "other",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
     t.eq(code, 0, out)
     t.eq(#comments(home), 2)
 end)
@@ -175,18 +280,51 @@ end)
 t.test("review refuses an unknown kind, a missing flag and a rev that is not a commit", function()
     local root, home = git_root()
     local id = card_in(root, home)
-    local out, code =
-        dev(root, home, { "board", "review", id, "--kind", "lint", "--by", "r", "--rev", "HEAD" })
+    local out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "lint",
+        "--by",
+        "r",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
     t.eq(code, 2, out)
     t.ok(out:find("the kinds are code, style, recheck", 1, true), out)
     out, code = dev(root, home, { "board", "review", id, "--kind", "code", "--by", "r" })
     t.eq(code, 2, out)
-    out, code =
-        dev(root, home, { "board", "review", id, "--kind", "code", "--by", "a b", "--rev", "HEAD" })
+    out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "code",
+        "--by",
+        "a b",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
     t.eq(code, 2, out)
     for _, rev in ipairs({ "nosuchrev", "--all", "", "HEAD^{tree}" }) do
-        out, code =
-            dev(root, home, { "board", "review", id, "--kind", "code", "--by", "r", "--rev", rev })
+        out, code = dev(root, home, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "code",
+            "--by",
+            "r",
+            "--rev",
+            rev,
+            "--verdict",
+            "clean",
+        })
         t.eq(code, 1, out)
     end
     t.eq(#comments(home), 0)
@@ -198,7 +336,19 @@ t.test("note cannot write, edit or delete the review prefix", function()
     local out, code = dev(root, home, { "board", "note", id, "  DEV-REVIEW: kind=code" })
     t.eq(code, 1, out)
     t.ok(out:find("dev board review writes", 1, true), out)
-    must(dev(root, home, { "board", "review", id, "--kind", "code", "--by", "r", "--rev", "HEAD" }))
+    must(dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "code",
+        "--by",
+        "r",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    }))
     local listing = dev(root, home, { "board", "notes", id })
     local first = assert(listing:match("^(%x+)"), listing)
     out, code = dev(root, home, { "board", "note", id, "--edit", first, "fine" })
@@ -239,7 +389,7 @@ t.test("a review that cannot be written is never reported as recorded", function
     end
     local result = require("dev.cmd.board").run(
         "review",
-        { "11111111", "--kind", "code", "--by", "r", "--rev", "HEAD" },
+        { "11111111", "--kind", "code", "--by", "r", "--rev", "HEAD", "--verdict", "clean" },
         backend
     )
     t.eq(result.output, nil)
@@ -271,21 +421,41 @@ if has_jj then
             local want =
                 jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id ++ ' ' ++ change_id")
             local commit, change = want:match("^(%x+) (%a+)")
-            local out, code = dev(
-                root,
-                home,
-                { "board", "review", id, "--kind", "recheck", "--by", "r", "--rev", "@-" }
-            )
+            local out, code = dev(root, home, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                "recheck",
+                "--by",
+                "r",
+                "--rev",
+                "@-",
+                "--verdict",
+                "clean",
+            })
             t.eq(code, 0, out)
             t.eq(
                 comments(home)[1].body,
-                "dev-review: kind=recheck by=r commit=" .. commit .. " change=" .. change
+                "dev-review: kind=recheck by=r commit="
+                    .. commit
+                    .. " change="
+                    .. change
+                    .. " verdict=clean"
             )
-            out, code = dev(
-                root,
-                home,
-                { "board", "review", id, "--kind", "code", "--by", "r", "--rev", "all()" }
-            )
+            out, code = dev(root, home, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                "code",
+                "--by",
+                "r",
+                "--rev",
+                "all()",
+                "--verdict",
+                "clean",
+            })
             t.eq(code, 1, out)
             t.eq(#comments(home), 1)
         end

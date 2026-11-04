@@ -106,6 +106,33 @@ function M.missing_reviews(comments, state)
     return missing
 end
 
+---List the reviews at a commit whose latest verdict of their kind is needs-work.
+---@param comments {body: string}[] the card's comments, oldest first
+---@param state dev.board.check.State the commit that would land
+---@return string[] refused one line per kind, naming the reviewer
+function M.refused_reviews(comments, state)
+    local latest = {}
+    for _, comment in ipairs(comments) do
+        local record = review.parse(comment.body)
+        if record and record.change == state.change and record.commit == state.commit then
+            latest[record.kind] = record
+        end
+    end
+    local refused = {}
+    for _, kind in ipairs(review.KINDS) do
+        local record = latest[kind]
+        if record and record.verdict == review.VERDICT.NEEDS_WORK then
+            refused[#refused + 1] = string.format(
+                "the %s review by %s at commit %s says needs-work; fix it and record a new review",
+                kind,
+                record.by,
+                M.short(state.commit)
+            )
+        end
+    end
+    return refused
+end
+
 ---Say whether the newest run of the checks at a commit passed every row.
 ---
 ---A record made with `--expect-fail` never counts.
@@ -273,6 +300,7 @@ local function checked_commits(comments, state, rows)
             if
                 not M.checks_problem(comments, at, rows)
                 and #M.missing_reviews(comments, at) == 0
+                and #M.refused_reviews(comments, at) == 0
             then
                 found[#found + 1] = record.commit
             end
