@@ -2996,14 +2996,14 @@ t.test("next --column blocked --for planner asks for a needs:planner card", func
     t.eq(commands.run("next", { "--column", "blocked", "--for", "x" }, fake(sample())).code, 2)
 end)
 
-t.test("escalate swaps needs:planner for needs:lead and notes the reason", function()
+t.test("escalate posts a blocked note and swaps the label", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner", "docs" }
     local backend = fake(cards)
     local result =
         commands.run("escalate", { "11111111-a", "outcome", "2", "is", "bogus" }, backend)
     t.eq(result.output, "escalated 11111111 to needs:lead")
-    t.eq(backend.calls[1], { "note", ID_A, "outcome 2 is bogus", { kind = "question" } })
+    t.eq(backend.calls[1], { "note", ID_A, "outcome 2 is bogus", { kind = "blocked" } })
     t.eq(backend.calls[2], { "set_labels", ID_A, { "docs", "needs:lead" }, nil })
 end)
 
@@ -3014,6 +3014,20 @@ t.test("escalate refuses a card without needs:planner and an empty reason", func
     t.ok(result.message:find("is not needs:planner", 1, true), result.message)
     t.eq(commands.run("escalate", { "11111111-a" }, backend).code, 2)
     t.eq(commands.run("escalate", { "11111111-a", "  " }, backend).code, 2)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("escalate refuses the ask flags and points to dev board ask", function()
+    local cards = blocked_cards()
+    cards[1].labels = { "needs:planner" }
+    local backend = fake(cards)
+    for _, flag in ipairs({ "--question", "--choice", "--recommend", "--why" }) do
+        local result = commands.run("escalate", { "11111111-a", flag, "x" }, backend)
+        t.eq(result.code, 2, flag)
+        t.ok(result.message:find(flag, 1, true), result.message)
+        t.ok(result.message:find("dev board ask", 1, true), result.message)
+    end
+    t.eq(commands.run("escalate", { "11111111-a", "--why=x" }, backend).code, 2)
     t.eq(#backend.calls, 0)
 end)
 

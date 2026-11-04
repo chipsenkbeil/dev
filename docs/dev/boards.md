@@ -358,10 +358,13 @@ Every card in every column is fair game for an agent unless it is labelled
   Review, Verify or Release with no claim waits for that stage's role. A
   claim means the role is working it.
 - Blocked: waiting on an answer.
-  - `needs:human` is yours alone.
+  - `needs:human` is yours alone, and only a question for you uses `dev board
+    ask`. A question between agents is a blocked note holding the numbered
+    menu.
   - `needs:planner` is for a planner. An implementer or reviewer who doubts a
-    card's plan, an outcome above all, writes why in a question note and labels
-    the card, and never rewords or deletes the outcome. A planner who did not
+    card's plan, an outcome above all, writes why in a blocked note holding
+    the numbered menu of choices, moves the card to Blocked and labels it, and
+    never rewords or deletes the outcome. A planner who did not
     build the card finds it with `dev board next --column blocked --for
     planner`, parks on `timeout 86400 dev board wait --for planner`, moves it to
     Backlog and keeps, rewords or deletes the outcome there, then moves it back
@@ -1114,14 +1117,16 @@ never handles the API.
   (`<id prefix> is in <column>, and needs:human lives only in Blocked or Icebox; move it there first`,
   exit 1, on both backends and on a queued replay); removing it is allowed in
   any column.
-- `escalate CARD TEXT`: Hands a `needs:planner` card up. It posts TEXT as a
-  question note, then replaces `needs:planner` with `needs:lead` in the
+- `escalate CARD TEXT`: Hands a `needs:planner` card up. It posts TEXT, which holds
+  the numbered menu of choices, as a blocked note, then replaces `needs:planner` with `needs:lead` in the
   card's labels, both with the claim's fence when this machine holds one, and
   prints `escalated <id prefix> to needs:lead`. The column stays. A card
   without `needs:planner` and an empty TEXT are refused before anything is
   written (exit 1 for the card, exit 2 for the text). A label change that
   fails after the note is exit 1 and prints the `dev board label` command
-  that finishes it.
+  that finishes it. It refuses `--question`, `--choice`, `--recommend` and
+  `--why` (exit 2) and points to `dev board ask`, which only the owner's
+  questions use.
 - `answer CARD --choice N --quote TEXT`: Records the owner's answer, typed
   in this session, on a `needs:human` card. It removes `needs:human`
   from the card's labels (the other labels and the column stay), then posts

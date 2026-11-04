@@ -278,7 +278,7 @@ return {
         words = { "board", "escalate" },
         handler = "lua",
         usage = "dev board escalate CARD TEXT",
-        desc = "Hand a needs:planner card up to a lead: a question note with the reason, then the needs:planner label swapped for needs:lead, the column left alone",
+        desc = "Hand a needs:planner card up to a lead: a blocked note holding the reason and its numbered menu, then the needs:planner label swapped for needs:lead, the column left alone",
     },
     {
         words = { "board", "outcome" },

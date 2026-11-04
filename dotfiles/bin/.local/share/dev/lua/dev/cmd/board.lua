@@ -1913,9 +1913,20 @@ function commands.answer(backend, args)
 end
 
 function commands.escalate(backend, args)
+    local asks = { ["--question"] = 1, ["--choice"] = 1, ["--recommend"] = 1, ["--why"] = 1 }
     local words = {}
-    for index = 2, #args do
-        words[#words + 1] = args[index]
+    for index = 1, #args do
+        local flag = args[index]:match("^(%-%-[%a-]+)")
+        if asks[flag] then
+            return usage(
+                "escalate takes a card and the note text, not "
+                    .. flag
+                    .. ", so put a question for the owner through dev board ask"
+            )
+        end
+        if index > 1 then
+            words[#words + 1] = args[index]
+        end
     end
     local why = table.concat(words, " ")
     if #args < 2 or not why:find("%S") then
@@ -1946,7 +1957,7 @@ function commands.escalate(backend, args)
     if not index_of(labels, board.NEEDS_LEAD) then
         labels[#labels + 1] = board.NEEDS_LEAD
     end
-    local ok, message = backend:note(card.id, why, fence, { kind = board.NoteKind.QUESTION })
+    local ok, message = backend:note(card.id, why, fence, { kind = board.NoteKind.BLOCKED })
     if not ok then
         return failure(message)
     end
