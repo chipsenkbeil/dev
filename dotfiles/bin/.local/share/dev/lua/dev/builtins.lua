@@ -56,6 +56,7 @@ return {
     {
         words = { "push" },
         handler = "lua",
+        flags = "--tag",
         desc = "Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named",
         group = "Share it",
     },

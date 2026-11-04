@@ -6,9 +6,19 @@ remote named. A name is accepted when it is `origin` or `gerrit` and the
 project has that remote, or when it is the remote of record. Any other name
 exits 2. `dev help push` shows the exact commands for this repo.
 
+`dev push --tag NAME` pushes an existing tag instead of the trunk, and the flag
+repeats for several tags. It goes to the remote of record, or to the remote
+named. Before anything is pushed dev refuses a tag that does not exist locally
+(`dev: no local tag NAME`) and a tag the remote holds at another commit, and it
+never forces. A tag the remote holds at the same commit is reported and
+skipped. It needs no trunk bookmark or branch, so a detached HEAD is fine. The push
+goes through `commit-guard`, which checks the tagged commit for an attribution
+line like any other push, and dev only sends tags, it never creates or signs one.
+
 ```
 dev push
 dev push origin
+dev push --tag v1.2.0 --tag batch-7
 dev help push
 ```
 

@@ -1,6 +1,9 @@
 dev push
   Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named
 
+flags
+  --tag
+
 the built-in runs
   (none: neither .jj nor .git found in <root>)
 

@@ -28,7 +28,7 @@ local SHARE = project.share
 local VCS_HANDLERS = { push = push.run, pull = pull.run, sync = sync.run }
 local NOT_TAKEN = {
     push = function(arg)
-        return arg:sub(1, 1) == "-"
+        return arg:sub(1, 1) == "-" and arg ~= "--tag"
     end,
     pull = function()
         return true
