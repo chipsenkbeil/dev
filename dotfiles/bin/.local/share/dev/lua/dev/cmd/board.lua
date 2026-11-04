@@ -2235,6 +2235,15 @@ function commands.outcome(backend, args)
         if not text:find("%S") then
             return usage(REASON_FLAG .. " needs the reason")
         end
+        local agent = os.getenv("DEV_AGENT") or ""
+        if not M.is_lead(agent) then
+            return failure(
+                "only the lead deletes an outcome, and DEV_AGENT "
+                    .. agent
+                    .. " is not a lead name, whose role segment is lead; "
+                    .. "ask the lead, with the card, the number and the reason"
+            )
+        end
     else
         if #args ~= 3 then
             return usage(args[2] .. " needs one outcome number")

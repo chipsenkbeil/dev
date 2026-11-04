@@ -16,6 +16,7 @@ local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+local LEAD = "dotfiles/lead/1"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
@@ -2282,65 +2283,6 @@ t.test(
     end
 )
 
-t.test("outcome --delete removes the Nth and notes its text and the reason", function()
-    local card = colored("green")
-    card.outcomes = outcomes(3)
-    local backend = fake({ card })
-    local result = commands.run(
-        "outcome",
-        { "cccccccc", "--delete", "2", "--reason", "never", "achievable" },
-        backend
-    )
-    t.eq(result.output, "outcome cccccccc 2 deleted")
-    t.eq(backend.calls[1], { "delete_outcome", ID_C, "s2", nil })
-    t.eq(backend.calls[2][1], "note")
-    t.eq(
-        backend.calls[2][3],
-        "Deleted outcome 2: " .. card.outcomes[2].name .. " Reason: never achievable"
-    )
-    t.eq(backend.calls[2][4], { kind = "decision" })
-end)
-
-t.test("outcome --delete needs a number and a reason, and a bad number deletes nothing", function()
-    local card = colored("green")
-    card.outcomes = outcomes(2)
-    local backend = fake({ card })
-    t.eq(commands.run("outcome", { "cccccccc", "--delete" }, backend).code, 2)
-    t.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
-    t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "--reason" }, backend).code, 2)
-    t.eq(
-        commands.run("outcome", { "cccccccc", "--delete", "1", "--reason", "  " }, backend).code,
-        2
-    )
-    t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "why" }, backend).code, 2)
-    t.eq(commands.run("outcome", { "cccccccc", "--delete", "3", "--reason", "x" }, backend).code, 1)
-    t.eq(#backend.calls, 0)
-end)
-
-t.test("the claimant cannot delete an outcome under any name it is given", function()
-    local card = colored("green")
-    card.outcomes = outcomes(2)
-    card.claimant = "project-run/a"
-    local backend = fake({ card })
-    local result = commands.run(
-        "outcome",
-        { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/a" },
-        backend
-    )
-    t.eq(result.code, 1)
-    t.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
-    t.ok(result.message:find("Pass the change back", 1, true), result.message)
-    for _, call in ipairs(backend.calls) do
-        t.eq(call[1], "comments")
-    end
-    result = commands.run(
-        "outcome",
-        { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/b" },
-        backend
-    )
-    t.eq(result.output, "outcome cccccccc 1 deleted")
-end)
-
 local function as_agent(name, run)
     local previous = os.getenv("DEV_AGENT") or ""
     ffi.C.setenv("DEV_AGENT", name, 1)
@@ -2348,6 +2290,115 @@ local function as_agent(name, run)
     ffi.C.setenv("DEV_AGENT", previous, 1)
     assert(ok, err)
 end
+
+local function writes(backend)
+    local calls = {}
+    for _, call in ipairs(backend.calls) do
+        if call[1] ~= "comments" then
+            calls[#calls + 1] = call
+        end
+    end
+    return calls
+end
+
+t.test("outcome delete refuses a name that is not a lead", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    for _, name in ipairs({ "dotfiles/implementer/95f0e009/1", "project-run/a" }) do
+        as_agent(name, function()
+            local result =
+                commands.run("outcome", { "cccccccc", "--delete", "1", "--reason", "x" }, backend)
+            t.eq(result.code, 1)
+            t.ok(result.message:find("only the lead deletes an outcome", 1, true), result.message)
+            t.ok(result.message:find(name, 1, true), result.message)
+        end)
+    end
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("outcome delete by a lead notes the reason and the text", function()
+    for _, column in ipairs({ "Backlog", "In Progress", "Done" }) do
+        local card = colored("green")
+        card.column = column
+        card.outcomes = outcomes(3)
+        local backend = fake({ card })
+        as_agent(LEAD, function()
+            local result = commands.run(
+                "outcome",
+                { "cccccccc", "--delete", "2", "--reason", "never", "achievable" },
+                backend
+            )
+            t.eq(result.output, "outcome cccccccc 2 deleted")
+        end)
+        local calls = writes(backend)
+        t.eq(calls[1], { "delete_outcome", ID_C, "s2", nil })
+        t.eq(
+            calls[2][3],
+            "Deleted outcome 2: " .. card.outcomes[2].name .. " Reason: never achievable"
+        )
+        t.eq(calls[2][4], { kind = "decision" })
+    end
+end)
+
+t.test("outcome delete by a lead needs a reason", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    as_agent(LEAD, function()
+        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
+        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "--reason" }, backend).code, 2)
+        t.eq(
+            commands.run("outcome", { "cccccccc", "--delete", "1", "--reason", "  " }, backend).code,
+            2
+        )
+    end)
+    as_agent("dotfiles/implementer/95f0e009/1", function()
+        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
+    end)
+    t.eq(#backend.calls, 0)
+end)
+
+t.test("outcome --delete by a lead needs a number, and a bad number deletes nothing", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    as_agent(LEAD, function()
+        t.eq(commands.run("outcome", { "cccccccc", "--delete" }, backend).code, 2)
+        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "why" }, backend).code, 2)
+        t.eq(
+            commands.run("outcome", { "cccccccc", "--delete", "3", "--reason", "x" }, backend).code,
+            1
+        )
+    end)
+    t.eq(#writes(backend), 0)
+end)
+
+t.test("the claimant cannot delete an outcome under any name it is given", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+    as_agent(LEAD, function()
+        local result = commands.run(
+            "outcome",
+            { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/a" },
+            backend
+        )
+        t.eq(result.code, 1)
+        t.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
+        t.ok(result.message:find("Pass the change back", 1, true), result.message)
+        for _, call in ipairs(backend.calls) do
+            t.eq(call[1], "comments")
+        end
+        result = commands.run(
+            "outcome",
+            { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/b" },
+            backend
+        )
+        t.eq(result.output, "outcome cccccccc 1 deleted")
+    end)
+end)
 
 local function released_by(name, claimant)
     local card = colored("green")
@@ -2365,7 +2416,6 @@ t.test("a name that released the card cannot reclaim the finish line", function(
         local runs = {
             { "outcome", { "cccccccc", "A", "new", "outcome" } },
             { "outcome", { "cccccccc", "--rename", "1", "New", "--reason", "x" } },
-            { "outcome", { "cccccccc", "--delete", "1", "--reason", "x" } },
             { "checks", { "cccccccc", "dev test" } },
             { "outcome", { "cccccccc", "--convert" } },
         }
@@ -3997,8 +4047,8 @@ t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", fu
         "--reason",
         "x",
         "--as",
-        "project-run/b",
-    }, own)
+        "project-run/a",
+    }, { agent = LEAD })
     t.eq(code, 1, out)
     t.ok(out:find("claimed by project-run/a", 1, true), out)
     out, code = dev(
@@ -4015,7 +4065,7 @@ t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", fu
         root,
         home,
         { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
-        { agent = "project-run/b" }
+        { agent = LEAD }
     )
     t.eq(code, 0, out)
     t.eq(out, "outcome 11111111 2 deleted\n")

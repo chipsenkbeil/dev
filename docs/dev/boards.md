@@ -199,12 +199,13 @@ smallest preset that covers its calls, on the boards it works.
 | Tool | Token | Calls it needs | Deletes it holds |
 |------|-------|----------------|------------------|
 | lead session | `lead_token`, `lead` | Everything `work` does, plus `boards.create`, `columns.create`, `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and `tasks.bin`, for `init`, and for the `dev board delete` verb that card 83f0e016 adds | `tasks.bin`: a card goes to the bin for 30 days |
-| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments, links and outcomes. No card delete |
+| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete, which only the lead does |
 | runner | `work` on its board | Read the board, create and move cards, set fields and labels, comment, link, claim, heartbeat and release | None. Its `init` needs `lead`, which the lead runs |
 | Aide agent | `work`, assigned boards only | The subagent's calls, notes written with `--as aide` | None. It never holds `lead` |
 
-Every delete an agent holds is of its own work, so a mistaken comment, link or
-outcome never waits for the owner. Deleting from the bin, emptying it, and every
+Every delete an agent holds is of its own work, except that only the lead
+deletes an outcome, so a mistaken comment or
+link never waits for the owner. Deleting from the bin, emptying it, and every
 board, column or account delete stay with the owner, who holds `admin`.
 
 A card delete is token policy, not something dev enforces on its own. Only the
@@ -214,7 +215,8 @@ lead decides and does one, and Pomb refuses a `work` token with a 403 naming
 The calls come from `board/pomb.lua`, a runner's Pomb contract notes and
 Pomb's permission catalog. For the deletes, the table follows the Pomb 0.5.60
 report: a `work` token deletes its own comments, links and outcomes, which the
-older passages and the contract still call admin-only. Those are tracked in
+older passages and the contract still call admin-only, though dev lets only the
+lead delete an outcome. Those are tracked in
 two cards, one for this file and one for the contract.
 
 The review found no preset to change. The outcome delete is a Pomb right with
@@ -405,9 +407,10 @@ Every card in every column is fair game for an agent unless it is labelled
     never rewords or deletes the outcome. A planner who did not
     build the card finds it with `dev board next --column blocked --for
     planner`, parks on `timeout 86400 dev board wait --for planner`, moves it to
-    Backlog and keeps, rewords or deletes the outcome there, then moves it back
-    to Ready. The agent that writes the outcomes never ticks them, a verifier
-    does. A planner who cannot settle it runs `dev board escalate CARD TEXT`,
+    Backlog, keeps or rewords the outcome there or asks the lead to delete it,
+    then moves it back to Ready. The agent that writes the outcomes never ticks
+    them, a verifier does. A planner who cannot settle it runs
+    `dev board escalate CARD TEXT`,
     which becomes `needs:lead`.
   - `needs:lead` is for a higher-tier agent, which answers and moves the card
     out.
@@ -681,9 +684,13 @@ one word is ignored there. `--untick` takes no name and stays open to anyone.
 ordinary text, so `--untick N --as X` is exit 2 for its extra words. A queued
 tick keeps the name it resolved, so a later sync records the same ticker.
 `outcome CARD --delete N --reason TEXT [--as NAME]` removes the Nth outcome
-(`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb), so the ones after it move
-up a number, and writes a decision note holding the deleted text and the
-reason, then prints `outcome <id prefix> N deleted`. A missing number or reason
+(`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) in any column. Only the
+lead deletes an outcome: a `DEV_AGENT` whose role segment is not lead is
+refused with exit 1 and nothing written, before any backend call, and a
+runner, implementer, planner or reviewer asks the lead with the card, the
+number and the reason. The outcomes after it move up a number, and the command
+writes a decision note holding the deleted text and the reason, then prints
+`outcome <id prefix> N deleted`. A missing number or reason
 is exit 2. `--reason` is the one way to say why an outcome that was
 never achievable is deleted and not reworded. Pomb lets a Work token delete
 only an outcome that same token created. Any other outcome, whether made in
@@ -707,7 +714,8 @@ refusal compares the names with `DEV_AGENT` and, after `--delete` and
 `--convert`, with the `--as` name.
 `checks` reads `DEV_AGENT` only. The lead
 (a name with no `/`) and any name that never claimed the card may change
-outcomes and checks. A session with no `DEV_AGENT` is not checked.
+outcomes and checks, except that only the lead deletes an outcome. A session
+with no `DEV_AGENT` is not checked.
 
 `outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
 appends one outcome per `- [ ]` or `- [x]` item, ticks the ticked ones, and only
