@@ -3432,13 +3432,16 @@ function commands.link(backend, args)
     }
 end
 
-local function delete_refusal()
+local function delete_refusal(action)
     local name = os.getenv("DEV_AGENT") or ""
     if name:find("/", 1, true) then
         return failure(
-            "only the lead deletes a card, and DEV_AGENT "
+            "only the lead "
+                .. (action or "deletes a card")
+                .. ", and DEV_AGENT "
                 .. name
-                .. " names a runner's workspace; ask the lead, with the card and the reason"
+                .. " names a runner's workspace; ask the lead"
+                .. (action and "" or ", with the card and the reason")
         )
     end
 end
@@ -4543,8 +4546,8 @@ end
 
 local LEAD_TOKEN_KEY = "lead_token"
 
-local function open_lead(ctx)
-    local refused = delete_refusal()
+local function open_lead(ctx, action)
+    local refused = delete_refusal(action)
     if refused then
         verb.die("dev: " .. refused.message)
     end
@@ -4560,6 +4563,33 @@ local function open_lead(ctx)
         verb.die(message)
     end
     return backend
+end
+
+M.handlers["board token mint"] = function(ctx)
+    local flags, extra = parse(ctx.args, { ["--role"] = true, ["--as"] = true })
+    if not flags then
+        verb.usage_error(ctx, extra.message)
+    elseif #extra > 0 then
+        verb.usage_error(ctx, "unknown argument " .. extra[1])
+    elseif not flags["--role"] or not flags["--as"] or flags["--as"] == "" then
+        verb.usage_error(ctx, "needs --role ROLE and --as NAME")
+    end
+    local backend = open_lead(ctx, "mints a role token")
+    local issued, message = backend:mint(flags["--role"], flags["--as"])
+    if not issued then
+        verb.die("dev: " .. message)
+    end
+    local stamp = issued.expires > 0 and os.date("!%Y-%m-%dT%H:%M:%SZ", issued.expires) or "never"
+    print(
+        string.format(
+            "minted role %s as %s, label %s, expires %s",
+            issued.role,
+            flags["--as"],
+            issued.label,
+            stamp
+        )
+    )
+    return 0
 end
 
 M.handlers["board status"] = function(ctx)

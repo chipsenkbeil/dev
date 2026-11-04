@@ -115,9 +115,37 @@ The keep-alive loop does the same on a tick.
 `DEV_BOARD_TOKEN` carries a role token a lead issued. When it is set and not
 empty, dev board sends it in place of the `pass` entry and reads neither `pass`
 nor the Keychain, and the keep-alive loop does the same on a tick. When it is
-unset or empty, dev reads `pass` as above. A 401 under it is refused with
-`the issued token in DEV_BOARD_TOKEN was refused by pomb`, with no retry and no
-fallback to the `pass` token.
+unset or empty, dev reads the token file for the current `DEV_AGENT`, then
+`pass` as above. A 401 under either is refused, with no retry and no fallback
+to the `pass` token. The refusal says `the issued token in DEV_BOARD_TOKEN was
+refused by pomb` for the variable and `the role token file for DEV_AGENT was
+refused by pomb` for the file. An expired file is refused the same way, with
+`mint it again`.
+
+### Role tokens: token-mint
+
+`dev board token mint --role ROLE --as NAME` gives a runner a role token when
+a lead starts it by hand. It reads the role's id by name from
+`GET /api/v1/agent-roles`, posts `{name, role_id}` to
+`/api/v1/auth/tokens/children` with the lead token (`lead_token`), and prints
+the role, the `agent-N` label and the expiry, never the token. Pomb sets the
+expiry: one hour by default, at most eight, and never past the lead's own.
+
+The token goes to a file named by a SHA-256 hash of NAME, mode 0600, in a
+directory of mode 0700. The directory is `$XDG_RUNTIME_DIR/dev/tokens` when
+that variable is an absolute path, else `dev/tokens` under the state
+directory. The file holds the token on its first line and the expiry in Unix
+seconds on its second. Every mint deletes the expired files it finds there.
+
+The lead then starts the runner with `DEV_AGENT=NAME` and no token in its
+environment or prompt. Because NAME is the claimant name, it follows
+`<repo>/<role>/<card>/<run>`, and a lead whose own `DEV_AGENT` has a slash is
+refused, as `delete` is.
+
+Pomb refuses a name that a live token holds with a 409, and a name frees once
+its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`
+in plain words. Revoking a token and minting again on expiry are not part of
+this verb.
 
 The token goes to curl on standard input as a config line. It is in no argument
 list, no file and no output, `-v` and `-vv` included, and in no environment

@@ -3,6 +3,7 @@ local claims = require("dev.board.claims")
 local devos = require("dev.os")
 local json = require("dev.json")
 local project = require("dev.project")
+local tokenfile = require("dev.board.tokenfile")
 
 local present = json.present
 local PASSLOCK_SCRIPT = "/board/passlock.sh"
@@ -11,6 +12,14 @@ local KEYCHAIN_SOURCE = "keychain"
 local UNAUTHORIZED = 401
 local ISSUED_VARIABLE = "DEV_BOARD_TOKEN"
 local ISSUED_REFUSED = "the issued token in DEV_BOARD_TOKEN was refused by pomb"
+local FILE_REFUSED = "the role token file for DEV_AGENT was refused by pomb"
+local FILE_EXPIRED =
+    "the role token file for DEV_AGENT expired; mint it again with dev board token mint"
+local AGENT_VARIABLE = "DEV_AGENT"
+local ROLES_LIST_PATH = "/api/v1/agent-roles"
+local CHILDREN_PATH = "/api/v1/auth/tokens/children"
+local CONFLICT = 409
+local UNKNOWN_ROLE = "unknown_role"
 local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text"
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = 30
@@ -182,6 +191,27 @@ local function entry_of(ref)
     end
 end
 
+---The role token the file for the current `DEV_AGENT` holds.
+---@return string? token the token, nil when there is no agent name or no file
+---@return string? message why the file is not usable
+local function filed()
+    local name = os.getenv(AGENT_VARIABLE)
+    if not name or name == "" then
+        return nil
+    end
+    local found, message = tokenfile.read(name)
+    if not found then
+        return nil, message
+    end
+    if found.expires > 0 and found.expires <= os.time() then
+        return nil, FILE_EXPIRED
+    end
+    if not found.token:find(TOKEN_PATTERN) then
+        return nil, "the token file for DEV_AGENT holds a token that is not plain text"
+    end
+    return found.token
+end
+
 ---The role token a lead issued, from `DEV_BOARD_TOKEN`.
 ---@return string? token the token, nil when the variable is unset or empty
 ---@return string? message why the token is not usable
@@ -285,7 +315,14 @@ function Backend:__request(method, path, body, fence, seconds)
         if message then
             return nil, message
         end
-        self.__issued = token ~= nil
+        self.__issued = token and ISSUED_REFUSED or nil
+        if not token then
+            token, message = filed()
+            if message then
+                return nil, message
+            end
+            self.__issued = token and FILE_REFUSED or nil
+        end
         if not token then
             token, message = M.token(self.__opts.token)
         end
@@ -340,7 +377,7 @@ function Backend:__request(method, path, body, fence, seconds)
     end
     local expired = status == UNAUTHORIZED and type(doc) == "table" and doc.code == TOKEN_EXPIRED
     if status == UNAUTHORIZED and self.__issued then
-        return nil, expired and unavailable(EXPIRED) or ISSUED_REFUSED, status, doc
+        return nil, expired and unavailable(EXPIRED) or self.__issued, status, doc
     end
     if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
         self.__healed = true
@@ -1378,6 +1415,74 @@ function Backend:keepalive(id, fence, ticks, state)
         return nil, "cannot start the keep-alive loop"
     end
     return pid
+end
+
+local function plural(list)
+    return #list > 0 and table.concat(list, ", ") or "none"
+end
+
+---Issue a role token as a child of the token in use and keep it in the file of
+---`name`, deleting the expired token files on the way.
+---
+---The token goes to the file and nowhere else.
+---@param role string the agent role's name
+---@param name string the agent name to issue as, the `DEV_AGENT` of the runner
+---@return {role: string, label: string, expires: integer}? issued what was issued, without the token
+---@return string? message why nothing was issued
+function Backend:mint(role, name)
+    local roles, message = self:__request("GET", ROLES_LIST_PATH)
+    if not roles then
+        return nil, message
+    end
+    local id
+    local names = {}
+    for _, row in ipairs(type(roles) == "table" and roles or {}) do
+        names[#names + 1] = present(row.name) or "?"
+        if row.name == role then
+            id = present(row.id)
+        end
+    end
+    if not id then
+        table.sort(names)
+        return nil, "pomb has no agent role named " .. role .. ", the roles are " .. plural(names)
+    end
+    local reply, status, doc
+    reply, message, status, doc =
+        self:__request("POST", CHILDREN_PATH, { name = name, role_id = id })
+    local code = type(doc) == "table" and doc.code or nil
+    if status == CONFLICT then
+        return nil,
+            "another token already has the name "
+                .. name
+                .. ", pick another --as or wait for that token to expire"
+    elseif status == HTTP_ERROR and code == UNKNOWN_ROLE then
+        return nil, "pomb has no agent role named " .. role
+    elseif status == FORBIDDEN and code == EXCEEDS_GRANT then
+        return nil,
+            "the token in use cannot issue the "
+                .. role
+                .. " role: it asks for more than this token holds or the role is granted on a board this token lacks ("
+                .. (present(doc.message) or "no message")
+                .. ")"
+    elseif not reply then
+        return nil, message
+    end
+    local raw = type(reply) == "table" and present(reply.raw_token)
+    if not raw or not raw:find(TOKEN_PATTERN) then
+        return nil, unavailable("pomb sent no usable token")
+    end
+    local expires = tonumber(reply.expires_at) or 0
+    tokenfile.sweep(os.time())
+    local ok
+    ok, message = tokenfile.write(name, raw, expires)
+    if not ok then
+        return nil, "cannot keep the token: " .. message
+    end
+    return {
+        role = present(reply.role_name) or role,
+        label = present(reply.label) or "none",
+        expires = expires,
+    }
 end
 
 ---Use a token already in hand instead of reading one with `pass`.
