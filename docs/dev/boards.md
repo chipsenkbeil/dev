@@ -139,8 +139,10 @@ seconds on its second. Every mint deletes the expired files it finds there.
 
 The lead then starts the runner with `DEV_AGENT=NAME` and no token in its
 environment or prompt. Because NAME is the claimant name, it follows
-`<repo>/<role>/<card>/<run>`, and a lead whose own `DEV_AGENT` has a slash is
-refused, as `delete` is.
+`<repo>/<role>/<card>/<run>`. The verb runs only for a lead, and so does
+`delete`: both read one helper, which counts a `DEV_AGENT` as the lead when its
+role segment (the second) is `lead`, as in `dotfiles/lead/CARD/1`, or when it
+holds no slash. Any other role is refused.
 
 Pomb refuses a name that a live token holds with a 409, and a name frees once
 its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`
@@ -1190,9 +1192,11 @@ never handles the API.
   It reads `lead_token` from `[board.pomb]`, not `token`, adds a `decision`
   comment `the lead deletes this card, reason: TEXT` to keep the reason on
   the card when it is restored, then sends `DELETE /api/tasks/{id}` and prints
-  `moved <id prefix> to the bin`. A `DEV_AGENT` that holds a `/`, the
-  `<session>/<workspace>` form of a runner, is refused with exit 1 before
-  any token is read or any call is made. A local board has no bin and exits 1.
+  `moved <id prefix> to the bin`. A `DEV_AGENT` that is not a lead
+  name is refused with exit 1 before any token is read or any call is made. A
+  lead name has a role segment (the second) of `lead`, as in
+  `dotfiles/lead/CARD/1`, or holds no slash, and `token mint` reads the same
+  helper. A local board has no bin and exits 1.
   Pomb's refusals print as they come: a `permission_denied` 403 names the
   permission and board, and `card_locked` says the card is locked. A locked
   card refuses the comment first and keeps nothing. A delete Pomb refuses after

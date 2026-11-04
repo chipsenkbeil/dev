@@ -6389,18 +6389,49 @@ t.test("delete notes the reason, then moves the card to the bin with the lead to
     t.ok(calls:find("the lead deletes this card, reason: duplicate", 1, true), calls)
 end)
 
-t.test("delete is refused for a runner, with no call and no token read", function()
+t.test("delete-lead-role deletes a card for a DEV_AGENT whose role segment is lead", function()
     local root, home = sandbox({ user = LEAD_USER })
     local out, code = dev(
         root,
         home,
         { "board", "delete", "11111111-a", "--reason", "duplicate" },
-        { agent = "project-run/pombbin" }
+        { agent = "dotfiles/lead/82f0e002/1" }
     )
-    t.eq(code, 1, out)
-    t.ok(out:find("only the lead deletes a card", 1, true), out)
-    t.ok(out:find("project-run/pombbin", 1, true), out)
-    t.eq(read(root, "calls"), "")
+    t.eq(code, 0, out)
+    t.eq(out, "moved 11111111 to the bin\n")
+    t.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
+end)
+
+t.test("delete-runner-role refuses a runner name, with no call and no token read", function()
+    for _, name in ipairs({
+        "dotfiles/implementer/82f0e002/1",
+        "dotfiles/leader/82f0e002/1",
+        "lead/implementer/82f0e002/1",
+        "project-run/pombbin",
+    }) do
+        local root, home = sandbox({ user = LEAD_USER })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "delete", "11111111-a", "--reason", "duplicate" },
+            { agent = name }
+        )
+        t.eq(code, 1, out)
+        t.ok(out:find("only the lead deletes a card", 1, true), out)
+        t.ok(out:find(name, 1, true), out)
+        t.eq(read(root, "calls"), "")
+    end
+end)
+
+t.test("lead-name-helper counts a name with no slash or a lead role as the lead", function()
+    t.eq(commands.is_lead(""), true)
+    t.eq(commands.is_lead("project-lead"), true)
+    t.eq(commands.is_lead("dotfiles/lead/82f0e002/1"), true)
+    t.eq(commands.is_lead("dotfiles/lead"), true)
+    t.eq(commands.is_lead("dotfiles/implementer/82f0e002/1"), false)
+    t.eq(commands.is_lead("dotfiles/leader/82f0e002/1"), false)
+    t.eq(commands.is_lead("lead/implementer/82f0e002/1"), false)
+    t.eq(commands.is_lead("project-run/pombbin"), false)
 end)
 
 t.test("delete without a lead token or on a local board does nothing", function()

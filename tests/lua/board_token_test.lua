@@ -140,6 +140,17 @@ t.test("token-mint-issue finds the role id by name and issues the child as NAME"
     )
 end)
 
+t.test(
+    "token-mint-lead-role mints a role token for a DEV_AGENT whose role segment is lead",
+    function()
+        local root, home = sandbox()
+        local out, code = mint(root, home, { agent = "dotfiles/lead/82f0e002/1" })
+        t.ok(code == 0, out)
+        t.ok(read(root, "calls"):find("/api/v1/auth/tokens/children", 1, true), read(root, "calls"))
+        t.ok(read(root, "stdin"):find("Bearer " .. LEAD, 1, true), read(root, "stdin"))
+    end
+)
+
 t.test("token-mint-silent never prints, logs or passes the token on an argument", function()
     local root, home = sandbox()
     local out, code = mint(root, home)

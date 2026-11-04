@@ -3443,15 +3443,22 @@ function commands.link(backend, args)
     }
 end
 
+function M.is_lead(name)
+    if not name:find("/", 1, true) then
+        return true
+    end
+    return name:match("^[^/]*/([^/]*)") == "lead"
+end
+
 local function delete_refusal(action)
     local name = os.getenv("DEV_AGENT") or ""
-    if name:find("/", 1, true) then
+    if not M.is_lead(name) then
         return failure(
             "only the lead "
                 .. (action or "deletes a card")
                 .. ", and DEV_AGENT "
                 .. name
-                .. " names a runner's workspace; ask the lead"
+                .. " is not a lead name, whose role segment is lead; ask the lead"
                 .. (action and "" or ", with the card and the reason")
         )
     end
