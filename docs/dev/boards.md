@@ -178,6 +178,15 @@ What it lays out:
   not know stays, comes after Done and is reported as
   `kept column "X", which is not part of the standard board`. It renames
   no column but In Review.
+- The agent roles: the planner, implementer, reviewer, verifier, release and lead
+  roles, granted to the board. `init` posts `{"boards":[board id]}` to Pomb's
+  `/api/v1/agent-roles/standard` right after the columns and prints
+  `created agent roles` with the names the reply lists, or `agent roles unchanged`
+  on a rerun, which is not counted as a change. A role that exists keeps its
+  template. The endpoint needs `settings.write` and a board the token holds. A
+  `permission_denied` is shown with the missing permission, and an
+  `exceeds_grant` as `the token does not hold board X`, with nothing created. A
+  local board has no roles, so it says nothing.
 - The palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`,
   red `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps
   its colour in every column, so the colour is the only record of its size.

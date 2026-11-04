@@ -218,7 +218,7 @@ return {
         handler = "lua",
         flags = "--name --admin",
         usage = "dev board init [--name N] [--admin]",
-        desc = "Bring the board to the standard: nine columns, the size palette with White as the default, no size words in names; --admin signs in through the browser for existing boards",
+        desc = "Bring the board to the standard: nine columns, the six agent roles granted to the board (agent-roles step), the size palette with White as the default, no size words in names; --admin signs in through the browser for existing boards",
     },
     {
         words = { "board", "ls" },

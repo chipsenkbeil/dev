@@ -38,6 +38,8 @@ local STAMP_CHARS = 19
 local PAGE_LIMIT = 500
 local FORBIDDEN = 403
 local PERMISSION_DENIED = "permission_denied"
+local EXCEEDS_GRANT = "exceeds_grant"
+local ROLES_PATH = "/api/v1/agent-roles/standard"
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
 local SUBTASKS_DELETE = "subtasks.delete"
@@ -1480,6 +1482,35 @@ function Backend:add_checks_field()
     end
     self.__field_keys = nil
     return true
+end
+
+function Backend:add_roles()
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local reply, status, doc
+    reply, message, status, doc = self:__request("POST", ROLES_PATH, { boards = { id } })
+    if not reply then
+        if status == FORBIDDEN and type(doc) == "table" and doc.code == EXCEEDS_GRANT then
+            return nil,
+                unavailable(
+                    "the token does not hold board "
+                        .. self.__opts.name
+                        .. " ("
+                        .. id
+                        .. "), so it cannot be granted the standard roles; add the board to the token"
+                )
+        end
+        return nil, message
+    end
+    local created = {}
+    if type(reply) == "table" and type(reply.created) == "table" then
+        for _, entry in ipairs(reply.created) do
+            created[#created + 1] = type(entry) == "table" and entry.name or entry
+        end
+    end
+    return created
 end
 
 function Backend:add_column(name, is_done)

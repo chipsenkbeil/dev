@@ -498,6 +498,10 @@ function Backend:add_checks_field()
     return true
 end
 
+function Backend:add_roles()
+    return false
+end
+
 function Backend:has_field()
     return true
 end

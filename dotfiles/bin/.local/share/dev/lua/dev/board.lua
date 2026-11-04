@@ -131,6 +131,7 @@ local M = {}
 ---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description, default flag or enabled flag
 ---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a card's name or colour
 ---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined on the board
+---@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string? the standard agent roles granted to the board, the names this call created, or false when the board has no roles
 
 ---@class dev.board.LayoutState
 ---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order

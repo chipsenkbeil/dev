@@ -4,6 +4,7 @@ local RENAMED_FROM = "In Review"
 local NEEDS_ADMIN = "pomb answered 403"
 local LEFT_ENABLED = "left the colours enabled as they are, since this token may not change them; "
     .. "run dev board init --admin"
+local ROLES_UNCHANGED = "agent roles unchanged"
 local ADMIN_HINT = "; this token may not change this board, run dev board init --admin"
 
 ---The standard board: the nine columns, the size palette and names without
@@ -170,6 +171,23 @@ local function columns_step(layout, state, say)
             state.changes = state.changes + 1
         end
     end
+    return true
+end
+
+local function roles_step(layout, state, say)
+    local created, message = layout:add_roles()
+    if created == nil then
+        return nil, message
+    end
+    if created == false then
+        return true
+    end
+    if #created == 0 then
+        say(ROLES_UNCHANGED)
+        return true
+    end
+    say("created agent roles " .. table.concat(created, ", "))
+    state.changes = state.changes + 1
     return true
 end
 
@@ -352,6 +370,7 @@ function M.run(layout, name, say, roles)
         layout_state.columns, layout_state.colors, layout_state.cards, layout_state.has_checks
     for _, step in ipairs({
         columns_step,
+        roles_step,
         checks_step,
         palette_step,
         strip_step,

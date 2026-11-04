@@ -20,6 +20,9 @@ local STANDARD = {
     "Done",
 }
 
+local UNCHANGED = "agent roles unchanged\n"
+local STANDARD_ROLES = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
+
 local function copy(value)
     if type(value) ~= "table" then
         return value
@@ -62,6 +65,7 @@ local function fake_layout(opts)
         colors = opts.colors or stock_palette(),
         cards = opts.cards or {},
         has_checks = opts.has_checks ~= false,
+        roles = opts.roles == nil and {} or opts.roles,
         writes = {},
     }
     local layout = { state = state }
@@ -84,6 +88,17 @@ local function fake_layout(opts)
             cards = state.cards,
             has_checks = state.has_checks,
         })
+    end
+    function layout:add_roles()
+        if state.roles == false then
+            return false
+        end
+        local created = {}
+        if #state.roles == 0 then
+            state.roles = copy(STANDARD_ROLES)
+            created = copy(STANDARD_ROLES)
+        end
+        return created
     end
     function layout:add_checks_field()
         write("add_checks_field")
@@ -163,7 +178,9 @@ end
 local function run(layout)
     local lines = {}
     local changes, message = init.run(layout, "demo", function(line)
-        lines[#lines + 1] = line
+        if line ~= "agent roles unchanged" then
+            lines[#lines + 1] = line
+        end
     end)
     return changes, message, lines
 end
@@ -458,6 +475,11 @@ case "$last" in
     esac
     ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/api/v1/agent-roles/standard)
+    line=$(cat "$ROOT/roles.json")
+    status=${line%%|*}
+    body=${line#*|}
+    ;;
 *) body='{"ok":true}' ;;
 esac
 printf '%s\n%s' "$body" "$status"
@@ -490,6 +512,7 @@ local function sandbox(opts)
         ["detail.json"] = detail(),
         ["colors.json"] = colors_json(),
         ["fields.json"] = opts.fields or FIELDS,
+        ["roles.json"] = opts.roles or '200|{"created":[],"roles":[]}\n',
         ["export.json"] = EXPORT,
         ["templates.json"] = '[{"id":"tpl-1","name":"agent project","built_in":false}]',
         ["whoami.json"] = '{"kind":"token","name":"x","scope":"admin"}',
@@ -529,7 +552,11 @@ local function writes(root)
     for line in read(root, "calls"):gsub("\n%%", " %%"):gmatch("[^\n]+") do
         if
             line:find("-X PATCH", 1, true)
-            or (line:find("-X POST", 1, true) and not line:find("/auth/", 1, true))
+            or (
+                line:find("-X POST", 1, true)
+                and not line:find("/auth/", 1, true)
+                and not line:find("/agent-roles/standard", 1, true)
+            )
         then
             count = count + 1
         end
@@ -541,7 +568,7 @@ t.test("init on a board already at the standard says so and writes nothing", fun
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
     t.eq(code, 0)
-    t.eq(out, "board demo already follows the standard, nothing to change\n")
+    t.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
     t.eq(writes(root), 0)
     t.ok(read(root, "calls"):find("pass show secrets/lead/token/pomb", 1, true))
     t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
@@ -562,6 +589,7 @@ t.test("init --admin pairs through pending, slow_down and success", function()
         out,
         "approve the admin sign-in at https://pomb.example/device\n"
             .. "code: ABCD-EFGH\n"
+            .. UNCHANGED
             .. "board demo already follows the standard, nothing to change\n"
     )
     t.eq(read(root, "polls"), "4\n")
@@ -639,7 +667,8 @@ t.test("a project with no [board] section needs --name and then gets one", funct
     t.eq(code, 0)
     t.eq(
         out,
-        "wrote [board] to .dev/config.toml\n"
+        UNCHANGED
+            .. "wrote [board] to .dev/config.toml\n"
             .. "board demo already follows the standard, nothing to change\n"
     )
     t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
@@ -656,7 +685,8 @@ t.test("a project with no .dev/config.toml takes --name and gets the file", func
     t.eq(code, 0)
     t.eq(
         out,
-        "wrote [board] to .dev/config.toml\n"
+        UNCHANGED
+            .. "wrote [board] to .dev/config.toml\n"
             .. "board demo already follows the standard, nothing to change\n"
     )
     t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
@@ -669,7 +699,8 @@ t.test("a project with no .dev directory gets it and the file", function()
     t.eq(code, 0, out)
     t.eq(
         out,
-        "wrote [board] to .dev/config.toml\n"
+        UNCHANGED
+            .. "wrote [board] to .dev/config.toml\n"
             .. "board demo already follows the standard, nothing to change\n"
     )
     t.ok(fs.is_dir(root .. "/.dev"))
@@ -709,7 +740,7 @@ t.test("init defines the checks field once with the dev definition", function()
     local root, home, tmp = sandbox({ fields = "[]" })
     local out, code = dev(root, home, tmp, { "board", "init" })
     t.eq(code, 0, out)
-    t.eq(out, "added the checks field dev.checks\nboard demo: 1 change\n")
+    t.eq(out, UNCHANGED .. "added the checks field dev.checks\nboard demo: 1 change\n")
     local body = '{"columns":[{"key":"run","kind":"text","label":"Run","options":[],"required":true},'
         .. '{"key":"on","kind":"multiselect","label":"On","options":["local"],"required":false}],'
         .. '"key":"dev.checks","kind":"table","label":"Checks","required":true}'
@@ -724,7 +755,7 @@ t.test("init defines the checks field once with the dev definition", function()
     t.eq(writes(root), 1)
     root, home, tmp = sandbox()
     out = dev(root, home, tmp, { "board", "init" })
-    t.eq(out, "board demo already follows the standard, nothing to change\n")
+    t.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
     t.eq(writes(root), 0)
 end)
 
@@ -993,7 +1024,87 @@ t.test("init sends enabled through the palette PATCH for each colour", function(
     local patch = '--data-raw {"enabled":false} '
         .. "https://pomb.example/api/boards/board-1/colors/orange-id"
     t.ok(calls_of(root):find(patch, 1, true), calls_of(root))
-    t.eq(out, "disabled orange\nboard demo: 1 change\n")
+    t.eq(out, UNCHANGED .. "disabled orange\nboard demo: 1 change\n")
+end)
+
+t.test("agent-roles-create: a first init posts the board id and prints names", function()
+    local root, home, tmp = sandbox({
+        roles = '200|{"created":["planner","implementer","reviewer","verifier","release","lead"],'
+            .. '"roles":[]}\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.eq(
+        out,
+        "created agent roles planner, implementer, reviewer, verifier, release, lead\n"
+            .. "board demo: 1 change\n"
+    )
+    t.ok(
+        calls_of(root):find(
+            '--data-raw {"boards":["board-1"]} https://pomb.example/api/v1/agent-roles/standard',
+            1,
+            true
+        ),
+        calls_of(root)
+    )
+end)
+
+t.test("agent-roles-unchanged: a rerun prints unchanged and counts no change", function()
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    t.ok(calls_of(root):find("/api/v1/agent-roles/standard", 1, true), calls_of(root))
+end)
+
+t.test("agent-roles-create: the step runs once through a layout", function()
+    local layout = fake_layout({ columns = template_columns() })
+    local lines = {}
+    local changes = init.run(layout, "demo", function(line)
+        lines[#lines + 1] = line
+    end)
+    t.ok(changes >= 1)
+    t.ok(table.concat(lines, "\n"):find("created agent roles planner, implementer", 1, true))
+    lines = {}
+    t.eq(
+        init.run(layout, "demo", function(line)
+            lines[#lines + 1] = line
+        end),
+        0
+    )
+    t.eq(lines, { "agent roles unchanged" })
+end)
+
+t.test("a board with no roles says nothing about them", function()
+    local layout = fake_layout({ columns = template_columns(), roles = false })
+    local lines = {}
+    init.run(layout, "demo", function(line)
+        lines[#lines + 1] = line
+    end)
+    for _, line in ipairs(lines) do
+        t.eq(line:find("agent roles", 1, true), nil, line)
+    end
+end)
+
+t.test("agent-roles-exceeds-grant: a board the init token does not hold is named", function()
+    local root, home, tmp = sandbox({
+        roles = '403|{"code":"exceeds_grant","message":"the calling token does not hold board board-1"}\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 1)
+    t.ok(out:find("the token does not hold board demo (board-1)", 1, true), out)
+    t.ok(out:find("add the board to the token", 1, true), out)
+    t.eq(out:find("--admin", 1, true), nil)
+end)
+
+t.test("agent-roles-denied: a permission_denied names the missing permission", function()
+    local root, home, tmp = sandbox({
+        roles = '403|{"code":"permission_denied","message":"no","permission":"settings.write",'
+            .. '"board_id":null}\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 1)
+    t.ok(out:find("lacks the settings.write permission", 1, true), out)
 end)
 
 t.test("init --admin accepts a token with the admin preset's permissions on every board", function()
