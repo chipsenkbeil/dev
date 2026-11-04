@@ -620,6 +620,37 @@ function Backend:note(id, body, fence, opts)
     end)
 end
 
+function Backend:ask()
+    return nil, "a local board holds no structured questions; use dev board note"
+end
+
+function Backend:answer(id, choice, quote, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        local labels = {}
+        for _, label in ipairs(card.labels or {}) do
+            if label ~= board.NEEDS_HUMAN then
+                labels[#labels + 1] = label
+            end
+        end
+        card.labels = labels
+        card.comments[#card.comments + 1] = {
+            id = store.id(),
+            who = COMMENT_ACTOR,
+            at = store.stamp(),
+            body = "Owner's answer, typed in this session: choice "
+                .. choice
+                .. ", quote: "
+                .. quote,
+            kind = "decision",
+        }
+        return true
+    end)
+end
+
 function Backend:comments(id)
     local doc, message = self:__read()
     if not doc then

@@ -1831,6 +1831,50 @@ function commands.label(backend, args)
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
 end
 
+function commands.ask(backend, args)
+    local fields = { ["--question"] = "text", ["--recommend"] = "recommended", ["--why"] = "why" }
+    if #args < 1 then
+        return usage(
+            "needs a card, --question TEXT, --choice COLUMN=LABEL, --recommend N and --why TEXT"
+        )
+    end
+    local question = { choices = {} }
+    local i = 2
+    while i <= #args do
+        local flag, value = args[i], args[i + 1]
+        if not value then
+            return usage(flag .. " needs a value")
+        end
+        if flag == "--choice" then
+            local column, label = value:match("^%s*([^=]-)%s*=%s*(.-)%s*$")
+            if not column or column == "" or label == "" then
+                return usage("--choice takes COLUMN=LABEL, not " .. value)
+            end
+            question.choices[#question.choices + 1] = { column = column, label = label }
+        elseif fields[flag] == "recommended" then
+            if not value:match("^%d+$") then
+                return usage("--recommend takes a choice number, not " .. value)
+            end
+            question.recommended = tonumber(value)
+        elseif fields[flag] then
+            question[fields[flag]] = value
+        else
+            return usage("unknown flag " .. flag)
+        end
+        i = i + 2
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held = claims.read(card.id)
+    local ok, message = backend:ask(card.id, question, held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    return { output = "asked " .. card.id:sub(1, board.MIN_PREFIX) }
+end
+
 function commands.answer(backend, args)
     local choice, quote_at
     if args[2] == "--choice" then
@@ -1854,41 +1898,16 @@ function commands.answer(backend, args)
         return err
     end
     local prefix = card.id:sub(1, board.MIN_PREFIX)
-    local at = index_of(card.labels, board.NEEDS_HUMAN)
-    if not at then
+    if not index_of(card.labels, board.NEEDS_HUMAN) then
         return failure(
             prefix .. " is not " .. board.NEEDS_HUMAN .. ", so nothing waits on an answer"
         )
     end
     local held = claims.read(card.id)
-    local fence = held and held.fence
-    local labels = {}
-    for index, label in ipairs(card.labels) do
-        if index ~= at then
-            labels[#labels + 1] = label
-        end
-    end
-    local ok, message = backend:set_labels(card.id, labels, fence)
+    local ok, message =
+        backend:answer(card.id, tonumber(choice), quote:match("^%s*(.-)%s*$"), held and held.fence)
     if not ok then
         return failure(message)
-    end
-    local body = "Owner's answer, typed in this session: choice " .. choice .. ", quote: " .. quote
-    ok, message = backend:note(card.id, body, fence, { kind = NOTE_DECISION })
-    if not ok then
-        return unqueued(
-            failure(
-                board.NEEDS_HUMAN
-                    .. " is removed from "
-                    .. prefix
-                    .. " but the decision note failed: "
-                    .. message
-                    .. ", so post it with dev board note "
-                    .. prefix
-                    .. ' --kind decision "'
-                    .. body
-                    .. '"'
-            )
-        )
     end
     return { output = "answered " .. prefix .. " with choice " .. choice }
 end

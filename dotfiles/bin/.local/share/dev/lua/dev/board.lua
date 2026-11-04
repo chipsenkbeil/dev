@@ -67,6 +67,8 @@ local M = {}
 ---@field set_checks fun(self: dev.board.Backend, id: string, runs: string[], fence: integer?): boolean?, string? the card's checks rows replaced by one row per command, checked against the claim's fence when one is given
 ---@field set_field fun(self: dev.board.Backend, id: string, key: string, value: string|string[]|table[]|dev.json.Null, fence: integer?): boolean?, string? the custom field with that key replaced whole by the value, where json.null clears it, checked against the claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts: dev.board.NoteOpts?): boolean?, string? a comment added to the card, of kind agent unless opts names one, checked against the claim's fence when one is given
+---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?): boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with needs:human, or nil and Pomb's refusal
+---@field answer fun(self: dev.board.Backend, id: string, choice: integer, quote: string, fence: integer?): boolean?, string? the card's open question answered with the choice and the owner's quote, so Pomb moves the card to that choice's column, or nil and a message
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
@@ -110,6 +112,17 @@ local M = {}
 ---@field kind string? its kind tag, when it has one
 ---@field author string? the role label it was written under, when it has one
 ---@field actor string? the kind of actor that wrote it, `human` or `agent`, when known
+---@field question dev.board.Question? the structured question the comment holds, with its answer once given
+
+---@class dev.board.Question
+---@field text string the question
+---@field answer table<string, any>? how the question was answered, nil while it is open
+
+---@class dev.board.Ask
+---@field text string? the question
+---@field choices {label: string, column: string}[] the choices in order, each with the column the card moves to
+---@field recommended integer? the number of the recommended choice
+---@field why string? why the agent cannot decide alone
 
 ---@class dev.board.NextOpts
 ---@field label string? the label the card must carry

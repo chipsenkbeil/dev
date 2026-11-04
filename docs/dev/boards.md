@@ -14,6 +14,7 @@ dev board size 8af0e001 1
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --label needs:lead --label docs
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --checks "dev lint" --checks "dev test"
 dev board label 8af0e001 needs:human --remove needs:lead
+dev board ask 8af0e001 --question "Which way?" --choice "Ready=Take the first" --choice "Icebox=Park it" --recommend 1 --why "Only you can choose"
 dev board answer 8af0e001 --choice 2 --quote "Take the second one."
 dev board stale --days 7
 dev board lint
@@ -343,8 +344,8 @@ Every card in every column is fair game for an agent unless it is labelled
     out.
   - A lead finds one with `dev board next --column blocked`, takes it before
     any Ready card, and parks on `timeout 86400 dev board wait --for lead`.
-  - A lead that cannot answer adds `needs:human`, removes `needs:lead` and
-    leaves the card in Blocked for you. The chain is `needs:planner`,
+  - A lead that cannot answer asks you with `dev board ask`, which leaves the
+    card in Blocked with `needs:human`. The chain is `needs:planner`,
     `needs:lead`, `needs:human`.
 - Done: on main (and live where the project deploys), answered, or
   dropped with a note.
@@ -380,7 +381,7 @@ A size answers no question, and an agent may change it to another size. An
 agent never sets `unsized` on such a card. You set `unsized` yourself, with
 `dev board size` in Icebox. The other two both end with an agent removing the
 label: an agent that you answered directly in its own session removes the
-label, quotes you in a decision note and carries on, and once you move a card
+label through `dev board answer CARD --choice N --quote TEXT` and carries on, and once you move a card
 out of Blocked or Icebox, the first agent to see it elsewhere removes the
 label and follows that column. `stale` lists such a card under `moved by the
 owner`. Your own comment on the card, or that session answer, counts as the
@@ -393,10 +394,22 @@ to a token for a comment (create, and edit or delete of its own), a move, a
 reorder and a size change, and only a label change passes. dev prints that
 reason instead of a generic failure.
 
-The label therefore goes last. Move the card to Blocked, write the question
-note, then add the label. `add --label needs:human` creates the card and its
-outcomes, then sets the label. An agent that records your answer removes the
-label first, then writes the decision note.
+An agent asks you with `dev board ask CARD --question TEXT --choice
+COLUMN=LABEL... --recommend N --why TEXT`. It sends Pomb's structured question:
+the question, two to ten numbered choices that each name the column the card
+moves to, the recommended choice and why the agent cannot decide. Pomb moves
+the card to Blocked, adds `needs:human` and refuses a part that is missing in
+its own words, which dev prints as they come (exit 1). Pomb refuses `note
+--kind question` without that shape, so `ask` is the only way to put a
+question to you. `add --label needs:human` still creates the card and its
+outcomes, then sets the label.
+
+`dev board answer CARD --choice N --quote TEXT` records your answer through
+Pomb's answer API. The quote must hold your own words and may not be empty:
+dev refuses an empty one before it calls Pomb. Pomb removes `needs:human`,
+moves the card to the destination of choice N and stores the answer as relayed,
+with the token's name and the quote. It refuses a card with no open question.
+You can also answer in the browser.
 
 Until Pomb's `fff0e011` ships, `order` and `size` fail on such a card,
 whatever the rule says. `label --remove needs:human` stays allowed in any

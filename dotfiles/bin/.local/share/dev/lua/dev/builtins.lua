@@ -265,7 +265,14 @@ return {
         handler = "lua",
         flags = "--choice --quote",
         usage = "dev board answer CARD --choice N --quote TEXT",
-        desc = "Record the owner's answer typed in this session on a needs:human card: a decision note with the choice and the quote, then the needs:human label removed, the column left alone",
+        desc = "Record the owner's answer on a needs:human card through Pomb: the choice with the owner's words as the quote, so Pomb removes the label and moves the card to that choice's column",
+    },
+    {
+        words = { "board", "ask" },
+        handler = "lua",
+        flags = "--question --choice --recommend --why",
+        usage = "dev board ask CARD --question TEXT --choice COLUMN=LABEL... --recommend N --why TEXT",
+        desc = "Ask the owner a structured question through Pomb: the question, two to ten choices that each name the column the card moves to, the recommended choice and why you cannot decide. Pomb moves the card to Blocked with needs:human and refuses a missing part in its own words",
     },
     {
         words = { "board", "escalate" },

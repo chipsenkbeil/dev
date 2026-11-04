@@ -28,6 +28,7 @@ local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
 local HTTP_ERROR = 400
 local TOP = 0
 local COMMENT_KIND = "agent"
+local QUESTION_KIND = "question"
 local DEFAULT_AUTHOR = "api-token"
 local ACTORS = { user = "human", api_token = "agent" }
 local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
@@ -879,6 +880,63 @@ function Backend:note(id, body, fence, opts)
     return true
 end
 
+function Backend:ask(id, question, fence)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local choices
+    for index, choice in ipairs(question.choices) do
+        local column = self:__column_id(choice.column)
+        if not column then
+            return nil, "choice " .. index .. " names " .. choice.column .. ", which is no column"
+        end
+        choices = choices or {}
+        choices[index] = { label = choice.label, column_id = column }
+    end
+    local made
+    made, message = self:__request("POST", "/api/tasks/" .. id .. "/comments", {
+        kind = QUESTION_KIND,
+        question = {
+            text = question.text,
+            choices = choices,
+            recommended = question.recommended,
+            why = question.why,
+        },
+    }, fence)
+    if not made then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:answer(id, choice, quote, fence)
+    local comments, message = self:comments(id)
+    if not comments then
+        return nil, message
+    end
+    local open
+    for _, comment in ipairs(comments) do
+        if comment.question and not present(comment.question.answer) then
+            open = comment
+        end
+    end
+    if not open then
+        return nil, "the card holds no open question to answer"
+    end
+    local done
+    done, message = self:__request(
+        "POST",
+        "/api/tasks/" .. id .. "/comments/" .. open.id .. "/answer",
+        { choice = choice, quote = quote },
+        fence
+    )
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:comments(id)
     local list, message = self:__request("GET", "/api/tasks/" .. id .. "/comments")
     if not list then
@@ -896,6 +954,7 @@ function Backend:comments(id)
             body = present(comment.body) or "",
             kind = present(comment.kind),
             author = author ~= DEFAULT_AUTHOR and author or nil,
+            question = type(present(comment.question)) == "table" and comment.question or nil,
         }
     end
     return found

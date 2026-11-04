@@ -92,6 +92,14 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "note", id, text, opts }
         return true
     end
+    function backend:ask(id, question, fence)
+        calls[#calls + 1] = { "ask", id, question, fence }
+        return backend.refusal == nil, backend.refusal
+    end
+    function backend:answer(id, choice, quote, fence)
+        calls[#calls + 1] = { "answer", id, choice, quote, fence }
+        return backend.refusal == nil, backend.refusal
+    end
     function backend:comments(id)
         calls[#calls + 1] = { "comments", id }
         return backend.listed or {}
@@ -2459,7 +2467,7 @@ local function blocked_cards()
     return cards
 end
 
-t.test("answer posts the decision note with the quote and removes only needs:human", function()
+t.test("answer sends the choice and the quote to the backend and touches nothing else", function()
     local backend = fake(blocked_cards())
     local result = commands.run(
         "answer",
@@ -2467,14 +2475,60 @@ t.test("answer posts the decision note with the quote and removes only needs:hum
         backend
     )
     t.eq(result.output, "answered 11111111 with choice 2")
-    t.eq(#backend.calls, 2)
-    t.eq(backend.calls[1], { "set_labels", ID_A, { "docs" }, nil })
-    t.eq(backend.calls[2], {
-        "note",
+    t.eq(backend.calls, { { "answer", ID_A, 2, "go with two", nil } })
+end)
+
+t.test("answer prints the backend's refusal and exits 1", function()
+    local backend = fake(blocked_cards())
+    backend.refusal = "pomb answered 409: the question is answered already"
+    local result =
+        commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.message, backend.refusal)
+end)
+
+t.test("ask sends the parts it was given and lets the backend refuse a missing one", function()
+    local backend = fake(sample())
+    local result = commands.run("ask", {
+        "11111111-a",
+        "--question",
+        "Which?",
+        "--choice",
+        "Ready=Ship it",
+        "--choice",
+        "Icebox = Park it",
+        "--recommend",
+        "1",
+    }, backend)
+    t.eq(result.output, "asked 11111111")
+    t.eq(backend.calls[1], {
+        "ask",
         ID_A,
-        "Owner's answer, typed in this session: choice 2, quote: go with two",
-        { kind = "decision" },
+        {
+            text = "Which?",
+            choices = {
+                { column = "Ready", label = "Ship it" },
+                { column = "Icebox", label = "Park it" },
+            },
+            recommended = 1,
+        },
+        nil,
     })
+end)
+
+t.test("ask refuses a bad choice, a bad recommendation, an unknown flag and no card", function()
+    local backend = fake(sample())
+    for _, args in ipairs({
+        { "11111111-a", "--choice", "no equals sign" },
+        { "11111111-a", "--choice", "=label" },
+        { "11111111-a", "--recommend", "x" },
+        { "11111111-a", "--bogus", "x" },
+        { "11111111-a", "--why" },
+    }) do
+        t.eq(commands.run("ask", args, backend).code, 2, table.concat(args, " "))
+    end
+    t.eq(commands.run("ask", {}, backend).code, 2)
+    t.eq(#backend.calls, 0)
 end)
 
 t.test("answer refuses a card without needs:human and writes nothing", function()
@@ -2500,33 +2554,6 @@ t.test("answer refuses an empty quote, a bad choice and missing flags", function
         t.eq(commands.run("answer", args, backend).code, 2, table.concat(args, " "))
     end
     t.eq(#backend.calls, 0)
-end)
-
-t.test("answer posts no note when the label write fails", function()
-    local backend = fake(blocked_cards())
-    function backend:set_labels()
-        return nil, "board unavailable: cannot reach pomb"
-    end
-    local result =
-        commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
-    t.eq(result.code, 1)
-    t.eq(#backend.calls, 0)
-end)
-
-t.test("answer prints the note to post by hand when the note fails after the label", function()
-    local backend = fake(blocked_cards())
-    function backend:note()
-        return nil, "board unavailable: cannot reach pomb"
-    end
-    local result =
-        commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.unqueued, true)
-    t.ok(
-        result.message:find('dev board note 11111111 --kind decision "Owner', 1, true),
-        result.message
-    )
-    t.ok(result.message:find("choice 1, quote: yes", 1, true), result.message)
 end)
 
 t.test("a needs:human card moves within its own column and not out of it", function()
@@ -3192,6 +3219,10 @@ case "$last" in
         if [ -f "$ROOT/locked" ]; then
             body='{"code":"card_locked","message":"locked"}'
             status=403
+        fi
+        if [ -f "$ROOT/ask_refusal" ]; then
+            body=$(cat "$ROOT/ask_refusal")
+            status=400
         fi
         ;;
     esac
@@ -4617,6 +4648,135 @@ t.test("note posts a comment of kind agent and move goes to the top of the colum
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     t.ok(calls:find('"column_id":"col-review"', 1, true), calls)
     t.ok(calls:find('"position":0', 1, true), calls)
+end)
+
+local function owner_card_sandbox()
+    local export = EXPORT:gsub(
+        '"labels":%["docs"%],"description":"Why it matters',
+        '"labels":["docs","needs:human"],"description":"Why it matters',
+        1
+    )
+    return sandbox({ export = export })
+end
+
+t.test("ask posts a structured question", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, {
+        "board",
+        "ask",
+        "11111111-a",
+        "--question",
+        "Which way?",
+        "--choice",
+        "Ready=Ship it",
+        "--choice",
+        "Icebox=Park it",
+        "--recommend",
+        "2",
+        "--why",
+        "Only he can choose",
+    })
+    t.eq(out, "asked 11111111\n")
+    t.eq(code, 0)
+    local calls = read(root, "calls")
+    t.ok(calls:find("-X POST", 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
+    t.ok(calls:find('"kind":"question"', 1, true), calls)
+    t.ok(calls:find('"text":"Which way?"', 1, true), calls)
+    t.ok(calls:find('"label":"Ship it"', 1, true), calls)
+    t.ok(calls:find('"column_id":"col-ready"', 1, true), calls)
+    t.ok(calls:find('"column_id":"col-icebox"', 1, true), calls)
+    t.ok(calls:find('"recommended":2', 1, true), calls)
+    t.ok(calls:find('"why":"Only he can choose"', 1, true), calls)
+end)
+
+t.test("ask prints the refusal as worded", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
+    local out, code = dev(root, home, {
+        "board",
+        "ask",
+        "11111111-a",
+        "--question",
+        "Which way?",
+        "--choice",
+        "Ready=Ship it",
+        "--choice",
+        "Icebox=Park it",
+        "--recommend",
+        "1",
+    })
+    t.eq(code, 1)
+    t.ok(out:find("question.why is required", 1, true), out)
+end)
+
+t.test("ask names a choice whose column the board lacks and posts nothing", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, {
+        "board",
+        "ask",
+        "11111111-a",
+        "--choice",
+        "Nowhere=Lost",
+    })
+    t.eq(code, 1)
+    t.ok(out:find("choice 1 names Nowhere, which is no column", 1, true), out)
+    t.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
+end)
+
+local QUESTION_COMMENT = '[{"id":"qqqqqqqq-1111-4111-8111-111111111111","author":"api-token",'
+    .. '"actor_kind":"api_token","token_name":"worker","created_at":"2026-10-27T09:30:12Z",'
+    .. '"body":"Which way?","kind":"question","question":{"text":"Which way?","choices":['
+    .. '{"label":"Ship it","column_id":"col-ready"},{"label":"Park it","column_id":"col-icebox"}],'
+    .. '"recommended":1,"why":"w","answer":%s}}]'
+
+t.test("answer records the choice through Pomb", function()
+    local root, home = owner_card_sandbox()
+    local plain = '{"id":"pppppppp-2222-4222-8222-222222222222","author":"x","actor_kind":"user",'
+        .. '"token_name":null,"created_at":"2026-10-27T10:00:00Z","body":"later","question":null}'
+    local listed = QUESTION_COMMENT:format("null")
+    assert(fs.write(root .. "/comments.json", listed:sub(1, -2) .. "," .. plain .. "]"))
+    local out, code = dev(
+        root,
+        home,
+        { "board", "answer", "11111111-a", "--choice", "2", "--quote", "go with two" }
+    )
+    t.eq(out, "answered 11111111 with choice 2\n")
+    t.eq(code, 0)
+    local calls = read(root, "calls")
+    t.ok(
+        calls:find(
+            "/api/tasks/" .. ID_A .. "/comments/qqqqqqqq-1111-4111-8111-111111111111/answer",
+            1,
+            true
+        ),
+        calls
+    )
+    t.ok(calls:find('"choice":2', 1, true), calls)
+    t.ok(calls:find('"quote":"go with two"', 1, true), calls)
+end)
+
+t.test("answer refuses a card whose question is answered already before calling Pomb", function()
+    local root, home = owner_card_sandbox()
+    assert(
+        fs.write(
+            root .. "/comments.json",
+            QUESTION_COMMENT:format('{"choice":1,"answered_by":"o","answered_at":"x"}')
+        )
+    )
+    local out, code =
+        dev(root, home, { "board", "answer", "11111111-a", "--choice", "1", "--quote", "yes" })
+    t.eq(code, 1)
+    t.ok(out:find("no open question", 1, true), out)
+    t.ok(not read(root, "calls"):find("/answer", 1, true), read(root, "calls"))
+end)
+
+t.test("answer refuses an empty quote before calling Pomb", function()
+    local root, home = owner_card_sandbox()
+    local _, code =
+        dev(root, home, { "board", "answer", "11111111-a", "--choice", "1", "--quote", " " })
+    t.eq(code, 2)
+    t.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
 end)
 
 t.test("order sends each position to Pomb and refuses two columns first", function()
