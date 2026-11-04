@@ -4,6 +4,7 @@ local json = require("dev.json")
 local picker = require("dev.ui.picker")
 local ui = require("dev.ui")
 local verb = require("dev.verb")
+local xdg = require("dev.xdg")
 
 local present = json.present
 local stderr = io.stderr
@@ -39,11 +40,7 @@ end
 ---Find the file where ci keeps the host keys of the boxes it shows.
 ---@return string path the known_hosts file
 local function known_hosts()
-    local state = os.getenv("XDG_STATE_HOME")
-    if not state or state:sub(1, 1) ~= "/" then
-        state = os.getenv("HOME") .. "/.local/state"
-    end
-    return state .. "/ci/known_hosts"
+    return xdg.state_home() .. "/ci/known_hosts"
 end
 
 ---Check a project directory against the names ci can make.

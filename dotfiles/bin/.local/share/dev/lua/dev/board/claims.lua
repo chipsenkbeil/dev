@@ -1,5 +1,6 @@
 local devos = require("dev.os")
 local fs = require("dev.fs")
+local xdg = require("dev.xdg")
 
 local STATE_NAME = "dev/board"
 local LOOP_MARK = "board/keepalive.sh"
@@ -27,13 +28,9 @@ M.TICK_SECONDS = M.TICK_MINUTES * 60
 M.TTL_SECONDS = 900
 
 ---Find the directory that holds the state files.
----@return string dir `$XDG_STATE_HOME/dev/board` when that is absolute, else `~/.local/state/dev/board`
+---@return string dir the `dev/board` directory under the state home
 function M.dir()
-    local home = os.getenv("XDG_STATE_HOME")
-    if not home or home:sub(1, 1) ~= "/" then
-        home = (os.getenv("HOME") or "") .. "/.local/state"
-    end
-    return home .. "/" .. STATE_NAME
+    return xdg.state_home() .. "/" .. STATE_NAME
 end
 
 ---Name the state file of a card.

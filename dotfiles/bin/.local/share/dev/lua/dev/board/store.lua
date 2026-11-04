@@ -2,6 +2,7 @@ local devos = require("dev.os")
 local ffi = require("ffi")
 local fs = require("dev.fs")
 local json = require("dev.json")
+local xdg = require("dev.xdg")
 
 ffi.cdef([[
 typedef struct dev_file dev_file;
@@ -27,13 +28,9 @@ local M = {}
 ---@field private boolean? whether the files are state no one else may read
 
 ---Find the directory that holds the boards and the queues.
----@return string dir `$XDG_STATE_HOME/dev/boards` when that is absolute, else `~/.local/state/dev/boards`
+---@return string dir the `dev/boards` directory under the state home
 function M.dir()
-    local home = os.getenv("XDG_STATE_HOME")
-    if not home or home:sub(1, 1) ~= "/" then
-        home = (os.getenv("HOME") or "") .. "/.local/state"
-    end
-    return home .. "/" .. STATE_NAME
+    return xdg.state_home() .. "/" .. STATE_NAME
 end
 
 ---Make a random id, the shape of a version 4 UUID.
