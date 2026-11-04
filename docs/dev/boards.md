@@ -292,13 +292,14 @@ Every card in every column is fair game for an agent unless it is labelled
   haiku agent, green and blue by a sonnet agent.
 - In Progress: an agent holds the card, under its name. Only the claimant works
   it.
-- Review: the change is under review or ci, then `dev board land` lands it
-  and moves the card to Done. Still the claimant's.
-- Verify: the review passed and a verifier ticks the outcomes from the ci logs.
-- Release: verified and waiting to reach main and, where the project deploys,
-  go live. `stale` lists a card that sits here for `--days` days or more.
-  A card in Review, Verify or Release with no claim waits for that stage's
-  role. A claim means the role is working it.
+- Review: the change is under review or ci, and a verifier ticks the outcomes
+  from the ci logs while it sits here. Then `dev board land` lands it and
+  moves the card to Done. Still the claimant's.
+- Verify: a stage column `dev board land` does not use yet.
+- Release: a stage column `dev board land` does not use yet, for a card
+  waiting to reach main and, where the project deploys, go live. `stale` lists a card that sits here for `--days` days or
+  more. A card in Review, Verify or Release with no claim waits for that
+  stage's role. A claim means the role is working it.
 - Blocked: waiting on an answer.
   - `needs:human` is yours alone.
   - `needs:planner` is for a planner. An implementer or reviewer who doubts a
