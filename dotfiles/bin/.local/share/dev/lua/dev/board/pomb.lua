@@ -59,8 +59,8 @@ local LINKS_DELETE = "links.delete"
 local SUBTASKS_DELETE = "subtasks.delete"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
-local NOT_CREATOR =
-    "pomb refused the delete. This token may delete only an outcome that same token created, and this one was made in the browser or by another token. A token with subtasks.delete deletes any outcome"
+local NEEDS_LEAD =
+    "pomb refused the delete: it needs subtasks.delete, which only the lead token holds. Set [board.pomb] lead_token in ~/.config/dev/config.toml"
 local NOT_YOURS = "that comment is not yours to change"
 local LOCKED = "pomb locked this card while it is labelled "
     .. board.NEEDS_HUMAN
@@ -89,6 +89,7 @@ local M = {}
 ---@field url string the server's base URL
 ---@field token string? `pass:<entry>`, where the token is kept, unneeded when `authorize` gives one
 ---@field name string the board's name
+---@field lead boolean? true to send the configured token and never the issued or filed one
 
 ---@class dev.board.pomb.Detail
 ---@field id string the board's id
@@ -314,12 +315,15 @@ end
 ---@return any? answer the decoded body of a refused call
 function Backend:__request(method, path, body, fence, seconds)
     if not self.__secret then
-        local token, message = issued()
+        local token, message
+        if not self.__opts.lead then
+            token, message = issued()
+        end
         if message then
             return nil, message
         end
         self.__issued = token and ISSUED_REFUSED or nil
-        if not token then
+        if not token and not self.__opts.lead then
             token, message = filed()
             if message then
                 return nil, message
@@ -1206,13 +1210,12 @@ function Backend:delete_outcome(id, outcome, fence)
     local done, message, status, doc =
         self:__request("DELETE", "/api/tasks/" .. id .. "/subtasks/" .. outcome, nil, fence)
     if not done then
-        local owner_only = status == FORBIDDEN
+        local needs_lead = status == FORBIDDEN
             and type(doc) == "table"
             and doc.code == PERMISSION_DENIED
             and doc.permission == SUBTASKS_DELETE
-            and not present(doc.board_id)
-        if owner_only then
-            return nil, NOT_CREATOR
+        if needs_lead then
+            return nil, NEEDS_LEAD
         end
         return nil, message
     end

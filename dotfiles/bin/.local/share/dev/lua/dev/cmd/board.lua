@@ -4212,6 +4212,8 @@ function M.run(sub, args, backend, now, screen)
     return run(backend, args, now, screen)
 end
 
+local LEAD_TOKEN_KEY = "lead_token"
+
 local function open_backend(settings, token)
     if settings.backend == board.Backend.LOCAL then
         if settings.path then
@@ -4231,6 +4233,7 @@ local function open_backend(settings, token)
         url = config.user("board.pomb.url"),
         token = config.user("board.pomb." .. token),
         name = settings.name,
+        lead = token == LEAD_TOKEN_KEY,
     })
     if not backend then
         return nil, "dev: " .. message
@@ -4564,9 +4567,7 @@ local function open_board(ctx)
     return backend, pending
 end
 
-local LEAD_TOKEN_KEY = "lead_token"
-
-local function open_lead(ctx, action)
+local function open_lead(ctx, action, permission)
     local refused = delete_refusal(action)
     if refused then
         verb.die("dev: " .. refused.message)
@@ -4576,7 +4577,10 @@ local function open_lead(ctx, action)
         verb.die("dev: " .. NO_BIN)
     end
     if config.user("board.pomb." .. LEAD_TOKEN_KEY) == nil then
-        verb.die("dev: [board.pomb] lead_token is not set in ~/.config/dev/config.toml")
+        verb.die(
+            "dev: [board.pomb] lead_token is not set in ~/.config/dev/config.toml"
+                .. (permission and ", and " .. permission .. " needs the lead token" or "")
+        )
     end
     local backend, message = M.open(found, { token_key = LEAD_TOKEN_KEY })
     if not backend then
@@ -5097,6 +5101,12 @@ for sub in pairs(commands) do
         local backend, pending
         if sub == "delete" then
             backend = open_lead(ctx)
+        elseif
+            sub == "outcome"
+            and args[2] == DELETE_FLAG
+            and settings(ctx).backend == board.Backend.POMB
+        then
+            backend = open_lead(ctx, "deletes an outcome", "subtasks.delete")
         else
             backend, pending = open_board(ctx)
         end

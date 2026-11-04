@@ -4131,7 +4131,7 @@ t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", fu
             1
         )
     )
-    local root, home = sandbox({ export = claimed })
+    local root, home = sandbox({ export = claimed, user = LEAD_USER })
     local own = { agent = "project-run/a" }
     local out, code = dev(root, home, {
         "board",
@@ -4174,11 +4174,11 @@ t.test("a refused outcome delete prints Pomb's reason, writes no note and is not
     local cases = {
         {
             body = '{"code":"permission_denied","permission":"subtasks.delete","message":"denied"}',
-            want = "may delete only an outcome that same token created",
+            want = "needs subtasks.delete, which only the lead token holds",
         },
         {
             body = '{"code":"permission_denied","permission":"subtasks.delete","board_id":"board-9","message":"denied"}',
-            want = "not assigned to board board-9",
+            want = "Set [board.pomb] lead_token",
         },
         {
             body = '{"code":"permission_denied","permission":"subtasks.write","message":"denied"}',
@@ -4190,7 +4190,7 @@ t.test("a refused outcome delete prints Pomb's reason, writes no note and is not
         },
     }
     for _, case in ipairs(cases) do
-        local root, home = sandbox({ export = BACKLOG_EXPORT })
+        local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
         executable(
             root .. "/bin/curl",
             "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in */subtasks/*) cat >/dev/null; printf '%s\\n403' '"
@@ -4210,6 +4210,109 @@ t.test("a refused outcome delete prints Pomb's reason, writes no note and is not
     end
 end)
 
+local WORK_SECRET = "pomb_WORKtoken0123456789"
+local LEAD_SECRET = "pomb_LEADtoken0123456789"
+local ISSUED_SECRET = "pomb_ISSUEDtoken0123456789"
+
+local function two_tokens(root)
+    executable(
+        root .. "/bin/pass",
+        '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\ncase "$*" in\n*Lead*) echo '
+            .. LEAD_SECRET
+            .. " ;;\n*) echo "
+            .. WORK_SECRET
+            .. " ;;\nesac\n"
+    )
+    executable(
+        root .. "/bin/curl",
+        (
+            CURL:gsub(
+                'cat >"$ROOT/stdin"\n',
+                'cat >"$ROOT/stdin"\ncase "$*" in *"-X DELETE"*) cp "$ROOT/stdin" "$ROOT/delete_stdin" ;; esac\n',
+                1
+            )
+        )
+    )
+end
+
+t.test("outcome delete on a pomb board sends the DELETE with the lead token", function()
+    local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
+    two_tokens(root)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+        { agent = LEAD, env = { DEV_BOARD_TOKEN = ISSUED_SECRET } }
+    )
+    t.eq(code, 0, out)
+    t.eq(out, "outcome 11111111 2 deleted\n")
+    local sent = read(root, "delete_stdin")
+    t.ok(sent:find("Bearer " .. LEAD_SECRET, 1, true), "the DELETE did not carry the lead token")
+    t.eq(sent:find(WORK_SECRET, 1, true), nil)
+    t.eq(sent:find(ISSUED_SECRET, 1, true), nil)
+end)
+
+t.test("outcome delete with no lead token exits 1 naming subtasks.delete", function()
+    local root, home = sandbox({ export = BACKLOG_EXPORT })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+        { agent = LEAD }
+    )
+    t.eq(code, 1, out)
+    t.ok(out:find("lead_token is not set", 1, true), out)
+    t.ok(out:find("subtasks.delete", 1, true), out)
+    t.eq(read(root, "calls"), "")
+    t.eq(fs.exists(queue_file(home)), false)
+end)
+
+t.test("a 403 on outcome delete names subtasks.delete and the lead token", function()
+    local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
+    executable(
+        root .. "/bin/curl",
+        "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in */subtasks/*) cat >/dev/null; printf '%s\\n403' '"
+            .. '{"code":"permission_denied","permission":"subtasks.delete","board_id":"board-1","message":"denied"}'
+            .. "'; exit 0 ;; esac\n"
+            .. CURL:gsub("^#!/bin/sh\n", "")
+    )
+    local out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+        { agent = LEAD }
+    )
+    t.eq(code, 1, out)
+    t.ok(out:find("subtasks.delete", 1, true), out)
+    t.ok(out:find("lead token", 1, true), out)
+    t.eq(read(root, "calls"):find("-X POST", 1, true), nil)
+    t.eq(fs.exists(queue_file(home)), false)
+end)
+
+t.test(
+    "outcome delete refuses a non-lead name before any request and a locked column before the DELETE",
+    function()
+        local root, home = sandbox({ export = SUBTASKS_EXPORT, user = LEAD_USER })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "outcome", "11111111", "--delete", "1", "--reason", "x" },
+            { agent = "dotfiles/implementer/82f0e002/1" }
+        )
+        t.eq(code, 1, out)
+        t.ok(out:find("only the lead deletes an outcome", 1, true), out)
+        t.eq(read(root, "calls"), "")
+        out, code = dev(
+            root,
+            home,
+            { "board", "outcome", "11111111", "--delete", "1", "--reason", "x" },
+            { agent = LEAD }
+        )
+        t.eq(code, 1, out)
+        t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+    end
+)
+
 t.test("outcome past the last subtask exits 1 and changes nothing", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
@@ -4219,7 +4322,7 @@ t.test("outcome past the last subtask exits 1 and changes nothing", function()
 end)
 
 t.test("outcome queues a tick but not an append when the write cannot reach Pomb", function()
-    local root, home = sandbox({ export = BACKLOG_EXPORT })
+    local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
     executable(
         root .. "/bin/curl",
         '#!/bin/sh\nfor last; do :; done\ncase "$last" in */subtasks*) cat >/dev/null; exit 28 ;; esac\n'

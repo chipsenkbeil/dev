@@ -198,8 +198,8 @@ smallest preset that covers its calls, on the boards it works.
 
 | Tool | Token | Calls it needs | Deletes it holds |
 |------|-------|----------------|------------------|
-| lead session | `lead_token`, `lead` | Everything `work` does, plus `boards.create`, `columns.create`, `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and `tasks.bin`, for `init`, and for the `dev board delete` verb that card 83f0e016 adds | `tasks.bin`: a card goes to the bin for 30 days |
-| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete, which only the lead does, and never from Ready on, where outcomes are fixed |
+| lead session | `lead_token`, `lead` | Everything `work` does, plus `boards.create`, `columns.create`, `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and `tasks.bin`, for `init`, for the `dev board delete` verb, and `subtasks.delete` for `outcome --delete` | `tasks.bin`: a card goes to the bin for 30 days. `subtasks.delete`: any outcome |
+| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete: Pomb answers 403 `permission_denied` for `subtasks.delete`, and only the lead does either, with the lead token, and never an outcome from Ready on, where outcomes are fixed |
 | runner | `work` on its board | Read the board, create and move cards, set fields and labels, comment, link, claim, heartbeat and release | None. Its `init` needs `lead`, which the lead runs |
 | Aide agent | `work`, assigned boards only | The subagent's calls, notes written with `--as aide` | None. It never holds `lead` |
 
@@ -697,16 +697,20 @@ the card, the number and the reason. The outcomes after it move up a number, and
 the command writes a decision note holding the deleted text and the reason, then
 prints `outcome <id prefix> N deleted`. A missing number or reason is exit 2.
 `--reason` is the one way to say why an outcome that was never achievable is
-deleted and not reworded. Pomb lets a Work token delete only an outcome that
-same token created. Any other outcome, whether made in the browser, by another
-token or stored with no token, gets 403 `permission_denied` naming
-`subtasks.delete`, and a token holding `subtasks.delete` deletes any. A locked
-card gets 403 `card_locked` for every token, and a column entry rule can refuse
-a delete that leaves the card worse. `--delete` prints Pomb's reason for each
-refusal, writes no note and changes nothing. A delete is never queued for a
-later sync, to keep its number from pointing at a different outcome by then. dev
-never reorders an outcome. The claim's fence goes along when this machine holds
-one, and a local board keeps the same outcomes on the card.
+deleted and not reworded. On a Pomb board the DELETE goes out with the lead
+token, `lead_token` in `[board.pomb]`, never the work token, and never
+`DEV_BOARD_TOKEN` or the token file for `DEV_AGENT`, which every other verb
+reads first. Pomb 0.5.78 gives `subtasks.delete` to the lead tier only. A
+missing `lead_token` exits 1 before any request, naming `subtasks.delete` and
+the lead token. A 403 `permission_denied` for `subtasks.delete` exits 1 with a
+message that names `subtasks.delete` and the lead token, and writes no note. A
+local board needs no lead token. A locked card gets 403 `card_locked` for every
+token, and a column entry rule can refuse a delete that leaves the card worse.
+`--delete` prints Pomb's reason for each refusal, writes no note and changes
+nothing. A delete is never queued for a later sync, to keep its number from
+pointing at a different outcome by then. dev never reorders an outcome. The
+claim's fence goes along when this machine holds one, and a local board keeps
+the same outcomes on the card.
 
 The card's claimant and every name in its claim history (the `dev-claim:`
 notes that `review` reads) are refused an outcome add, `--convert`,

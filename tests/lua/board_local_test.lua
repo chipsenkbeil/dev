@@ -1085,6 +1085,35 @@ t.test(
     end
 )
 
+t.test("outcome delete on a local board needs no lead token", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "A works",
+        "--done-when",
+        "B works",
+    })
+    t.eq(code, 0, out)
+    local a = prefix_of(out)
+    t.eq(fs.read(home .. "/.config/dev/config.toml"):find("lead_token", 1, true), nil)
+    out, code = dev(
+        root,
+        home,
+        { "board", "outcome", a, "--delete", "1", "--reason", "never possible" },
+        { DEV_AGENT = "dotfiles/lead/1" }
+    )
+    t.eq(code, 0, out)
+    t.eq(out, "outcome " .. a .. " 1 deleted\n")
+    t.eq(#document(file_of(home)).cards[1].outcomes, 1)
+end)
+
 t.test("outcome delete refuses from Ready on on a local board", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
