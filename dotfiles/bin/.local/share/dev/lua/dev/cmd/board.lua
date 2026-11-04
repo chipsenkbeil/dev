@@ -2784,11 +2784,11 @@ end
 local function card_problems(backend, card, who)
     local problems = {}
     local roles = backend.roles
-    if card.column ~= roles.review then
+    if card.column ~= roles.verify then
         problems[#problems + 1] = "it is in "
             .. card.column
             .. ", and only a card in "
-            .. roles.review
+            .. roles.verify
             .. " lands"
     end
     if card.claimant and card.claimant ~= who.name then
@@ -2964,27 +2964,34 @@ local function land_held(opts)
             land.short(carried)
         )
     end
+    local deploys = config.get(backend.root, "board.land.deploys") == true
+    local target = deploys and backend.roles.release or backend.roles:done_column()
+    if deploys then
+        text = text .. " It waits in " .. target .. " for the deploy."
+    end
     local noted
     noted, message = backend:note(card.id, text, held and held.fence, { kind = "done" })
     if not noted then
         local refused = failure(
             string.format(
-                "landed commit %s, but the done note was NOT written on %s (%s) and the card was not moved; write the note and move it to Done by hand",
+                "landed commit %s, but the done note was NOT written on %s (%s) and the card was not moved; write the note and move it to %s by hand",
                 commit,
                 short,
-                message
+                message,
+                target
             )
         )
         refused.landed = true
         return refused
     end
-    local moved = move_card(backend, { card.id, backend.roles:done_column() })
+    local moved = move_card(backend, { card.id, target })
     if moved.code then
         local refused = failure(
             string.format(
-                "landed commit %s and noted it on %s, but the move to Done failed: %s",
+                "landed commit %s and noted it on %s, but the move to %s failed: %s",
                 commit,
                 short,
+                target,
                 moved.message
             )
         )
@@ -2993,11 +3000,12 @@ local function land_held(opts)
     end
     return {
         output = string.format(
-            "landed %s at commit %s%s and moved it to Done",
+            "landed %s at commit %s%s and moved it to %s",
             short,
             commit,
             on_trunk and ""
-                or " (the commit from before the land, which may differ: trunk could not be read)"
+                or " (the commit from before the land, which may differ: trunk could not be read)",
+            target
         ),
     }
 end

@@ -362,7 +362,7 @@ local function fake_backend(root, card)
     local view = {
         id = CARD_ID,
         name = "Card",
-        column = "Review",
+        column = "Verify",
         labels = {},
         outcomes = { { id = "o1", name = "It works", done = true } },
         checks = { "true" },
@@ -486,7 +486,7 @@ if has_jj then
     t.test("a card that meets every condition lands, gets a done note and reaches Done", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local commit = head(root)
         local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
@@ -507,10 +507,57 @@ if has_jj then
         t.eq(column_of(home), "Done")
     end)
 
-    t.test("a land that rewrites the commit notes the commit on trunk", function()
+    t.test("land refuses a card in Review and names Verify", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "review" }))
+        approve(root, home, log, id)
+        refused(root, home, log, id, { "it is in Review, and only a card in Verify lands" })
+        t.eq(column_of(home, id), "Review")
+    end)
+
+    t.test("land moves a verified card to Release when the project deploys", function()
+        local root, home, log = jj_project(LIB_CONFIG .. "deploys = true\n")
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
+        approve(root, home, log, id)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        t.ok(out:find("and moved it to Release", 1, true), out)
+        local list = comments(home, id)
+        t.eq(list[#list].kind, "done")
+        t.ok(list[#list].body:find("waits in Release for the deploy", 1, true), list[#list].body)
+        t.eq(column_of(home, id), "Release")
+    end)
+
+    t.test("land moves a verified card to Done when the project does not deploy", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
+        approve(root, home, log, id)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        t.ok(out:find("and moved it to Done", 1, true), out)
+        t.eq(column_of(home, id), "Done")
+    end)
+
+    t.test("a card in Release moves to Done once every outcome is ticked", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "release" }))
+        local out, code = dev(root, home, log, { "board", "move", id, "done" })
+        t.eq(code, 1, out)
+        t.ok(out:find("1 of 1 outcomes are unticked", 1, true), out)
+        t.eq(column_of(home, id), "Release")
+        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        must(dev(root, home, log, { "board", "move", id, "done" }))
+        t.eq(column_of(home, id), "Done")
+    end)
+
+    t.test("a land that rewrites the commit notes the commit on trunk", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local before = head(root)
         local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "rewrite" })
@@ -531,7 +578,7 @@ if has_jj then
         function()
             local root, home, log = jj_project()
             local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, "review" }))
+            must(dev(root, home, log, { "board", "move", id, "verify" }))
             approve(root, home, log, id)
             local commit = head(root)
             local out, code = dev(root, home, log, { "board", "land", id })
@@ -547,10 +594,10 @@ if has_jj then
         end
     )
 
-    t.test("a failed jj land leaves the card in Review and exits non-zero", function()
+    t.test("a failed jj land leaves the card in Verify and exits non-zero", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local before = #comments(home)
         local out, code = dev(
@@ -561,17 +608,17 @@ if has_jj then
             { LAND_CODE = "1", LAND_MSG = "boom" }
         )
         t.eq(code, 1, out)
-        t.ok(out:find("stays in Review", 1, true) and out:find("boom", 1, true), out)
+        t.ok(out:find("stays in Verify", 1, true) and out:find("boom", 1, true), out)
         t.ok(landed_calls(log):find("land", 1, true))
         t.eq(#comments(home), before)
-        t.eq(column_of(home), "Review")
+        t.eq(column_of(home), "Verify")
     end)
 
     t.test("land names every missing condition and runs nothing", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
         refused(root, home, log, id, {
-            "it is in Backlog, and only a card in Review lands",
+            "it is in Backlog, and only a card in Verify lands",
             "1 of 1 outcomes are unticked",
             "no code review of change",
             "no style review of change",
@@ -642,7 +689,7 @@ if has_jj then
     t.test("land refuses a working copy that is empty or undescribed", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         jj(root, "describe", "-m", "")
         refused(root, home, log, id, { "has no description" })
@@ -654,7 +701,7 @@ if has_jj then
     t.test("a check run at an older commit or with a failing row does not count", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
         refused(root, home, log, id, { "no run of dev board check is recorded at commit" })
@@ -671,7 +718,7 @@ if has_jj then
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "checks", id, "false" }))
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         for _, kind in ipairs({ "code", "style" }) do
             must(
                 dev(
@@ -690,7 +737,7 @@ if has_jj then
     t.test("a change after the reviews needs a recheck at the landing commit", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
         must(dev(root, home, log, { "board", "check", id }))
@@ -710,7 +757,7 @@ if has_jj then
     t.test("land rebases onto trunk under the turn when trunk has moved", function()
         local root, home, log, bare = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local other = support.tempdir() .. "/clone"
         must(
@@ -731,13 +778,13 @@ if has_jj then
     t.test("land names the holder and since when while another card holds the turn", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local held = hold_turn(home, "other", "cccc3333")
         local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" })
         t.eq(code, 1, out)
         t.ok(out:find("held by other since 20", 1, true), out)
-        t.eq(column_of(home), "Review")
+        t.eq(column_of(home), "Verify")
         _, code = dev(root, home, log, { "board", "land", id, "--wait", "x" })
         t.eq(code, 2)
         _, code = dev(root, home, log, { "board", "land", id, "--wait", "999999999" })
@@ -760,7 +807,7 @@ if has_jj then
         jj(root, "new", "-m", "feat: child")
         assert(fs.write(root .. "/child.txt", "two\n"), "write failed")
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local other = support.tempdir() .. "/clone"
         must(
@@ -780,7 +827,7 @@ if has_jj then
     t.test("land waits up to the wait and then names the holder", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local held = hold_turn(home, "other", "cccc3333")
         local PAST_DEADLINE_SECONDS = 4
@@ -797,7 +844,7 @@ if has_jj then
     t.test("land gives the turn back when it refuses", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         local out, code = dev(root, home, log, { "board", "land", id })
         t.eq(code, 1, out)
@@ -837,7 +884,7 @@ if has_jj then
         if row then
             must(dev(root, home, log, { "board", "checks", id, row }))
         end
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         return id
     end
@@ -905,7 +952,7 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("jj land failed", 1, true), out)
         t.ok(out:find("push rejected: trunk moved", 1, true), out)
-        t.eq(column_of(home), "Review")
+        t.eq(column_of(home), "Verify")
     end)
 
     t.test("land does not carry a pass over a failed run at the rebased commit", function()
@@ -957,7 +1004,7 @@ if has_jj then
         rebase_onto_trunk(root)
         assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         for _, kind in ipairs({ "code", "style" }) do
             must(
                 dev(
@@ -982,7 +1029,7 @@ if has_jj then
         rebase_onto_trunk(root)
         assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         for _, kind in ipairs({ "code", "style" }) do
             must(
                 dev(
@@ -1096,7 +1143,7 @@ if has_jj then
         jj(root, "new", "-m", "feat: work")
         assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(root)
@@ -1125,7 +1172,7 @@ if has_jj then
         rebase_onto_trunk(root)
         assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         local older = reviewed_and_checked({ root = root, home = home, log = log, id = id })
         assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
@@ -1230,7 +1277,7 @@ if has_jj then
         trunk_moves(root, bare, { ["shared.txt"] = SHARED })
         rebase_onto_trunk(root)
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         must(
             dev(
                 root,
@@ -1249,7 +1296,7 @@ if has_jj then
     t.test("land refuses a working copy that holds conflicts", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         local first = jj(root, "log", "-r", "@", "--no-graph", "-T", "change_id")
         jj(root, "new", "master", "-m", "feat: other")
         assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
@@ -1268,7 +1315,7 @@ if has_jj then
     t.test("land refuses when the fetch from the remote of record fails", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         jj(root, "git", "remote", "set-url", "origin", root .. "/missing-remote")
         refused(root, home, log, id, { "trunk cannot be compared", "the fetch from origin failed" })
@@ -1318,7 +1365,7 @@ if has_jj then
     t.test("land refuses a working copy that jj cannot read", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local out = refused(
             root,
@@ -1336,7 +1383,7 @@ if has_jj then
     t.test("land refuses a remote of record that is not a remote of the project", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         refused(root, home, log, id, {
             "trunk cannot be compared: the remote of record gerrit is not a remote of this project",
@@ -1346,7 +1393,7 @@ if has_jj then
     t.test("a landed commit whose done note was not written is named and exits non-zero", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local commit = head(root)
         local out, code = dev(root, home, log, { "board", "land", id }, {
@@ -1369,7 +1416,7 @@ if has_jj then
     t.test("a fetch that fails after the land falls back to the commit from before it", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local before = head(root)
         local out, code = dev(root, home, log, { "board", "land", id }, {
@@ -1401,7 +1448,7 @@ if has_jj then
         )
         local child = assert(out:match("added (%x+)"), out)
         must(dev(root, home, log, { "board", "link", child, "parent", id }))
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id }))
         local commit = head(root)
@@ -1418,18 +1465,18 @@ if has_jj then
         t.ok(out:find("1 of 1 children are open", 1, true), out)
         local list = comments(home, id)
         t.eq(list[#list].kind, "done")
-        t.eq(column_of(home, id), "Review")
+        t.eq(column_of(home, id), "Verify")
     end)
 
-    local function in_review(root, home, log)
+    local function in_verify(root, home, log)
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         return id
     end
 
     t.test("a held turn survives a check and lands the card under it", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         local out, code = dev(root, home, log, { "board", "turn", id })
         t.eq(code, 0, out)
         t.ok(out:find("holding the landing turn for " .. id, 1, true), out)
@@ -1443,7 +1490,7 @@ if has_jj then
 
     t.test("a second runner is told who holds the turn and since when", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         must(dev(root, home, log, { "board", "turn", id }))
         local out, code = dev(
             root,
@@ -1462,7 +1509,7 @@ if has_jj then
 
     t.test("land refuses a hold that ran out and lands nothing", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
         devos.nap(PAST_HOLD_SECONDS)
@@ -1470,12 +1517,12 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("ran out or was taken by another", 1, true), out)
         t.eq(landed_calls(log), "")
-        t.eq(column_of(home, id), "Review")
+        t.eq(column_of(home, id), "Verify")
     end)
 
     t.test("land refuses a hold another runner took after it ran out", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
         devos.nap(PAST_HOLD_SECONDS)
@@ -1489,7 +1536,7 @@ if has_jj then
 
     t.test("a refused landing keeps the hold until it is released", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         must(dev(root, home, log, { "board", "turn", id }))
         local out, code = dev(root, home, log, { "board", "land", id })
@@ -1506,7 +1553,7 @@ if has_jj then
 
     t.test("a landing refused before the turn is read says the hold is kept", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         must(dev(root, home, log, { "board", "turn", id }))
         local out, code = dev(root, home, log, { "board", "land", id })
         t.eq(code, 1, out)
@@ -1516,7 +1563,7 @@ if has_jj then
 
     t.test("turn refuses a hold outside 1 to 7200 seconds", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         for _, bad in ipairs({ "0", "7201", "x" }) do
             local out, code = dev(root, home, log, { "board", "turn", id, "--hold", bad })
             t.eq(code, 2, out)
@@ -1527,7 +1574,7 @@ if has_jj then
 
     t.test("release clears a hold that ran out, and land then asks for a fresh turn", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
         devos.nap(PAST_HOLD_SECONDS)
@@ -1541,7 +1588,7 @@ if has_jj then
 
     t.test("turn refuses a card that is already in Done", function()
         local root, home, log = jj_project()
-        local id = in_review(root, home, log)
+        local id = in_verify(root, home, log)
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" }))
         local out, code = dev(root, home, log, { "board", "turn", id })
@@ -1602,7 +1649,7 @@ if has_jj then
 
     local function lander_ready(root, home, log)
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "review" }))
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         return id
     end

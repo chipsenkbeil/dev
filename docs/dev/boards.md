@@ -292,14 +292,18 @@ Every card in every column is fair game for an agent unless it is labelled
   haiku agent, green and blue by a sonnet agent.
 - In Progress: an agent holds the card, under its name. Only the claimant works
   it.
-- Review: the change is under review or ci, and a verifier ticks the outcomes
-  from the ci logs while it sits here. Then `dev board land` lands it and
-  moves the card to Done. Still the claimant's.
-- Verify: a stage column `dev board land` does not use yet.
-- Release: a stage column `dev board land` does not use yet, for a card
-  waiting to reach main and, where the project deploys, go live. `stale` lists a card that sits here for `--days` days or
-  more. A card in Review, Verify or Release with no claim waits for that
-  stage's role. A claim means the role is working it.
+- Review: the change is under review or ci. The claimant dispatches the
+  reviewers, and when every review is clean and the check passes it moves the
+  card to Verify. Still the claimant's.
+- Verify: a verifier ticks the outcomes from the ci logs while the card sits
+  here. Then `dev board land` lands it and moves the card to Release, or to
+  Done when `[board.land] deploys` is not true.
+- Release: where `[board.land] deploys` is true, land sends a card to Release,
+  and it waits there to go live. Once it is live, `dev board move CARD done`
+  moves it to Done and refuses while an outcome is unticked.
+  `stale` lists a card that sits here for `--days` days or more. A card in
+  Review, Verify or Release with no claim waits for that stage's role. A
+  claim means the role is working it.
 - Blocked: waiting on an answer.
   - `needs:human` is yours alone.
   - `needs:planner` is for a planner. An implementer or reviewer who doubts a
@@ -1335,12 +1339,13 @@ never handles the API.
   and `--delete` refuse a comment that holds it. It does not judge the review.
 - `land CARD [--wait SECONDS]`: Takes the landing turn, rebases the working-copy
   change onto trunk, lands it with `jj land --yes -r @` run in the project
-  root, writes a `done` note, moves the card to Done and gives the turn
+  root, writes a `done` note, moves the card to Release when
+  `[board.land] deploys` is true and to Done otherwise, and gives the turn
   back. It needs `DEV_AGENT` (usage error, exit 2, without it) and a jj
   project: in plain git it refuses and says so. It refuses, exit 1, and
   lands nothing until every condition holds, and the message lists each one
   that fails. A refusal can leave the change rebased onto trunk:
-  - the card is in the review column and no other agent claims it. `move`
+  - the card is in the verify column and no other agent claims it. `move`
     releases the claim, so `land` refuses a card claimed by another agent and
     lets any agent with `DEV_AGENT` set land an unclaimed one.
   - every outcome is ticked (the same count `move CARD done` refuses on). The
@@ -1480,6 +1485,10 @@ never handles the API.
   `docs/*-provenance.md` files stay off the list (no test, lint or `.ci` job
   opens them). `bootstrap_test.sh` checks that `bootstrap.sh` prints the name
   `docs/mail.md`, not the file.
+
+  `deploys = true` under the same `[board.land]` table makes `land` move the
+  card to Release, where it waits until it is live. Without it `land` moves the
+  card to Done. This repo does not set it.
 
   Two runners landing code or skill changes against the same trunk commit
   still need a new check for the second. By convention, and not by `dev`,
