@@ -98,6 +98,8 @@ local M = {}
 ---@field private __opts dev.board.pomb.Opts the server, token reference and board name
 ---@field private __secret string? the token, nil until the first request
 ---@field private __healed boolean? nil until a refused Keychain token is replaced
+---@field private __filed boolean? true when the token came from the role token file
+---@field private __reread boolean? true once an expired file token has been looked up again
 ---@field private __detail dev.board.pomb.Detail? the board with its columns
 ---@field private __colors table<string, string>? palette labels by colour id
 ---@field private __values table<string, string>? palette colour values by colour id
@@ -323,6 +325,7 @@ function Backend:__request(method, path, body, fence, seconds)
                 return nil, message
             end
             self.__issued = token and FILE_REFUSED or nil
+            self.__filed = token ~= nil
         end
         if not token then
             token, message = M.token(self.__opts.token)
@@ -377,6 +380,14 @@ function Backend:__request(method, path, body, fence, seconds)
         return nil, unavailable("pomb sent an answer dev cannot read")
     end
     local expired = status == UNAUTHORIZED and type(doc) == "table" and doc.code == TOKEN_EXPIRED
+    if expired and self.__filed and not self.__reread then
+        self.__reread = true
+        local fresh = filed()
+        if fresh and fresh ~= self.__secret then
+            self.__secret = fresh
+            return self:__request(method, path, body, fence, seconds)
+        end
+    end
     if status == UNAUTHORIZED and self.__issued then
         return nil, expired and unavailable(EXPIRED) or self.__issued, status, doc
     end

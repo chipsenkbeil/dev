@@ -24,8 +24,8 @@ local USER = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/
 
 local CURL = [[#!/bin/sh
 printf 'curl %s\n' "$*" >>"$ROOT/calls"
-cat >>"$ROOT/stdin"
-printf '\n' >>"$ROOT/stdin"
+sent=$(cat)
+printf '%s\n' "$sent" >>"$ROOT/stdin"
 for last; do :; done
 status=200
 case "$last" in
@@ -43,6 +43,13 @@ case "$last" in
     ;;
 *) body='{}' ;;
 esac
+if [ -f "$ROOT/expire" ] && printf '%s' "$sent" | grep -q "$(cat "$ROOT/expire")"; then
+    body='{"code":"token_expired","message":"expired"}'
+    status=401
+    if [ -f "$ROOT/swap" ]; then
+        cp "$ROOT/swap" "$SWAPTO"
+    fi
+fi
 if [ -f "$ROOT/refuse" ]; then
     body='{"message":"bad"}'
     status=401
@@ -387,3 +394,96 @@ t.test("token-revoke-none exits 0 for an unknown or already revoked name", funct
     t.eq(out, "nothing was left to revoke for " .. NAME .. "\n")
     t.eq(#token_files(home .. "/state/dev/tokens"), 0)
 end)
+
+local NEW = "pomb_NEWROLEtoken0123456789"
+
+local function filed_path(home)
+    local dir = home .. "/state/dev/tokens"
+    return dir .. "/" .. token_files(dir)[1]
+end
+
+local function curl_calls(root)
+    return occurrences(read(root, "calls"), "curl ")
+end
+
+t.test("token-remint-retry retries once with the new token the file holds", function()
+    local root, home = minted()
+    local path = filed_path(home)
+    assert(fs.write(root .. "/expire", RAW))
+    assert(fs.write(root .. "/swap", NEW .. "\n" .. EXPIRES .. "\n"))
+    local out, code = dev(root, home, { "board", "boards" }, {
+        agent = NAME,
+        env = { SWAPTO = path },
+    })
+    t.ok(code == 0, out)
+    t.eq(occurrences(read(root, "stdin"), "Bearer " .. RAW), 1)
+    local sent = read(root, "stdin")
+    local old = sent:find("Bearer " .. RAW, 1, true)
+    local new = sent:find("Bearer " .. NEW, 1, true)
+    t.ok(old and new and old < new, sent)
+end)
+
+t.test("token-remint-stale fails with the expired message and no second retry", function()
+    local root, home = minted()
+    assert(fs.write(root .. "/expire", RAW))
+    assert(fs.write(root .. "/swap", RAW .. "\n" .. EXPIRES .. "\n"))
+    local out, code = dev(root, home, { "board", "boards" }, {
+        agent = NAME,
+        env = { SWAPTO = filed_path(home) },
+    })
+    t.ok(code == 1, out)
+    t.ok(out:find("expired", 1, true), out)
+    t.eq(curl_calls(root), 2)
+    t.eq(out:find(RAW, 1, true), nil, out)
+end)
+
+t.test("token-remint-env never retries an expired env or pass token from the file", function()
+    local root, home = minted()
+    assert(fs.write(root .. "/expire", ENV_TOKEN))
+    assert(fs.write(root .. "/swap", NEW .. "\n" .. EXPIRES .. "\n"))
+    local out, code = dev(root, home, { "board", "boards" }, {
+        agent = NAME,
+        env = { DEV_BOARD_TOKEN = ENV_TOKEN, SWAPTO = filed_path(home) },
+    })
+    t.ok(code == 1, out)
+    t.ok(out:find("expired", 1, true), out)
+    t.eq(curl_calls(root), 2)
+    t.eq(read(root, "stdin"):find(NEW, 1, true), nil)
+    root, home = minted()
+    assert(fs.write(root .. "/expire", WORKER))
+    assert(fs.write(root .. "/swap", NEW .. "\n" .. EXPIRES .. "\n"))
+    out, code = dev(root, home, { "board", "boards" }, {
+        env = { SWAPTO = filed_path(home) },
+    })
+    t.ok(code == 1, out)
+    t.ok(out:find("expired", 1, true), out)
+    t.eq(curl_calls(root), 2)
+    t.eq(read(root, "stdin"):find(NEW, 1, true), nil)
+end)
+
+t.test(
+    "token-remint-name replaces the file under the same name and refuses a live clash",
+    function()
+        local root, home = minted()
+        local path = filed_path(home)
+        assert(fs.write(root .. "/children.json", (CREATED:gsub(RAW, NEW))))
+        assert(fs.write(root .. "/calls", ""))
+        local out, code = mint(root, home)
+        t.ok(code == 0, out)
+        t.eq(occurrences(read(root, "calls"), '"name":"' .. NAME .. '"'), 1)
+        t.eq(#token_files(home .. "/state/dev/tokens"), 1)
+        t.eq(filed_path(home), path)
+        t.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+        assert(fs.write(root .. "/children_status", "409"))
+        assert(
+            fs.write(
+                root .. "/children.json",
+                '{"code":"name_taken","message":"a live token has that name"}'
+            )
+        )
+        out, code = mint(root, home)
+        t.ok(code == 1, out)
+        t.ok(out:find("another token already has the name " .. NAME, 1, true), out)
+        t.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+    end
+)

@@ -146,12 +146,31 @@ holds no slash. Any other role is refused.
 
 Pomb refuses a name that a live token holds with a 409, and a name frees once
 its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`
-in plain words. Minting again on expiry is not part of this verb, and
-`token revoke` ends a token early.
+in plain words. Minting again for a running runner is described under
+token-remint, and `token revoke` ends a token early.
 
 The token goes to curl on standard input as a config line. It is in no argument
 list, no file and no output, `-v` and `-vv` included, and in no environment
 variable but `DEV_BOARD_TOKEN` itself.
+
+### Minting again when a token expires: token-remint
+
+A role token lives at most eight hours, and Pomb answers 401 `token_expired`
+once it ends. The runner holds no `tokens.issue`, so the lead mints again with
+the same command, `dev board token mint --role ROLE --as NAME`. Pomb deletes
+the account's expired issued tokens when it issues a child, so an expired
+token's name is free at once and the new token reuses NAME with no suffix. The
+file of NAME is replaced with the new token. Only a live or suspended token of
+that name, matched without regard to case, gets a 409 `name_taken`, which the
+verb refuses by naming NAME and leaves the file as it was.
+
+A request that was refused with `token_expired` for the token it read from that
+file reads the file once more. When the file holds another token, it retries
+the request once with it. When the file still holds the same token, it fails
+with the expired message and makes no second try. A token from
+`DEV_BOARD_TOKEN` or from `pass` is never retried this way, and an expired one
+fails with the expired message as before. A runner cannot mint for itself, and
+dispatch's own re-mint is a separate matter.
 
 ### Ending a role token: token-revoke
 
