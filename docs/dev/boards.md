@@ -470,8 +470,9 @@ An agent asks you with `dev board ask CARD --question TEXT --choice
 COLUMN=LABEL... --recommend N --why TEXT`. It sends Pomb's structured question:
 the question, two to ten numbered choices that each name the column the card
 moves to, the recommended choice and why the agent cannot decide. Pomb moves
-the card to Blocked, adds `needs:human` and refuses a part that is missing in
-its own words, which dev prints as they come (exit 1). Pomb refuses `note
+the card to the column marked blocked, which `dev board init` sets, adds
+`needs:human` and refuses a part that is missing in its own words, which dev
+prints as they come (exit 1). Pomb refuses `note
 --kind question` without that shape, so `ask` is the only way to put a
 question to you. `add --label needs:human` still creates the card and its
 outcomes, then sets the label.
@@ -2122,7 +2123,12 @@ lists it and no template otherwise; rename an In Review column to Review with
 `PATCH /api/columns/{id}` (`{"name": "Review"}`) when no Review column exists,
 add each missing column with `POST /api/columns` (Done with `is_done`), then
 re-read the board, mark an existing Done column done with `PATCH
-/api/columns/{id}` when it is not, and reorder with `POST
+/api/columns/{id}` when it is not, mark the Blocked column with `PATCH
+/api/columns/{id}` and `{"is_blocked": true}` when it is not (a Pomb whose
+column views carry no `is_blocked` key stops init at that step with a message
+that it cannot mark a Blocked column yet and that `dev board ask` needs it,
+sending no write for the mark. A local board has no such setting, so it marks
+nothing and says nothing), and reorder with `POST
 /api/columns/{id}/move` (`{"position": N}`, 0 first) so the nine standard
 columns come first in the order Icebox, Backlog, Ready, In Progress, Review,
 Verify, Release, Blocked, Done and any other column follows, kept and reported
@@ -2157,8 +2163,9 @@ stops early can be repeated and still know the old default. A name that is only
 a size word is kept and reported. Labels are plain strings on cards in Pomb, so
 `needs:lead` and `needs:human` need no creation. Each change prints one line
 (`created board X from the agent project template`, `added column X`, `moved
-column X to position N`, `marked Done as the column of finished cards`, `named
-yellow "1 Pomodoro"`, `made white the default colour`, `renamed card <id prefix>
+column X to position N`, `marked Done as the column of finished cards`, `marked
+Blocked as the column of cards waiting on an answer`, `named yellow
+"1 Pomodoro"`, `made white the default colour`, `renamed card <id prefix>
 to "..." and coloured it blue`), and the last line is `board X already follows
 the standard, nothing to change` or `board X: N changes`. A failure prints `dev:
 <message>` with exit 1 after the lines of the changes already made, and a `403`

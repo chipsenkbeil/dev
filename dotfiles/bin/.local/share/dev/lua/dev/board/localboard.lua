@@ -946,6 +946,7 @@ function Backend:read()
             id = column.id,
             name = column.name,
             is_done = column.is_done == true,
+            is_blocked = false,
         }
     end
     for _, color in ipairs(doc.colors) do
@@ -1005,6 +1006,10 @@ function Backend:mark_done(id)
         end
         return true
     end)
+end
+
+function Backend:mark_blocked()
+    return true, nil, false
 end
 
 function Backend:set_color(id, fields)

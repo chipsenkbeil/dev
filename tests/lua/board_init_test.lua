@@ -52,7 +52,12 @@ end
 local function template_columns()
     local columns = {}
     for index, name in ipairs({ "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }) do
-        columns[index] = { id = "col-" .. name, name = name, is_done = name == "Done" }
+        columns[index] = {
+            id = "col-" .. name,
+            name = name,
+            is_done = name == "Done",
+            is_blocked = name == "Blocked",
+        }
     end
     return columns
 end
@@ -82,8 +87,14 @@ local function fake_layout(opts)
         return true, "agent project"
     end
     function layout:read()
+        local columns = copy(state.columns)
+        for _, column in ipairs(columns) do
+            if column.is_blocked == nil and not opts.without_blocked then
+                column.is_blocked = false
+            end
+        end
         return copy({
-            columns = state.columns,
+            columns = columns,
             colors = state.colors,
             cards = state.cards,
             has_checks = state.has_checks,
@@ -107,7 +118,8 @@ local function fake_layout(opts)
     end
     function layout:add_column(name, is_done)
         write("add_column", name, is_done)
-        state.columns[#state.columns + 1] = { id = "col-" .. name, name = name, is_done = is_done }
+        state.columns[#state.columns + 1] =
+            { id = "col-" .. name, name = name, is_done = is_done, is_blocked = false }
         return true
     end
     function layout:rename_column(id, name)
@@ -137,6 +149,15 @@ local function fake_layout(opts)
             end
         end
         return true
+    end
+    function layout:mark_blocked(id)
+        write("mark_blocked", id)
+        for _, column in ipairs(state.columns) do
+            if column.id == id then
+                column.is_blocked = true
+            end
+        end
+        return true, nil, true
     end
     function layout:set_color(id, fields)
         write("set_color", id)
@@ -399,10 +420,11 @@ local function detail()
     local parts = {}
     for _, name in ipairs(STANDARD) do
         parts[#parts + 1] = string.format(
-            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s}',
+            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
             name:gsub(" ", ""),
             name,
-            name == "Done" and "true" or "false"
+            name == "Done" and "true" or "false",
+            name == "Blocked" and "true" or "false"
         )
     end
     return DETAIL .. table.concat(parts, ",") .. "]}"
@@ -776,10 +798,11 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
     local parts = {}
     for _, name in ipairs(ordered) do
         parts[#parts + 1] = string.format(
-            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s}',
+            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
             name:gsub(" ", ""),
             name,
-            name == "Done" and "true" or "false"
+            name == "Done" and "true" or "false",
+            name == "Blocked" and "true" or "false"
         )
     end
     assert(fs.write(root .. "/detail.json", last .. table.concat(parts, ",") .. "]}"))
@@ -859,10 +882,11 @@ t.test("init renames In Review to Review through the column update", function()
         "Done",
     }) do
         parts[#parts + 1] = string.format(
-            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s}',
+            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
             name:gsub(" ", ""),
             name,
-            name == "Done" and "true" or "false"
+            name == "Done" and "true" or "false",
+            name == "Blocked" and "true" or "false"
         )
     end
     assert(fs.write(root .. "/detail.json", DETAIL .. table.concat(parts, ",") .. "]}"))
@@ -1171,3 +1195,87 @@ t.test(
         t.eq(message:find("--admin", 1, true), nil)
     end
 )
+
+t.test("init marks blocked on a new board", function()
+    local layout = fake_layout({ exists = false })
+    local create = layout.create
+    function layout:create()
+        local made, template = create(self)
+        for _, column in ipairs(self.state.columns) do
+            column.is_blocked = false
+        end
+        return made, template
+    end
+    local changes, message, lines = run(layout)
+    t.eq(message, nil)
+    t.eq(layout.state.columns[8].is_blocked, true)
+    t.ok(
+        table
+            .concat(lines, "\n")
+            :find("marked Blocked as the column of cards waiting on an answer", 1, true)
+    )
+    t.ok(changes > 0)
+end)
+
+t.test("init blocked rerun says nothing", function()
+    local columns = template_columns()
+    for _, column in ipairs(columns) do
+        column.is_blocked = false
+    end
+    local layout = fake_layout({ columns = columns })
+    local first = run(layout)
+    t.eq(layout.state.columns[8].is_blocked, true)
+    local again, message, said = run(layout)
+    t.eq(message, nil)
+    t.eq(again, 0)
+    t.eq(said, {})
+    t.ok(first > 0)
+    local marks = 0
+    for _, write in ipairs(layout.state.writes) do
+        marks = marks + (write[1] == "mark_blocked" and 1 or 0)
+    end
+    t.eq(marks, 1)
+end)
+
+t.test("init refuses when pomb lacks is blocked", function()
+    local columns = template_columns()
+    for _, column in ipairs(columns) do
+        column.is_blocked = nil
+    end
+    local layout = fake_layout({ columns = columns, without_blocked = true })
+    local changes, message = run(layout)
+    t.eq(changes, nil)
+    t.ok(message:find("cannot mark a Blocked column", 1, true), message)
+    t.ok(message:find("dev board ask", 1, true), message)
+    for _, write in ipairs(layout.state.writes) do
+        t.ok(write[1] ~= "mark_blocked")
+    end
+end)
+
+t.test("init sends is blocked through the column update", function()
+    local root, home, tmp = sandbox()
+    local unmarked = detail():gsub(
+        '("name":"Blocked","wip_limit":null,"is_done":false,"is_blocked":)true',
+        "%1false"
+    )
+    assert(fs.write(root .. "/detail.json", unmarked))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.ok(
+        calls_of(root):find(
+            '%-X PATCH[^\n]*%-%-data%-raw {"is_blocked":true} https://pomb%.example/api/columns/col%-Blocked'
+        ),
+        calls_of(root)
+    )
+    t.ok(out:find("marked Blocked as the column of cards waiting on an answer\n", 1, true), out)
+end)
+
+t.test("init stops before any write when the column views carry no is blocked", function()
+    local root, home, tmp = sandbox()
+    local bare = detail():gsub(',"is_blocked":%a+', "")
+    assert(fs.write(root .. "/detail.json", bare))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 1)
+    t.ok(out:find("cannot mark a Blocked column yet", 1, true), out)
+    t.eq(writes(root), 0)
+end)

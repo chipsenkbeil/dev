@@ -136,6 +136,22 @@ local function columns_step(layout, state, say)
         say("marked " .. done.name .. " as the column of finished cards")
         state.changes = state.changes + 1
     end
+    local blocked = present[state.roles.blocked:lower()]
+    if blocked.is_blocked == nil then
+        return nil,
+            "this Pomb cannot mark a Blocked column yet, and dev board ask needs it; "
+                .. "update Pomb and run dev board init again"
+    end
+    if not blocked.is_blocked then
+        local ok, message, changed = layout:mark_blocked(blocked.id)
+        if not ok then
+            return nil, message
+        end
+        if changed then
+            say("marked " .. blocked.name .. " as the column of cards waiting on an answer")
+            state.changes = state.changes + 1
+        end
+    end
     local want, used = {}, {}
     for _, name in ipairs(standard) do
         local column = present[name:lower()]

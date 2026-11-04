@@ -2629,3 +2629,13 @@ t.test("epic_local_next", function()
     t.ok(out:find("r/one", 1, true), out)
     t.eq(card_named(document(file_of(home)), "Epic").claim.claimant, "r/one")
 end)
+
+t.test("a local board has no blocked setting", function()
+    local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
+    local out, code = dev(root, home, { "board", "init" })
+    t.eq(code, 0, out)
+    t.eq(out:find("marked Blocked", 1, true), nil)
+    for _, column in ipairs(document(file_of(home)).columns) do
+        t.eq(column.is_blocked, nil)
+    end
+end)

@@ -144,13 +144,20 @@ local M = {}
 ---@field rename_column fun(self: dev.board.Layout, id: string, name: string): boolean?, string? a column given a new name, its cards kept
 ---@field move_column fun(self: dev.board.Layout, id: string, position: integer): boolean?, string? a column moved, 0 first
 ---@field mark_done fun(self: dev.board.Layout, id: string): boolean?, string? a column made the one of finished cards
+---@field mark_blocked fun(self: dev.board.Layout, id: string): boolean?, string?, boolean? a column made the one of cards waiting on an answer, third value true when it changed one
 ---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description, default flag or enabled flag
 ---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a card's name or colour
 ---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined on the board
 ---@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string? the standard agent roles granted to the board, the names this call created, or false when the board has no roles
 
+---@class dev.board.LayoutColumn
+---@field id string the column's id
+---@field name string the column's name
+---@field is_done boolean whether a card in it counts as finished
+---@field is_blocked boolean? whether it holds the cards waiting on an answer, nil when the backend sends no such key
+
 ---@class dev.board.LayoutState
----@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
+---@field columns dev.board.LayoutColumn[] the columns in board order
 ---@field colors {id: string, value: string, label: string, description: string, is_default: boolean, enabled: boolean}[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 ---@field has_checks boolean whether the board has the checks field

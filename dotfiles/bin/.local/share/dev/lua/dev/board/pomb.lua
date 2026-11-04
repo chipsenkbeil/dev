@@ -1747,10 +1747,15 @@ function Backend:read()
     end
     local columns, colors, cards = {}, {}, {}
     for _, column in ipairs(detail.columns) do
+        local blocked = column.is_blocked
+        if type(blocked) ~= "boolean" then
+            blocked = nil
+        end
         columns[#columns + 1] = {
             id = column.id,
             name = column.name,
             is_done = column.is_done == true,
+            is_blocked = blocked,
         }
     end
     for _, color in ipairs(palette) do
@@ -1856,6 +1861,14 @@ function Backend:mark_done(id)
         return nil, message
     end
     return true
+end
+
+function Backend:mark_blocked(id)
+    local done, message = self:__request("PATCH", "/api/columns/" .. id, { is_blocked = true })
+    if not done then
+        return nil, message
+    end
+    return true, nil, true
 end
 
 function Backend:set_color(id, fields)
