@@ -874,6 +874,11 @@ with curl, so it costs no model turns and outlives the shell that started it.
 Its claimant is the name from `take --as NAME`, else the `DEV_AGENT` environment
 variable, else `dev@<host>:<session or pid>`. A name is one word of letters,
 digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows it as the holder.
+Agents name themselves `<repo>/<role>/<card>/<run>`: the board name, one of
+`planner`, `implementer`, `reviewer`, `verifier`, `release` or `lead`, a card id
+(the lead's run card for a lead) and the attempt number, with the review kind in
+front for a reviewer, as in `dotfiles/implementer/f5f0e007/1` and
+`dotfiles/reviewer/f5f0e007/code-1`. dev does not check the shape.
 `move CARD progress` takes the claim itself, under the same name and with the
 same keep-alive loop, when nobody holds the card, except a card with children,
 which stays unclaimed. A claim this machine already holds is kept, and one held
