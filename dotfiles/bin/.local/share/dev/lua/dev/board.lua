@@ -45,6 +45,7 @@ local M = {}
 ---@class dev.board.ColumnRow
 ---@field name string the column's name
 ---@field is_done boolean whether a card in it counts as finished
+---@field wip_limit integer? how many cards it holds at most, nil when it has no limit, and always nil on a local board
 
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them

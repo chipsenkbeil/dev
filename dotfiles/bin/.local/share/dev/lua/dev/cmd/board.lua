@@ -1325,25 +1325,37 @@ local function unqueued(result)
     return result
 end
 
----Refuse a move to Done that the card's children do not allow.
+---Refuse a move of an epic with an open child into a WIP-limited or done column.
+---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
----@param children {done: integer, total: integer}? its children, nil when it has none
----@return dev.cmd.board.Result? err the refusal, nil when every child is Done
-local function children_refusal(card, children)
-    local unfinished = board.open_children(children)
-    if unfinished == 0 then
+---@param column string the column it moves to
+---@return dev.cmd.board.Result? err the refusal, nil when the move is allowed
+local function children_refusal(backend, card, column)
+    local unfinished = board.open_children(card.epic)
+    if unfinished == 0 or card.column == column then
         return nil
     end
-    return unqueued(
-        failure(
-            string.format(
-                "%s cannot move to Done: %d of %d children are open, and an umbrella is Done when every child is",
-                card.id:sub(1, board.MIN_PREFIX),
-                unfinished,
-                children.total
+    local rows, why = backend:columns()
+    if not rows then
+        return unqueued(failure(why))
+    end
+    for _, row in ipairs(rows) do
+        local kind = row.is_done and "done" or row.wip_limit and "WIP-limited"
+        if kind and row.name:lower() == column:lower() then
+            return unqueued(
+                failure(
+                    string.format(
+                        "%s is an epic and cannot enter %s, a %s column: %d of %d children are open",
+                        card.id:sub(1, board.MIN_PREFIX),
+                        row.name,
+                        kind,
+                        unfinished,
+                        card.epic.total
+                    )
+                )
             )
-        )
-    )
+        end
+    end
 end
 
 ---Refuse a move to Done that the card's outcomes do not allow.
@@ -1502,12 +1514,8 @@ local function move_card(backend, args, opts)
             )
         end
     end
-    if to_done then
-        local failed = read_children()
-        if failed then
-            return failed
-        end
-        local refused = children_refusal(card, children)
+    if not (opts and opts.drop) then
+        local refused = children_refusal(backend, card, column)
         if refused then
             return refused
         end

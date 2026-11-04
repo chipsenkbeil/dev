@@ -1340,7 +1340,11 @@ function Backend:columns(name)
     end
     local rows = {}
     for _, column in ipairs(detail.columns) do
-        rows[#rows + 1] = { name = column.name, is_done = column.is_done == true }
+        rows[#rows + 1] = {
+            name = column.name,
+            is_done = column.is_done == true,
+            wip_limit = type(column.wip_limit) == "number" and column.wip_limit or nil,
+        }
     end
     return rows
 end

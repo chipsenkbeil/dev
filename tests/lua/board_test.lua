@@ -42,6 +42,16 @@ local function fake(cards, times, finished)
     function backend:done_columns()
         return finished
     end
+    function backend:columns()
+        local rows = {}
+        for _, name in ipairs(finished) do
+            rows[#rows + 1] = { name = name, is_done = true }
+        end
+        for _, name in ipairs(backend.limited or {}) do
+            rows[#rows + 1] = { name = name, is_done = false, wip_limit = 2 }
+        end
+        return rows
+    end
     function backend:entered()
         return times or {}
     end
@@ -993,17 +1003,30 @@ t.test("an umbrella moves to Done with no outcomes once every child is Done", fu
     t.eq(backend.calls[#backend.calls], { "move", ID_C, "Done" })
 end)
 
-t.test("an umbrella is refused a move to Done while a child is open", function()
-    local backend = fake({ planned() })
-    backend.kin = { children = { done = 1, total = 3 } }
+t.test("epic_move_refused", function()
+    local card = planned()
+    card.column = "Ready"
+    card.epic = { done = 1, total = 3 }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    backend.limited = { "Review" }
     local result = commands.run("move", { "cccccccc", "done" }, backend)
     t.eq(result.code, 1)
     t.eq(result.unqueued, true)
     t.eq(
         result.message,
-        "cccccccc cannot move to Done: 2 of 3 children are open, and an umbrella is Done when every child is"
+        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open"
     )
-    t.eq(backend.calls, { { "family", ID_C } })
+    result = commands.run("move", { "cccccccc", "review" }, backend)
+    t.eq(result.code, 1)
+    t.eq(
+        result.message,
+        "cccccccc is an epic and cannot enter Review, a WIP-limited column: 2 of 3 children are open"
+    )
+    for _, call in ipairs(backend.calls) do
+        t.ok(call[1] ~= "move", "the refused move was sent")
+    end
+    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
 end)
 
 t.test("a move to Done is refused when the children cannot be read", function()
@@ -2436,7 +2459,7 @@ t.test("move to Ready takes a sized card, and other columns take a planned one",
     for _, column in ipairs({ "backlog", "review", "blocked", "done" }) do
         local backend = fake({ colored("green") })
         t.eq(commands.run("move", { "cccccccc", column }, backend).code, nil)
-        t.eq(#backend.calls, column == "done" and 2 or 1)
+        t.eq(#backend.calls, 1)
     end
     local backend = fake({ colored("white") })
     t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)
@@ -4231,6 +4254,61 @@ t.test("epic_ls_marks", function()
     t.eq(code, 0, out)
     t.ok(out:find("kind: epic, 2 open\n", 1, true), out)
     t.ok(out:find("children: 1 of 3 done\n", 1, true), out)
+end)
+
+t.test("epic_move_refused_by_settings", function()
+    local detail = DETAIL:gsub('"name":"Backlog"', '"name":"Backlog","wip_limit":2', 1)
+    local export = PLANNED_EXPORT:gsub(
+        '"name":"First"',
+        '"name":"First","kind":"epic","children_total":3,"children_done":1',
+        1
+    )
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail })
+    for _, column in ipairs({ "backlog", "done" }) do
+        local out, code = dev(root, home, { "board", "move", "11111111-a", column })
+        t.eq(code, 1, out)
+        t.ok(out:find("is an epic and cannot enter", 1, true), out)
+        t.ok(out:find("2 of 3 children are open", 1, true), out)
+    end
+    t.eq(read(root, "calls"):find("/move", 1, true), nil)
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
+    t.eq(code, 0, out)
+    t.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
+end)
+
+t.test("epic_move_pomb_refusal", function()
+    local text =
+        "the epic still has open children (2), so it cannot enter a WIP-limited or Done column"
+    local export = PLANNED_EXPORT:gsub(
+        '"name":"First"',
+        '"name":"First","kind":"epic","children_total":3,"children_done":3',
+        1
+    )
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(3) })
+    curl_with(
+        root,
+        '*/move) body=\'{"code":"epic_has_open_children","message":"'
+            .. text
+            .. "\"}'; status=409 ;;\n*/claim/release) body= ;;"
+    )
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
+    t.eq(code, 1, out)
+    t.ok(out:find(text, 1, true), out)
+end)
+
+t.test("epic_reopen_out_of_done", function()
+    local export = PLANNED_EXPORT:gsub(
+        '"name":"First","column_id":"col%-ready"',
+        '"name":"First","kind":"epic","children_total":3,"children_done":1,"column_id":"col-done"',
+        1
+    )
+    local task = EPIC_TASK:format(1):gsub("col%-ready", "col-done", 1)
+    local root, home = sandbox({ export = export, task = task })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", "backlog" })
+    t.eq(code, 0, out)
+    local calls = read(root, "calls")
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
+    t.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
 end)
 
 t.test("next skips a card held by a blocker that is not in Done", function()

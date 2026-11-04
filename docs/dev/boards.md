@@ -1821,16 +1821,20 @@ never handles the API.
   Outcomes that Pomb sent in a form dev cannot read (`subtasks` that is not a
   list, or an entry without a string name) refuse the move the same way:
   `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked`.
-  A card with no outcomes, or with all of them ticked, moves as before. An
-  umbrella needs no outcomes, so a move into Done reads `backend:family` after
-  the outcome check and refuses while a child is open:
-  `<id prefix> cannot move to Done: N of M children are open, and an umbrella is Done when every child is`
-  (exit 1, on both backends). A failed read of the children refuses the move
-  with the read's message, so an umbrella never closes on missing data. A move
-  of a card with no outcomes into another column outside Icebox and Ready reads
-  the children the same way and skips the outcome rule for an umbrella. None
-  of these refusals is queued, nor is a move to Done that Pomb could not answer
-  for.
+  A card with no outcomes, or with all of them ticked, moves as before.
+  An epic with an open child is refused a move into a column whose settings
+  make it WIP-limited or done, never one picked by its name:
+  `<id prefix> is an epic and cannot enter COLUMN, a done column: N of M children are open`
+  (or `a WIP-limited column`; exit 1, on both backends). `Backend:columns`
+  reports each column's `is_done` and `wip_limit`, and a local column has no
+  limit, so only `is_done` applies there. The refusal reads the epic's counts
+  from the card, so a plain card costs no extra request. When the counts are
+  stale and Pomb refuses the move itself (`epic_has_open_children`, a `409`),
+  dev prints Pomb's own text. Pomb reopens an epic that moves out of a done
+  column, and a local epic is open again as soon as its column is not done,
+  because a local board stores no closed flag. `discard` skips the rule, and
+  none of these refusals is queued, nor is a move to Done that Pomb could not
+  answer for.
   `add` cannot create a card with children and `discard` asks for no outcomes,
   so neither reads them.
 - `discard CARD [--reason TEXT]`: Drops a card in three steps, in order: with

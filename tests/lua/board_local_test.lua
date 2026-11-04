@@ -2543,6 +2543,41 @@ t.test("take and move refuse a DEV_MAX_SIZE that is not 1, 2 or 3", function()
     t.eq(code, 2, out)
 end)
 
+t.test("epic_local_move", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--problem",
+            "x",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
+    end
+    local epic, child = add("Epic"), add("Child")
+    tick_first(root, home, epic)
+    dev(root, home, { "board", "link", child, "parent", epic })
+    local out, code = dev(root, home, { "board", "move", epic, "done" })
+    t.eq(code, 1, out)
+    t.ok(out:find("is an epic and cannot enter Done, a done column", 1, true), out)
+    t.ok(out:find("1 of 1 children are open", 1, true), out)
+    out, code = dev(root, home, { "board", "move", epic, "review" })
+    t.eq(code, 0, out)
+    tick_first(root, home, child)
+    dev(root, home, { "board", "move", child, "done" })
+    out, code = dev(root, home, { "board", "move", epic, "done" })
+    t.eq(code, 0, out)
+    dev(root, home, { "board", "move", child, "backlog" })
+    out, code = dev(root, home, { "board", "move", epic, "backlog" })
+    t.eq(code, 0, out)
+    out = dev(root, home, { "board", "ls" })
+    t.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
+end)
+
 t.test("epic_local_next", function()
     local root, home = local_board()
     local function add(name)
