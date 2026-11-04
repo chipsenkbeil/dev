@@ -376,7 +376,7 @@ Every card in every column is fair game for an agent unless it is labelled
 - Backlog: wanted, not ready to run. A card enters with a size, the card
   format v2 sections and an outcome. A planner refines the description, the
   outcomes and the checks, re-sizes it if needed (splitting a red card, which
-  may become an umbrella over its children) and moves it to Ready.
+  may become an epic over its children) and moves it to Ready.
 - Ready: an agent can run it with no questions: size 1 to 3, v2, 3 to 7 outcomes
   and a checks row, which `dev board` enforces. The top card is next, and the
   order within Ready is the priority. A runner takes it by size: yellow by a
@@ -489,8 +489,9 @@ An epic is a card with children, which Pomb also calls kind epic. `ls` and
 no children, and `show` prints `kind: epic, N open` above the `parent` and
 `children` lines. Once every child is Done it enters Ready and takes a claim
 like any card. While a child is open, `next` never offers it, in any column, on
-Pomb or a local board. It takes no outcomes of its own, so `move CARD done`
-closes it once every child is Done and refuses it while a child is open.
+Pomb or a local board. Its outcomes are its final check. dev asks none of an epic with
+children, so `move CARD done` closes it once every child is Done and refuses it
+while a child is open.
 
 To push a card later, drag it lower in Ready.
 
@@ -554,8 +555,8 @@ what is missing (exit 2), `move` does the same (exit 1), and `discard` refuses
 an unsized card or one without the headings but does not ask for outcomes (exit
 1), so a card never reaches Done unsized. `size CARD unsized` is refused outside
 Icebox (exit 1), `edit` refuses a text that drops a heading outside Icebox (exit
-1), and a move into Icebox always works. An umbrella follows the same rule
-except for outcomes, which it does not need, and a red one is allowed.
+1), and a move into Icebox always works. An epic follows the same rule
+except for outcomes, which dev does not ask of one with children.
 
 Sizing is part of planning, so a card also cannot enter Ready as red.
 `move CARD ready` refuses a card that is unsized (white or no colour) or red,
@@ -612,7 +613,7 @@ outcomes print as `done when:` with one `- [x]` or `- [ ]` line each, after the
 description. A card with no description prints `no description`, and one with no
 comments `no comments`. Use it instead of the Pomb API to read a card, so the
 token stays inside dev. `links` lists its links. A child also prints
-`parent: <id prefix> <name>` under the `ls` line, and an umbrella
+`parent: <id prefix> <name>` under the `ls` line, and an epic
 `children: N of M done`.
 
 `edit CARD` replaces a card's description with the text of `--file PATH`, or of
@@ -738,11 +739,11 @@ finds by reading that board, so write the work that spans repos as
 it, and asking again for a link it has changes nothing, so a `link` that could
 not reach Pomb is queued with the others. Pomb refuses a card linked to itself
 and a link that would make cards wait on each other.
-`dev board link CHILD parent UMBRELLA` makes the other card the umbrella of the
-first. A card has one umbrella and umbrellas nest to any depth, so Pomb
-refuses a second umbrella and a link that would make a cycle, and a local
-board refuses them too, naming the two cards the link joins. An umbrella
-counts its direct children. A local board stores the links on its own cards,
+`dev board link CHILD parent EPIC` makes the other card the epic of the
+first. A card has one epic and epics nest to any depth, so Pomb
+refuses a second epic and a link that would make a cycle, and a local
+board refuses them too, naming the two cards the link joins. Epics count
+their direct children. A local board stores the links on its own cards,
 links only its own cards, and its `next` skips a card that a card outside Done
 blocks.
 
@@ -815,7 +816,7 @@ open question. `--strict` exits the same way. The rules:
   reports the shapes of `dev.board.shapes`, which `move CARD ready` shares: no
   text under Change or Out of scope, and no `Change:` or `Out of scope:` line
   under Problem. A Done card gets the size and outcome checks only, and a Done
-  card labelled `discarded` needs no outcome. An umbrella, a card with children,
+  card labelled `discarded` needs no outcome. An epic, a card with children,
   needs no outcome either, so lint reads its children when a card has none.
 - With `--strict`, a Done card also needs the three v2 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
@@ -824,8 +825,8 @@ open question. `--strict` exits the same way. The rules:
   Progress and Review, a checks row. In Ready, no red size.
 - `needs:human` sits only in Blocked or Icebox.
 - A Blocked card holds a `question` or `blocked` note or a `blocked_by` link.
-- An In Progress card holds a claimant unless it is an umbrella with children.
-- A Done umbrella that was not discarded has every child Done: `N of M children
+- An In Progress card holds a claimant unless it is an epic with children.
+- A Done epic that was not discarded has every child Done: `N of M children
   open`.
 - A Done card that was not discarded has every outcome ticked.
 
@@ -1195,11 +1196,11 @@ never handles the API.
 - `link CARD KIND OTHER`: Links a card to another and prints
   `linked <id prefix> <kind> <other>`. `KIND` is `blocked_by`, `blocks`,
   `related` or `parent`, else exit 2. `parent` is held by the child and names
-  the umbrella as `OTHER`. Umbrellas nest to any depth and a card has one
-  umbrella, so Pomb answers a second umbrella or a cycle with a `400` (exit 1),
+  the epic as `OTHER`. Epics nest to any depth and a card has one
+  epic, so Pomb answers a second epic or a cycle with a `400` (exit 1),
   and a local board refuses the same itself (`the card already has an
   umbrella`, `the link would make a cycle of umbrellas between A and B`) while
-  linking the same umbrella twice changes nothing. `OTHER` is a card of this board (an id or a prefix of 8 hex
+  linking the same epic twice changes nothing. `OTHER` is a card of this board (an id or a prefix of 8 hex
   characters or more) or `BOARD:PREFIX` for a card of another board of the same
   Pomb server, which dev finds by reading that board (`other_board`) and
   resolving the prefix there, then sends the other card's full id
