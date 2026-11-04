@@ -2395,7 +2395,33 @@ t.test("outcome delete reads the renamed role columns", function()
     for _, column in ipairs({ "Ready", "In Progress" }) do
         local backend = fake({ card_in(column) }, nil, { "Shipped" })
         backend.column_map = map
+        t.eq(delete_in(backend, "cccccccc").code, 1, column)
+        t.eq(#writes(backend), 0)
+    end
+end)
+
+t.test("outcome delete refuses an unmapped column", function()
+    local backend = fake({ card_in("QA") })
+    local result = delete_in(backend, "cccccccc")
+    t.eq(result.code, 1)
+    t.ok(result.message:find("QA", 1, true), result.message)
+    t.ok(result.message:find("fixed from Ready on", 1, true), result.message)
+    t.eq(result.unqueued, true)
+    t.eq(#writes(backend), 0)
+end)
+
+t.test("outcome delete allows renamed blocked and backlog columns", function()
+    local map = { blocked = "Parked", backlog = "Someday" }
+    for _, column in ipairs({ "Parked", "parked", "SOMEDAY" }) do
+        local backend = fake({ card_in(column) })
+        backend.column_map = map
         t.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
+    end
+    for _, column in ipairs({ "Blocked", "Backlog" }) do
+        local backend = fake({ card_in(column) })
+        backend.column_map = map
+        t.eq(delete_in(backend, "cccccccc").code, 1, column)
+        t.eq(#writes(backend), 0)
     end
 end)
 

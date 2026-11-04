@@ -687,28 +687,26 @@ tick keeps the name it resolved, so a later sync records the same ticker.
 `outcome CARD --delete N --reason TEXT [--as NAME]` removes the Nth outcome
 (`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) from a card in Blocked,
 Backlog or Icebox. Outcomes are fixed from Ready on. A card in a column mapped
-to the ready, progress, review, verify or release role, or in a finished column,
-is refused with exit 1 naming the column, with nothing written or queued. The
-roles come from `[board.columns]` and `is_done`, never from a column name. Only the
-lead deletes an outcome: a `DEV_AGENT` whose role segment is not lead is
-refused with exit 1 and nothing written, before any backend call, and a
-runner, implementer, planner or reviewer asks the lead with the card, the
-number and the reason. The outcomes after it move up a number, and the command
-writes a decision note holding the deleted text and the reason, then prints
-`outcome <id prefix> N deleted`. A missing number or reason
-is exit 2. `--reason` is the one way to say why an outcome that was
-never achievable is deleted and not reworded. Pomb lets a Work token delete
-only an outcome that same token created. Any other outcome, whether made in
-the browser, by another token or stored with no token, gets 403
-`permission_denied` naming `subtasks.delete`, and a token holding
-`subtasks.delete` deletes any. A locked card gets 403
-`card_locked` for every token, and a column entry rule can refuse a delete that
-leaves the card worse. `--delete` prints Pomb's reason for each refusal, writes
-no note and changes nothing. A delete is never queued for a later sync, to keep
-its number from pointing at a different outcome by then. dev never reorders an
-outcome. The
-claim's fence goes along when this machine holds one, and a local board keeps
-the same outcomes on the card.
+to the ready, progress, review, verify or release role, in a finished column, or
+in a column outside the role map is refused with exit 1 naming the column, with
+nothing written or queued. The roles come from `[board.columns]` and `is_done`,
+never from a column name. Only the lead deletes an outcome: a `DEV_AGENT` whose
+role segment is not lead is refused with exit 1 and nothing written, before any
+backend call, and a runner, implementer, planner or reviewer asks the lead with
+the card, the number and the reason. The outcomes after it move up a number, and
+the command writes a decision note holding the deleted text and the reason, then
+prints `outcome <id prefix> N deleted`. A missing number or reason is exit 2.
+`--reason` is the one way to say why an outcome that was never achievable is
+deleted and not reworded. Pomb lets a Work token delete only an outcome that
+same token created. Any other outcome, whether made in the browser, by another
+token or stored with no token, gets 403 `permission_denied` naming
+`subtasks.delete`, and a token holding `subtasks.delete` deletes any. A locked
+card gets 403 `card_locked` for every token, and a column entry rule can refuse
+a delete that leaves the card worse. `--delete` prints Pomb's reason for each
+refusal, writes no note and changes nothing. A delete is never queued for a
+later sync, to keep its number from pointing at a different outcome by then. dev
+never reorders an outcome. The claim's fence goes along when this machine holds
+one, and a local board keeps the same outcomes on the card.
 
 The card's claimant and every name in its claim history (the `dev-claim:`
 notes that `review` reads) are refused an outcome add, `--convert`,
