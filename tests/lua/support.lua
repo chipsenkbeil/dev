@@ -70,7 +70,8 @@ function M.dev(root, args, opts)
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
-    local env = { DEV_SELF = SELF, PATH = root .. "/bin:" .. os.getenv("PATH") }
+    local env =
+        { DEV_SELF = SELF, DEV_BOARD_TOKEN = "", PATH = root .. "/bin:" .. os.getenv("PATH") }
     env.STUB_CODE = opts.code
     for name, value in pairs(opts.env or {}) do
         env[name] = value

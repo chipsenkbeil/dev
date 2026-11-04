@@ -9,6 +9,9 @@ local PASSLOCK_SCRIPT = "/board/passlock.sh"
 local KEYCHAIN_SCRIPT = "/board/keychain.sh"
 local KEYCHAIN_SOURCE = "keychain"
 local UNAUTHORIZED = 401
+local ISSUED_VARIABLE = "DEV_BOARD_TOKEN"
+local ISSUED_REFUSED = "the issued token in DEV_BOARD_TOKEN was refused by pomb"
+local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text"
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = 30
 local WAIT_SECONDS = 50
@@ -169,6 +172,20 @@ local function entry_of(ref)
     end
 end
 
+---The role token a lead issued, from `DEV_BOARD_TOKEN`.
+---@return string? token the token, nil when the variable is unset or empty
+---@return string? message why the token is not usable
+local function issued()
+    local value = os.getenv(ISSUED_VARIABLE)
+    if not value or value == "" then
+        return nil
+    end
+    if not value:find(TOKEN_PATTERN) then
+        return nil, ISSUED_BAD
+    end
+    return value
+end
+
 ---Read the worker token from the Keychain or `pass`, without a prompt.
 ---
 ---A locked store fails at once instead of waiting for a pinentry. On a machine
@@ -254,7 +271,14 @@ end
 ---@return any? answer the decoded body of a refused call
 function Backend:__request(method, path, body, fence, seconds)
     if not self.__secret then
-        local token, message = M.token(self.__opts.token)
+        local token, message = issued()
+        if message then
+            return nil, message
+        end
+        self.__issued = token ~= nil
+        if not token then
+            token, message = M.token(self.__opts.token)
+        end
         if not token then
             return nil, message
         end
@@ -303,6 +327,9 @@ function Backend:__request(method, path, body, fence, seconds)
     status = tonumber(status)
     if not status or doc == nil then
         return nil, unavailable("pomb sent an answer dev cannot read")
+    end
+    if status == UNAUTHORIZED and self.__issued then
+        return nil, ISSUED_REFUSED, status, doc
     end
     if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
         self.__healed = true

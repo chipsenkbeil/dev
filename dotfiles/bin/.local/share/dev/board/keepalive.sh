@@ -15,7 +15,11 @@ healed=0
 while [ "$n" -lt "$ticks" ]; do
     sleep "$tick"
     grep -qx "fence=$fence" "$state" 2>/dev/null || exit 0
-    read_out=$(bash "$here/passlock.sh" "$entry")
+    if [ -n "${DEV_BOARD_TOKEN:-}" ]; then
+        read_out=$DEV_BOARD_TOKEN
+    else
+        read_out=$(bash "$here/passlock.sh" "$entry")
+    fi
     token=${read_out%%$'\n'*}
     origin=
     case $read_out in

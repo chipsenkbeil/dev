@@ -111,8 +111,16 @@ reads `pass` once and repeats the request once, to replace a rotated token.
 A delete that fails ends the retry, and the 401 is reported.
 The keep-alive loop does the same on a tick.
 
+`DEV_BOARD_TOKEN` carries a role token a lead issued. When it is set and not
+empty, dev board sends it in place of the `pass` entry and reads neither `pass`
+nor the Keychain, and the keep-alive loop does the same on a tick. When it is
+unset or empty, dev reads `pass` as above. A 401 under it is refused with
+`the issued token in DEV_BOARD_TOKEN was refused by pomb`, with no retry and no
+fallback to the `pass` token.
+
 The token goes to curl on standard input as a config line. It is in no argument
-list, no environment variable, no file and no output, `-v` and `-vv` included.
+list, no file and no output, `-v` and `-vv` included, and in no environment
+variable but `DEV_BOARD_TOKEN` itself.
 
 ## Which token each tool holds
 

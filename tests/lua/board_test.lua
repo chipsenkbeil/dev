@@ -3246,15 +3246,19 @@ end
 
 local function dev(root, home, args, opts)
     opts = opts or {}
+    local env = {
+        HOME = home,
+        ROOT = root,
+        XDG_STATE_HOME = home .. "/state",
+        CI = "",
+        DEV_AGENT = opts.agent or "",
+        DEV_PASS_LOCK = root .. "/pass.lock",
+    }
+    for name, value in pairs(opts.env or {}) do
+        env[name] = value
+    end
     return support.dev(root, args, {
-        env = {
-            HOME = home,
-            ROOT = root,
-            XDG_STATE_HOME = home .. "/state",
-            CI = "",
-            DEV_AGENT = opts.agent or "",
-            DEV_PASS_LOCK = root .. "/pass.lock",
-        },
+        env = env,
         split = opts.split,
         input = opts.input,
         cwd = opts.cwd,
@@ -6149,4 +6153,82 @@ t.test("delete shows Pomb's permission_denied and card_locked as they come", fun
     t.eq(code, 1, out)
     t.ok(out:find("labelled needs:human", 1, true), out)
     t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+end)
+
+local ISSUED = "pomb_ISSUEDrole0123456789"
+
+local function issued_dev(root, home, token)
+    return dev(root, home, { "board", "ls" }, { env = { DEV_BOARD_TOKEN = token } })
+end
+
+t.test(
+    "DEV_BOARD_TOKEN is sent as the bearer token and pass and the Keychain are never read",
+    function()
+        local root, home = sandbox()
+        with_security(root)
+        local out, code = issued_dev(root, home, ISSUED)
+        t.eq(code, 0, out)
+        t.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
+        t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+        t.eq(read(root, "seccalls"), "")
+    end
+)
+
+t.test("DEV_BOARD_TOKEN unset or empty reads pass as before", function()
+    local root, home = sandbox()
+    local out, code = issued_dev(root, home, "")
+    t.eq(code, 0, out)
+    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    t.ok(read(root, "stdin"):find("Bearer " .. TOKEN, 1, true), read(root, "stdin"))
+    root, home = sandbox()
+    out, code = dev(root, home, { "board", "ls" })
+    t.eq(code, 0, out)
+    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+end)
+
+t.test(
+    "DEV_BOARD_TOKEN refused with 401 names the issued token and never falls back to pass",
+    function()
+        local root, home = sandbox()
+        with_security(root)
+        executable(
+            root .. "/bin/curl",
+            '#!/bin/sh\ncat >/dev/null\nprintf \'curl %s\\n\' "$*" >>"$ROOT/calls"\n'
+                .. 'printf \'{"message":"bad"}\\n401\''
+        )
+        local out, code = issued_dev(root, home, ISSUED)
+        t.eq(code, 1)
+        t.ok(out:find("issued token", 1, true), out)
+        t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    end
+)
+
+t.test("DEV_BOARD_TOKEN never reaches the output, the arguments or the log", function()
+    local root, home = sandbox()
+    local out = issued_dev(root, home, ISSUED)
+    t.eq(out:find(ISSUED, 1, true), nil, out)
+    t.eq(read(root, "calls"):find(ISSUED, 1, true), nil)
+    executable(root .. "/bin/curl", '#!/bin/sh\ncat >/dev/null\nprintf \'{"message":"bad"}\\n401\'')
+    out = issued_dev(root, home, ISSUED)
+    t.eq(out:find(ISSUED, 1, true), nil, out)
+    t.eq(read(root, "calls"):find(ISSUED, 1, true), nil)
+end)
+
+t.test("the keep-alive loop under DEV_BOARD_TOKEN sends that token and never reads pass", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/state", "fence=7\n"))
+    shell(
+        root,
+        root .. "/pass.lock",
+        "DEV_BOARD_TOKEN="
+            .. ISSUED
+            .. " bash "
+            .. SHARE
+            .. "keepalive.sh "
+            .. root
+            .. "/state card 7 1 https://pomb.example Agents/x 0",
+        "600"
+    )
+    t.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
+    t.eq(occurrences(read(root, "calls"), "pass show"), 0)
 end)
