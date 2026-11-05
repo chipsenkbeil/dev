@@ -15,7 +15,7 @@ M.MAX_WORDS = 400
 ---@class dev.board.lint.Facts
 ---@field comments fun(): dev.board.Comment[]?, string? the card's comments, read only when a rule needs them
 ---@field links fun(): dev.board.Link[]?, string? the card's links, read only when a rule needs them
----@field children fun(): {done: integer, total: integer}?, string? the card's children, total 0 when it has none
+---@field children fun(): {done: integer, total: integer, epic: boolean?}?, string? the card's children, total 0 when it has none, and whether it is an epic
 
 local function word_count(description)
     local count = 0
@@ -102,13 +102,13 @@ function M.card(card, opts)
         return kids, kids_why
     end
     if column ~= roles.icebox then
-        local child_total = 0
+        local child_total, child_epic = 0, false
         if need_outcomes then
             local found, why = children()
             if not found then
                 return nil, why
             end
-            child_total = found.total
+            child_total, child_epic = found.total, found.epic == true
         end
         local sectioned = open or opts.strict == true
         local missing = board.unplanned({
@@ -117,6 +117,7 @@ function M.card(card, opts)
             outcomes = #card.outcomes,
             need_outcomes = need_outcomes,
             children = child_total,
+            epic = child_epic,
             sections = sectioned,
         })
         for _, item in ipairs(missing) do

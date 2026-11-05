@@ -18,6 +18,7 @@ local M = {}
 ---@field labels string[] the card's labels
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds a live claim on it
+---@field kind string? `epic` for an epic, `task` otherwise
 ---@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not one
 ---@field checks string[] the run commands in its checks rows, empty when it has none
 ---@field allow string[] the guard rails its allow field lifts, empty when it has none
@@ -77,6 +78,7 @@ local M = {}
 ---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the epic) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
 ---@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks`, `related` or `child` entry for each link another card holds on it, in the order the backend gives them
 ---@field unlink fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? the link of that kind from the card to the card with that full id removed, or nil and a message when the card holds no such link or the backend refuses the change
+---@field make_epic fun(self: dev.board.Backend, id: string, fence: integer?): boolean?, string? the card turned into an epic, checked against the claim's fence when one is given, or nil and the backend's refusal, as for a card that is already an epic
 ---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's epic and the count of its children
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
 ---@field boards fun(self: dev.board.Backend): string[]?, string? the names of the boards the token sees, in the server's order, or nil and a message
@@ -135,6 +137,7 @@ local M = {}
 ---@field labels string[]? the labels to give it
 ---@field checks string[] the run commands to give it, one checks row each
 ---@field outcomes string[]? the Done when outcomes to give it, one subtask each
+---@field epic boolean? whether to create it as an epic
 
 ---@class dev.board.Layout
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a message
@@ -237,6 +240,9 @@ end
 
 ---The backends a project may name.
 M.Backend = { POMB = "pomb", LOCAL = "local" }
+
+---The kinds of card.
+M.Kind = { EPIC = "epic", TASK = "task" }
 
 ---The kinds of link between two cards.
 M.LinkKind = {
@@ -773,6 +779,7 @@ end
 ---@field outcomes integer how many outcomes it has
 ---@field need_outcomes boolean whether it needs one
 ---@field children integer how many children it has, 0 for a card that is no epic
+---@field epic boolean? whether it is an epic even with no children
 ---@field sections boolean? whether the v2 sections are checked, true when nil
 
 ---The refusal for an epic whose outcome count is out of range.
@@ -805,7 +812,7 @@ function M.unplanned(card)
     if card.need_outcomes then
         if card.outcomes == 0 and checklist_items(description) == 0 then
             missing[#missing + 1] = "Done when outcomes"
-        elseif card.children > 0 and card.outcomes > M.MAX_EPIC_OUTCOMES then
+        elseif (card.children > 0 or card.epic) and card.outcomes > M.MAX_EPIC_OUTCOMES then
             missing[#missing + 1] = epic_outcomes(card.outcomes)
         end
     end
@@ -842,8 +849,9 @@ end
 ---@param description string? the card's description
 ---@param outcomes integer how many outcomes the card has
 ---@param children integer how many children the card has
+---@param epic boolean? whether the card is an epic even with no children
 ---@return string[] missing the problems, empty when the card follows the format
-function M.missing(description, outcomes, children)
+function M.missing(description, outcomes, children, epic)
     local seen, filled = sections(description)
     local items = checklist_items(description)
     local missing = {}
@@ -857,7 +865,7 @@ function M.missing(description, outcomes, children)
     for _, shape in ipairs(M.shapes(description)) do
         missing[#missing + 1] = shape
     end
-    if children > 0 then
+    if children > 0 or epic then
         if outcomes == 0 and items == 0 then
             missing[#missing + 1] = M.MIN_EPIC_OUTCOMES
                 .. " to "

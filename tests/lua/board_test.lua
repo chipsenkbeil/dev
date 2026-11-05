@@ -166,6 +166,10 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "set_size", id, color, fence }
         return true
     end
+    function backend:make_epic(id, fence)
+        calls[#calls + 1] = { "make_epic", id, fence }
+        return backend.refusal == nil, backend.refusal
+    end
     function backend:link(id, kind, other)
         calls[#calls + 1] = { "link", id, kind, other }
         return true
@@ -1279,13 +1283,19 @@ t.test("link to BOARD:CARD resolves the card on the other board", function()
     t.eq(result.output, "linked 11111111 blocked_by ci:dddddddd")
     t.eq(backend.calls[1], { "other_board", "ci" })
     t.eq(backend.calls[2], { "link", ID_A, "blocked_by", "dddddddd-dddd-4ddd-8ddd-dddddddddddd" })
+    result = commands.run("link", { "11111111-a", "parent", "ci:dddddddd" }, backend)
+    t.eq(result.code, 1)
+    t.eq(
+        result.message,
+        "ci:dddddddd is not an epic, make it one with dev board epic dddddddd from the project that owns that board"
+    )
     result = commands.run("link", { "11111111-a", "related", "nope:dddddddd" }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("no board named nope", 1, true), result.message)
     result = commands.run("link", { "11111111-a", "related", "ci:eeeeeeee" }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("no card starts with eeeeeeee", 1, true), result.message)
-    t.eq(#backend.calls, 4)
+    t.eq(#backend.calls, 5)
 end)
 
 t.test("links lists each link with the kind, the id prefix and the board", function()
@@ -1329,8 +1339,50 @@ t.test("unlink removes the held link of that kind and target, and refuses one it
     t.eq(commands.run("unlink", { "11111111-a", "blocked_by", "deadbeef" }, backend).code, 1)
 end)
 
-t.test("link takes parent, and show prints the epic and the children", function()
+local function with_epic()
+    local cards = sample()
+    cards[1].kind = "epic"
+    return fake(cards)
+end
+
+t.test("link refuses a parent that is not an epic before any request", function()
     local backend = fake(sample())
+    local result = commands.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.message, "11111111 is not an epic, make it one with dev board epic 11111111")
+    t.eq(backend.calls[1], nil)
+    result = commands.run("link", { "cccccccc", "related", "11111111-a" }, backend)
+    t.eq(result.output, "linked cccccccc related 11111111")
+end)
+
+t.test("epic turns a card into an epic and prints the refusal as given", function()
+    local backend = fake(sample())
+    local result = commands.run("epic", { "11111111-b" }, backend)
+    t.eq(result.output, "made 11111111 an epic")
+    t.eq(backend.calls[1], { "make_epic", ID_B, nil })
+    backend.refusal = "pomb answered 409: the card holds a live claim"
+    result = commands.run("epic", { "11111111-b" }, backend)
+    t.eq(result.code, 1)
+    t.eq(result.message, "pomb answered 409: the card holds a live claim")
+    t.eq(commands.run("epic", {}, backend).code, 2)
+    t.eq(commands.run("epic", { "deadbeef" }, backend).code, 1)
+end)
+
+t.test("add --epic creates an epic through the backend", function()
+    local backend = fake(sample())
+    local result = commands.run(
+        "add",
+        { "Big", "--epic", "--problem", "x", "--size", "1", "--done-when", "a" },
+        backend
+    )
+    t.eq(result.code, nil, result.message)
+    t.eq(backend.opts.epic, true)
+    commands.run("add", { "Small", "--problem", "x", "--size", "1", "--done-when", "a" }, backend)
+    t.eq(backend.opts.epic, nil)
+end)
+
+t.test("link takes parent, and show prints the epic and the children", function()
+    local backend = with_epic()
     local result = commands.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
     t.eq(result.output, "linked cccccccc parent 11111111")
     t.eq(backend.calls[1], { "link", ID_C, "parent", ID_A })

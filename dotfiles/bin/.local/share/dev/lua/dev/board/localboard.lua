@@ -172,9 +172,9 @@ local function children_of(doc, id)
     return found
 end
 
-local function child_counts(doc, id)
-    local children = children_of(doc, id)
-    if #children == 0 then
+local function child_counts(doc, card)
+    local children = children_of(doc, card.id)
+    if #children == 0 and card.kind ~= board.Kind.EPIC then
         return nil
     end
     local done = 0
@@ -192,7 +192,8 @@ local function card_view(doc, card)
     local column = find_by_id(doc.columns, card.column_id)
     local claim = live(card.claim)
     return {
-        epic = child_counts(doc, card.id),
+        epic = child_counts(doc, card),
+        kind = card.kind == board.Kind.EPIC and board.Kind.EPIC or board.Kind.TASK,
         id = card.id,
         name = card.name,
         column = column and column.name or "?",
@@ -346,6 +347,12 @@ function Backend:link(id, kind, other)
             if current == target.id then
                 return true
             end
+            if target.kind ~= board.Kind.EPIC then
+                return nil,
+                    target.id:sub(1, board.MIN_PREFIX)
+                        .. " is not an epic, make it one with dev board epic "
+                        .. target.id:sub(1, board.MIN_PREFIX)
+            end
             if current then
                 return nil, "the card already has an epic"
             end
@@ -469,8 +476,9 @@ function Backend:family(id)
     if epic then
         family.parent = { id = epic.id, name = epic.name }
     end
-    family.children = child_counts(doc, id)
-    family.epic = family.children ~= nil
+    local counts = child_counts(doc, card)
+    family.children = counts and counts.total > 0 and counts or nil
+    family.epic = counts ~= nil
     return family
 end
 
@@ -589,6 +597,7 @@ function Backend:add(name, column, opts)
             description = opts and opts.description or nil,
             column_id = target.id,
             color_id = color_id,
+            kind = opts and opts.epic and board.Kind.EPIC or board.Kind.TASK,
             labels = opts and opts.labels or {},
             checks = opts and opts.checks or {},
             outcomes = outcome_rows(opts and opts.outcomes),
@@ -785,6 +794,20 @@ function Backend:set_size(id, color, fence)
             return nil, "the board has no " .. color .. " colour, run dev board init"
         end
         card.color_id = found.id
+        return true
+    end)
+end
+
+function Backend:make_epic(id, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        if card.kind == board.Kind.EPIC then
+            return nil, "the card is already an epic"
+        end
+        card.kind = board.Kind.EPIC
         return true
     end)
 end

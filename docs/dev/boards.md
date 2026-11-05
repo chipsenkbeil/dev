@@ -488,7 +488,8 @@ Until Pomb's `fff0e011` ships, `order` and `size` fail on such a card,
 whatever the rule says. `label --remove needs:human` stays allowed in any
 column.
 
-An epic is a card with children, which Pomb also calls kind epic. `ls` and
+An epic is a card of kind epic, which `add --epic` creates and `epic CARD` turns
+an existing card into, and a `parent` link needs one. `ls` and
 `next` print `[epic N of M open] ` before its name, and `[epic] ` while it has
 no children, and `show` prints `kind: epic, N open` above the `parent` and
 `children` lines. Once every child is Done it enters Ready and takes a claim
@@ -757,12 +758,13 @@ it, and asking again for a link it has changes nothing, so a `link` that could
 not reach Pomb is queued with the others. Pomb refuses a card linked to itself
 and a link that would make cards wait on each other.
 `dev board link CHILD parent EPIC` makes the other card the epic of the
-first. A card has one epic and epics nest to any depth, so Pomb
-refuses a second epic and a link that would make a cycle, and a local
-board refuses them too, naming the two cards the link joins. Epics count
-their direct children. A local board stores the links on its own cards,
-links only its own cards, and its `next` skips a card that a card outside Done
-blocks.
+first, and dev refuses an `EPIC` that is not an epic before any request,
+naming `dev board epic EPIC`. A card has one epic and epics nest to any
+depth, so Pomb refuses a second epic and a link that would make a cycle,
+and a local board refuses them too, naming the two cards the link joins.
+Epics count their direct children. A local board stores the links on its own
+cards, links only its own cards, and its `next` skips a card that a card
+outside Done blocks.
 
 `links CARD` lists a card's links, one line each: the kind as the card sees it
 (`blocked_by`, `blocks`, `related` or `parent`), the other card's id prefix and
@@ -1215,10 +1217,19 @@ never handles the API.
   twice. dev cannot tell a typed answer from a
   relayed one, so the verb is for the agent whose own session the owner
   answered in.
+- `epic CARD`: Turns a card into an epic with `PATCH /api/tasks/{id}` and
+  `{"kind": "epic"}` (`tasks.edit`) and prints `made <id prefix> an epic`. Pomb
+  answers a live claim with a `409` `claim_held` and a card that is already an
+  epic with a `400`, and dev prints Pomb's words and exits 1. A local board
+  stores `kind` on the card and refuses a card that is already an epic. Turning
+  an epic back into a plain card is not supported. `add --epic` creates the card
+  with `"kind": "epic"`, on a local board too.
 - `link CARD KIND OTHER`: Links a card to another and prints
   `linked <id prefix> <kind> <other>`. `KIND` is `blocked_by`, `blocks`,
   `related` or `parent`, else exit 2. `parent` is held by the child and names
-  the epic as `OTHER`. Epics nest to any depth and a card has one
+  the epic as `OTHER`, which must be an epic (dev refuses any other card with
+  `<id prefix> is not an epic, make it one with dev board epic <id prefix>`
+  before any request). Epics nest to any depth and a card has one
   epic, so Pomb answers a second epic or a cycle with a `400` (exit 1),
   and a local board refuses the same itself (`the card already has an
   epic`, `the link would make a cycle of epics between A and B`) while

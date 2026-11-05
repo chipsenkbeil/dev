@@ -799,6 +799,7 @@ t.test("a local board refuses what the needs:human and epic rules forbid", funct
     t.eq(code, 0, out)
     out, code = dev(root, home, { "board", "move", card, "backlog" })
     t.eq(code, 0, out)
+    dev(root, home, { "board", "epic", epic })
     dev(root, home, { "board", "link", child, "parent", epic })
     out, code = dev(root, home, { "board", "move", epic, "ready" })
     t.eq(code, 0, out)
@@ -818,6 +819,9 @@ t.test("link parent sets one epic and show and links report it", function()
         )
     end
     local epic, one, two, other = add("Epic"), add("One"), add("Two"), add("Other")
+    dev(root, home, { "board", "epic", epic })
+    dev(root, home, { "board", "epic", one })
+    dev(root, home, { "board", "epic", other })
     local out, code = dev(root, home, { "board", "link", one, "parent", epic })
     t.eq(out, "linked " .. one .. " parent " .. epic .. "\n")
     t.eq(code, 0)
@@ -1253,6 +1257,7 @@ t.test(
         t.eq(card_named(document(file_of(home)), "Beta").claim.claimant, "r/two")
         out = dev(root, home, { "board", "ls" })
         t.ok(out:find("r/two", 1, true), out)
+        dev(root, home, { "board", "epic", a })
         dev(root, home, { "board", "link", c, "parent", a })
         out, code = dev(root, home, { "board", "move", a, "progress" }, { DEV_AGENT = "r/three" })
         t.eq(code, 0, out)
@@ -1554,6 +1559,7 @@ for arg; do
 done
 for last; do :; done
 printf '%s %s\n' "$method" "$last" >>"$ROOT/calls"
+if [ "$method" = PATCH ] && [ -f "$ROOT/held" ]; then printf '{"code":"claim_held","message":"the card holds a live claim"}\n409'; exit 0; fi
 status=200
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
@@ -2667,6 +2673,7 @@ t.test("epic_local_move", function()
     end
     local epic, child = add("Epic"), add("Child")
     tick_first(root, home, epic)
+    dev(root, home, { "board", "epic", epic })
     dev(root, home, { "board", "link", child, "parent", epic })
     local out, code = dev(root, home, { "board", "move", epic, "done" })
     t.eq(code, 1, out)
@@ -2703,6 +2710,7 @@ t.test("epic_local_next", function()
         })))
     end
     local epic, child = add("Epic"), add("Child")
+    dev(root, home, { "board", "epic", epic })
     dev(root, home, { "board", "link", child, "parent", epic })
     local out = dev(root, home, { "board", "ls" })
     t.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
@@ -2728,4 +2736,130 @@ t.test("a local board has no blocked setting", function()
     for _, column in ipairs(document(file_of(home)).columns) do
         t.eq(column.is_blocked, nil)
     end
+end)
+
+t.test("local board keeps the epic kind and refuses a parent that is not an epic", function()
+    local root, home = local_board()
+    local function add(name, ...)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--problem",
+            "x",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+            ...,
+        })))
+    end
+    local made, plain, child = add("Made", "--epic"), add("Plain"), add("Child")
+    local doc = document(file_of(home))
+    t.eq(card_named(doc, "Made").kind, "epic")
+    t.eq(card_named(doc, "Plain").kind, "task")
+    local out, code = dev(root, home, { "board", "link", child, "parent", plain })
+    t.eq(code, 1, out)
+    t.ok(out:find("make it one with dev board epic " .. plain, 1, true), out)
+    out, code = dev(root, home, { "board", "epic", plain })
+    t.eq(out, "made " .. plain .. " an epic\n")
+    t.eq(code, 0)
+    t.eq(card_named(document(file_of(home)), "Plain").kind, "epic")
+    out, code = dev(root, home, { "board", "epic", plain })
+    t.eq(code, 1, out)
+    t.ok(out:find("already an epic", 1, true), out)
+    out, code = dev(root, home, { "board", "link", child, "parent", made })
+    t.eq(code, 0, out)
+    out = dev(root, home, { "board", "ls" })
+    t.ok(out:find("[epic 1 of 1 open] Made", 1, true), out)
+    t.ok(out:find("[epic] Plain", 1, true), out)
+end)
+
+t.test("add --epic creates an epic on Pomb with kind epic", function()
+    local root, home = pomb()
+    local out, code = pomb_dev(root, home, {
+        "board",
+        "add",
+        "Big",
+        "--epic",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
+    t.eq(code, 0, out)
+    t.ok(fs.read(root .. "/bodies"):find('"kind":"epic"', 1, true), fs.read(root .. "/bodies"))
+end)
+
+t.test("epic turns a card into an epic on Pomb and prints Pomb's refusal", function()
+    local root, home = pomb()
+    local out, code = pomb_dev(root, home, { "board", "epic", ID_A:sub(1, 8) })
+    t.eq(code, 0, out)
+    t.eq(out, "made aaaaaaaa an epic\n")
+    t.ok(
+        calls(root):find("PATCH ", 1, true) and calls(root):find("/api/tasks/" .. ID_A, 1, true),
+        calls(root)
+    )
+    t.eq(fs.read(root .. "/bodies"), '{"kind":"epic"}\n')
+    assert(fs.write(root .. "/held", ""))
+    out, code = pomb_dev(root, home, { "board", "epic", ID_A:sub(1, 8) })
+    t.eq(code, 1, out)
+    t.ok(out:find("409", 1, true) and out:find("the card holds a live claim", 1, true), out)
+end)
+
+t.test("a childless epic enters Ready with 1 to 3 outcomes like any epic", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Big",
+        "--epic",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--done-when",
+        "b",
+        "--done-when",
+        "c",
+        "--done-when",
+        "d",
+    })
+    t.eq(code, 2, out)
+    t.ok(out:find("1 to 3 Done when outcomes for an epic, not 4", 1, true), out)
+    out, code = dev(root, home, {
+        "board",
+        "add",
+        "Epic",
+        "--epic",
+        "--column",
+        "ready",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "none",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--done-when",
+        "b",
+        "--checks",
+        "dev test",
+    })
+    t.eq(code, 0, out)
+    local epic = prefix_of(out)
+    out, code = dev(root, home, { "board", "move", epic, "backlog" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", epic, "ready" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "lint" })
+    t.eq(code, 0, out)
+    t.eq(out:find("lacks 3 to 7", 1, true), nil, out)
 end)

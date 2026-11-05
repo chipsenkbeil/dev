@@ -658,7 +658,7 @@ end
 
 local function epic_counts(task)
     local total = type(task.children_total) == "number" and task.children_total or 0
-    if task.kind ~= "epic" and total == 0 then
+    if task.kind ~= board.Kind.EPIC and total == 0 then
         return nil
     end
     return { done = task.children_done or 0, total = total }
@@ -668,6 +668,7 @@ function Backend:__card(task)
     local outcomes, readable = outcomes_of(task)
     return {
         epic = epic_counts(task),
+        kind = task.kind == board.Kind.EPIC and board.Kind.EPIC or board.Kind.TASK,
         checks = runs_of(task),
         allow = field_names(task, board.ALLOW_FIELD),
         tests = field_names(task, board.TESTS_FIELD),
@@ -874,6 +875,9 @@ function Backend:add(name, column, opts)
         end
     end
     local body = { name = name, column_id = id }
+    if opts and opts.epic then
+        body.kind = board.Kind.EPIC
+    end
     if opts and opts.color then
         body.color_id, message = self:__color_id(opts.color)
         if not body.color_id then
@@ -1183,6 +1187,15 @@ function Backend:set_labels(id, labels, fence)
     local done
     done, message = self:__request("PATCH", "/api/tasks/" .. id, { labels = labels }, fence)
     if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:make_epic(id, fence)
+    local made, message =
+        self:__request("PATCH", "/api/tasks/" .. id, { kind = board.Kind.EPIC }, fence)
+    if not made then
         return nil, message
     end
     return true

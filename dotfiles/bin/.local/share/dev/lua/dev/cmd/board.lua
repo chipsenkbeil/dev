@@ -104,6 +104,7 @@ local QUEUE_RULES = {
     size = { idempotent = true },
     label = { idempotent = true },
     link = { idempotent = true },
+    epic = { idempotent = false },
     edit = { idempotent = true },
     rename = { idempotent = true },
     checks = { idempotent = true },
@@ -723,6 +724,7 @@ function commands.add(backend, args)
         ["--blocked-by"] = true,
         ["--from"] = true,
         [ID_ONLY_FLAG] = SWITCH,
+        ["--epic"] = SWITCH,
     }, {
         ["--problem"] = true,
         ["--change"] = true,
@@ -842,6 +844,7 @@ function commands.add(backend, args)
             outcomes = #outcomes,
             need_outcomes = true,
             children = 0,
+            epic = flags["--epic"],
         })
         if #missing > 0 then
             return usage(
@@ -855,7 +858,7 @@ function commands.add(backend, args)
         end
     end
     if column == roles.ready then
-        local missing = board.missing(description, #outcomes, 0)
+        local missing = board.missing(description, #outcomes, 0, flags["--epic"])
         if #missing > 0 then
             return usage(
                 "a card needs card format v2 before it enters Ready, and this one lacks "
@@ -901,6 +904,7 @@ function commands.add(backend, args)
         labels = labels,
         checks = checks,
         outcomes = outcomes,
+        epic = flags["--epic"] or nil,
     })
     if not card then
         return failure(message)
@@ -1508,6 +1512,7 @@ local function move_card(backend, args, opts)
         end
     end
     local children = card.epic and card.epic.total or 0
+    local epic = card.epic ~= nil
     if column == roles.ready and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
@@ -1525,6 +1530,7 @@ local function move_card(backend, args, opts)
             outcomes = #card.outcomes,
             need_outcomes = not (opts and opts.drop) and not card.outcomes_unreadable,
             children = children,
+            epic = epic,
         }
         local missing = board.unplanned(facts)
         if #missing > 0 then
@@ -1545,7 +1551,7 @@ local function move_card(backend, args, opts)
         end
     end
     if column == roles.ready then
-        local missing = board.missing(card.description, #card.outcomes, children)
+        local missing = board.missing(card.description, #card.outcomes, children, epic)
         if #missing > 0 then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
@@ -3458,6 +3464,15 @@ function commands.link(backend, args)
     if not card then
         return err
     end
+    if args[2] == board.LinkKind.PARENT and other.kind ~= board.Kind.EPIC then
+        local prefix = other.id:sub(1, board.MIN_PREFIX)
+        return failure(
+            shown
+                .. " is not an epic, make it one with dev board epic "
+                .. prefix
+                .. (shown == prefix and "" or " from the project that owns that board")
+        )
+    end
     local ok, message = backend:link(card.id, args[2], other.id)
     if not ok then
         return failure(message)
@@ -3465,6 +3480,22 @@ function commands.link(backend, args)
     return {
         output = "linked " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. args[2] .. " " .. shown,
     }
+end
+
+function commands.epic(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held = claims.read(card.id)
+    local ok, message = backend:make_epic(card.id, held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    return { output = "made " .. card.id:sub(1, board.MIN_PREFIX) .. " an epic" }
 end
 
 function M.is_lead(name)
@@ -3989,7 +4020,8 @@ function commands.lint(backend, args)
                 if not family then
                     return nil, "could not read the family of " .. card.id .. ": " .. why
                 end
-                return family.children or { done = 0, total = 0 }
+                local counts = family.children or { done = 0, total = 0 }
+                return { done = counts.done, total = counts.total, epic = family.epic }
             end,
         }
         local rules, why, owned =
@@ -4250,7 +4282,7 @@ function commands.run(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `link`, `links`, `unlink`, `stale`, `lint`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `epic`, `link`, `links`, `unlink`, `stale`, `lint`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
 ---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil

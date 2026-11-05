@@ -1564,6 +1564,7 @@ if has_jj then
             { "board", "add", "Child", "--problem", "x", "--size", "1", "--done-when", "x" }
         )
         local child = assert(out:match("added (%x+)"), out)
+        must(dev(root, home, log, { "board", "epic", id }))
         must(dev(root, home, log, { "board", "link", child, "parent", id }))
         must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
