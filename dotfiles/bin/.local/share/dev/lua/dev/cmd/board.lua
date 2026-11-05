@@ -548,6 +548,20 @@ local function other_card(backend, word)
     return other, (other_name and other_name .. ":" or "") .. other.id:sub(1, board.MIN_PREFIX)
 end
 
+---Refuse the first checks row that is not a plain command.
+---@private
+---@param runs string[] the rows as given
+---@return dev.cmd.board.Result? refusal a usage error naming the row, nil when every row is plain
+function M.__row_refusal(runs)
+    for _, run in ipairs(runs) do
+        local why = check.refusal(run)
+        if why then
+            return usage(why)
+        end
+    end
+    return nil
+end
+
 ---Open the Pomb board named `name` with this board's column map, root and roles.
 ---@param backend dev.board.Backend the board the command runs on
 ---@param name string the other board's name
@@ -821,6 +835,10 @@ function commands.add(backend, args)
             return usage("--checks needs a command")
         end
         checks[#checks + 1] = run
+    end
+    local refused_row = M.__row_refusal(checks)
+    if refused_row then
+        return refused_row
     end
     local outcomes = {}
     for _, item in ipairs(flags["--done-when"] or {}) do
@@ -2554,6 +2572,10 @@ function commands.checks(backend, args)
     local runs = {}
     for pos = 2, #args do
         runs[#runs + 1] = args[pos]
+    end
+    local refused_row = M.__row_refusal(runs)
+    if refused_row then
+        return refused_row
     end
     local found, err = find_card(backend, args[1])
     if not found then

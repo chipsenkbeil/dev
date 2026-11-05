@@ -594,7 +594,12 @@ board (one row per command, so it also adds a second command) and prints
 usage error (exit 2), to keep anyone from clearing the rows by accident. It
 sends the claim's fence when this machine holds one, gives the same refusal as a
 move into Ready on a Pomb board with no checks field, and is queued while Pomb
-is unreachable, since sending the same rows twice changes nothing more. `show`
+is unreachable, since sending the same rows twice changes nothing more. Both
+`checks` and `add --checks` apply the write-time refusal of `dev board check`
+to every row, so a row holding a shell character (a quote, a backslash, `*`,
+`|` and the rest) or starting with a dotted run such as `dev.--remote.lint` is
+a usage error (exit 2) naming the row and nothing is written. A leading `! `
+is allowed. Rows already on a card are not rewritten. `show`
 prints the rows under the description. Icebox is exempt.
 
 Three more card fields are set the same way, each replacing the field's
@@ -1172,7 +1177,8 @@ never handles the API.
   the subtasks and then moves it to Ready, so the card is never in Ready without
   them; a failed move says
   `<id prefix> was added to Backlog with its outcomes but the move to Ready failed: <reason>`.
-  Each `--checks CMD` (repeatable, a blank one is exit 2) gives the card one row
+  Each `--checks CMD` (repeatable, a blank one or one that `dev board check`
+  would refuse is exit 2, as for `checks`) gives the card one row
   of the board's checks field `dev.checks`, a table whose `run` column
   holds the command (`POST /api/tasks` with `fields`; a local card keeps them in
   `checks`). A `--checks`, or a `--column ready`, on a Pomb board that has no
@@ -1423,7 +1429,9 @@ never handles the API.
   so the sent rows replace the field's whole value, with the claim's fence when
   this machine holds one). A local board sets the card's `checks` under the same
   fence rule. A name in the card's claim history is refused with exit 1 and
-  nothing written. No command, a blank command, a missing card or an unknown
+  nothing written. A row that `dev board check` would refuse is exit 2 with the
+  row named, as in `add --checks`. No command, a blank command, a missing card
+  or an unknown
   option word is exit 2 (so nobody clears the rows by accident, and no
   subcommand clears them), and an unknown card is exit 1. A Pomb board with no
   checks field is refused before any write with the message
@@ -1435,7 +1443,8 @@ never handles the API.
   card and records the result as one comment on the card. A row runs as a
   plain command, split on whitespace and started without a shell, so a row
   that holds any of `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`,
-  `?`, `!` or a line break is refused before anything runs (exit 1). One `!`
+  `?`, `!` or a line break, or starts with a dotted run such as
+  `dev.--remote.lint`, is refused before anything runs (exit 1). One `!`
   is allowed, as the first word: a row `! rg -n PATTERN FILE` runs the rest as
   the command and passes only when it exits 1 (a search that found nothing).
   Exit 0 fails the row as a match found, and any other exit fails it as an

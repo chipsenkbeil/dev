@@ -523,6 +523,20 @@ t.test("add defaults to Backlog and joins the words of the name", function()
     t.eq(commands.run("add", {}, backend).code, 2)
 end)
 
+t.test("add --checks refuses the rows checks refuses and writes nothing", function()
+    for _, row in ipairs({ "rg 'a' f", "rg a.*b f", "dev.--remote.lint" }) do
+        local backend = fake(sample())
+        local result = commands.run(
+            "add",
+            { "X", "--problem", "x", "--checks", "dev test", "--checks", row },
+            backend
+        )
+        t.eq(result.code, 2)
+        t.ok(result.message:find(row, 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+end)
+
 t.test("add --board files on the named board and leaves this one alone", function()
     local backend = fake(sample())
     local sibling = fake(sample())
@@ -1157,6 +1171,21 @@ t.test("checks replaces the rows with one row per command", function()
     t.eq(backend.calls[1], { "set_checks", ID_A, { "dev lint", "dev test" }, nil })
     result = commands.run("checks", { "11111111-a", "dev lint" }, fake(sample()))
     t.eq(result.output, "set checks 11111111, 1 row")
+end)
+
+t.test("checks refuses the rows add --checks refuses and writes nothing", function()
+    for _, row in ipairs({ "rg 'a' f", "rg a.*b f", "dev.--remote.lint", "rg a|b" }) do
+        local backend = fake(sample())
+        local result = commands.run("checks", { "11111111-a", "dev lint", row }, backend)
+        t.eq(result.code, 2)
+        t.ok(result.message:find(row, 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end
+    local backend = fake(sample())
+    t.eq(
+        commands.run("checks", { "11111111-a", "! rg -q a f" }, backend).output,
+        "set checks 11111111, 1 row"
+    )
 end)
 
 t.test(

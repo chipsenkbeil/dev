@@ -37,23 +37,44 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
 
----Split a checks row into the words of one command.
+---Say why a checks row is not a plain command.
 ---
----A row is a command and never shell text, so a character the shell would act on is refused.
----A leading `! ` marks a negated row and is dropped, since `run` reads it from the row.
+---A row is a command and never shell text, so a character the shell would act on is refused, and
+---so is a first word that is a dotted run such as `dev.--remote.lint`, which is a row written with
+---dots for spaces. A leading `! ` marks a negated row and is allowed.
 ---@param row string the row as the card holds it
----@return string[]? argv the command and its arguments
----@return string? message why the row is not a plain command
-function M.argv(row)
+---@return string? message why the row is refused, nil when it is a plain command
+function M.refusal(row)
     row = row:match(NEGATED) or row
     local bad = row:match(SHELL_CHARS)
     if bad then
-        return nil,
-            string.format(
-                "the row %q holds %q, which only a shell reads, and a row runs as a plain command",
-                row,
-                bad == "\n" and "a line break" or bad
-            )
+        return string.format(
+            "the row %q holds %q, which only a shell reads, and a row runs as a plain command",
+            row,
+            bad == "\n" and "a line break" or bad
+        )
+    end
+    local first = row:match("%S+")
+    if first and not first:find("/", 1, true) and first:find("%.[^.]+%.") then
+        return string.format(
+            "the row %q starts with the dotted run %q, so write spaces between the words",
+            row,
+            first
+        )
+    end
+end
+
+---Split a checks row into the words of one command.
+---
+---A leading `! ` marks a negated row and is dropped, since `run` reads it from the row.
+---@param row string the row as the card holds it
+---@return string[]? argv the command and its arguments
+---@return string? message why the row is not a plain command, from `refusal`
+function M.argv(row)
+    row = row:match(NEGATED) or row
+    local message = M.refusal(row)
+    if message then
+        return nil, message
     end
     local argv = {}
     for word in row:gmatch("%S+") do

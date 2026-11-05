@@ -90,6 +90,44 @@ t.test("a row is split into words and a shell character is refused", function()
     t.eq(check.argv("  "), nil)
 end)
 
+t.test("checks refuses a row with a shell character", function()
+    for _, char in ipairs({
+        "|",
+        "&",
+        ";",
+        "<",
+        ">",
+        "(",
+        ")",
+        "$",
+        "`",
+        "\\",
+        '"',
+        "'",
+        "*",
+        "?",
+        "!",
+        "\n",
+    }) do
+        local row = "rg a" .. char .. "b"
+        t.ok(check.refusal(row):find("only a shell reads", 1, true), row)
+        t.eq(check.argv(row), nil, row)
+    end
+    t.eq(check.refusal("! rg -q a b"), nil)
+    t.eq(check.argv("! rg -q a b"), { "rg", "-q", "a", "b" })
+    t.ok(check.refusal("! rg a|b"), "a negated row keeps the refusal")
+end)
+
+t.test("checks refuses a dotted first word", function()
+    local why = check.refusal("dev.--remote.lint")
+    t.ok(why:find("dev.--remote.lint", 1, true), why)
+    t.ok(check.refusal("! dev.--remote.lint"))
+    t.eq(check.argv("dev.--remote.lint"), nil)
+    t.eq(check.refusal("tests/a.b.sh x"), nil)
+    t.eq(check.refusal("rg a.b.c file"), nil)
+    t.eq(check.refusal("dev --remote lint"), nil)
+end)
+
 t.test("a negated row passes on no match, fails on a match and fails as an error", function()
     local root = support.tempdir()
     assert(fs.write(root .. "/hit.txt", "needle\n"))
@@ -178,7 +216,11 @@ end)
 
 t.test("check runs a row as a plain command and never through a shell", function()
     local root, home = git_root()
-    local id = card_with(root, home, { "touch marker; true" })
+    local id = card_with(root, home, { "true" })
+    local path = home .. "/state/dev/boards/mine.json"
+    local doc = assert(json.decode(assert(fs.read(path))))
+    doc.cards[1].checks = { "touch marker; true" }
+    assert(fs.write(path, json.encode(doc)))
     local out, code = dev(root, home, { "board", "check", id })
     t.eq(code, 1, out)
     t.ok(out:find("only a shell reads", 1, true), out)
