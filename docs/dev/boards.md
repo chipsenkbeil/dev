@@ -199,7 +199,7 @@ smallest preset that covers its calls, on the boards it works.
 | Tool | Token | Calls it needs | Deletes it holds |
 |------|-------|----------------|------------------|
 | lead session | `lead_token`, `lead` | Everything `work` does, plus `boards.create`, `columns.create`, `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and `tasks.bin`, for `init`, for the `dev board delete` verb, and `subtasks.delete` for `outcome --delete` | `tasks.bin`: a card goes to the bin for 30 days. `subtasks.delete`: any outcome |
-| subagent and runner | `token`, `work` | Every read, `tasks.write` (add, edit, move, claim, heartbeat, release, labels, fields), `subtasks.write`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete: Pomb answers 403 `permission_denied` for `subtasks.delete`, and only the lead does either, with the lead token, and never an outcome from Ready on, where outcomes are fixed |
+| subagent and runner | `token`, `work` | Every read, `tasks.create` (add), `tasks.edit` (edit, labels, fields, restore), `tasks.move`, `tasks.claim` (claim, heartbeat, release), `subtasks.edit`, `subtasks.check`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete: Pomb answers 403 `permission_denied` for `subtasks.delete`, and only the lead does either, with the lead token, and never an outcome from Ready on, where outcomes are fixed |
 | runner | `work` on its board | Read the board, create and move cards, set fields and labels, comment, link, claim, heartbeat and release | None. Its `init` needs `lead`, which the lead runs |
 | Aide agent | `work`, assigned boards only | The subagent's calls, notes written with `--as aide` | None. It never holds `lead` |
 
@@ -210,7 +210,7 @@ board, column or account delete stay with the owner, who holds `admin`.
 
 A card delete is token policy, not something dev enforces on its own. Only the
 lead decides and does one, and Pomb refuses a `work` token with a 403 naming
-`tasks.bin`. A restore from the bin needs only `tasks.write`.
+`tasks.bin`. A restore from the bin needs only `tasks.edit`.
 
 The calls come from `board/pomb.lua`, a runner's Pomb contract notes and
 Pomb's permission catalog. For the deletes, the table follows the Pomb 0.5.60
@@ -259,7 +259,7 @@ What it lays out:
 - Role refusals: a refusal reads the token's `role_name` from
   `GET /api/v1/auth/whoami`, once, and only then. A `permission_denied` 403 and
   an `exceeds_grant` 403 name the refused permission or action and the role, as
-  `this token (role implementer) lacks the tasks.write permission`. A token
+  `this token (role implementer) lacks the tasks.edit permission`. A token
   with no role gets the plain text with no role named. A 401 with the code
   `token_expired`, matched on the code and never the message, prints `the role
   token expired; mint it again from its issuer`.

@@ -4181,8 +4181,8 @@ t.test("a refused outcome delete prints Pomb's reason, writes no note and is not
             want = "Set [board.pomb] lead_token",
         },
         {
-            body = '{"code":"permission_denied","permission":"subtasks.write","message":"denied"}',
-            want = "lacks the subtasks.write permission",
+            body = '{"code":"permission_denied","permission":"subtasks.edit","message":"denied"}',
+            want = "lacks the subtasks.edit permission",
         },
         {
             body = '{"code":"card_locked","message":"this task carries a locking label, so only the owner can change it"}',
@@ -5252,7 +5252,7 @@ t.test("unlink deletes the link the token holds and reports a refused delete pla
     root, home = sandbox({ links = links })
     curl_with(
         root,
-        [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.write","message":"no write","board_id":"board-9"}'; status=403 ;;
+        [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.edit","message":"no write","board_id":"board-9"}'; status=403 ;;
 */claim/release) body= ;;]]
     )
     out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
@@ -5974,14 +5974,14 @@ t.test("a permission_denied with no board says the token lacks it everywhere", f
     local root, home = sandbox()
     answering(
         root,
-        [[*) printf '{"code":"permission_denied","permission":"tasks.write","message":"m","board_id":null}\n403' ;;
+        [[*) printf '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":null}\n403' ;;
 ]]
     )
     local out, code = dev(root, home, { "board", "ls" })
     t.eq(code, 1)
     t.eq(
         out,
-        "dev: board unavailable: pomb answered 403: this token lacks the tasks.write permission "
+        "dev: board unavailable: pomb answered 403: this token lacks the tasks.edit permission "
             .. "on every board; use a token that has it\n"
     )
 end)
@@ -5990,14 +5990,14 @@ t.test("a permission_denied with a board says the board is not assigned", functi
     local root, home = sandbox()
     answering(
         root,
-        [[*) printf '{"code":"permission_denied","permission":"tasks.write","message":"m","board_id":"board-9"}\n403' ;;
+        [[*) printf '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":"board-9"}\n403' ;;
 ]]
     )
     local out, code = dev(root, home, { "board", "ls" })
     t.eq(code, 1)
     t.eq(
         out,
-        "dev: board unavailable: this token has the tasks.write permission but is not assigned "
+        "dev: board unavailable: this token has the tasks.edit permission but is not assigned "
             .. "to board board-9; add the board to the token\n"
     )
 end)
@@ -6018,14 +6018,14 @@ t.test("role-refusal-denied names the refused permission and the role", function
     refusing(
         root,
         '{"role_name":"implementer","permissions":[]}',
-        '{"code":"permission_denied","permission":"tasks.write","message":"m","board_id":null}\\n403'
+        '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":null}\\n403'
     )
     local out, code = dev(root, home, { "board", "ls" })
     t.eq(code, 1)
     t.eq(
         out,
         "dev: board unavailable: pomb answered 403: this token (role implementer) lacks the "
-            .. "tasks.write permission on every board; use a token that has it\n"
+            .. "tasks.edit permission on every board; use a token that has it\n"
     )
 end)
 
