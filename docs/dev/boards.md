@@ -1978,13 +1978,14 @@ never handles the API.
   (DEV_MAX_SIZE)` (exit 1). `run` takes its own run card and is not held
   to the limit.
   `take` and `move CARD progress` also refuse a card when the caller already
-  has 3 cards in Review, Verify or Release whose latest `dev-claim:` note is
-  by the caller's name (`DEV_AGENT`, else the host and session name), so a
-  session lands what passed before it takes a new card. The card being moved
-  does not count, and another name's cards never do. The refusal reads
-  `NAME already has N cards waiting in Review, Verify or Release (ID, ID,
-  ID), so land them first` (exit 1). A caller with neither `DEV_AGENT` nor
-  `CLAUDE_SESSION_ID` has no stable name, so the limit does not apply to it.
+  has 3 cards in Review or Verify whose latest `dev-claim:` note is by the
+  caller's name (`DEV_AGENT`, else the host and session name), so a session
+  lands what passed before it takes a new card. Cards in Release do not count
+  (land puts a card there to wait for a deploy). The card being moved does not
+  count, and another name's cards never do. The refusal reads `NAME already
+  has N cards waiting in Review or Verify (ID, ID, ID). Land them first`
+  (exit 1). A caller with neither `DEV_AGENT` nor `CLAUDE_SESSION_ID` has no
+  stable name, so the limit does not apply to it.
   A card already in In Progress, or whose claim this machine holds, is not
   checked, and a take of a card another name holds gets the claim refusal.
   The count and the claim are two steps, so under parallel commands with one

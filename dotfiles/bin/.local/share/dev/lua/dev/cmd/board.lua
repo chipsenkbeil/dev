@@ -560,10 +560,7 @@ function runner.__waiting(backend, card, who)
     local waiting = {}
     for _, other in ipairs(cards) do
         local column = other.column
-        if
-            other.id ~= card.id
-            and (column == roles.review or column == roles.verify or column == roles.release)
-        then
+        if other.id ~= card.id and (column == roles.review or column == roles.verify) then
             local past, why = backend:comments(other.id)
             if not past then
                 return failure(why)
@@ -582,13 +579,11 @@ function runner.__waiting(backend, card, who)
             .. #waiting
             .. " cards waiting in "
             .. roles.review
-            .. ", "
-            .. roles.verify
             .. " or "
-            .. roles.release
+            .. roles.verify
             .. " ("
             .. table.concat(waiting, ", ")
-            .. "), so land them first"
+            .. "). Land them first."
     )
 end
 

@@ -2998,24 +2998,35 @@ t.test("a fourth card past in progress is refused", function()
     for _, id in ipairs(parked) do
         t.ok(out:find(id, 1, true), out)
     end
-    t.ok(out:find("land them first", 1, true), out)
+    t.ok(out:find("Land them first.", 1, true), out)
     out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
     t.eq(code, 1, out)
-    t.ok(out:find("land them first", 1, true), out)
+    t.ok(out:find("Land them first.", 1, true), out)
     t.eq(card_named(document(file_of(home)), "Fourth").claim, nil)
     out, code = dev(root, home, { "board", "next" }, { DEV_AGENT = "r/one" })
     t.eq(code, 0, out)
 end)
 
-t.test("cards waiting in Verify and Release count toward the limit", function()
+t.test("cards waiting in Review and Verify count toward the limit", function()
     local root, home = local_board()
     local fourth = park_three(root, home, {
         agent = "r/one",
-        columns = { "review", "verify", "release" },
+        columns = { "review", "verify", "verify" },
     })
     local out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
     t.eq(code, 1, out)
-    t.ok(out:find("land them first", 1, true), out)
+    t.ok(out:find("waiting in Review or Verify (", 1, true), out)
+    t.ok(out:find("Land them first.", 1, true), out)
+end)
+
+t.test("landed cards in Release do not refuse a fourth", function()
+    local root, home = local_board()
+    local fourth = park_three(root, home, {
+        agent = "r/one",
+        columns = { "release", "release", "release" },
+    })
+    local out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
+    t.eq(code, 0, out)
 end)
 
 t.test("a held card is not refused while three of the caller's cards wait", function()
@@ -3122,7 +3133,7 @@ t.test("take on a card another name holds gives the claim refusal", function()
     out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
     t.eq(code, 1, out)
     t.ok(out:find("is claimed by r/two", 1, true), out)
-    t.ok(not out:find("land them first", 1, true), out)
+    t.ok(not out:find("Land them first.", 1, true), out)
 end)
 
 t.test("a card that moved on to another claimant stops counting", function()
