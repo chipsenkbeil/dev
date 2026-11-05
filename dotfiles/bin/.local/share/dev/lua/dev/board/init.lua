@@ -1,12 +1,5 @@
 local board = require("dev.board")
 
-local RENAMED_FROM = "In Review"
-local NEEDS_ADMIN = "pomb answered 403"
-local LEFT_ENABLED = "left the colours enabled as they are, since this token may not change them; "
-    .. "run dev board init --admin"
-local ROLES_UNCHANGED = "agent roles unchanged"
-local ADMIN_HINT = "; this token may not change this board, run dev board init --admin"
-
 ---The standard board: the nine columns, the size palette and names without
 ---size words, laid out one step at a time. Each step adds or fixes what is
 ---missing, renames only In Review and never deletes. The default colour changes last, so
@@ -65,10 +58,12 @@ function M.split_size(name)
 end
 
 local function needs_admin(message)
+    local NEEDS_ADMIN = "pomb answered 403"
     return message:find(NEEDS_ADMIN, 1, true) ~= nil
 end
 
 local function advise(message)
+    local ADMIN_HINT = "; this token may not change this board, run dev board init --admin"
     if needs_admin(message) then
         return message .. ADMIN_HINT
     end
@@ -85,6 +80,7 @@ local function by_name(columns)
 end
 
 local function columns_step(layout, state, say)
+    local RENAMED_FROM = "In Review"
     local present = by_name(state.columns)
     local added = false
     local standard = state.roles.list
@@ -191,6 +187,7 @@ local function columns_step(layout, state, say)
 end
 
 local function roles_step(layout, state, say)
+    local ROLES_UNCHANGED = "agent roles unchanged"
     local created, message = layout:add_roles()
     if created == nil then
         return nil, message
@@ -268,6 +265,8 @@ local function default_step(layout, state, say)
 end
 
 local function enabled_step(layout, state, say)
+    local LEFT_ENABLED = "left the colours enabled as they are, since this token may not change them; "
+        .. "run dev board init --admin"
     local wanted = {}
     for _, swatch in ipairs(M.PALETTE) do
         wanted[swatch.value] = true
