@@ -1598,6 +1598,7 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","columns":['
     .. '{"id":"col-backlog","name":"Backlog"},{"id":"col-ready","name":"Ready"},'
     .. '{"id":"col-review","name":"Review"},{"id":"col-done","name":"Done"}]}'
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
+    .. '{"id":"blue-id","value":"blue","label":"3 Pomodori"},'
     .. '{"id":"white-id","value":"white","label":"Unsized"}]'
 local EXPORT = '{"tasks":[{"id":"'
     .. ID_A
@@ -1636,6 +1637,9 @@ case "$last" in
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
 */api/tasks/aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa) body='{"id":"aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa","parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Epic"},"children_done":1,"children_total":3}' ;;
+*/tasks\?*) body=$(cat "$ROOT/page.json") ;;
+*/api/tasks/cccccccc-2222-4ccc-8ccc-cccccccccccc) body=$(cat "$ROOT/big.json") ;;
+*/api/tasks/dddddddd-2222-4ddd-8ddd-dddddddddddd) body=$(cat "$ROOT/small.json") ;;
 */api/tasks) body='{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"x","column_id":"col-backlog"}' ;;
 *) body='{"ok":true}' ;;
 esac
@@ -2722,6 +2726,40 @@ t.test("take and move refuse a DEV_MAX_SIZE that is not 1, 2 or 3", function()
     t.eq(code, 2, out)
     out, code = dev(root, home, { "board", "move", big, "progress" }, env)
     t.eq(code, 2, out)
+end)
+
+local function sized_pomb()
+    local root, home = pomb()
+    local big = "cccccccc-2222-4ccc-8ccc-cccccccccccc"
+    local small = "dddddddd-2222-4ddd-8ddd-dddddddddddd"
+    local function task(id, name, color_id)
+        return '{"id":"'
+            .. id
+            .. '","name":"'
+            .. name
+            .. '","column_id":"col-ready","color_id":"'
+            .. color_id
+            .. '","labels":[]}'
+    end
+    assert(
+        fs.write(
+            root .. "/page.json",
+            '{"items":[{"id":"' .. big .. '"},{"id":"' .. small .. '"}],"next_cursor":null}'
+        )
+    )
+    assert(fs.write(root .. "/big.json", task(big, "Big", "blue-id")))
+    assert(fs.write(root .. "/small.json", task(small, "Small", "yellow-id")))
+    return root, home, big:sub(1, 8), small:sub(1, 8)
+end
+
+t.test("next --max-size skips a size 3 card on a pomb board", function()
+    local root, home, big, small = sized_pomb()
+    local out = dev(root, home, { "board", "next" }, { ROOT = root, DEV_MAX_SIZE = "" })
+    t.ok(out:find(big, 1, true) and not out:find(small, 1, true), out)
+    out = pomb_dev(root, home, { "board", "next", "--max-size", "1" })
+    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
+    out = dev(root, home, { "board", "next" }, { ROOT = root, DEV_MAX_SIZE = "1" })
+    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
 end)
 
 t.test("epic_local_move", function()
