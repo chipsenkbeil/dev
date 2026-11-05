@@ -3006,6 +3006,10 @@ local function await_turn(opts)
         if hold or opts.wait == 0 then
             return hold, message
         end
+        local kept = not opts.take and turn.held(opts.backend, opts.name, opts.short)
+        if kept then
+            return kept
+        end
         local left = deadline - store.now()
         if left <= 0 then
             turn.leave(opts.backend, opts.name, opts.short)
@@ -3262,7 +3266,8 @@ function commands.land(backend, args)
     if blocked then
         return failure(short .. " cannot land: " .. blocked .. (hold and kept_note(short) or ""))
     end
-    if not hold then
+    local waited = not hold
+    if waited then
         hold, message = await_turn({
             backend = backend,
             name = name,
@@ -3274,8 +3279,11 @@ function commands.land(backend, args)
     if not hold then
         return failure(short .. " cannot land: " .. message)
     end
-    blocked = not hold.hold and blocking_check(backend, short)
+    blocked = (waited or not hold.hold) and blocking_check(backend, short)
     if blocked then
+        if hold.hold then
+            return failure(short .. " cannot land: " .. blocked .. kept_note(short))
+        end
         turn.release(backend, hold)
         return failure(short .. " cannot land: " .. blocked)
     end

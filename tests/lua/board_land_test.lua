@@ -1839,6 +1839,63 @@ if has_jj then
         t.eq(column_of(home), "Done")
     end)
 
+    t.test("a land that waited keeps a hold taken meanwhile", function()
+        local root, home, log = jj_project()
+        local id = lander_ready(root, home, log)
+        local held = hold_turn(home, "other", "cccc3333")
+        local backend, restore = board_at(home)
+        backend.root = root
+        local nap = devos.nap
+        devos.nap = function()
+            devos.nap = nap
+            release_turn(home, held)
+            must(dev(root, home, log, { "board", "turn", id, "--hold", "60" }))
+            must(dev(root, home, log, { "board", "move", id, "blocked" }))
+        end
+        local previous = os.getenv("DEV_AGENT") or ""
+        ffi.C.setenv("DEV_AGENT", "lander", 1)
+        local ok, result = pcall(commands.run, "land", { id, "--wait", "30" }, backend)
+        ffi.C.setenv("DEV_AGENT", previous, 1)
+        devos.nap = nap
+        restore()
+        assert(ok, result)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("cannot land", 1, true), result.message)
+        t.ok(result.message:find("stays held", 1, true), result.message)
+        t.eq(assert(turn_holder(home)).name, "lander")
+        local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+        t.eq(code, 0, out)
+        t.eq(turn_holder(home), nil)
+    end)
+
+    t.test("a land that waited waits for a check begun while it waited", function()
+        local root, home, log = jj_project()
+        local id = lander_ready(root, home, log)
+        local work_commit = head(root)
+        local held = hold_turn(home, "other", "dddd4444")
+        local backend, restore = board_at(home)
+        backend.root = root
+        local nap = devos.nap
+        devos.nap = function()
+            devos.nap = nap
+            release_turn(home, held)
+            must(dev(root, home, log, { "board", "turn", id, "--hold", "60" }))
+            hold_check(home, work_commit)
+        end
+        local previous = os.getenv("DEV_AGENT") or ""
+        ffi.C.setenv("DEV_AGENT", "lander", 1)
+        local ok, result = pcall(commands.run, "land", { id, "--wait", "30" }, backend)
+        ffi.C.setenv("DEV_AGENT", previous, 1)
+        devos.nap = nap
+        restore()
+        assert(ok, result)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("check held for cccc3333", 1, true), result.message)
+        t.ok(result.message:find("stays held", 1, true), result.message)
+        t.eq(landed_calls(log), "")
+        t.eq(assert(turn_holder(home)).name, "lander")
+    end)
+
     t.test("a landing polls under --wait and goes ahead once the hold lapses", function()
         local root, home, log = jj_project()
         local id = lander_ready(root, home, log)

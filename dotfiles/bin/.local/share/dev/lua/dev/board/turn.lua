@@ -259,13 +259,13 @@ function M.ask(backend, opts)
     )
 end
 
----Leave the line for the turn.
+---Leave the line for the turn, which a live hold of the same name and card survives.
 ---@param backend dev.board.Backend the board backend
 ---@param name string the name that waited
 ---@param card string the short id of the card that wanted to land
 function M.leave(backend, name, card)
     local holding = turn_card(backend)
-    if holding then
+    if holding and not M.held(backend, name, card) then
         backend:note(
             holding.id,
             string.format("%sleft holder=%s card=%s", RECORD_PREFIX, name, card),
