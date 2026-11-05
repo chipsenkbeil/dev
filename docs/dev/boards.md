@@ -1440,7 +1440,12 @@ never handles the API.
   so `checks` is queued while Pomb is unreachable like `edit`, timeouts and 502,
   503 and 504 included. The `on` runner names are not set.
 - `check CARD [--expect-fail] [--timeout SECONDS]`: Runs every checks row of the
-  card and records the result as one comment on the card. A row runs as a
+  card and records the result as one comment on the card.
+  In a jj project `check`, `turn` (not `--release`) and `land` first refuse,
+  and do nothing else, unless the working copy's workspace is named for the
+  card's id prefix, the name `dev ws new CARD` gives. The refusal names the
+  workspace it found. A git project is not checked, and no flag or
+  environment variable turns the rule off. A row runs as a
   plain command, split on whitespace and started without a shell, so a row
   that holds any of `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`,
   `?`, `!` or a line break, or starts with a dotted run such as
@@ -1542,14 +1547,16 @@ never handles the API.
   `dev-review:` and `dev-turn:` as it does `dev-check:`, and `note --edit`
   and `--delete` refuse a comment that holds it. `review` does not judge the
   verdict: `land` does.
-- `land CARD [--wait SECONDS]`: Takes the landing turn, rebases the working-copy
-  change onto trunk, lands it with `jj land --yes -r @` run in the project
-  root, writes a `done` note, moves the card to Release when
-  `[board.land] deploys` is true and to Done otherwise, and gives the turn
-  back. It needs `DEV_AGENT` (usage error, exit 2, without it) and a jj
-  project: in plain git it refuses and says so. It refuses, exit 1, and
-  lands nothing until every condition holds, and the message lists each one
-  that fails. A refusal can leave the change rebased onto trunk:
+- `land CARD [--wait SECONDS]`: Takes the landing turn and lands the change.
+  It refuses outside the card's workspace, as `check` does. It rebases the
+  working-copy change onto trunk, lands it with
+  `jj land --yes -r @` run in the project root, writes a `done` note, moves
+  the card to Release when `[board.land] deploys` is true and to Done
+  otherwise, and gives the turn back. It needs `DEV_AGENT` (usage error, exit
+  2, without it) and a jj project: in plain git it refuses and says so. It
+  refuses, exit 1, and lands nothing until every condition holds, and the
+  message lists each one that fails. A refusal can leave the change rebased
+  onto trunk:
   - the card is in the verify column and no other agent claims it. `move`
     releases the claim, so `land` refuses a card claimed by another agent and
     lets any agent with `DEV_AGENT` set land an unclaimed one.
@@ -1724,7 +1731,9 @@ never handles the API.
   NAME.` and says that the commit named is from before the land and may differ
   from the one on trunk, the success line says the same, and the card still
   moves to Done. It is never queued.
-- `turn CARD [--hold SECONDS] [--wait SECONDS] [--release]`: Takes the landing
+- `turn CARD [--hold SECONDS] [--wait SECONDS] [--release]`:
+  It refuses outside the card's workspace, as `check` does, but `--release`
+  works from anywhere. It takes the landing
   turn for CARD and keeps it across the rebase, the reviews and the check, so
   `land` lands under it and no other landing moves trunk meanwhile. It needs
   `DEV_AGENT` (exit 2 without it) and takes the turn as `land` does, but fails

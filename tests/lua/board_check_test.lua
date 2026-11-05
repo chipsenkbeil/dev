@@ -331,9 +331,20 @@ if has_jj then
         return root, home, ws
     end
 
+    t.test("check refuses outside the workspace named for the card", function()
+        local root, home, ws = workspace()
+        local id = card_with(root, home, { "true" })
+        local out, code = dev(root, home, { "board", "check", id }, ws)
+        t.eq(code, 1, out)
+        t.ok(out:find("w2", 1, true), out)
+        t.ok(out:find("dev ws new " .. id, 1, true), out)
+        t.eq(#comments(home), 0)
+    end)
+
     t.test("in a jj workspace the working-copy commit is the commit, edits included", function()
         local root, home, ws = workspace()
         local id = card_with(root, home, { "true" })
+        jj(ws, "workspace", "rename", id)
         assert(fs.write(ws .. "/edited", "x"))
         local out, code = dev(root, home, { "board", "check", id }, ws)
         t.eq(code, 0, out)
@@ -349,6 +360,7 @@ if has_jj then
     t.test("in a jj workspace a row that edits files leaves nothing recorded", function()
         local root, home, ws = workspace()
         local id = card_with(root, home, { "touch made" })
+        jj(ws, "workspace", "rename", id)
         local out, code = dev(root, home, { "board", "check", id }, ws)
         t.eq(code, 1, out)
         t.ok(out:find("changed while the checks ran", 1, true), out)

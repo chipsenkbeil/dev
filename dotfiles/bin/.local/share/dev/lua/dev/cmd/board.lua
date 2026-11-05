@@ -562,6 +562,22 @@ function M.__row_refusal(runs)
     return nil
 end
 
+---Refuse a verb run outside the jj workspace `dev ws new` names for the card.
+---@private
+---@param backend dev.board.Backend the board the command runs on
+---@param short string the card's short id
+---@return dev.cmd.board.Result? refusal a failure naming the workspace found, nil when the verb may go on
+function M.__workspace_refusal(backend, short)
+    if not backend.root then
+        return nil
+    end
+    local problem = land.workspace_problem(backend.root, short)
+    if problem then
+        return failure(problem)
+    end
+    return nil
+end
+
 ---Open the Pomb board named `name` with this board's column map, root and roles.
 ---@param backend dev.board.Backend the board the command runs on
 ---@param name string the other board's name
@@ -2755,6 +2771,10 @@ function commands.check(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
+    local elsewhere = M.__workspace_refusal(backend, short)
+    if elsewhere then
+        return elsewhere
+    end
     if #card.checks == 0 then
         return failure(short .. " has no checks rows; set them with dev board checks")
     end
@@ -3229,6 +3249,10 @@ function commands.land(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
+    local elsewhere = M.__workspace_refusal(backend, short)
+    if elsewhere then
+        return elsewhere
+    end
     local held_back = owner_holds(card)
     if held_back then
         return held_back
@@ -3350,6 +3374,12 @@ function commands.turn(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
+    if not releasing then
+        local elsewhere = M.__workspace_refusal(backend, short)
+        if elsewhere then
+            return elsewhere
+        end
+    end
     local hold, message, lost = turn.held(backend, name, short)
     if releasing then
         if message and not lost then

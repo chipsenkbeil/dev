@@ -334,6 +334,10 @@ local function new_card(root, home, log)
     })
     local id = assert(out:match("added (%x+)"), out)
     must(dev(root, home, log, { "board", "checks", id, "true" }))
+    if fs.is_dir(root .. "/.jj") then
+        local rename = { "jj", "-R", root, "workspace", "rename", id }
+        must(devos.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
+    end
     return id
 end
 
@@ -396,6 +400,10 @@ local CARD_PREFIX = CARD_ID:sub(1, 8)
 
 local function fake_backend(root, card)
     local backend = { root = root, column_map = {}, notes = {} }
+    if root and fs.is_dir(root .. "/.jj") then
+        local rename = { "jj", "-R", root, "workspace", "rename", CARD_PREFIX }
+        must(devos.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
+    end
     card = card or {}
     local view = {
         id = CARD_ID,
@@ -535,6 +543,31 @@ if has_jj then
         restore()
         return holder
     end
+
+    t.test("land refuses outside the workspace named for the card", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
+        approve(root, home, log, id)
+        jj(root, "workspace", "rename", "elsewhere")
+        refused(root, home, log, id, { "elsewhere", "dev ws new " .. id })
+    end)
+
+    t.test("turn refuses outside the workspace named for the card", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "turn", id }))
+        jj(root, "workspace", "rename", "elsewhere")
+        local out, code = dev(root, home, log, { "board", "turn", id })
+        t.eq(code, 1, out)
+        t.ok(out:find("elsewhere", 1, true), out)
+        t.ok(out:find("dev ws new " .. id, 1, true), out)
+        t.eq(assert(turn_holder(home)).name, "lander")
+        out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+        t.eq(code, 0, out)
+        t.ok(out:find("gave back the landing turn held for " .. id, 1, true), out)
+        t.eq(turn_holder(home), nil)
+    end)
 
     t.test("a card that meets every condition lands, gets a done note and reaches Done", function()
         local root, home, log = jj_project()

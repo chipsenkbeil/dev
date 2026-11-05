@@ -9,6 +9,7 @@ local M = {}
 
 local SHAPE_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ if(description == "", "bare", "named")'
 local COMMIT_TEMPLATE = 'commit_id ++ "\\n"'
+local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local COMMIT_CHARS = 12
 local FILES_TEMPLATE = 'self.diff().files().map(|f| f.source().path() ++ "\\n" ++ '
     .. 'f.target().path() ++ "\\n").join("")'
@@ -30,6 +31,31 @@ local function count_lines(text)
         n = n + 1
     end
     return n
+end
+
+---Say whether the working copy sits in the workspace `dev ws new` names for a card.
+---@param root string the project root
+---@param short string the card's short id, which names its workspace
+---@return string? problem why this is the wrong workspace, nil in a git project or the right one
+function M.workspace_problem(root, short)
+    if vcs.backend(root) ~= vcs.JJ then
+        return nil
+    end
+    local out, code =
+        devos.capture(jj(root, "workspace", "list", "-T", WORKSPACE_TEMPLATE), { stderr = "null" })
+    if code ~= 0 then
+        return "jj could not read the workspace of " .. root
+    end
+    local name = out:gsub("%s+$", "")
+    if name == short then
+        return nil
+    end
+    return string.format(
+        "this is the workspace %s, not the one named for %s, so run dev ws new %s and work from there",
+        name,
+        short,
+        short
+    )
 end
 
 ---Name the change a landing would carry.
