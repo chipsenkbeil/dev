@@ -339,6 +339,24 @@ return {
         desc = "Revoke the role token that dev board token mint issued as NAME, found by name among the lead token's own child tokens, and delete its file. A NAME no live child holds, or a token Pomb no longer knows, exits 0 and says nothing was left to revoke, and a revoke Pomb refuses keeps the file. It is refused unless DEV_AGENT is a lead name, as mint is. dev help boards, section token-revoke, has the details",
     },
     {
+        words = { "board", "attach" },
+        handler = "lua",
+        usage = "dev board attach CARD FILE...",
+        desc = "Upload each file to a Pomb card and print `attached <id prefix> <name>`, or `skipped <name>` when the card already holds that name. dev checks no size and no type, so Pomb's refusal prints as Pomb words it, and a 503 busy answer is retried after a short nap. A local board refuses it",
+    },
+    {
+        words = { "board", "attachments" },
+        handler = "lua",
+        usage = "dev board attachments CARD",
+        desc = "List a card's attachments, one line each with the id prefix, the size in bytes and the name, or `no attachments`. Listing is its own verb so show stays one request",
+    },
+    {
+        words = { "board", "detach" },
+        handler = "lua",
+        usage = "dev board detach CARD ID",
+        desc = "Remove the attachment whose id starts with ID from a card and print `detached <id prefix> <name>`. A token without the attachments.delete permission is refused plainly, and agents do not detach",
+    },
+    {
         words = { "board", "unlink" },
         handler = "lua",
         usage = "dev board unlink CARD KIND OTHER",

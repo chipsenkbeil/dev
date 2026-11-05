@@ -8,6 +8,7 @@ local SECONDS_PER_MINUTE = 60
 local COMMENT_ACTOR = "agent"
 local COMMENT_KIND = "agent"
 local NOT_YOURS = "that comment is not yours to change"
+local NO_ATTACHMENTS = "a local board holds no attachments"
 local INVERSE = {
     [board.LinkKind.BLOCKED_BY] = board.LinkKind.BLOCKS,
     [board.LinkKind.PARENT] = board.LinkKind.CHILD,
@@ -404,6 +405,18 @@ local function remove_link(holder, kind, target_id)
         end
     end
     return false
+end
+
+function Backend:attachments()
+    return nil, NO_ATTACHMENTS
+end
+
+function Backend:attach()
+    return nil, NO_ATTACHMENTS
+end
+
+function Backend:detach()
+    return nil, NO_ATTACHMENTS
 end
 
 function Backend:unlink(id, kind, other)

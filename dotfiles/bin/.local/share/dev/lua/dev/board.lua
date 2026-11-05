@@ -78,6 +78,9 @@ local M = {}
 ---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the epic) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
 ---@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks`, `related` or `child` entry for each link another card holds on it, in the order the backend gives them
 ---@field unlink fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? the link of that kind from the card to the card with that full id removed, or nil and a message when the card holds no such link or the backend refuses the change
+---@field attachments fun(self: dev.board.Backend, id: string): dev.board.Attachment[]?, string? the files the card holds, oldest first, or nil and a message
+---@field attach fun(self: dev.board.Backend, id: string, path: string): dev.board.Attachment?, string? the file at that path uploaded to the card, or nil and the backend's refusal as it words it
+---@field detach fun(self: dev.board.Backend, id: string, attachment: string): boolean?, string? the attachment with that full id removed, or nil and a message
 ---@field make_epic fun(self: dev.board.Backend, id: string, fence: integer?): boolean?, string? the card turned into an epic, checked against the claim's fence when one is given, or nil and the backend's refusal, as for a card that is already an epic
 ---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's epic and the count of its children
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
@@ -93,6 +96,11 @@ local M = {}
 ---@field kind string `blocked_by`, `blocks`, `related`, `parent` or `child`, as seen from the card
 ---@field id string the other card's full id
 ---@field board string? the other card's board name, nil for the card's own board
+
+---@class dev.board.Attachment
+---@field id string the attachment's full id
+---@field name string the file name
+---@field size integer the size in bytes
 
 ---@class dev.board.Family
 ---@field parent {id: string, name: string}? the epic the card is part of

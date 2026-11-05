@@ -309,11 +309,12 @@ end
 ---@param body table<string, any>? the JSON body
 ---@param fence integer? the claim fence to send as `If-Claim-Fence`
 ---@param seconds integer? the whole request's `--max-time`, 30 when nil
+---@param file string? a file to send as the `file` part of a multipart body, in place of a JSON body
 ---@return any? doc the decoded answer
 ---@return string? message why the call failed
 ---@return integer? status the HTTP status when pomb refused the call
 ---@return any? answer the decoded body of a refused call
-function Backend:__request(method, path, body, fence, seconds)
+function Backend:__request(method, path, body, fence, seconds, file)
     if not self.__secret then
         local token, message
         if not self.__opts.lead then
@@ -350,11 +351,16 @@ function Backend:__request(method, path, body, fence, seconds)
         "-",
         "-X",
         method,
-        "-H",
-        "Content-Type: application/json",
         "-w",
         "\n%{http_code}",
     }
+    if file then
+        argv[#argv + 1] = "-F"
+        argv[#argv + 1] = 'file=@"' .. file:gsub('[\\"]', "\\%0") .. '"'
+    else
+        argv[#argv + 1] = "-H"
+        argv[#argv + 1] = "Content-Type: application/json"
+    end
     if fence then
         argv[#argv + 1] = "-H"
         argv[#argv + 1] = "If-Claim-Fence: " .. string.format("%d", fence)
@@ -389,7 +395,7 @@ function Backend:__request(method, path, body, fence, seconds)
         local fresh = filed()
         if fresh and fresh ~= self.__secret then
             self.__secret = fresh
-            return self:__request(method, path, body, fence, seconds)
+            return self:__request(method, path, body, fence, seconds, file)
         end
     end
     if status == UNAUTHORIZED and self.__issued then
@@ -398,7 +404,7 @@ function Backend:__request(method, path, body, fence, seconds)
     if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
         self.__healed = true
         self.__secret = nil
-        return self:__request(method, path, body, fence, seconds)
+        return self:__request(method, path, body, fence, seconds, file)
     end
     if expired then
         return nil, unavailable(EXPIRED), status, doc
@@ -1230,6 +1236,73 @@ function Backend:delete_outcome(id, outcome, fence)
         if needs_lead then
             return nil, NEEDS_LEAD
         end
+        return nil, message
+    end
+    return true
+end
+
+---@private
+---Call `__request` again after a short nap while Pomb answers 503 `busy`.
+---@param method string the HTTP method
+---@param path string the path under the server's URL
+---@param file string? a file to send as the multipart body
+---@return any? doc the decoded answer
+---@return string? message why the call failed
+---@return integer? status the HTTP status when pomb refused the call
+---@return any? answer the decoded body of a refused call
+function Backend:__patient(method, path, file)
+    local busy_code = "busy"
+    local busy_status = 503
+    local busy_tries = 3
+    local busy_nap_seconds = 2
+    local upload_seconds = 600
+    local doc, message, status, answer
+    for tries = 1, busy_tries do
+        doc, message, status, answer = self:__request(method, path, nil, nil, upload_seconds, file)
+        local busy = status == busy_status and type(answer) == "table" and answer.code == busy_code
+        if doc or not busy or tries == busy_tries then
+            break
+        end
+        devos.nap(busy_nap_seconds)
+    end
+    return doc, message, status, answer
+end
+
+function Backend:attachments(id)
+    local list, message = self:__patient("GET", "/api/tasks/" .. id .. "/attachments")
+    if not list then
+        return nil, message
+    end
+    local found = {}
+    for _, row in ipairs(list) do
+        found[#found + 1] = { id = row.id, name = row.name, size = row.size }
+    end
+    return found
+end
+
+function Backend:attach(id, path)
+    local doc, message = self:__patient("POST", "/api/tasks/" .. id .. "/attachments", path)
+    if not doc then
+        return nil, message
+    end
+    local result = type(doc) == "table" and type(doc.results) == "table" and doc.results[1]
+    if type(result) ~= "table" then
+        return nil, unavailable("pomb sent an answer dev cannot read")
+    end
+    if type(result.error) == "table" then
+        return nil, present(result.error.message) or present(result.error.code) or "refused"
+    end
+    local made = result.attachment
+    if type(made) ~= "table" then
+        return nil, unavailable("pomb sent an answer dev cannot read")
+    end
+    return { id = made.id, name = made.name, size = made.size }
+end
+
+function Backend:detach(id, attachment)
+    local done, message =
+        self:__patient("DELETE", "/api/tasks/" .. id .. "/attachments/" .. attachment)
+    if not done then
         return nil, message
     end
     return true

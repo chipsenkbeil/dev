@@ -2863,3 +2863,27 @@ t.test("a childless epic enters Ready with 1 to 3 outcomes like any epic", funct
     t.eq(code, 0, out)
     t.eq(out:find("lacks 3 to 7", 1, true), nil, out)
 end)
+
+t.test("attach, attachments and detach refuse plainly on a local board", function()
+    local root, home = local_board()
+    local a = prefix_of(
+        (
+            dev(
+                root,
+                home,
+                { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+            )
+        )
+    )
+    local file = support.tempdir() .. "/shot.png"
+    assert(fs.write(file, "x"))
+    for _, args in ipairs({
+        { "board", "attach", a, file },
+        { "board", "attachments", a },
+        { "board", "detach", a, "abcd" },
+    }) do
+        local out, code = dev(root, home, args)
+        t.eq(code, 1, out)
+        t.ok(out:find("a local board holds no attachments", 1, true), out)
+    end
+end)

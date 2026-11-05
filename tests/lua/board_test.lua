@@ -3492,6 +3492,31 @@ case "$last" in
 */tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. ID_B .. [[","column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
 */tasks\?limit=500) body='{"items":[{"id":"]] .. ID_A .. [[","column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
 */tasks\?*) body='{"items":[{"id":"]] .. ID_A .. [["}],"next_cursor":null}' ;;
+*/attachments)
+    body=$(cat "$ROOT/attachments.json")
+    case "$*" in
+    *"-X POST"*)
+        n=$(cat "$ROOT/post_n" 2>/dev/null || echo 0)
+        n=$((n + 1))
+        echo "$n" >"$ROOT/post_n"
+        if [ "$n" -le "$(cat "$ROOT/busy" 2>/dev/null || echo 0)" ]; then
+            body='{"code":"busy","message":"the server is busy"}'
+            status=503
+        elif [ -f "$ROOT/upload_$n.json" ]; then
+            body=$(cat "$ROOT/upload_$n.json")
+        else
+            body=$(cat "$ROOT/upload.json")
+        fi
+        ;;
+    esac
+    ;;
+*/attachments/*)
+    body=
+    if [ -f "$ROOT/detach_body" ]; then
+        body=$(cat "$ROOT/detach_body")
+        status=403
+    fi
+    ;;
 */api/tasks/]] .. ID_A .. [[)
     body=$(cat "$ROOT/task.json")
     case "$*" in
@@ -7060,4 +7085,137 @@ t.test("wait on a board with In Review and no Review names dev board init", func
         result.message:find("run dev board init to move the board to the stage columns", 1, true),
         result.message
     )
+end)
+
+local ATTACHED = '[{"id":"abcdef12-0000-4000-8000-000000000001","name":"old.png","size":2048,'
+    .. '"mime":"image/png","file_url":"/f"}]'
+
+local function attach_files(root)
+    local dir = support.tempdir()
+    assert(fs.write(dir .. "/old.png", "x"))
+    assert(fs.write(dir .. "/new.png", "y"))
+    assert(fs.write(root .. "/attachments.json", ATTACHED))
+    assert(
+        fs.write(
+            root .. "/upload.json",
+            '{"results":[{"name":"new.png","attachment":{"id":"99887766-0000-4000-8000-000000000002",'
+                .. '"name":"new.png","size":1}}]}'
+        )
+    )
+    return dir
+end
+
+t.test("attach uploads a new file once and skips a name the card already holds", function()
+    local root, home = sandbox()
+    local dir = attach_files(root)
+    local out, code =
+        dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png", dir .. "/old.png" })
+    t.eq(code, 0, out)
+    t.eq(out, "attached 99887766 new.png\nskipped old.png\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find("-X POST", 1, true), calls)
+    t.ok(calls:find("/api/tasks/" .. ID_A .. "/attachments", 1, true), calls)
+    t.ok(calls:find('-F file=@"' .. dir .. '/new.png"', 1, true), calls)
+    t.ok(not calls:find('old.png"', 1, true), calls)
+    t.ok(not calls:find("Content-Type: application/json -w", 1, true), calls)
+    t.ok(not read(root, "calls"):find(TOKEN, 1, true), "token in argv")
+end)
+
+t.test("attach prints Pomb's refusal as Pomb words it and checks no size or type", function()
+    local root, home = sandbox()
+    local dir = attach_files(root)
+    assert(
+        fs.write(
+            root .. "/upload.json",
+            '{"results":[{"name":"new.png","error":{"code":"quota_exceeded","message":"the task holds its most attachments"}}]}'
+        )
+    )
+    local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
+    t.eq(code, 1)
+    t.ok(out:find("new.png: the task holds its most attachments", 1, true), out)
+end)
+
+t.test("attach keeps uploading the other files after Pomb refuses one", function()
+    local root, home = sandbox()
+    local dir = attach_files(root)
+    assert(
+        fs.write(
+            root .. "/upload_1.json",
+            '{"results":[{"name":"new.png","error":{"code":"duplicate_attachment","message":"same bytes"}}]}'
+        )
+    )
+    assert(fs.write(dir .. "/third.png", "z"))
+    assert(
+        fs.write(
+            root .. "/upload.json",
+            '{"results":[{"name":"third.png","attachment":{"id":"55443322-0000-4000-8000-000000000003",'
+                .. '"name":"third.png","size":1}}]}'
+        )
+    )
+    local out, code =
+        dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png", dir .. "/third.png" })
+    t.eq(code, 1)
+    t.ok(out:find("new.png: same bytes\nattached 55443322 third.png", 1, true), out)
+    t.eq(fs.read(root .. "/post_n"), "2\n")
+end)
+
+t.test("attach retries a busy answer after a nap and then uploads", function()
+    local root, home = sandbox()
+    local dir = attach_files(root)
+    assert(fs.write(root .. "/busy", "1"))
+    local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
+    t.eq(code, 0, out)
+    t.eq(out, "attached 99887766 new.png\n")
+    t.eq(fs.read(root .. "/post_n"), "2\n")
+end)
+
+t.test("attach gives up on a busy answer that stays", function()
+    local root, home = sandbox()
+    local dir = attach_files(root)
+    assert(fs.write(root .. "/busy", "9"))
+    local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
+    t.eq(code, 1)
+    t.ok(out:find("pomb answered 503", 1, true), out)
+    t.eq(fs.read(root .. "/post_n"), "3\n")
+end)
+
+t.test("attachments lists id prefix, size and name, or says there are none", function()
+    local root, home = sandbox()
+    attach_files(root)
+    local out, code = dev(root, home, { "board", "attachments", "11111111-a" })
+    t.eq(code, 0, out)
+    t.eq(out, "abcdef12  2048  old.png\n")
+    assert(fs.write(root .. "/attachments.json", "[]"))
+    out = dev(root, home, { "board", "attachments", "11111111-a" })
+    t.eq(out, "no attachments\n")
+end)
+
+t.test("detach removes an attachment by id prefix and reports a missing permission", function()
+    local root, home = sandbox()
+    attach_files(root)
+    local out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
+    t.eq(code, 0, out)
+    t.eq(out, "detached abcdef12 old.png\n")
+    local calls = read(root, "calls")
+    t.ok(calls:find("-X DELETE", 1, true), calls)
+    t.ok(
+        calls:find(
+            "/api/tasks/" .. ID_A .. "/attachments/abcdef12-0000-4000-8000-000000000001",
+            1,
+            true
+        ),
+        calls
+    )
+    assert(
+        fs.write(
+            root .. "/detach_body",
+            '{"code":"permission_denied","permission":"attachments.delete","message":"no"}'
+        )
+    )
+    out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
+    t.eq(code, 1)
+    t.ok(out:find("lacks the attachments.delete permission", 1, true), out)
+    out, code = dev(root, home, { "board", "detach", "11111111-a", "ffff" })
+    t.eq(code, 1)
+    t.ok(out:find("holds no attachment with the id ffff", 1, true), out)
 end)

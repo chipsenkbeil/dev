@@ -3584,6 +3584,114 @@ function commands.unlink(backend, args)
     return failure("the card holds no " .. args[2] .. " link to " .. shown .. ", " .. held)
 end
 
+function commands.attach(backend, args)
+    if #args < 2 then
+        return usage("needs a card and one or more files")
+    end
+    for index = 2, #args do
+        if not fs.is_file(args[index]) then
+            return failure(args[index] .. " is not a file")
+        end
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held, message = backend:attachments(card.id)
+    if not held then
+        return failure(message)
+    end
+    local names = {}
+    for _, attachment in ipairs(held) do
+        names[attachment.name] = true
+    end
+    local lines = {}
+    local refused = false
+    for index = 2, #args do
+        local name = fs.basename(args[index])
+        if names[name] then
+            lines[#lines + 1] = "skipped " .. name
+        else
+            local made
+            made, message = backend:attach(card.id, args[index])
+            if made then
+                names[name] = true
+                lines[#lines + 1] = "attached "
+                    .. made.id:sub(1, board.MIN_PREFIX)
+                    .. " "
+                    .. made.name
+            else
+                refused = true
+                lines[#lines + 1] = name .. ": " .. message
+            end
+        end
+    end
+    if refused then
+        return failure(table.concat(lines, "\n"))
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
+function commands.attachments(backend, args)
+    if #args ~= 1 then
+        return usage("needs a card")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held, message = backend:attachments(card.id)
+    if not held then
+        return failure(message)
+    end
+    if #held == 0 then
+        return { output = "no attachments" }
+    end
+    local lines = {}
+    for _, attachment in ipairs(held) do
+        lines[#lines + 1] = attachment.id:sub(1, board.MIN_PREFIX)
+            .. "  "
+            .. string.format("%d", attachment.size)
+            .. "  "
+            .. attachment.name
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
+function commands.detach(backend, args)
+    if #args ~= 2 then
+        return usage("needs a card and an attachment id")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local held, message = backend:attachments(card.id)
+    if not held then
+        return failure(message)
+    end
+    local match
+    for _, attachment in ipairs(held) do
+        if attachment.id:sub(1, #args[2]) == args[2] then
+            if match then
+                return failure(args[2] .. " matches more than one attachment")
+            end
+            match = attachment
+        end
+    end
+    if not match then
+        return failure("the card holds no attachment with the id " .. args[2])
+    end
+    local ok
+    ok, message = backend:detach(card.id, match.id)
+    if not ok then
+        return failure(message)
+    end
+    return {
+        output = "detached " .. match.id:sub(1, board.MIN_PREFIX) .. " " .. match.name,
+    }
+end
+
 function commands.boards(backend, args)
     if #args > 0 then
         return usage("unknown argument " .. args[1])

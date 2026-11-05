@@ -785,6 +785,18 @@ or one made before Pomb 0.5.40 (which records no creator), gets a 403
 for, leaving the link in place. Unlike `link`, `unlink` is not queued while Pomb
 is unreachable.
 
+`attach CARD FILE...` uploads each file to a Pomb card and prints `attached <id
+prefix> <name>`, or `skipped <name>` when the card already holds a file of that
+name, so a rerun uploads nothing twice. `attachments CARD` lists the card's
+files, one line each with the id prefix, the size in bytes and the name, or
+`no attachments`. `detach CARD ID` removes the attachment whose id starts with
+ID and prints `detached <id prefix> <name>`. dev checks no size and no type:
+Pomb enforces its own limits and dev prints its refusal as Pomb words it. A 503
+`busy` answer is retried after a short nap. A token without `attachments.delete`
+gets the permission message, and agents do not detach. A local board refuses all
+three with `a local board holds no attachments`. None of them is queued while
+Pomb is unreachable.
+
 `stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards that have
 sat in Backlog, Ready, In Progress, Review, Verify or Release for N days or
 more, 7 by default, oldest first. Each line is the id prefix, the column, the
@@ -1269,6 +1281,20 @@ never handles the API.
   `pomb kept the link`, and leaves the link in place. The change is not queued
   while Pomb is unreachable (exit 1, `board unavailable`). A local board removes
   the link from the card that holds it.
+- `attach CARD FILE...`: Sends each file to `POST /api/tasks/{id}/attachments` as
+  a multipart `file` part, after one `GET /api/tasks/{id}/attachments` that
+  lists the names the card holds. A name already held prints `skipped <name>`,
+  any other prints `attached <id prefix> <name>`. Pomb's refusal for a file
+  (size, type, `quota_exceeded`, `duplicate_attachment`) prints as Pomb words it
+  after the file's name, the other files still upload, and the exit is 1. A 503 `busy` is retried twice after a 2 second nap. A local board
+  refuses it.
+- `attachments CARD`: Prints `<id prefix>  <size>  <name>` for each attachment in
+  the order Pomb lists them, else `no attachments`. A local board refuses it.
+- `detach CARD ID`: Finds the attachment whose id starts with ID in the card's
+  list, sends `DELETE /api/tasks/{id}/attachments/{attachment_id}` and prints
+  `detached <id prefix> <name>`. An id that matches none or several exits 1. A
+  403 `permission_denied` for `attachments.delete` is reported by the permission
+  message. A local board refuses it.
 - `delete CARD --reason TEXT`: Moves a card to Pomb's recycle bin for the lead.
   It reads `lead_token` from `[board.pomb]`, not `token`, adds a `decision`
   comment `the lead deletes this card, reason: TEXT` to keep the reason on
