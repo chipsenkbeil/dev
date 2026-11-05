@@ -203,7 +203,8 @@ end
 ---Refuse a board that still has the In Review column and lacks a stage column.
 ---@param backend dev.board.Backend the board
 ---@return dev.cmd.board.Result? refusal naming `dev board init`, nil when the board needs no migration
-function M.stage_refusal(backend)
+---@private
+function M.__stage_refusal(backend)
     local rows = backend:columns()
     if type(rows) ~= "table" then
         return nil
@@ -644,7 +645,8 @@ end
 ---@param name string the other board's name
 ---@return dev.board.Backend? home the named board, nil when it cannot be opened
 ---@return string? why the reason, set when home is nil
-function M.other_home(backend, name)
+---@private
+function M.__other_home(backend, name)
     local home, why = backend:other_board(name)
     if not home then
         return nil, why
@@ -668,14 +670,15 @@ end
 ---@return dev.board.Backend? home the board to act on, nil when refused
 ---@return string[]? rest the words with `--board NAME` removed, nil when refused
 ---@return dev.cmd.board.Result? refused the usage error or failure, set when home is nil
-function M.on_board(backend, args)
+---@private
+function M.__on_board(backend, args)
     if args[2] ~= "--board" then
         return backend, args
     end
     if not args[3] then
         return nil, nil, usage("--board needs a board name")
     end
-    local home, why = M.other_home(backend, args[3])
+    local home, why = M.__other_home(backend, args[3])
     if not home then
         return nil, nil, failure(why)
     end
@@ -875,7 +878,7 @@ function commands.add(backend, args)
         return usage("needs a card name")
     end
     if flags["--board"] then
-        local home, why = M.other_home(backend, flags["--board"])
+        local home, why = M.__other_home(backend, flags["--board"])
         if not home then
             return failure(why)
         end
@@ -1305,7 +1308,7 @@ local function card_view(backend, card)
 end
 
 function commands.show(backend, args)
-    local home, rest, refused = M.on_board(backend, args)
+    local home, rest, refused = M.__on_board(backend, args)
     if not home then
         return refused
     end
@@ -1401,7 +1404,7 @@ function commands.note(backend, args)
     if args[2] == "--board" and (args[4] == EDIT_FLAG or args[4] == DELETE_FLAG) then
         return usage("--board takes no " .. EDIT_FLAG .. " or " .. DELETE_FLAG)
     end
-    local home, rest, refused = M.on_board(backend, args)
+    local home, rest, refused = M.__on_board(backend, args)
     if not home then
         return refused
     end
@@ -1626,7 +1629,7 @@ local function move_card(backend, args, opts)
         or column == roles.verify
         or column == roles.release
     then
-        local refused = M.stage_refusal(backend)
+        local refused = M.__stage_refusal(backend)
         if refused then
             return refused
         end
@@ -3315,7 +3318,7 @@ function commands.land(backend, args)
     if not name then
         return usage("needs DEV_AGENT, the name that lands the card")
     end
-    local legacy = M.stage_refusal(backend)
+    local legacy = M.__stage_refusal(backend)
     if legacy then
         return legacy
     end
@@ -5244,7 +5247,7 @@ function M.wait(backend, args, opts)
         )
     end
     local roles = backend.roles or board.roles()
-    local legacy = M.stage_refusal(backend)
+    local legacy = M.__stage_refusal(backend)
     if legacy then
         return legacy
     end
