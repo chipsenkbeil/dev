@@ -20,7 +20,7 @@ export STUB_LOG="$TMP/stub.log"
 mkdir -p "$STUBS"
 export GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_SYSTEM=/dev/null JJ_CONFIG="$TMP/jj.toml"
 printf '[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n' >"$GIT_CONFIG_GLOBAL"
-printf 'user.name = "t"\nuser.email = "t@t"\nsigning.behavior = "drop"\ngit.sign-on-push = false\n' >"$JJ_CONFIG"
+printf 'user.name = "t"\nuser.email = "t@t"\nsigning.behavior = "drop"\n' >"$JJ_CONFIG"
 cp "$JJ_CONFIG" "$TMP/jj.base.toml"
 for tool in cargo love godot npm make stylua ast-grep; do
     # shellcheck disable=SC2016  # $* and $STUB_LOG expand in the generated stub
