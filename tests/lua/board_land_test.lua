@@ -411,6 +411,9 @@ local function fake_backend(root, card)
     function backend:done_columns()
         return { "Done" }
     end
+    function backend:columns()
+        return backend.rows or {}
+    end
     function backend:cards()
         return { view }
     end
@@ -432,6 +435,18 @@ local function land_as_lander(backend)
     assert(ok, result)
     return result
 end
+
+t.test("land on a board with In Review and no Verify names dev board init", function()
+    local backend = fake_backend("/nonexistent")
+    backend.rows = { { name = "In Review", is_done = false }, { name = "Done", is_done = true } }
+    local result = land_as_lander(backend)
+    t.eq(result.code, 1)
+    t.ok(
+        result.message:find("run dev board init to move the board to the stage columns", 1, true),
+        result.message
+    )
+    t.eq(backend.notes, {})
+end)
 
 t.test("land refuses a board with no project root", function()
     local backend = fake_backend(nil)

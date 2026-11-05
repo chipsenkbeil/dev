@@ -199,6 +199,34 @@ local function named_column(backend, word)
     return column
 end
 
+---Refuse a board that still has the In Review column and lacks a stage column.
+---@param backend dev.board.Backend the board
+---@return dev.cmd.board.Result? refusal naming `dev board init`, nil when the board needs no migration
+function M.stage_refusal(backend)
+    local rows = backend:columns()
+    if type(rows) ~= "table" then
+        return nil
+    end
+    local has = {}
+    for _, row in ipairs(rows) do
+        has[row.name:lower()] = true
+    end
+    if not has["in review"] then
+        return nil
+    end
+    local roles = backend.roles or board.roles()
+    for _, name in ipairs({ roles.review, roles.verify, roles.release }) do
+        if not has[name:lower()] then
+            return failure(
+                "the board has an In Review column and no "
+                    .. name
+                    .. " column, so run dev board init to move the board to the stage columns"
+            )
+        end
+    end
+    return nil
+end
+
 local function sized(word)
     local color = board.size_color(word)
     if not color then
@@ -1439,6 +1467,17 @@ local function move_card(backend, args, opts)
     end
     local roles = backend.roles
     local column, err = named_column(backend, table.concat(words, " ", 2))
+    if
+        not column
+        or column == roles.review
+        or column == roles.verify
+        or column == roles.release
+    then
+        local refused = M.stage_refusal(backend)
+        if refused then
+            return refused
+        end
+    end
     if not column then
         return err
     end
@@ -3090,6 +3129,10 @@ function commands.land(backend, args)
     end
     if not name then
         return usage("needs DEV_AGENT, the name that lands the card")
+    end
+    local legacy = M.stage_refusal(backend)
+    if legacy then
+        return legacy
     end
     local card, err = find_card(backend, words[1])
     if not card then
@@ -4859,6 +4902,10 @@ function M.wait(backend, args, opts)
         )
     end
     local roles = backend.roles or board.roles()
+    local legacy = M.stage_refusal(backend)
+    if legacy then
+        return legacy
+    end
     local nap = opts.nap or devos.nap
     local random = opts.random or turn.entropy
     local notice = opts.notice or stderr_line

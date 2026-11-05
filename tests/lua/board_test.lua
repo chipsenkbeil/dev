@@ -6363,6 +6363,9 @@ local function waiter(replies)
         local reply = table.remove(replies, 1)
         return reply.got, reply.message, reply.oldest, reply.refused
     end
+    function backend:columns()
+        return backend.rows or {}
+    end
     return backend, seen
 end
 
@@ -6951,4 +6954,37 @@ t.test("the keep-alive loop under DEV_BOARD_TOKEN sends that token and never rea
     )
     t.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
     t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+end)
+
+t.test("move to review on a board with In Review and no Review names dev board init", function()
+    local backend = fake({ planned() })
+    backend.limited = { "In Review" }
+    local result = commands.run("move", { "cccccccc", "review" }, backend)
+    t.eq(result.code, 1)
+    t.ok(
+        result.message:find("run dev board init to move the board to the stage columns", 1, true),
+        result.message
+    )
+    t.ok(result.message:find("no Review column", 1, true), result.message)
+    result = commands.run("move", { "cccccccc", "In Review" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("run dev board init to move", 1, true), result.message)
+end)
+
+t.test("move to review keeps the plain refusal on a board without In Review", function()
+    local backend = fake({ planned() })
+    local result = commands.run("move", { "cccccccc", "In Review" }, backend)
+    t.eq(result.code, 2)
+    t.ok(result.message:find("unknown column In Review", 1, true), result.message)
+end)
+
+t.test("wait on a board with In Review and no Review names dev board init", function()
+    local backend = waiter({})
+    backend.rows = { { name = "In Review", is_done = false }, { name = "Done", is_done = true } }
+    local result = commands.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
+    t.eq(result.code, 1)
+    t.ok(
+        result.message:find("run dev board init to move the board to the stage columns", 1, true),
+        result.message
+    )
 end)
