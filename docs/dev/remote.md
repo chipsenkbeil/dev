@@ -12,8 +12,9 @@ wins over the project file, so a host chooses its own default, and with neither
 set the default is remote. Any other value exits 1. With `"local"`, only
 `--remote` and `DEV_REMOTE` go to ci.
 
-The default applies only to a command whose job `ci jobs --json` lists, and
-never to a machine-local verb (below) or as root, which reads no config.
+The default applies only to a command whose job `ci run --list --json`
+lists, and never to a machine-local verb (below) or as root, which reads no
+config.
 A project with no `.ci/*.lua` pipeline file has no job and ci is not asked, and
 a command the listing does not name runs here with no message, so
 `dev board ls` is the same under either default.
@@ -28,9 +29,9 @@ the verb runs here under the default.
 
 When ci cannot be asked, the default fails instead of running here, to keep a
 ci deploy from moving every run onto the laptop. A missing `ci` on PATH, or a
-`ci jobs` that exits non-zero, fails with ci's error and exit code and the hint
-`rerun, or pass --local to run it here`. Local is automatic only for `CI=true`,
-the box marker, `--local`, `default = "local"` and `DEV_REMOTE=0`.
+`ci run --list` that exits non-zero, fails with ci's error and exit code and
+the hint `rerun, or pass --local to run it here`. Local is automatic only for
+`CI=true`, the box marker, `--local`, `default = "local"` and `DEV_REMOTE=0`.
 
 Inside a ci job (`CI=true`) or a dev box (the file `/etc/ci-box`, which ci
 writes at box creation, see "Dev boxes" in ci's README), dev always runs here,
@@ -69,9 +70,9 @@ every word):
 ci -C <root> run --local --follow --job <job> -- <args>
 ```
 
-dev checks `ci jobs --json` first. A verb with no such job exits 1 with `no job
-named <job> in the project's default pipeline (.ci/jobs.lua), add one to run it
-with --remote`, and nothing runs. It never falls back to a local run.
+dev checks `ci run --list --json` first. A verb with no such job exits 1 with
+`no job named <job> in the project's default pipeline (.ci/jobs.lua), add one to
+run it with --remote`, and nothing runs. It never falls back to a local run.
 
 ## Agents
 

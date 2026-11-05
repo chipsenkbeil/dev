@@ -9,8 +9,8 @@ local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local STUB = [[#!/usr/bin/env bash
 root=""
 if [ "$1" = -C ]; then root="$2"; shift 2; fi
-case "$1" in
-jobs)
+case "$1 ${2:-}" in
+"run --list")
     case "${CI_STUB_JOBS:-}" in
     fail)
         echo "hub unreachable" >&2
@@ -29,13 +29,13 @@ jobs)
         exit 0
         ;;
     esac
-    if [ "$2" = bootstrap ] || [ "$2" = soak ]; then
-        printf '{"jobs":[{"name":"%s"}]}\n' "$2"
+    if [ "$3" = bootstrap ] || [ "$3" = soak ]; then
+        printf '{"jobs":[{"name":"%s"}]}\n' "$3"
     else
         printf '{"jobs":[{"name":"test"},{"name":"widget.save"},{"name":"n.m.x"}]}\n'
     fi
     ;;
-run)
+run*)
     printf 'ci -C %s' "$root" >>"$STUB_LOG"
     printf ' [%s]' "$@" >>"$STUB_LOG"
     printf '\n' >>"$STUB_LOG"
@@ -257,11 +257,11 @@ t.test("without ci on PATH the default fails with the --local hint", function()
     t.eq(out, "hi\n")
 end)
 
-t.test("a failing ci jobs listing under the default fails with ci's error and the hint", function()
+t.test("a failing ci run --list under the default fails with ci's error and the hint", function()
     local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
     local out, code, log = dev(root, base, { "hello" }, { CI_STUB_JOBS = "fail" })
     t.eq(code, 9)
-    t.eq(out, "dev: ci jobs failed: hub unreachable; rerun, or pass --local to run it here\n")
+    t.eq(out, "dev: ci run --list failed: hub unreachable; rerun, or pass --local to run it here\n")
     t.eq(log, "")
     out, code = dev(root, base, { "hello", "--local" }, { CI_STUB_JOBS = "fail" })
     t.eq(out, "hi\n")
@@ -306,21 +306,21 @@ t.test("a __remote.lua that errors or returns no function ends with one line and
     t.eq(out, "dev: nope\n")
 end)
 
-t.test("a failing ci jobs listing is reported with ci's exit code, not as a missing job", function()
+t.test("a failing ci run --list is reported with ci's exit code, not as a missing job", function()
     local root, base = setup()
     local out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = "fail" })
     t.eq(code, 9)
-    t.eq(out, "dev: ci jobs failed: hub unreachable\n")
+    t.eq(out, "dev: ci run --list failed: hub unreachable\n")
     t.eq(log, "")
     out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = "bad" })
     t.eq(code, 1)
-    t.ok(out:find("dev: ci jobs failed", 1, true), out)
+    t.ok(out:find("dev: ci run --list failed", 1, true), out)
     t.ok(not out:find("no job named", 1, true), out)
     t.eq(log, "")
     for _, mode in ipairs({ "empty", "array" }) do
         out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = mode })
         t.eq(code, 1)
-        t.eq(out, "dev: ci jobs failed\n")
+        t.eq(out, "dev: ci run --list failed\n")
         t.eq(log, "")
     end
 end)

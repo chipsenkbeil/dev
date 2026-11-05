@@ -100,7 +100,7 @@ end
 ---@return boolean
 function M.has_job(root, job, pipeline, hint)
     local errfile = fs.mktemp({ prefix = "dev-remote" })
-    local list = { "ci", "-C", root, "jobs" }
+    local list = { "ci", "-C", root, "run", "--list" }
     if pipeline then
         list[#list + 1] = pipeline
     end
@@ -114,7 +114,7 @@ function M.has_job(root, job, pipeline, hint)
     if code ~= 0 or type(doc) ~= "table" or type(doc.jobs) ~= "table" then
         detail = detail:gsub("%s+$", "")
         stderr:write(
-            "dev: ci jobs failed",
+            "dev: ci run --list failed",
             detail ~= "" and (": " .. detail) or "",
             hint and ("; " .. hint) or "",
             "\n"

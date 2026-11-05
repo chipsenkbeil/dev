@@ -208,7 +208,7 @@ mkdir -p "$CIBIN" "$PROJ/.dev/widget"
 cat >"$CIBIN/ci" <<'STUB'
 #!/bin/sh
 echo "ci $*" >>"$CI_LOG"
-[ "$3" = jobs ] && echo '{"jobs":[]}'
+[ "$3" = run ] && [ "$4" = --list ] && echo '{"jobs":[]}'
 exit 0
 STUB
 chmod +x "$CIBIN/ci"
@@ -231,7 +231,7 @@ out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=1 "$DEV
 assert_eq "DEV_REMOTE=1 dev bootstrap goes through main.lua and finds no job" "$?" "1"
 assert_contains "DEV_REMOTE=1 dev bootstrap names the missing job" "$out" "dev: no job named bootstrap"
 assert_eq "DEV_REMOTE=1 dev bootstrap did not run bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "absent"
-assert_eq "DEV_REMOTE=1 dev bootstrap ran no ci job" "$(grep -c " run " "$CILOG")" "0"
+assert_eq "DEV_REMOTE=1 dev bootstrap ran no ci job" "$(grep -c -- "--job" "$CILOG")" "0"
 rm -f "$CILOG"
 out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=0 "$DEV" bootstrap 2>&1)"
 assert_eq "DEV_REMOTE=0 dev bootstrap still runs bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "ran"
