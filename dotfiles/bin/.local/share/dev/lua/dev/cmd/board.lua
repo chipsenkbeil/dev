@@ -548,6 +548,49 @@ local function other_card(backend, word)
     return other, (other_name and other_name .. ":" or "") .. other.id:sub(1, board.MIN_PREFIX)
 end
 
+---Open the Pomb board named `name` with this board's column map, root and roles.
+---@param backend dev.board.Backend the board the command runs on
+---@param name string the other board's name
+---@return dev.board.Backend? home the named board, nil when it cannot be opened
+---@return string? why the reason, set when home is nil
+function M.other_home(backend, name)
+    local home, why = backend:other_board(name)
+    if not home then
+        return nil, why
+    end
+    local found, message = home:find()
+    if found == nil then
+        return nil, message
+    end
+    if not found then
+        return nil, "pomb has no board named " .. name
+    end
+    home.column_map = backend.column_map
+    home.root = backend.root
+    home.roles = board.roles(backend.column_map, home:done_columns() or {})
+    return home
+end
+
+---Move to the board named by a `--board NAME` right after the card, else keep this one.
+---@param backend dev.board.Backend the board the command runs on
+---@param args string[] the command's words, the card first
+---@return dev.board.Backend? home the board to act on, nil when refused
+---@return string[]? rest the words with `--board NAME` removed, nil when refused
+---@return dev.cmd.board.Result? refused the usage error or failure, set when home is nil
+function M.on_board(backend, args)
+    if args[2] ~= "--board" then
+        return backend, args
+    end
+    if not args[3] then
+        return nil, nil, usage("--board needs a board name")
+    end
+    local home, why = M.other_home(backend, args[3])
+    if not home then
+        return nil, nil, failure(why)
+    end
+    return home, { args[1], unpack(args, 4) }
+end
+
 local commands = {}
 
 function commands.ls(backend, args, _, screen)
@@ -741,20 +784,10 @@ function commands.add(backend, args)
         return usage("needs a card name")
     end
     if flags["--board"] then
-        local home, why = backend:other_board(flags["--board"])
+        local home, why = M.other_home(backend, flags["--board"])
         if not home then
             return failure(why)
         end
-        local found, message = home:find()
-        if found == nil then
-            return failure(message)
-        end
-        if not found then
-            return failure("pomb has no board named " .. flags["--board"])
-        end
-        home.column_map = backend.column_map
-        home.root = backend.root
-        home.roles = board.roles(backend.column_map, home:done_columns() or {})
         backend = home
     end
     for _, flag in ipairs({ "--problem", "--out-of-scope" }) do
@@ -1177,15 +1210,20 @@ local function card_view(backend, card)
 end
 
 function commands.show(backend, args)
+    local home, rest, refused = M.on_board(backend, args)
+    if not home then
+        return refused
+    end
+    args = rest
     if #args ~= 1 then
         return usage("needs a card")
     end
-    local card, err = find_card(backend, args[1])
+    local card, err = find_card(home, args[1])
     if not card then
         return err
     end
     local view
-    view, err = card_view(backend, card)
+    view, err = card_view(home, card)
     if not view then
         return err
     end
@@ -1265,16 +1303,24 @@ local function note_opts(args)
 end
 
 function commands.note(backend, args)
+    if args[2] == "--board" and (args[4] == EDIT_FLAG or args[4] == DELETE_FLAG) then
+        return usage("--board takes no " .. EDIT_FLAG .. " or " .. DELETE_FLAG)
+    end
+    local home, rest, refused = M.on_board(backend, args)
+    if not home then
+        return refused
+    end
+    args = rest
     if args[2] == EDIT_FLAG then
-        return edit_note(backend, args)
+        return edit_note(home, args)
     elseif args[2] == DELETE_FLAG then
-        return delete_note(backend, args)
+        return delete_note(home, args)
     end
     local words, opts = note_opts(args)
     if not words then
         return opts
     end
-    local card, err = find_card(backend, words[1])
+    local card, err = find_card(home, words[1])
     if not card then
         return err
     end
@@ -1283,7 +1329,7 @@ function commands.note(backend, args)
         return failure(RESERVED_NOTE)
     end
     local held = claims.read(card.id)
-    local ok, message = backend:note(card.id, text, held and held.fence, opts)
+    local ok, message = home:note(card.id, text, held and held.fence, opts)
     if not ok then
         return failure(message)
     end

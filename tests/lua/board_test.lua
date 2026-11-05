@@ -1490,6 +1490,55 @@ t.test("show indents the rest of a multi-line body under its body, notes keeps o
     )
 end)
 
+t.test("note --board files the note on the crossboard card's board", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    local result =
+        commands.run("note", { "11111111-a", "--board", "ci", "--kind", "decision", "ok" }, backend)
+    t.eq(result.output, "noted 11111111")
+    t.eq(backend.calls, { { "other_board", "ci" } })
+    t.eq(sibling.calls[1], { "note", ID_A, "ok", { kind = "decision" } })
+end)
+
+t.test("show --board prints the crossboard card from the named board", function()
+    local backend = fake(sample())
+    local far = sample()
+    far[1].name = "Far card"
+    local sibling = fake(far)
+    backend.sibling = sibling
+    local result = commands.run("show", { "11111111-a", "--board", "ci" }, backend)
+    t.eq(result.code, nil)
+    t.ok(result.output:find("Far card", 1, true), result.output)
+    t.eq(backend.calls, { { "other_board", "ci" } })
+    t.eq(sibling.calls[1], { "comments", ID_A })
+end)
+
+t.test("note and show --board refuse a crossboard board that is not there", function()
+    local backend = fake(sample())
+    local result = commands.run("note", { "11111111-a", "--board", "nope", "ok" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    result = commands.run("show", { "11111111-a", "--board", "nope" }, backend)
+    t.eq(result.code, 1)
+    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    result = commands.run("show", { "11111111-a", "--board" }, backend)
+    t.eq(result.code, 2)
+    t.eq(#backend.calls, 2)
+end)
+
+t.test("note --board refuses crossboard --edit and --delete before it looks anything up", function()
+    local backend = fake(sample())
+    for _, args in ipairs({
+        { "11111111-a", "--board", "ci", "--edit", "aaaaaaaa", "x" },
+        { "11111111-a", "--board", "ci", "--delete", "aaaaaaaa" },
+    }) do
+        local result = commands.run("note", args, backend)
+        t.eq(result.code, 2)
+    end
+    t.eq(#backend.calls, 0)
+end)
+
 t.test("note --kind question names dev board ask", function()
     local backend = fake(sample())
     local count = #backend.calls

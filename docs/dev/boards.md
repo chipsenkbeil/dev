@@ -1393,7 +1393,9 @@ never handles the API.
   prints `parent: <id prefix> <name>` under the `ls` line, and on an epic
   `kind: epic, N open` above it and `children: N of M done`, from `GET /api/tasks/{id}` (`parent`,
   `children_done`, `children_total`) on Pomb and from the `parent` links of the
-  cards on a local board (done meaning in a done column).
+  cards on a local board (done meaning in a done column). `show CARD --board B`
+  prints the card on the Pomb board named `B` from any repo, looked up as
+  `add --board` looks it up, and a local board refuses it (exit 1).
 - `edit CARD [--file PATH]`: Replaces the card's description with the text of
   `--file PATH`, else of standard input (a terminal with no `--file` is exit 2),
   with trailing whitespace removed, and prints `edited <id prefix>`
@@ -1810,8 +1812,8 @@ never handles the API.
   The colour id comes from the palette (`/colors`) by its `value`, never its
   label. Any other size word is exit 2 naming the five. A board without the
   colour is `board unavailable: the board has no <colour> colour` (exit 1).
-- `note CARD [--kind K] [--as ROLE] TEXT`: Adds a comment and prints
-  `noted <id prefix>`. The words after the card, minus the two options, are
+- `note CARD [--board B] [--kind K] [--as ROLE] TEXT`: Adds a comment and prints
+  `noted <id prefix>`. The words after the card, minus the options, are
   joined with spaces, and any other word, one starting with `-` included, is
   text. `--kind` is `decision`, `blocked`, `status` or `done` in any case, sent
   lowercase as the comment's `kind` (anything else is exit 2, `question`
@@ -1821,7 +1823,9 @@ never handles the API.
   exit 2, and none leaves Pomb's default). A local board stores both on the
   comment. `show` and `notes` print them, a queued note keeps both options in
   its arguments, and `--edit` replaces only the body, so the kind and the label
-  stay.
+  stay. `--board B`, right after `CARD`, comments on the card on the Pomb board
+  named `B` from any repo, looked up as `add --board` looks it up, and a local
+  board refuses it (exit 1). It takes no `--edit` or `--delete` (exit 2).
 - `note CARD --edit COMMENT TEXT`, `note CARD --delete COMMENT`: Replaces the
   body of one of the agent's own comments
   (`PATCH /api/tasks/{id}/comments/{comment_id}`) or deletes it (`DELETE`), and

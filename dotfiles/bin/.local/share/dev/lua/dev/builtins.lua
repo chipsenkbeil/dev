@@ -365,9 +365,9 @@ return {
     {
         words = { "board", "note" },
         handler = "lua",
-        flags = "--edit --delete --kind --as",
-        usage = "dev board note CARD [--kind K] [--as ROLE] TEXT | CARD --edit COMMENT TEXT | CARD --delete COMMENT",
-        desc = "Add a comment to a card, of kind agent unless --kind gives decision, blocked, status or done, under the label --as ROLE, or edit or delete one of your own by its id prefix. An owner question goes through dev board ask",
+        flags = "--board --edit --delete --kind --as",
+        usage = "dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT | CARD --edit COMMENT TEXT | CARD --delete COMMENT",
+        desc = "Add a comment to a card, of kind agent unless --kind gives decision, blocked, status or done, under the label --as ROLE, or edit or delete one of your own by its id prefix. --board B comments on the card on the Pomb board named B from any repo. An owner question goes through dev board ask",
     },
     {
         words = { "board", "notes" },
@@ -378,8 +378,9 @@ return {
     {
         words = { "board", "show" },
         handler = "lua",
-        usage = "dev board show CARD",
-        desc = "Print a card's name, column, size, labels, description and comments",
+        flags = "--board",
+        usage = "dev board show CARD [--board B]",
+        desc = "Print a card's name, column, size, labels, description and comments. --board B prints the card on the Pomb board named B from any repo",
     },
     {
         words = { "board", "edit" },

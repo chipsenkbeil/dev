@@ -134,6 +134,16 @@ t.test("the board file is private and writes leave no temporary file", function(
     t.eq(names, { "mine.json", "mine.json.lock" })
 end)
 
+t.test("show and note refuse a crossboard --board on a local board", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, { "board", "show", "11111111", "--board", "other" })
+    t.eq(code, 1, out)
+    t.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+    out, code = dev(root, home, { "board", "note", "11111111", "--board", "other", "text" })
+    t.eq(code, 1, out)
+    t.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+end)
+
 t.test("boards and columns answer for a local board's own name only", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "boards" })
