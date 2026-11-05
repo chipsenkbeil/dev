@@ -11,6 +11,7 @@ local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
+local REVIEW_ONLY = { "review", "review", "review" }
 
 local function setup(project)
     local root = support.sandbox({ [".dev/config.toml"] = project }, {})
@@ -2953,4 +2954,189 @@ t.test("attach, attachments and detach refuse plainly on a local board", functio
         t.eq(code, 1, out)
         t.ok(out:find("a local board holds no attachments", 1, true), out)
     end
+end)
+
+local function park_three(root, home, opts)
+    local agent = opts.agent
+    local columns = opts.columns
+    local function ready(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            "ready",
+            "--size",
+            "1",
+            "--description",
+            V1,
+            "--checks",
+            "dev test",
+        })))
+    end
+    local parked = {}
+    for index, name in ipairs({ "One", "Two", "Three" }) do
+        local id = ready(name)
+        local env = { DEV_AGENT = agent }
+        local out, code = dev(root, home, { "board", "move", id, "progress" }, env)
+        t.eq(code, 0, out)
+        dev(root, home, { "board", "note", id, "built it, tried it, learned it" })
+        local column = columns[index]
+        out, code = dev(root, home, { "board", "move", id, column }, { DEV_AGENT = agent })
+        t.eq(code, 0, out)
+        parked[#parked + 1] = id
+    end
+    return ready("Fourth"), parked
+end
+
+t.test("a fourth card past in progress is refused", function()
+    local root, home = local_board()
+    local fourth, parked = park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    local one = { DEV_AGENT = "r/one" }
+    local out, code = dev(root, home, { "board", "move", fourth, "progress" }, one)
+    t.eq(code, 1, out)
+    for _, id in ipairs(parked) do
+        t.ok(out:find(id, 1, true), out)
+    end
+    t.ok(out:find("land them first", 1, true), out)
+    out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
+    t.eq(code, 1, out)
+    t.ok(out:find("land them first", 1, true), out)
+    t.eq(card_named(document(file_of(home)), "Fourth").claim, nil)
+    out, code = dev(root, home, { "board", "next" }, { DEV_AGENT = "r/one" })
+    t.eq(code, 0, out)
+end)
+
+t.test("cards waiting in Verify and Release count toward the limit", function()
+    local root, home = local_board()
+    local fourth = park_three(root, home, {
+        agent = "r/one",
+        columns = { "review", "verify", "release" },
+    })
+    local out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
+    t.eq(code, 1, out)
+    t.ok(out:find("land them first", 1, true), out)
+end)
+
+t.test("a held card is not refused while three of the caller's cards wait", function()
+    local root, home = local_board()
+    local held = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Held",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    local out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
+    t.eq(code, 0, out)
+    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
+    t.eq(code, 0, out)
+end)
+
+t.test("cards of another claimant do not count", function()
+    local root, home = local_board()
+    local fourth, _ = park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    local two = { DEV_AGENT = "r/two" }
+    local out, code = dev(root, home, { "board", "move", fourth, "progress" }, two)
+    t.eq(code, 0, out)
+    t.eq(card_named(document(file_of(home)), "Fourth").claim.claimant, "r/two")
+end)
+
+t.test("a held card moves to progress past the limit", function()
+    local root, home = local_board()
+    local held = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Held",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    local out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
+    t.eq(code, 0, out)
+    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    out, code = dev(root, home, { "board", "move", held, "progress" }, { DEV_AGENT = "r/one" })
+    t.eq(code, 0, out)
+end)
+
+t.test("take on an In Progress card is not refused past the limit", function()
+    local root, home = local_board()
+    local held = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Held",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    local out, code = dev(root, home, { "board", "take", held, "--as", "r/two" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", held, "progress" }, { DEV_AGENT = "r/two" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "release", held }, { DEV_AGENT = "r/two" })
+    t.eq(code, 0, out)
+    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
+    t.eq(code, 0, out)
+end)
+
+t.test("take on a card another name holds gives the claim refusal", function()
+    local root, home = local_board()
+    local held = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Held",
+        "--column",
+        "ready",
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+    local out, code = dev(root, home, { "board", "take", held, "--as", "r/two" }, {
+        DEV_AGENT = "r/two",
+    })
+    t.eq(code, 0, out)
+    local full = card_named(document(file_of(home)), "Held").id
+    fs.remove(home .. "/state/dev/board/" .. full)
+    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
+    t.eq(code, 1, out)
+    t.ok(out:find("is claimed by r/two", 1, true), out)
+    t.ok(not out:find("land them first", 1, true), out)
+end)
+
+t.test("a card that moved on to another claimant stops counting", function()
+    local root, home = local_board()
+    local fourth, parked = park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    local out, code = dev(root, home, { "board", "move", parked[1], "ready" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", parked[1], "progress" }, { DEV_AGENT = "r/two" })
+    t.eq(code, 0, out)
+    dev(root, home, { "board", "note", parked[1], "built it, tried it, learned it" })
+    out, code = dev(root, home, { "board", "move", parked[1], "review" }, { DEV_AGENT = "r/two" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", fourth, "progress" }, { DEV_AGENT = "r/one" })
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", parked[2], "progress" }, { DEV_AGENT = "r/one" })
+    t.eq(code, 0, out)
 end)

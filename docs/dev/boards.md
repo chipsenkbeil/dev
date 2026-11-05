@@ -1743,14 +1743,14 @@ never handles the API.
   fast: it asks once unless `--wait` gives seconds to keep asking, and, when the
   turn stays taken, refuses with `the landing turn is held by NAME since STAMP`.
   A hold is longer than a landing's 900 second lease: `--hold` sets its lease,
-  3600 seconds by default and 7200 at most (a whole number, exit 2 otherwise),
+  1800 seconds by default and 3600 at most (a whole number, exit 2 otherwise),
   so a check of 15 to 60 minutes fits. `check` does not renew the lease while
   it runs. Running `turn CARD` again as the holder renews the lease for
-  `--hold` more seconds, until the hold has been kept without a break for 7200 seconds in all, after
-  which `turn` and `land` refuse, give the turn back and leave the holder to ask
-  again. The hold is recorded in the `dev-turn:` note with the
-  fence and the lease, so a later command finds it from the board alone, on any
-  machine under the same `DEV_AGENT`. Success prints
+  `--hold` more seconds, until the hold has been kept without a break for 3600
+  seconds in all, after which `turn` and `land` refuse, give the turn back and
+  leave the holder to ask again. The hold is recorded in the `dev-turn:` note
+  with the fence and the lease, so a later command finds it from the board
+  alone, on any machine under the same `DEV_AGENT`. Success prints
   `holding the landing turn for <id prefix> for N seconds`.
   A hold that lapsed frees the turn to the next asker, so taking it again
   starts a new window. `--release` gives the hold back and writes a `left`
@@ -1977,6 +1977,20 @@ never handles the API.
   `<id prefix> is <size>, above this runner's limit of N Pomodori
   (DEV_MAX_SIZE)` (exit 1). `run` takes its own run card and is not held
   to the limit.
+  `take` and `move CARD progress` also refuse a card when the caller already
+  has 3 cards in Review, Verify or Release whose latest `dev-claim:` note is
+  by the caller's name (`DEV_AGENT`, else the host and session name), so a
+  session lands what passed before it takes a new card. The card being moved
+  does not count, and another name's cards never do. The refusal reads
+  `NAME already has N cards waiting in Review, Verify or Release (ID, ID,
+  ID), so land them first` (exit 1). A caller with neither `DEV_AGENT` nor
+  `CLAUDE_SESSION_ID` has no stable name, so the limit does not apply to it.
+  A card already in In Progress, or whose claim this machine holds, is not
+  checked, and a take of a card another name holds gets the claim refusal.
+  The count and the claim are two steps, so under parallel commands with one
+  name the limit is advisory and can be overrun. `next` stays read-only and
+  shows the card anyway. The turn hold is 1800 seconds by default and 3600 at
+  most (see `turn`).
 - `release CARD`: Stops the loop, forgets the claim and posts `/claim/release`
   with the fence. Prints `released <id prefix>`. A card with no claim taken by
   `take` is exit 1.

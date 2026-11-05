@@ -1712,14 +1712,14 @@ if has_jj then
         t.eq(assert(turn_holder(home)).name, "lander")
     end)
 
-    t.test("turn refuses a hold outside 1 to 7200 seconds", function()
+    t.test("turn refuses a hold outside 1 to 3600 seconds", function()
         local root, home, log = jj_project()
         local id = in_verify(root, home, log)
-        for _, bad in ipairs({ "0", "7201", "x" }) do
+        for _, bad in ipairs({ "0", "3601", "x" }) do
             local out, code = dev(root, home, log, { "board", "turn", id, "--hold", bad })
             t.eq(code, 2, out)
         end
-        local _, code = dev(root, home, log, { "board", "turn", id, "--hold", "7200" })
+        local _, code = dev(root, home, log, { "board", "turn", id, "--hold", "3600" })
         t.eq(code, 0)
     end)
 

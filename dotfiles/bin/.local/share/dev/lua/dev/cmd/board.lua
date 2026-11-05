@@ -26,7 +26,7 @@ local stderr = io.stderr
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
-local runner = { FLAG = "--max-size" }
+local runner = { FLAG = "--max-size", MAX_WAITING_CARDS = 3 }
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
 local CLAIMANT_CHARS = 200
@@ -518,6 +518,19 @@ local function claimant(name)
     return ("dev@" .. host .. ":" .. session:gsub("[^%w._-]", "_")):sub(1, CLAIMANT_CHARS)
 end
 
+---Tell a named caller from an anonymous one.
+---
+---@param name string? the caller's given name
+---@return boolean named true when a name or CLAUDE_SESSION_ID stands for the caller
+---@private
+function runner.__named(name)
+    if name then
+        return true
+    end
+    local session = os.getenv("CLAUDE_SESSION_ID")
+    return session ~= nil and session ~= ""
+end
+
 local function find_card(backend, word)
     local cards, message = backend:cards()
     if not cards then
@@ -528,6 +541,54 @@ local function find_card(backend, word)
         return nil, failure(why)
     end
     return card
+end
+
+---Refuse `card` when `who` already holds the limit of cards waiting to land.
+---
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card the caller is about to start
+---@param who string the caller's claimant name
+---@return dev.cmd.board.Result? err the refusal naming the waiting cards, nil under the limit
+---@private
+function runner.__waiting(backend, card, who)
+    local cards, message = backend:cards()
+    if not cards then
+        return failure(message)
+    end
+    local roles = backend.roles
+    local waiting = {}
+    for _, other in ipairs(cards) do
+        local column = other.column
+        if
+            other.id ~= card.id
+            and (column == roles.review or column == roles.verify or column == roles.release)
+        then
+            local past, why = backend:comments(other.id)
+            if not past then
+                return failure(why)
+            end
+            if board.last_claimant(past) == who then
+                waiting[#waiting + 1] = other.id:sub(1, board.MIN_PREFIX)
+            end
+        end
+    end
+    if #waiting < runner.MAX_WAITING_CARDS then
+        return nil
+    end
+    return failure(
+        who
+            .. " already has "
+            .. #waiting
+            .. " cards waiting in "
+            .. roles.review
+            .. ", "
+            .. roles.verify
+            .. " or "
+            .. roles.release
+            .. " ("
+            .. table.concat(waiting, ", ")
+            .. "), so land them first"
+    )
 end
 
 local function other_card(backend, word)
@@ -1663,6 +1724,18 @@ local function move_card(backend, args, opts)
         local refused = runner.refusal(card, limit)
         if refused then
             return refused
+        end
+        if card.column ~= roles.progress and not claims.read(card.id) then
+            local who, wrong = agent_name()
+            if wrong then
+                return wrong
+            end
+            if runner.__named(who) then
+                refused = runner.__waiting(backend, card, who or claimant())
+                if refused then
+                    return refused
+                end
+            end
         end
     end
     local missing_note = unnoted(backend, card, column)
@@ -4290,6 +4363,15 @@ function commands.take(backend, args)
     local refused = runner.refusal(card, limit)
     if refused then
         return refused
+    end
+    local roles = backend.roles
+    local rival = card.claimant ~= nil and card.claimant ~= (name or claimant())
+    local limited = card.column ~= roles.progress and not claims.read(card.id) and not rival
+    if limited and runner.__named(name) then
+        refused = runner.__waiting(backend, card, name or claimant())
+        if refused then
+            return refused
+        end
     end
     local result, fence = claim_card(backend, card, name)
     if not fence then

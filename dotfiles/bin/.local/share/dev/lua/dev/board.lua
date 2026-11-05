@@ -323,6 +323,19 @@ function M.claimants(comments)
     return names
 end
 
+---Return the name in the newest claim comment.
+---@param comments {body: string}[] the card's comments, oldest first
+---@return string? name the latest claimant, nil when no claim comment exists
+function M.last_claimant(comments)
+    local last
+    for _, comment in ipairs(comments) do
+        if comment.body:sub(1, #M.CLAIM_PREFIX) == M.CLAIM_PREFIX then
+            last = comment.body:sub(#M.CLAIM_PREFIX + 1):match("^ by=(%S+)$") or last
+        end
+    end
+    return last
+end
+
 ---Say whether a comment body begins with a prefix only a dev verb writes.
 ---@param body string the comment body
 ---@return boolean reserved true when a note may not hold it

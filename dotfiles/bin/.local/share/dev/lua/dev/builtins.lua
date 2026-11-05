@@ -451,7 +451,7 @@ return {
         handler = "lua",
         flags = "--hold --wait --release",
         usage = "dev board turn CARD [--hold SECONDS] [--wait SECONDS] [--release]",
-        desc = "Take the landing turn for a card and keep it across a rebase, review and check (3600 seconds by default, up to 7200, renewed by running it again), so dev board land lands under it and refuses once it is lost; --release gives it back; needs DEV_AGENT",
+        desc = "Take the landing turn for a card and keep it across a rebase, review and check (1800 seconds by default, up to 3600, renewed by running it again), so dev board land lands under it and refuses once it is lost. --release gives it back, and it needs DEV_AGENT",
     },
     {
         words = { "board", "allow" },
