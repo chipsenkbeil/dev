@@ -1986,4 +1986,75 @@ if has_jj then
         local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
         t.eq(code, 0, out)
     end)
+    local function rebased_and_checked(root, home, log, id)
+        rebase_onto_trunk(root)
+        must(dev(root, home, log, { "board", "check", id }))
+    end
+
+    t.test("a clean rebase keeps its reviews", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        local before = head(root)
+        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
+        rebased_and_checked(root, home, log, id)
+        t.ok(head(root) ~= before, "the rebase must rewrite the commit")
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        local list = comments(home)
+        t.eq(list[#list].kind, "done")
+        t.eq(list[#list].body:find("carried over", 1, true), nil, list[#list].body)
+        t.eq(column_of(home), "Done")
+    end)
+
+    t.test("a rebase over edits to the same file keeps its reviews", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
+        rebased_and_checked(root, home, log, id)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        t.eq(column_of(home), "Done")
+    end)
+
+    t.test("a changed patch still needs a recheck", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
+        rebased_and_checked(root, home, log, id)
+        refused(root, home, log, id, {
+            "the code review is of an earlier commit",
+            "the style review is of an earlier commit",
+        })
+    end)
+
+    t.test("a needs-work review of the same patch still refuses", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        must(dev(root, home, log, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "code",
+            "--by",
+            "rev2",
+            "--rev",
+            "@",
+            "--verdict",
+            "needs-work",
+        }))
+        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
+        rebased_and_checked(root, home, log, id)
+        refused(root, home, log, id, { "the code review by rev2", "says needs-work" })
+    end)
+
+    t.test("kept reviews still need a check at the rebased commit", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
+        rebase_onto_trunk(root)
+        local out = refused(root, home, log, id, { "no run of dev board check is recorded" })
+        t.eq(out:find("code review", 1, true), nil, out)
+    end)
 end

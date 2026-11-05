@@ -1565,9 +1565,12 @@ never handles the API.
   - the working-copy commit is non-empty, has a description and has no
     conflicts.
   - a `code` and a `style` review of the working-copy change are recorded. A
-    review of an earlier commit of the change counts only with a `recheck`
-    recorded at the commit that lands.
-  - no `code`, `style` or `recheck` review at the landing commit has `needs-work`
+    review of an earlier commit of the change counts when `jj interdiff`
+    between that commit and the landing one is empty, so
+    a clean rebase keeps its reviews and only the check reruns. Any other
+    earlier commit counts only with a `recheck` recorded at the landing commit.
+  - no `code`, `style` or `recheck` review at the landing commit, or at an
+    earlier commit of the change with the same empty interdiff, has `needs-work`
     as its latest verdict. The refusal names the kind and the reviewer, and a
     later `clean` or `minor` review of that kind at the commit lifts it. A record
     with no verdict never refuses.

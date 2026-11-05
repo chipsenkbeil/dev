@@ -2956,12 +2956,10 @@ local function land_problems(backend, card, who)
         return problems
     end
     local lacking = land.missing_reviews(who.comments, state)
-    local refused = land.refused_reviews(who.comments, state)
     local unproven = land.checks_problem(who.comments, state, card.checks)
-    local carried
+    local carried, carry_why
     if #lacking > 0 then
-        local why
-        carried, why = land.carry({
+        carried, carry_why = land.carry({
             root = backend.root,
             comments = who.comments,
             state = state,
@@ -2970,10 +2968,14 @@ local function land_problems(backend, card, who)
         })
         if carried then
             lacking, unproven = {}, nil
-        elseif why then
-            problems[#problems + 1] = why
+        else
+            lacking = land.missing_reviews(who.comments, state, backend.root)
+            if carry_why then
+                problems[#problems + 1] = carry_why
+            end
         end
     end
+    local refused = land.refused_reviews(who.comments, state, backend.root)
     for _, missing in ipairs(lacking) do
         problems[#problems + 1] = missing
     end

@@ -25,6 +25,34 @@ local function jj(root, ...)
     return vcs.with(vcs.base(root, vcs.JJ, { quiet = true }), ...)
 end
 
+local function jj_out(root, ...)
+    local out, code = devos.capture(jj(root, ...), { stderr = "null" })
+    if code ~= 0 then
+        return nil
+    end
+    return out
+end
+
+local function interdiff(root, commit)
+    return jj_out(root, "interdiff", "--from", commit, "--to", "@", "--name-only")
+end
+
+local function same_patch(root, state)
+    local seen = {}
+    return function(commit)
+        if commit == state.commit then
+            return true
+        end
+        if not root then
+            return false
+        end
+        if seen[commit] == nil then
+            seen[commit] = interdiff(root, commit) == ""
+        end
+        return seen[commit]
+    end
+end
+
 local function count_lines(text)
     local n = 0
     for _ in text:gmatch("[^\n]+") do
@@ -88,12 +116,15 @@ end
 
 ---List what the recorded reviews still lack for a commit.
 ---
----A kind is met by a review of that kind at the commit, or by one of that kind on the
----change at an earlier commit plus a recheck at this commit.
+---A kind is met by a review of that kind at the commit, by one at an earlier commit of the
+---change whose patch is the same (an empty `jj interdiff`, read only when `root` is given), or
+---by one of that kind on the change at another commit plus a recheck at this commit.
 ---@param comments {body: string}[] the card's comments, oldest first
 ---@param state dev.board.check.State the commit that would land
+---@param root string? the project root, which lets an identical earlier patch count
 ---@return string[] missing one line per review that is absent
-function M.missing_reviews(comments, state)
+function M.missing_reviews(comments, state, root)
+    local same = same_patch(root, state)
     local reviews = {}
     for _, comment in ipairs(comments) do
         local record = review.parse(comment.body)
@@ -101,19 +132,27 @@ function M.missing_reviews(comments, state)
             reviews[#reviews + 1] = record
         end
     end
-    local function has(kind, at)
+    local function has_kind(kind, matches)
         for _, record in ipairs(reviews) do
-            if record.kind == kind and (not at or record.commit == at) then
+            if record.kind == kind and matches(record.commit) then
                 return true
             end
         end
         return false
     end
-    local rechecked = has(review.KIND.RECHECK, state.commit)
+    local function has_any(kind)
+        return has_kind(kind, function()
+            return true
+        end)
+    end
+    local function has_here(kind)
+        return has_kind(kind, same)
+    end
+    local rechecked = has_here(review.KIND.RECHECK)
     local missing = {}
     for _, kind in ipairs({ review.KIND.CODE, review.KIND.STYLE }) do
-        if not has(kind, state.commit) then
-            if not has(kind) then
+        if not has_here(kind) then
+            if not has_any(kind) then
                 missing[#missing + 1] = string.format(
                     "no %s review of change %s; record one with dev board review --kind %s",
                     kind,
@@ -135,12 +174,14 @@ end
 ---List the reviews at a commit whose latest verdict of their kind is needs-work.
 ---@param comments {body: string}[] the card's comments, oldest first
 ---@param state dev.board.check.State the commit that would land
+---@param root string? the project root, which lets a review of an identical earlier patch count
 ---@return string[] refused one line per kind, naming the reviewer
-function M.refused_reviews(comments, state)
+function M.refused_reviews(comments, state, root)
+    local same = same_patch(root, state)
     local latest = {}
     for _, comment in ipairs(comments) do
         local record = review.parse(comment.body)
-        if record and record.change == state.change and record.commit == state.commit then
+        if record and record.change == state.change and same(record.commit) then
             latest[record.kind] = record
         end
     end
@@ -296,14 +337,6 @@ function M.rebase(root)
     return true
 end
 
-local function jj_out(root, ...)
-    local out, code = devos.capture(jj(root, ...), { stderr = "null" })
-    if code ~= 0 then
-        return nil
-    end
-    return out
-end
-
 local function file_set(out)
     local set = {}
     for line in out:gmatch("[^\n]+") do
@@ -363,12 +396,12 @@ local function carry_problem(root, state, commit)
             label
         )
     end
-    local interdiff = jj_out(root, "interdiff", "--from", commit, "--to", "@", "--name-only")
-    if interdiff == nil then
+    local differs = interdiff(root, commit)
+    if differs == nil then
         return string.format("jj could not compare the checked commit %s with this one", label),
             true
     end
-    if interdiff ~= "" then
+    if differs ~= "" then
         return string.format("this commit differs from the checked commit %s", label)
     end
     local mine = jj_out(root, "log", "-r", "@", "--no-graph", "-T", FILES_TEMPLATE)
