@@ -109,6 +109,18 @@ return {
         group = "Set up a machine or project",
     },
     {
+        words = { "ws" },
+        noun = true,
+        desc = "Make workspaces under one central root",
+        group = "Set up a machine or project",
+    },
+    {
+        words = { "ws", "new" },
+        handler = "lua",
+        usage = "dev ws new NAME",
+        desc = "Make a workspace for this project at ROOT/<repo>/NAME, a jj workspace on the trunk revision, a git worktree on a new branch NAME, or a plain folder, and print its path, with ROOT from DEV_WS_ROOT, else ~/.local/share/workspaces",
+    },
+    {
         words = { "connect" },
         handler = "lua",
         flags = "--ssh",

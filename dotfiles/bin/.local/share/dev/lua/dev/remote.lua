@@ -20,7 +20,8 @@ local MACHINE_VERBS = {
     guide = true,
     connect = true,
 }
-local MACHINE_NOUNS = { tools = true, box = true, board = true, pi = true, antinote = true }
+local MACHINE_NOUNS =
+    { tools = true, box = true, board = true, ws = true, pi = true, antinote = true }
 local JOB_NAME = "^[A-Za-z0-9_.-]+$"
 local LOCAL_HINT = "rerun, or pass --local to run it here"
 local AGENT_HINT = "an agent runs it on ci, so fix ci and rerun"

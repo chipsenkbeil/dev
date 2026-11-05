@@ -10,6 +10,7 @@ local push = require("dev.cmd.push")
 local sync = require("dev.cmd.sync")
 local tools = require("dev.cmd.tools")
 local types = require("dev.cmd.types")
+local ws = require("dev.cmd.ws")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
@@ -240,6 +241,7 @@ local function builtin_handler(row)
             or board.handlers[row.name]
             or connect.handlers[row.name]
             or init.handlers[row.name]
+            or ws.handlers[row.name]
     end
     return nil
 end

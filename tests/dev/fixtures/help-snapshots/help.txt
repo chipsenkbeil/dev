@@ -19,6 +19,7 @@ Set up a machine or project
   init                  Seed a project with lint, CI and remotes
   tools                 Install and check the tools in .dev/tools.tsv
   guide                 Show this repo's overview, or ask guide a question about its commands and topics
+  ws                    Make workspaces under one central root
 
 Boxes
   connect               Attach to a box or a connectable machine, picking, resuming or creating a box first
