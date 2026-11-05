@@ -1438,6 +1438,27 @@ t.test("show indents the rest of a multi-line body under its body, notes keeps o
     )
 end)
 
+t.test("note --kind question names dev board ask", function()
+    local backend = fake(sample())
+    local count = #backend.calls
+    for _, args in ipairs({
+        { "cccccccc", "--kind", "question", "Which way?" },
+        { "cccccccc", "--kind", "Question", "Which way?" },
+    }) do
+        local result = commands.run("note", args, backend)
+        t.eq(result.code, 2)
+        t.ok(
+            result.message:find(
+                "dev board ask CARD --question TEXT --choice COLUMN=LABEL --recommend N --why TEXT",
+                1,
+                true
+            ),
+            result.message
+        )
+    end
+    t.eq(#backend.calls, count)
+end)
+
 t.test("note sends a lowercase kind and a trimmed role, and refuses a bad one", function()
     local backend = fake(sample())
     local args = { "cccccccc", "--kind", "Decision", "--as", " reviewer ", "go", "ahead" }

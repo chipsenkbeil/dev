@@ -253,7 +253,7 @@ M.LINK_KINDS = { M.LinkKind.BLOCKED_BY, M.LinkKind.BLOCKS, M.LinkKind.RELATED, M
 ---The fewest characters of a card id that name a card.
 M.MIN_PREFIX = 8
 
----The comment kinds `note --kind` accepts.
+---The comment kinds, with question sent only by `ask`.
 M.NoteKind = {
     DECISION = "decision",
     QUESTION = "question",
@@ -265,7 +265,6 @@ M.NoteKind = {
 ---The comment kinds `note --kind` accepts, in the order help lists them.
 M.NOTE_KINDS = {
     M.NoteKind.DECISION,
-    M.NoteKind.QUESTION,
     M.NoteKind.BLOCKED,
     M.NoteKind.STATUS,
     M.NoteKind.DONE,

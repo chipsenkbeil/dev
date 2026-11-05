@@ -343,7 +343,7 @@ return {
         handler = "lua",
         flags = "--edit --delete --kind --as",
         usage = "dev board note CARD [--kind K] [--as ROLE] TEXT | CARD --edit COMMENT TEXT | CARD --delete COMMENT",
-        desc = "Add a comment to a card, of kind agent unless --kind gives decision, question, blocked, status or done, under the label --as ROLE, or edit or delete one of your own by its id prefix",
+        desc = "Add a comment to a card, of kind agent unless --kind gives decision, blocked, status or done, under the label --as ROLE, or edit or delete one of your own by its id prefix. An owner question goes through dev board ask",
     },
     {
         words = { "board", "notes" },

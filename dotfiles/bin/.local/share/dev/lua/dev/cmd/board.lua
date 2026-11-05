@@ -1230,6 +1230,14 @@ local function note_opts(args)
     local opts = {}
     if kind then
         opts.kind = kind:lower()
+        if opts.kind == board.NoteKind.QUESTION then
+            return nil,
+                usage(
+                    "question is not a note kind: ask the owner with "
+                        .. "dev board ask CARD --question TEXT --choice COLUMN=LABEL "
+                        .. "--recommend N --why TEXT"
+                )
+        end
         if not index_of(board.NOTE_KINDS, opts.kind) then
             return nil,
                 usage(

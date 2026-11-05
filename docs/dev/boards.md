@@ -628,12 +628,13 @@ decision. Trailing whitespace is dropped, and empty text is a usage error (exit
 2), to keep an empty pipe from wiping a plan. It sends the claim's fence when
 this machine holds one. It does not touch the title or the comments.
 
-`note CARD --kind K --as ROLE TEXT` tags the comment: `K` is decision, question,
-blocked, status or done (agent when omitted), and `ROLE` is a free label of at
-most 80 characters, such as planner, implementer or reviewer, that lets agents
-sharing one token tell themselves apart. A note that begins with a dash still
-posts as text. `--edit` changes only the text, so the kind and the label stay,
-and a queued note replays with both.
+`note CARD --kind K --as ROLE TEXT` tags the comment: `K` is decision, blocked,
+status or done (agent when omitted), and `ROLE` is a free label of at most 80
+characters, such as planner, implementer or reviewer, that lets agents sharing
+one token tell themselves apart. `question` is exit 2 and names `dev board ask`,
+which sends the owner a question in Pomb's structured shape. A note that begins
+with a dash still posts as text. `--edit` changes only the text, so the kind and
+the label stay, and a queued note replays with both.
 
 `notes CARD` lists the card's comments, oldest first: the comment's id prefix,
 who wrote it (the token's name, else the kind of actor), its kind, its role
@@ -1775,14 +1776,15 @@ never handles the API.
 - `note CARD [--kind K] [--as ROLE] TEXT`: Adds a comment and prints
   `noted <id prefix>`. The words after the card, minus the two options, are
   joined with spaces, and any other word, one starting with `-` included, is
-  text. `--kind` is `decision`, `question`, `blocked`, `status` or `done` in any
-  case, sent lowercase as the comment's `kind` (anything else is exit 2, and no
-  `--kind` posts kind `agent`). `--as ROLE` is free text, trimmed, sent as the
-  comment's `author` label (Pomb allows 80 characters, and an empty, over-long
-  or control-character value is exit 2, and none leaves Pomb's default). A local
-  board stores both on the comment. `show` and `notes` print them, a queued note
-  keeps both options in its arguments, and `--edit` replaces only the body, so
-  the kind and the label stay.
+  text. `--kind` is `decision`, `blocked`, `status` or `done` in any case, sent
+  lowercase as the comment's `kind` (anything else is exit 2, `question`
+  included, which names `dev board ask`, and no `--kind` posts kind `agent`).
+  `--as ROLE` is free text, trimmed, sent as the comment's `author` label (Pomb
+  allows 80 characters, and an empty, over-long or control-character value is
+  exit 2, and none leaves Pomb's default). A local board stores both on the
+  comment. `show` and `notes` print them, a queued note keeps both options in
+  its arguments, and `--edit` replaces only the body, so the kind and the label
+  stay.
 - `note CARD --edit COMMENT TEXT`, `note CARD --delete COMMENT`: Replaces the
   body of one of the agent's own comments
   (`PATCH /api/tasks/{id}/comments/{comment_id}`) or deletes it (`DELETE`), and
