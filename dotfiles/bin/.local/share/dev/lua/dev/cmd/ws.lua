@@ -1,4 +1,5 @@
 local devos = require("dev.os")
+local forge = require("dev.forge")
 local fs = require("dev.fs")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
@@ -37,6 +38,33 @@ local function parse(ctx)
     return name
 end
 
+local function fetch_trunk(ctx)
+    if vcs.backend(ctx.root) ~= vcs.JJ then
+        return nil
+    end
+    local found, why = forge.resolve(ctx.root)
+    if not found then
+        return "dev ws new: trunk cannot be compared: " .. why
+    end
+    local argv = vcs.with(
+        vcs.base(ctx.root, vcs.JJ, { quiet = true }),
+        "git",
+        "fetch",
+        "--remote",
+        found.remote
+    )
+    verb.show(ctx, argv)
+    local out, code = devos.capture(argv, { stderr = "stdout" })
+    if code ~= 0 then
+        return string.format(
+            "dev ws new: the fetch from %s failed: %s",
+            found.remote,
+            (out:gsub("\n$", ""))
+        )
+    end
+    return nil
+end
+
 local function plan(root, name, path)
     local backend = vcs.backend(root)
     if backend == vcs.JJ then
@@ -71,6 +99,10 @@ M.handlers["ws new"] = function(ctx)
     local path = fs.join(base, repo_name(base, ctx.root), name)
     if fs.exists(path) then
         verb.die("dev ws new: " .. path .. " already exists")
+    end
+    local failure = fetch_trunk(ctx)
+    if failure then
+        verb.die(failure)
     end
     local made, why = fs.mkdir(fs.dirname(path), { parents = true })
     if not made then

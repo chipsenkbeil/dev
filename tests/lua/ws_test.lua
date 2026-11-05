@@ -6,6 +6,11 @@ local support = require("support")
 local JJ_STUB = [[#!/bin/sh
 if [ "$1" = "--no-pager" ]; then shift; fi
 if [ "$1" = root ]; then pwd; exit 0; fi
+case "$*" in
+    *" git root") echo .git; exit 0 ;;
+    *" git remote list") printf '%s' "$REMOTES"; exit 0 ;;
+    *" git fetch "*) echo "jj $*" >> "$LOG"; printf '%s' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;
+esac
 echo "jj $*" >> "$LOG"
 mkdir -p "$(eval echo \$$#)"
 ]]
@@ -40,16 +45,73 @@ local function setup(kind)
         stub(root, "jj", NO_GIT)
         stub(root, "git", NO_GIT)
     end
-    local env = { env = { DEV_WS_ROOT = ws .. "/ws", LOG = log } }
+    local env = {
+        env = { DEV_WS_ROOT = ws .. "/ws", LOG = log, JJ_FORGE = "", REMOTES = "origin\n" },
+    }
     return root, ws .. "/ws/" .. fs.basename(root) .. "/feat", env, log
 end
 
-t.test("new in a jj project adds a jj workspace on the trunk revision", function()
+t.test("new in a jj project fetches the remote of record first", function()
     local root, path, env, log = setup("jj")
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
     t.eq(code, 0)
     t.eq(out, path .. "\n")
-    t.eq(fs.read(log), "jj -R " .. root .. " workspace add --name feat -r trunk() " .. path .. "\n")
+    t.eq(
+        fs.read(log),
+        "jj --color never -R "
+            .. root
+            .. " git fetch --remote origin\n"
+            .. "jj -R "
+            .. root
+            .. " workspace add --name feat -r trunk() "
+            .. path
+            .. "\n"
+    )
+end)
+
+t.test("new in a jj project fetches the gerrit remote of record", function()
+    local root, path, env, log = setup("jj")
+    env.env.JJ_FORGE = "gerrit"
+    env.env.REMOTES = "origin\ngerrit\n"
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+    t.eq(code, 0)
+    t.eq(out, path .. "\n")
+    t.eq(
+        fs.read(log),
+        "jj --color never -R "
+            .. root
+            .. " git fetch --remote gerrit\n"
+            .. "jj -R "
+            .. root
+            .. " workspace add --name feat -r trunk() "
+            .. path
+            .. "\n"
+    )
+end)
+
+t.test("new in a jj project stops at a failed fetch with no workspace", function()
+    local root, path, env, log = setup("jj")
+    env.env.FETCH_CODE = "1"
+    env.env.FETCH_OUT = "error: could not connect\n"
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+    t.eq(code, 1)
+    t.eq(out, "dev ws new: the fetch from origin failed: error: could not connect\n")
+    t.eq(fs.read(log), "jj --color never -R " .. root .. " git fetch --remote origin\n")
+    t.eq(fs.exists(path), false)
+    t.eq(fs.exists(fs.dirname(path)), false)
+end)
+
+t.test("new in a jj project refuses a missing remote of record", function()
+    local root, path, env, log = setup("jj")
+    env.env.REMOTES = ""
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+    t.eq(code, 1)
+    t.eq(
+        out,
+        "dev ws new: trunk cannot be compared: the remote of record origin is not a remote of this project (detected: no gerrit remote and origin is not on github.com)\n"
+    )
+    t.eq(fs.exists(log), false)
+    t.eq(fs.exists(path), false)
 end)
 
 t.test("new in a git project adds a worktree on a new branch", function()
