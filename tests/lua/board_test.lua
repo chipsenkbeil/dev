@@ -117,6 +117,9 @@ local function fake(cards, times, finished)
     end
     function backend:comments(id)
         calls[#calls + 1] = { "comments", id }
+        if backend.listed_error then
+            return nil, backend.listed_error
+        end
         return backend.listed or {}
     end
     function backend:edit_note(id, comment, text)
@@ -2522,6 +2525,33 @@ t.test("a name that released the card cannot reclaim the finish line", function(
             t.eq(result.code, 1, run[2][2])
             t.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
         end
+    end)
+    for _, call in ipairs(backend.calls) do
+        t.eq(call[1], "comments")
+    end
+end)
+
+t.test("an --as name of a former claimant cannot reclaim the finish line", function()
+    local released = "project-run/a"
+    local backend = released_by(released)
+    as_agent("project-run/b", function()
+        local result =
+            commands.run("outcome", { "cccccccc", "--convert", "--as", released }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
+    end)
+    for _, call in ipairs(backend.calls) do
+        t.eq(call[1], "comments")
+    end
+end)
+
+t.test("a failed comments read refuses the reclaim check with its message", function()
+    local backend = released_by("project-run/a")
+    backend.listed_error = "comments are unavailable"
+    as_agent("project-run/b", function()
+        local result = commands.run("checks", { "cccccccc", "dev test" }, backend)
+        t.eq(result.code, 1)
+        t.eq(result.message, "comments are unavailable")
     end)
     for _, call in ipairs(backend.calls) do
         t.eq(call[1], "comments")
