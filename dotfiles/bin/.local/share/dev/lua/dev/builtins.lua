@@ -111,7 +111,7 @@ return {
     {
         words = { "ws" },
         noun = true,
-        desc = "Make workspaces under one central root",
+        desc = "Make, list and remove workspaces under one central root",
         group = "Set up a machine or project",
     },
     {
@@ -119,6 +119,18 @@ return {
         handler = "lua",
         usage = "dev ws new NAME",
         desc = "Make a workspace for this project at ROOT/<repo>/NAME, a jj workspace on the trunk revision, a git worktree on a new branch NAME, or a plain folder, and print its path, with ROOT from DEV_WS_ROOT, else ~/.local/share/workspaces",
+    },
+    {
+        words = { "ws", "ls" },
+        handler = "lua",
+        usage = "dev ws ls",
+        desc = "List this project's workspaces under ROOT/<repo>, each as its name and path",
+    },
+    {
+        words = { "ws", "rm" },
+        handler = "lua",
+        usage = "dev ws rm NAME",
+        desc = "Forget the jj workspace or remove the git worktree NAME of this project and delete its folder under ROOT/<repo>, refusing a folder with changes not in a commit, a link or a path outside ROOT",
     },
     {
         words = { "connect" },

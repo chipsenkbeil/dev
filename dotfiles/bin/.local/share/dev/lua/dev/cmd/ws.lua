@@ -31,7 +31,7 @@ local function parse(ctx)
     if ctx.args[2] ~= nil then
         verb.usage_error(ctx, "takes one NAME, got " .. ctx.args[2])
     end
-    if name:find("/", 1, true) or name == "." or name == ".." then
+    if name == "" or name:find("/", 1, true) or name == "." or name == ".." then
         verb.usage_error(ctx, "NAME is one folder name, got " .. name)
     end
     return name
@@ -90,6 +90,113 @@ M.handlers["ws new"] = function(ctx)
         end
     end
     print(path)
+    return 0
+end
+
+---Check that a workspace folder holds nothing outside a commit.
+---@private
+---@param backend dev.vcs.Backend? the backend of the workspace folder
+---@param path string the workspace folder
+---@return boolean clean whether the folder holds nothing outside a commit
+---@return string? why what was found or why it could not be read
+function M.__clean(backend, path)
+    if backend == nil then
+        return true
+    end
+    local argv
+    if backend == vcs.JJ then
+        argv = vcs.with(
+            vcs.base(path, backend, { quiet = true }),
+            "log",
+            "-r",
+            "@",
+            "--no-graph",
+            "-T",
+            'if(empty, "", "changes")'
+        )
+    else
+        argv = vcs.with(vcs.base(path, backend), "status", "--porcelain")
+    end
+    local out, code = devos.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        return false, "cannot read the state of " .. path
+    end
+    if out ~= "" then
+        return false, path .. " holds changes not in a commit"
+    end
+    return true
+end
+
+---List the current project's workspaces under the central root.
+---
+---Each line is the folder's name, a tab and its path. A project with no
+---workspaces prints nothing.
+---@param ctx dev.Ctx the verb's context
+---@return integer code the exit code
+M.handlers["ws ls"] = function(ctx)
+    if ctx.args[1] ~= nil then
+        verb.usage_error(ctx, "takes no arguments, got " .. ctx.args[1])
+    end
+    local base = workspace_root()
+    local dir = fs.join(base, repo_name(base, ctx.root))
+    for _, name in ipairs(fs.list(dir) or {}) do
+        local path = fs.join(dir, name)
+        if fs.is_dir(path) then
+            print(name .. "\t" .. path)
+        end
+    end
+    return 0
+end
+
+---Remove a workspace of the current project and its folder.
+---
+---Only a folder directly under ROOT/<repo> is removed, never a link and never
+---the workspace the command runs in. A jj workspace is forgotten, a git
+---worktree is removed, and a folder with changes not in a commit is refused
+---and left in place.
+---@param ctx dev.Ctx the verb's context
+---@return integer code the exit code
+M.handlers["ws rm"] = function(ctx)
+    local name = parse(ctx)
+    local base = workspace_root()
+    local path = fs.join(base, repo_name(base, ctx.root), name)
+    local real = fs.realpath(path)
+    local real_base = fs.realpath(base)
+    if not fs.is_dir(path) then
+        verb.die("dev ws rm: " .. path .. " is not a workspace folder")
+    end
+    if fs.is_link(path) or real == nil or real_base == nil then
+        verb.die("dev ws rm: " .. path .. " is a link, not removed")
+    end
+    if real:sub(1, #real_base + 1) ~= real_base .. "/" then
+        verb.die("dev ws rm: " .. path .. " is outside " .. base)
+    end
+    if real == fs.realpath(ctx.root) then
+        verb.die("dev ws rm: " .. path .. " is the workspace dev runs in")
+    end
+    local backend = vcs.backend(path)
+    local clean, why = M.__clean(backend, path)
+    if not clean then
+        verb.die("dev ws rm: " .. why)
+    end
+    local argv
+    if backend == vcs.JJ then
+        argv = vcs.with(vcs.base(ctx.root, vcs.JJ), "workspace", "forget", name)
+    elseif backend == vcs.GIT then
+        argv = vcs.with(vcs.base(ctx.root, vcs.GIT), "worktree", "remove", path)
+    end
+    if argv ~= nil then
+        verb.show(ctx, argv)
+        local code = devos.run(argv) or 1
+        if code ~= 0 then
+            return code
+        end
+    end
+    local removed, err = fs.remove(path, { recursive = true })
+    if not removed then
+        verb.die("dev ws rm: " .. err)
+    end
+    print("removed " .. path)
     return 0
 end
 
