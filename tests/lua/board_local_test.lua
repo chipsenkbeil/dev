@@ -389,6 +389,63 @@ t.test("discard refuses a needs:human card and writes nothing", function()
     t.eq(card.labels[1], "needs:human")
 end)
 
+t.test("discard closes an unplanned Icebox card given a reason", function()
+    local root, home = local_board()
+    local a = prefix_of(
+        (dev(root, home, { "board", "add", "Card", "--column", "icebox", "--description", "keep" }))
+    )
+    local out, code = dev(root, home, { "board", "discard", a, "--reason", "Answered" })
+    t.eq(code, 0, out)
+    t.eq(out, "discarded " .. a .. "\n")
+    local card = document(file_of(home)).cards[1]
+    t.eq(card.comments[1].body, "Answered")
+    t.eq(card.labels[1], "discarded")
+    out = dev(root, home, { "board", "ls", "--column", "Done" })
+    t.ok(out:find(a, 1, true), out)
+end)
+
+t.test("discard refuses an unplanned Icebox card without a reason and writes nothing", function()
+    local root, home = local_board()
+    local a = prefix_of(
+        (dev(root, home, { "board", "add", "Card", "--column", "icebox", "--description", "keep" }))
+    )
+    local out, code = dev(root, home, { "board", "discard", a })
+    t.eq(code, 1, out)
+    t.ok(out:find("is not planned and cannot be discarded", 1, true), out)
+    local card = document(file_of(home)).cards[1]
+    t.eq(#(card.comments or {}), 0)
+    t.eq(#(card.labels or {}), 0)
+    out = dev(root, home, { "board", "ls", "--column", "icebox" })
+    t.ok(out:find(a, 1, true), out)
+end)
+
+t.test("discard refuses an unplanned card outside Icebox even with a reason", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        "backlog",
+        "--problem",
+        "x",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
+    local doc = document(file_of(home))
+    doc.cards[1].description = "keep"
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    local out, code = dev(root, home, { "board", "discard", a, "--reason", "Dropped" })
+    t.eq(code, 1, out)
+    t.ok(out:find("is not planned and cannot be discarded", 1, true), out)
+    local card = document(file_of(home)).cards[1]
+    t.eq(#(card.comments or {}), 0)
+    out = dev(root, home, { "board", "ls", "--column", "backlog" })
+    t.ok(out:find(a, 1, true), out)
+end)
+
 t.test(
     "move to Done waits for every outcome to be ticked, and discard drops an open card",
     function()

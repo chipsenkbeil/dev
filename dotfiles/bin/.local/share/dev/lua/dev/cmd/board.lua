@@ -1531,7 +1531,7 @@ end
 ---Move a card to a column, checking its outcomes first when the column is Done.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card and the column
----@param opts {drop: boolean?}? `drop` skips the outcome check, as a discard's move does
+---@param opts {drop: boolean?}? `drop` skips the outcome check, and the planning check from Icebox
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 local function move_card(backend, args, opts)
     local flags, words = parse(args, {})
@@ -1587,7 +1587,8 @@ local function move_card(backend, args, opts)
                 .. " and cannot enter Ready; size it with dev board size CARD 1, 2 or 3"
         )
     end
-    if column ~= roles.icebox and column ~= roles.ready then
+    local dropping_icebox = opts and opts.drop and card.column == roles.icebox
+    if column ~= roles.icebox and column ~= roles.ready and not dropping_icebox then
         local facts = {
             color = card.color,
             description = card.description,
@@ -1776,13 +1777,16 @@ function commands.discard(backend, args)
     if held_back then
         return held_back
     end
-    local missing = board.unplanned({
-        color = card.color,
-        description = card.description,
-        outcomes = #card.outcomes,
-        need_outcomes = false,
-        children = 0,
-    })
+    local missing = {}
+    if not (reason and card.column == backend.roles.icebox) then
+        missing = board.unplanned({
+            color = card.color,
+            description = card.description,
+            outcomes = #card.outcomes,
+            need_outcomes = false,
+            children = 0,
+        })
+    end
     if #missing > 0 then
         return failure(
             card.id:sub(1, board.MIN_PREFIX)

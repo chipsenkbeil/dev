@@ -559,10 +559,10 @@ cannot read is not refused for missing outcomes, except into Done and Ready.
 `add` refuses a card without them and names
 what is missing (exit 2), `move` does the same (exit 1), and `discard` refuses
 an unsized card or one without the headings but does not ask for outcomes (exit
-1), so a card never reaches Done unsized. `size CARD unsized` is refused outside
-Icebox (exit 1), `edit` refuses a text that drops a heading outside Icebox (exit
-1), and a move into Icebox always works. An epic follows the same rule
-with 1 to 3 outcomes in place of 3 to 7.
+1), so a card reaches Done unsized only by the Icebox `--reason` case below.
+`size CARD unsized` is refused outside Icebox (exit 1), `edit` refuses a text
+that drops a heading outside Icebox (exit 1), and a move into Icebox always
+works. An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7.
 
 Sizing is part of planning, so a card also cannot enter Ready as red.
 `move CARD ready` refuses a card that is unsized (white or no colour) or red,
@@ -1865,7 +1865,8 @@ never handles the API.
   no outcome is refused before the backend is called:
   `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it with dev board size, edit and outcome`
   (exit 1, on both backends, `dev.board.unplanned`). A `discard` is refused the
-  same way for a missing size or heading, with no outcome needed. A move into
+  same way for a missing size or heading, with no outcome needed, except an
+  unplanned Icebox card given a `--reason`. A move into
   Ready of a card whose description lacks one of the three v2 headings or text under one,
   or that has neither 3 to 7 outcomes (subtasks) nor, as the v1 fallback while
   boards are converted, a `- [ ]` or `- [x]` item under `## Done when`, is
@@ -1921,7 +1922,10 @@ never handles the API.
   except the move, which skips the outcome check (a dropped card is not done).
   When Pomb cannot take a step the steps left are queued, in order, under those
   names, so a reason is never posted twice. A blank `--reason` is exit 2. The
-  card is kept, never deleted.
+  card is kept, never deleted. An unplanned Icebox card closes when it has a
+  `--reason`, since the planning check is skipped there. An unplanned card in
+  any other column is refused (exit 1), and so is an Icebox card with no
+  reason.
 - `run [--orders TEXT | --end]`: Keeps a session's run on the board as one card
   labelled `run`, named `run <session>`, where the session is `DEV_AGENT` else
   `dev@<host>:<session>`. `--orders TEXT` adds the card in In Progress,
