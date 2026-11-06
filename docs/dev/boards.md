@@ -1710,10 +1710,12 @@ never handles the API.
   card to Release, where it waits until it is live. Without it `land` moves the
   card to Done. This repo does not set it.
 
-  Two runners landing code or skill changes against the same trunk commit
-  still need a new check for the second. By convention, and not by `dev`,
-  landings in this repo go one at a time, each runner waiting for the
-  orchestrator's turn.
+  Two runners landing code or skill changes against the same trunk commit may
+  need a new check for the second. The carry rule still asks the second
+  landing for a fresh check when a listed path moved.
+
+  The landing turn keeps landings made through `dev board land` to one at a
+  time, and a raw `jj land` takes no turn (see the `land` entry above).
 
   An overlap refuses and names the files. A different change id, a non-empty
   interdiff or a review never recorded at the checked commit keeps the plain
