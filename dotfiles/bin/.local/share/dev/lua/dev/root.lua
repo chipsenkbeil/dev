@@ -50,7 +50,7 @@ local function check_chain(root, manifest)
         end
     end
     local dir = fs.dirname(root)
-    while dir ~= "/" do
+    while dir ~= "/" and dir ~= "." do
         local refusal = check_ancestor(manifest, dir)
         if refusal then
             return refusal

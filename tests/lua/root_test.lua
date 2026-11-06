@@ -6,6 +6,7 @@ local devproject = require("dev.project")
 local support = require("support")
 local tools = require("dev.cmd.tools")
 
+local MAIN = devos.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/main.lua"
 local MAX = 262144
 
 local function line_of(length)
@@ -397,5 +398,22 @@ t.test("a refused manifest never reaches the driver and leaves no copy", functio
     t.eq(code, 1)
     t.eq(seen, nil)
     t.eq(temp_count(), before)
+    fs.remove(base, { recursive = true })
+end)
+
+t.test("a removed working directory exits 1 at once and names it", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local dir = base .. "/gone"
+    assert(fs.mkdir(dir))
+    local out, code = devos.capture_timed({
+        "sh",
+        "-c",
+        'cd "$1" && rmdir "$1" && exec luajit "$2" help',
+        "sh",
+        dir,
+        MAIN,
+    }, 1, { merge = true, env = { CI = "", DEV_REMOTE = "0" } })
+    t.eq(code, 1)
+    t.ok(out:find("dev: The working directory " .. dir .. " cannot be read.\n", 1, true), out)
     fs.remove(base, { recursive = true })
 end)

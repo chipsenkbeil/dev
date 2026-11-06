@@ -19,12 +19,23 @@ local stderr = io.stderr
 local SHARE = debug.getinfo(1, "S").source:match("^@(.*)/lua/dev/[^/]*$") or "."
 
 local function physical_cwd()
-    return (devos.capture({ "pwd", "-P" }):gsub("\n$", ""))
+    local out, code = devos.capture({ "pwd", "-P" }, { stderr = "null" })
+    local path = out:gsub("\n$", "")
+    if code ~= 0 or path == "" then
+        local pwd = os.getenv("PWD")
+        local where = "The current directory"
+        if pwd and pwd:sub(1, 1) == "/" then
+            where = "The working directory " .. pwd
+        end
+        stderr:write("dev: ", where, " cannot be read.\n")
+        os.exit(1)
+    end
+    return path
 end
 
 local function ancestor_with(markers, cwd, test)
     local dir = cwd
-    while dir ~= "/" do
+    while dir ~= "/" and dir ~= "." do
         for _, marker in ipairs(markers) do
             if test(dir .. "/" .. marker) then
                 return dir
