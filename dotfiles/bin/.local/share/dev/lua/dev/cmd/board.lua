@@ -606,9 +606,9 @@ local function other_card(backend, word)
 end
 
 ---Refuse the first checks row that is not a plain command.
----@private
 ---@param runs string[] the rows as given
 ---@return dev.cmd.board.Result? refusal a usage error naming the row, nil when every row is plain
+---@private
 function M.__row_refusal(runs)
     for _, run in ipairs(runs) do
         local why = check.refusal(run)
@@ -620,10 +620,10 @@ function M.__row_refusal(runs)
 end
 
 ---Refuse a verb run outside the jj workspace `dev ws new` names for the card.
----@private
 ---@param backend dev.board.Backend the board the command runs on
 ---@param short string the card's short id
 ---@return dev.cmd.board.Result? refusal a failure naming the workspace found, nil when the verb may go on
+---@private
 function M.__workspace_refusal(backend, short)
     if not backend.root then
         return nil

@@ -106,4 +106,18 @@ M.FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
     .. '{"id":"f4","key":"dev.files","label":"Files","kind":"multiline",'
     .. '"options":[],"columns":[],"required":false}]'
 
+---The board column names, by constant.
+---@type table<string, string>
+M.COLUMN = {
+    BACKLOG = "backlog",
+    BLOCKED = "blocked",
+    DONE = "done",
+    ICEBOX = "icebox",
+    PROGRESS = "progress",
+    READY = "ready",
+    RELEASE = "release",
+    REVIEW = "review",
+    VERIFY = "verify",
+}
+
 return M
