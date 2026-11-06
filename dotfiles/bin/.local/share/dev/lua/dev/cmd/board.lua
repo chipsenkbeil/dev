@@ -3105,6 +3105,53 @@ local function await_turn(opts)
     end
 end
 
+---Delete the card's bookmark or branch and remove its workspace.
+---@param root string absolute path of the workspace dev runs in
+---@param short string the card's short id, which names both
+---@return string lines what was deleted, removed or kept, each on its own line
+function M.clean_up(root, short)
+    local ws = require("dev.cmd.ws")
+    local kind = vcs.backend(root)
+    local lines = {}
+    local function add(line)
+        lines[#lines + 1] = line
+    end
+    local function delete_branch_from(from)
+        local deleted, why = vcs.delete_branch(from, kind, short)
+        if deleted then
+            add("Deleted " .. (kind == vcs.JJ and "bookmark " or "branch ") .. short)
+        elseif deleted == nil then
+            add("Kept " .. short .. ": " .. why)
+        end
+    end
+    local main = root
+    if kind == vcs.GIT then
+        local argv = vcs.with(
+            vcs.base(root, kind),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir"
+        )
+        local out, code = devos.capture(argv, { stderr = "null" })
+        if code == 0 then
+            main = out:gsub("\n$", ""):gsub("/%.git$", "")
+        end
+    else
+        delete_branch_from(root)
+    end
+    local removed, message = ws.remove(root, short, { inside = true })
+    if removed then
+        add(message)
+        add("The workspace is gone. Run the next command from another folder.")
+        if kind == vcs.GIT then
+            delete_branch_from(main)
+        end
+    else
+        add("Kept the workspace: " .. message)
+    end
+    return "\n" .. table.concat(lines, "\n")
+end
+
 ---@class dev.cmd.board.HeldOpts
 ---@field backend dev.board.Backend the board backend
 ---@field card dev.board.Card the card that lands
@@ -3224,7 +3271,7 @@ local function land_held(opts)
             on_trunk and ""
                 or " (the commit from before the land, which may differ: trunk could not be read)",
             target
-        ),
+        ) .. M.clean_up(backend.root, short),
     }
 end
 

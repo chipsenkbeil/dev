@@ -111,6 +111,34 @@ function M.branches(root, backend)
     return lines_of(out)
 end
 
+---Delete the branch or bookmark `name`, when the project lists it.
+---@param root string absolute path of the project root
+---@param backend dev.vcs.Backend the project's backend
+---@param name string the branch or bookmark
+---@return boolean? deleted true when deleted, false when no branch has the name, nil when the delete failed
+---@return string? why what the tool printed when the delete failed
+function M.delete_branch(root, backend, name)
+    local listed = false
+    for _, branch in ipairs(M.branches(root, backend)) do
+        listed = listed or branch == name
+    end
+    if not listed then
+        return false
+    end
+    local base = M.base(root, backend, { quiet = true })
+    local argv
+    if backend == M.JJ then
+        argv = M.with(base, "bookmark", "delete", name)
+    else
+        argv = M.with(base, "branch", "-D", name)
+    end
+    local out, code = devos.capture(argv, { stderr = "stdout" })
+    if code ~= 0 then
+        return nil, (out:gsub("\n$", ""))
+    end
+    return true
+end
+
 ---Pick `master` or `main`, whichever the list holds.
 ---@param names string[] branch names
 ---@return string? name the trunk's name

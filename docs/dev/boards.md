@@ -1661,6 +1661,16 @@ never handles the API.
   board keeps the lease for its length and ignores the card-size lease that
   `take` uses.
 
+  After the move, `land` cleans up. It deletes the bookmark named for the
+  card, then runs the removal behind `dev ws rm` on the card's workspace,
+  which is the one it runs in, so a shell left inside it sees dev exit 1 with
+  the deleted working directory message and the output says to run the next
+  command from another folder. A git project removes the worktree first and
+  then deletes the branch, because git refuses to delete a checked-out
+  branch. A workspace outside the central root, or one with changes not in a
+  commit, stays, and the output names it and why. Cleanup never changes the
+  exit code or the card's column.
+
   One case keeps a check and reviews across a rebase. When the landing commit
   lacks the reviews and has no `dev-check:` record of its own (one that does
   not parse is its own, and `land` refuses one not marked `expect-fail` as

@@ -1,6 +1,7 @@
 local ffi = require("ffi")
 
 local t = require("testing")
+local board = require("dev.board")
 local check = require("dev.board.check")
 local commands = require("dev.cmd.board")
 local devos = require("dev.os")
@@ -11,6 +12,8 @@ local localboard = require("dev.board.localboard")
 local review = require("dev.board.review")
 local support = require("support")
 local turn = require("dev.board.turn")
+local vcs = require("dev.vcs")
+local ws = require("dev.cmd.ws")
 
 local has_jj = devos.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
@@ -78,6 +81,12 @@ for word in "$@"; do
         if [ -n "$LAND_TRUNK" ]; then
             "$REAL_JJ" bookmark set master -r @ >/dev/null 2>&1
             "$REAL_JJ" git push --remote origin --bookmark master >/dev/null 2>&1
+        fi
+        if [ -n "$LAND_NEW" ]; then
+            "$REAL_JJ" new >/dev/null 2>&1
+        fi
+        if [ -n "$LAND_STRAY" ]; then
+            echo stray >"$LAND_STRAY"
         fi
         echo "$LAND_MSG"
         exit "${LAND_CODE:-0}"
@@ -2126,4 +2135,121 @@ if has_jj then
         local out = refused(root, home, log, id, { "no run of dev board check is recorded" })
         t.eq(out:find("code review", 1, true), nil, out)
     end)
+
+    local function central_project()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        jj(root, "workspace", "rename", "default")
+        local base = assert(fs.realpath(support.tempdir()))
+        local path = base .. "/proj/" .. id
+        assert(fs.mkdir(base .. "/proj", { parents = true }), "mkdir failed")
+        jj(root, "workspace", "add", "--name", id, "-r", "master", path)
+        assert(fs.write(path .. "/work.txt", "two\n"), "write failed")
+        jj(path, "describe", "-m", "feat: work")
+        jj(path, "bookmark", "create", id, "-r", "@")
+        must(dev(path, home, log, { "board", "move", id, "verify" }, { DEV_WS_ROOT = base }))
+        approve(path, home, log, id)
+        return root, home, log, id, path, base
+    end
+
+    t.test("land removes the workspace and bookmark in a jj project", function()
+        local root, home, log, id, path, base = central_project()
+        local out, code = dev(
+            path,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = "keep", LAND_NEW = "1", DEV_WS_ROOT = base }
+        )
+        t.eq(code, 0, out)
+        t.ok(out:find("Deleted bookmark " .. id, 1, true), out)
+        t.ok(out:find("removed " .. path, 1, true), out)
+        t.eq(fs.exists(path), false)
+        t.eq(jj(root, "bookmark", "list", "-T", 'name ++ "\\n"'):find(id, 1, true), nil)
+        t.eq(jj(root, "workspace", "list"):find(id .. ":", 1, true), nil)
+        t.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+    end)
+
+    t.test("land keeps a workspace with uncommitted changes", function()
+        local root, home, log, id, path, base = central_project()
+        local out, code = dev(path, home, log, { "board", "land", id }, {
+            LAND_TRUNK = "keep",
+            LAND_NEW = "1",
+            LAND_STRAY = "stray.txt",
+            DEV_WS_ROOT = base,
+        })
+        t.eq(code, 0, out)
+        t.ok(out:find("Kept the workspace: " .. path .. " holds changes", 1, true), out)
+        t.eq(out:find("Run the next command", 1, true), nil, out)
+        t.eq(fs.exists(path .. "/stray.txt"), true)
+        t.ok(jj(root, "workspace", "list"):find(id .. ":", 1, true), "the workspace is forgotten")
+        t.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+    end)
+
+    t.test("land removes the workspace it runs in", function()
+        local _, home, log, id, path, base = central_project()
+        local out, code = dev(
+            path,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = "keep", LAND_NEW = "1", DEV_WS_ROOT = base }
+        )
+        t.eq(code, 0, out)
+        t.ok(out:find("Run the next command from another folder.", 1, true), out)
+        local list = comments(home, id)
+        t.eq(list[#list].kind, board.NoteKind.DONE)
+        t.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+        t.eq(fs.exists(path), false)
+    end)
+
+    t.test("land keeps a workspace outside the central root and says why", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
+        approve(root, home, log, id)
+        local base = assert(fs.realpath(support.tempdir()))
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = "keep", LAND_NEW = "1", DEV_WS_ROOT = base }
+        )
+        t.eq(code, 0, out)
+        t.ok(out:find("Kept the workspace: " .. root .. " is outside " .. base, 1, true), out)
+        t.eq(fs.exists(root), true)
+        t.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+    end)
 end
+
+t.test("land removes the worktree and branch in a git project", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local root = assert(fs.realpath(support.tempdir()))
+    local function git(...)
+        local argv =
+            { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
+        must(devos.run(argv, { stdout = "null", stderr = "null" }))
+    end
+    git("init", "-q", "-b", "master")
+    git("commit", "-q", "--allow-empty", "-m", "base")
+    local path = base .. "/" .. fs.basename(root) .. "/card"
+    assert(fs.mkdir(base .. "/" .. fs.basename(root), { parents = true }), "mkdir failed")
+    git("worktree", "add", "-q", "-b", "card", path)
+    ffi.C.setenv("DEV_WS_ROOT", base, 1)
+    local deleted, why = vcs.delete_branch(root, vcs.GIT, "card")
+    t.eq(deleted, nil)
+    t.ok(why:find("card", 1, true), why)
+    local removed, message = ws.remove(root, "card", { inside = true })
+    t.eq(removed, true, message)
+    t.eq(message, "removed " .. path)
+    t.eq(fs.exists(path), false)
+    t.eq(vcs.delete_branch(root, vcs.GIT, "card"), true)
+    t.eq(vcs.delete_branch(root, vcs.GIT, "card"), false)
+    git("worktree", "add", "-q", "-b", "card", path)
+    local lines = commands.clean_up(path, "card")
+    t.ok(lines:find("removed " .. path, 1, true), lines)
+    t.ok(lines:find("Deleted branch card", 1, true), lines)
+    t.eq(fs.exists(path), false)
+    ffi.C.setenv("DEV_WS_ROOT", "", 1)
+end)
