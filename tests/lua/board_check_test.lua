@@ -192,6 +192,13 @@ t.test("check records the ci run id each row printed", function()
     })
 end)
 
+t.test("check labels the ci run of a row as repo/check/card", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "! printenv DEV_CI_VERB DEV_CI_CARD" })
+    local out = dev(root, home, { "board", "check", id })
+    t.ok(out:find("    check\n    " .. id, 1, true), out)
+end)
+
 t.test("check refuses a dirty git tree and records nothing", function()
     local root, home = git_root()
     local id = card_with(root, home, { "true" })

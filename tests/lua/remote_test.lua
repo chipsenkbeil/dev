@@ -39,6 +39,7 @@ run*)
     printf 'ci -C %s' "$root" >>"$STUB_LOG"
     printf ' [%s]' "$@" >>"$STUB_LOG"
     printf '\n' >>"$STUB_LOG"
+    printf '%s\n' "${DEV_AGENT:-}" >>"$STUB_LOG.agent"
     exit "${CI_STUB_RC:-0}"
     ;;
 esac
@@ -78,6 +79,9 @@ local function dev(root, base, args, env)
         PATH = base .. "/bin:" .. os.getenv("PATH"),
         HOME = base .. "/home",
         CI = "",
+        DEV_AGENT = "",
+        DEV_CI_VERB = "",
+        DEV_CI_CARD = "",
         DEV_BOX_MARKER = base .. "/no-box",
     }
     for key, value in pairs(env or {}) do
@@ -501,4 +505,39 @@ t.test("# local also works in a Lua header and a noun subcommand, and shows unde
     t.eq(log, "")
     out = dev(root, base, { "widget", "save", "-h" })
     t.ok(out:find("runs here under the remote default", 1, true), out)
+end)
+
+t.test("--remote ci run label is repo/remote when DEV_AGENT is unset", function()
+    local root, base = setup()
+    local _, code = dev(root, base, { "--remote", "test" })
+    t.eq(code, 0)
+    t.eq(fs.read(base .. "/log.agent"), "p/remote\n")
+end)
+
+t.test("--remote ci run label takes DEV_CI_VERB and DEV_CI_CARD", function()
+    local root, base = setup()
+    local _, code = dev(
+        root,
+        base,
+        { "--remote", "test" },
+        { DEV_CI_VERB = "land", DEV_CI_CARD = "d9f0e004" }
+    )
+    t.eq(code, 0)
+    t.eq(fs.read(base .. "/log.agent"), "p/land/d9f0e004\n")
+    fs.remove(base .. "/log.agent")
+    _, code = dev(root, base, { "--remote", "test" }, { DEV_CI_VERB = "release" })
+    t.eq(code, 0)
+    t.eq(fs.read(base .. "/log.agent"), "p/release\n")
+end)
+
+t.test("--remote ci run label keeps a caller's DEV_AGENT", function()
+    local root, base = setup()
+    local _, code = dev(
+        root,
+        base,
+        { "--remote", "test" },
+        { DEV_AGENT = "dotfiles/implementer/x/1", DEV_CI_VERB = "land" }
+    )
+    t.eq(code, 0)
+    t.eq(fs.read(base .. "/log.agent"), "dotfiles/implementer/x/1\n")
 end)

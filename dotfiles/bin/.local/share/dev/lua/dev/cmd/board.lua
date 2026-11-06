@@ -2762,6 +2762,7 @@ end
 local function check_rows(opts)
     local backend, card, before, argvs, flags =
         opts.backend, opts.card, opts.before, opts.argvs, opts.options
+    local remote = require("dev.remote")
     local short = card.id:sub(1, board.MIN_PREFIX)
     local message
     local rows = {}
@@ -2772,6 +2773,10 @@ local function check_rows(opts)
             run = card.checks[i],
             argv = argv,
             seconds = flags.seconds,
+            env = {
+                [remote.VERB_ENV] = remote.VERB.CHECK,
+                [remote.CARD_ENV] = short,
+            },
         })
     end
     local lines = check_lines(rows)

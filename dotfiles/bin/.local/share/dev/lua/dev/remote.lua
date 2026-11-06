@@ -1,3 +1,4 @@
+local config = require("dev.config")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -135,6 +136,28 @@ local function trace(argv, verbosity)
     end
 end
 
+---The environment variable that names the verb of a ci run, as `DEV_CI_VERB`.
+M.VERB_ENV = "DEV_CI_VERB"
+
+---The environment variable that names the card of a ci run, as `DEV_CI_CARD`.
+M.CARD_ENV = "DEV_CI_CARD"
+
+---The verbs dev puts in a ci run label when the caller names none.
+M.VERB = { CHECK = "check", REMOTE = "remote" }
+
+---Name the ci run dev starts, as `repo/verb` or `repo/verb/card`.
+---@param root string the project root
+---@param verb_name string the role, such as `remote`, `check`, `land` or `release`
+---@param card string? the card's short id
+---@return string label
+local function label(root, verb_name, card)
+    local name = (config.get(root, "board.name") or fs.basename(root)) .. "/" .. verb_name
+    if card ~= nil and card ~= "" then
+        name = name .. "/" .. card
+    end
+    return name
+end
+
 ---@class dev.remote.CiOpts
 ---@field verbosity integer 1 or more prints the ci command first
 ---@field pipeline? string a pipeline under `.ci/` to run the job from, else the default one
@@ -174,7 +197,18 @@ function M.ci_runner(run, opts)
         argv[#argv + 1] = word
     end
     trace(argv, opts.verbosity)
-    local code = devos.run(argv)
+    local agent = os.getenv("DEV_AGENT")
+    local env
+    if agent == nil or agent == "" then
+        local verb_name = os.getenv(M.VERB_ENV)
+        if verb_name == nil or verb_name == "" then
+            verb_name = M.VERB.REMOTE
+        end
+        env = {
+            DEV_AGENT = label(run.root, verb_name, os.getenv(M.CARD_ENV)),
+        }
+    end
+    local code = devos.run(argv, { env = env })
     if code == nil then
         verb.die("dev: cannot run ci")
     end

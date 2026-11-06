@@ -159,13 +159,17 @@ end
 ---@field run string the row
 ---@field argv string[] the row's words from `argv`, without a leading `! `
 ---@field seconds integer how long the row may run
+---@field env table<string, string>? variables set for the row
 
 ---Run one checks row to its end or its time limit.
 ---@param opts dev.board.check.RunOpts the row and where it runs
 ---@return dev.board.check.Row row how it ended
 function M.run(opts)
-    local output, code =
-        devos.capture_timed(opts.argv, opts.seconds, { cwd = opts.root, merge = true })
+    local output, code = devos.capture_timed(
+        opts.argv,
+        opts.seconds,
+        { cwd = opts.root, merge = true, env = opts.env }
+    )
     local negated = opts.run:match(NEGATED) ~= nil
     local passed = code == 0
     local note

@@ -87,6 +87,16 @@ nothing. When ci
 cannot be asked, the refusal fails with ci's error and the hint
 `an agent runs it on ci, so fix ci and rerun`.
 
+A run dev starts on ci carries a `DEV_AGENT` label, which `ci ps -o run,by`
+shows in the BY column. A caller's non-empty `DEV_AGENT` is kept. Otherwise the label is
+`<repo>/<verb>`, or `<repo>/<verb>/<card>` when `DEV_CI_CARD` is set, where the
+verb is `DEV_CI_VERB` and defaults to `remote`, and the repo is `[board] name` or
+the project directory name. `dev board check` sets both variables, so with
+`DEV_AGENT` unset its runs read `<repo>/check/<card>`. `dev board land` requires `DEV_AGENT`, so a run under
+land keeps the caller's label and never reads `<repo>/land/<card>`. A
+repo's own release verb exports `DEV_CI_VERB=release` and `DEV_CI_CARD` before it
+calls `dev --remote`.
+
 ## --detach
 
 `--detach` needs `--remote` (alone it is a usage error). The ci runner then
