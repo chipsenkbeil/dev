@@ -474,7 +474,8 @@ return {
     {
         words = { "board", "move" },
         handler = "lua",
-        usage = "dev board move CARD COLUMN",
+        flags = "--max-size",
+        usage = "dev board move CARD COLUMN [--max-size N]",
         desc = "Move a card to the top of a column, given by name or as ready, progress, review, verify, release, blocked, done, backlog or icebox, and a needs:human card moves only within its own column. An epic, a card with children, moves to Ready and takes a claim like any card, needs 1 to 3 outcomes as its final check and enters a WIP-limited or Done column only once every child is Done",
     },
     {
@@ -513,8 +514,8 @@ return {
     {
         words = { "board", "take" },
         handler = "lua",
-        flags = "--as",
-        usage = "dev board take CARD [--as NAME]",
+        flags = "--as --max-size",
+        usage = "dev board take CARD [--as NAME] [--max-size N]",
         desc = "Claim a card, as NAME or DEV_AGENT, and start a loop that renews the claim every 5 minutes without a model turn",
     },
     {

@@ -1860,8 +1860,8 @@ never handles the API.
   written before Pomb 0.5.7, which dev prints as
   `that comment is not yours to change` (exit 1). A missing text, a missing
   comment or an extra word is exit 2.
-- `move CARD COLUMN`: Moves the card to the top of the column and prints
-  `moved <id prefix> to <column>`. A move into In Progress that takes the claim
+- `move CARD COLUMN [--max-size N]`: Moves the card to the top of the column
+  and prints `moved <id prefix> to <column>`. A move into In Progress that takes the claim
   adds a blank line and the card as `show CARD` prints it, with the same
   stderr warning when that read fails. When the card has a claim taken by
   `take`, the move sends its fence as `If-Claim-Fence` and, for any column but
@@ -1960,8 +1960,8 @@ never handles the API.
   `init --name <directory>` does when the project is private (no origin, or an
   origin on github.com that `gh repo view` says is private) and stops with
   exit 1 otherwise, to leave a public project's board to the owner.
-- `take CARD [--as NAME]`: Claims the card (`POST /api/tasks/{id}/claim` with
-  `claimant` NAME, else `DEV_AGENT`, else
+- `take CARD [--as NAME] [--max-size N]`: Claims the card
+  (`POST /api/tasks/{id}/claim` with `claimant` NAME, else `DEV_AGENT`, else
   `dev@<host>:<CLAUDE_SESSION_ID or the pid of dev's caller>`; NAME is one word
   of letters, digits and `.`, `-`, `_` and `/` of at most 200 characters, else
   exit 2, `ttl_seconds` 900, and the stored fence when this machine already
@@ -1975,11 +1975,11 @@ never handles the API.
   `dev-claim: by=NAME`, so the name outlives the claim, and `review` reads
   those notes. If that note cannot be written the claim is released and `take`
   exits 1. `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
-  With `DEV_MAX_SIZE` set to 1, 2 or 3 (else exit 2), `take` and `move CARD
-  progress` refuse a card bigger than that many Pomodori with
-  `<id prefix> is <size>, above this runner's limit of N Pomodori
+  With `--max-size N` or, when the flag is absent, `DEV_MAX_SIZE` set to 1, 2
+  or 3 (else exit 2), `take` and `move CARD progress` refuse a card bigger
+  than that many Pomodori with `<id prefix> is <size>, above this runner's limit of N Pomodori
   (DEV_MAX_SIZE)` (exit 1). `run` takes its own run card and is not held
-  to the limit.
+  to the limit, and the `next:` line of `run` skips a card above it.
   `take` and `move CARD progress` also refuse a card when the caller already
   has 3 cards in Review or Verify whose latest `dev-claim:` note is by the
   caller's name (`DEV_AGENT`, else the host and session name), so a session

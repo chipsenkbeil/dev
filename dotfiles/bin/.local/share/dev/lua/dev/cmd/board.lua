@@ -1609,12 +1609,18 @@ end
 ---@param opts {drop: boolean?}? `drop` skips the outcome check, and the planning check from Icebox
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 local function move_card(backend, args, opts)
-    local flags, words = parse(args, {})
+    local flags, words = parse(args, { [runner.FLAG] = true })
     if not flags then
         return words
     end
     if #words < 2 then
         return usage("needs a card and a column")
+    end
+    if flags[runner.FLAG] then
+        local _, bad = runner.limit(flags[runner.FLAG])
+        if bad then
+            return bad
+        end
     end
     local roles = backend.roles
     local column, err = named_column(backend, table.concat(words, " ", 2))
@@ -1715,7 +1721,7 @@ local function move_card(backend, args, opts)
         end
     end
     if column == roles.progress then
-        local limit, bad = runner.limit()
+        local limit, bad = runner.limit(flags[runner.FLAG])
         if bad then
             return bad
         end
@@ -4339,7 +4345,7 @@ function commands.lint(backend, args)
 end
 
 function commands.take(backend, args)
-    local flags, words = parse(args, { [AS_FLAG] = true })
+    local flags, words = parse(args, { [AS_FLAG] = true, [runner.FLAG] = true })
     if not flags then
         return words
     end
@@ -4350,7 +4356,7 @@ function commands.take(backend, args)
     if why then
         return why
     end
-    local limit, bad = runner.limit()
+    local limit, bad = runner.limit(flags[runner.FLAG])
     if bad then
         return bad
     end
@@ -4498,7 +4504,8 @@ local function resume_run(backend, opts)
             held[#held + 1] = card_line(card)
         end
     end
-    local upcoming, message = backend:next(backend.roles.ready)
+    local limit = runner.limit()
+    local upcoming, message = backend:next(backend.roles.ready, { max_size = limit })
     if not upcoming and message then
         return failure(message)
     end

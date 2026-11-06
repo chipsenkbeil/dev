@@ -2719,6 +2719,59 @@ t.test("next refuses an empty --max-size", function()
     t.eq(code, 2, out)
 end)
 
+t.test("a --max-size flag on take and move wins over DEV_MAX_SIZE", function()
+    local root, home, big, small = sized_board()
+    local env = { DEV_MAX_SIZE = "3", DEV_AGENT = "r/one" }
+    local out, code = dev(root, home, { "board", "take", big, "--max-size", "2" }, env)
+    t.eq(code, 1, out)
+    t.ok(out:find("above this runner's limit of 2 Pomodori", 1, true), out)
+    out, code = dev(root, home, { "board", "move", big, "progress", "--max-size", "1" }, env)
+    t.eq(code, 1, out)
+    t.ok(out:find("above this runner's limit of 1 Pomodori", 1, true), out)
+    env.DEV_MAX_SIZE = "1"
+    out, code = dev(root, home, { "board", "take", big, "--max-size", "3" }, env)
+    t.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "take", small, "--max-size", "1" }, env)
+    t.eq(code, 0, out)
+end)
+
+t.test("take and move refuse a --max-size that is not 1, 2 or 3", function()
+    local root, home, big = sized_board()
+    local env = { DEV_MAX_SIZE = "", DEV_AGENT = "r/one" }
+    for _, word in ipairs({ "9", "", "x" }) do
+        local out, code = dev(root, home, { "board", "take", big, "--max-size", word }, env)
+        t.eq(code, 2, out)
+        out, code = dev(root, home, { "board", "move", big, "progress", "--max-size", word }, env)
+        t.eq(code, 2, out)
+    end
+end)
+
+t.test("move refuses a --max-size that is not 1, 2 or 3 into any column", function()
+    local root, home, big = sized_board()
+    local out, code = dev(root, home, { "board", "move", big, "backlog", "--max-size", "9" })
+    t.eq(code, 2, out)
+end)
+
+t.test("run resumes with a DEV_MAX_SIZE that is not 1, 2 or 3", function()
+    local root, home = sized_board()
+    local agent = { DEV_AGENT = "dotfiles/one", DEV_MAX_SIZE = "" }
+    dev(root, home, { "board", "run", "--orders", "Clear the board" }, agent)
+    agent.DEV_MAX_SIZE = "9"
+    local out, code = dev(root, home, { "board", "run" }, agent)
+    t.eq(code, 0, out)
+end)
+
+t.test("run prints a next card within DEV_MAX_SIZE", function()
+    local root, home, big, small = sized_board()
+    local agent = { DEV_AGENT = "dotfiles/one", DEV_MAX_SIZE = "" }
+    dev(root, home, { "board", "run", "--orders", "Clear the board" }, agent)
+    local out = dev(root, home, { "board", "run" }, agent)
+    t.ok(out:find(big, 1, true), out)
+    agent.DEV_MAX_SIZE = "1"
+    out = dev(root, home, { "board", "run" }, agent)
+    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
+end)
+
 t.test("take and move refuse a DEV_MAX_SIZE that is not 1, 2 or 3", function()
     local root, home, big = sized_board()
     local env = { DEV_MAX_SIZE = "9", DEV_AGENT = "r/one" }
