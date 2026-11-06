@@ -26,7 +26,7 @@ local stderr = io.stderr
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
-local runner = { FLAG = "--max-size", MAX_WAITING_CARDS = 3 }
+local runner = { FLAG = "--max-size", DEFAULT_WIP_CARDS = 4 }
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
 local CLAIMANT_CHARS = 200
@@ -519,19 +519,6 @@ local function claimant(name)
     return ("dev@" .. host .. ":" .. session:gsub("[^%w._-]", "_")):sub(1, CLAIMANT_CHARS)
 end
 
----Tell a named caller from an anonymous one.
----
----@param name string? the caller's given name
----@return boolean named true when a name or CLAUDE_SESSION_ID stands for the caller
----@private
-function runner.__named(name)
-    if name then
-        return true
-    end
-    local session = os.getenv("CLAUDE_SESSION_ID")
-    return session ~= nil and session ~= ""
-end
-
 local function find_card(backend, word)
     local cards, message = backend:cards()
     if not cards then
@@ -544,46 +531,48 @@ local function find_card(backend, word)
     return card
 end
 
----Refuse `card` when `who` already holds the limit of cards waiting to land.
+---Refuse `card` when the board already holds its budget of cards in flight.
 ---
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card the caller is about to start
----@param who string the caller's claimant name
----@return dev.cmd.board.Result? err the refusal naming the waiting cards, nil under the limit
+---@return dev.cmd.board.Result? err the refusal naming the cards in flight, nil under the budget
 ---@private
-function runner.__waiting(backend, card, who)
+function runner.__budget(backend, card)
     local cards, message = backend:cards()
     if not cards then
         return failure(message)
     end
     local roles = backend.roles
-    local waiting = {}
+    local flying = {}
     for _, other in ipairs(cards) do
         local column = other.column
-        if other.id ~= card.id and (column == roles.review or column == roles.verify) then
-            local past, why = backend:comments(other.id)
-            if not past then
-                return failure(why)
-            end
-            if board.last_claimant(past) == who then
-                waiting[#waiting + 1] = other.id:sub(1, board.MIN_PREFIX)
-            end
+        if
+            other.id ~= card.id
+            and (column == roles.progress or column == roles.review or column == roles.verify)
+        then
+            flying[#flying + 1] = other.id:sub(1, board.MIN_PREFIX)
         end
     end
-    if #waiting < runner.MAX_WAITING_CARDS then
+    local budget = config.get(backend.root, "board.wip") or runner.DEFAULT_WIP_CARDS
+    if type(budget) ~= "number" or budget % 1 ~= 0 or budget < 1 then
+        return failure("dev: [board] wip must be a whole number of cards, 1 or more.")
+    end
+    if #flying < budget then
         return nil
     end
     return failure(
-        who
-            .. " already has "
-            .. #waiting
-            .. " cards waiting in "
+        #flying
+            .. " cards are in flight in "
+            .. roles.progress
+            .. ", "
             .. roles.review
-            .. " or "
+            .. " and "
             .. roles.verify
             .. " ("
-            .. table.concat(waiting, ", ")
-            .. "). Land them first."
+            .. table.concat(flying, ", ")
+            .. "), at the budget of "
+            .. budget
+            .. ". Land one first."
     )
 end
 
@@ -1730,15 +1719,13 @@ local function move_card(backend, args, opts)
             return refused
         end
         if card.column ~= roles.progress and not claims.read(card.id) then
-            local who, wrong = agent_name()
+            local _, wrong = agent_name()
             if wrong then
                 return wrong
             end
-            if runner.__named(who) then
-                refused = runner.__waiting(backend, card, who or claimant())
-                if refused then
-                    return refused
-                end
+            refused = runner.__budget(backend, card)
+            if refused then
+                return refused
             end
         end
     end
@@ -4371,8 +4358,8 @@ function commands.take(backend, args)
     local roles = backend.roles
     local rival = card.claimant ~= nil and card.claimant ~= (name or claimant())
     local limited = card.column ~= roles.progress and not claims.read(card.id) and not rival
-    if limited and runner.__named(name) then
-        refused = runner.__waiting(backend, card, name or claimant())
+    if limited then
+        refused = runner.__budget(backend, card)
         if refused then
             return refused
         end

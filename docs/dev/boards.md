@@ -62,7 +62,8 @@ name = "dotfiles"
 ```
 
 `backend` is `pomb` or `local`, and `name` defaults to the project directory's
-name. `dev board status` prints the backend and the board, or
+name. `wip` is the budget of cards in flight and is 4 when it is unset (see
+`take`). `dev board status` prints the backend and the board, or
 `no board for this project` with exit 1, and every other subcommand says the
 same and exits 1 without a `[board]` section. The `local` backend keeps the
 board in a file (see Local boards below).
@@ -1980,21 +1981,21 @@ never handles the API.
   than that many Pomodori with `<id prefix> is <size>, above this runner's limit of N Pomodori
   (DEV_MAX_SIZE)` (exit 1). `run` takes its own run card and is not held
   to the limit, and the `next:` line of `run` skips a card above it.
-  `take` and `move CARD progress` also refuse a card when the caller already
-  has 3 cards in Review or Verify whose latest `dev-claim:` note is by the
-  caller's name (`DEV_AGENT`, else the host and session name), so a session
-  lands what passed before it takes a new card. Cards in Release do not count
-  (land puts a card there to wait for a deploy). The card being moved does not
-  count, and another name's cards never do. The refusal reads `NAME already
-  has N cards waiting in Review or Verify (ID, ID, ID). Land them first`
-  (exit 1). A caller with neither `DEV_AGENT` nor `CLAUDE_SESSION_ID` has no
-  stable name, so the limit does not apply to it.
+  `take` and `move CARD progress` also refuse a card when the board already
+  holds its budget of cards in flight, the cards in In Progress, Review and
+  Verify whoever claimed them, to land what passed before it starts a new
+  card. The budget is `board.wip`, set as `wip` under `[board]`, and is 4 when
+  it is unset. A project sets it only to change it. Cards in Release do not
+  count (land puts a card there to wait for a deploy), and neither does the
+  card being moved. The refusal reads `N cards are in flight in In Progress,
+  Review and Verify (ID, ID, ID), at the budget of B. Land one first.` (exit
+  1). Every caller counts, named or not.
   A card already in In Progress, or whose claim this machine holds, is not
   checked, and a take of a card another name holds gets the claim refusal.
-  The count and the claim are two steps, so under parallel commands with one
-  name the limit is advisory and can be overrun. `next` stays read-only and
-  shows the card anyway. The turn hold is 1800 seconds by default and 3600 at
-  most (see `turn`).
+  Cards already in flight are never moved. The count and the claim are two
+  steps, and under parallel commands the budget is advisory and can be
+  overrun. `next` stays read-only and shows the card anyway. The turn hold is
+  1800 seconds by default and 3600 at most (see `turn`).
 - `release CARD`: Stops the loop, forgets the claim and posts `/claim/release`
   with the fence. Prints `released <id prefix>`. A card with no claim taken by
   `take` is exit 1.

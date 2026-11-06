@@ -13,7 +13,6 @@ local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
-local REVIEW_ONLY = { COLUMN.REVIEW, COLUMN.REVIEW, COLUMN.REVIEW }
 
 local function setup(project)
     local root = support.sandbox({ [".dev/config.toml"] = project }, {})
@@ -3107,218 +3106,140 @@ t.test("attach, attachments and detach refuse plainly on a local board", functio
     end
 end)
 
-local function park_three(root, home, opts)
-    local agent = opts.agent
-    local columns = opts.columns
-    local function ready(name)
-        return prefix_of((dev(root, home, {
-            "board",
-            "add",
-            name,
-            "--column",
-            COLUMN.READY,
-            "--size",
-            "1",
-            "--description",
-            V1,
-            "--checks",
-            "dev test",
-        })))
-    end
-    local parked = {}
-    for index, name in ipairs({ "One", "Two", "Three" }) do
-        local id = ready(name)
-        local env = { DEV_AGENT = agent }
-        local out, code = dev(root, home, { "board", "move", id, COLUMN.PROGRESS }, env)
-        t.eq(code, 0, out)
-        dev(root, home, { "board", "note", id, "built it, tried it, learned it" })
-        local column = columns[index]
-        out, code = dev(root, home, { "board", "move", id, column }, { DEV_AGENT = agent })
-        t.eq(code, 0, out)
-        parked[#parked + 1] = id
-    end
-    return ready("Fourth"), parked
+local function ready_card(root, home, name)
+    return prefix_of((dev(root, home, {
+        "board",
+        "add",
+        name,
+        "--column",
+        COLUMN.READY,
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
 end
 
-t.test("a fourth card past in progress is refused", function()
-    local root, home = local_board()
-    local fourth, parked = park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
-    local one = { DEV_AGENT = "r/one" }
-    local out, code = dev(root, home, { "board", "move", fourth, COLUMN.PROGRESS }, one)
+local function park_cards(root, home, columns)
+    local parked = {}
+    for index, column in ipairs(columns) do
+        local id = ready_card(root, home, "Parked" .. index)
+        local env = { DEV_AGENT = "r/" .. index }
+        local out, code = dev(root, home, { "board", "move", id, COLUMN.PROGRESS }, env)
+        t.eq(code, 0, out)
+        if column ~= COLUMN.PROGRESS then
+            dev(root, home, { "board", "note", id, "built it, tried it, learned it" })
+            out, code = dev(root, home, { "board", "move", id, column }, env)
+            t.eq(code, 0, out)
+        end
+        parked[#parked + 1] = id
+    end
+    return parked
+end
+
+local function wip_board(wip)
+    local project = '[board]\nbackend = "local"\nname = "mine"\n'
+    if wip then
+        project = project .. "wip = " .. wip .. "\n"
+    end
+    return local_board(project)
+end
+
+t.test("board budget refuses take at the budget", function()
+    local root, home = wip_board(3)
+    local parked = park_cards(root, home, { COLUMN.PROGRESS, COLUMN.REVIEW, COLUMN.VERIFY })
+    local extra = ready_card(root, home, "Extra")
+    local out, code = dev(root, home, { "board", "move", extra, COLUMN.PROGRESS })
     t.eq(code, 1, out)
     for _, id in ipairs(parked) do
         t.ok(out:find(id, 1, true), out)
     end
-    t.ok(out:find("Land them first.", 1, true), out)
-    out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
+    t.ok(out:find("at the budget of 3. Land one first.", 1, true), out)
+    out, code = dev(root, home, { "board", "take", extra, "--as", "r/new" })
     t.eq(code, 1, out)
-    t.ok(out:find("Land them first.", 1, true), out)
-    t.eq(card_named(document(file_of(home)), "Fourth").claim, nil)
-    out, code = dev(root, home, { "board", "next" }, { DEV_AGENT = "r/one" })
+    t.ok(out:find("Land one first.", 1, true), out)
+    t.eq(card_named(document(file_of(home)), "Extra").claim, nil)
+end)
+
+t.test("board budget allows take under the budget", function()
+    local root, home = wip_board(3)
+    park_cards(root, home, { COLUMN.PROGRESS, COLUMN.REVIEW })
+    local extra = ready_card(root, home, "Extra")
+    local out, code = dev(root, home, { "board", "take", extra, "--as", "r/new" })
     t.eq(code, 0, out)
 end)
 
-t.test("cards waiting in Review and Verify count toward the limit", function()
-    local root, home = local_board()
-    local fourth = park_three(root, home, {
-        agent = "r/one",
-        columns = { COLUMN.REVIEW, COLUMN.VERIFY, COLUMN.VERIFY },
-    })
-    local out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
-    t.eq(code, 1, out)
-    t.ok(out:find("waiting in Review or Verify (", 1, true), out)
-    t.ok(out:find("Land them first.", 1, true), out)
-end)
-
-t.test("landed cards in Release do not refuse a fourth", function()
-    local root, home = local_board()
-    local fourth = park_three(root, home, {
-        agent = "r/one",
-        columns = { COLUMN.RELEASE, COLUMN.RELEASE, COLUMN.RELEASE },
-    })
-    local out, code = dev(root, home, { "board", "take", fourth, "--as", "r/one" })
+t.test("board budget default is 4 when wip is unset", function()
+    local root, home = wip_board()
+    park_cards(root, home, { COLUMN.PROGRESS, COLUMN.PROGRESS, COLUMN.REVIEW })
+    local extra = ready_card(root, home, "Extra")
+    local new = { DEV_AGENT = "r/new" }
+    local out, code = dev(root, home, { "board", "move", extra, COLUMN.PROGRESS }, new)
     t.eq(code, 0, out)
+    local more = ready_card(root, home, "More")
+    out, code = dev(root, home, { "board", "take", more, "--as", "r/other" })
+    t.eq(code, 1, out)
+    t.ok(out:find("at the budget of 4. Land one first.", 1, true), out)
 end)
 
-t.test("a held card is not refused while three of the caller's cards wait", function()
-    local root, home = local_board()
-    local held = prefix_of((dev(root, home, {
-        "board",
-        "add",
-        "Held",
-        "--column",
-        COLUMN.READY,
-        "--size",
-        "1",
-        "--description",
-        V1,
-        "--checks",
-        "dev test",
-    })))
+t.test("board budget wip replaces the default", function()
+    local root, home = wip_board(6)
+    park_cards(root, home, {
+        COLUMN.PROGRESS,
+        COLUMN.PROGRESS,
+        COLUMN.REVIEW,
+        COLUMN.REVIEW,
+        COLUMN.VERIFY,
+    })
+    local extra = ready_card(root, home, "Extra")
+    local new = { DEV_AGENT = "r/new" }
+    local out, code = dev(root, home, { "board", "move", extra, COLUMN.PROGRESS }, new)
+    t.eq(code, 0, out)
+    local more = ready_card(root, home, "More")
+    out, code = dev(root, home, { "board", "take", more, "--as", "r/other" })
+    t.eq(code, 1, out)
+    t.ok(out:find("at the budget of 6. Land one first.", 1, true), out)
+end)
+
+t.test("board budget leaves held and rival cards to their own refusals", function()
+    local root, home = wip_board(1)
+    local held = ready_card(root, home, "Held")
     local out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
     t.eq(code, 0, out)
-    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
-    out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
+    local rival = ready_card(root, home, "Rival")
+    out, code = dev(root, home, { "board", "take", rival, "--as", "r/two" })
     t.eq(code, 0, out)
-end)
-
-t.test("cards of another claimant do not count", function()
-    local root, home = local_board()
-    local fourth, _ = park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
-    local two = { DEV_AGENT = "r/two" }
-    local out, code = dev(root, home, { "board", "move", fourth, COLUMN.PROGRESS }, two)
-    t.eq(code, 0, out)
-    t.eq(card_named(document(file_of(home)), "Fourth").claim.claimant, "r/two")
-end)
-
-t.test("a held card moves to progress past the limit", function()
-    local root, home = local_board()
-    local held = prefix_of((dev(root, home, {
-        "board",
-        "add",
-        "Held",
-        "--column",
-        COLUMN.READY,
-        "--size",
-        "1",
-        "--description",
-        V1,
-        "--checks",
-        "dev test",
-    })))
-    local out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
-    t.eq(code, 0, out)
-    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
+    local full = card_named(document(file_of(home)), "Rival").id
+    fs.remove(home .. "/state/dev/board/" .. full)
+    park_cards(root, home, { COLUMN.PROGRESS })
     out, code = dev(root, home, { "board", "move", held, COLUMN.PROGRESS }, { DEV_AGENT = "r/one" })
     t.eq(code, 0, out)
-end)
-
-t.test("take on an In Progress card is not refused past the limit", function()
-    local root, home = local_board()
-    local held = prefix_of((dev(root, home, {
-        "board",
-        "add",
-        "Held",
-        "--column",
-        COLUMN.READY,
-        "--size",
-        "1",
-        "--description",
-        V1,
-        "--checks",
-        "dev test",
-    })))
-    local out, code = dev(root, home, { "board", "take", held, "--as", "r/two" })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "move", held, COLUMN.PROGRESS }, { DEV_AGENT = "r/two" })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "release", held }, { DEV_AGENT = "r/two" })
-    t.eq(code, 0, out)
-    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
-    out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
-    t.eq(code, 0, out)
-end)
-
-t.test("take on a card another name holds gives the claim refusal", function()
-    local root, home = local_board()
-    local held = prefix_of((dev(root, home, {
-        "board",
-        "add",
-        "Held",
-        "--column",
-        COLUMN.READY,
-        "--size",
-        "1",
-        "--description",
-        V1,
-        "--checks",
-        "dev test",
-    })))
-    local out, code = dev(root, home, { "board", "take", held, "--as", "r/two" }, {
-        DEV_AGENT = "r/two",
-    })
-    t.eq(code, 0, out)
-    local full = card_named(document(file_of(home)), "Held").id
-    fs.remove(home .. "/state/dev/board/" .. full)
-    park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
-    out, code = dev(root, home, { "board", "take", held, "--as", "r/one" })
+    out, code = dev(root, home, { "board", "take", rival, "--as", "r/one" })
     t.eq(code, 1, out)
     t.ok(out:find("is claimed by r/two", 1, true), out)
-    t.ok(not out:find("Land them first.", 1, true), out)
+    t.ok(not out:find("Land one first.", 1, true), out)
 end)
 
-t.test("a card that moved on to another claimant stops counting", function()
-    local root, home = local_board()
-    local fourth, parked = park_three(root, home, { agent = "r/one", columns = REVIEW_ONLY })
-    local out, code = dev(root, home, { "board", "move", parked[1], COLUMN.READY })
-    t.eq(code, 0, out)
-    out, code = dev(
-        root,
-        home,
-        { "board", "move", parked[1], COLUMN.PROGRESS },
-        { DEV_AGENT = "r/two" }
-    )
+t.test("board budget rejects a wip that is not a whole number", function()
+    local root, home = wip_board('"many"')
+    local extra = ready_card(root, home, "Extra")
+    local out, code = dev(root, home, { "board", "take", extra, "--as", "r/new" })
+    t.eq(code, 1, out)
+    t.ok(out:find("wip must be a whole number", 1, true), out)
+end)
+
+t.test("board budget ignores Release and the card moved", function()
+    local root, home = wip_board(1)
+    local parked = park_cards(root, home, { COLUMN.REVIEW })
+    local env = { DEV_AGENT = "r/1" }
+    local out, code = dev(root, home, { "board", "move", parked[1], COLUMN.PROGRESS }, env)
     t.eq(code, 0, out)
     dev(root, home, { "board", "note", parked[1], "built it, tried it, learned it" })
-    out, code = dev(
-        root,
-        home,
-        { "board", "move", parked[1], COLUMN.REVIEW },
-        { DEV_AGENT = "r/two" }
-    )
+    out, code = dev(root, home, { "board", "move", parked[1], COLUMN.RELEASE }, env)
     t.eq(code, 0, out)
-    out, code = dev(
-        root,
-        home,
-        { "board", "move", fourth, COLUMN.PROGRESS },
-        { DEV_AGENT = "r/one" }
-    )
-    t.eq(code, 0, out)
-    out, code = dev(
-        root,
-        home,
-        { "board", "move", parked[2], COLUMN.PROGRESS },
-        { DEV_AGENT = "r/one" }
-    )
+    local extra = ready_card(root, home, "Extra")
+    out, code = dev(root, home, { "board", "take", extra, "--as", "r/new" })
     t.eq(code, 0, out)
 end)
