@@ -620,6 +620,15 @@ assert_contains "ci's notes are shown" "$out" "dev connect: example-box is unrea
 assert_contains "the good connectable still connects" "$(calls)" "ssh ci-ok-vm"
 reset
 fx ls "$(lsdoc "$RUNNING")"
+fx ssh.ls "$CONNECTABLES"
+echo "hub down" >"$FX/ssh.ls.err"
+echo 1 >"$FX/ssh.ls.rc"
+out="$(box connect scratch-vm 2>&1)"
+assert_eq "a failing ci ssh ls exits with ci's code" "$?" "1"
+assert_contains "a failing ci ssh ls prints ci's standard error" "$out" "dev connect: hub down"
+assert_not_contains "a failing ci ssh ls does not print its standard output" "$out" "dev connect: {"
+reset
+fx ls "$(lsdoc "$RUNNING")"
 echo 2 >"$FX/ssh.config.rc"
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
 assert_eq "an old ci without ssh config still connects a box" "$(calls)" "ci box ls --json
@@ -629,7 +638,8 @@ et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c
 assert_eq "an old ci gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx ssh.ls "error: unrecognized subcommand 'ssh'" 2
+fx ssh.ls '' 2
+echo "error: unrecognized subcommand 'ssh'" >"${FX}/ssh.ls.err"
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
 assert_eq "a ci with ssh config but no ssh ls lists boxes only" "$(calls)" "ci box ls --json
 ci ssh config
@@ -639,7 +649,8 @@ et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c
 assert_eq "a ci with no ssh ls gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx ssh.ls 'hub unreachable' 1
+fx ssh.ls '' 1
+echo 'hub unreachable' >"${FX}/ssh.ls.err"
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
 assert_eq "a failing ci ssh config or ls still lets the picker attach a box" "$?" "0"
 assert_contains "a failing ci ssh config or ls prints ci's message" "$out" "dev connect: hub unreachable"
@@ -647,7 +658,8 @@ assert_contains "a failing ci ssh config or ls still offers the boxes" "$(cat "$
 assert_contains "the box attaches over et" "$(calls)" "et --ssh-option"
 reset
 fx ls "$(lsdoc "$RUNNING")"
-fx ssh.ls 'hub unreachable' 1
+fx ssh.ls '' 1
+echo 'hub unreachable' >"${FX}/ssh.ls.err"
 out="$(box connect host-a 2>&1)"
 assert_eq "a named non-box keeps ci's code when ci ssh ls fails" "$?" "1"
 assert_contains "a named non-box prints ci's message" "$out" "dev connect: hub unreachable"

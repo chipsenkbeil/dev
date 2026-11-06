@@ -1,5 +1,6 @@
 local box = require("dev.cmd.box")
 local devos = require("dev.os")
+local fs = require("dev.fs")
 local json = require("dev.json")
 local picker = require("dev.ui.picker")
 local ui = require("dev.ui")
@@ -210,7 +211,8 @@ local function connect_failed(raw)
     if type(message) ~= "string" then
         message = out
     end
-    message = message:match("^[^\n]*")
+    message = message:match("\nerror:[^\n]*") or message:match("^[^\n]*")
+    message = message:gsub("^\n", "")
     if message ~= "" then
         stderr:write("dev connect: ", (message:gsub("[^\32-\126]", " ")), "\n")
     end
@@ -230,6 +232,33 @@ local function plain(text)
     return (text:gsub("[^\32-\126]", " "))
 end
 
+---Run a ci command, keeping its standard error apart from its output.
+---
+---On success the standard error goes through to the terminal unchanged. On
+---failure it is returned as the text to report. Without a temporary file ci
+---writes to the terminal directly.
+---@param argv string[] the ci command
+---@return string output what ci wrote to standard output, or its standard error when it failed
+---@return integer? code exit status of the command
+local function capture_ci(argv)
+    local errfile, reason = fs.mktemp({ prefix = "dev-connect" })
+    if not errfile then
+        stderr:write("dev connect: ", reason, "\n")
+        return devos.capture(argv)
+    end
+    local ok, out, code = pcall(devos.capture, argv, { stderr = errfile })
+    local detail = fs.read(errfile) or ""
+    fs.remove(errfile)
+    if not ok then
+        error(out, 0)
+    end
+    if code ~= 0 then
+        return detail, code
+    end
+    stderr:write(detail)
+    return out, code
+end
+
 ---Write ci's ssh_config and list the hosts of `ci ssh ls`, apart from boxes and sessions.
 ---
 ---A ci with no `ssh config` exits 2, which shows boxes only, with one note.
@@ -238,9 +267,9 @@ end
 ---@param opts dev.cmd.connect.ConnectablesOpts how to treat a failure
 ---@return dev.cmd.connect.Connectable[] found the connectables, in ci's order
 local function connectables(opts)
-    local raw, code = devos.capture({ "ci", "ssh", "config" })
+    local raw, code = capture_ci({ "ci", "ssh", "config" })
     if code == 0 then
-        raw, code = devos.capture({ "ci", "ssh", "ls", "--json" })
+        raw, code = capture_ci({ "ci", "ssh", "ls", "--json" })
     end
     if code == NO_CONNECT then
         stderr:write("dev connect: this ci has no ssh command, listing boxes only\n")

@@ -25,10 +25,22 @@ local function sandbox()
         '#!/bin/sh\necho "ci $*" >> "'
             .. root
             .. '/calls"\n'
-            .. 'if [ "$1" = ssh ] && [ "$2" = config ]; then exit "$(cat "'
+            .. 'if [ "$1" = ssh ] && [ "$2" = config ]; then\n'
+            .. '  [ ! -f "'
             .. root
-            .. '/ssh.config.rc" 2>/dev/null || echo 0)"; fi\n'
+            .. '/ssh.config.err" ] || cat "'
+            .. root
+            .. '/ssh.config.err" >&2\n'
+            .. '  exit "$(cat "'
+            .. root
+            .. '/ssh.config.rc" 2>/dev/null || echo 0)"\n'
+            .. "fi\n"
             .. 'if [ "$1" = ssh ] && [ "$2" = ls ]; then\n'
+            .. '  [ ! -f "'
+            .. root
+            .. '/ssh.ls.err" ] || cat "'
+            .. root
+            .. '/ssh.ls.err" >&2\n'
             .. '  cat "'
             .. root
             .. '/ssh.ls.json"\n'
@@ -134,8 +146,8 @@ end)
 
 t.test("a failing ci ssh ls still lets the picker attach a box", function()
     local root = sandbox()
-    assert(fs.write(root .. "/ssh.ls.json", "hub down"))
-    assert(fs.write(root .. "/ssh.ls.rc", "7\n"))
+    assert(fs.write(root .. "/ssh.ls.err", "hub down\n"))
+    assert(fs.write(root .. "/ssh.ls.rc", "1\n"))
     local out, code =
         support.dev(root, { "connect", "--ssh" }, env({ FAKE_TTY = "1", FAKE_PICK = "b1" }))
     t.eq(code, 0)
@@ -144,22 +156,68 @@ t.test("a failing ci ssh ls still lets the picker attach a box", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test("another ci ssh ls failure prints ci's message and keeps its code", function()
+t.test("another ci ssh ls failure prints ci's standard error and keeps its code", function()
     local root = sandbox()
-    assert(fs.write(root .. "/ssh.ls.json", "hub down"))
-    assert(fs.write(root .. "/ssh.ls.rc", "7\n"))
+    assert(fs.write(root .. "/ssh.ls.err", "hub down\n"))
+    assert(fs.write(root .. "/ssh.ls.rc", "1\n"))
     local out, code = support.dev(root, { "connect", "vm1" }, env())
-    t.eq(code, 7)
+    t.eq(code, 1)
     t.ok(out:find("dev connect: hub down", 1, true), out)
     t.eq(calls(root):find("ssh ci-", 1, true), nil)
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a failing ci ssh config keeps its code and never asks ci ssh ls", function()
+t.test("a failing ci ssh config prints its standard error and never asks ci ssh ls", function()
     local root = sandbox()
-    assert(fs.write(root .. "/ssh.config.rc", "7\n"))
-    local _, code = support.dev(root, { "connect", "vm1" }, env())
-    t.eq(code, 7)
+    assert(fs.write(root .. "/ssh.config.err", "hub down\n"))
+    assert(fs.write(root .. "/ssh.config.rc", "1\n"))
+    local out, code = support.dev(root, { "connect", "vm1" }, env())
+    t.eq(code, 1)
+    t.ok(out:find("dev connect: hub down", 1, true), out)
     t.eq(calls(root), "ci box ls --json\nci ssh config\n")
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a successful ci ssh ls parses its document and shows a note on standard error", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.ls.err", "ci: refreshing the session list\n"))
+    local out, code = support.dev(root, { "connect", "vm1" }, env())
+    t.eq(code, 0)
+    t.eq(calls(root), "ci box ls --json\nci ssh config\nci ssh ls --json\nssh ci-vm1\n")
+    t.ok(out:find("dev connect: example-box is slow", 1, true), out)
+    t.ok(out:find("ci: refreshing the session list", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a successful ci ssh config shows its warning on standard error", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.config.err", "warning: stale host key\n"))
+    local out, code = support.dev(root, { "connect", "vm1" }, env())
+    t.eq(code, 0)
+    t.eq(calls(root), "ci box ls --json\nci ssh config\nci ssh ls --json\nssh ci-vm1\n")
+    t.ok(out:find("warning: stale host key", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a temporary file that cannot be made still lets the picker list boxes", function()
+    local root = sandbox()
+    local out, code = support.dev(
+        root,
+        { "connect", "--ssh" },
+        env({ FAKE_TTY = "1", FAKE_PICK = "b1", TMPDIR = root .. "/missing" })
+    )
+    t.eq(code, 0)
+    t.ok(out:find("dev connect: cannot make a temporary path", 1, true), out)
+    t.ok(calls(root):find("ci ssh b1", 1, true), calls(root))
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("a failing ci ssh config prints the error line after a warning", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.config.err", "warning: stale host key\nerror: cannot write\n"))
+    assert(fs.write(root .. "/ssh.config.rc", "1\n"))
+    local out, code = support.dev(root, { "connect", "vm1" }, env())
+    t.eq(code, 1)
+    t.ok(out:find("dev connect: error: cannot write", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
