@@ -69,11 +69,7 @@ local function write_config(base, body)
     assert(fs.write(base .. "/home/.config/dev/config.toml", "[remote]\n" .. body .. "\n"))
 end
 
-local function dev(root, base, args, env)
-    local argv = { "luajit", MAIN }
-    for _, word in ipairs(args) do
-        argv[#argv + 1] = word
-    end
+local function dev_env(base, env)
     local merged = {
         STUB_LOG = base .. "/log",
         PATH = base .. "/bin:" .. os.getenv("PATH"),
@@ -87,8 +83,19 @@ local function dev(root, base, args, env)
     for key, value in pairs(env or {}) do
         merged[key] = value
     end
+    return merged
+end
+
+local function dev(root, base, args, env)
+    local argv = { "luajit", MAIN }
+    for _, word in ipairs(args) do
+        argv[#argv + 1] = word
+    end
     fs.remove(base .. "/log")
-    local out, code = devos.capture(argv, { cwd = root, stderr = "stdout", env = merged })
+    local out, code = devos.capture(
+        argv,
+        { cwd = root, stderr = "stdout", stdin = "null", env = dev_env(base, env) }
+    )
     return out, code, fs.read(base .. "/log") or ""
 end
 
@@ -528,6 +535,41 @@ t.test("--remote ci run label takes DEV_CI_VERB and DEV_CI_CARD", function()
     _, code = dev(root, base, { "--remote", "test" }, { DEV_CI_VERB = "release" })
     t.eq(code, 0)
     t.eq(fs.read(base .. "/log.agent"), "p/release\n")
+end)
+
+t.test("run label is unset for a bare run in a terminal", function()
+    local remote = require("dev.remote")
+    local root = setup()
+    t.eq(remote.run_label(root, {}, true), nil)
+    t.eq(remote.run_label(root, { DEV_AGENT = "", DEV_CI_VERB = "" }, true), nil)
+    t.eq(remote.run_label(root, { DEV_CI_CARD = "d9f0e004" }, true), nil)
+end)
+
+t.test("run label keeps check and release labels in a terminal", function()
+    local remote = require("dev.remote")
+    local root = setup()
+    local check = { DEV_CI_VERB = remote.VERB.CHECK, DEV_CI_CARD = "d9f0e004" }
+    t.eq(remote.run_label(root, check, true), "p/check/d9f0e004")
+    local release = "release"
+    t.eq(remote.run_label(root, { DEV_CI_VERB = release }, true), "p/" .. release)
+    t.eq(remote.run_label(root, {}, false), "p/remote")
+    local agent = { DEV_AGENT = "dotfiles/implementer/x/1" }
+    t.eq(remote.run_label(root, agent, false), nil)
+    t.eq(remote.run_label(root, agent, true), nil)
+end)
+
+t.test("--remote ci run label is unset when run from a real terminal", function()
+    local root, base = setup()
+    if devos.name() ~= "Linux" then
+        error("the terminal run needs util-linux script, so it runs on Linux only")
+    end
+    local argv = { "luajit", MAIN, "--remote", "test" }
+    local _, code = devos.capture(
+        { "script", "-qec", devos.command(argv), "/dev/null" },
+        { cwd = root, stderr = "stdout", env = dev_env(base) }
+    )
+    t.eq(code, 0)
+    t.eq(fs.read(base .. "/log.agent"), "\n")
 end)
 
 t.test("--remote ci run label keeps a caller's DEV_AGENT", function()

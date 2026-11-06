@@ -158,6 +158,28 @@ local function label(root, verb_name, card)
     return name
 end
 
+---Choose the `DEV_AGENT` label for a run dev starts on ci.
+---
+---A caller's non-empty `DEV_AGENT` wins, a bare run from a terminal carries none,
+---and any other run is labelled by its verb and card.
+---@param root string the project root
+---@param env table<string, string?> `DEV_AGENT`, `DEV_CI_VERB` and `DEV_CI_CARD`
+---@param tty boolean whether stdin is a terminal
+---@return string? name the label to set, or nil to set none
+function M.run_label(root, env, tty)
+    if env.DEV_AGENT ~= nil and env.DEV_AGENT ~= "" then
+        return nil
+    end
+    local verb_name = env.DEV_CI_VERB
+    if verb_name == nil or verb_name == "" then
+        if tty then
+            return nil
+        end
+        verb_name = M.VERB.REMOTE
+    end
+    return label(root, verb_name, env.DEV_CI_CARD)
+end
+
 ---@class dev.remote.CiOpts
 ---@field verbosity integer 1 or more prints the ci command first
 ---@field pipeline? string a pipeline under `.ci/` to run the job from, else the default one
@@ -197,17 +219,12 @@ function M.ci_runner(run, opts)
         argv[#argv + 1] = word
     end
     trace(argv, opts.verbosity)
-    local agent = os.getenv("DEV_AGENT")
-    local env
-    if agent == nil or agent == "" then
-        local verb_name = os.getenv(M.VERB_ENV)
-        if verb_name == nil or verb_name == "" then
-            verb_name = M.VERB.REMOTE
-        end
-        env = {
-            DEV_AGENT = label(run.root, verb_name, os.getenv(M.CARD_ENV)),
-        }
-    end
+    local name = M.run_label(run.root, {
+        DEV_AGENT = os.getenv("DEV_AGENT"),
+        DEV_CI_VERB = os.getenv(M.VERB_ENV),
+        DEV_CI_CARD = os.getenv(M.CARD_ENV),
+    }, devos.isatty(0))
+    local env = name and { DEV_AGENT = name } or nil
     local code = devos.run(argv, { env = env })
     if code == nil then
         verb.die("dev: cannot run ci")
