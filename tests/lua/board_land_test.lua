@@ -579,6 +579,24 @@ if has_jj then
         refused(root, home, log, id, { "elsewhere", "dev ws new " .. id })
     end)
 
+    t.test("land refuses when jj cannot read the workspace list", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve(root, home, log, id)
+        local before = #comments(home, id)
+        refused(
+            root,
+            home,
+            log,
+            id,
+            { "jj could not read the workspace of" },
+            { LOG_FAIL_AT = "workspace" }
+        )
+        t.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
+        t.eq(#comments(home, id), before)
+    end)
+
     t.test("turn refuses outside the workspace named for the card", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
@@ -1338,6 +1356,36 @@ if has_jj then
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(root)
         refused(root, home, log, id, { "does not sit on a single ancestor of trunk" })
+    end)
+
+    t.test("land refuses a carry from a checked commit of another change", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        local trunk = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+        local change = jj(root, "log", "-r", "@", "--no-graph", "-T", "change_id")
+        local at = { commit = trunk, change = change }
+        local records = {
+            check.record(at, { { result = check.RESULT.PASS, run_id = "-", run = "true" } }, false),
+            review.record(review.KIND.CODE, "rev", at, review.VERDICT.CLEAN),
+            review.record(review.KIND.STYLE, "rev", at, review.VERDICT.CLEAN),
+        }
+        local backend, restore = board_at(home)
+        for _, card in ipairs(assert(backend:cards())) do
+            if card.id:sub(1, #id) == id then
+                for _, body in ipairs(records) do
+                    assert(backend:note(card.id, body))
+                end
+            end
+        end
+        restore()
+        local before = #comments(home, id)
+        refused(root, home, log, id, {
+            "the checked commit " .. trunk:sub(1, 12) .. " is not of change",
+        })
+        t.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
+        t.eq(#comments(home, id), before)
     end)
 
     local function reviewed_and_checked(opts)
