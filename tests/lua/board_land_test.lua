@@ -295,7 +295,7 @@ local function dev(root, home, log, args, extra)
         XDG_STATE_HOME = home .. "/state",
         JJ_USER = "t",
         JJ_EMAIL = "t@example.com",
-        DEV_AGENT = "lander",
+        DEV_AGENT = "dotfiles/lander",
         LAND_LOG = log,
         LAND_MSG = "stub land",
         REAL_JJ = devos.which("jj"),
@@ -463,7 +463,7 @@ end
 
 local function land_as_lander(backend)
     local previous = os.getenv("DEV_AGENT") or ""
-    ffi.C.setenv("DEV_AGENT", "lander", 1)
+    ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
     local ok, result = pcall(commands.run, "land", { CARD_PREFIX }, backend)
     ffi.C.setenv("DEV_AGENT", previous, 1)
     assert(ok, result)
@@ -588,7 +588,7 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("elsewhere", 1, true), out)
         t.ok(out:find("dev ws new " .. id, 1, true), out)
-        t.eq(assert(turn_holder(home)).name, "lander")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/lander")
         out, code = dev(root, home, log, { "board", "turn", id, "--release" })
         t.eq(code, 0, out)
         t.ok(out:find("gave back the landing turn held for " .. id, 1, true), out)
@@ -617,6 +617,29 @@ if has_jj then
         t.eq(last.kind, "done")
         t.ok(last.body:find("Landed commit " .. commit:sub(1, 12), 1, true), last.body)
         t.eq(column_of(home), "Done")
+    end)
+
+    t.test("an old-shape claimant still checks and lands its claimed card", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, "verify" }))
+        approve(root, home, log, id)
+        local old = "dotfiles/implementer/38f0e013/1"
+        local backend, restore = board_at(home)
+        local cards = assert(backend:cards())
+        for _, card in ipairs(cards) do
+            if card.id:sub(1, #id) == id then
+                assert(backend:claim(card.id, old, 3600, nil, { lease = true }))
+            end
+        end
+        restore()
+        local as_old = { DEV_AGENT = old, LAND_TRUNK = "keep" }
+        local out, code = dev(root, home, log, { "board", "check", id }, as_old)
+        t.eq(code, 0, out)
+        out, code = dev(root, home, log, { "board", "land", id }, as_old)
+        t.eq(code, 0, out)
+        t.ok(out:find("landed " .. id, 1, true), out)
+        t.eq(column_of(home, id), "Done")
     end)
 
     t.test("land refuses a card in Review and names Verify", function()
@@ -769,15 +792,15 @@ if has_jj then
     t.test("land refuses another claimant's card", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "take", id, "--as", "builder" }))
-        refused(root, home, log, id, { "claimed by builder", "not lander" })
+        must(dev(root, home, log, { "board", "take", id, "--as", "dotfiles/builder" }))
+        refused(root, home, log, id, { "claimed by dotfiles/builder", "not dotfiles/lander" })
         must(dev(root, home, log, { "board", "release", id }))
     end)
 
     t.test("a claimed card's review comes from another name, never its claimant", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "take", id, "--as", "builder" }))
+        must(dev(root, home, log, { "board", "take", id, "--as", "dotfiles/builder" }))
         local before = #comments(home, id)
         for _, kind in ipairs({ "code", "style", "recheck" }) do
             local out, code = dev(root, home, log, {
@@ -787,14 +810,14 @@ if has_jj then
                 "--kind",
                 kind,
                 "--by",
-                "builder",
+                "dotfiles/builder",
                 "--rev",
                 "@",
                 "--verdict",
                 "clean",
             })
             t.eq(code, 1, out)
-            t.ok(out:find("a reviewer other than builder must record it", 1, true), out)
+            t.ok(out:find("a reviewer other than dotfiles/builder must record it", 1, true), out)
         end
         for _, kind in ipairs({ "code", "style", "recheck" }) do
             local out, code = dev(root, home, log, {
@@ -809,9 +832,9 @@ if has_jj then
                 "@",
                 "--verdict",
                 "clean",
-            }, { DEV_AGENT = "builder" })
+            }, { DEV_AGENT = "dotfiles/builder" })
             t.eq(code, 1, out)
-            t.ok(out:find("a reviewer other than builder must record it", 1, true), out)
+            t.ok(out:find("a reviewer other than dotfiles/builder must record it", 1, true), out)
         end
         t.eq(#comments(home, id), before)
         must(dev(root, home, log, {
@@ -1006,7 +1029,8 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("no code review", 1, true), out)
         t.ok(
-            fs.read(home .. "/state/dev/boards/mine.json"):find("dev-turn: holder=lander", 1, true)
+            fs.read(home .. "/state/dev/boards/mine.json")
+                :find("dev-turn: holder=dotfiles/lander", 1, true)
         )
         t.eq(turn_holder(home), nil)
     end)
@@ -1710,7 +1734,7 @@ if has_jj then
         t.eq(code, 0, out)
         t.ok(out:find("holding the landing turn for " .. id, 1, true), out)
         approve(root, home, log, id)
-        t.eq(assert(turn_holder(home)).name, "lander")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/lander")
         out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
         t.eq(code, 0, out)
         t.eq(column_of(home, id), "Done")
@@ -1726,14 +1750,14 @@ if has_jj then
             home,
             log,
             { "board", "turn", id, "--wait", "0" },
-            { DEV_AGENT = "other" }
+            { DEV_AGENT = "dotfiles/other" }
         )
         t.eq(code, 1, out)
-        t.ok(out:find("held by lander since 20", 1, true), out)
+        t.ok(out:find("held by dotfiles/lander since 20", 1, true), out)
         out, code = dev(root, home, log, { "board", "turn", id, "--hold", "120" })
         t.eq(code, 0, out)
         t.ok(out:find("renewed the landing turn held for " .. id, 1, true), out)
-        t.eq(assert(turn_holder(home)).name, "lander")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/lander")
     end)
 
     t.test("land refuses a hold that ran out and lands nothing", function()
@@ -1755,12 +1779,12 @@ if has_jj then
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
         devos.nap(PAST_HOLD_SECONDS)
-        must(dev(root, home, log, { "board", "turn", id }, { DEV_AGENT = "other" }))
+        must(dev(root, home, log, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
         local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
         t.eq(code, 1, out)
         t.ok(out:find("ran out or was taken by another", 1, true), out)
         t.eq(landed_calls(log), "")
-        t.eq(assert(turn_holder(home)).name, "other")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/other")
     end)
 
     t.test("a refused landing keeps the hold until it is released", function()
@@ -1772,7 +1796,7 @@ if has_jj then
         t.eq(code, 1, out)
         t.ok(out:find("no code review", 1, true), out)
         t.ok(out:find("turn you hold for " .. id .. " stays held", 1, true), out)
-        t.eq(assert(turn_holder(home)).name, "lander")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/lander")
         out, code = dev(root, home, log, { "board", "turn", id, "--release" })
         t.eq(code, 0, out)
         t.eq(turn_holder(home), nil)
@@ -1787,7 +1811,7 @@ if has_jj then
         local out, code = dev(root, home, log, { "board", "land", id })
         t.eq(code, 1, out)
         t.ok(out:find("turn you hold for " .. id .. " stays held", 1, true), out)
-        t.eq(assert(turn_holder(home)).name, "lander")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/lander")
     end)
 
     t.test("turn refuses a hold outside 1 to 3600 seconds", function()
@@ -1889,7 +1913,7 @@ if has_jj then
         local notes = turn_notes(home)
         local seen = {}
         for _, note in ipairs(notes) do
-            seen[#seen + 1] = note.body:match("^dev%-turn: (%a+) holder=lander card=%x+")
+            seen[#seen + 1] = note.body:match("^dev%-turn: (%a+) holder=dotfiles/lander card=%x+")
         end
         t.eq(seen, { "check", "checked" })
         local backend, restore = board_at(home)
@@ -1905,7 +1929,7 @@ if has_jj then
         t.eq(code, 1)
         local kinds = {}
         for _, note in ipairs(turn_notes(home)) do
-            kinds[#kinds + 1] = note.body:match("^dev%-turn: (%a+) holder=lander")
+            kinds[#kinds + 1] = note.body:match("^dev%-turn: (%a+) holder=dotfiles/lander")
         end
         t.eq(kinds, { "check", "checked" })
     end)
@@ -1964,7 +1988,7 @@ if has_jj then
             must(dev(root, home, log, { "board", "move", id, "blocked" }))
         end
         local previous = os.getenv("DEV_AGENT") or ""
-        ffi.C.setenv("DEV_AGENT", "lander", 1)
+        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
         local ok, result = pcall(commands.run, "land", { id, "--wait", "30" }, backend)
         ffi.C.setenv("DEV_AGENT", previous, 1)
         devos.nap = nap
@@ -1973,7 +1997,7 @@ if has_jj then
         t.eq(result.code, 1)
         t.ok(result.message:find("cannot land", 1, true), result.message)
         t.ok(result.message:find("stays held", 1, true), result.message)
-        t.eq(assert(turn_holder(home)).name, "lander")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/lander")
         local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
         t.eq(code, 0, out)
         t.eq(turn_holder(home), nil)
@@ -1994,7 +2018,7 @@ if has_jj then
             hold_check(home, work_commit)
         end
         local previous = os.getenv("DEV_AGENT") or ""
-        ffi.C.setenv("DEV_AGENT", "lander", 1)
+        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
         local ok, result = pcall(commands.run, "land", { id, "--wait", "30" }, backend)
         ffi.C.setenv("DEV_AGENT", previous, 1)
         devos.nap = nap
@@ -2004,7 +2028,7 @@ if has_jj then
         t.ok(result.message:find("check held for cccc3333", 1, true), result.message)
         t.ok(result.message:find("stays held", 1, true), result.message)
         t.eq(landed_calls(log), "")
-        t.eq(assert(turn_holder(home)).name, "lander")
+        t.eq(assert(turn_holder(home)).name, "dotfiles/lander")
     end)
 
     t.test("a landing polls under --wait and goes ahead once the hold lapses", function()

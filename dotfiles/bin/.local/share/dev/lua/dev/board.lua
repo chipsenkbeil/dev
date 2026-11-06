@@ -246,6 +246,20 @@ function M.labelled(card, label)
     return false
 end
 
+---Check that a name has the shape <repo>/<role>[/<card>].
+---@param name string the agent name
+---@return boolean
+function M.agent_shape(name)
+    local parts = 0
+    for part in (name .. "/"):gmatch("([^/]*)/") do
+        if not part:find("^[%w._-]+$") then
+            return false
+        end
+        parts = parts + 1
+    end
+    return parts == 2 or parts == 3
+end
+
 ---The backends a project may name.
 M.Backend = { POMB = "pomb", LOCAL = "local" }
 

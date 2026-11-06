@@ -5864,9 +5864,9 @@ t.test("take names the claimant from --as, then DEV_AGENT, else dev@host", funct
     t.eq(code, 0, out)
     t.ok(read(root, "calls"):find('"claimant":"project-alt/x"', 1, true), read(root, "calls"))
     dev(root, home, { "board", "release", "11111111-a" })
-    out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "env.agent" })
+    out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "dotfiles/env" })
     t.eq(code, 0, out)
-    t.ok(read(root, "calls"):find('"claimant":"env.agent"', 1, true), read(root, "calls"))
+    t.ok(read(root, "calls"):find('"claimant":"dotfiles/env"', 1, true), read(root, "calls"))
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -5880,6 +5880,57 @@ t.test("take refuses a name that is not one word of the allowed characters", fun
     local _, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "bad name" })
     t.eq(code, 2)
     t.eq(read(root, "calls"):find("/claim", 1, true), nil)
+end)
+
+t.test("DEV_AGENT shape accepts repo/role and repo/role/card", function()
+    for _, name in ipairs({ "dotfiles/lead", "infra/runner/39f0e015", "a.b_c/d-e/1" }) do
+        local root, home = sandbox()
+        local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
+        t.eq(code, 0, out)
+        t.ok(read(root, "calls"):find('"claimant":"' .. name .. '"', 1, true), read(root, "calls"))
+        dev(root, home, { "board", "release", "11111111-a" })
+    end
+end)
+
+t.test("DEV_AGENT shape refuses one part, four parts, a space and an empty segment", function()
+    local names =
+        { "lander", "dotfiles/implementer/38f0e013/1", "a b/c", "a//b", "/a", "a/b/", "a/b c" }
+    for _, name in ipairs(names) do
+        local root, home = sandbox()
+        local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
+        t.eq(code, 2, out)
+        if not name:find(" ", 1, true) then
+            t.ok(out:find("an agent name is <repo>/<role>[/<card>], got " .. name, 1, true), out)
+        end
+        t.eq(read(root, "calls"):find("/claim", 1, true), nil)
+        out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
+        t.eq(code, 2, out)
+    end
+end)
+
+t.test("DEV_AGENT shape refuses move into progress of an unclaimed card", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", "progress" },
+        { agent = "builder" }
+    )
+    t.eq(code, 2, out)
+    t.eq(read(root, "calls"):find("/claim", 1, true), nil)
+end)
+
+t.test("an old-shape claimant still moves and lands its claimed card", function()
+    local old = "dotfiles/implementer/95f0e009/1"
+    local card = colored("green")
+    card.column = "Ready"
+    card.claimant = old
+    local backend = fake({ card })
+    as_agent(old, function()
+        local result = commands.run("move", { "cccccccc", "backlog" }, backend)
+        t.eq(result.code, nil, result.message)
+        t.eq(result.output, "moved cccccccc to Backlog")
+    end)
 end)
 
 t.test("move into progress takes the claim of an unclaimed card under the agent name", function()

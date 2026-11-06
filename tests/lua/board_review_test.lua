@@ -141,7 +141,7 @@ end)
 t.test("review refuses the claimant as the reviewer", function()
     local root, home = git_root()
     local id = card_in(root, home)
-    must(dev(root, home, { "board", "take", id, "--as", "builder" }))
+    must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
     local out, code = dev(root, home, {
         "board",
         "review",
@@ -149,7 +149,7 @@ t.test("review refuses the claimant as the reviewer", function()
         "--kind",
         "style",
         "--by",
-        "builder",
+        "dotfiles/builder",
         "--rev",
         "HEAD",
         "--verdict",
@@ -165,7 +165,7 @@ t.test("review refuses the claimant as the reviewer", function()
         "--kind",
         "style",
         "--by",
-        "other",
+        "dotfiles/other",
         "--rev",
         "HEAD",
         "--verdict",
@@ -178,10 +178,10 @@ end)
 t.test("review refuses a claimant whose claim lapsed, and a take writes one claim note", function()
     local root, home = git_root()
     local id = card_in(root, home)
-    must(dev(root, home, { "board", "take", id, "--as", "builder" }))
-    must(dev(root, home, { "board", "take", id, "--as", "builder" }))
+    must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
+    must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
     t.eq(#comments(home), 1)
-    t.eq(comments(home)[1].body, "dev-claim: by=builder")
+    t.eq(comments(home)[1].body, "dev-claim: by=dotfiles/builder")
     local file = home .. "/state/dev/boards/mine.json"
     local doc = assert(json.decode(assert(fs.read(file))))
     doc.cards[1].claim.expires_at = "2000-01-01T00:00:00Z"
@@ -194,7 +194,7 @@ t.test("review refuses a claimant whose claim lapsed, and a take writes one clai
             "--kind",
             kind,
             "--by",
-            "builder",
+            "dotfiles/builder",
             "--rev",
             "HEAD",
             "--verdict",
@@ -202,7 +202,11 @@ t.test("review refuses a claimant whose claim lapsed, and a take writes one clai
         })
         t.eq(code, 1, out)
         t.ok(
-            out:find("was claimed by builder, so builder cannot review its own change", 1, true),
+            out:find(
+                "was claimed by dotfiles/builder, so dotfiles/builder cannot review its own change",
+                1,
+                true
+            ),
             out
         )
     end
@@ -214,7 +218,7 @@ t.test("review refuses a claimant whose claim lapsed, and a take writes one clai
         "--kind",
         "code",
         "--by",
-        "other",
+        "dotfiles/other",
         "--rev",
         "HEAD",
         "--verdict",
@@ -241,16 +245,16 @@ t.test("review refuses a default-named claimant when DEV_AGENT is unset", functi
             },
         })
     end
-    must(run("builder", { "board", "take", id }))
+    must(run("dotfiles/builder", { "board", "take", id }))
     for _, kind in ipairs({ "code", "style", "recheck" }) do
-        local out, code = run("builder", {
+        local out, code = run("dotfiles/builder", {
             "board",
             "review",
             id,
             "--kind",
             kind,
             "--by",
-            "other",
+            "dotfiles/other",
             "--rev",
             "HEAD",
             "--verdict",
@@ -267,7 +271,7 @@ t.test("review refuses a default-named claimant when DEV_AGENT is unset", functi
         "--kind",
         "code",
         "--by",
-        "other",
+        "dotfiles/other",
         "--rev",
         "HEAD",
         "--verdict",

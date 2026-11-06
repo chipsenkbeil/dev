@@ -140,15 +140,16 @@ seconds on its second. Every mint deletes the expired files it finds there.
 
 The lead then starts the runner with `DEV_AGENT=NAME` and no token in its
 environment or prompt. Because NAME is the claimant name, it follows
-`<repo>/<role>/<card>/<run>`. The verb runs only for a lead, and so does
+`repo/role[/card]`. The verb runs only for a lead, and so does
 `delete`: both read one helper, which counts a `DEV_AGENT` as the lead when its
-role segment (the second) is `lead`, as in `dotfiles/lead/CARD/1`, or when it
+role segment (the second) is `lead`, as in `dotfiles/lead`, or when it
 holds no slash. Any other role is refused.
 
 Pomb refuses a name that a live token holds with a 409, and a name frees once
 its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`
 in plain words. Minting again for a running runner is described under
-token-remint, and `token revoke` ends a token early.
+token-remint, and `token revoke` ends a token early. A retry of a card reuses its
+name, so it revokes the earlier live token first or waits for it to expire.
 
 The token goes to curl on standard input as a config line. It is in no argument
 list, no file and no output, `-v` and `-vv` included, and in no environment
@@ -1014,11 +1015,17 @@ with curl, so it costs no model turns and outlives the shell that started it.
 Its claimant is the name from `take --as NAME`, else the `DEV_AGENT` environment
 variable, else `dev@<host>:<session or pid>`. A name is one word of letters,
 digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows it as the holder.
-Agents name themselves `<repo>/<role>/<card>/<run>`: the board name, one of
-`planner`, `implementer`, `reviewer`, `verifier`, `release` or `lead`, a card id
-(the lead's run card for a lead) and the attempt number, with the review kind in
-front for a reviewer, as in `dotfiles/implementer/f5f0e007/1` and
-`dotfiles/reviewer/f5f0e007/code-1`. dev does not check the shape.
+Agents name themselves `repo/role[/card]`, written `<repo>/<role>[/<card>]`:
+the board name, any role word (usually `lead`, `runner`, `planner`,
+`implementer`, `code-examiner`, `style-examiner`, `recheck-examiner`,
+`verifier`, `land`, `release` or `check`) and an optional card id, as in
+`dotfiles/lead` and `dotfiles/implementer/f5f0e007`. Each part is letters,
+digits, `.`, `_` and `-`. A name of another shape is refused with `an agent
+name is <repo>/<role>[/<card>], got NAME` (exit 2) when `take` or a `move` into
+In Progress would take a new claim, whether it came from `DEV_AGENT` or `--as`.
+Every other verb on a card already claimed under that exact name passes, so a
+card claimed under an older name finishes and lands under it. An unset or empty
+`DEV_AGENT` is accepted.
 `move CARD progress` takes the claim itself, under the same name and with the
 same keep-alive loop, when nobody holds the card, except a card with children,
 which stays unclaimed. A claim this machine already holds is kept, and one held
@@ -1912,8 +1919,8 @@ never handles the API.
   labelled `needs:human` first, whatever the column. A move into any other
   column, Icebox included, is never checked for the Ready rules. A move into In
   Progress of a card nobody holds and that this machine holds no claim on takes
-  the claim first, as `take` does with `DEV_AGENT` as the name (a bad name is
-  exit 2), an epic included, and releases it again when the move fails.
+  the claim first, as `take` does with `DEV_AGENT` as the name (a name that
+  is not `repo/role[/card]` is exit 2), an epic included, and releases it again when the move fails.
   A move into Done (`move CARD done`) is refused once the card is read, before
   the move is sent, while the card has an unticked outcome:
   `<id prefix> cannot move to Done: N of M outcomes are unticked (1. text, 2. text); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it`

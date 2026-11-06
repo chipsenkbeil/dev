@@ -469,6 +469,15 @@ local function agent_name(flag)
     return name
 end
 
+---Refuse a name that is not <repo>/<role>[/<card>] when it would take a new claim.
+---@param name string? the agent name, nil when none is set
+---@return dev.cmd.board.Result? err the usage error, nil when the name passes
+function runner.shape_refusal(name)
+    if name and not board.agent_shape(name) then
+        return usage("an agent name is <repo>/<role>[/<card>], got " .. name)
+    end
+end
+
 ---Read a runner's size limit from the flag, else DEV_MAX_SIZE.
 ---@param flag string? the value of --max-size
 ---@return integer? limit the most Pomodori the runner takes, nil when it has no limit
@@ -1739,6 +1748,10 @@ local function move_card(backend, args, opts)
         local name, bad = agent_name()
         if bad then
             return bad
+        end
+        local shaped = runner.shape_refusal(name)
+        if shaped then
+            return shaped
         end
         local result, fence = claim_card(backend, card, name)
         if not fence then
@@ -4409,6 +4422,12 @@ function commands.take(backend, args)
     end
     local roles = backend.roles
     local rival = card.claimant ~= nil and card.claimant ~= (name or claimant())
+    if card.claimant == nil then
+        local shaped = runner.shape_refusal(name)
+        if shaped then
+            return shaped
+        end
+    end
     local limited = card.column ~= roles.progress and not claims.read(card.id) and not rival
     if limited then
         refused = runner.__budget(backend, card)

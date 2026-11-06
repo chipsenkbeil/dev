@@ -76,7 +76,8 @@ run it with --remote`, and nothing runs. It never falls back to a local run.
 
 ## Agents
 
-An agent sets `DEV_AGENT` to its workspace name. Under it, a run that would
+An agent sets `DEV_AGENT` to its name, `repo/role[/card]` as `dev board` takes
+it (`dev help boards`), such as `dotfiles/implementer/f5f0e007`. Under it, a run that would
 happen here for a verb with a default ci job is refused, whatever chose the
 laptop (`--local`, `DEV_REMOTE=0`, or `[remote] default = "local"`). The
 refusal exits 2, prints a line that names the verb and `--remote`, and runs
