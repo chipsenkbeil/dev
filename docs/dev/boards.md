@@ -999,8 +999,9 @@ failure: `wait` prints one line on standard error the first time, then retries
 with a pause that doubles from 30 seconds to 5 minutes, each pause cut by a
 random fraction of up to a quarter to keep sessions from retrying together, and
 keeps waiting until a slot frees. Any other refusal, such as a bad token, exits
-1 at once. Exit 124 from `timeout` means nothing changed. With nothing to do
-and no card in flight, end the session (a session started later under the same
+1 at once. Exit 124 from `timeout`, or 143 from the `run_with_timeout` wrapper
+in the background-work rules, means nothing changed. With nothing to do and no
+card in flight, end the session (a session started later under the same
 `DEV_AGENT` picks its open run card up with `dev board run`). Otherwise park
 again.
 
