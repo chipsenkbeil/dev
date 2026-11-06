@@ -35,6 +35,23 @@ for word in "$@"; do
             esac
         fi
         ;;
+    *"- & ::@-"*)
+        if [ -n "$ANCESTOR_FAIL_AT" ] && [ "$word" = "$ANCESTOR_FAIL_AT- & ::@-" ]; then
+            exit 1
+        fi
+        ;;
+    [0-9a-f]*-)
+        if [ -n "$PARENT_FAIL_AT" ] && [ "$word" = "$PARENT_FAIL_AT-" ]; then
+            exit 1
+        fi
+        ;;
+    file)
+        if [ -n "$FILE_LIST_FAIL_AT" ]; then
+            case "$*" in
+            *"$FILE_LIST_FAIL_AT"*) exit 1 ;;
+            esac
+        fi
+        ;;
     *files\(\)*)
         if [ -n "$FILES_FAIL" ]; then
             exit 1
@@ -1395,6 +1412,58 @@ if has_jj then
             { LOG_FAIL_AT = newer }
         )
         t.eq(out:find(older:sub(1, 12), 1, true), nil, out)
+    end)
+
+    local failed_reads = {
+        {
+            name = "parent",
+            switch = "PARENT_FAIL_AT",
+            message = "jj could not read the parent of the checked commit ",
+        },
+        {
+            name = "ancestor",
+            switch = "ANCESTOR_FAIL_AT",
+            message = "jj could not read the ancestor of the checked commit ",
+        },
+        {
+            name = "shared path",
+            switch = "FILE_LIST_FAIL_AT",
+            message = "jj could not list the shared path lib",
+        },
+    }
+    for _, case in ipairs(failed_reads) do
+        t.test("land refuses at once when jj cannot read the older " .. case.name, function()
+            local root, home, log, bare = jj_project()
+            local id, older, newer = two_checked_commits({
+                root = root,
+                home = home,
+                log = log,
+                bare = bare,
+                final_shared = "a\nb\nc\nd\ne\nf\nG\n",
+            })
+            local out = refused(root, home, log, id, { case.message }, { [case.switch] = older })
+            t.eq(out:find("carried over", 1, true), nil, out)
+            t.eq(out:find(newer:sub(1, 12), 1, true), nil, out)
+        end)
+    end
+
+    t.test("land names the older candidate when its interdiff read fails", function()
+        local root, home, log, bare = jj_project()
+        local id, older = two_checked_commits({
+            root = root,
+            home = home,
+            log = log,
+            bare = bare,
+            final_shared = "a\nb\nc\nd\ne\nf\nZ\n",
+        })
+        refused(
+            root,
+            home,
+            log,
+            id,
+            { "jj could not compare the checked commit " .. older:sub(1, 12) },
+            { INTERDIFF_FAIL_AT = older }
+        )
     end)
 
     t.test("land refuses a rebase of a commit that differs from the checked one", function()
