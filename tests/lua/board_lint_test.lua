@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local commands = require("dev.cmd.board")
 local fs = require("dev.fs")
 local json = require("dev.json")

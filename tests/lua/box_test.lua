@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local box = require("dev.cmd.box")
 local devos = require("dev.os")
 local fs = require("dev.fs")

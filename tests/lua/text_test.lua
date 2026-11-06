@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local text = require("dev.text")
 
 t.test("width counts codepoints", function()

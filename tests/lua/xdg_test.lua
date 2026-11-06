@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 
-local t = require("testing")
+local t = require("dev.testing")
 local claims = require("dev.board.claims")
 local store = require("dev.board.store")
 local xdg = require("dev.xdg")

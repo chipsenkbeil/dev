@@ -1,6 +1,6 @@
 dofile((arg[0]:match("^(.*)/[^/]*$") or ".") .. "/boot.lua")
 
-local t = require("testing")
+local testrun = require("dev.testrun")
 
 local file = arg[1]
 local only = arg[2]
@@ -12,18 +12,4 @@ end
 
 dofile(file)
 
-local failed = 0
-for _, case in ipairs(t.tests()) do
-    if not only or case.name:find(only, 1, true) then
-        local ok, err = pcall(case.fn)
-        if ok then
-            print("ok - " .. case.name)
-        else
-            failed = failed + 1
-            print("not ok - " .. case.name)
-            print("    " .. tostring(err))
-        end
-    end
-end
-
-os.exit(failed == 0 and 0 or 1)
+os.exit(testrun.execute(0, only) == 0 and 0 or 1)

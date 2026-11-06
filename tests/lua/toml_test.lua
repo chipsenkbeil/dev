@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local toml = require("dev.toml")
 
 t.test("parse reads a table, a string and a trailing comment", function()

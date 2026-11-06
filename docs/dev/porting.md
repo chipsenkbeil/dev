@@ -83,6 +83,8 @@ functions in its doc comments.
   `confirm` and `spin`
 - `dev.ui.picker`: the list picker, `run(ctx, items, opts)`
 - `dev.project`: `root`, `dotfiles_root` and `detect_type`
+- `dev.testing`, `dev.testrun` and `dev.testenv`: the test registry, the
+  runner and the helpers, see "Testing a verb"
 
 ## Your own modules
 
@@ -111,6 +113,28 @@ A verb runs under CI, in a box and from agents, where no terminal is attached.
 `ci`. A project replaces that with `.dev/__remote.lua`, a chunk that returns
 `function(run)`. `dev help remote` has the fields of `run`, the refusals and
 the `dev.remote` helper a runner can reuse.
+
+## Testing a verb
+
+A project's Lua verb tests live in `.dev/tests/NAME_test.lua`. Each file
+requires `dev.testing` and registers cases with `t.test(name, fn)`, then
+asserts with `t.eq`, `t.ok` and `t.raises`. The project's `.dev/test.lua` ends
+with `return require("dev.testrun").run(ctx.root)`, so `dev --remote test` runs
+these files on ci. Cargo and the project's other suites never see them. `run`
+loads the files in sorted order with `.dev/lua` on `package.path`, prints
+`ok - NAME` or `not ok - NAME` with the error, and returns 1 when a case fails
+or a file fails to load. A project with no `.dev/tests` prints
+`SKIP .dev/tests (none)` and returns 0.
+
+`dev.testenv` helps a test drive a verb:
+
+- `tempdir()` makes a scratch directory
+- `fake(root, name, {code, out, err})` writes an executable `root/bin/NAME`
+  that prints `out` and `err`, appends its arguments to `root/bin/NAME.log` and
+  exits `code`
+- `calls(root, name)` returns the logged lines
+- `verb(root, words, opts)` runs the dev launcher in `root` with `root/bin`
+  first on PATH and `opts.env`, and returns `out, code, err`
 
 ## One verb before and after
 

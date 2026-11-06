@@ -1,6 +1,6 @@
 local bit = require("bit")
 
-local t = require("testing")
+local t = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")

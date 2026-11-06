@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local json = require("dev.json")
 
 local TARGET = "linux-x86-base"

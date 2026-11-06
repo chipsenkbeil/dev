@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local ui = require("dev.ui")
 
 local plain = ui.context({ color = false, interactive = false, width = 80 })

@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local markdown = require("dev.ui.markdown")
 local text = require("dev.text")
 

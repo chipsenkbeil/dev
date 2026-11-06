@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 
-local t = require("testing")
+local t = require("dev.testing")
 local board = require("dev.board")
 local box = require("dev.cmd.box")
 local commands = require("dev.cmd.board")

@@ -1,4 +1,4 @@
-local t = require("testing")
+local t = require("dev.testing")
 local term = require("dev.term")
 
 local Key = term.Key
