@@ -1680,6 +1680,33 @@ if has_jj then
         t.ok(out:find(root, 1, true), out)
     end)
 
+    t.test("land refuses when the rebase onto trunk fails", function()
+        local root, home, log, bare = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve(root, home, log, id)
+        local other = support.tempdir() .. "/clone"
+        must(
+            devos.run(
+                { "git", "clone", "-q", "--branch", "master", bare, other },
+                { stdout = "null", stderr = "null" }
+            )
+        )
+        git(other, "commit", "-q", "--allow-empty", "-m", "moved")
+        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        local FAIL_AT = { REBASE = "rebase" }
+        refused(
+            root,
+            home,
+            log,
+            id,
+            { "the rebase onto trunk failed" },
+            { LOG_FAIL_AT = FAIL_AT.REBASE }
+        )
+        t.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
+        t.eq(turn_holder(home), nil)
+    end)
+
     t.test("land refuses a remote of record that is not a remote of the project", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)
