@@ -503,6 +503,10 @@ function Backend:boards()
     return { self.__opts.name }
 end
 
+function Backend:limits()
+    return { columns = {}, groups = {} }
+end
+
 function Backend:columns(name)
     if name and name ~= self.__opts.name then
         return nil, "a local board knows only its own columns, so " .. name .. " is not reachable"

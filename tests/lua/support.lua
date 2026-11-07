@@ -120,4 +120,14 @@ M.COLUMN = {
     VERIFY = "verify",
 }
 
+---The Pomb display name of a column, by constant.
+---@type table<string, string>
+M.COLUMN_NAME = {
+    DONE = "Done",
+    PROGRESS = "In Progress",
+    READY = "Ready",
+    REVIEW = "Review",
+    VERIFY = "Verify",
+}
+
 return M

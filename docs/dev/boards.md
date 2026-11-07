@@ -62,8 +62,7 @@ name = "dotfiles"
 ```
 
 `backend` is `pomb` or `local`, and `name` defaults to the project directory's
-name. `wip` is the budget of cards in flight and is 4 when it is unset (see
-`take`). `dev board status` prints the backend and the board, or
+name. `dev board status` prints the backend and the board, or
 `no board for this project` with exit 1, and every other subcommand says the
 same and exits 1 without a `[board]` section. The `local` backend keeps the
 board in a file (see Local boards below).
@@ -1998,21 +1997,30 @@ never handles the API.
   than that many Pomodori with `<id prefix> is <size>, above this runner's limit of N Pomodori
   (DEV_MAX_SIZE)` (exit 1). `run` takes its own run card and is not held
   to the limit, and the `next:` line of `run` skips a card above it.
-  `take` and `move CARD progress` also refuse a card when the board already
-  holds its budget of cards in flight, the cards in In Progress, Review and
-  Verify whoever claimed them, to land what passed before it starts a new
-  card. The budget is `board.wip`, set as `wip` under `[board]`, and is 4 when
-  it is unset. A project sets it only to change it. Cards in Release do not
-  count (land puts a card there to wait for a deploy), and neither does the
-  card being moved. The refusal reads `N cards are in flight in In Progress,
-  Review and Verify (ID, ID, ID), at the budget of B. Land one first.` (exit
-  1). Every caller counts, named or not.
+  `take`, `move CARD COLUMN` and `move CARD progress` also refuse a card
+  when a limit Pomb holds forbids it, to land what passed before it starts a
+  new card. dev reads both kinds of limit from Pomb with a fresh
+  `GET /api/boards/ID`: a column's own `wip_limit` and the `limit_groups`
+  that span adjacent columns, such as In Progress, Review and Verify. A
+  column limit refuses when the target holds that many other cards and the
+  card is not in it, and the refusal reads `COLUMN holds N cards (ID, ID), at
+  its limit of L. Land one first.` A group limit refuses when the target is
+  in the group, the card's column is outside it and the group's columns hold
+  that many other cards, whoever claimed them. The refusal reads `N cards are
+  in flight in In Progress, Review and Verify (ID, ID, ID), at the limit of
+  L. Land one first.` (exit 1). Cards in other columns do not count, and
+  neither do epics or the card being moved. A board with no limits set in
+  Pomb is uncapped, and so is a local board. A move to Done is not checked here.
   A card already in In Progress, or whose claim this machine holds, is not
-  checked, and a take of a card another name holds gets the claim refusal.
-  Cards already in flight are never moved. The count and the claim are two
-  steps, and under parallel commands the budget is advisory and can be
-  overrun. `next` stays read-only and shows the card anyway. The turn hold is
-  1800 seconds by default and 3600 at most (see `turn`).
+  checked for In Progress, and a take of a card another name holds gets the
+  claim refusal. Cards already in flight are never moved. The count and the
+  claim are two steps, and under parallel commands the limit is advisory and
+  can be overrun. Pomb enforces its limits too: a move it refuses with 409
+  `wip_limit_reached` prints `Pomb refused the move: MESSAGE` (exit 1), a
+  `move CARD progress` that had just taken the claim gives it back, and dev
+  never sends `force`, so its own land move into Release fails the same way
+  and the card stays put. `next` stays read-only and shows the card anyway.
+  The turn hold is 1800 seconds by default and 3600 at most (see `turn`).
 - `release CARD`: Stops the loop, forgets the claim and posts `/claim/release`
   with the fence. Prints `released <id prefix>`. A card with no claim taken by
   `take` is exit 1.

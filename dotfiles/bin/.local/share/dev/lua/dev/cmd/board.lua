@@ -26,7 +26,7 @@ local stderr = io.stderr
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
-local runner = { FLAG = "--max-size", DEFAULT_WIP_CARDS = 4 }
+local runner = { FLAG = "--max-size", limits = require("dev.board.limits") }
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
 local CLAIMANT_CHARS = 200
@@ -540,49 +540,16 @@ local function find_card(backend, word)
     return card
 end
 
----Refuse `card` when the board already holds its budget of cards in flight.
+---Refuse `card` when a Pomb limit on `target` forbids the move.
 ---
 ---@param backend dev.board.Backend the board
----@param card dev.board.Card the card the caller is about to start
----@return dev.cmd.board.Result? err the refusal naming the cards in flight, nil under the budget
+---@param card dev.board.Card the card the caller is about to move
+---@param target string the column it moves to
+---@return dev.cmd.board.Result? err the refusal naming the cards at the limit, nil when the move fits
 ---@private
-function runner.__budget(backend, card)
-    local cards, message = backend:cards()
-    if not cards then
-        return failure(message)
-    end
-    local roles = backend.roles
-    local flying = {}
-    for _, other in ipairs(cards) do
-        local column = other.column
-        if
-            other.id ~= card.id
-            and (column == roles.progress or column == roles.review or column == roles.verify)
-        then
-            flying[#flying + 1] = other.id:sub(1, board.MIN_PREFIX)
-        end
-    end
-    local budget = config.get(backend.root, "board.wip") or runner.DEFAULT_WIP_CARDS
-    if type(budget) ~= "number" or budget % 1 ~= 0 or budget < 1 then
-        return failure("dev: [board] wip must be a whole number of cards, 1 or more.")
-    end
-    if #flying < budget then
-        return nil
-    end
-    return failure(
-        #flying
-            .. " cards are in flight in "
-            .. roles.progress
-            .. ", "
-            .. roles.review
-            .. " and "
-            .. roles.verify
-            .. " ("
-            .. table.concat(flying, ", ")
-            .. "), at the budget of "
-            .. budget
-            .. ". Land one first."
-    )
+function runner.__limited(backend, card, target)
+    local message = runner.limits.refusal(backend, card, target)
+    return message and failure(message)
 end
 
 local function other_card(backend, word)
@@ -1732,10 +1699,15 @@ local function move_card(backend, args, opts)
             if wrong then
                 return wrong
             end
-            refused = runner.__budget(backend, card)
+            refused = runner.__limited(backend, card, column)
             if refused then
                 return refused
             end
+        end
+    elseif card.column ~= column and not to_done then
+        local refused = runner.__limited(backend, card, column)
+        if refused then
+            return refused
         end
     end
     local missing_note = unnoted(backend, card, column)
@@ -1760,11 +1732,14 @@ local function move_card(backend, args, opts)
         started = true
         held = { fence = fence }
     end
-    local ok, message = backend:move(card.id, column, { fence = held and held.fence })
+    local ok, message, full = backend:move(card.id, column, { fence = held and held.fence })
     if not ok then
         if started then
             claims.stop(card.id)
             backend:release(card.id, held.fence)
+        end
+        if full then
+            return failure(runner.limits.REFUSED .. message)
         end
         return to_done and unqueued(failure(message)) or failure(message)
     end
@@ -4430,7 +4405,7 @@ function commands.take(backend, args)
     end
     local limited = card.column ~= roles.progress and not claims.read(card.id) and not rival
     if limited then
-        refused = runner.__budget(backend, card)
+        refused = runner.__limited(backend, card, roles.progress)
         if refused then
             return refused
         end

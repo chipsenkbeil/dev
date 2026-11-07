@@ -19,6 +19,8 @@ local AGENT_VARIABLE = "DEV_AGENT"
 local ROLES_LIST_PATH = "/api/v1/agent-roles"
 local CHILDREN_PATH = "/api/v1/auth/tokens/children"
 local CONFLICT = 409
+local LIMIT_REACHED = "wip_limit_reached"
+local FULL = "full"
 local NOT_FOUND = 404
 local UNKNOWN_ROLE = "unknown_role"
 local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text"
@@ -1110,14 +1112,17 @@ function Backend:move(id, column, opts)
         return nil, unavailable("the board has no " .. column .. " column")
     end
     opts = opts or {}
-    local moved
-    moved, message = self:__request(
+    local moved, status, doc
+    moved, message, status, doc = self:__request(
         "POST",
         "/api/tasks/" .. id .. "/move",
         { column_id = target, position = opts.position or TOP },
         opts.fence
     )
     if not moved then
+        if status == CONFLICT and type(doc) == "table" and doc.code == LIMIT_REACHED then
+            return nil, present(doc.message) or message, FULL
+        end
         return nil, message
     end
     return true
@@ -1454,6 +1459,51 @@ function Backend:columns(name)
         }
     end
     return rows
+end
+
+function Backend:limits()
+    -- Limits change on Pomb at any time, so each call reads the board fresh
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local detail
+    detail, message = self:__request("GET", "/api/boards/" .. id)
+    if not detail then
+        return nil, message
+    end
+
+    -- Pomb names columns by id, so keep each column's name and board position to read the groups
+    local limits, names, order = { columns = {}, groups = {} }, {}, {}
+    for index, column in ipairs(detail.columns) do
+        names[column.id] = column.name
+        order[column.id] = index
+        if type(column.wip_limit) == "number" then
+            limits.columns[column.name] = column.wip_limit
+        end
+    end
+
+    -- A group lists column ids in any order, and dev reports them by name in board order
+    local groups = detail.limit_groups
+    for _, group in ipairs(groups == nil and {} or groups) do
+        local ids = {}
+        for _, column_id in ipairs(group.column_ids) do
+            if names[column_id] then
+                ids[#ids + 1] = column_id
+            end
+        end
+        table.sort(ids, function(a, b)
+            return order[a] < order[b]
+        end)
+        local columns = {}
+        for _, column_id in ipairs(ids) do
+            columns[#columns + 1] = names[column_id]
+        end
+        if #columns > 0 and type(group.limit) == "number" then
+            limits.groups[#limits.groups + 1] = { columns = columns, limit = group.limit }
+        end
+    end
+    return limits
 end
 
 function Backend:other_board(name)

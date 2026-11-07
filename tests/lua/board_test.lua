@@ -59,6 +59,9 @@ local function fake(cards, times, finished)
     function backend:find()
         return true
     end
+    function backend:limits()
+        return { columns = {}, groups = {} }
+    end
     function backend:describe()
         return "fake"
     end
