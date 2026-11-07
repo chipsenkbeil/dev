@@ -23,7 +23,7 @@ Set up a machine or project
 
 Boxes
   connect                     Attach to a box or a connectable machine, picking, resuming or creating a box first
-  box                         List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box
+  box                         List, create, show, stop, resume, extend, delete, retag, connect and tools install to dev boxes through ci box
 
 Greeting
   greet                       Say hello.

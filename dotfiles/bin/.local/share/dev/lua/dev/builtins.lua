@@ -143,7 +143,7 @@ return {
     {
         words = { "box" },
         noun = true,
-        desc = "List, create, show, stop, resume, extend, delete and connect to dev boxes through ci box",
+        desc = "List, create, show, stop, resume, extend, delete, retag, connect and tools install to dev boxes through ci box",
         group = "Boxes",
     },
     {
