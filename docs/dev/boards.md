@@ -2031,9 +2031,11 @@ never handles the API.
   that span adjacent columns, such as In Progress, Review and Verify. A
   column limit refuses when the target holds that many other cards and the
   card is not in it, and the refusal reads `COLUMN holds N cards (ID, ID), at
-  its limit of L. Land one first.` A group limit refuses when the target is
-  in the group, the card's column is outside it and the group's columns hold
-  that many other cards, whoever claimed them. The refusal reads `N cards are
+  its limit of L. Land one first.` A column whose `limit_unit` is `hours` is
+  skipped, and Pomb enforces that limit itself. A missing `limit_unit` counts
+  as `count`. A group limit refuses when the target is in the group, the card's
+  column is outside it and the group's columns hold that many other cards,
+  whoever claimed them. The refusal reads `N cards are
   in flight in In Progress, Review and Verify (ID, ID, ID), at the limit of
   L. Land one first.` (exit 1). Cards in other columns do not count, and
   neither do epics or the card being moved. A board with no limits set in

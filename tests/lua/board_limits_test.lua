@@ -20,6 +20,8 @@ local TASK = "task"
 local LIMIT_TEXT = NAME.PROGRESS .. " is at its limit of 4"
 local LIMIT_BODY = '{"code":"wip_limit_reached","message":"' .. LIMIT_TEXT .. '"}'
 local EPIC = "epic"
+local COUNT = "count"
+local HOURS = "hours"
 local IN_FLIGHT = string.format(
     "dev: 3 cards are in flight in %s, %s and %s"
         .. " (aaaaaaaa, bbbbbbbb, cccccccc), at the limit of 3. Land one first.\n",
@@ -90,17 +92,23 @@ local function uuid(letter)
     return letter:rep(8) .. "-1111-4111-8111-111111111111"
 end
 
-local function detail(limits, groups)
+local function detail(limits, opts)
+    local groups, units = opts and opts.groups, opts and opts.units
     local parts = {}
     for _, column in ipairs(COLUMNS) do
         local limit = "null"
         if limits[column[2]] then
             limit = tostring(limits[column[2]])
         end
+        local unit = ""
+        if units and units[column[2]] then
+            unit = string.format('"limit_unit":"%s",', units[column[2]])
+        end
         parts[#parts + 1] = string.format(
-            '{"id":"%s","name":"%s","wip_limit":%s,"is_done":%s}',
+            '{"id":"%s","name":"%s",%s"wip_limit":%s,"is_done":%s}',
             column[1],
             column[2],
+            unit,
             limit,
             tostring(column[1] == ID.DONE)
         )
@@ -179,7 +187,7 @@ end
 t.test("take refuses at the group limit and names the cards", function()
     local box = sandbox({
         project = POMB,
-        detail = detail({}, GROUP .. '"limit":3,"count":3}]'),
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
@@ -191,7 +199,7 @@ end)
 t.test("take refuses at a column limit with room in its group", function()
     local box = sandbox({
         project = POMB,
-        detail = detail({ [NAME.PROGRESS] = 1 }, GROUP .. '"limit":4,"count":3}]'),
+        detail = detail({ [NAME.PROGRESS] = 1 }, { groups = GROUP .. '"limit":4,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
@@ -201,6 +209,35 @@ t.test("take refuses at a column limit with room in its group", function()
         "dev: " .. NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
     )
     t.eq(read(box, "calls"):find("/claim", 1, true), nil)
+end)
+
+t.test("a count limit still refuses at its limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.PROGRESS] = 1 }, { units = { [NAME.PROGRESS] = COUNT } }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    t.eq(code, 1, out)
+    t.eq(
+        out,
+        "dev: " .. NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
+    )
+end)
+
+t.test("an hours limit never refuses a take or move", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.PROGRESS] = 1 }, { units = { [NAME.PROGRESS] = HOURS } }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    t.eq(code, 0, out)
+    t.ok(out:find("took dddddddd", 1, true), out)
+    dev(box, { "board", "release", "dddddddd" }, "")
+    out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, "")
+    t.eq(code, 0, out)
+    t.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
 end)
 
 t.test("a board with no limits is uncapped", function()
@@ -214,7 +251,7 @@ end)
 t.test("an epic in the group is not counted", function()
     local box = sandbox({
         project = POMB,
-        detail = detail({}, GROUP .. '"limit":3,"count":2}]'),
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":2}]' }),
         export = export({
             { "a", ID.PROGRESS, TASK },
             { "b", ID.REVIEW, TASK },
@@ -230,7 +267,7 @@ end)
 t.test("move refuses a card entering a full group and names the cards", function()
     local box = sandbox({
         project = POMB,
-        detail = detail({}, GROUP .. '"limit":3,"count":3}]'),
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
@@ -242,7 +279,7 @@ end)
 t.test("move refuses a card entering a full column", function()
     local box = sandbox({
         project = POMB,
-        detail = detail({ [NAME.REVIEW] = 1 }, GROUP .. '"limit":4,"count":3}]'),
+        detail = detail({ [NAME.REVIEW] = 1 }, { groups = GROUP .. '"limit":4,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
@@ -257,7 +294,7 @@ end)
 t.test("a move inside the group is not counted", function()
     local box = sandbox({
         project = POMB,
-        detail = detail({}, GROUP .. '"limit":2,"count":3}]'),
+        detail = detail({}, { groups = GROUP .. '"limit":2,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "bbbbbbbb", COLUMN.VERIFY }, "")
@@ -312,9 +349,9 @@ local UNITS = '"limit":4,"limit_unit":"count","count":2}]'
 t.test("limits prints each column limit with its unit and each group", function()
     local box = sandbox({
         project = POMB,
-        detail = detail({ [NAME.PROGRESS] = 2 }, GROUP .. UNITS):gsub(
-            '"wip_limit":2',
-            '"wip_limit":2,"limit_unit":"hours"'
+        detail = detail(
+            { [NAME.PROGRESS] = 2 },
+            { groups = GROUP .. UNITS, units = { [NAME.PROGRESS] = HOURS } }
         ),
         export = export({}),
     })
@@ -334,7 +371,11 @@ t.test("limits prints each column limit with its unit and each group", function(
 end)
 
 t.test("limits exits 1 with no limit group when the board has none", function()
-    local box = sandbox({ project = POMB, detail = detail({}, "[]"), export = export({}) })
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = "[]" }),
+        export = export({}),
+    })
     local out, code = dev(box, { "board", "limits" }, "")
     t.eq(code, 1, out)
     t.eq(out, "no limit group\n")
@@ -355,7 +396,7 @@ t.test("limits names another board and reads its limits", function()
     local box = sandbox({
         project = POMB,
         detail = detail({}),
-        other = detail({}, GROUP .. UNITS),
+        other = detail({}, { groups = GROUP .. UNITS }),
         export = export({}),
     })
     local out, code = dev(box, { "board", "limits", "other" }, "")

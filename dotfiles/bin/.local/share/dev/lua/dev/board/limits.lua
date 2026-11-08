@@ -3,7 +3,8 @@ local board = require("dev.board")
 ---The in-flight limits Pomb holds, and the refusal an agent gets at one.
 ---@class dev.board.limits
 ---@field REFUSED string the prefix of a refusal Pomb makes at a limit
-local M = { REFUSED = "Pomb refused the move: " }
+---@field HOURS string the unit of a column limit that counts estimated hours, not cards
+local M = { REFUSED = "Pomb refused the move: ", HOURS = "hours" }
 
 ---@class dev.board.limits.Group
 ---@field columns string[] the column names the group spans, in board order
@@ -64,7 +65,7 @@ function M.refusal(backend, card, target)
 
     -- A column's own limit counts the cards already in it, so a card staying put is never refused
     local own = limits.columns[target]
-    if own and card.column ~= target then
+    if own and limits.units[target] ~= M.HOURS and card.column ~= target then
         local held = holding(cards, card, { target })
         if #held >= own then
             return string.format(
