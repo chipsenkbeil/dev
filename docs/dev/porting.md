@@ -118,7 +118,9 @@ never lists or runs. Line 2 of each script reads
 
 `dev lint` warns on a `.sh` file anywhere else under `.dev` and on a
 standalone script with a bad line 2. It warns and exits 0 today while some
-projects still have shell verbs to port.
+projects still have shell verbs to port. The one exemption is a hidden helper
+named `.dev/__*.sh`. AGENTS.md sanctions that path for a raw script a verb
+needs, so the lint does not warn on it.
 
 Adding a file under `.dev/standalone/` is a deliberate choice. `dev board land`
 refuses the commit unless the card carries the `standalone-ok` label, and only

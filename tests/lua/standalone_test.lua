@@ -21,6 +21,20 @@ t.test("standalone warns on a .sh outside .dev/standalone", function()
     fs.remove(root, { recursive = true })
 end)
 
+t.test("standalone passes a hidden __ helper under .dev", function()
+    local root = project({ [".dev/__helper.sh"] = "#!/bin/sh\n" })
+    t.eq(standalone.problems(root), {})
+    fs.remove(root, { recursive = true })
+end)
+
+t.test("standalone warns on a nested __ shell under .dev", function()
+    local root = project({ [".dev/verbs/__x.sh"] = "#!/bin/sh\n" })
+    t.eq(standalone.problems(root), {
+        "WARNING: .dev/verbs/__x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+    })
+    fs.remove(root, { recursive = true })
+end)
+
 t.test("standalone warns on a bad line 2", function()
     local root = project({ [".dev/standalone/x.sh"] = "#!/bin/sh\n# runs somewhere\n" })
     t.eq(standalone.problems(root), {

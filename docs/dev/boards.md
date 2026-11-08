@@ -54,7 +54,7 @@ dev board wait --for ready
 A project's `.dev/standalone/` is reserved for shell that must run where dev
 cannot, such as a production server. Line 2 of each script there reads
 `# standalone: runs on <where>, where dev is absent`, and `dev lint` warns on
-any other `.sh` under `.dev`.
+any other `.sh` under `.dev` except a hidden `.dev/__*.sh` helper.
 
 `dev board land` refuses a commit that adds a file under `.dev/standalone/`
 unless the card carries the `standalone-ok` label, and the refusal names the

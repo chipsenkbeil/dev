@@ -63,7 +63,7 @@ end
 function M.problems(root)
     local lines = {}
     for _, path in ipairs(found(root, { "-name", "*.sh" })) do
-        if path:sub(1, #DIR) ~= DIR then
+        if path:sub(1, #DIR) ~= DIR and not path:match("^%.dev/__[^/]+$") then
             lines[#lines + 1] = "WARNING: "
                 .. path
                 .. ": shell outside .dev/standalone, port it to Lua (dev help porting)"
