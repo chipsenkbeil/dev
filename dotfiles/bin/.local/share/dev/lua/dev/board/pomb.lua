@@ -1,4 +1,5 @@
 local board = require("dev.board")
+local box = require("dev.cmd.box")
 local claims = require("dev.board.claims")
 local devos = require("dev.os")
 local json = require("dev.json")
@@ -1635,6 +1636,7 @@ function Backend:wait(after, kinds, timeout)
             column = known(column),
             from_column = known(from),
             actor = ACTORS[event.actor_kind],
+            at = type(event.at) == "string" and box.parse_time(event.at) or nil,
         }
     end
     return { cursor = doc.cursor, events = events }

@@ -6617,7 +6617,7 @@ t.test("wait returns the events oldest first with column names and the cursor", 
         root,
         '{"cursor":"9","events":['
             .. '{"cursor":"8","kind":"task_added","task_id":"t1","column_id":"col-ready","at":"x","actor_kind":"user","extra":1},'
-            .. '{"cursor":"9","kind":"task_moved","task_id":"t2","column_id":"col-progress","from_column_id":"col-blocked","token_name":null}]}'
+            .. '{"cursor":"9","kind":"task_moved","task_id":"t2","column_id":"col-progress","from_column_id":"col-blocked","at":"2026-11-08T10:00:00Z","token_name":null}]}'
     )
     local result = waiting(root, home, "'7', {'task_added', 'task_moved'}, 20")
     t.eq(result.got, {
@@ -6629,6 +6629,7 @@ t.test("wait returns the events oldest first with column names and the cursor", 
                 task_id = "t2",
                 column = "In Progress",
                 from_column = "Blocked",
+                at = assert(box.parse_time("2026-11-08T10:00:00Z")),
             },
         },
     })
@@ -6785,6 +6786,7 @@ t.test(
                 column = "Ready",
                 from_column = "Blocked",
                 actor = "human",
+                at = 100,
             }),
             got("4"),
         }, { "--for", "human" }, {
@@ -6856,6 +6858,7 @@ t.test("wait --for human settles for 60 seconds and prints one line per card", f
             column = "Ready",
             from_column = "Blocked",
             actor = "human",
+            at = started + 7200,
         }, { kind = "comment_added", task_id = ID_C, column = "Blocked" }),
         got("4"),
     }, { "--for", "human" }, { cards = cards, comments = replies, now = started })
@@ -6874,10 +6877,85 @@ t.test("wait --for human prints the lines it holds when the cursor is trimmed", 
             column = "Ready",
             from_column = "Blocked",
             actor = "human",
+            at = 100,
         }),
         { oldest = "9" },
     }, { "--for", "human" }, { cards = cards })
     t.eq(result.output, "moved 11111111 out of Blocked")
+end)
+
+t.test("wait --for human ignores a human move older than the wait's start", function()
+    local cards = { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
+    local result = waited({
+        got("1", {
+            kind = "task_moved",
+            task_id = ID_A,
+            column = support.COLUMN_NAME.READY,
+            from_column = board.DEFAULT_NAMES.blocked,
+            actor = "human",
+            at = 99,
+        }),
+        got("2", {
+            kind = "task_moved",
+            task_id = ID_C,
+            column = support.COLUMN_NAME.READY,
+            from_column = board.DEFAULT_NAMES.blocked,
+            actor = "human",
+            at = 101,
+        }),
+        got("3"),
+    }, { "--for", "human" }, { cards = cards, now = 100 })
+    t.eq(result.output, "moved cccccccc out of " .. board.DEFAULT_NAMES.blocked)
+end)
+
+t.test("wait --for human keeps waiting on a trimmed stream with no moved card", function()
+    local cards = {
+        { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false },
+        { id = ID_B, column = board.DEFAULT_NAMES.icebox, labels = {}, done = false },
+    }
+    local result, seen, path = waited({
+        { oldest = "9" },
+        got("10", {
+            kind = "task_moved",
+            task_id = ID_C,
+            column = support.COLUMN_NAME.READY,
+            from_column = board.DEFAULT_NAMES.blocked,
+        }),
+        got("11"),
+        { oldest = "20" },
+        { message = "stop" },
+    }, { "--for", "human" }, { cards = cards })
+    t.eq(result.message, "stop")
+    t.eq(seen.afters, { "none", "9", "10", "11", "20" })
+    t.eq(fs.read(path .. ".human.cursor"), "20\n")
+end)
+
+t.test("wait --for human names the card that left Blocked on a trimmed stream", function()
+    local before =
+        { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
+    local after = { { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false } }
+    local reads = 0
+    local replies = { { oldest = "9" } }
+    local backend, seen = waiter(replies)
+    function backend:cards()
+        reads = reads + 1
+        return reads == 1 and before or after
+    end
+    local path = support.tempdir() .. "/wait"
+    local result = commands.wait(backend, { "--for", "human" }, {
+        stem = path,
+        nap = function() end,
+        random = function()
+            return 0
+        end,
+        now = function()
+            return 0
+        end,
+        notice = function() end,
+    })
+    t.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
+    t.eq(seen.afters, { "none" })
+    t.eq(fs.read(path .. ".human.cursor"), "9\n")
 end)
 
 t.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
@@ -6990,9 +7068,10 @@ t.test("wait resumes from the stored cursor", function()
             column = "Ready",
             from_column = "Blocked",
             actor = "human",
+            at = 100,
         }),
         got("11"),
-    }, { "--for", "human" }, { path = path })
+    }, { "--for", "human" }, { path = path, cards = {} })
     t.eq(other.afters, { "none", "9", "10" })
 end)
 

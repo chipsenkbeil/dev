@@ -5227,6 +5227,49 @@ function Owner.comments(backend, events, since)
     return spoke
 end
 
+---Collect the cards that sat in Blocked or Icebox and have left them.
+---
+---Remove each departed card from `sat`, so it is reported once.
+---@param backend dev.board.Backend the board
+---@param sat table<string, string> the column of each card that sat in Blocked or Icebox
+---@return string[]? lines one line per card that left, nil when the board could not be read
+---@return string? why the reason the board could not be read
+function Owner.departed(backend, sat)
+    local cards, message = backend:cards()
+    if not cards then
+        return nil, message
+    end
+    local lines = {}
+    for _, card in ipairs(cards) do
+        local from = sat[card.id]
+        if from and card.column ~= from then
+            sat[card.id] = nil
+            lines[#lines + 1] = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " out of " .. from
+        end
+    end
+    table.sort(lines)
+    return lines
+end
+
+---Collect the cards that sit in Blocked or Icebox.
+---@param backend dev.board.Backend the board
+---@param roles dev.board.Roles the column names
+---@return table<string, string>? sat the column of each card in Blocked or Icebox
+---@return string? why the reason the board could not be read
+function Owner.sitting(backend, roles)
+    local cards, message = backend:cards()
+    if not cards then
+        return nil, message
+    end
+    local sat = {}
+    for _, card in ipairs(cards) do
+        if card.column == roles.blocked or card.column == roles.icebox then
+            sat[card.id] = card.column
+        end
+    end
+    return sat
+end
+
 ---Collect the unclaimed cards of a column.
 ---@param backend dev.board.Backend the board
 ---@param column string the column's name
@@ -5261,6 +5304,8 @@ local function wait_line(event, opts)
             event.kind == EventKind.MOVED
             and event.from_column == roles.blocked
             and event.actor == HUMAN_ACTOR
+            and event.at
+            and event.at > opts.started
         then
             return "moved " .. id .. " out of " .. roles.blocked
         end
@@ -5340,6 +5385,14 @@ function M.wait(backend, args, opts)
     local clock = opts.now or os.time
     local started = clock()
     local held, touched, last = {}, {}, nil
+    local sat
+    if only == WaitFor.HUMAN then
+        local why
+        sat, why = Owner.sitting(backend, roles)
+        if not sat then
+            return failure(why)
+        end
+    end
     local function flush(result)
         if #held == 0 then
             return result
@@ -5398,10 +5451,14 @@ function M.wait(backend, args, opts)
             local matched = false
             for _, event in ipairs(reply.events) do
                 local line = type(event.task_id) == "string"
-                    and wait_line(
-                        event,
-                        { only = only, roles = roles, leads = leads, spoke = spoke, stage = stage }
-                    )
+                    and wait_line(event, {
+                        only = only,
+                        roles = roles,
+                        leads = leads,
+                        spoke = spoke,
+                        stage = stage,
+                        started = started,
+                    })
                 if line then
                     matched = true
                     if only ~= WaitFor.HUMAN then
@@ -5428,7 +5485,20 @@ function M.wait(backend, args, opts)
             if not saved then
                 return flush(failure(why))
             end
-            return flush({ output = WAIT_TRIMMED })
+            if only ~= WaitFor.HUMAN then
+                return flush({ output = WAIT_TRIMMED })
+            end
+            local gone, reason = Owner.departed(backend, sat)
+            if not gone then
+                return flush(failure(reason))
+            end
+            for _, line in ipairs(gone) do
+                held[#held + 1] = line
+            end
+            cursor = oldest
+            if #held > 0 then
+                return flush({ output = WAIT_TRIMMED })
+            end
         elseif refused then
             failures = 0
             if not told then

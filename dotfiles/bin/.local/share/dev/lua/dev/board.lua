@@ -38,6 +38,7 @@ local M = {}
 ---@field column string? the name of the column the card sits in after the event, nil when it left for another board
 ---@field from_column string? the name of the column a moved card left
 ---@field actor string? `human` for the owner and `agent` for a token, nil when Pomb did not say
+---@field at integer? when it happened, in seconds since the epoch, nil when Pomb did not say
 
 ---@class dev.board.Events
 ---@field cursor string the cursor to send as `after` next

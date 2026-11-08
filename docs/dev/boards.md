@@ -984,31 +984,34 @@ timeout 86400 dev board wait --for planner
 <id prefix> to Ready` or `moved <id prefix> to Ready`. `--for review`, `--for
 verify` and `--for release` do the same for that column, but only for a card
 nobody has claimed. `--for human` wakes on a card the owner moved out of Blocked
-(`moved <id prefix> out of Blocked`, and a move by an agent never wakes it) and
-on a card, in any column but Done, whose newest comment is the owner's and newer
-than the wait's start (`the owner commented on <id prefix>`). A comment of an
-agent never wakes it. The first such event opens a settle window of 60 seconds:
-the wait keeps listening until no new event from the owner has come for that
-long, to catch a second reply, then prints one line per card the owner touched,
-not one per comment. The woken agent reads every comment with `dev board show`.
-`--for lead` wakes on a card added, moved or updated that is now in Blocked with
-the `needs:lead` label, no claim and without `needs:human`, and prints `<id
+(`moved <id prefix> out of Blocked`, and a move by an agent never wakes it, nor
+does a move made before the wait started) and on a card, in any column but
+Done, whose newest comment is the owner's and newer than the wait's start
+(`the owner commented on <id prefix>`). A comment of an agent never wakes it.
+The first such event opens a settle window of 60 seconds: the wait keeps
+listening until no new event from the owner has come for that long, to catch a
+second reply, then prints one line per card the owner touched, not one per
+comment. The woken agent reads every comment with `dev board show`. `--for
+lead` wakes on a card added, moved or updated that is now in Blocked with the
+`needs:lead` label, no claim and without `needs:human`, and prints `<id
 prefix> is labelled needs:lead in Blocked`. `--for planner` does the same for
 `needs:planner` and prints `<id prefix> is labelled needs:planner in Blocked`.
-Pomb's events carry no labels, so it reads the board for each batch of events. With no `--for`, every added card,
-move, update and comment wakes it. Any other `--for` value is a usage error, and
-a local board is `dev: a local board has nothing to wait on` (exit 1).
-`wait` is never queued.
+Pomb's events carry no labels, so it reads the board for each batch of events.
+With no `--for`, every added card, move, update and comment wakes it. Any
+other `--for` value is a usage error, and a local board is `dev: a local board
+has nothing to wait on` (exit 1). `wait` is never queued.
 
 The command asks Pomb for events after a cursor and holds each request for up to
 50 seconds, repeating on a quiet board until a matching event arrives. It keeps
 the cursor in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`ready`, `human`,
 `lead` or `all`), readable by you alone and saved after every reply, so a change made
-while no wait was running wakes the next one. With no cursor file the first call
+while no wait was running wakes the next one, except that `--for human`
+ignores a move made before it started. With no cursor file the first call
 starts from now. When Pomb has dropped the events after the stored cursor,
 `wait` stores the oldest one it still has, prints
 `events were trimmed, check the board` and exits 0, so look at the board and run
-it again.
+it again. `--for human` instead keeps waiting on a trim, and exits only when a
+card that sat in Blocked or Icebox when it started has left it.
 
 Pomb being unreachable (no route, a locked `pass`, a gateway error) is retried
 every 30 seconds, up to ten failures in a row, and then `wait` exits 1 with the
@@ -2124,42 +2127,48 @@ event in the reply, then exits 0, so a background run under `timeout` wakes the
 session. `--for ready` sends kinds `task_added,task_moved` and matches a card
 whose column is Ready after the event (`added <id prefix> to Ready`, `moved <id
 prefix> to Ready`), `--for human` sends `task_moved,comment_added` and matches a
-move whose `from_column` is Blocked and whose `actor` is `human` (Pomb's
-`actor_kind` of `user`, kept on each event by `Backend:wait`), printed as `moved
-<id prefix> out of Blocked`, or a comment event whose card is not Done and whose
-newest comment is the owner's and newer than the time the wait started, which it
-reads with `Backend:cards` and `Backend:comments` (`the owner commented on <id
-prefix>`). The first match opens a settle window of 60 seconds
-(`Owner.SETTLE_SECONDS`): each further call to `Backend:wait` passes the time
-left of the window as its timeout, a match restarts the window, and an empty
-reply or an elapsed window ends it with one line per card. `--for lead` sends
-`task_added,task_moved,task_updated` and, for each reply with events, reads
-`Backend:cards` and matches an event whose card is in Blocked with `needs:lead`
-(`--for planner`, which sends the same kinds, `needs:planner`)
-and no `needs:human` (`<id prefix> is labelled needs:lead in Blocked`, once per
-card per reply), and with no `--for` all four kinds match (`added <id> to
-<column>`, `moved <id> to <column>`, `updated <id>`, `commented on <id>`). An
-unknown `--for`, a card argument or another flag is exit 2, and a local board is
-`dev: a local board has nothing to wait on` (exit 1). The cursor is `<state
+move whose `from_column` is Blocked, whose `actor` is `human` (Pomb's
+`actor_kind` of `user`) and whose `at` (Pomb's `at` as epoch seconds, both
+kept on each event by `Backend:wait`) is later than the wait's start, printed
+as `moved <id prefix> out of Blocked`, or a comment event whose card is not
+Done and whose newest comment is the owner's and newer than the time the wait
+started, which it reads with `Backend:cards` and `Backend:comments` (`the
+owner commented on <id prefix>`). The first match opens a settle window of 60
+seconds (`Owner.SETTLE_SECONDS`): each further call to `Backend:wait` passes
+the time left of the window as its timeout, a match restarts the window, and
+an empty reply or an elapsed window ends it with one line per card. `--for
+lead` sends `task_added,task_moved,task_updated` and, for each reply with
+events, reads `Backend:cards` and matches an event whose card is in Blocked
+with `needs:lead` (`--for planner`, which sends the same kinds,
+`needs:planner`) and no `needs:human` (`<id prefix> is labelled needs:lead in
+Blocked`, once per card per reply), and with no `--for` all four kinds match
+(`added <id> to <column>`, `moved <id> to <column>`, `updated <id>`,
+`commented on <id>`). An unknown `--for`, a card argument or another flag is
+exit 2, and a local board is `dev: a local board has nothing to wait on` (exit
+1). The cursor is `<state
 home>/dev/boards/<name>.<ready|review|verify|release|human|lead|planner|all>.cursor`,
 one per `--for` mode so a filtered wait never consumes another mode's events
 (the name with every character outside `A-Za-z0-9._-` turned into `_`) at mode
 600, written after every reply, and with no file the first call asks without a
 cursor and starts from the cursor Pomb answers. An expired cursor (410) stores
 the backend's oldest cursor and prints `events were trimmed, check the board`
-(exit 0). A failure `pomb.unreachable` counts (idempotent rules) is retried
-after a 30 second nap, and the tenth in a row exits 1 with its message (an
-endless silent retry would hide a dead Pomb from the session). A 429 whose body
-has the code `too_many_waits` (4 open waits per token, and every session shares
-the token) makes `Backend:wait` return a fourth value, `true`, and is never a
-failure: `wait` prints `dev: pomb holds too many open waits for this token,
-waiting for one to end` on standard error once per call, resets the failure
-count, and retries with a pause of 30, 60, 120, 240 and then 300 seconds, each
-cut by up to a quarter with a random fraction, until a reply comes (a reply
-starts the pause over). A 429 with another code is a plain refusal. Any other
-refusal exits 1 at once. `wait` is not in the queue rules, and a reply with no
-matching event loops again. `tests/lua/board_test.lua` covers it with a fake
-backend and stub `nap`, `random` and `notice` options.
+(exit 0). `--for human` stores it and rereads the cards instead
+(`Owner.sitting` at the start, `Owner.departed` on a trim) and prints `moved
+<id prefix> out of <column>` for each card that sat in Blocked or Icebox and
+has left it, or keeps waiting when none has. A failure `pomb.unreachable`
+counts (idempotent rules) is retried after a 30 second nap, and the tenth in a
+row exits 1 with its message (an endless silent retry would hide a dead Pomb
+from the session). A 429 whose body has the code `too_many_waits` (4 open
+waits per token, and every session shares the token) makes `Backend:wait`
+return a fourth value, `true`, and is never a failure: `wait` prints `dev:
+pomb holds too many open waits for this token, waiting for one to end` on
+standard error once per call, resets the failure count, and retries with a
+pause of 30, 60, 120, 240 and then 300 seconds, each cut by up to a quarter
+with a random fraction, until a reply comes (a reply starts the pause over). A
+429 with another code is a plain refusal. Any other refusal exits 1 at once.
+`wait` is not in the queue rules, and a reply with no matching event loops
+again. `tests/lua/board_test.lua` covers it with a fake backend and stub
+`nap`, `random` and `notice` options.
 
 `dev board sync` is the one subcommand outside the board's own commands. On a
 Pomb board it replays the queue below and prints `synced <sub> <first argument>`
