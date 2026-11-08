@@ -5,7 +5,7 @@ local header = require("dev.header")
 
 local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = io.stderr
-local RESERVED_DIRS = { lua = true, topics = true }
+local RESERVED_DIRS = { lua = true, topics = true, standalone = true }
 local HIDDEN_GROUP = "hidden"
 local GLOBAL_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach", "-C" }
 

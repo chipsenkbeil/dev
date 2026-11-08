@@ -163,18 +163,21 @@ t.test("a noun with no description file lists its subcommand names", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test(".dev/lua and .dev/topics are never nouns", function()
+t.test(".dev/lua, .dev/topics and .dev/standalone are never nouns", function()
     local root = make_project()
     scripted(root, ".dev/lua/helper.lua", "return {}\n", "644")
     scripted(root, ".dev/topics/guide.sh", "#!/usr/bin/env bash\n# Not a verb.\n")
+    scripted(root, ".dev/standalone/run.sh", "#!/usr/bin/env bash\n# Not a verb.\n")
     local reg = registry.load(root)
     t.eq(reg:is_noun("lua"), false)
     t.eq(reg:is_noun("topics"), false)
     t.eq(reg:find({ "lua" }), nil)
     t.eq(reg:find({ "topics", "guide" }), nil)
+    t.eq(reg:is_noun("standalone"), false)
+    t.eq(reg:find({ "standalone", "run" }), nil)
     for _, row in ipairs(reg:verbs()) do
         t.ok(
-            row.name ~= "lua" and row.name ~= "topics",
+            row.name ~= "lua" and row.name ~= "topics" and row.name ~= "standalone",
             "reserved directory listed as " .. row.name
         )
     end

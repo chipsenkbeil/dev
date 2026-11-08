@@ -138,6 +138,11 @@ if #lua_files > 0 then
     lint_lua(lua_files)
 end
 
+stdout:write("> standalone shell\n")
+for _, line in ipairs(require("dev.standalone").problems(root)) do
+    stderr:write(line, "\n")
+end
+
 if devos.which("ast-grep") then
     local sets = fs.join(root, checks.lint_dir, "..")
     for _, set in ipairs(RULE_TEST_SETS) do

@@ -107,6 +107,19 @@ A verb runs under CI, in a box and from agents, where no terminal is attached.
   as root.
 - A verb that takes only `KEY=value` calls `verb.no_args(ctx)` first.
 
+## Standalone shell
+
+Some scripts run where dev does not exist: a production server, a test sandbox
+or GitHub Actions. They stay shell and live in `.dev/standalone/`, a folder dev
+never lists or runs. Line 2 of each script reads
+`# standalone: runs on <where>, where dev is absent`, and `<where>` is one of
+`production server`, `test sandbox` or `GitHub Actions`. The list is
+`M.WHERE` in `dev/standalone.lua`, and widening it is a dotfiles change.
+
+`dev lint` warns on a `.sh` file anywhere else under `.dev` and on a
+standalone script with a bad line 2. It warns and exits 0 today while some
+projects still have shell verbs to port.
+
 ## Running somewhere else
 
 `dev --remote <verb>` runs the verb's job from the project's pipeline through

@@ -51,6 +51,11 @@ dev board sync
 dev board wait --for ready
 ```
 
+A project's `.dev/standalone/` is reserved for shell that must run where dev
+cannot, such as a production server. Line 2 of each script there reads
+`# standalone: runs on <where>, where dev is absent`, and `dev lint` warns on
+any other `.sh` under `.dev`.
+
 ## Opting in
 
 A project uses a board when `.dev/config.toml` has a `[board]` section:

@@ -29,6 +29,14 @@ keep their hyphens.
 The first line of `.dev/<noun>/DESCRIPTION` describes the noun. Without it,
 `dev help` lists the subcommand names.
 
+## Reserved folders
+
+`.dev/lua`, `.dev/topics` and `.dev/standalone` are never nouns, and dev lists
+and runs nothing inside them. `standalone` holds shell that must run where dev
+cannot. Line 2 of each script there reads
+`# standalone: runs on <where>, where dev is absent`, and `dev help porting`
+has the list of places.
+
 ## Header lines
 
 dev reads the comment block under the shebang of each script.
