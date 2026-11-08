@@ -2,8 +2,8 @@ local board = require("dev.board")
 
 ---The standard board: the nine columns, the size palette and names without
 ---size words, laid out one step at a time. Each step adds or fixes what is
----missing, renames only In Review and never deletes. The default colour changes last, so
----a run that stops early can be repeated and still tell the old default.
+---missing, renames only In Review and never deletes. The default colour changes before the
+---limit group, so a run that stops early can be repeated and still tell the old default.
 ---@class dev.board.init
 local M = {}
 
@@ -23,6 +23,7 @@ M.PALETTE = {
 }
 
 local DEFAULT_VALUE = "white"
+local LIMIT_GROUP_CARDS = 4
 
 local SIZE_WORDS = {
     { text = "red, split", value = "red" },
@@ -264,6 +265,35 @@ local function default_step(layout, state, say)
     return true
 end
 
+local function limits_step(layout, state, say)
+    local groups, message = layout:limit_groups()
+    if groups == nil then
+        return nil, message
+    end
+    if groups == false or #groups > 0 then
+        return true
+    end
+    local roles = state.roles
+    local ok
+    ok, message =
+        layout:add_limit_group({ roles.progress, roles.review, roles.verify }, LIMIT_GROUP_CARDS)
+    if not ok then
+        return nil, message
+    end
+    say(
+        "created limit group "
+            .. roles.progress
+            .. ", "
+            .. roles.review
+            .. " and "
+            .. roles.verify
+            .. " at "
+            .. LIMIT_GROUP_CARDS
+    )
+    state.changes = state.changes + 1
+    return true
+end
+
 local function enabled_step(layout, state, say)
     local LEFT_ENABLED = "left the colours enabled as they are, since this token may not change them; "
         .. "run dev board init --admin"
@@ -391,6 +421,7 @@ function M.run(layout, name, say, roles)
         strip_step,
         enabled_step,
         default_step,
+        limits_step,
         worn_step,
     }) do
         local ok

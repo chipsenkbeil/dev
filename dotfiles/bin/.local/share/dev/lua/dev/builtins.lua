@@ -271,6 +271,12 @@ return {
         desc = "List the columns of this board, or of the Pomb board named BOARD, in board order with (done) after a column that finishes a card",
     },
     {
+        words = { "board", "limits" },
+        handler = "lua",
+        usage = "dev board limits [BOARD]",
+        desc = "Show the limits of this board, or of the Pomb board named BOARD: each column limit with its unit, then each limit group with the cards in flight. It exits 1 with no limit group when the board has none",
+    },
+    {
         words = { "board", "next" },
         handler = "lua",
         flags = "--column --for --max-size",

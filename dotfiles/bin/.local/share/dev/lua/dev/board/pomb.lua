@@ -1462,25 +1462,31 @@ function Backend:columns(name)
     return rows
 end
 
-function Backend:limits()
+function Backend:limits(name)
     -- Limits change on Pomb at any time, so each call reads the board fresh
-    local id, message = self:__board_id()
+    local home = self
+    if name and name ~= self.__opts.name then
+        home = self:other_board(name)
+    end
+    local id, message = home:__board_id()
     if not id then
         return nil, message
     end
     local detail
-    detail, message = self:__request("GET", "/api/boards/" .. id)
+    detail, message = home:__request("GET", "/api/boards/" .. id)
     if not detail then
         return nil, message
     end
 
     -- Pomb names columns by id, so keep each column's name and board position to read the groups
-    local limits, names, order = { columns = {}, groups = {} }, {}, {}
+    local limits, names, order = { columns = {}, units = {}, groups = {} }, {}, {}
     for index, column in ipairs(detail.columns) do
         names[column.id] = column.name
         order[column.id] = index
         if type(column.wip_limit) == "number" then
             limits.columns[column.name] = column.wip_limit
+            limits.units[column.name] = type(column.limit_unit) == "string" and column.limit_unit
+                or "count"
         end
     end
 
@@ -1501,10 +1507,62 @@ function Backend:limits()
             columns[#columns + 1] = names[column_id]
         end
         if #columns > 0 and type(group.limit) == "number" then
-            limits.groups[#limits.groups + 1] = { columns = columns, limit = group.limit }
+            limits.groups[#limits.groups + 1] = {
+                columns = columns,
+                limit = group.limit,
+                count = type(group.count) == "number" and group.count or nil,
+            }
         end
     end
     return limits
+end
+
+function Backend:limit_groups()
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local detail
+    detail, message = self:__request("GET", "/api/boards/" .. id)
+    if not detail then
+        return nil, message
+    end
+    local groups = detail.limit_groups
+    return type(groups) == "table" and groups or {}
+end
+
+function Backend:add_limit_group(names, limit)
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local detail
+    detail, message = self:__request("GET", "/api/boards/" .. id)
+    if not detail then
+        return nil, message
+    end
+    local ids = {}
+    for _, wanted in ipairs(names) do
+        for _, column in ipairs(detail.columns) do
+            if column.name:lower() == wanted:lower() then
+                ids[#ids + 1] = column.id
+                break
+            end
+        end
+    end
+    if #ids ~= #names then
+        return nil, "the board lacks a column of " .. table.concat(names, ", ")
+    end
+    local made
+    made, message = self:__request(
+        "POST",
+        "/api/boards/" .. id .. "/limit-groups",
+        { column_ids = ids, limit = limit }
+    )
+    if not made then
+        return nil, message
+    end
+    return true
 end
 
 function Backend:other_board(name)

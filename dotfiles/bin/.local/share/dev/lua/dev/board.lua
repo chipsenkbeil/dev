@@ -88,7 +88,7 @@ local M = {}
 ---@field columns fun(self: dev.board.Backend, name: string?): dev.board.ColumnRow[]?, string? the columns of the named board, or of this one when nil, in board order, or nil and a message
 ---@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?): dev.board.Events?, string?, string?, boolean? the events after the cursor, oldest first, held up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once with none and the board's current cursor. On an expired cursor it returns nil, a message and the oldest cursor that still resumes, when Pomb holds too many open waits for the token it returns nil, a message, nil and true, and on any other failure nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.MoveOpts?): boolean?, string?, string? the card moved to a column, or nil, a message and `full` when Pomb refuses it at a limit
----@field limits fun(self: dev.board.Backend): dev.board.limits.Limits?, string? the column and group limits the board holds, empty on a board with none, or nil and a message
+---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the column and group limits the board holds, or those of the Pomb board named `name`, empty on a board with none, or nil and a message
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the claim, renewed when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
@@ -161,6 +161,8 @@ local M = {}
 ---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a card's name or colour
 ---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined on the board
 ---@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string? the standard agent roles granted to the board, the names this call created, or false when the board has no roles
+---@field limit_groups fun(self: dev.board.Layout): table<string, any>[]|false|nil, string? the limit groups the board holds, false when the board has no limits to set, or nil and a message
+---@field add_limit_group fun(self: dev.board.Layout, names: string[], limit: integer): boolean?, string? the columns named made one limit group of cards
 
 ---@class dev.board.LayoutColumn
 ---@field id string the column's id

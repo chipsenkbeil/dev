@@ -8,9 +8,11 @@ local M = { REFUSED = "Pomb refused the move: " }
 ---@class dev.board.limits.Group
 ---@field columns string[] the column names the group spans, in board order
 ---@field limit integer how many cards the columns hold together at most
+---@field count integer? how many cards the columns hold now, nil when Pomb does not say
 
 ---@class dev.board.limits.Limits
 ---@field columns table<string, integer> column name -> its own limit
+---@field units table<string, string> column name -> what its limit counts, `count` or `hours`
 ---@field groups dev.board.limits.Group[] the limit groups
 
 local function short(cards)

@@ -3963,6 +3963,36 @@ function commands.columns(backend, args)
     return { output = table.concat(lines, "\n") }
 end
 
+function commands.limits(backend, args)
+    if #args > 1 then
+        return usage("takes at most one board name")
+    end
+    local limits, message = backend:limits(args[1])
+    if not limits then
+        return failure(message)
+    end
+    local lines = {}
+    local names = {}
+    for name in pairs(limits.columns) do
+        names[#names + 1] = name
+    end
+    table.sort(names)
+    for _, name in ipairs(names) do
+        lines[#lines + 1] = name .. ": " .. limits.columns[name] .. " " .. limits.units[name]
+    end
+    for _, group in ipairs(limits.groups) do
+        lines[#lines + 1] = table.concat(group.columns, ", ")
+            .. ": "
+            .. group.limit
+            .. (group.count and (" (" .. group.count .. " in flight)") or "")
+    end
+    if #limits.groups == 0 then
+        lines[#lines + 1] = "no limit group"
+        return { output = table.concat(lines, "\n"), code = FAILURE }
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
 function commands.links(backend, args)
     if #args ~= 1 then
         return usage("needs a card")

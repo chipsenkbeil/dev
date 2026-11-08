@@ -284,6 +284,13 @@ What it lays out:
   colour, or has the colour that was the default when the run began (Pomb gave
   that to every card nobody coloured), the card takes the colour the word names.
   A card with any other colour keeps it.
+- The limit group: when `GET /api/boards/{id}` lists no `limit_groups`, `init`
+  posts `{"column_ids":[In Progress, Review, Verify ids],"limit":4}` to
+  `/api/boards/{id}/limit-groups` and prints `created limit group In Progress,
+  Review and Verify at 4`. A board that has any group is left alone and says
+  nothing, and a local board gets none and stays uncapped. A 403 is shown with
+  the `--admin` hint like the other changes. `dev board limits` shows the
+  result.
 - Labels need nothing: `needs:planner`, `needs:lead` and `needs:human` are
   plain strings on a card, and Pomb makes them when a card first carries one.
 
@@ -1140,6 +1147,13 @@ never handles the API.
   does not see is exit 1 and says no board has that name. A local board
   answers only for its own name and refuses any other with exit 1. A second
   word is exit 2.
+- `limits [BOARD]`: The limits of the board named BOARD, else of this
+  project's board, from a fresh `GET /api/boards/{id}`. It prints one line per
+  column limit as `COLUMN: N UNIT`, where UNIT is `count` or `hours` from the
+  column's `limit_unit`, then one line per limit group as `COLUMN, COLUMN:
+  N (C in flight)`, where C is the group's `count` and a group always counts
+  cards. A board with no limit group is exit 1 and the last line says `no
+  limit group`, and so is a local board. A second word is exit 2.
 - `add NAME [--board B] [--blocked-by CARD]... [--from CARD] [--id-only] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...`:
   Creates the card, in Backlog by default, and prints
   `added <id prefix> <column>`. `--size` gives it the colour of the size, as

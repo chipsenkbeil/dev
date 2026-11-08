@@ -503,8 +503,11 @@ function Backend:boards()
     return { self.__opts.name }
 end
 
-function Backend:limits()
-    return { columns = {}, groups = {} }
+function Backend:limits(name)
+    if name and name ~= self.__opts.name then
+        return nil, "a local board knows only its own limits, so " .. name .. " is not reachable"
+    end
+    return { columns = {}, units = {}, groups = {} }
 end
 
 function Backend:columns(name)
@@ -524,6 +527,10 @@ end
 
 function Backend:other_board(name)
     return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
+end
+
+function Backend:limit_groups()
+    return false
 end
 
 function Backend:add_checks_field()

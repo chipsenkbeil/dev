@@ -71,6 +71,7 @@ local function fake_layout(opts)
         cards = opts.cards or {},
         has_checks = opts.has_checks ~= false,
         roles = opts.roles == nil and {} or opts.roles,
+        groups = opts.groups or {},
         writes = {},
     }
     local layout = { state = state }
@@ -173,6 +174,14 @@ local function fake_layout(opts)
                 color.description = fields.description or color.description
             end
         end
+        return true
+    end
+    function layout:limit_groups()
+        return copy(state.groups)
+    end
+    function layout:add_limit_group(names, limit)
+        write("add_limit_group", table.concat(names, ","), limit)
+        state.groups[#state.groups + 1] = { column_names = names, limit = limit }
         return true
     end
     function layout:set_card(id, fields)
@@ -416,6 +425,8 @@ local PERMISSIONS = '[{"name":"cards.read","presets":["read","work","lead","admi
     .. '{"name":"boards.write","presets":["lead","admin"]},{"name":"templates.write","presets":["admin"]}]'
 local BOARDS = '[{"id":"board-1","name":"demo","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"demo","swimlanes":[],"columns":['
+local GROUPS = '"limit_groups":[{"id":"g1","column_ids":["col-InProgress","col-Review","col-Verify"],'
+    .. '"limit":4,"limit_unit":"count","count":0}]'
 local function detail()
     local parts = {}
     for _, name in ipairs(STANDARD) do
@@ -427,7 +438,7 @@ local function detail()
             name == "Blocked" and "true" or "false"
         )
     end
-    return DETAIL .. table.concat(parts, ",") .. "]}"
+    return DETAIL .. table.concat(parts, ",") .. "]," .. GROUPS .. "}"
 end
 
 local function colors_json()
@@ -889,7 +900,8 @@ t.test("init renames In Review to Review through the column update", function()
             name == "Blocked" and "true" or "false"
         )
     end
-    assert(fs.write(root .. "/detail.json", DETAIL .. table.concat(parts, ",") .. "]}"))
+    local body = DETAIL .. table.concat(parts, ",") .. "]," .. GROUPS .. "}"
+    assert(fs.write(root .. "/detail.json", body))
     local out, code = dev(root, home, tmp, { "board", "init" })
     t.eq(code, 0, out)
     t.ok(
@@ -1278,4 +1290,90 @@ t.test("init stops before any write when the column views carry no is blocked", 
     t.eq(code, 1)
     t.ok(out:find("cannot mark a Blocked column yet", 1, true), out)
     t.eq(writes(root), 0)
+end)
+
+local function limit_posts(root)
+    local count = 0
+    for line in calls_of(root):gmatch("[^\n]+") do
+        count = count
+            + (line:find("/limit-groups", 1, true) and line:find("-X POST", 1, true) and 1 or 0)
+    end
+    return count
+end
+
+t.test("init creates the limit group of 4 on a board that has none", function()
+    local root, home, tmp = sandbox()
+    assert(fs.write(root .. "/detail.json", (detail():gsub(',"limit_groups":%b[]', ""))))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.eq(limit_posts(root), 1)
+    t.ok(
+        calls_of(root):find(
+            '--data-raw {"column_ids":["col-InProgress","col-Review","col-Verify"],"limit":4} https://pomb.example/api/boards/board-1/limit-groups',
+            1,
+            true
+        ),
+        calls_of(root)
+    )
+    t.ok(out:find("created limit group In Progress, Review and Verify at 4\n", 1, true), out)
+    t.ok(out:find("board demo: 1 change\n", 1, true), out)
+end)
+
+t.test("init leaves a board that has a limit group alone and says nothing", function()
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.eq(limit_posts(root), 0)
+    t.eq(out:find("limit group", 1, true), nil)
+end)
+
+t.test("init leaves a board with any other limit group alone", function()
+    local root, home, tmp = sandbox()
+    local other = detail():gsub('"column_ids":%b[]', '"column_ids":["col-Ready","col-InProgress"]')
+    assert(fs.write(root .. "/detail.json", other))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    t.eq(code, 0, out)
+    t.eq(limit_posts(root), 0)
+end)
+
+t.test("init says to use --admin when Pomb refuses the limit group", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:limit_groups()
+        return {}
+    end
+    function layout:add_limit_group()
+        return nil, "board unavailable: pomb answered 403: insufficient_scope"
+    end
+    local changes, message = run(layout)
+    t.eq(changes, nil)
+    t.ok(message:find("run dev board init --admin", 1, true), message)
+end)
+
+t.test("a layout with no limits gets no limit group", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:limit_groups()
+        return false
+    end
+    function layout:add_limit_group()
+        error("must not be called")
+    end
+    local changes, message = run(layout)
+    t.eq(message, nil)
+    t.ok(changes > 0)
+end)
+
+t.test("a missing board gets one limit group once", function()
+    local layout = fake_layout({ exists = false })
+    local _, _, lines = run(layout)
+    local said = 0
+    for _, line in ipairs(lines) do
+        said = said + (line == "created limit group In Progress, Review and Verify at 4" and 1 or 0)
+    end
+    t.eq(said, 1)
+    t.eq(layout.state.groups[1].limit, 4)
+    t.eq(layout.state.groups[1].column_names, { "In Progress", "Review", "Verify" })
+    local changes
+    changes, _, lines = run(layout)
+    t.eq(changes, 0)
+    t.eq(#lines, 0)
 end)

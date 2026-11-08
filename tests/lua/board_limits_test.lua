@@ -42,7 +42,8 @@ local GROUP = '[{"id":"g1","column_ids":["'
     .. '"],'
 local PLANNED =
     "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a"
-local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
+local BOARDS =
+    '[{"id":"board-1","name":"dotfiles","archived":false},{"id":"board-2","name":"other","archived":false}]'
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"}]'
 local COLUMNS = {
     { ID.READY, NAME.READY },
@@ -60,6 +61,7 @@ status=200
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
+*/api/boards/board-2) body=$(cat "$ROOT/detail2.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
@@ -145,6 +147,7 @@ local function sandbox(opts)
         ["colors.json"] = COLORS,
         ["fields.json"] = support.FIELDS,
         ["export.json"] = opts.export,
+        ["detail2.json"] = opts.other or "{}",
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
@@ -302,4 +305,60 @@ t.test("a local board is uncapped", function()
         out, code = dev(box, { "board", "move", id, COLUMN.PROGRESS }, NEW .. "/" .. index)
         t.eq(code, 0, out)
     end
+end)
+
+local UNITS = '"limit":4,"limit_unit":"count","count":2}]'
+
+t.test("limits prints each column limit with its unit and each group", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.PROGRESS] = 2 }, GROUP .. UNITS):gsub(
+            '"wip_limit":2',
+            '"wip_limit":2,"limit_unit":"hours"'
+        ),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits" }, "")
+    t.eq(code, 0, out)
+    t.eq(
+        out,
+        NAME.PROGRESS
+            .. ": 2 hours\n"
+            .. NAME.PROGRESS
+            .. ", "
+            .. NAME.REVIEW
+            .. ", "
+            .. NAME.VERIFY
+            .. ": 4 (2 in flight)\n"
+    )
+end)
+
+t.test("limits exits 1 with no limit group when the board has none", function()
+    local box = sandbox({ project = POMB, detail = detail({}, "[]"), export = export({}) })
+    local out, code = dev(box, { "board", "limits" }, "")
+    t.eq(code, 1, out)
+    t.eq(out, "no limit group\n")
+end)
+
+t.test("limits names a column limit with no group and still exits 1", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.READY] = 5 }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "dotfiles" }, "")
+    t.eq(code, 1, out)
+    t.eq(out, NAME.READY .. ": 5 count\nno limit group\n")
+end)
+
+t.test("limits names another board and reads its limits", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}),
+        other = detail({}, GROUP .. UNITS),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "other" }, "")
+    t.eq(code, 0, out)
+    t.eq(out, NAME.PROGRESS .. ", " .. NAME.REVIEW .. ", " .. NAME.VERIFY .. ": 4 (2 in flight)\n")
 end)
