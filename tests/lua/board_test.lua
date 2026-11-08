@@ -2853,6 +2853,43 @@ t.test("move and edit refuse a needs:human card, and label --remove still frees 
     t.eq(result.output, "labelled 11111111 -")
 end)
 
+t.test("label refuses to add standalone-ok for an agent and still removes it", function()
+    local held = sample()
+    held[1].labels = { "standalone-ok" }
+    as_agent("dotfiles/implementer/x", function()
+        local result =
+            commands.run("label", { "11111111-a", "--remove", "standalone-ok" }, fake(held))
+        t.eq(result.output, "labelled 11111111 -")
+        result = commands.run("label", { "11111111-a", "+standalone-ok" }, fake(sample()))
+        t.eq(result.code, 1)
+        t.ok(result.message:find("only by the owner", 1, true), result.message)
+    end)
+    as_agent("", function()
+        local result = commands.run("label", { "11111111-a", "+standalone-ok" }, fake(sample()))
+        t.eq(result.output, "labelled 11111111 docs,standalone-ok")
+    end)
+end)
+
+t.test("add refuses the standalone-ok label for an agent", function()
+    as_agent("dotfiles/implementer/x", function()
+        local backend = fake(sample())
+        local result = commands.run("add", {
+            "C",
+            "--problem",
+            "x",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+            "--label",
+            "standalone-ok",
+        }, backend)
+        t.eq(result.code, 1)
+        t.ok(result.message:find("only by the owner", 1, true), result.message)
+        t.eq(#backend.calls, 0)
+    end)
+end)
+
 local function blocked_cards()
     local cards = sample()
     cards[1].labels = { "needs:human", "docs" }

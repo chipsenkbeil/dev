@@ -56,6 +56,12 @@ cannot, such as a production server. Line 2 of each script there reads
 `# standalone: runs on <where>, where dev is absent`, and `dev lint` warns on
 any other `.sh` under `.dev`.
 
+`dev board land` refuses a commit that adds a file under `.dev/standalone/`
+unless the card carries the `standalone-ok` label, and the refusal names the
+file. Only the owner adds that label, so `dev board label` refuses to add it
+when `DEV_AGENT` is set, while removing it stays allowed. An agent that needs a
+standalone script files a `needs:human` card instead.
+
 ## Opting in
 
 A project uses a board when `.dev/config.toml` has a `[board]` section:

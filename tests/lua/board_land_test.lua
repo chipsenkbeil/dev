@@ -1087,6 +1087,54 @@ if has_jj then
         return id
     end
 
+    local function standalone_ready(root, home, log)
+        assert(fs.mkdir(root .. "/.dev/standalone", { parents = true }), "mkdir failed")
+        assert(fs.write(root .. "/.dev/standalone/x.sh", "#!/bin/sh\n"), "write failed")
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+        return id
+    end
+
+    t.test("land refuses a commit that adds a standalone file without standalone-ok", function()
+        local root, home, log = jj_project()
+        local id = standalone_ready(root, home, log)
+        approve(root, home, log, id)
+        refused(root, home, log, id, {
+            "adds .dev/standalone/x.sh, which needs the standalone-ok label",
+        })
+    end)
+
+    t.test("land refuses a commit that moves a file into .dev/standalone", function()
+        local root, home, log = jj_project()
+        jj(root, "describe", "-m", "base2")
+        assert(fs.write(root .. "/x.sh", "#!/bin/sh\n"), "write failed")
+        jj(root, "commit", "-m", "base2")
+        jj(root, "bookmark", "set", "master", "-r", "@-")
+        jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
+        jj(root, "describe", "-m", "feat: move")
+        assert(fs.mkdir(root .. "/.dev/standalone", { parents = true }), "mkdir failed")
+        must(devos.run({ "mv", root .. "/x.sh", root .. "/.dev/standalone/x.sh" }))
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve(root, home, log, id)
+        refused(root, home, log, id, { "adds .dev/standalone/x.sh" })
+    end)
+
+    t.test(
+        "land lands a commit that adds a standalone file when the card has standalone-ok",
+        function()
+            local root, home, log = jj_project()
+            local id = standalone_ready(root, home, log)
+            must(
+                dev(root, home, log, { "board", "label", id, "+standalone-ok" }, { DEV_AGENT = "" })
+            )
+            approve(root, home, log, id)
+            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            t.eq(code, 0, out)
+            t.eq(column_of(home), board.DEFAULT_NAMES.done)
+        end
+    )
+
     t.test("land after another lander's turn ends rebases without a trunk-moved refusal", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)

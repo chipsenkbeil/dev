@@ -50,3 +50,17 @@ t.test("standalone passes a valid header", function()
     t.eq(standalone.problems(root), {})
     fs.remove(root, { recursive = true })
 end)
+
+t.test("land_problem refuses an added standalone file without the label", function()
+    t.eq(
+        standalone.land_problem({ "a.txt", ".dev/standalone/x.sh" }, { "docs" }),
+        "adds .dev/standalone/x.sh, which needs the standalone-ok label that only the owner adds"
+    )
+end)
+
+t.test("land_problem passes with the label and for unrelated paths", function()
+    t.eq(standalone.LABEL, "standalone-ok")
+    t.eq(standalone.land_problem({ ".dev/standalone/x.sh" }, { "docs", "standalone-ok" }), nil)
+    t.eq(standalone.land_problem({ ".dev/x.sh", "docs/standalone/y.sh", "a.txt" }, {}), nil)
+    t.eq(standalone.land_problem({}, {}), nil)
+end)

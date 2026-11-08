@@ -120,6 +120,12 @@ never lists or runs. Line 2 of each script reads
 standalone script with a bad line 2. It warns and exits 0 today while some
 projects still have shell verbs to port.
 
+Adding a file under `.dev/standalone/` is a deliberate choice. `dev board land`
+refuses the commit unless the card carries the `standalone-ok` label, and only
+the owner adds it: `dev board label` refuses it for an agent. An agent files a
+`needs:human` card instead. The check is
+`dev.standalone.land_problem(added, labels)`.
+
 ## Running somewhere else
 
 `dev --remote <verb>` runs the verb's job from the project's pipeline through

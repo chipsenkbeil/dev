@@ -864,6 +864,10 @@ function commands.add(backend, args)
         if not ok then
             return err
         end
+        local denied = require("dev.standalone").label_problem(label)
+        if denied then
+            return failure(denied)
+        end
         labels = labels or {}
         if not index_of(labels, label) then
             labels[#labels + 1] = label
@@ -1987,6 +1991,10 @@ function commands.label(backend, args)
                     .. " lives only in Blocked or Icebox; move it there first"
             )
         end
+        local denied = require("dev.standalone").label_problem(change.word)
+        if change.add and denied then
+            return failure(denied)
+        end
         local at = index_of(labels, change.word)
         if change.add and not at then
             labels[#labels + 1] = change.word
@@ -3011,6 +3019,14 @@ local function land_problems(backend, card, who)
     if not state then
         problems[#problems + 1] = message
         return problems
+    end
+    local added = land.added(backend.root, state.commit)
+    local standalone_problem = "jj could not list the files the commit adds."
+    if added then
+        standalone_problem = require("dev.standalone").land_problem(added, card.labels)
+    end
+    if standalone_problem then
+        problems[#problems + 1] = standalone_problem
     end
     local lacking = land.missing_reviews(who.comments, state)
     local unproven = land.checks_problem(who.comments, state, card.checks)

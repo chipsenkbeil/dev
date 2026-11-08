@@ -8,6 +8,7 @@ local DIR = ".dev/standalone/"
 
 M.WHERE = { "production server", "test sandbox", "GitHub Actions" }
 M.HEADER = "^# standalone: runs on (.+), where dev is absent$"
+M.LABEL = "standalone-ok"
 
 local function allowed(where)
     for _, name in ipairs(M.WHERE) do
@@ -75,6 +76,40 @@ function M.problems(root)
     end
     table.sort(lines)
     return lines
+end
+
+---Name why a landing that adds files may not land without the owner's label.
+---@param added string[] the paths the landing commit adds
+---@param labels string[] the labels of the card
+---@return string? problem the refusal, nil when the landing may go ahead
+function M.land_problem(added, labels)
+    for _, label in ipairs(labels) do
+        if label == M.LABEL then
+            return nil
+        end
+    end
+    for _, path in ipairs(added) do
+        if path:sub(1, #DIR) == DIR then
+            return "adds "
+                .. path
+                .. ", which needs the "
+                .. M.LABEL
+                .. " label that only the owner adds"
+        end
+    end
+    return nil
+end
+
+---Name why the running agent may not add a label.
+---@param label string the label being added
+---@return string? problem the refusal, nil when the label may be added
+function M.label_problem(label)
+    if label == M.LABEL and (os.getenv("DEV_AGENT") or "") ~= "" then
+        return "The "
+            .. M.LABEL
+            .. " label is added only by the owner. File a needs:human card instead."
+    end
+    return nil
 end
 
 return M
