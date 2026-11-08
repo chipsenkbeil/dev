@@ -1112,11 +1112,13 @@ never handles the API.
   the top unclaimed card labelled `needs:lead`, or with `--for planner`
   `needs:planner`, never one labelled `needs:human`
   and, like every `next`, never one that a card outside Done blocks, nor an epic
-  with a child that is not Done. Any other
-  column is exit 2. `--max-size N` (1, 2 or 3, else exit 2), or `DEV_MAX_SIZE`
-  when the flag is absent, skips a card bigger than N Pomodori to keep a small
-  model from taking a bigger card. A card with no size passes. With neither
-  set, nothing is skipped.
+  with a child that is not Done. A blocker on another board counts only while
+  it is outside Done, and a card on that board that cannot be read counts as
+  open. The Ready column also sends Pomb's `ready=true` filter. Any other
+  column is exit 2. `--max-size N` (1, 2 or 3, else exit 2), or
+  `DEV_MAX_SIZE` when the flag is absent, skips a card bigger than N Pomodori
+  to keep a small model from taking a bigger card. A card with no size
+  passes. With neither set, nothing is skipped.
 - `boards`: The name of every board the token sees, one per line
   (`GET /api/boards`, which leaves out the boards outside a fine-grained
   token's set). On a local board it prints that board's own name. An extra

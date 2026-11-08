@@ -3616,6 +3616,10 @@ case "$last" in
     esac
     ;;
 */api/tasks) body=$(cat "$ROOT/task.json") ;;
+*/api/tasks/dddddddd-dddd-4ddd-8ddd-dddddddddddd)
+    body=$(cat "$ROOT/far.json")
+    if [ -f "$ROOT/far_gone" ]; then status=404; fi
+    ;;
 */api/tasks/]] .. ID_C .. [[/links) body=$(cat "$ROOT/holder_links.json") ;;
 */links) body=$(cat "$ROOT/links.json") ;;
 */subtasks)
@@ -4810,9 +4814,75 @@ t.test("next skips a card held by a blocker that is not in Done", function()
     local root, home = sandbox({
         links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]',
     })
+    local out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    t.ok(code == 0, out)
+    t.eq(out, "no cards in Backlog\n")
+    out, code = dev(root, home, { "board", "next" })
+    t.ok(code == 0, out)
+    t.eq(out, "no ready cards\n")
+end)
+
+local function far_sandbox(column)
+    local link = '[{"kind":"blocked_by",'
+        .. '"target_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","board_id":"board-2"}]'
+    local root, home = sandbox({ links = link })
+    assert(
+        fs.write(
+            root .. "/boards.json",
+            '[{"id":"board-1","name":"dotfiles"},{"id":"board-2","name":"ci"}]'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/general.json",
+            '{"id":"board-2","name":"ci","swimlanes":[],"columns":['
+                .. '{"id":"far-ready","name":"Ready"},'
+                .. '{"id":"far-done","name":"Done","is_done":true}]}'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/far.json",
+            '{"id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","name":"Far","column_id":"'
+                .. column
+                .. '","labels":[]}'
+        )
+    )
+    return root, home
+end
+
+t.test("next offers a Ready card whose blocker on another board is Done", function()
+    local root, home = far_sandbox("far-done")
+    local out, code = dev(root, home, { "board", "next" })
+    t.ok(code == 0, out)
+    t.ok(out:find("First", 1, true), out)
+    t.ok(read(root, "calls"):find("&ready=true", 1, true), read(root, "calls"))
+    out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    t.ok(code == 0, out)
+    t.ok(out:find("First", 1, true), out)
+end)
+
+t.test("next skips a backlog card whose blocker on another board cannot be read", function()
+    local root, home = far_sandbox("far-done")
+    assert(fs.write(root .. "/far.json", '{"message":"gone"}'))
+    assert(fs.write(root .. "/far_gone", ""))
+    local out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    t.ok(code == 0, out)
+    t.eq(out, "no cards in Backlog\n")
+end)
+
+t.test("next skips a Ready card whose blocker on another board is open", function()
+    local root, home = far_sandbox("far-ready")
     local out, code = dev(root, home, { "board", "next" })
     t.ok(code == 0, out)
     t.eq(out, "no ready cards\n")
+end)
+
+t.test("next skips a backlog card whose blocker on another board is open", function()
+    local root, home = far_sandbox("far-ready")
+    local out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    t.ok(code == 0, out)
+    t.eq(out, "no cards in Backlog\n")
 end)
 
 t.test("add posts the card to the named column", function()

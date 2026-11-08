@@ -828,24 +828,25 @@ function Backend:next(column, opts)
     until not cursor
 end
 
----Whether `blocked_by` links hold a card: another board's card always does, and one of this board
----does unless it is in Done.
+---Report whether `blocked_by` links hold a card: a linked card holds it unless it is in Done, and
+---a card that cannot be read holds it too.
 ---@param links dev.board.Link[] the links the card holds
 ---@return boolean? blocked, string? message
 function Backend:__blocked(links)
     for _, link in ipairs(links) do
         if link.kind == "blocked_by" then
-            if link.board then
-                return true
-            end
-            local cards, message = self:cards()
-            if not cards then
-                return nil, message
-            end
             local target
-            for _, card in ipairs(cards) do
-                if card.id == link.id then
-                    target = card
+            if link.board then
+                target = self:other_board(link.board):card(link.id)
+            else
+                local cards, message = self:cards()
+                if not cards then
+                    return nil, message
+                end
+                for _, card in ipairs(cards) do
+                    if card.id == link.id then
+                        target = card
+                    end
                 end
             end
             if not target or not target.done then
@@ -1512,7 +1513,13 @@ function Backend:other_board(name)
         opts[key] = value
     end
     opts.name = name
-    return setmetatable({ __opts = opts, __secret = self.__secret }, Backend)
+    return setmetatable({
+        __opts = opts,
+        __secret = self.__secret,
+        __filed = self.__filed,
+        __reread = self.__reread,
+        __healed = self.__healed,
+    }, Backend)
 end
 
 local function escaped(word)
