@@ -39,6 +39,7 @@ early with another code, return it, or call `os.exit`.
 - `verb.usage_error(ctx, msg)`: print `dev <name>: <msg>` and exit 2
 - `verb.no_args(ctx)`: refuse any positional argument, as a verb that takes only
   `KEY=value` does
+- `verb.note(msg)`: write `msg` and a newline to standard error
 - `verb.die(msg)`: print `msg` and exit 1
 - `verb.show(ctx, argv)`: print `+ <argv>` on standard error when `ctx.verbose`
   is 1 or more

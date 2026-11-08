@@ -5,7 +5,6 @@ local templates = require("dev.templates")
 local ui = require("dev.ui")
 local verb = require("dev.verb")
 
-local stderr = io.stderr
 local NONE = "none"
 
 ---@class dev.cmd.sync
@@ -219,7 +218,7 @@ function M.run(ctx)
     end
     local code = 0
     local function failed(err)
-        stderr:write("dev: ", tostring(err), "\n")
+        verb.note("dev: " .. tostring(err))
         code = 1
     end
     for _, entry in ipairs(entries) do

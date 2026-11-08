@@ -4,7 +4,6 @@ local json = require("dev.json")
 local project = require("dev.project")
 local verb = require("dev.verb")
 
-local stderr = io.stderr
 local Kind = project.Kind
 
 ---@enum dev.cmd.types.Verb
@@ -233,14 +232,14 @@ function M.commands(root, kind, verb_name)
 end
 
 local function unsupported(verb_name, kind)
-    stderr:write(
-        "dev: no built-in ",
-        verb_name,
-        " for ",
-        kind,
-        " projects, add .dev/",
-        verb_name,
-        ".sh\n"
+    verb.note(
+        "dev: no built-in "
+            .. verb_name
+            .. " for "
+            .. kind
+            .. " projects, add .dev/"
+            .. verb_name
+            .. ".sh"
     )
     return 1
 end
@@ -250,7 +249,7 @@ local function probe_fails(step)
     if code == 0 then
         return false
     end
-    stderr:write("WARNING: ", step.probe.warning, "\n")
+    verb.note("WARNING: " .. step.probe.warning)
     return true
 end
 

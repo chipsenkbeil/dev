@@ -42,13 +42,13 @@ local function bad_argument(ctx, reg, arg)
 end
 
 local function fail(message)
-    stderr:write("dev: ", message, "\n")
+    verb.note("dev: " .. message)
     return 1
 end
 
 local function exec(argv, opts)
     local _, message = devos.exec(argv, opts)
-    stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
+    verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
     return devos.EXEC_FAILED
 end
 

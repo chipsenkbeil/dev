@@ -22,7 +22,6 @@ local ui = require("dev.ui")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
-local stderr = io.stderr
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
@@ -1300,7 +1299,7 @@ end
 local function claimed_view(backend, card, result)
     local view, err = card_view(backend, card)
     if not view then
-        stderr:write("dev: took ", card.id:sub(1, board.MIN_PREFIX), ", but ", err.message, "\n")
+        verb.note("dev: took " .. card.id:sub(1, board.MIN_PREFIX) .. ", but " .. err.message)
         return result
     end
     result.output = result.output .. "\n\n" .. view
@@ -1751,7 +1750,7 @@ local function move_card(backend, args, opts)
         claims.stop(card.id)
         local released, why = backend:release(card.id, held.fence)
         if not released then
-            stderr:write("dev: moved, but the claim was not released: ", why, "\n")
+            verb.note("dev: moved, but the claim was not released: " .. why)
         end
     end
     local result = { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
@@ -2734,7 +2733,7 @@ local function register_check(backend, card, before, opts)
         seconds = opts.seconds * #card.checks,
     })
     if not ok then
-        stderr:write("the check is not held on the landing turn card: " .. why .. "\n")
+        verb.note("the check is not held on the landing turn card: " .. why)
         return nil
     end
     return name
@@ -2763,7 +2762,7 @@ local function check_rows(opts)
     local message
     local rows = {}
     for i, argv in ipairs(argvs) do
-        stderr:write(string.format("running %d of %d: %s\n", i, #argvs, card.checks[i]))
+        verb.note(string.format("running %d of %d: %s", i, #argvs, card.checks[i]))
         rows[i] = check.run({
             root = backend.root,
             run = card.checks[i],
@@ -2873,12 +2872,11 @@ function commands.check(backend, args)
             commit = before.commit,
         })
         if not ended then
-            stderr:write(
+            verb.note(
                 "the check hold on "
                     .. short
                     .. " was not ended and lapses at its end time: "
                     .. why
-                    .. "\n"
             )
         end
     end
@@ -5008,7 +5006,7 @@ local function replay(backend, pending, say)
 end
 
 local function stderr_line(line)
-    stderr:write(line, "\n")
+    verb.note(line)
 end
 
 local function stderr_news(line)

@@ -427,7 +427,7 @@ local function report_failure(sub, doc, out)
         message = first.error
     end
     if type(message) == "string" then
-        stderr:write("dev box ", sub, ": ", message, "\n")
+        verb.note("dev box " .. sub .. ": " .. message)
     elseif out ~= "" then
         stderr:write(out, "\n")
     end
@@ -535,10 +535,10 @@ function M.default_project(root)
         return nil
     end
     if name:sub(1, 1) == "-" then
-        stderr:write(
-            "dev box: not using ",
-            name,
-            " as the default project, a project name cannot start with -\n"
+        verb.note(
+            "dev box: not using "
+                .. name
+                .. " as the default project, a project name cannot start with -"
         )
         return nil
     end
@@ -1050,13 +1050,15 @@ local function nothing_fits(opts)
             end
         end
     end
-    stderr:write(
-        "dev box create: ",
-        opts.what,
-        " fits now, ",
-        #running > 0 and "stop a running box to make room: " .. table.concat(running, ", ")
-            or "no box is running on its machines",
-        "\n"
+    verb.note(
+        "dev box create: "
+            .. opts.what
+            .. " fits now, "
+            .. (
+                #running > 0
+                    and "stop a running box to make room: " .. table.concat(running, ", ")
+                or "no box is running on its machines"
+            )
     )
     os.exit(Exit.FAILED)
 end
@@ -1068,7 +1070,7 @@ end
 local function choose(items, opts)
     local ok, picked = pcall(picker.run, ui.context(), items, opts)
     if not ok then
-        stderr:write("dev box create: ", tostring(picked), "\n")
+        verb.note("dev box create: " .. tostring(picked))
         os.exit(Exit.FAILED)
     end
     if not picked or picked == "" then
@@ -1172,7 +1174,7 @@ local function pick_target(project)
     end
     local names = machines_of(targets)
     if #targets == 0 then
-        stderr:write("dev box create: ci lists no targets\n")
+        verb.note("dev box create: ci lists no targets")
         os.exit(Exit.FAILED)
     end
     if enabled == 0 then
@@ -1341,13 +1343,13 @@ local function pick_name(ctx, parsed, opts)
         end
     end
     if #items == 0 then
-        stderr:write("dev ", ctx.name, ": ", opts.none, "\n")
+        verb.note("dev " .. ctx.name .. ": " .. opts.none)
         os.exit(Exit.FAILED)
     end
     local ok, picked =
         pcall(picker.run, ui.context(), items, { title = opts.title, auto = opts.auto })
     if not ok then
-        stderr:write("dev ", ctx.name, ": ", tostring(picked), "\n")
+        verb.note("dev " .. ctx.name .. ": " .. tostring(picked))
         os.exit(Exit.FAILED)
     end
     if not picked or picked == "" then
@@ -1594,7 +1596,7 @@ M.handlers["box delete"] = function(ctx)
             M.delete_prompt(name, parsed.no_archive, is_attached(boxes, name))
         local screen = ui.context({ interactive = true, color = false })
         if not ui.confirm(screen, question, consequence) then
-            stderr:write("not deleted\n")
+            verb.note("not deleted")
             return Exit.FAILED
         end
     end

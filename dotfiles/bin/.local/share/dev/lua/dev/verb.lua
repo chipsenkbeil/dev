@@ -38,10 +38,16 @@ function M.no_args(ctx)
     )
 end
 
+---Write `msg` and a newline to standard error.
+---@param msg string the whole message
+function M.note(msg)
+    stderr:write(msg, "\n")
+end
+
 ---Print `msg` and exit 1.
 ---@param msg string the whole message
 function M.die(msg)
-    stderr:write(msg, "\n")
+    M.note(msg)
     os.exit(1)
 end
 
@@ -50,7 +56,7 @@ end
 ---@param argv string[] the command and its arguments, joined with spaces
 function M.show(ctx, argv)
     if ctx.verbose >= 1 then
-        stderr:write("+ ", table.concat(argv, " "), "\n")
+        M.note("+ " .. table.concat(argv, " "))
     end
 end
 
@@ -59,7 +65,7 @@ end
 ---@param install string how to install it, as the warning shows
 function M.need(binary, install)
     if not devos.which(binary) then
-        stderr:write("WARNING: ", binary, " not found. Install with: ", install, "\n")
+        M.note("WARNING: " .. binary .. " not found. Install with: " .. install)
         os.exit(1)
     end
 end
@@ -74,7 +80,7 @@ end
 function M.run(path, ctx)
     local source, read_error = fs.read(path)
     if not source then
-        stderr:write("dev ", ctx.name, ": cannot read ", tostring(read_error), "\n")
+        M.note("dev " .. ctx.name .. ": cannot read " .. tostring(read_error))
         return 1
     end
     local chunk, message = load(source, "=" .. ctx.name)
@@ -90,19 +96,19 @@ function M.run(path, ctx)
         if text:sub(1, #ctx.name + 1) == ctx.name .. ":" then
             text = text:sub(#ctx.name + 2):gsub("^%d+: ", "")
         end
-        stderr:write("dev ", ctx.name, ": ", text, "\n")
+        M.note("dev " .. ctx.name .. ": " .. text)
         return 1
     end
     if result == nil then
         return 0
     end
     if type(result) ~= "number" or result % 1 ~= 0 then
-        stderr:write(
-            "dev ",
-            ctx.name,
-            ": the script returned ",
-            tostring(result),
-            ", not an exit code\n"
+        M.note(
+            "dev "
+                .. ctx.name
+                .. ": the script returned "
+                .. tostring(result)
+                .. ", not an exit code"
         )
         return 1
     end

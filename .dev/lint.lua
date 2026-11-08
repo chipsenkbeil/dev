@@ -14,7 +14,7 @@ local ctx = ...
 verb.no_args(ctx)
 
 local root = ctx.root
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 local failed = false
 local dirty = {}
 
@@ -36,13 +36,13 @@ end
 
 local function report(file, numbers, message)
     for _, number in ipairs(numbers) do
-        stderr:write(string.format("%s:%d: %s\n", file, number, message))
+        verb.note(string.format("%s:%d: %s", file, number, message))
         failed = true
     end
 end
 
 local function missing(tool)
-    stderr:write("WARNING: ", tool, " not found, skipping. Install with: brew install ", tool, "\n")
+    verb.note("WARNING: " .. tool .. " not found, skipping. Install with: brew install " .. tool)
 end
 
 local have_shfmt = devos.which("shfmt") ~= nil
@@ -126,9 +126,9 @@ for _, file in ipairs(checks.bats_files(root)) do
 end
 
 if #dirty > 0 then
-    stderr:write("\nshfmt -i 4 would change:\n")
+    verb.note("\nshfmt -i 4 would change:")
     for _, file in ipairs(dirty) do
-        stderr:write("  ", file, "\n")
+        verb.note("  " .. file)
     end
     failed = true
 end
@@ -140,7 +140,7 @@ end
 
 stdout:write("> standalone shell\n")
 for _, line in ipairs(require("dev.standalone").problems(root)) do
-    stderr:write(line, "\n")
+    verb.note(line)
 end
 
 if devos.which("ast-grep") then

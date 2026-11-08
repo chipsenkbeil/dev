@@ -28,7 +28,7 @@ local M = { handlers = {} }
 ---Say why connecting stops, in the voice of `dev box connect`.
 ---@param message string what is wrong
 local function say(message)
-    stderr:write("dev box connect: ", message, "\n")
+    verb.note("dev box connect: " .. message)
 end
 
 ---Say why a box cannot be connected to yet and exit.
@@ -85,7 +85,7 @@ end
 ---@return integer code the exit code of a command that could not start
 local function exec(argv)
     local _, message = devos.exec(argv)
-    stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
+    verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
     return devos.EXEC_FAILED
 end
 
@@ -214,7 +214,7 @@ local function connect_failed(raw)
     message = message:match("\nerror:[^\n]*") or message:match("^[^\n]*")
     message = message:gsub("^\n", "")
     if message ~= "" then
-        stderr:write("dev connect: ", (message:gsub("[^\32-\126]", " ")), "\n")
+        verb.note("dev connect: " .. message:gsub("[^\32-\126]", " "))
     end
 end
 
@@ -243,7 +243,7 @@ end
 local function capture_ci(argv)
     local errfile, reason = fs.mktemp({ prefix = "dev-connect" })
     if not errfile then
-        stderr:write("dev connect: ", reason, "\n")
+        verb.note("dev connect: " .. reason)
         return devos.capture(argv)
     end
     local ok, out, code = pcall(devos.capture, argv, { stderr = errfile })
@@ -272,7 +272,7 @@ local function connectables(opts)
         raw, code = capture_ci({ "ci", "ssh", "ls", "--json" })
     end
     if code == NO_CONNECT then
-        stderr:write("dev connect: this ci has no ssh command, listing boxes only\n")
+        verb.note("dev connect: this ci has no ssh command, listing boxes only")
         return {}
     end
     if code ~= 0 then
@@ -288,7 +288,7 @@ local function connectables(opts)
     end
     for _, note in ipairs(type(doc.notes) == "table" and doc.notes or {}) do
         if type(note) == "string" then
-            stderr:write("dev connect: ", plain(note), "\n")
+            verb.note("dev connect: " .. plain(note))
         end
     end
     local found = {}
@@ -297,7 +297,7 @@ local function connectables(opts)
             if safe_name(entry.name) then
                 found[#found + 1] = entry
             else
-                stderr:write("dev connect: skipping a connectable with an invalid name\n")
+                verb.note("dev connect: skipping a connectable with an invalid name")
             end
         end
     end
@@ -373,7 +373,7 @@ end
 local function choose(boxes, others, project)
     local items = items_for(boxes, others, project)
     if #items == 0 then
-        stderr:write("no boxes; create one with dev box create\n")
+        verb.note("no boxes; create one with dev box create")
         os.exit(Exit.FAILED)
     end
     if not box.interactive() then

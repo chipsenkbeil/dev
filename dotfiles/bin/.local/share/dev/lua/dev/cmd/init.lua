@@ -9,7 +9,6 @@ local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
-local stderr = io.stderr
 local Kind = project.Kind
 local NONE = "none"
 local TYPES = {
@@ -327,7 +326,7 @@ local function init_gerrit(run)
     verb.show(run.ctx, list)
     local out, code = devos.capture(list, { stderr = "stdout" })
     if code ~= 0 then
-        stderr:write("warning: gerrit ls-projects failed: ", trimmed(out), "\n")
+        verb.note("warning: gerrit ls-projects failed: " .. trimmed(out))
         leave(
             run,
             "create the Gerrit project and remote: "

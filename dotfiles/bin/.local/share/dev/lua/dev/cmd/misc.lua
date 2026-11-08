@@ -4,14 +4,12 @@ local help = require("dev.help")
 local project = require("dev.project")
 local verb = require("dev.verb")
 
-local stderr = io.stderr
-
 ---@class dev.cmd.misc
 local M = {}
 
 local function exec(argv, opts)
     local _, message = devos.exec(argv, opts)
-    stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
+    verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
     return devos.EXEC_FAILED
 end
 
@@ -19,7 +17,7 @@ end
 ---@param _ dev.Ctx the verb's context
 ---@return integer code 1
 function M.deploy(_)
-    stderr:write("dev: deploy has no built-in, add .dev/deploy.sh\n")
+    verb.note("dev: deploy has no built-in, add .dev/deploy.sh")
     return 1
 end
 

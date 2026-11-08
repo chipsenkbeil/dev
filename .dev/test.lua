@@ -15,7 +15,7 @@ verb.no_args(ctx)
 verb.need("bats", "brew install bats-core")
 
 local root = ctx.root
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 local SKIPPED = 3
 local SIGINT = 2
 local POLL_SECS = 0.1
@@ -274,9 +274,9 @@ end
 stdout:write(string.format("\n%d passed, %d failed, %d skipped\n", passed, failed, skipped))
 stdout:flush()
 if devos.getuid() ~= 0 or devos.name() ~= "Linux" then
-    stderr:write(
-        "dev: the real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh ",
-        "were skipped, run dev --remote test for them\n"
+    verb.note(
+        "dev: the real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh "
+            .. "were skipped, run dev --remote test for them"
     )
 end
 return failed == 0 and 0 or 1
