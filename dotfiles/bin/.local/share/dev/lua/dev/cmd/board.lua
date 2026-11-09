@@ -2991,6 +2991,14 @@ local function land_problems(backend, card, who)
     if standalone_problem then
         problems[#problems + 1] = standalone_problem
     end
+    local touched = land.touched(backend.root, state.commit)
+    local template_problem = "jj could not list the files the commit touches."
+    if touched then
+        template_problem = land.template_problem(backend.root, touched)
+    end
+    if template_problem then
+        problems[#problems + 1] = template_problem
+    end
     local lacking = land.missing_reviews(who.comments, state)
     local unproven = land.checks_problem(who.comments, state, card.checks)
     local carried, carry_why

@@ -1173,6 +1173,56 @@ if has_jj then
         end
     )
 
+    local TEMPLATE_DIR = "dotfiles/claude/.claude/skills/style/lint/lua"
+    local MODULE_DIR = "dotfiles/bin/.local/share/dev/lua/dev"
+
+    local function template_ready(root, home, log, opts)
+        assert(fs.mkdir(root .. "/" .. TEMPLATE_DIR, { parents = true }), "mkdir failed")
+        assert(fs.mkdir(root .. "/" .. MODULE_DIR, { parents = true }), "mkdir failed")
+        assert(
+            fs.write(root .. "/" .. TEMPLATE_DIR .. "/lint.lua", 'local fs = require("dev.fs")\n'),
+            "write failed"
+        )
+        if opts.module then
+            assert(
+                fs.write(root .. "/" .. MODULE_DIR .. "/" .. opts.module, "return {}\n"),
+                "write"
+            )
+        end
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve(root, home, log, id)
+        return id
+    end
+
+    testing.test(
+        "land refuses a commit that changes the lint-set template and a dev module it requires",
+        function()
+            local root, home, log = jj_project()
+            local id = template_ready(root, home, log, { module = "fs.lua" })
+            refused(root, home, log, id, {
+                "This commit changes the lint-set template and " .. MODULE_DIR .. "/fs.lua",
+                "Land the dev change first, have infra rebake the ci images,",
+            })
+        end
+    )
+
+    testing.test("land lands a template change with a dev module it does not require", function()
+        local root, home, log = jj_project()
+        local id = template_ready(root, home, log, { module = "other.lua" })
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(home), board.DEFAULT_NAMES.done)
+    end)
+
+    testing.test("land lands a commit that changes only the lint-set template", function()
+        local root, home, log = jj_project()
+        local id = template_ready(root, home, log, {})
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(home), board.DEFAULT_NAMES.done)
+    end)
+
     testing.test(
         "land after another lander's turn ends rebases without a trunk-moved refusal",
         function()

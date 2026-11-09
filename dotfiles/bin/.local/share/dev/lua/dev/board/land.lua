@@ -1,7 +1,9 @@
 local check = require("dev.board.check")
 local devos = require("dev.os")
 local forge = require("dev.forge")
+local fs = require("dev.fs")
 local review = require("dev.board.review")
+local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 
 ---@class dev.board.land
@@ -431,6 +433,69 @@ function M.added(root, rev)
     local ADDED_TEMPLATE = 'self.diff().files().filter(|f| f.status() != "modified" && '
         .. 'f.status() != "removed").map(|f| f.target().path() ++ "\\n").join("")'
     return sorted_paths(root, rev, ADDED_TEMPLATE)
+end
+
+---List the files a commit touches, a moved or copied file counting at its new path.
+---@param root string the project root, a jj project
+---@param rev string the revset of one commit
+---@return string[]? paths the sorted paths, nil when jj could not read them
+function M.touched(root, rev)
+    local TOUCHED_TEMPLATE = 'self.diff().files().map(|f| f.target().path() ++ "\\n").join("")'
+    return sorted_paths(root, rev, TOUCHED_TEMPLATE)
+end
+
+---Name why a commit may not change a lint-set template file and a dev module the template requires.
+---@param root string the project root, a jj project
+---@param touched string[] the paths the landing commit touches
+---@return string? problem the refusal, nil when the landing may go ahead
+function M.template_problem(root, touched)
+    local MODULE_DIR = "dotfiles/bin/.local/share/dev/lua/dev/"
+    local base = templates.BASE .. "/"
+    local changed_template = false
+    local changed = {}
+    for _, path in ipairs(touched) do
+        changed[path] = true
+        if path:sub(1, #base) == base then
+            changed_template = true
+        end
+    end
+    if not changed_template then
+        return nil
+    end
+    local listed = jj_out(
+        root,
+        "file",
+        "list",
+        "-r",
+        "@",
+        "-T",
+        'path ++ "\\n"',
+        'root:"' .. templates.BASE .. '"'
+    )
+    if not listed then
+        return "jj could not list the lint-set template files."
+    end
+    local modules = {}
+    for path in listed:gmatch("[^\n]+") do
+        for name in (fs.read(root .. "/" .. path) or ""):gmatch('require%("(dev%.[%w_.]+)"%)') do
+            local module = MODULE_DIR .. name:sub(5):gsub("%.", "/") .. ".lua"
+            if changed[module] then
+                modules[module] = true
+            end
+        end
+    end
+    local names = {}
+    for module in pairs(modules) do
+        names[#names + 1] = module
+    end
+    if #names == 0 then
+        return nil
+    end
+    table.sort(names)
+    return "This commit changes the lint-set template and "
+        .. table.concat(names, ", ")
+        .. ", which the template requires. Land the dev change first,"
+        .. " have infra rebake the ci images, then land the template change."
 end
 
 ---@class dev.board.land.Opts
