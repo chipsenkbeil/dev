@@ -2188,18 +2188,16 @@ if has_jj then
         t.eq(column_of(home), "Done")
     end)
 
-    t.test("a landing on a shared path waits for a check that does not touch it", function()
+    t.test("a landing on a shared path goes ahead of a check that does not read it", function()
         local root, home, log = jj_project()
         assert(fs.write(root .. "/lib/extra.txt", "extra\n"), "write failed")
         local id = lander_ready(root, home, log)
         hold_check(home, sibling_commit(root, head(root)))
-        blocked({
-            root = root,
-            home = home,
-            log = log,
-            id = id,
-            wanted = { "check held for cccc3333", "lib/extra.txt" },
+        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" }, {
+            LAND_TRUNK = "keep",
         })
+        t.eq(code, 0, out)
+        t.eq(column_of(home), "Done")
     end)
 
     t.test("a held check whose runner died stops blocking once its end time passes", function()

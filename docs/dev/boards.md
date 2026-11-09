@@ -1631,28 +1631,28 @@ never handles the API.
     at the rebased commit. A change that sits on an unlanded parent is
     refused and not rebased.
 
-  A landing waits for a held check that it would invalidate. The paths a held
-  check reads are the files its checked commit changes (a rename counts both
-  paths) and the `shared` list, the same two sets the carry rule below
-  compares. A landing that passes while the hold stands cannot make the
-  held check's carry refuse.
+  A landing waits for a held check that it would invalidate. The hold waits
+  only on the files the held commit changes (a rename counts both paths). The
+  `shared` list governs only the carry, so a landing under a shared path that
+  touches none of those files goes ahead, and the held card reruns its check
+  once the carry refuses it.
 
   `land` lists its own change's files and, for each live hold of another card,
-  refuses when one of them is a file of the held commit or is, or lies under,
-  a shared path. It waits for such a hold before it asks for the turn,
-  polling for up to `--wait` seconds.
+  refuses when one of them is a file of the held commit. It waits for such a
+  hold before it asks for the turn, polling for up to `--wait` seconds.
 
   The wait never keeps the turn from a landing that touches none of those
-  paths, and the wait for the turn that follows has its own `--wait`. A
+  files, and the wait for the turn that follows has its own `--wait`. A
   landing that takes the turn here looks again, and a landing that already
   holds the turn from `turn` looks once. It then refuses with a message that
   begins `the check held for ID by NAME at commit ... reads PATHS, which this
   change touches`.
 
-  A hold whose commit jj cannot read counts for the shared paths only. A
-  landing that overlaps no hold goes ahead while the check runs, and the held
-  card then carries its check over the rebase. A check that starts after the
-  landing's last look can still be overlapped, which costs it a new check.
+  A hold whose commit jj cannot read blocks no landing. A landing that
+  overlaps no hold goes ahead while the check runs, and the held card then
+  carries its check over the rebase when the shared paths still match. A
+  check that starts after the landing's last look can still be overlapped,
+  which costs it a new check.
 
   A hold ends when its check ends or its `until` passes. Only a project with
   a `shared` list holds checks, and the rest still need `turn --hold` to keep
@@ -1735,7 +1735,8 @@ never handles the API.
   so list every path the checks read.
 
   `shared` lists the repo-relative paths that can change what the check
-  proves, such as a crate the change depends on:
+  proves, such as a crate the change depends on. It governs only the carry
+  and never makes a landing wait for a hold:
 
   ```toml
   [board.land]

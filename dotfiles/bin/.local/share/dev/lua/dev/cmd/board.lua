@@ -3308,7 +3308,7 @@ local function blocking_check(backend, short)
             if not mine then
                 return "jj could not list the files of this change"
             end
-            local overlap = land.overlap(mine, theirs, shared)
+            local overlap = land.overlap(mine, theirs, {})
             if #overlap > 0 then
                 return string.format(
                     "the check held for %s by %s at commit %s reads %s, which this change touches, "
