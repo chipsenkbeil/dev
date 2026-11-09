@@ -11,7 +11,8 @@ local DEFAULT_PINS = ".dev/releases.tsv"
 ---@field tool string the pin's name, also what the installer is called in messages
 ---@field binary string the command the build puts in the prefix's `bin`
 ---@field needs string[] the commands that must be on PATH
----@field build fun(prefix: string): string[][] the commands that build and install, run in the source directory
+---@field build fun(prefix: string): string[][] the commands that build and install, run in the
+---   source directory
 
 ---@class dev.pkg.source
 local M = {}

@@ -211,7 +211,8 @@ end
 ---Say how long a box has left.
 ---@param box dev.cmd.box.Box the box as ci gives it
 ---@param now integer the current time in seconds since the epoch
----@return string left `3h12m left`, `kept`, `deleted in 6d`, `expired`, `deleted soon`, or an empty string
+---@return string left `3h12m left`, `kept`, `deleted in 6d`, `expired`, `deleted soon`, or an empty
+---   string
 function M.left(box, now)
     local state = present(box.state)
     local expires = present(box.expires_at)
@@ -403,7 +404,8 @@ end
 
 ---Read the box that a `ci box` document reports as retagged.
 ---@param doc any the decoded document, which may be no table
----@return table<string, any>? entry the first `retagged` entry, or nil when the list is missing or its first entry is no table
+---@return table<string, any>? entry the first `retagged` entry, or nil when the list is missing or
+---   its first entry is no table
 local function first_retagged(doc)
     local retagged = type(doc) == "table" and doc.retagged or nil
     local first = type(retagged) == "table" and retagged[1] or nil
@@ -548,7 +550,8 @@ end
 ---Add a flag to an argument list, with its value when it has one.
 ---@param args string[] the list to extend
 ---@param flag string the flag, such as `--ttl`
----@param value string|boolean|nil the flag's value, `true` for a bare flag, nil or false to add nothing
+---@param value string|boolean|nil the flag's value, `true` for a bare flag, nil or false to add
+---   nothing
 local function append_flag(args, flag, value)
     if not value then
         return
@@ -578,7 +581,8 @@ end
 
 ---Say a created box in one line.
 ---@param box dev.cmd.box.Box the box as ci gives it
----@return string line `Created <name> · <target> @ <machine> · <shape> · <time left> · dev connect <name>`
+---@return string line
+---   `Created <name> · <target> @ <machine> · <shape> · <time left> · dev connect <name>`
 function M.created_line(box)
     local machine = present(box.machine)
     local left = M.left(box, os.time())
@@ -881,7 +885,8 @@ end
 
 ---Find the smallest shape.
 ---@param shapes dev.cmd.box.Shape[] the shapes ci lists
----@return string name the name of the shape with the least memory, then the fewest CPUs, `-` for none
+---@return string name the name of the shape with the least memory, then the fewest CPUs, `-` for
+---   none
 local function smallest_shape(shapes)
     local best
     for _, shape in ipairs(shapes) do

@@ -80,7 +80,8 @@ function M.refusal(backend, card, target)
         end
     end
 
-    -- A group limit applies only to a card coming from outside the group, because a move inside it adds nothing
+    -- A group limit applies only to a card coming from outside the group, because a move inside it
+    -- adds nothing
     for _, group in ipairs(limits.groups) do
         local entering, leaving = false, true
         for _, name in ipairs(group.columns) do

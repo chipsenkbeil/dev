@@ -17,7 +17,8 @@ local M = {}
 ---@field expires integer the expiry in Unix seconds, 0 for none
 
 ---Find the directory that holds the token files.
----@return string dir `dev/tokens` under `XDG_RUNTIME_DIR` when that is an absolute path, else under the state home
+---@return string dir `dev/tokens` under `XDG_RUNTIME_DIR` when that is an absolute path, else under
+---   the state home
 function M.dir()
     local runtime = os.getenv("XDG_RUNTIME_DIR")
     if runtime and runtime:sub(1, 1) == "/" then
@@ -95,7 +96,8 @@ end
 
 ---Read an agent's token file.
 ---@param name string the agent's name
----@return dev.board.tokenfile.Token? found the token, nil when there is no file or it cannot be read
+---@return dev.board.tokenfile.Token? found the token, nil when there is no file or it cannot be
+---   read
 ---@return string? message why a file that exists cannot be used
 function M.read(name)
     local path = M.path(name)

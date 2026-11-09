@@ -103,9 +103,11 @@ end
 
 ---Run a command, appending its output to the log file when there is one.
 ---
----A failing command with a log file is remembered, and `flush_failure` prints the tail of its output.
+---A failing command with a log file is remembered, and `flush_failure` prints the tail of its
+---output.
 ---@param argv string[] the command and its arguments
----@param opts { log_file: string?, env: table<string,string>?, cwd: string? }? the log file, environment and directory
+---@param opts { log_file: string?, env: table<string,string>?, cwd: string? }? the log file,
+---   environment and directory
 ---@return integer? code the command's exit status
 function M.run(argv, opts)
     opts = opts or {}

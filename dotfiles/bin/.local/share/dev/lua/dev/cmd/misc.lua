@@ -23,9 +23,9 @@ end
 
 ---Show the overview, or ask `guide` a question about this repo's commands and topics.
 ---
----With no question it shows the `overview` topic when there is one, a blank
----line, then the curated help, through the pager on a terminal. With one it runs `guide dev` from the project
----root with the project's topics read first.
+---With no question it shows the `overview` topic when there is one, a blank line, then the curated
+---help, through the pager on a terminal. With one it runs `guide dev` from the project root
+---with the project's topics read first.
 ---@param ctx dev.Ctx the verb's context, whose `args` are the question's words
 ---@param reg dev.Registry the project's registry
 ---@return integer code the exit code, or 126 when `guide` cannot be started

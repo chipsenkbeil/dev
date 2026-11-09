@@ -24,12 +24,14 @@ local Verb = {
 ---@field argv string[] the command and its arguments
 ---@field cwd string? the directory to run in, the current one when nil
 ---@field needs dev.cmd.types.Need[]? binaries that must be on PATH before the step runs
----@field probe { argv: string[], warning: string }? a command that must succeed, else the warning is printed
+---@field probe { argv: string[], warning: string }? a command that must succeed, else the warning
+---   is printed
 
 ---@class dev.cmd.types
 ---@field Verb table<string, dev.cmd.types.Verb> the verbs the project type decides
 ---@field VERBS table<string, boolean> the same verbs as a set of names
----@field handlers table<string, fun(ctx: dev.Ctx): integer> one handler per verb, for the registry's rows
+---@field handlers table<string, fun(ctx: dev.Ctx): integer> one handler per verb, for the
+---   registry's rows
 local M = { Verb = Verb, VERBS = {}, handlers = {} }
 
 local CARGO = { "cargo", "brew install rustup" }

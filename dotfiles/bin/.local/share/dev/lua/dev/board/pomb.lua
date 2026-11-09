@@ -110,7 +110,8 @@ local M = {}
 ---@field private __values table<string, string>? palette colour values by colour id
 ---@field private __ids table<string, string>? palette colour ids by colour value
 ---@field private __id string? the board's id, once found or created
----@field private __field_keys table<string, boolean>? the keys of the board's custom fields, once asked
+---@field private __field_keys table<string, boolean>? the keys of the board's custom fields, once
+---   asked
 local Backend = {}
 Backend.__index = Backend
 
@@ -313,7 +314,8 @@ end
 ---@param body table<string, any>? the JSON body
 ---@param fence integer? the claim fence to send as `If-Claim-Fence`
 ---@param seconds integer? the whole request's `--max-time`, 30 when nil
----@param file string? a file to send as the `file` part of a multipart body, in place of a JSON body
+---@param file string? a file to send as the `file` part of a multipart body, in place of a JSON
+---   body
 ---@return any? doc the decoded answer
 ---@return string? message why the call failed
 ---@return integer? status the HTTP status when pomb refused the call
@@ -455,7 +457,9 @@ function Backend:__role()
 end
 
 ---Read the credential behind the token in use from whoami.
----@return {name: string, kind: string, scope: string, role: string?, label: string?, issuer: string?, expires: integer?, boards: string[]|string, permissions: string[]}? who the credential, never its token
+---@return {name: string, kind: string, scope: string, role: string?, label: string?, issuer:
+---   string?, expires: integer?, boards: string[]|string, permissions: string[]}? who the
+---   credential, never its token
 ---@return string? message why nothing was read
 function Backend:whoami()
     local doc, message = self:__request("GET", WHOAMI_PATH)
@@ -641,7 +645,8 @@ end
 ---A missing or null `subtasks` is a card with none.
 ---@param task table<string, any> the task row of the export
 ---@return dev.board.Outcome[] outcomes the outcomes dev could read
----@return boolean readable false when `subtasks` is not a list or one of its entries is not an outcome
+---@return boolean readable false when `subtasks` is not a list or one of its entries is not an
+---   outcome
 local function outcomes_of(task)
     local outcomes = {}
     local subtasks = present(task.subtasks)
@@ -1360,7 +1365,8 @@ function Backend:links(id)
 end
 
 ---Remove the link of one kind from `source` to `target`, as the source's own tasks list it.
----@return boolean? removed true when a link was deleted, false when the source has none, nil and a message when Pomb refused
+---@return boolean? removed true when a link was deleted, false when the source has none, nil and a
+---   message when Pomb refused
 function Backend:__drop_link(source, kind, target)
     local fetched, message = self:__request("GET", "/api/tasks/" .. source .. "/links")
     if not fetched then
@@ -1702,7 +1708,8 @@ end
 ---The token goes to the file and nowhere else.
 ---@param role string the agent role's name
 ---@param name string the agent name to issue as, the `DEV_AGENT` of the runner
----@return {role: string, label: string, expires: integer}? issued what was issued, without the token
+---@return {role: string, label: string, expires: integer}? issued what was issued, without the
+---   token
 ---@return string? message why nothing was issued
 function Backend:mint(role, name)
     local roles, message = self:__request("GET", ROLES_LIST_PATH)

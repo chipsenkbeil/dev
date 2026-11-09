@@ -7,7 +7,8 @@ local stderr = io.stderr
 ---@field words string[] the command words
 ---@field root string absolute path of the project root
 ---@field args string[] positional arguments, minus `KEY=value` words unless `positional`
----@field vars table<string, string> the `KEY=value` arguments, whose key starts with an uppercase letter
+---@field vars table<string, string> the `KEY=value` arguments, whose key starts with an uppercase
+---   letter
 ---@field verbose 0|1|2 the verbosity after the flags and `VERBOSE`
 ---@field interpreter string? the program dev runs under, as the launcher started it
 
@@ -76,7 +77,8 @@ end
 ---but an integer all end the run with a message and no traceback.
 ---@param path string the `.lua` file
 ---@param ctx dev.Ctx the context the chunk gets
----@return integer code the script's exit code modulo 256 as a shell takes it, 0 when it returns nothing
+---@return integer code the script's exit code modulo 256 as a shell takes it, 0 when it returns
+---   nothing
 function M.run(path, ctx)
     local source, read_error = fs.read(path)
     if not source then

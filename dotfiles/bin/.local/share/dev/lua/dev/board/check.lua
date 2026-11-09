@@ -349,7 +349,8 @@ end
 
 ---Read the commit of a comment that carries a record's head but does not parse.
 ---@param body string the comment body
----@return string? commit the full commit id, nil when the body has no record head or parses as a record
+---@return string? commit the full commit id, nil when the body has no record head or parses as a
+---   record
 ---@return string? mode the mode the head names, nil when it names none
 function M.unreadable(body)
     local prefix, commit = body:match("^(%S+) commit=(%x+)")

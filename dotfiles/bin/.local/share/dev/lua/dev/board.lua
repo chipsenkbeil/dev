@@ -14,18 +14,21 @@ local M = {}
 ---@field column string the name of the column it sits in
 ---@field done boolean? whether that column is one of finished cards
 ---@field size string the colour's palette label, or `unsized`
----@field color string? the colour's standard value (`yellow`, `green`, `blue`, `red`, `white`), nil when the card has none
+---@field color string? the colour's standard value (`yellow`, `green`, `blue`, `red`, `white`), nil
+---   when the card has none
 ---@field labels string[] the card's labels
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds a live claim on it
 ---@field kind string? `epic` for an epic, `task` otherwise
----@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not one
+---@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not
+---   one
 ---@field checks string[] the run commands in its checks rows, empty when it has none
 ---@field allow string[] the guard rails its allow field lifts, empty when it has none
 ---@field tests string[] the tests its tests field names, empty when it has none
 ---@field files string[] the files its files field names, empty when it has none
 ---@field outcomes dev.board.Outcome[] its Done when outcomes, empty when it has none
----@field outcomes_unreadable boolean? true when the board sent outcomes dev cannot read, so `outcomes` may be short
+---@field outcomes_unreadable boolean? true when the board sent outcomes dev cannot read, so
+---   `outcomes` may be short
 
 ---@class dev.board.Outcome
 ---@field id string the outcome's id
@@ -35,7 +38,8 @@ local M = {}
 ---@class dev.board.Event
 ---@field kind string `task_added`, `task_moved`, `task_updated` or `comment_added`
 ---@field task_id string the card it happened to
----@field column string? the name of the column the card sits in after the event, nil when it left for another board
+---@field column string? the name of the column the card sits in after the event, nil when it left
+---   for another board
 ---@field from_column string? the name of the column a moved card left
 ---@field actor string? `human` for the owner and `agent` for a token, nil when Pomb did not say
 ---@field at integer? when it happened, in seconds since the epoch, nil when Pomb did not say
@@ -47,52 +51,124 @@ local M = {}
 ---@class dev.board.ColumnRow
 ---@field name string the column's name
 ---@field is_done boolean whether a card in it counts as finished
----@field wip_limit integer? how many cards it holds at most, nil when it has no limit, and always nil on a local board
+---@field wip_limit integer? how many cards it holds at most, nil when it has no limit, and always
+---   nil on a local board
 
 ---@class dev.board.Backend
----@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints them
----@field done_columns fun(self: dev.board.Backend): string[]?, string? the names of the columns marked finished, in board order, or nil and a message
----@field column_map table<string, string>? the `[board.columns]` map the runner resolves into `roles`
+---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints
+---   them
+---@field done_columns fun(self: dev.board.Backend): string[]?, string? the names of the columns
+---   marked finished, in board order, or nil and a message
+---@field column_map table<string, string>? the `[board.columns]` map the runner resolves into
+---   `roles`
 ---@field roles dev.board.Roles? the column set of this run, which the runner sets before a command
----@field card fun(self: dev.board.Backend, id: string): dev.board.Card?, string? the card with that id, or nil and a message
----@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order, or nil and a message
----@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board defines the custom field with that key, or nil and a message
----@field next fun(self: dev.board.Backend, column: string, opts: dev.board.NextOpts?): dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human, or nil and a message when it failed
----@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?): dev.board.Card?, string? the new card
----@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card entered its column, as an RFC 3339 stamp by card id, or nil and a message
----@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?): boolean?, string? the card given the palette colour of that value, checked against the claim's fence when one is given
----@field set_labels fun(self: dev.board.Backend, id: string, labels: string[], fence: integer?): boolean?, string? the card's whole label list replaced, checked against the claim's fence when one is given
----@field add_outcome fun(self: dev.board.Backend, id: string, text: string, fence: integer?): boolean?, string? an outcome appended to the card, checked against the claim's fence when one is given
----@field set_outcome fun(self: dev.board.Backend, id: string, outcome: string, fields: {name: string?, done: boolean?}, fence: integer?): boolean?, string? the wording or the tick of the outcome with that id changed, checked against the claim's fence when one is given
----@field delete_outcome fun(self: dev.board.Backend, id: string, outcome: string, fence: integer?): boolean?, string? the outcome with that id removed from the card, checked against the claim's fence when one is given
----@field set_description fun(self: dev.board.Backend, id: string, text: string, fence: integer?): boolean?, string? the card's description replaced, checked against the claim's fence when one is given
----@field set_name fun(self: dev.board.Backend, id: string, name: string, fence: integer?): boolean?, string? the card's title replaced, checked against the claim's fence when one is given
----@field set_checks fun(self: dev.board.Backend, id: string, runs: string[], fence: integer?): boolean?, string? the card's checks rows replaced by one row per command, checked against the claim's fence when one is given
----@field set_field fun(self: dev.board.Backend, id: string, key: string, value: string|string[]|table[]|dev.json.Null, fence: integer?): boolean?, string? the custom field with that key replaced whole by the value, where json.null clears it, checked against the claim's fence when one is given
----@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts: dev.board.NoteOpts?): boolean?, string? a comment added to the card, of kind agent unless opts names one, checked against the claim's fence when one is given
----@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?): boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with needs:human, or nil and Pomb's refusal
----@field answer fun(self: dev.board.Backend, id: string, choice: integer, quote: string, fence: integer?): boolean?, string? the card's open question answered with the choice and the owner's quote, so Pomb moves the card to that choice's column, or nil and a message
----@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the card's comments, oldest first
----@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string): boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
----@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string? one of the caller's own comments deleted, or nil and a message
----@field bin? fun(self: dev.board.Backend, id: string): boolean?, string? the card moved to the recycle bin, or nil and a message when the backend refuses
----@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? a link of that kind (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the epic) from the card to the card with that full id, which may sit on another board; linking twice changes nothing
----@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the card holds plus a `blocks`, `related` or `child` entry for each link another card holds on it, in the order the backend gives them
----@field unlink fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?, string? the link of that kind from the card to the card with that full id removed, or nil and a message when the card holds no such link or the backend refuses the change
----@field attachments fun(self: dev.board.Backend, id: string): dev.board.Attachment[]?, string? the files the card holds, oldest first, or nil and a message
----@field attach fun(self: dev.board.Backend, id: string, path: string): dev.board.Attachment?, string? the file at that path uploaded to the card, or nil and the backend's refusal as it words it
----@field detach fun(self: dev.board.Backend, id: string, attachment: string): boolean?, string? the attachment with that full id removed, or nil and a message
----@field make_epic fun(self: dev.board.Backend, id: string, fence: integer?): boolean?, string? the card turned into an epic, checked against the claim's fence when one is given, or nil and the backend's refusal, as for a card that is already an epic
----@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's epic and the count of its children
----@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the backend of another board on the same server, or nil and a message
----@field boards fun(self: dev.board.Backend): string[]?, string? the names of the boards the token sees, in the server's order, or nil and a message
----@field columns fun(self: dev.board.Backend, name: string?): dev.board.ColumnRow[]?, string? the columns of the named board, or of this one when nil, in board order, or nil and a message
----@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?): dev.board.Events?, string?, string?, boolean? the events after the cursor, oldest first, held up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once with none and the board's current cursor. On an expired cursor it returns nil, a message and the oldest cursor that still resumes, when Pomb holds too many open waits for the token it returns nil, a message, nil and true, and on any other failure nil and a message
----@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.MoveOpts?): boolean?, string?, string? the card moved to a column, or nil, a message and `full` when Pomb refuses it at a limit
----@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the column and group limits the board holds, or those of the Pomb board named `name`, empty on a board with none, or nil and a message
----@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence: integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the claim, renewed when the caller's live fence is given
----@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the claim given up
----@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer, state: string): integer?, string? the pid of a detached loop that renews the claim every tick until the state file loses the fence or the ticks run out
+---@field card fun(self: dev.board.Backend, id: string): dev.board.Card?, string? the card with that
+---   id, or nil and a message
+---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order,
+---   or nil and a message
+---@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board
+---   defines the custom field with that key, or nil and a message
+---@field next fun(self: dev.board.Backend, column: string, opts: dev.board.NextOpts?):
+---   dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human,
+---   or nil and a message when it failed
+---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?):
+---   dev.board.Card?, string? the new card
+---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card
+---   entered its column, as an RFC 3339 stamp by card id, or nil and a message
+---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?):
+---   boolean?, string? the card given the palette colour of that value, checked against the claim's
+---   fence when one is given
+---@field set_labels fun(self: dev.board.Backend, id: string, labels: string[], fence: integer?):
+---   boolean?, string? the card's whole label list replaced, checked against the claim's fence when
+---   one is given
+---@field add_outcome fun(self: dev.board.Backend, id: string, text: string, fence: integer?):
+---   boolean?, string? an outcome appended to the card, checked against the claim's fence when one
+---   is given
+---@field set_outcome fun(self: dev.board.Backend, id: string, outcome: string, fields: {name:
+---   string?, done: boolean?}, fence: integer?): boolean?, string? the wording or the tick of the
+---   outcome with that id changed, checked against the claim's fence when one is given
+---@field delete_outcome fun(self: dev.board.Backend, id: string, outcome: string, fence: integer?):
+---   boolean?, string? the outcome with that id removed from the card, checked against the claim's
+---   fence when one is given
+---@field set_description fun(self: dev.board.Backend, id: string, text: string, fence: integer?):
+---   boolean?, string? the card's description replaced, checked against the claim's fence when one
+---   is given
+---@field set_name fun(self: dev.board.Backend, id: string, name: string, fence: integer?):
+---   boolean?, string? the card's title replaced, checked against the claim's fence when one is
+---   given
+---@field set_checks fun(self: dev.board.Backend, id: string, runs: string[], fence: integer?):
+---   boolean?, string? the card's checks rows replaced by one row per command, checked against the
+---   claim's fence when one is given
+---@field set_field fun(self: dev.board.Backend, id: string, key: string, value:
+---   string|string[]|table[]|dev.json.Null, fence: integer?): boolean?, string? the custom field
+---   with that key replaced whole by the value, where json.null clears it, checked against the
+---   claim's fence when one is given
+---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts:
+---   dev.board.NoteOpts?): boolean?, string? a comment added to the card, of kind agent unless opts
+---   names one, checked against the claim's fence when one is given
+---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?):
+---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
+---   needs:human, or nil and Pomb's refusal
+---@field answer fun(self: dev.board.Backend, id: string, choice: integer, quote: string,
+---   fence: integer?): boolean?, string? the card's open question answered with the choice and the
+---   owner's quote, so Pomb moves the card to that choice's column, or nil and a message
+---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the
+---   card's comments, oldest first
+---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string):
+---   boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
+---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string?
+---   one of the caller's own comments deleted, or nil and a message
+---@field bin? fun(self: dev.board.Backend, id: string): boolean?, string? the card moved to the
+---   recycle bin, or nil and a message when the backend refuses
+---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?,
+---   string? a link of that kind
+---   (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the epic) from
+---   the card to the card with that full id, which may sit on another board; linking twice changes
+---   nothing
+---@field links fun(self: dev.board.Backend, id: string): dev.board.Link[]?, string? the links the
+---   card holds plus a `blocks`, `related` or `child` entry for each link another card holds on it,
+---   in the order the backend gives them
+---@field unlink fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?,
+---   string? the link of that kind from the card to the card with that full id removed, or nil and
+---   a message when the card holds no such link or the backend refuses the change
+---@field attachments fun(self: dev.board.Backend, id: string): dev.board.Attachment[]?, string? the
+---   files the card holds, oldest first, or nil and a message
+---@field attach fun(self: dev.board.Backend, id: string, path: string): dev.board.Attachment?,
+---   string? the file at that path uploaded to the card, or nil and the backend's refusal as it
+---   words it
+---@field detach fun(self: dev.board.Backend, id: string, attachment: string): boolean?, string? the
+---   attachment with that full id removed, or nil and a message
+---@field make_epic fun(self: dev.board.Backend, id: string, fence: integer?): boolean?, string? the
+---   card turned into an epic, checked against the claim's fence when one is given, or nil and the
+---   backend's refusal, as for a card that is already an epic
+---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's
+---   epic and the count of its children
+---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the
+---   backend of another board on the same server, or nil and a message
+---@field boards fun(self: dev.board.Backend): string[]?, string? the names of the boards the token
+---   sees, in the server's order, or nil and a message
+---@field columns fun(self: dev.board.Backend, name: string?): dev.board.ColumnRow[]?, string? the
+---   columns of the named board, or of this one when nil, in board order, or nil and a message
+---@field wait fun(self: dev.board.Backend, after: string?, kinds: string[]?, timeout: integer?):
+---   dev.board.Events?, string?, string?, boolean? the events after the cursor, oldest first, held
+---   up to `timeout` seconds (50 when nil) until there is one; with no cursor it answers at once
+---   with none and the board's current cursor. On an expired cursor it returns nil, a message and
+---   the oldest cursor that still resumes, when Pomb holds too many open waits for the token it
+---   returns nil, a message, nil and true, and on any other failure nil and a message
+---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.MoveOpts?):
+---   boolean?, string?, string? the card moved to a column, or nil, a message and `full` when Pomb
+---   refuses it at a limit
+---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the
+---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
+---   board with none, or nil and a message
+---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence:
+---   integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the claim, renewed when
+---   the caller's live fence is given
+---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the
+---   claim given up
+---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer,
+---   state: string): integer?, string? the pid of a detached loop that renews the claim every tick
+---   until the state file loses the fence or the ticks run out
 
 ---@class dev.board.Link
 ---@field kind string `blocked_by`, `blocks`, `related`, `parent` or `child`, as seen from the card
@@ -107,7 +183,8 @@ local M = {}
 ---@class dev.board.Family
 ---@field parent {id: string, name: string}? the epic the card is part of
 ---@field epic boolean whether the card is an epic, Pomb's kind epic or a card with children
----@field children {done: integer, total: integer}? how many of the card's children are done, nil when it has none
+---@field children {done: integer, total: integer}? how many of the card's children are done, nil
+---   when it has none
 
 ---@class dev.board.NoteOpts
 ---@field kind string? the comment's kind, lowercase
@@ -125,7 +202,8 @@ local M = {}
 ---@field kind string? its kind tag, when it has one
 ---@field author string? the role label it was written under, when it has one
 ---@field actor string? the kind of actor that wrote it, `human` or `agent`, when known
----@field question dev.board.Question? the structured question the comment holds, with its answer once given
+---@field question dev.board.Question? the structured question the comment holds, with its answer
+---   once given
 
 ---@class dev.board.Question
 ---@field text string the question
@@ -133,7 +211,8 @@ local M = {}
 
 ---@class dev.board.Ask
 ---@field text string? the question
----@field choices {label: string, column: string}[] the choices in order, each with the column the card moves to
+---@field choices {label: string, column: string}[] the choices in order, each with the column the
+---   card moves to
 ---@field recommended integer? the number of the recommended choice
 ---@field why string? why the agent cannot decide alone
 
@@ -150,30 +229,46 @@ local M = {}
 ---@field epic boolean? whether to create it as an epic
 
 ---@class dev.board.Layout
----@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a message
----@field create fun(self: dev.board.Layout): boolean?, string? the board made, with the name of the template it came from
----@field read fun(self: dev.board.Layout): dev.board.LayoutState?, string? the board's columns, colours and cards
----@field add_column fun(self: dev.board.Layout, name: string, is_done: boolean): boolean?, string? a column at the end
----@field rename_column fun(self: dev.board.Layout, id: string, name: string): boolean?, string? a column given a new name, its cards kept
----@field move_column fun(self: dev.board.Layout, id: string, position: integer): boolean?, string? a column moved, 0 first
----@field mark_done fun(self: dev.board.Layout, id: string): boolean?, string? a column made the one of finished cards
----@field mark_blocked fun(self: dev.board.Layout, id: string): boolean?, string?, boolean? a column made the one of cards waiting on an answer, third value true when it changed one
----@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a colour's label, description, default flag or enabled flag
----@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?, string? a card's name or colour
----@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined on the board
----@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string? the standard agent roles granted to the board, the names this call created, or false when the board has no roles
----@field limit_groups fun(self: dev.board.Layout): table<string, any>[]|false|nil, string? the limit groups the board holds, false when the board has no limits to set, or nil and a message
----@field add_limit_group fun(self: dev.board.Layout, names: string[], limit: integer): boolean?, string? the columns named made one limit group of cards
+---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a
+---   message
+---@field create fun(self: dev.board.Layout): boolean?, string? the board made, with the name of the
+---   template it came from
+---@field read fun(self: dev.board.Layout): dev.board.LayoutState?, string? the board's columns,
+---   colours and cards
+---@field add_column fun(self: dev.board.Layout, name: string, is_done: boolean): boolean?, string?
+---   a column at the end
+---@field rename_column fun(self: dev.board.Layout, id: string, name: string): boolean?, string? a
+---   column given a new name, its cards kept
+---@field move_column fun(self: dev.board.Layout, id: string, position: integer): boolean?, string?
+---   a column moved, 0 first
+---@field mark_done fun(self: dev.board.Layout, id: string): boolean?, string? a column made the one
+---   of finished cards
+---@field mark_blocked fun(self: dev.board.Layout, id: string): boolean?, string?, boolean? a column
+---   made the one of cards waiting on an answer, third value true when it changed one
+---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?,
+---   string? a colour's label, description, default flag or enabled flag
+---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?,
+---   string? a card's name or colour
+---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined
+---   on the board
+---@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string? the standard agent roles
+---   granted to the board, the names this call created, or false when the board has no roles
+---@field limit_groups fun(self: dev.board.Layout): table<string, any>[]|false|nil, string? the
+---   limit groups the board holds, false when the board has no limits to set, or nil and a message
+---@field add_limit_group fun(self: dev.board.Layout, names: string[], limit: integer): boolean?,
+---   string? the columns named made one limit group of cards
 
 ---@class dev.board.LayoutColumn
 ---@field id string the column's id
 ---@field name string the column's name
 ---@field is_done boolean whether a card in it counts as finished
----@field is_blocked boolean? whether it holds the cards waiting on an answer, nil when the backend sends no such key
+---@field is_blocked boolean? whether it holds the cards waiting on an answer, nil when the backend
+---   sends no such key
 
 ---@class dev.board.LayoutState
 ---@field columns dev.board.LayoutColumn[] the columns in board order
----@field colors {id: string, value: string, label: string, description: string, is_default: boolean, enabled: boolean}[] the palette
+---@field colors {id: string, value: string, label: string, description: string, is_default:
+---   boolean, enabled: boolean}[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 ---@field has_checks boolean whether the board has the checks field
 
@@ -690,7 +785,8 @@ end
 ---Split a v1 `## Done when` checklist off a description: the `- [ ]` and `- [x]` items under that
 ---heading, and the description without the heading and those items.
 ---@param description string? the card's description
----@return {name: string, done: boolean}[]? items the checklist items in order, nil when there are none
+---@return {name: string, done: boolean}[]? items the checklist items in order, nil when there are
+---   none
 ---@return string? rest the description without the heading and the items
 function M.split_checklist(description)
     local items, kept, current, cut = {}, {}, nil, false
@@ -950,8 +1046,10 @@ end
 
 ---Say a card in one line.
 ---@param card dev.board.Card the card
----@param opts {holders: boolean?, progress: boolean?}? `holders` adds the claim holder before the name, `progress` the ticked outcomes before the holder
----@return string[] cells id prefix, column, size, labels, the ticks and the holder when asked for, and name
+---@param opts {holders: boolean?, progress: boolean?}? `holders` adds the claim holder before the
+---   name, `progress` the ticked outcomes before the holder
+---@return string[] cells id prefix, column, size, labels, the ticks and the holder when asked for,
+---   and name
 function M.cells(card, opts)
     opts = opts or {}
     local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"

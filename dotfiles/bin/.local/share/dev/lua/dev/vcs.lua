@@ -115,7 +115,8 @@ end
 ---@param root string absolute path of the project root
 ---@param backend dev.vcs.Backend the project's backend
 ---@param name string the branch or bookmark
----@return boolean? deleted true when deleted, false when no branch has the name, nil when the delete failed
+---@return boolean? deleted true when deleted, false when no branch has the name, nil when the
+---   delete failed
 ---@return string? why what the tool printed when the delete failed
 function M.delete_branch(root, backend, name)
     local listed = false

@@ -24,7 +24,8 @@ end
 ---`root/bin/<name>.log` and exits with `code`.
 ---@param root string project directory
 ---@param name string command name
----@param spec dev.testenv.Fake? what the command prints and returns, `code` 0 and empty text when nil
+---@param spec dev.testenv.Fake? what the command prints and returns, `code` 0 and empty text when
+---   nil
 function M.fake(root, name, spec)
     local fields = { code = 0, out = "", err = "" }
     for key, value in pairs(spec or {}) do

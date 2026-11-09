@@ -100,7 +100,8 @@ end
 
 ---Make a directory.
 ---@param path string directory to make
----@param opts {parents: boolean?}? `parents` also makes missing parents and accepts an existing directory
+---@param opts {parents: boolean?}? `parents` also makes missing parents and accepts an existing
+---   directory
 ---@return true? ok true on success
 ---@return string? message why it failed
 function M.mkdir(path, opts)
@@ -109,7 +110,8 @@ end
 
 ---Remove a file, link or directory.
 ---@param path string path to remove
----@param opts {recursive: boolean?}? `recursive` removes a directory with its contents and accepts a missing path
+---@param opts {recursive: boolean?}? `recursive` removes a directory with its contents and accepts
+---   a missing path
 ---@return true? ok true on success
 ---@return string? message why it failed
 function M.remove(path, opts)
@@ -195,7 +197,8 @@ function M.readlink(path)
 end
 
 ---Make a temporary file or directory.
----@param opts {prefix: string?, dir: boolean?}? name prefix (`dev` by default) and whether to make a directory
+---@param opts {prefix: string?, dir: boolean?}? name prefix (`dev` by default) and whether to make
+---   a directory
 ---@return string? path the new path, or nil on failure
 ---@return string? message why it failed
 function M.mktemp(opts)

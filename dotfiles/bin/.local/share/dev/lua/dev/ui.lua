@@ -483,7 +483,8 @@ local function report(err, label, code, captured)
 end
 
 ---@class dev.ui.SpinOpts
----@field capture boolean? keep standard output apart and return it, showing only standard error on failure
+---@field capture boolean? keep standard output apart and return it, showing only standard error on
+---   failure
 
 ---Run `argv` with a spinner on standard error, then show a check or a cross and its output.
 ---
@@ -561,7 +562,8 @@ end
 ---It does when paging is allowed, standard output is a terminal and the text
 ---has more lines than the screen has rows.
 ---@param content string the text to show
----@param opts dev.ui.PageOpts? `allowed`, `interactive` and `rows`, each read from the terminal when nil
+---@param opts dev.ui.PageOpts? `allowed`, `interactive` and `rows`, each read from the terminal
+---   when nil
 ---@return boolean page true when the pager should show the text
 function M.should_page(content, opts)
     opts = opts or {}

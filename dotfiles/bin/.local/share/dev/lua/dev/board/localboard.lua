@@ -24,13 +24,16 @@ local M = {}
 ---@class dev.board.localboard.Doc
 ---@field name string the board's name
 ---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
----@field colors {id: string, value: string, label: string, description: string, is_default: boolean, enabled: boolean?}[] the palette
----@field cards table<integer, table<string, any>> the cards, each a table of the fields the file holds
+---@field colors {id: string, value: string, label: string, description: string, is_default:
+---   boolean, enabled: boolean?}[] the palette
+---@field cards table<integer, table<string, any>> the cards, each a table of the fields the file
+---   holds
 
 ---@class dev.board.localboard.Opts
 ---@field name string the board's name
 ---@field path string the file that holds the board
----@field private boolean? whether the file is state in the user's own directory, so only its owner may read it
+---@field private boolean? whether the file is state in the user's own directory, so only its owner
+---   may read it
 
 ---@class dev.board.localboard.Backend: dev.board.Backend, dev.board.Layout
 ---@field private __opts dev.board.localboard.Opts the board's name and file
@@ -94,7 +97,8 @@ end
 
 ---@private
 ---Run a change under the lock and write the board back when it succeeds.
----@param fn fun(doc: dev.board.localboard.Doc): any?, string? the change, which returns its result or nil and a message
+---@param fn fun(doc: dev.board.localboard.Doc): any?, string? the change, which returns its result
+---   or nil and a message
 ---@param opts {create: boolean?}? whether a missing file is made from an empty board
 ---@return any? result what the change returned
 ---@return string? message why it failed

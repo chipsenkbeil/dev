@@ -146,7 +146,8 @@ end
 ---A `Session:die` or a failed step prints `  ! install-<tool>: <message>` and returns 1.
 ---@param tool string the installer's name
 ---@param args string[] the command line
----@param body fun(session: dev.release.Session): integer? the installer, returning an exit code or nothing for 0
+---@param body fun(session: dev.release.Session): integer? the installer, returning an exit code or
+---   nothing for 0
 ---@return integer code the exit code
 function M.main(tool, args, body)
     local first = 1

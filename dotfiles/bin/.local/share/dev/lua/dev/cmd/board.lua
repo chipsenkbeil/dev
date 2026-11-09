@@ -146,13 +146,15 @@ end
 ---@field code integer? 2 for a usage error, 1 for a failure or a lint finding, nil on success
 ---@field warnings string[]? lines for standard error when the change still went through
 ---@field page boolean? whether the output goes through the pager when it is taller than the screen
----@field unqueued boolean? true when the refusal must not be queued for a later sync, as a move to Done is not
+---@field unqueued boolean? true when the refusal must not be queued for a later sync, as a move to
+---   Done is not
 ---@field lost boolean? true when the landing turn was lost before the landing
 ---@field landed boolean? true when the change is on trunk although the result is a failure
 
 ---@class dev.cmd.board
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `board` subcommands
----@field open fun(settings: dev.cmd.board.Settings): dev.board.Backend?, string? builds the backend a board uses
+---@field open fun(settings: dev.cmd.board.Settings): dev.board.Backend?, string? builds the backend
+---   a board uses
 local M = { handlers = {} }
 
 local function usage(message)
@@ -201,7 +203,8 @@ end
 
 ---Refuse a board that still has the In Review column and lacks a stage column.
 ---@param backend dev.board.Backend the board
----@return dev.cmd.board.Result? refusal naming `dev board init`, nil when the board needs no migration
+---@return dev.cmd.board.Result? refusal naming `dev board init`, nil when the board needs no
+---   migration
 ---@private
 function M.__stage_refusal(backend)
     local rows = backend:columns()
@@ -544,7 +547,8 @@ end
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card the caller is about to move
 ---@param target string the column it moves to
----@return dev.cmd.board.Result? err the refusal naming the cards at the limit, nil when the move fits
+---@return dev.cmd.board.Result? err the refusal naming the cards at the limit, nil when the move
+---   fits
 ---@private
 function runner.__limited(backend, card, target)
     local message = runner.limits.refusal(backend, card, target)
@@ -586,7 +590,8 @@ end
 ---Refuse a verb run outside the jj workspace `dev ws new` names for the card.
 ---@param backend dev.board.Backend the board the command runs on
 ---@param short string the card's short id
----@return dev.cmd.board.Result? refusal a failure naming the workspace found, nil when the verb may go on
+---@return dev.cmd.board.Result? refusal a failure naming the workspace found, nil when the verb may
+---   go on
 ---@private
 function M.__workspace_refusal(backend, short)
     if not backend.root then
@@ -4039,7 +4044,8 @@ local Owner = { SETTLE_SECONDS = 60 }
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@param since integer? the time in seconds since the epoch, only a comment newer than it counts
----@return boolean? answered whether the newest comment is the owner's, nil when they could not be read
+---@return boolean? answered whether the newest comment is the owner's, nil when they could not be
+---   read
 ---@return string? why the reason the comments could not be read
 function Owner.commented(backend, card, since)
     if card.done then
@@ -4669,10 +4675,13 @@ function commands.run(backend, args)
 end
 
 ---Run one board subcommand against a backend.
----@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`, `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `epic`, `link`, `links`, `unlink`, `stale`, `lint`, `take` or `release`
+---@param sub string `ls`, `next`, `add`, `note`, `notes`, `show`, `move`, `order`, `discard`,
+---   `size`, `label`, `edit`, `checks`, `allow`, `tests`, `files`, `outcome`, `epic`, `link`,
+---   `links`, `unlink`, `stale`, `lint`, `take` or `release`
 ---@param args string[] the arguments after the subcommand
 ---@param backend dev.board.Backend the board
----@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when nil
+---@param now integer? the time in seconds since the epoch that `stale` counts from, the clock when
+---   nil
 ---@param screen dev.ui.Context? the terminal `ls` draws for, left nil for the plain lines
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 function M.run(sub, args, backend, now, screen)
@@ -5274,7 +5283,8 @@ end
 ---Collect the unclaimed cards of a column.
 ---@param backend dev.board.Backend the board
 ---@param column string the column's name
----@return table<string, boolean>? waiting the ids of the unclaimed cards, nil when the board could not be read
+---@return table<string, boolean>? waiting the ids of the unclaimed cards, nil when the board could
+---   not be read
 ---@return string? why the reason the board could not be read
 function Owner.stage_cards(backend, column)
     local cards, message = backend:cards()
@@ -5340,8 +5350,10 @@ end
 ---@class dev.cmd.board.WaitOpts
 ---@field stem string the path the cursor files start with, one per `--for` mode
 ---@field nap fun(seconds: number)? sleeps between retries, `dev.os.nap` when nil
----@field random (fun(): number)? a number in [0, 1) that spreads the pause, entropy from the system when nil
----@field notice fun(line: string)? prints the one line about too many open waits, standard error when nil
+---@field random (fun(): number)? a number in [0, 1) that spreads the pause, entropy from the system
+---   when nil
+---@field notice fun(line: string)? prints the one line about too many open waits, standard error
+---   when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `os.time` when nil
 
 ---Hold until the board changes in a way the caller asked for.
@@ -5356,7 +5368,8 @@ end
 ---@param backend dev.board.Backend the Pomb board
 ---@param args string[] the arguments after `wait`
 ---@param opts dev.cmd.board.WaitOpts where the cursor lives and how to sleep
----@return dev.cmd.board.Result result the lines for the matching events, or a message and the exit code
+---@return dev.cmd.board.Result result the lines for the matching events, or a message and the exit
+---   code
 function M.wait(backend, args, opts)
     local flags, words = parse(args, { ["--for"] = true })
     if not flags then

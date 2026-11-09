@@ -136,11 +136,14 @@ end
 
 ---@class dev.os.Opts
 ---@field env table<string,string>? variables set for the command, over `os.defaults.env`
----@field unset string[]? variables removed from the command's environment, besides `os.defaults.unset`
+---@field unset string[]? variables removed from the command's environment, besides
+---   `os.defaults.unset`
 ---@field cwd string? directory to run in
 ---@field stdin "null"? read from /dev/null
----@field stdout string? "null", or a file path to append to, resolved against the caller's directory, not `cwd`
----@field stderr string? "null", a file path to append to (resolved like `stdout`), or "stdout" to merge into standard output
+---@field stdout string? "null", or a file path to append to, resolved against the caller's
+---   directory, not `cwd`
+---@field stderr string? "null", a file path to append to (resolved like `stdout`), or "stdout" to
+---   merge into standard output
 
 ---@class dev.os.Defaults
 ---@field env table<string,string> variables set for every command
@@ -399,11 +402,13 @@ end
 
 ---@class dev.os.TimedOpts
 ---@field env table<string,string>? variables set for the command, over `os.defaults.env`
----@field unset string[]? variables removed from the command's environment, besides `os.defaults.unset`
+---@field unset string[]? variables removed from the command's environment, besides
+---   `os.defaults.unset`
 ---@field cwd string? directory to run in
 ---@field input string? what the command reads from standard input, /dev/null when nil
 ---@field merge boolean? send standard error to the collected output instead of the terminal
----@field reap boolean? kill what the command left running in its process group once it exits on its own
+---@field reap boolean? kill what the command left running in its process group once it exits on its
+---   own
 
 local function nap(secs)
     ffi.C.usleep(secs * MICROS_PER_SEC)

@@ -13,9 +13,11 @@ M.MAX_WORDS = 400
 ---@field strict boolean? whether a Done card is held to the v2 sections too
 
 ---@class dev.board.lint.Facts
----@field comments fun(): dev.board.Comment[]?, string? the card's comments, read only when a rule needs them
+---@field comments fun(): dev.board.Comment[]?, string? the card's comments, read only when a rule
+---   needs them
 ---@field links fun(): dev.board.Link[]?, string? the card's links, read only when a rule needs them
----@field children fun(): {done: integer, total: integer, epic: boolean?}?, string? the card's children, total 0 when it has none, and whether it is an epic
+---@field children fun(): {done: integer, total: integer, epic: boolean?}?, string? the card's
+---   children, total 0 when it has none, and whether it is an epic
 
 local function word_count(description)
     local count = 0
@@ -75,7 +77,8 @@ end
 
 ---List the rules a card breaks.
 ---@param card dev.board.Card the card
----@param opts dev.board.lint.Opts the board's columns, the lazy reads and whether Done cards are held to the v2 sections too
+---@param opts dev.board.lint.Opts the board's columns, the lazy reads and whether Done cards are
+---   held to the v2 sections too
 ---@return string[]? rules what is wrong with the card, empty when it follows every rule
 ---@return string? message why a read failed
 ---@return table<integer, true>? owned the indexes of the rules only the owner can fix

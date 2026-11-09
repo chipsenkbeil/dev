@@ -16,9 +16,11 @@ local GLOBAL_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detac
 ---@class dev.Row
 ---@field words string[] the command words, with a noun first in a subcommand's
 ---@field name string the words joined by a space
----@field kind "builtin"|"override"|"local" where the row comes from, `override` for a project script that replaces a built-in verb
+---@field kind "builtin"|"override"|"local" where the row comes from, `override` for a project
+---   script that replaces a built-in verb
 ---@field noun boolean whether the row is a noun
----@field handler string? the built-in handler, nil for a noun, a local verb or the project type's builtin
+---@field handler string? the built-in handler, nil for a noun, a local verb or the project type's
+---   builtin
 ---@field flags string? flags a built-in row takes, space separated
 ---@field usage string? usage line of a built-in row
 ---@field desc string description shown in `dev help`
@@ -36,8 +38,10 @@ local GLOBAL_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detac
 ---@field root string project root
 ---@field warn fun(message: string) receives each warning about a script's header
 ---@field private builtin table<string, dev.Builtin> built-in rows by name
----@field private builtin_subs table<string, dev.Builtin[]> built-in rows by the name of their parent noun
----@field private dirs table<string, dev.Dir|false> the directories read so far by the space-joined words of the noun, `""` for `.dev`
+---@field private builtin_subs table<string, dev.Builtin[]> built-in rows by the name of their
+---   parent noun
+---@field private dirs table<string, dev.Dir|false> the directories read so far by the space-joined
+---   words of the noun, `""` for `.dev`
 ---@field private headers table<string, dev.Header> parsed headers by script path
 ---@field private rows table<string, dev.Row|false> resolved verb rows by name
 local Registry = {}
@@ -115,7 +119,8 @@ end
 ---for one name. The `lua` and `topics` directories hold helpers and topics,
 ---never nouns.
 ---@param root string project root
----@param opts {warn: fun(message: string)?}? `warn` receives header warnings and writes to standard error by default
+---@param opts {warn: fun(message: string)?}? `warn` receives header warnings and writes to standard
+---   error by default
 ---@return dev.Registry registry the registry of the project
 function M.load(root, opts)
     local self = setmetatable({
@@ -397,7 +402,8 @@ end
 
 ---List the subcommands of a noun.
 ---@param noun string|string[] the noun's words, or its name when it is one word
----@return dev.Row[] rows the built-in subcommands, then the project's, none for words that are not a noun
+---@return dev.Row[] rows the built-in subcommands, then the project's, none for words that are not
+---   a noun
 function Registry:subs(noun)
     local words = type(noun) == "string" and { noun } or noun
     local parent = self:find(words)
@@ -442,7 +448,8 @@ end
 
 ---Check whether a word is a noun.
 ---@param word string|string[] the words to check, or the name when it is one word
----@return boolean noun true for a built-in noun or a directory of scripts no script of the same name shadows
+---@return boolean noun true for a built-in noun or a directory of scripts no script of the same
+---   name shadows
 function Registry:is_noun(word)
     local row = self:find(type(word) == "string" and { word } or word)
     return row ~= nil and row.noun

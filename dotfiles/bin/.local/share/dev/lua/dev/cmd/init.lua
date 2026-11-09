@@ -31,7 +31,8 @@ local STYLE_TAIL = "\n"
 local NEEDS_YQ = "brew install yq"
 
 ---@class dev.cmd.init
----@field handlers table<string, fun(ctx: dev.Ctx, reg: dev.Registry): integer> the handler of `init`
+---@field handlers table<string, fun(ctx: dev.Ctx, reg: dev.Registry): integer> the handler of
+---   `init`
 local M = { handlers = {} }
 
 ---@class dev.cmd.init.Run

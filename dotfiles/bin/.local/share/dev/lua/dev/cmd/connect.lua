@@ -19,7 +19,8 @@ local MAX_NAME = 40
 local NO_CONNECT = 2
 
 ---@class dev.cmd.connect
----@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of `connect` and `box connect`
+---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of `connect` and
+---   `box connect`
 local M = { handlers = {} }
 
 ---@class dev.cmd.connect.AttachOpts

@@ -239,7 +239,8 @@ function Model:key(name)
 end
 
 ---Collect what the user picked.
----@return (string|string[]|dev.ui.picker.Result)? result nil unless the user picked; the picked value or checked values, or a result table when the options list toggles
+---@return (string|string[]|dev.ui.picker.Result)? result nil unless the user picked; the picked
+---   value or checked values, or a result table when the options list toggles
 function Model:result()
     if self.__outcome ~= Outcome.PICK then
         return nil
@@ -419,7 +420,8 @@ end
 ---@param ctx dev.ui.Context drawing settings
 ---@param items dev.ui.picker.Item[] rows in display order
 ---@param opts dev.ui.picker.Opts how to show and what to allow
----@return (string|string[]|dev.ui.picker.Result)? result what `Model:result` gives, nil when the user cancelled
+---@return (string|string[]|dev.ui.picker.Result)? result what `Model:result` gives, nil when the
+---   user cancelled
 function M.run(ctx, items, opts)
     local model = M.new(items, opts)
     local only = opts.auto and only_enabled(items)

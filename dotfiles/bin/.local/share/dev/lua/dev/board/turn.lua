@@ -420,7 +420,8 @@ end
 ---@param opts dev.board.turn.TakeOpts? a hold and how long its lease lasts
 ---@return dev.board.turn.Turn? turn the turn, nil when it is not free
 ---@return string? message who holds it, or why the board failed
----@return string? place a key for `Poll:pace` that changes with the line or the holder, nil when this card takes the turn or the board could not be read
+---@return string? place a key for `Poll:pace` that changes with the line or the holder, nil when
+---   this card takes the turn or the board could not be read
 function M.take(backend, name, card, opts)
     local lease = opts and opts.seconds or M.LEASE_SECONDS
     local hold = opts and opts.hold or false

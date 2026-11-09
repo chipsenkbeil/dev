@@ -17,7 +17,8 @@ function M.verbs(_, reg)
     return 0
 end
 
----Print `sub<TAB>origin<TAB>description` for each subcommand of the noun named by `ctx.args`, one word per level.
+---Print `sub<TAB>origin<TAB>description` for each subcommand of the noun named by `ctx.args`, one
+---word per level.
 ---@param ctx dev.Ctx the context
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0, with no output for a word that is not a noun

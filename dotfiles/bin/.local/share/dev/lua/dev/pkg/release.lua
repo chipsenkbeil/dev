@@ -285,7 +285,8 @@ end
 ---@param pin dev.pkg.release.Pin the pinned asset
 ---@param dir string an existing directory to work in
 ---@param opts { log_file: string? }? where the commands' output goes
----@return string? path the real path of the pin's file inside the unpacked archive, or of the bare download
+---@return string? path the real path of the pin's file inside the unpacked archive, or of the bare
+---   download
 ---@return string? err what failed
 function M.fetch(pin, dir, opts)
     return unpack_pin(

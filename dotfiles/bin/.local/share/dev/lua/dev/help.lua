@@ -400,7 +400,8 @@ end
 ---@field hint boolean whether a paged text ends in the filter hint
 
 ---Decide how a text is paged.
----@param opts { curated: boolean?, no_pager: boolean? }? whether it is the curated view, and whether paging is off
+---@param opts { curated: boolean?, no_pager: boolean? }? whether it is the curated view, and
+---   whether paging is off
 ---@param pager string? the value of `PAGER`
 ---@param dev_pager string? the value of `DEV_PAGER`
 ---@return dev.help.PagePlan plan the pager options, a curated view paging at any height

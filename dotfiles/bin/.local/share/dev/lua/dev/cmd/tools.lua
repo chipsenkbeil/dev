@@ -18,7 +18,8 @@ local REMOVE_COPY =
 local Scope = require("dev.pkg.kinds").Scope
 
 ---@class dev.cmd.tools
----@field handlers table<string, fun(ctx: dev.Ctx, reg: dev.Registry?): integer> the handlers of `tools install` and `tools check`, the registry being nil as root
+---@field handlers table<string, fun(ctx: dev.Ctx, reg: dev.Registry?): integer> the handlers of
+---   `tools install` and `tools check`, the registry being nil as root
 local M = { handlers = {} }
 
 local function usage_error(ctx, reg, message)

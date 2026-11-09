@@ -39,7 +39,8 @@ end
 
 ---Split a trailing size word off a card's name.
 ---@param name string the card's name
----@return string? stripped the name without `(yellow)`, `(green)`, `(blue)`, `(red)` or `(red, split)`
+---@return string? stripped the name without `(yellow)`, `(green)`, `(blue)`, `(red)` or
+---   `(red, split)`
 ---@return string? value the standard colour value the word names
 function M.split_size(name)
     local found, value

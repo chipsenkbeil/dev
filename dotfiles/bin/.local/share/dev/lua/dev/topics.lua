@@ -169,7 +169,8 @@ end
 ---
 ---The built-in topics document the dotfiles repository's own verbs, so they are
 ---checked when the project is the dotfiles clone dev reads them from
----(`DOTFILES` overrides it), and the project's topics in every project. A topic's first line must be `# <name>: <summary>`, its name may not clash
+---(`DOTFILES` overrides it), and the project's topics in every project. A topic's first line must
+---be `# <name>: <summary>`, its name may not clash
 ---with a built-in topic or a verb, and each backticked `dev ...` span or
 ---fenced `dev ...` line must name a real verb or subcommand and only flags
 ---`Registry:flags` lists. A script whose flags line declares `-h` or `--help`

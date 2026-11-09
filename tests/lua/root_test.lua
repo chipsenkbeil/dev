@@ -226,7 +226,8 @@ end
 
 ---@class root_test.Opts
 ---@field verbose 0|1|2? the verbosity, 0 by default
----@field hook (fun(argv: string[], opts: table, run: function): integer)? replaces running the wrapper
+---@field hook (fun(argv: string[], opts: table, run: function): integer)? replaces running the
+---   wrapper
 ---@field interpreter string? the interpreter in the context, an absolute path by default
 
 local function run_as_root(dir, handler, opts)

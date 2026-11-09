@@ -24,7 +24,8 @@ local SHELL_SPECIAL = "[ \t\n!\"$&'()*;<>?%[\\%]^`{|}]"
 ---@field scope dev.pkg.Scope? install only the rows of this scope
 ---@field dry_run boolean whether to print the commands without running them
 ---@field force boolean whether to reinstall what is already present
----@field log_file string the file the drivers append their commands' output to, empty for the terminal
+---@field log_file string the file the drivers append their commands' output to, empty for the
+---   terminal
 ---@field names string[] install only these tools, every tool when empty
 
 ---@class dev.pkg.InstallState
@@ -201,7 +202,8 @@ end
 
 ---Report which of the manifest's tools are present.
 ---@param opts dev.pkg.Opts the manifest, the drivers' directory and the group
----@return integer code 0 with every tool present, 1 with one missing or the manifest unusable, 2 for an unknown group
+---@return integer code 0 with every tool present, 1 with one missing or the manifest unusable, 2
+---   for an unknown group
 function M.check(opts)
     local manager = detect_manager()
     if not manager then
@@ -306,7 +308,8 @@ end
 
 ---Install the manifest's tools.
 ---@param opts dev.pkg.Opts the manifest, the drivers' directory, the group, the scope and the flags
----@return integer code 0 on success, 1 with a failed tool or an unusable manifest, 2 for an unknown group or tool
+---@return integer code 0 on success, 1 with a failed tool or an unusable manifest, 2 for an unknown
+---   group or tool
 function M.install(opts)
     local manager = detect_manager()
     if not manager then
@@ -455,7 +458,8 @@ end
 
 ---Run `check` or `install` from a command line.
 ---@param argv string[] the arguments after the program name, starting with the subcommand
----@param defaults { interpreter: string, modules: string, manifest: string } the luajit that runs the driver, dev's module directory and the manifest used without `--manifest`
+---@param defaults { interpreter: string, modules: string, manifest: string } the luajit that runs
+---   the driver, dev's module directory and the manifest used without `--manifest`
 ---@return integer code the exit code
 function M.main(argv, defaults)
     local sub = argv[1]

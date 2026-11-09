@@ -627,7 +627,8 @@ end
 ---Read the commit that holds a change on trunk, which `jj land` may have rewritten.
 ---@param root string the project root, a jj project
 ---@param change string the change id, which survives the rewrite
----@return string? commit the full commit id, nil when trunk does not hold exactly one commit of the change
+---@return string? commit the full commit id, nil when trunk does not hold exactly one commit of the
+---   change
 function M.trunk_commit(root, change)
     local found = forge.resolve(root)
     if not found then
