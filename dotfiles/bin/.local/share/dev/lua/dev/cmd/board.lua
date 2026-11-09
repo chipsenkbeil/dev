@@ -3411,7 +3411,7 @@ function commands.land(backend, args)
     if #words ~= 1 then
         return usage("needs a card")
     end
-    local DEFAULT_WAIT_SECONDS = 300
+    local DEFAULT_WAIT_SECONDS = 60
     local wait = DEFAULT_WAIT_SECONDS
     if flags[WAIT_FLAG] then
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
@@ -3621,7 +3621,7 @@ function commands.turn(backend, args)
     end
     return {
         output = string.format(
-            "holding the landing turn for %s for %d seconds: rebase, review and check, then dev board land %s, which lands under it; run dev board turn %s again to renew it, or add --release to give it back",
+            "holding the landing turn for %s for %d seconds: rebase, then dev board land %s, which lands under it; run dev board turn %s again to renew it, or add --release to give it back",
             short,
             seconds,
             short,

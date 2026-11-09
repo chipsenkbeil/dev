@@ -1674,7 +1674,7 @@ never handles the API.
 
   A card in the wrong column, with an open outcome or claimed by another
   agent is refused before the turn is asked for. `land` then asks for the
-  turn for up to `--wait` seconds (300 by default, up to 86400, a whole number)
+  turn for up to `--wait` seconds (60 by default, up to 86400, a whole number)
   and, when it stays taken, refuses with
   `the landing turn is held by NAME since STAMP`.
 
@@ -1784,15 +1784,17 @@ never handles the API.
   moves to Done. It is never queued.
 - `turn CARD [--hold SECONDS] [--wait SECONDS] [--release]`:
   It refuses outside the card's workspace, as `check` does, but `--release`
-  works from anywhere. It takes the landing
-  turn for CARD and keeps it across the rebase, the reviews and the check, so
-  `land` lands under it and no other landing moves trunk meanwhile. It needs
+  works from anywhere. The turn is short and holding it is optional: a landing
+  takes it only around the rebase and the push, so a runner holds none across
+  the reviews or a check, and two cards whose checks ran in parallel land one
+  after the other. `turn` takes the landing turn for CARD early and keeps it,
+  so `land` lands under it and no other landing moves trunk meanwhile. It needs
   `DEV_AGENT` (exit 2 without it) and takes the turn as `land` does, but fails
   fast: it asks once unless `--wait` gives seconds to keep asking, and, when the
   turn stays taken, refuses with `the landing turn is held by NAME since STAMP`.
   A hold is longer than a landing's 900 second lease: `--hold` sets its lease,
   1800 seconds by default and 3600 at most (a whole number, exit 2 otherwise),
-  so a check of 15 to 60 minutes fits. `check` does not renew the lease while
+  so a long wait fits. `check` does not renew the lease while
   it runs. Running `turn CARD` again as the holder renews the lease for
   `--hold` more seconds, until the hold has been kept without a break for 3600
   seconds in all, after which `turn` and `land` refuse, give the turn back and
