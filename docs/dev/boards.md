@@ -616,9 +616,11 @@ move into Ready on a Pomb board with no checks field, and is queued while Pomb
 is unreachable, since sending the same rows twice changes nothing more. Both
 `checks` and `add --checks` apply the write-time refusal of `dev board check`
 to every row, so a row holding a shell character (a quote, a backslash, `*`,
-`|` and the rest) or starting with a dotted run such as `dev.--remote.lint` is
-a usage error (exit 2) naming the row and nothing is written. A leading `! `
-is allowed. Rows already on a card are not rewritten. `show`
+`|` and the rest), starting with a dotted run such as `dev.--remote.lint` or
+passing a word to `dev --remote test` or `dev --remote lint` before the double
+dash is a usage error (exit 2) naming the row and nothing is written. A test
+name goes after the double dash, as in `dev --remote test -- NAME`. A
+leading `! ` is allowed. Rows already on a card are not rewritten. `show`
 prints the rows under the description. Icebox is exempt.
 
 Three more card fields are set the same way, each replacing the field's
@@ -1487,9 +1489,11 @@ never handles the API.
   plain command, split on whitespace and started without a shell, so a row
   that holds any of `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`,
   `?`, `!` or a line break, or starts with a dotted run such as
-  `dev.--remote.lint`, is refused before anything runs (exit 1). One `!`
-  is allowed, as the first word: a row `! rg -n PATTERN FILE` runs the rest as
-  the command and passes only when it exits 1 (a search that found nothing).
+  `dev.--remote.lint`, or passes a word to `dev --remote test` or
+  `dev --remote lint` before the double dash, is refused before anything runs
+  (exit 1). One `!` is allowed, as the first word: a row
+  `! rg -n PATTERN FILE` runs the rest as the command and passes only when it
+  exits 1 (a search that found nothing).
   Exit 0 fails the row as a match found, and any other exit fails it as an
   error, so rg's exit 2 never passes. Under a set
   `DEV_AGENT`, dev refuses a local run of a verb that has a ci job, so a row

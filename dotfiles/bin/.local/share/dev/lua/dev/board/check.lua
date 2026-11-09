@@ -37,11 +37,74 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
 
+local GLOBAL_FLAGS = {
+    ["--remote"] = true,
+    ["--local"] = true,
+    ["--detach"] = true,
+    ["--verbose"] = true,
+}
+
+---Say why a `dev --remote test` or `dev --remote lint` row passes a word before the double dash.
+---@param row string the row without its leading `! `
+---@return string? message why the row is refused, nil when it is allowed
+local function bare_name(row)
+    local words = {}
+    for word in row:gmatch("%S+") do
+        words[#words + 1] = word
+    end
+    if words[1] ~= "dev" then
+        return nil
+    end
+    local remote, verb_at = false, nil
+    local i = 2
+    while i <= #words and words[i] ~= "--" do
+        local word = words[i]
+        if word == "--remote" then
+            remote = true
+        elseif word == "-C" then
+            i = i + 1
+        elseif word:sub(1, 1) ~= "-" then
+            verb_at = i
+            break
+        end
+        i = i + 1
+    end
+    local name = verb_at and words[verb_at]
+    if not (name == "test" or name == "lint") then
+        return nil
+    end
+    local extra
+    local k = verb_at + 1
+    while k <= #words and words[k] ~= "--" do
+        local word = words[k]
+        if word == "--remote" then
+            remote = true
+        elseif word == "-C" then
+            k = k + 1
+        elseif not (GLOBAL_FLAGS[word] or word:find("^%-v+$")) then
+            extra = extra or word
+        end
+        k = k + 1
+    end
+    if not (remote and extra) then
+        return nil
+    end
+    return string.format(
+        "The row %q gives %q before the double dash. Write dev --remote %s -- %s instead.",
+        row,
+        extra,
+        name,
+        extra
+    )
+end
+
 ---Say why a checks row is not a plain command.
 ---
 ---A row is a command and never shell text, so a character the shell would act on is refused, and
 ---so is a first word that is a dotted run such as `dev.--remote.lint`, which is a row written with
----dots for spaces. A leading `! ` marks a negated row and is allowed.
+---dots for spaces. A `dev --remote test` or `dev --remote lint` row with a word before the double
+---dash is refused, so a test name must come after the dash. A leading `! ` marks a negated row and
+---is allowed.
 ---@param row string the row as the card holds it
 ---@return string? message why the row is refused, nil when it is a plain command
 function M.refusal(row)
@@ -62,6 +125,7 @@ function M.refusal(row)
             first
         )
     end
+    return bare_name(row)
 end
 
 ---Split a checks row into the words of one command.

@@ -57,7 +57,8 @@ dev strips `--remote` and `--detach` (the launcher has already entered the
 directory of any `-C DIR`), then hands the runner the command words
 and the arguments after `--`, untouched, spaces and quotes included. The runner
 inherits the terminal, and its exit code is dev's. Any argument before the `--`
-is a usage error.
+is a usage error. A checks row for `test` or `lint` therefore reads
+`dev --remote test -- NAME`, and `dev board checks` refuses the bare form.
 
 ## The default runner
 
