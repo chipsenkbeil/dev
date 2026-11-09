@@ -13,8 +13,6 @@ local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local COMMIT_CHARS = 12
 local FILES_TEMPLATE = 'self.diff().files().map(|f| f.source().path() ++ "\\n" ++ '
     .. 'f.target().path() ++ "\\n").join("")'
-local ADDED_TEMPLATE = 'self.diff().files().filter(|f| f.status() != "modified" && '
-    .. 'f.status() != "removed").map(|f| f.target().path() ++ "\\n").join("")'
 
 ---Shorten a commit id for a message.
 ---@param commit string the full commit id
@@ -458,12 +456,8 @@ function M.shared_list(list)
     return shared_paths(list)
 end
 
----List the files a commit changes, a rename counting both its paths.
----@param root string the project root, a jj project
----@param rev string the revset of one commit
----@return string[]? paths the paths, nil when jj could not read them
-function M.touched(root, rev)
-    local out = jj_out(root, "log", "-r", rev, "--no-graph", "-T", FILES_TEMPLATE)
+local function sorted_paths(root, rev, template)
+    local out = jj_out(root, "log", "-r", rev, "--no-graph", "-T", template)
     if not out then
         return nil
     end
@@ -475,21 +469,22 @@ function M.touched(root, rev)
     return paths
 end
 
+---List the files a commit changes, a rename counting both its paths.
+---@param root string the project root, a jj project
+---@param rev string the revset of one commit
+---@return string[]? paths the paths, nil when jj could not read them
+function M.touched(root, rev)
+    return sorted_paths(root, rev, FILES_TEMPLATE)
+end
+
 ---List the files a commit adds, a moved or copied file counting at its new path.
 ---@param root string the project root, a jj project
 ---@param rev string the revset of one commit
 ---@return string[]? paths the sorted paths, nil when jj could not read them
 function M.added(root, rev)
-    local out = jj_out(root, "log", "-r", rev, "--no-graph", "-T", ADDED_TEMPLATE)
-    if not out then
-        return nil
-    end
-    local paths = {}
-    for path in pairs(file_set(out)) do
-        paths[#paths + 1] = path
-    end
-    table.sort(paths)
-    return paths
+    local ADDED_TEMPLATE = 'self.diff().files().filter(|f| f.status() != "modified" && '
+        .. 'f.status() != "removed").map(|f| f.target().path() ++ "\\n").join("")'
+    return sorted_paths(root, rev, ADDED_TEMPLATE)
 end
 
 ---Name the paths of a landing that would invalidate a held check.
