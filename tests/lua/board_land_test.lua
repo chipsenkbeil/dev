@@ -614,6 +614,24 @@ if has_jj then
         testing.eq(#comments(home, id), before)
     end)
 
+    testing.test(
+        "workspace check passes when another workspace shares the working-copy commit",
+        function()
+            local root, home, log = jj_project()
+            local id = new_card(root, home, log)
+            jj(root, "workspace", "rename", id)
+            local base = assert(fs.realpath(support.tempdir()))
+            local path = base .. "/other"
+            jj(root, "workspace", "add", "--name", "other", path)
+            local work = head(root)
+            jj(path, "edit", work)
+            testing.eq(head(path), work)
+            must(dev(root, home, log, { "board", "turn", id }))
+            local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+            testing.eq(code, 0, out)
+        end
+    )
+
     testing.test("turn refuses outside the workspace named for the card", function()
         local root, home, log = jj_project()
         local id = new_card(root, home, log)

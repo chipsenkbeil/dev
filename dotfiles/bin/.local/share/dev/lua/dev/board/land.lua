@@ -74,13 +74,16 @@ function M.workspace_problem(root, short)
     if code ~= 0 then
         return "jj could not read the workspace of " .. root
     end
-    local name = out:gsub("%s+$", "")
-    if name == short then
-        return nil
+    local names = {}
+    for name in out:gmatch("[^\n]+") do
+        if name == short then
+            return nil
+        end
+        names[#names + 1] = name
     end
     return string.format(
         "this is the workspace %s, not the one named for %s, so run dev ws new %s and work from there",
-        name,
+        table.concat(names, ", "),
         short,
         short
     )
