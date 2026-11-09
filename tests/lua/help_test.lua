@@ -191,3 +191,50 @@ testing.test("the hint is for less only", function()
     testing.ok(not help.uses_less("bat --paging=always"))
     testing.ok(not help.uses_less("/usr/bin/lessfilter"))
 end)
+
+local function noun_fixture()
+    return project({
+        ["n/DESCRIPTION"] = "The n noun\n",
+        ["n/a.sh"] = "#!/usr/bin/env bash\n# Run a with a description that is far too long for one line of a narrow screen.\n",
+        ["n/bb.sh"] = "#!/usr/bin/env bash\n# Short.\n",
+    })
+end
+
+testing.test("noun help wraps a long subcommand description under its column", function()
+    local help = require("dev.help")
+    local ui = require("dev.ui")
+    local text = require("dev.text")
+    local reg = require("dev.registry").load(noun_fixture())
+    local c = ui.context({ color = true, interactive = false, width = 40 })
+    local plain = help.noun_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
+    testing.ok(
+        plain:find(
+            "\n  a   Run a with a description that is\n      far too long for one line of a\n      narrow screen.\n",
+            1,
+            true
+        ),
+        plain
+    )
+    for line in plain:gmatch("\n(  [^\n]+)") do
+        testing.ok(text.width(line) <= 40, line)
+    end
+end)
+
+testing.test("noun help keeps a short subcommand description on one line", function()
+    local help = require("dev.help")
+    local ui = require("dev.ui")
+    local reg = require("dev.registry").load(noun_fixture())
+    local c = ui.context({ color = true, interactive = false, width = 40 })
+    local plain = help.noun_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
+    testing.ok(plain:find("\n  bb  Short.\n", 1, true), plain)
+    local bare = ui.context({ color = false, interactive = false, width = 40 })
+    local out = help.noun_text(reg, bare, { "n" })
+    testing.ok(
+        out:find(
+            "\n  a   Run a with a description that is far too long for one line of a narrow screen.\n",
+            1,
+            true
+        ),
+        out
+    )
+end)

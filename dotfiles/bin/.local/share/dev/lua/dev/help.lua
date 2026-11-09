@@ -71,6 +71,16 @@ local function fit_line(c, line)
     return c.color and text.fit(line, c.width) or line
 end
 
+local function row_text(c, lead, desc)
+    local line = lead .. desc
+    if not c.color or text.width(line) <= c.width then
+        return line
+    end
+    local indent = string.rep(" ", text.width(lead))
+    local lines = text.wrap(text.words(desc), c.width - text.width(lead))
+    return lead .. table.concat(lines, "\n" .. indent)
+end
+
 ---@class dev.help.Row
 ---@field name string the verb, subcommand or topic
 ---@field origin string? where it comes from
@@ -107,8 +117,11 @@ local function section(c, out, spec)
             local mark = row.origin == "override" and OVERRIDE or ""
             line = line .. ui.paint(c, pad(mark, markw), Style.DIM) .. text.GAP
         end
-        line = line .. row.desc
-        out[#out + 1] = (compact and fit_line(c, line) or line) .. "\n"
+        if compact then
+            out[#out + 1] = fit_line(c, line .. row.desc) .. "\n"
+        else
+            out[#out + 1] = row_text(c, line, row.desc) .. "\n"
+        end
     end
 end
 
@@ -270,7 +283,12 @@ local function overview(ctx, reg, c, opts)
     return table.concat(out)
 end
 
-local function noun_text(reg, c, words)
+---Return a noun's description and subcommands as `dev help <noun>` prints them.
+---@param reg dev.Registry the project's registry
+---@param c dev.ui.Context the drawing settings
+---@param words string[] the noun's words
+---@return string text the noun's help
+function M.noun_text(reg, c, words)
     local out = {}
     local noun = table.concat(words, " ")
     local row = reg:find(words)
@@ -490,9 +508,9 @@ function M.noun(reg, noun, opts)
     local c = screen()
     local words = type(noun) == "string" and { noun } or noun
     if opts and opts.stderr then
-        stderr:write(noun_text(reg, c:stderr(), words))
+        stderr:write(M.noun_text(reg, c:stderr(), words))
     else
-        io.write(noun_text(reg, c, words))
+        io.write(M.noun_text(reg, c, words))
     end
     return 0
 end
