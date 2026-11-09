@@ -623,6 +623,13 @@ name goes after the double dash, as in `dev --remote test -- NAME`. A
 leading `! ` is allowed. Rows already on a card are not rewritten. `show`
 prints the rows under the description. Icebox is exempt.
 
+A planner also runs each new rg row against a small sample of the intended
+result and confirms it passes, matches behaviour rather than a name the builder
+may choose, and checks every rule number or section the card names against the
+file. A must-not-match row (`rg --files-without-match`) names one file, as with
+several it passes when any one lacks the text, and the planner reads the code
+each Change bullet relies on before filing.
+
 Three more card fields are set the same way, each replacing the field's
 whole value under the claim's fence, and queued while Pomb is unreachable. A
 board that lacks the field is refused before any write (exit 1) with
