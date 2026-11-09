@@ -117,3 +117,21 @@ testing.test("standalone warns without failing the lint", function()
     testing.eq(lint:finish(), 0)
     fs.remove(root, { recursive = true })
 end)
+
+testing.test("standalone writes each problem line to standard error", function()
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir failed")
+    assert(fs.write(root .. "/.dev/x.sh", "#!/bin/sh\n"), "fixture setup failed")
+    assert(fs.write(root .. "/.dev/y.sh", "#!/bin/sh\n"), "fixture setup failed")
+    local code = "require('lintset').new({ root = %q, verbose = 0 }):standalone()"
+    local snippet = ("package.path = %q; " .. code):format(package.path, root)
+    local errors = root .. "/stderr.txt"
+    local out = devos.capture({ "luajit", "-e", snippet }, { stderr = errors })
+    testing.eq(out, "> standalone shell\n")
+    local reason = "shell outside .dev/standalone, port it to Lua (dev help porting)\n"
+    testing.eq(
+        assert(fs.read(errors)),
+        "WARNING: .dev/x.sh: " .. reason .. "WARNING: .dev/y.sh: " .. reason
+    )
+    fs.remove(root, { recursive = true })
+end)
