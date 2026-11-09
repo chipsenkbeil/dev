@@ -4,10 +4,11 @@ local fs = require("dev.fs")
 ---@class dev.standalone
 local M = {}
 
-local DIR = ".dev/standalone/"
+local FOLDER = ".dev/standalone"
+local DIR = FOLDER .. "/"
+local HEADER = "^# standalone: runs on (.+), where dev is absent$"
 
 M.WHERE = { "production server", "test sandbox", "GitHub Actions" }
-M.HEADER = "^# standalone: runs on (.+), where dev is absent$"
 M.LABEL = "standalone-ok"
 
 local function allowed(where)
@@ -45,7 +46,7 @@ local function found(root, args)
 end
 
 local function header_problem(root, path)
-    local where = second_line(root, path):match(M.HEADER)
+    local where = second_line(root, path):match(HEADER)
     if not where then
         return "WARNING: "
             .. path
@@ -66,7 +67,9 @@ function M.problems(root)
         if path:sub(1, #DIR) ~= DIR and not path:match("^%.dev/__[^/]+$") then
             lines[#lines + 1] = "WARNING: "
                 .. path
-                .. ": shell outside .dev/standalone, port it to Lua (dev help porting)"
+                .. ": shell outside "
+                .. FOLDER
+                .. ", port it to Lua (dev help porting)"
         end
     end
     for _, path in ipairs(found(root, {})) do
@@ -76,6 +79,15 @@ function M.problems(root)
     end
     table.sort(lines)
     return lines
+end
+
+---Pass each problem line of a project to a function, in order.
+---@param root string absolute project root
+---@param emit fun(line: string) called once for each problem line
+function M.warn(root, emit)
+    for _, line in ipairs(M.problems(root)) do
+        emit(line)
+    end
 end
 
 ---Name why a landing that adds files may not land without the owner's label.

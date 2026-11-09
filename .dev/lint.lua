@@ -139,9 +139,7 @@ if #lua_files > 0 then
 end
 
 stdout:write("> standalone shell\n")
-for _, line in ipairs(require("dev.standalone").problems(root)) do
-    verb.note(line)
-end
+require("dev.standalone").warn(root, verb.note)
 
 if devos.which("ast-grep") then
     local sets = fs.join(root, checks.lint_dir, "..")

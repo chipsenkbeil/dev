@@ -35,6 +35,19 @@ testing.test("standalone warns on a nested __ shell under .dev", function()
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("warn passes each problem line to the function it is given", function()
+    local root = project({ [".dev/x.sh"] = "#!/bin/sh\n", [".dev/n/y.sh"] = "#!/bin/sh\n" })
+    local lines = {}
+    standalone.warn(root, function(line)
+        lines[#lines + 1] = line
+    end)
+    testing.eq(lines, {
+        "WARNING: .dev/n/y.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+        "WARNING: .dev/x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+    })
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("standalone warns on a bad line 2", function()
     local root = project({ [".dev/standalone/x.sh"] = "#!/bin/sh\n# runs somewhere\n" })
     testing.eq(standalone.problems(root), {
