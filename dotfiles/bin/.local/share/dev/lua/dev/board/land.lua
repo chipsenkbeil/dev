@@ -660,7 +660,7 @@ end
 function M.run(root)
     local out, code = devos.capture(
         vcs.with(vcs.base(root, vcs.JJ), "land", "--yes", "-r", "@"),
-        { stderr = "stdout", cwd = root }
+        { stderr = "stdout", cwd = root, env = { DEV_BOARD_LAND = "1" } }
     )
     return code == 0, out
 end

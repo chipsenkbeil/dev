@@ -71,7 +71,7 @@ for word in "$@"; do
         ;;
     esac
     if [ "$word" = land ]; then
-        echo "$*" >>"$LAND_LOG"
+        echo "$* DEV_BOARD_LAND=${DEV_BOARD_LAND:-unset}" >>"$LAND_LOG"
         if [ -n "$BREAK_BOARD" ]; then
             printf '{' >"$BREAK_BOARD"
         fi
@@ -635,6 +635,17 @@ if has_jj then
         t.eq(last.kind, "done")
         t.ok(last.body:find("Landed commit " .. commit:sub(1, 12), 1, true), last.body)
         t.eq(column_of(home), "Done")
+    end)
+
+    t.test("land runs jj land with DEV_BOARD_LAND=1 so the jj guard lets it through", function()
+        local root, home, log = jj_project()
+        local id = new_card(root, home, log)
+        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve(root, home, log, id)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        t.eq(code, 0, out)
+        t.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
+        t.ok(landed_calls(log):find("DEV_BOARD_LAND=1", 1, true), landed_calls(log))
     end)
 
     t.test("an old-shape claimant still checks and lands its claimed card", function()

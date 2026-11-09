@@ -1764,6 +1764,11 @@ never handles the API.
   The landing turn keeps landings made through `dev board land` to one at a
   time, and a raw `jj land` takes no turn (see the `land` entry above).
 
+  In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
+  exits 1 and names `dev board land`. `dev board land` sets `DEV_BOARD_LAND=1`
+  for the `jj land` it runs, and `jj land --no-card` lands a change that has no
+  card.
+
   An overlap refuses and names the files. A different change id, a non-empty
   interdiff or a review never recorded at the checked commit keeps the plain
   refusals, and any jj read that fails refuses too. The done note then adds
