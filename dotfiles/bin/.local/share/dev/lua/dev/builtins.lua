@@ -434,9 +434,9 @@ return {
     {
         words = { "board", "check" },
         handler = "lua",
-        flags = "--expect-fail --timeout --end-hold",
-        usage = "dev board check CARD [--expect-fail] [--timeout SECONDS] | dev board check CARD --end-hold",
-        desc = "Run every checks row of a card as a plain command on the working-copy commit and record each result and the commit on the card, refusing a dirty git tree and a tree that changed mid-run; --expect-fail records rows that must fail; --end-hold ends the check hold the caller's own name holds on the card without running rows, exit 2 when another name holds it and exit 1 when no live hold of the caller's is on the card",
+        flags = "--expect-fail --timeout",
+        usage = "dev board check CARD [--expect-fail] [--timeout SECONDS]",
+        desc = "Run every checks row of a card as a plain command on the working-copy commit and record each result and the commit on the card, refusing a dirty git tree and a tree that changed mid-run; --expect-fail records rows that must fail",
     },
     {
         words = { "board", "review" },

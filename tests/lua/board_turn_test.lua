@@ -480,24 +480,6 @@ end)
 
 testing.test("turn covers rebase and land only", function()
     local backend = backend_at(board_home())
-    local first = {
-        name = "alpha",
-        card = "aaaa1111",
-        commit = "1111111111111111111111111111111111111111",
-        seconds = 3600,
-    }
-    local second = {
-        name = "beta",
-        card = "bbbb2222",
-        commit = "2222222222222222222222222222222222222222",
-        seconds = 3600,
-    }
-    assert(turn.begin_check(backend, first))
-    assert(turn.begin_check(backend, second))
-    testing.eq(#assert(turn.checking(backend)), 2)
-    assert(turn.end_check(backend, first))
-    assert(turn.end_check(backend, second))
-    testing.eq(turn.checking(backend), {})
     testing.eq(turn.holder(backend), nil)
     local landing = assert(turn.take(backend, "alpha", "aaaa1111"))
     testing.eq(landing.hold, false)

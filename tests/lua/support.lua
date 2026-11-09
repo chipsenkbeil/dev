@@ -29,7 +29,7 @@ local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
 local STUB = '#!/bin/sh\necho "$(basename "$0") $* cwd=$PWD"\nexit "${STUB_CODE:-0}"\n'
-
+local ASYNC_WAIT_SECONDS = 120
 ---Make a project directory with a `.dev` directory and stub tools in `bin`.
 ---
 ---Each stub prints its name, its arguments and its directory, then exits with `STUB_CODE`.
@@ -57,15 +57,7 @@ end
 ---@field env table<string, string>? more environment variables
 ---@field split boolean? keep standard error apart and return it as a third value
 
----Run `dev` on a project with its `bin` first on PATH.
----@param root string the project root from `sandbox`
----@param args string[] the command line after `dev`
----@param opts support.DevOpts? where to run and what to set
----@return string output standard output, with standard error merged in unless `opts.split` is set
----@return integer? code dev's exit code
----@return string? errors standard error alone, only when `opts.split` is set
-function M.dev(root, args, opts)
-    opts = opts or {}
+local function invocation(root, args, opts)
     local argv = { "luajit", MAIN }
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
@@ -76,7 +68,19 @@ function M.dev(root, args, opts)
     for name, value in pairs(opts.env or {}) do
         env[name] = value
     end
-    local run = { cwd = opts.cwd or root, stderr = "stdout", env = env }
+    return argv, { cwd = opts.cwd or root, stderr = "stdout", env = env }
+end
+
+---Run `dev` on a project with its `bin` first on PATH.
+---@param root string the project root from `sandbox`
+---@param args string[] the command line after `dev`
+---@param opts support.DevOpts? where to run and what to set
+---@return string output standard output, with standard error merged in unless `opts.split` is set
+---@return integer? code dev's exit code
+---@return string? errors standard error alone, only when `opts.split` is set
+function M.dev(root, args, opts)
+    opts = opts or {}
+    local argv, run = invocation(root, args, opts)
     local errors
     if opts.split then
         errors = assert(fs.mktemp({ prefix = "stderr" }))
@@ -94,6 +98,48 @@ function M.dev(root, args, opts)
         return out, code, text
     end
     return out, code
+end
+
+---@class support.Running
+---@field finished fun(): boolean whether the command has exited
+---@field wait fun(): string, integer? the output and exit code once it has exited
+
+---Start `dev` on a project in the background.
+---@param root string the project root from `sandbox`
+---@param args string[] the command line after `dev`
+---@param opts support.DevOpts? where to run and what to set
+---@return support.Running running the handle of the started command
+function M.dev_async(root, args, opts)
+    local argv, run = invocation(root, args, opts or {})
+    local dir = M.tempdir()
+    local out, status = dir .. "/out", dir .. "/status"
+    local line = devos.command(argv)
+        .. " >"
+        .. out
+        .. " 2>&1; echo $? >"
+        .. status
+        .. ".tmp; mv "
+        .. status
+        .. ".tmp "
+        .. status
+    assert(
+        devos.run({ "sh", "-c", "(" .. line .. ") &" }, { cwd = run.cwd, env = run.env }) == 0,
+        "start failed"
+    )
+    local function finished()
+        return fs.is_file(status)
+    end
+    return {
+        finished = finished,
+        wait = function()
+            local waited = 0
+            while not finished() and waited < ASYNC_WAIT_SECONDS * 10 do
+                devos.nap(0.1)
+                waited = waited + 1
+            end
+            return fs.read(out) or "", tonumber((fs.read(status) or ""):match("%d+"))
+        end,
+    }
 end
 
 ---The fields JSON of a Pomb board that defines the four card fields.

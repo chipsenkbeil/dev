@@ -1542,30 +1542,6 @@ never handles the API.
   `note` refuses any text that begins with `dev-check:` (any case, after
   leading space), and `note --edit` and `--delete` refuse a comment that holds
   or would hold it (exit 1).
-
-  In a project with a valid `shared` list, a run (not `--expect-fail`) also
-  holds its check on the landing turn card while the rows run, without taking
-  the turn.
-
-  It writes a `dev-turn: check holder=NAME card=ID commit=COMMIT until=STAMP`
-  note before the first row, and a `dev-turn: checked holder=NAME card=ID` note
-  with the same commit when the command ends, whatever its result.
-
-  `until` is the longest the rows may run (`--timeout` times the rows) plus 60
-  seconds, to stop a runner that died from holding past it. `land` reads these
-  holds (see `land`). A project with no usable list writes none, and a hold
-  that cannot be written or ended is reported on standard error and does not
-  stop the check.
-
-  `check CARD --end-hold` ends the hold that the caller's own name holds on the
-  card, for a check whose shell was killed before it could end its hold. It runs
-  no rows and takes no other flag (exit 2). The name is `DEV_AGENT`, and without
-  it the command is a usage error (exit 2), as `land` is. The hold ends with the `dev-turn: checked`
-  note a check writes, at the commit the hold recorded, so `land` stops seeing
-  it. It ends each live hold of that name on the card. When the live hold on the
-  card belongs to another name it refuses (exit 2), since only that holder ends
-  it, and when the caller holds no live hold on the card it exits 1. The
-  workspace rule of `check` applies.
 - `review CARD --kind code|style|recheck --by NAME --rev REV --verdict clean|minor|needs-work`:
   Records that NAME reviewed the commit REV with that verdict, as one `status`
   comment on the card that begins with a reserved first line and has no other:
@@ -1641,36 +1617,10 @@ never handles the API.
     at the rebased commit. A change that sits on an unlanded parent is
     refused and not rebased.
 
-  A landing waits for a held check that it would invalidate. The hold waits
-  only on the files the held commit changes (a rename counts both paths). The
-  `shared` list never makes a landing wait, so a landing that touches none of
-  those files goes ahead, and the held card carries its check over the rebase.
-
-  `land` lists its own change's files and, for each live hold of another card,
-  refuses when one of them is a file of the held commit. It waits for such a
-  hold before it asks for the turn, polling for up to `--wait` seconds.
-
-  The wait never keeps the turn from a landing that touches none of those
-  files, and the wait for the turn that follows has its own `--wait`. A
-  landing that takes the turn here looks again, and a landing that already
-  holds the turn from `turn` looks once. It then refuses with a message that
-  begins `the check held for ID by NAME at commit ... reads PATHS, which this
-  change touches`.
-
-  A hold whose commit jj cannot read blocks no landing. A landing that
-  overlaps no hold goes ahead while the check runs, and the held card then
-  carries its check over the rebase when the rebase left no conflict. A
-  check that starts after the landing's last look can still be overlapped,
-  which costs it a new check.
-
-  A hold ends when its check ends or its `until` passes. Only a project with
-  a `shared` list holds checks, and the rest still need `turn --hold` to keep
-  trunk still.
-
   The landing turn keeps one landing at a time across runners, to keep
   trunk from moving under a landing. It is the claim on a card named
-  `landing turn`, which `land` or a held check creates in the Icebox when
-  the board has none, to keep the holder on the board and not in one session.
+  `landing turn`, which `land` creates in the Icebox when the board has none,
+  to keep the holder on the board and not in one session.
 
   A card in the wrong column, with an open outcome or claimed by another
   agent is refused before the turn is asked for. `land` then asks for the
@@ -1733,17 +1683,8 @@ never handles the API.
   - `jj interdiff` between the checked commit and the landing one is empty
   - the rebase left no conflict
 
-  A trunk commit that touched the same files, or a path under `shared`, does
-  not stop the carry. The release run tests the whole batch and catches a
-  clash the rebase cannot see.
-
-  `shared` lists the repo-relative paths a project opts into holding checks
-  with, and the carry never reads it:
-
-  ```toml
-  [board.land]
-  shared = ["crates/physics", "Cargo.toml"]
-  ```
+  A trunk commit that touched the same files does not stop the carry. The
+  release run tests the whole batch and catches a clash the rebase cannot see.
 
   The carry is tried whenever reviews are lacking, even when another refusal
   stands (an unticked outcome, the wrong column), to list in the refusal only

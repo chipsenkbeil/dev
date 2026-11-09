@@ -2679,16 +2679,12 @@ function commands.checks(backend, args)
 end
 
 local function check_options(args)
-    local opts =
-        { expect_fail = false, end_hold = false, seconds = check.DEFAULT_SECONDS, words = {} }
-    local timed = false
+    local opts = { expect_fail = false, seconds = check.DEFAULT_SECONDS, words = {} }
     local i = 1
     while i <= #args do
         local arg = args[i]
         if arg == EXPECT_FAIL_FLAG then
             opts.expect_fail = true
-        elseif arg == "--end-hold" then
-            opts.end_hold = true
         elseif arg == TIMEOUT_FLAG then
             i = i + 1
             local value = args[i] and args[i]:match("^%d+$")
@@ -2702,7 +2698,6 @@ local function check_options(args)
                     )
             end
             opts.seconds = seconds
-            timed = true
         elseif #arg > 1 and arg:sub(1, 1) == "-" then
             return nil, usage("unknown flag " .. arg)
         else
@@ -2712,9 +2707,6 @@ local function check_options(args)
     end
     if #opts.words ~= 1 then
         return nil, usage("needs a card")
-    end
-    if opts.end_hold and (opts.expect_fail or timed) then
-        return nil, usage("The --end-hold flag takes the card and no other flag.")
     end
     return opts
 end
@@ -2730,26 +2722,6 @@ local function check_lines(rows)
         end
     end
     return lines
-end
-
-local function register_check(backend, card, before, opts)
-    local paths = land.shared_list(config.get(backend.root, "board.land.shared"))
-    if opts.expect_fail or not paths then
-        return nil
-    end
-    local name = agent_name() or claimant()
-    local short = card.id:sub(1, board.MIN_PREFIX)
-    local ok, why = turn.begin_check(backend, {
-        name = name,
-        card = short,
-        commit = before.commit,
-        seconds = opts.seconds * #card.checks,
-    })
-    if not ok then
-        verb.note("the check is not held on the landing turn card: " .. why)
-        return nil
-    end
-    return name
 end
 
 ---@class dev.cmd.board.CheckFlags
@@ -2837,57 +2809,6 @@ local function check_rows(opts)
     return { output = table.concat(lines, "\n") }
 end
 
----End the check hold that the caller's name holds on the card, at the commit it recorded.
----@param backend dev.board.Backend the board backend
----@param short string the short id of the card
----@return dev.cmd.board.Result result the outcome
-local function end_own_hold(backend, short)
-    local name, refused = agent_name()
-    if not name then
-        return refused or usage("The --end-hold flag needs DEV_AGENT set to the hold's name.")
-    end
-    local holds, why = turn.checking(backend)
-    if not holds then
-        return failure(
-            "The checks held on the landing turn card cannot be read, because " .. why .. "."
-        )
-    end
-    local mine, theirs = {}, nil
-    for _, hold in ipairs(holds) do
-        if hold.card == short then
-            if hold.name == name then
-                mine[#mine + 1] = hold
-            else
-                theirs = theirs or hold
-            end
-        end
-    end
-    if #mine == 0 and theirs then
-        return usage(
-            "The check hold on "
-                .. short
-                .. " is held by "
-                .. theirs.name
-                .. ", so "
-                .. name
-                .. " cannot end it."
-        )
-    end
-    if #mine == 0 then
-        return failure("There is no live check hold of " .. name .. " on " .. short .. ".")
-    end
-    for _, hold in ipairs(mine) do
-        local ended
-        ended, why = turn.end_check(backend, { name = name, card = short, commit = hold.commit })
-        if not ended then
-            return failure(
-                "The check hold on " .. short .. " was not ended, because " .. why .. "."
-            )
-        end
-    end
-    return { output = "ended the check hold on " .. short .. " held by " .. name }
-end
-
 function commands.check(backend, args)
     local opts, err = check_options(args)
     if not opts then
@@ -2902,9 +2823,6 @@ function commands.check(backend, args)
     local elsewhere = M.__workspace_refusal(backend, short)
     if elsewhere then
         return elsewhere
-    end
-    if opts.end_hold then
-        return end_own_hold(backend, short)
     end
     if #card.checks == 0 then
         return failure(short .. " has no checks rows; set them with dev board checks")
@@ -2924,33 +2842,13 @@ function commands.check(backend, args)
     if not before then
         return failure(message)
     end
-    local holder = register_check(backend, card, before, opts)
-    local ran, result = pcall(check_rows, {
+    return check_rows({
         backend = backend,
         card = card,
         before = before,
         argvs = argvs,
         options = opts,
     })
-    if holder then
-        local ended, why = turn.end_check(backend, {
-            name = holder,
-            card = short,
-            commit = before.commit,
-        })
-        if not ended then
-            verb.note(
-                "the check hold on "
-                    .. short
-                    .. " was not ended and lapses at its end time: "
-                    .. why
-            )
-        end
-    end
-    if not ran then
-        error(result, 0)
-    end
-    return result
 end
 
 function commands.review(backend, args)
@@ -3356,53 +3254,6 @@ local function kept_note(short)
         .. " --release)"
 end
 
-local function blocking_check(backend, short)
-    local root = backend.root
-    local shared = land.shared_list(config.get(root, "board.land.shared"))
-    if not shared then
-        return nil
-    end
-    local holds, why = turn.checking(backend)
-    if not holds then
-        return "the checks held on the landing turn card cannot be read: " .. why
-    end
-    local mine
-    for _, hold in ipairs(holds) do
-        if hold.card ~= short then
-            mine = mine or land.touched(root, "@")
-            local theirs = land.touched(root, hold.commit) or {}
-            if not mine then
-                return "jj could not list the files of this change"
-            end
-            local overlap = land.overlap(mine, theirs, {})
-            if #overlap > 0 then
-                return string.format(
-                    "the check held for %s by %s at commit %s reads %s, which this change touches, "
-                        .. "so it lands after that check ends (by %s at the latest)",
-                    hold.card,
-                    hold.name,
-                    land.short(hold.commit),
-                    table.concat(overlap, ", "),
-                    hold.expires
-                )
-            end
-        end
-    end
-end
-
-local function await_check(backend, short, wait)
-    local deadline = os.time() + wait
-    local poll = turn.poller()
-    while true do
-        local blocked = blocking_check(backend, short)
-        local left = deadline - os.time()
-        if not blocked or left <= 0 then
-            return blocked
-        end
-        devos.nap(math.min(poll:pace(blocked), left))
-    end
-end
-
 function commands.land(backend, args)
     local flags, words = parse(args, { [WAIT_FLAG] = true })
     if not flags then
@@ -3472,12 +3323,7 @@ function commands.land(backend, args)
     if message then
         return failure(short .. " cannot land: " .. message)
     end
-    local blocked = await_check(backend, short, hold and 0 or wait)
-    if blocked then
-        return failure(short .. " cannot land: " .. blocked .. (hold and kept_note(short) or ""))
-    end
-    local waited = not hold
-    if waited then
+    if not hold then
         hold, message = await_turn({
             backend = backend,
             name = name,
@@ -3488,14 +3334,6 @@ function commands.land(backend, args)
     end
     if not hold then
         return failure(short .. " cannot land: " .. message)
-    end
-    blocked = (waited or not hold.hold) and blocking_check(backend, short)
-    if blocked then
-        if hold.hold then
-            return failure(short .. " cannot land: " .. blocked .. kept_note(short))
-        end
-        turn.release(backend, hold)
-        return failure(short .. " cannot land: " .. blocked)
     end
     local current
     current, message = find_card(backend, words[1])

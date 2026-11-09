@@ -85,6 +85,8 @@ exec "$REAL_JJ" "$@"
 local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
 local PAST_HOLD_SECONDS = 2.2
+local CHECK_WAIT_SECONDS = 60
+local CHECK_STOP_SECONDS = 300
 local SHARED = "a\nb\nc\nd\ne\nf\ng\n"
 
 local function setup(extra)
@@ -271,26 +273,6 @@ testing.test("an unreadable expect-fail record never refuses a landing", functio
     )
     testing.ok(
         land.checks_problem({ skipped }, STATE, rows):find("no run of dev board check", 1, true)
-    )
-end)
-
-testing.test("overlap names the landing paths a held check reads", function()
-    local shared = { "Cargo.lock", "crates/physics" }
-    testing.eq(land.overlap({ "docs/a.md", "src/b.rs" }, { "src/c.rs" }, shared), {})
-    testing.eq(land.overlap({ "lib/a.txt", "libx/b.txt" }, {}, { "lib/" }), { "lib/a.txt" })
-    testing.eq(
-        land.overlap({ "Cargo.lock", "docs/a.md" }, { "src/c.rs" }, shared),
-        { "Cargo.lock" }
-    )
-    testing.eq(land.overlap({ "crates/physics/lib.rs", "crates/physicsx" }, {}, shared), {
-        "crates/physics/lib.rs",
-    })
-    testing.eq(
-        land.overlap({ "src/c.rs", "old.rs", "docs/a.md" }, { "old.rs", "src/c.rs" }, shared),
-        {
-            "old.rs",
-            "src/c.rs",
-        }
     )
 end)
 
@@ -509,10 +491,8 @@ if has_jj then
         must(devos.run(argv, { stdout = "null", stderr = "null" }))
     end
 
-    local LIB_CONFIG = '\n[board.land]\nshared = ["lib"]\n'
-
     local function jj_project(extra)
-        local root, home, log = setup(extra or LIB_CONFIG)
+        local root, home, log = setup(extra)
         assert(fs.write(root .. "/bin/jj", LAND_STUB), "write failed")
         must(devos.run({ "chmod", "755", root .. "/bin/jj" }))
         local bare = support.tempdir()
@@ -710,7 +690,7 @@ if has_jj then
     end)
 
     testing.test("land moves a verified card to Release when the project deploys", function()
-        local root, home, log = jj_project(LIB_CONFIG .. "deploys = true\n")
+        local root, home, log = jj_project("\n[board.land]\ndeploys = true\n")
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
@@ -1385,16 +1365,6 @@ if has_jj then
         testing.eq(column_of(home), "Done")
     end)
 
-    testing.test("land carries in a project that lists no shared paths", function()
-        local root, home, log, bare = jj_project("")
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
-        testing.eq(code, 0, out)
-        testing.eq(column_of(home), "Done")
-    end)
-
     testing.test("land refuses the carry when jj cannot compare the checked commit", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)
@@ -2013,133 +1983,12 @@ if has_jj then
         testing.eq(turn_holder(home), nil)
     end)
 
-    local function turn_notes(home)
-        local doc = assert(
-            json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
-            "decode failed"
-        )
-        for _, card in ipairs(doc.cards) do
-            if card.name == turn.NAME then
-                return card.comments or {}
-            end
-        end
-        return {}
-    end
-
-    local function hold_check(home, commit)
-        local backend, restore = board_at(home)
-        assert(
-            turn.begin_check(
-                backend,
-                { name = "other", card = "cccc3333", commit = commit, seconds = 600 }
-            )
-        )
-        restore()
-    end
-
-    local function end_hold(home, commit)
-        local backend, restore = board_at(home)
-        turn.end_check(backend, { name = "other", card = "cccc3333", commit = commit })
-        restore()
-    end
-
-    local function sibling_commit(root, work)
-        jj(root, "new", "master", "-m", "held")
-        assert(fs.write(root .. "/held.txt", "held\n"), "write failed")
-        local commit = head(root)
-        jj(root, "edit", work)
-        return commit
-    end
-
-    local function blocked(opts)
-        local root, home, log = opts.root, opts.home, opts.log
-        local out, code = dev(root, home, log, { "board", "land", opts.id, "--wait", "0" })
-        testing.eq(code, 1, out)
-        for _, text in ipairs(opts.wanted) do
-            testing.ok(out:find(text, 1, true), text .. "\n" .. out)
-        end
-        testing.eq(landed_calls(log), "")
-        testing.eq(turn_holder(home), nil)
-        testing.ok(column_of(home) ~= "Done", column_of(home))
-    end
-
     local function lander_ready(root, home, log)
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         return id
     end
-
-    testing.test(
-        "check holds itself on the turn card while it runs and lets go when it ends",
-        function()
-            local root, home, log = jj_project()
-            lander_ready(root, home, log)
-            local notes = turn_notes(home)
-            local seen = {}
-            for _, note in ipairs(notes) do
-                seen[#seen + 1] =
-                    note.body:match("^dev%-turn: (%a+) holder=dotfiles/lander card=%x+")
-            end
-            testing.eq(seen, { "check", "checked" })
-            local backend, restore = board_at(home)
-            testing.eq(turn.checking(backend), {})
-            restore()
-        end
-    )
-
-    testing.test("a failing check still ends its hold", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "checks", id, "false" }))
-        local _, code = dev(root, home, log, { "board", "check", id })
-        testing.eq(code, 1)
-        local kinds = {}
-        for _, note in ipairs(turn_notes(home)) do
-            kinds[#kinds + 1] = note.body:match("^dev%-turn: (%a+) holder=dotfiles/lander")
-        end
-        testing.eq(kinds, { "check", "checked" })
-    end)
-
-    testing.test("check writes no hold with --expect-fail or without a shared list", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        dev(root, home, log, { "board", "check", id, "--expect-fail" })
-        testing.eq(turn_notes(home), {})
-        local bare_root, bare_home, bare_log = jj_project("")
-        local bare_id = new_card(bare_root, bare_home, bare_log)
-        must(dev(bare_root, bare_home, bare_log, { "board", "check", bare_id }))
-        testing.eq(turn_notes(bare_home), {})
-    end)
-
-    testing.test("a landing that touches nothing a held check reads goes ahead", function()
-        local root, home, log = jj_project()
-        local id = lander_ready(root, home, log)
-        hold_check(home, sibling_commit(root, head(root)))
-        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" }, {
-            LAND_TRUNK = "keep",
-        })
-        testing.eq(code, 0, out)
-        testing.eq(column_of(home), "Done")
-    end)
-
-    testing.test("a landing that touches a file of the held change waits for the check", function()
-        local root, home, log = jj_project()
-        local id = lander_ready(root, home, log)
-        local work_commit = head(root)
-        hold_check(home, work_commit)
-        blocked({
-            root = root,
-            home = home,
-            log = log,
-            id = id,
-            wanted = { "check held for cccc3333", "work.txt" },
-        })
-        end_hold(home, work_commit)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
-        testing.eq(code, 0, out)
-        testing.eq(column_of(home), "Done")
-    end)
 
     testing.test("a land that waited keeps a hold taken meanwhile", function()
         local root, home, log = jj_project()
@@ -2170,95 +2019,72 @@ if has_jj then
         testing.eq(turn_holder(home), nil)
     end)
 
-    testing.test("a land that waited waits for a check begun while it waited", function()
+    testing.test("another check does not block a land", function()
         local root, home, log = jj_project()
-        local id = lander_ready(root, home, log)
-        local work_commit = head(root)
-        local held = hold_turn(home, "other", "dddd4444")
-        local backend, restore = board_at(home)
-        backend.root = root
-        local nap = devos.nap
-        devos.nap = function()
-            devos.nap = nap
-            release_turn(home, held)
-            must(dev(root, home, log, { "board", "turn", id, "--hold", "60" }))
-            hold_check(home, work_commit)
-        end
-        local previous = os.getenv("DEV_AGENT") or ""
-        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
-        local ok, result = pcall(commands.run, "land", { id, "--wait", "30" }, backend)
-        ffi.C.setenv("DEV_AGENT", previous, 1)
-        devos.nap = nap
-        restore()
-        assert(ok, result)
-        testing.eq(result.code, 1)
-        testing.ok(result.message:find("check held for cccc3333", 1, true), result.message)
-        testing.ok(result.message:find("stays held", 1, true), result.message)
-        testing.eq(landed_calls(log), "")
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
-    end)
-
-    testing.test("a landing polls under --wait and goes ahead once the hold lapses", function()
-        local root, home, log = jj_project()
-        local id = lander_ready(root, home, log)
-        local previous = turn.CHECK_GRACE_SECONDS
-        turn.CHECK_GRACE_SECONDS = 0
-        local backend, restore = board_at(home)
+        local landing = lander_ready(root, home, log)
+        local out = dev(root, home, log, {
+            "board",
+            "add",
+            "Other",
+            "--problem",
+            "x",
+            "--size",
+            "1",
+            "--done-when",
+            "It works",
+        })
+        local other = assert(out:match("added (%x+)"), out)
+        local scripts = support.tempdir()
+        local started, stop = scripts .. "/started", scripts .. "/stop"
+        local slow = scripts .. "/slow.sh"
         assert(
-            turn.begin_check(
-                backend,
-                { name = "other", card = "cccc3333", commit = head(root), seconds = 3 }
-            )
+            fs.write(
+                slow,
+                "touch "
+                    .. started
+                    .. "\n"
+                    .. "n=0\n"
+                    .. "while [ ! -e "
+                    .. stop
+                    .. " ] && [ $n -lt "
+                    .. CHECK_STOP_SECONDS * 10
+                    .. " ]; do\n"
+                    .. "    sleep 0.1\n"
+                    .. "    n=$((n + 1))\n"
+                    .. "done\n"
+            ),
+            "write failed"
         )
-        restore()
-        turn.CHECK_GRACE_SECONDS = previous
-        local started = os.time()
-        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "30" }, {
+        must(dev(root, home, log, { "board", "checks", other, "sh " .. slow }))
+        local elsewhere = support.tempdir() .. "/other"
+        jj(root, "workspace", "add", "--name", other, elsewhere)
+        local running = support.dev_async(elsewhere, { "board", "check", other }, {
+            env = {
+                HOME = home,
+                XDG_STATE_HOME = home .. "/state",
+                JJ_USER = "t",
+                JJ_EMAIL = "t@example.com",
+                DEV_AGENT = "dotfiles/lander",
+                LAND_LOG = log,
+                REAL_JJ = devos.which("jj"),
+            },
+        })
+        local deadline = os.time() + CHECK_WAIT_SECONDS
+        while not fs.exists(started) and os.time() < deadline do
+            devos.nap(0.1)
+        end
+        testing.ok(fs.exists(started), "the other card's check must be running")
+        local landed, code = dev(root, home, log, { "board", "land", landing, "--wait", "0" }, {
             LAND_TRUNK = "keep",
         })
-        testing.eq(code, 0, out)
-        testing.ok(os.time() - started >= 2, "the landing must wait for the hold")
-        testing.eq(column_of(home), "Done")
+        testing.eq(code, 0, landed)
+        testing.eq(column_of(home, landing), support.COLUMN_NAME.DONE)
+        testing.eq(running.finished(), false)
+        assert(fs.write(stop, ""), "write failed")
+        local output, status = running.wait()
+        testing.eq(status, 0, output)
     end)
 
-    testing.test(
-        "a landing on a shared path goes ahead of a check that does not read it",
-        function()
-            local root, home, log = jj_project()
-            assert(fs.write(root .. "/lib/extra.txt", "extra\n"), "write failed")
-            local id = lander_ready(root, home, log)
-            hold_check(home, sibling_commit(root, head(root)))
-            local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" }, {
-                LAND_TRUNK = "keep",
-            })
-            testing.eq(code, 0, out)
-            testing.eq(column_of(home), "Done")
-        end
-    )
-
-    testing.test(
-        "a held check whose runner died stops blocking once its end time passes",
-        function()
-            local root, home, log = jj_project()
-            local id = lander_ready(root, home, log)
-            local previous = turn.CHECK_GRACE_SECONDS
-            turn.CHECK_GRACE_SECONDS = 0
-            local backend, restore = board_at(home)
-            assert(
-                turn.begin_check(
-                    backend,
-                    { name = "other", card = "cccc3333", commit = head(root), seconds = 3 }
-                )
-            )
-            testing.eq(#assert(turn.checking(backend)), 1)
-            devos.nap(PAST_HOLD_SECONDS + 2)
-            testing.eq(turn.checking(backend), {})
-            restore()
-            turn.CHECK_GRACE_SECONDS = previous
-            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
-            testing.eq(code, 0, out)
-        end
-    )
     local function rebased_and_checked(root, home, log, id)
         rebase_onto_trunk(root)
         must(dev(root, home, log, { "board", "check", id }))

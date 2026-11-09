@@ -1,4 +1,3 @@
-local ffi = require("ffi")
 local testing = require("dev.testing")
 local board = require("dev.board")
 local check = require("dev.board.check")
@@ -6,19 +5,14 @@ local commands = require("dev.cmd.board")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
-local localboard = require("dev.board.localboard")
 local support = require("support")
-local turn = require("dev.board.turn")
-
-ffi.cdef([[int unsetenv(const char *name);]])
 
 local has_jj = devos.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
-local SHARED = '\n[board.land]\nshared = ["lib"]\n'
 
-local function setup(extra)
+local function setup()
     local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n' .. (extra or ""),
+        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n',
     }, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
@@ -60,8 +54,8 @@ local function card_with(root, home, rows)
     return id
 end
 
-local function git_root(extra)
-    local root, home = setup(extra)
+local function git_root()
+    local root, home = setup()
     local function git(...)
         local argv =
             { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
@@ -432,103 +426,4 @@ testing.test("the claimant's note is found by the token that posted the claim", 
     testing.eq(noted(claim, note("agents", "dev-check: x", STATUS)), false)
     testing.eq(noted(claim, note("agents", "dev-review: x", STATUS)), false)
     testing.eq(noted(claim, note("agents", "old"), claim), false)
-end)
-
-local function with_board(home, body)
-    local previous = os.getenv("XDG_STATE_HOME")
-    ffi.C.setenv("XDG_STATE_HOME", home .. "/state", 1)
-    local backend = localboard.new({
-        name = "mine",
-        path = home .. "/state/dev/boards/mine.json",
-        private = true,
-    })
-    backend.roles = { icebox = "Icebox" }
-    local ok, result, why = pcall(body, backend)
-    if previous then
-        ffi.C.setenv("XDG_STATE_HOME", previous, 1)
-    else
-        ffi.C.unsetenv("XDG_STATE_HOME")
-    end
-    if not ok then
-        error(result, 0)
-    end
-    return result, why
-end
-
-local function hold_check(home, name, card, commit)
-    local ok, why = with_board(home, function(backend)
-        return turn.begin_check(
-            backend,
-            { name = name, card = card, commit = commit, seconds = 600 }
-        )
-    end)
-    assert(ok, why)
-end
-
-local function live_holds(home)
-    local holds, why = with_board(home, turn.checking)
-    return assert(holds, why)
-end
-
-testing.test("check --end-hold ends the callers own hold", function()
-    local root, home, head = git_root(SHARED)
-    local id = card_with(root, home, { "true" })
-    local short = id:sub(1, board.MIN_PREFIX)
-    local name = "dotfiles/implementer/" .. short
-    hold_check(home, name, short, head)
-    local out, code = dev(
-        root,
-        home,
-        { "board", "check", id, "--end-hold", "--expect-fail" },
-        nil,
-        {
-            DEV_AGENT = name,
-        }
-    )
-    testing.eq(code, 2, out)
-    testing.eq(#live_holds(home), 1)
-    out, code = dev(root, home, { "board", "check", id, "--end-hold" }, nil, { DEV_AGENT = name })
-    testing.eq(code, 0, out)
-    testing.ok(out:find("ended the check hold on " .. short, 1, true), out)
-    testing.eq(live_holds(home), {})
-    out, code = dev(root, home, { "board", "check", id, "--end-hold" }, nil, { DEV_AGENT = name })
-    testing.eq(code, 1, out)
-    testing.ok(out:find("There is no live check hold of " .. name .. " on " .. short, 1, true), out)
-end)
-
-testing.test("check --end-hold refuses a hold held by another name", function()
-    local root, home, head = git_root(SHARED)
-    local id = card_with(root, home, { "true" })
-    local short = id:sub(1, board.MIN_PREFIX)
-    hold_check(home, "dotfiles/other/1", short, head)
-    local out, code = dev(root, home, { "board", "check", id, "--end-hold" }, nil, {
-        DEV_AGENT = "dotfiles/implementer/" .. short,
-    })
-    testing.eq(code, 2, out)
-    testing.ok(out:find("is held by dotfiles/other/1", 1, true), out)
-    testing.eq(#live_holds(home), 1)
-    testing.eq(live_holds(home)[1].name, "dotfiles/other/1")
-end)
-
-testing.test("check --end-hold needs DEV_AGENT and takes no other flag", function()
-    local root, home, head = git_root(SHARED)
-    local id = card_with(root, home, { "true" })
-    local short = id:sub(1, board.MIN_PREFIX)
-    local name = "dotfiles/implementer/" .. short
-    hold_check(home, name, short, head)
-    local out, code = dev(root, home, { "board", "check", id, "--end-hold" }, nil, {
-        DEV_AGENT = "",
-    })
-    testing.eq(code, 2, out)
-    testing.ok(out:find("needs DEV_AGENT set to the hold's name", 1, true), out)
-    out, code = dev(root, home, { "board", "check", id, "--end-hold", "--expect-fail" }, nil, {
-        DEV_AGENT = name,
-    })
-    testing.eq(code, 2, out)
-    testing.ok(out:find("takes the card and no other flag", 1, true), out)
-    out, code = dev(root, home, { "board", "check", id, "--end-hold", "--timeout", "5" }, nil, {
-        DEV_AGENT = name,
-    })
-    testing.eq(code, 2, out)
-    testing.eq(#live_holds(home), 1)
 end)

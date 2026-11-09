@@ -11,8 +11,6 @@ local SHAPE_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ if(description == "
 local COMMIT_TEMPLATE = 'commit_id ++ "\\n"'
 local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local COMMIT_CHARS = 12
-local FILES_TEMPLATE = 'self.diff().files().map(|f| f.source().path() ++ "\\n" ++ '
-    .. 'f.target().path() ++ "\\n").join("")'
 
 ---Shorten a commit id for a message.
 ---@param commit string the full commit id
@@ -412,29 +410,6 @@ local function carry_problem(root, state, commit)
     end
 end
 
----Read the shared paths from the config value.
----@param list any the raw `board.land.shared` value
----@return string[]? paths the paths, nil when the list is absent or not usable
----@return string? problem why the list is not usable
-function M.shared_list(list)
-    if list == nil or (type(list) == "table" and #list == 0) then
-        return nil,
-            "the config lists no shared paths under [board.land], so a check "
-                .. "never carries over a rebase"
-    end
-    if type(list) ~= "table" then
-        return nil, "[board.land] shared must be a list of paths, so the check does not carry"
-    end
-    for _, path in ipairs(list) do
-        if type(path) ~= "string" or path == "" or path:find('["\\]') then
-            return nil,
-                "[board.land] shared holds an entry that is not a plain path, so the check "
-                    .. "does not carry"
-        end
-    end
-    return list
-end
-
 local function sorted_paths(root, rev, template)
     local out = jj_out(root, "log", "-r", rev, "--no-graph", "-T", template)
     if not out then
@@ -448,14 +423,6 @@ local function sorted_paths(root, rev, template)
     return paths
 end
 
----List the files a commit changes, a rename counting both its paths.
----@param root string the project root, a jj project
----@param rev string the revset of one commit
----@return string[]? paths the paths, nil when jj could not read them
-function M.touched(root, rev)
-    return sorted_paths(root, rev, FILES_TEMPLATE)
-end
-
 ---List the files a commit adds, a moved or copied file counting at its new path.
 ---@param root string the project root, a jj project
 ---@param rev string the revset of one commit
@@ -464,34 +431,6 @@ function M.added(root, rev)
     local ADDED_TEMPLATE = 'self.diff().files().filter(|f| f.status() != "modified" && '
         .. 'f.status() != "removed").map(|f| f.target().path() ++ "\\n").join("")'
     return sorted_paths(root, rev, ADDED_TEMPLATE)
-end
-
----Name the paths of a landing that would invalidate a held check.
----
----A path invalidates the check when the checked change touches it, or when it
----is, or lies under, a shared path. A trailing slash on a shared path is ignored.
----@param mine string[] the files the landing change touches
----@param held string[] the files the checked change touches
----@param shared string[] the shared paths from the config
----@return string[] overlap the landing's paths that invalidate it, sorted
-function M.overlap(mine, held, shared)
-    local touched = {}
-    for _, path in ipairs(held) do
-        touched[path] = true
-    end
-    local overlap = {}
-    for _, path in ipairs(mine) do
-        local hit = touched[path]
-        for _, entry in ipairs(shared) do
-            local base = entry:gsub("/+$", "")
-            hit = hit or path == base or path:sub(1, #base + 1) == base .. "/"
-        end
-        if hit then
-            overlap[#overlap + 1] = path
-        end
-    end
-    table.sort(overlap)
-    return overlap
 end
 
 ---@class dev.board.land.Opts
