@@ -1,3 +1,5 @@
+local ffi = require("ffi")
+
 local t = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
@@ -67,6 +69,14 @@ end
 local function write_config(base, body)
     assert(fs.mkdir(base .. "/home/.config/dev", { parents = true }))
     assert(fs.write(base .. "/home/.config/dev/config.toml", "[remote]\n" .. body .. "\n"))
+end
+
+local function with_empty_home(body)
+    local previous = os.getenv("HOME")
+    ffi.C.setenv("HOME", support.tempdir(), 1)
+    local ok, err = pcall(body)
+    ffi.C.setenv("HOME", previous or "", 1)
+    assert(ok, err)
 end
 
 local function dev_env(base, env)
@@ -540,22 +550,26 @@ end)
 t.test("run label is unset for a bare run in a terminal", function()
     local remote = require("dev.remote")
     local root = setup()
-    t.eq(remote.run_label(root, {}, true), nil)
-    t.eq(remote.run_label(root, { DEV_AGENT = "", DEV_CI_VERB = "" }, true), nil)
-    t.eq(remote.run_label(root, { DEV_CI_CARD = "d9f0e004" }, true), nil)
+    with_empty_home(function()
+        t.eq(remote.run_label(root, {}, true), nil)
+        t.eq(remote.run_label(root, { DEV_AGENT = "", DEV_CI_VERB = "" }, true), nil)
+        t.eq(remote.run_label(root, { DEV_CI_CARD = "d9f0e004" }, true), nil)
+    end)
 end)
 
 t.test("run label keeps check and release labels in a terminal", function()
     local remote = require("dev.remote")
     local root = setup()
-    local check = { DEV_CI_VERB = remote.VERB.CHECK, DEV_CI_CARD = "d9f0e004" }
-    t.eq(remote.run_label(root, check, true), "p/check/d9f0e004")
-    local release = "release"
-    t.eq(remote.run_label(root, { DEV_CI_VERB = release }, true), "p/" .. release)
-    t.eq(remote.run_label(root, {}, false), "p/remote")
-    local agent = { DEV_AGENT = "dotfiles/implementer/x/1" }
-    t.eq(remote.run_label(root, agent, false), nil)
-    t.eq(remote.run_label(root, agent, true), nil)
+    with_empty_home(function()
+        local check = { DEV_CI_VERB = remote.VERB.CHECK, DEV_CI_CARD = "d9f0e004" }
+        t.eq(remote.run_label(root, check, true), "p/check/d9f0e004")
+        local release = "release"
+        t.eq(remote.run_label(root, { DEV_CI_VERB = release }, true), "p/" .. release)
+        t.eq(remote.run_label(root, {}, false), "p/remote")
+        local agent = { DEV_AGENT = "dotfiles/implementer/x/1" }
+        t.eq(remote.run_label(root, agent, false), nil)
+        t.eq(remote.run_label(root, agent, true), nil)
+    end)
 end)
 
 t.test("--remote ci run label is unset when run from a real terminal", function()
