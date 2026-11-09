@@ -17,6 +17,8 @@ local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 local LEAD = "dotfiles/lead/1"
+local PROGRESS_COLUMN = "col-progress"
+local PROGRESS_NAME = "In Progress"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
@@ -5948,6 +5950,26 @@ t.test("a move into progress that takes the claim prints the card and its commen
     out, code = dev(root, home, { "board", "move", "11111111-a", "progress" })
     t.eq(code, 0, out)
     t.eq(out, "moved 11111111 to In Progress\n")
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+t.test("move into progress posts the claim then the move to In Progress", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", "progress" },
+        { agent = "r/one" }
+    )
+    t.eq(code, 0, out)
+    t.ok(out:find("^moved 11111111 to " .. PROGRESS_NAME .. "\n"), out)
+    local calls = read(root, "calls")
+    local claim = calls:find("/api/tasks/" .. ID_A .. "/claim\n", 1, true)
+    local moved = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
+    t.ok(claim and moved and claim < moved, calls)
+    local move_line = calls:match("[^\n]*/move\n?")
+    t.ok(move_line:find('"column_id":"' .. PROGRESS_COLUMN .. '"', 1, true), move_line)
+    t.ok(move_line:find("If-Claim-Fence: 7", 1, true), move_line)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 

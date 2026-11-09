@@ -1577,7 +1577,7 @@ never handles the API.
   NAME. The reviewer records its own review with its final verdict, `clean` for
   CLEAN, `minor` for MINOR ISSUES and `needs-work` for NEEDS WORK, so it is the
   recorder the board allowance for `review` covers. After a needs-work record
-  the reviewer notes the findings and returns the card to Ready. It prints
+  the reviewer notes the findings and leaves the card where it is. It prints
   `recorded KIND review by NAME on <id prefix> at commit <12 characters>`. Like
   `check`, it is never queued: if the comment cannot be written the command
   exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
