@@ -1771,7 +1771,8 @@ never handles the API.
   In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
   exits 1 and names `dev board land`. `dev board land` sets `DEV_BOARD_LAND=1`
   for the `jj land` it runs, and `jj land --no-card` lands a change that has no
-  card.
+  card. `jj land --undo` and `jj land --dry-run` pass the guard. Neither one
+  lands a change, and neither needs a card.
 
   An overlap refuses and names the files. A different change id, a non-empty
   interdiff or a review never recorded at the checked commit keeps the plain
