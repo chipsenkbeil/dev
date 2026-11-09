@@ -3,8 +3,9 @@ local board = require("dev.board")
 ---The in-flight limits Pomb holds, and the refusal an agent gets at one.
 ---@class dev.board.limits
 ---@field REFUSED string the prefix of a refusal Pomb makes at a limit
+---@field COUNT string the unit of a column limit that counts cards
 ---@field HOURS string the unit of a column limit that counts estimated hours, not cards
-local M = { REFUSED = "Pomb refused the move: ", HOURS = "hours" }
+local M = { REFUSED = "Pomb refused the move: ", COUNT = "count", HOURS = "hours" }
 
 ---@class dev.board.limits.Group
 ---@field columns string[] the column names the group spans, in board order

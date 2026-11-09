@@ -1,4 +1,5 @@
 local board = require("dev.board")
+local board_limits = require("dev.board.limits")
 local box = require("dev.cmd.box")
 local claims = require("dev.board.claims")
 local devos = require("dev.os")
@@ -1487,7 +1488,7 @@ function Backend:limits(name)
         if type(column.wip_limit) == "number" then
             limits.columns[column.name] = column.wip_limit
             limits.units[column.name] = type(column.limit_unit) == "string" and column.limit_unit
-                or "count"
+                or board_limits.COUNT
         end
     end
 

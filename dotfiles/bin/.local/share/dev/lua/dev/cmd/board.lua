@@ -4167,8 +4167,11 @@ function commands.stale(backend, args, now)
         return refusal
     end
     local lead_limit
-    lead_limit, refusal =
-        whole_limit("--lead-hours", flags["--lead-hours"], { default = LEAD_HOURS, unit = "hours" })
+    lead_limit, refusal = whole_limit(
+        "--lead-hours",
+        flags["--lead-hours"],
+        { default = LEAD_HOURS, unit = runner.limits.HOURS }
+    )
     if not lead_limit then
         return refusal
     end
