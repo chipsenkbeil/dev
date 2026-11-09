@@ -508,7 +508,7 @@ return {
         handler = "lua",
         flags = "--days --icebox-days --lead-hours",
         usage = "dev board stale [--days N] [--icebox-days N] [--lead-hours N]",
-        desc = "List the cards that sat in Backlog, Ready, In Progress, Review, Verify or Release for N days (7 by default), oldest first, the needs:human ones apart, the other cards whose newest comment is the owner's apart, the needs:lead and needs:planner cards in Blocked for --lead-hours (1 by default), and the Icebox cards untouched for --icebox-days (30 by default)",
+        desc = "List the cards that sat in Backlog, Ready, In Progress, Review or Verify for N days (7 by default), oldest first, the needs:human ones apart, the other cards whose newest comment is the owner's apart, the needs:lead and needs:planner cards in Blocked for --lead-hours (1 by default), and the Icebox cards untouched for --icebox-days (30 by default)",
     },
     {
         words = { "board", "lint" },

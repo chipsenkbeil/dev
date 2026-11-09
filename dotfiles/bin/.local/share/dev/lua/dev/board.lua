@@ -567,7 +567,6 @@ function M.roles(map, finished)
         [roles.progress] = true,
         [roles.review] = true,
         [roles.verify] = true,
-        [roles.release] = true,
     }
     return roles
 end

@@ -3426,7 +3426,7 @@ testing.test("stale counts a card entered just under the limit as fresh", functi
     testing.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
 end)
 
-testing.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release only", function()
+testing.test("stale covers Backlog, Ready, In Progress, Review and Verify only", function()
     local columns = {
         support.COLUMN_NAME.ICEBOX,
         support.COLUMN_NAME.BACKLOG,
@@ -3450,8 +3450,26 @@ testing.test("stale covers Backlog, Ready, In Progress, Review, Verify and Relea
         support.COLUMN_NAME.PROGRESS,
         support.COLUMN_NAME.REVIEW,
         support.COLUMN_NAME.VERIFY,
-        support.COLUMN_NAME.RELEASE,
     })
+end)
+
+testing.test("stale skips release cards", function()
+    local cards, times = aged(
+        { support.COLUMN_NAME.RELEASE, support.COLUMN_NAME.VERIFY },
+        { 40, 40 }
+    )
+    testing.eq(
+        commands.run("stale", {}, fake(cards, times), NOW).output,
+        "00000002  Verify  40d  unsized  Card 2"
+    )
+end)
+
+testing.test("stale still lists a Release card the owner labelled needs:human", function()
+    local cards, times = aged({ support.COLUMN_NAME.RELEASE }, { 40 }, { { "needs:human" } })
+    testing.eq(
+        commands.run("stale", {}, fake(cards, times), NOW).output,
+        "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Release  40d  unsized  Card 1"
+    )
 end)
 
 testing.test("stale marks a needs:human card whose newest comment is the owner's", function()

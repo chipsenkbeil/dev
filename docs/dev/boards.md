@@ -413,9 +413,8 @@ Every card in every column is fair game for an agent unless it is labelled
 - Release: where `[board.land] deploys` is true, land sends a card to Release,
   and it waits there to go live. Once it is live, `dev board move CARD done`
   moves it to Done and refuses while an outcome is unticked.
-  `stale` lists a card that sits here for `--days` days or more. A card in
-  Review, Verify or Release with no claim waits for that stage's role. A
-  claim means the role is working it.
+  A card in Review, Verify or Release with no claim waits for that stage's
+  role. A claim means the role is working it.
 - Blocked: waiting on an answer.
   - `needs:human` is yours alone, and only a question for you uses `dev board
     ask`. A question between agents is a blocked note holding the numbered
@@ -831,8 +830,8 @@ three with `a local board holds no attachments`. None of them is queued while
 Pomb is unreachable.
 
 `stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards that have
-sat in Backlog, Ready, In Progress, Review, Verify or Release for N days or
-more, 7 by default, oldest first. Each line is the id prefix, the column, the
+sat in Backlog, Ready, In Progress, Review or Verify for N days or more, 7 by
+default, oldest first. Each line is the id prefix, the column, the
 days in it (`9d`), the size and the name. It counts whole days from the card's
 `column_entered_at`, which Pomb gives every task view, so a card at 6 days is
 fresh and one at 7 is stale. Icebox, Blocked and Done are never stale. Every
@@ -1364,8 +1363,8 @@ never handles the API.
   while Pomb is unreachable. Emptying the bin and deleting from it stay with
   the owner.
 - `stale [--days N] [--icebox-days N] [--lead-hours N]`: Lists the cards that
-  have sat in Backlog, Ready, In Progress, Review, Verify or Release for N days
-  or more (7 by default), oldest first, one line each: id prefix, column,
+  have sat in Backlog, Ready, In Progress, Review or Verify for N days or more
+  (7 by default), oldest first, one line each: id prefix, column,
   `<days>d`, size and name, aligned. Days are whole days from the card's
   `column_entered_at` (Pomb's task view, RFC 3339, read with
   `dev.cmd.box.parse_time`) to now, so 6 days is fresh and 7 is stale. Icebox,
