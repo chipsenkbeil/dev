@@ -9,15 +9,15 @@ local TOKEN = "pomb_SECRETtoken0123456789"
 local DEVICE_CODE = "DEVCODE-secret-9876"
 local ADMIN_TOKEN = "pomb_ADMINtoken0123456789"
 local STANDARD = {
-    "Icebox",
-    "Backlog",
-    "Ready",
-    "In Progress",
-    "Review",
-    "Verify",
-    "Release",
-    "Blocked",
-    "Done",
+    support.COLUMN_NAME.ICEBOX,
+    support.COLUMN_NAME.BACKLOG,
+    support.COLUMN_NAME.READY,
+    support.COLUMN_NAME.PROGRESS,
+    support.COLUMN_NAME.REVIEW,
+    support.COLUMN_NAME.VERIFY,
+    support.COLUMN_NAME.RELEASE,
+    support.COLUMN_NAME.BLOCKED,
+    support.COLUMN_NAME.DONE,
 }
 
 local UNCHANGED = "agent roles unchanged\n"
@@ -51,12 +51,19 @@ end
 
 local function template_columns()
     local columns = {}
-    for index, name in ipairs({ "Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done" }) do
+    for index, name in ipairs({
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        "In Review",
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
+    }) do
         columns[index] = {
             id = "col-" .. name,
             name = name,
-            is_done = name == "Done",
-            is_blocked = name == "Blocked",
+            is_done = name == support.COLUMN_NAME.DONE,
+            is_blocked = name == support.COLUMN_NAME.BLOCKED,
         }
     end
     return columns
@@ -277,23 +284,23 @@ end)
 t.test("an old board keeps its cards and gains what is missing", function()
     local layout = fake_layout({
         columns = {
-            { id = "col-Done", name = "Done", is_done = true },
-            { id = "col-Ready", name = "ready", is_done = false },
-            { id = "col-Backlog", name = "Backlog", is_done = false },
+            { id = "col-Done", name = support.COLUMN_NAME.DONE, is_done = true },
+            { id = "col-Ready", name = support.COLUMN.READY, is_done = false },
+            { id = "col-Backlog", name = support.COLUMN_NAME.BACKLOG, is_done = false },
         },
     })
     local changes, message = run(layout)
     t.eq(message, nil)
     t.eq(names(layout.state.columns), {
-        "Icebox",
-        "Backlog",
-        "ready",
-        "In Progress",
-        "Review",
-        "Verify",
-        "Release",
-        "Blocked",
-        "Done",
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
     })
     t.ok(changes > 0)
     local again = run(layout)
@@ -320,7 +327,8 @@ end)
 
 t.test("a board with both In Review and Review renames nothing", function()
     local columns = template_columns()
-    columns[#columns + 1] = { id = "col-Review", name = "Review", is_done = false }
+    columns[#columns + 1] =
+        { id = "col-Review", name = support.COLUMN_NAME.REVIEW, is_done = false }
     local layout = fake_layout({ columns = columns })
     run(layout)
     for _, write in ipairs(layout.state.writes) do
@@ -434,8 +442,8 @@ local function detail()
             '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
             name:gsub(" ", ""),
             name,
-            name == "Done" and "true" or "false",
-            name == "Blocked" and "true" or "false"
+            name == support.COLUMN_NAME.DONE and "true" or "false",
+            name == support.COLUMN_NAME.BLOCKED and "true" or "false"
         )
     end
     return DETAIL .. table.concat(parts, ",") .. "]," .. GROUPS .. "}"
@@ -796,15 +804,15 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
     local root, home, tmp = sandbox()
     local last = DETAIL
     local ordered = {
-        "Backlog",
-        "Ready",
-        "In Progress",
-        "Review",
-        "Verify",
-        "Release",
-        "Blocked",
-        "Done",
-        "Icebox",
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
+        support.COLUMN_NAME.ICEBOX,
     }
     local parts = {}
     for _, name in ipairs(ordered) do
@@ -812,8 +820,8 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
             '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
             name:gsub(" ", ""),
             name,
-            name == "Done" and "true" or "false",
-            name == "Blocked" and "true" or "false"
+            name == support.COLUMN_NAME.DONE and "true" or "false",
+            name == support.COLUMN_NAME.BLOCKED and "true" or "false"
         )
     end
     assert(fs.write(root .. "/detail.json", last .. table.concat(parts, ",") .. "]}"))
@@ -882,22 +890,22 @@ t.test("init renames In Review to Review through the column update", function()
     local root, home, tmp = sandbox()
     local parts = {}
     for _, name in ipairs({
-        "Icebox",
-        "Backlog",
-        "Ready",
-        "In Progress",
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
         "In Review",
-        "Verify",
-        "Release",
-        "Blocked",
-        "Done",
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
     }) do
         parts[#parts + 1] = string.format(
             '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
             name:gsub(" ", ""),
             name,
-            name == "Done" and "true" or "false",
-            name == "Blocked" and "true" or "false"
+            name == support.COLUMN_NAME.DONE and "true" or "false",
+            name == support.COLUMN_NAME.BLOCKED and "true" or "false"
         )
     end
     local body = DETAIL .. table.concat(parts, ",") .. "]," .. GROUPS .. "}"
@@ -1371,7 +1379,10 @@ t.test("a missing board gets one limit group once", function()
     end
     t.eq(said, 1)
     t.eq(layout.state.groups[1].limit, 4)
-    t.eq(layout.state.groups[1].column_names, { "In Progress", "Review", "Verify" })
+    t.eq(
+        layout.state.groups[1].column_names,
+        { support.COLUMN_NAME.PROGRESS, support.COLUMN_NAME.REVIEW, support.COLUMN_NAME.VERIFY }
+    )
     local changes
     changes, _, lines = run(layout)
     t.eq(changes, 0)

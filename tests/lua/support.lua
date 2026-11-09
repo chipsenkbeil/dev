@@ -123,9 +123,13 @@ M.COLUMN = {
 ---The Pomb display name of a column, by constant.
 ---@type table<string, string>
 M.COLUMN_NAME = {
+    BACKLOG = "Backlog",
+    BLOCKED = "Blocked",
     DONE = "Done",
+    ICEBOX = "Icebox",
     PROGRESS = "In Progress",
     READY = "Ready",
+    RELEASE = "Release",
     REVIEW = "Review",
     VERIFY = "Verify",
 }

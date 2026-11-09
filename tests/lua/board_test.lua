@@ -18,7 +18,7 @@ local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 local LEAD = "dotfiles/lead/1"
 local PROGRESS_COLUMN = "col-progress"
-local PROGRESS_NAME = "In Progress"
+local PROGRESS_NAME = support.COLUMN_NAME.PROGRESS
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
@@ -31,7 +31,7 @@ local function executable(path, body)
 end
 
 local function fake(cards, times, finished)
-    finished = finished or { "Done" }
+    finished = finished or { support.COLUMN_NAME.DONE }
     local is_finished = {}
     for _, name in ipairs(finished) do
         is_finished[name] = true
@@ -235,7 +235,7 @@ local function sample()
         {
             id = ID_A,
             name = "Write docs",
-            column = "Ready",
+            column = support.COLUMN_NAME.READY,
             size = "1 Pomodoro",
             color = "yellow",
             description = V2,
@@ -246,7 +246,7 @@ local function sample()
         {
             id = ID_B,
             name = "Fix lint",
-            column = "Backlog",
+            column = support.COLUMN_NAME.BACKLOG,
             size = "unsized",
             labels = {},
             checks = {},
@@ -255,7 +255,7 @@ local function sample()
         {
             id = ID_C,
             name = "Old thing",
-            column = "Done",
+            column = support.COLUMN_NAME.DONE,
             size = "unsized",
             labels = {},
             checks = {},
@@ -268,7 +268,7 @@ local function planned()
     return {
         id = ID_C,
         name = "Card",
-        column = "Backlog",
+        column = support.COLUMN_NAME.BACKLOG,
         size = "2 Pomodori",
         color = "green",
         description = V2,
@@ -280,10 +280,15 @@ end
 
 t.test("column takes the names and the short forms in any case", function()
     local roles = board.roles()
-    t.eq(roles:column("ready"), "Ready")
-    t.eq(roles:column("PROGRESS"), "In Progress")
-    t.eq(roles:column("review"), "Review")
-    for _, short in ipairs({ "blocked", "done", "backlog", "icebox" }) do
+    t.eq(roles:column(support.COLUMN.READY), support.COLUMN_NAME.READY)
+    t.eq(roles:column("PROGRESS"), support.COLUMN_NAME.PROGRESS)
+    t.eq(roles:column(support.COLUMN.REVIEW), support.COLUMN_NAME.REVIEW)
+    for _, short in ipairs({
+        support.COLUMN.BLOCKED,
+        support.COLUMN.DONE,
+        support.COLUMN.BACKLOG,
+        support.COLUMN.ICEBOX,
+    }) do
         t.eq(roles:column(short):lower(), short)
     end
     t.eq(roles:column("doing"), nil)
@@ -294,24 +299,24 @@ t.test("roles take the mapped names, the role words and the finished columns", f
         { ready = "Next", progress = "Doing", done = "Shipped" },
         { "Old", "Shipped" }
     )
-    t.eq(roles:column("ready"), "Next")
+    t.eq(roles:column(support.COLUMN.READY), "Next")
     t.eq(roles:column("PROGRESS"), "Doing")
     t.eq(roles:column("in progress"), nil)
-    t.eq(roles:column("done"), "Shipped")
+    t.eq(roles:column(support.COLUMN.DONE), "Shipped")
     t.eq(roles:column("old"), "Old")
     t.eq(roles.list, {
-        "Icebox",
-        "Backlog",
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
         "Next",
         "Doing",
-        "Review",
-        "Verify",
-        "Release",
-        "Blocked",
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
         "Shipped",
     })
     t.eq(board.roles(nil, { "Old", "Shipped" }):done_column(), "Old")
-    t.eq(board.roles():done_column(), "Done")
+    t.eq(board.roles():done_column(), support.COLUMN_NAME.DONE)
 end)
 
 t.test("a renamed board runs through the column map", function()
@@ -321,11 +326,11 @@ t.test("a renamed board runs through the column map", function()
     }, nil, { "Shipped" })
     backend.column_map = { backlog = "Inbox", ready = "Next", done = "Shipped" }
     t.eq(
-        commands.run("ls", { "--column", "ready" }, backend).output,
+        commands.run("ls", { "--column", support.COLUMN.READY }, backend).output,
         "11111111  Next  1 Pomodoro  -  A"
     )
     t.eq(
-        commands.run("ls", { "--column", "backlog" }, backend).output,
+        commands.run("ls", { "--column", support.COLUMN.BACKLOG }, backend).output,
         "11111111  Inbox  unsized  -  B"
     )
     t.eq(commands.run("ls", { "--column", "doing" }, backend).code, 2)
@@ -338,16 +343,16 @@ end)
 t.test("ls hides every finished column and discard picks the mapped one, else the first", function()
     local cards = sample()
     cards[2].column = "Archive"
-    local backend = fake(cards, nil, { "Done", "Archive" })
+    local backend = fake(cards, nil, { support.COLUMN_NAME.DONE, "Archive" })
     t.eq(commands.run("ls", {}, backend).output, "11111111  Ready  1 Pomodoro  docs  Write docs")
     t.eq(commands.run("ls", { "--column", "archive" }, backend).message, nil)
     commands.run("discard", { "11111111-a" }, backend)
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
-    backend = fake(sample(), nil, { "Archive", "Done" })
-    backend.column_map = { done = "Done" }
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+    backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
+    backend.column_map = { done = support.COLUMN_NAME.DONE }
     commands.run("discard", { "11111111-a" }, backend)
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
-    backend = fake(sample(), nil, { "Archive", "Done" })
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+    backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
     commands.run("discard", { "11111111-a" }, backend)
     t.eq(backend.calls[#backend.calls], { "move", ID_A, "Archive" })
 end)
@@ -384,7 +389,7 @@ t.test("ls hides Done and aligns the columns", function()
 end)
 
 t.test("ls filters by column and label", function()
-    local result = commands.run("ls", { "--column", "done" }, fake(sample()))
+    local result = commands.run("ls", { "--column", support.COLUMN.DONE }, fake(sample()))
     t.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
     result = commands.run("ls", { "--label", "docs" }, fake(sample()))
     t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
@@ -415,7 +420,7 @@ local function progress_sample()
     local cards = sample()
     cards[1].color = "yellow"
     cards[1].outcomes = { { done = true }, { done = false }, { done = true }, { done = false } }
-    cards[2].column = "Blocked"
+    cards[2].column = support.COLUMN_NAME.BLOCKED
     cards[2].claimant = nil
     return cards
 end
@@ -462,10 +467,15 @@ t.test("ls --group lists the cards under a heading and count per column", functi
     t.eq(lines[6], "")
     t.eq(lines[7], "Blocked  1 card")
     t.eq(lines[#lines], "Done is left out unless --column done")
-    local filtered = strip(coloured(progress_sample(), { "--group", "--column", "blocked" }).output)
+    local filtered =
+        strip(coloured(progress_sample(), { "--group", "--column", support.COLUMN.BLOCKED }).output)
     t.ok(filtered:find("Done is left out unless --column done", 1, true), filtered)
     t.eq(
-        coloured(sample(), { "--group", "--column", "done" }).output:find("left out", 1, true),
+        coloured(sample(), { "--group", "--column", support.COLUMN.DONE }).output:find(
+            "left out",
+            1,
+            true
+        ),
         nil
     )
 end)
@@ -479,8 +489,8 @@ t.test("ls filters by column, label and size in both layouts", function()
             end
             return strip(coloured(progress_sample(), args).output)
         end
-        t.ok(run("--column", "blocked"):find("Fix lint", 1, true))
-        t.eq(run("--column", "blocked"):find("Write docs", 1, true), nil)
+        t.ok(run("--column", support.COLUMN.BLOCKED):find("Fix lint", 1, true))
+        t.eq(run("--column", support.COLUMN.BLOCKED):find("Write docs", 1, true), nil)
         t.ok(run("--label", "docs"):find("Write docs", 1, true))
         t.eq(run("--label", "docs"):find("Fix lint", 1, true), nil)
         t.ok(run("--size", "1"):find("Write docs", 1, true))
@@ -518,13 +528,19 @@ t.test("add defaults to Backlog and joins the words of the name", function()
         backend
     )
     t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.calls[1], { "add", "A new card", "Backlog", SCAFFOLD, "yellow" })
-    result = commands.run(
-        "add",
-        { "X", "--column", "ready", "--description", V1, "--size", "2", "--checks", "dev test" },
-        backend
-    )
-    t.eq(backend.calls[2], { "add", "X", "Ready", V1, "green" })
+    t.eq(backend.calls[1], { "add", "A new card", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
+    result = commands.run("add", {
+        "X",
+        "--column",
+        support.COLUMN.READY,
+        "--description",
+        V1,
+        "--size",
+        "2",
+        "--checks",
+        "dev test",
+    }, backend)
+    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.READY, V1, "green" })
     t.eq(commands.run("add", {}, backend).code, 2)
 end)
 
@@ -554,7 +570,7 @@ t.test("add --board files on the named board and leaves this one alone", functio
     t.eq(result.output, "added cccccccc Backlog")
     t.eq(backend.calls[1], { "other_board", "ci" })
     t.eq(#backend.calls, 1)
-    t.eq(sibling.calls[1], { "add", "Far", "Backlog", SCAFFOLD, "yellow" })
+    t.eq(sibling.calls[1], { "add", "Far", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
 end)
 
 t.test("add --board refuses a board that is not there", function()
@@ -717,7 +733,15 @@ t.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", funct
     local far = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
     backend.sibling = {
         cards = function()
-            return { { id = far, name = "Far", column = "Ready", labels = {}, checks = {} } }
+            return {
+                {
+                    id = far,
+                    name = "Far",
+                    column = support.COLUMN_NAME.READY,
+                    labels = {},
+                    checks = {},
+                },
+            }
         end,
     }
     commands.run("add", {
@@ -736,7 +760,7 @@ t.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", funct
         "ci:dddddddd",
     }, backend)
     t.eq(backend.calls[1], { "other_board", "ci" })
-    t.eq(backend.calls[2], { "add", "X", "Backlog", SCAFFOLD, "yellow" })
+    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
     t.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_A })
     t.eq(backend.calls[4], { "link", ID_C, "blocked_by", far })
     t.eq(#backend.calls, 4)
@@ -746,7 +770,10 @@ t.test("add --size passes the colour its size word names", function()
     local backend = fake(sample())
     for word, color in pairs({ ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }) do
         commands.run("add", { "X", "--problem", "x", "--size", word, "--done-when", "a" }, backend)
-        t.eq(backend.calls[#backend.calls], { "add", "X", "Backlog", SCAFFOLD, color })
+        t.eq(
+            backend.calls[#backend.calls],
+            { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, color }
+        )
     end
     local calls = #backend.calls
     local refused = commands.run(
@@ -759,10 +786,13 @@ t.test("add --size passes the colour its size word names", function()
     t.eq(#backend.calls, calls)
     commands.run(
         "add",
-        { "X", "--column", "icebox", "--size", "UNSIZED", "--description", "loose" },
+        { "X", "--column", support.COLUMN.ICEBOX, "--size", "UNSIZED", "--description", "loose" },
         backend
     )
-    t.eq(backend.calls[#backend.calls], { "add", "X", "Icebox", "loose", "white" })
+    t.eq(
+        backend.calls[#backend.calls],
+        { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", "white" }
+    )
     local result = commands.run("add", { "X", "--size", "4" }, backend)
     t.eq(result.code, 2)
     t.ok(result.message:find("unknown size 4", 1, true), result.message)
@@ -786,7 +816,7 @@ t.test("size unsized is refused outside Icebox and works inside it", function()
     t.ok(result.message:find("keeps a size", 1, true), result.message)
     t.eq(#backend.calls, 0)
     local cards = sample()
-    cards[3].column = "Icebox"
+    cards[3].column = support.COLUMN_NAME.ICEBOX
     backend = fake(cards)
     result = commands.run("size", { "cccccccc", "unsized" }, backend)
     t.eq(result.output, "sized cccccccc unsized")
@@ -817,7 +847,7 @@ t.test("ls --size keeps the cards of one colour and counts no colour as unsized"
     cards[2].color = nil
     result = commands.run("ls", { "--size", "unsized" }, fake(cards))
     t.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
-    result = commands.run("ls", { "--size", "3", "--column", "done" }, fake(cards))
+    result = commands.run("ls", { "--size", "3", "--column", support.COLUMN.DONE }, fake(cards))
     t.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
     result = commands.run("ls", { "--size", "2" }, fake(cards))
     t.eq(result.output, "no cards")
@@ -841,9 +871,12 @@ t.test("add --label may repeat and drops a duplicate", function()
         "--label",
         "a",
     }, backend)
-    t.eq(backend.calls[1], { "add", "X", "Backlog", SCAFFOLD, "green", { "a", "needs:lead" } })
+    t.eq(
+        backend.calls[1],
+        { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "green", { "a", "needs:lead" } }
+    )
     commands.run("add", { "X", "--problem", "x", "--size", "2", "--done-when", "a" }, backend)
-    t.eq(backend.calls[2], { "add", "X", "Backlog", SCAFFOLD, "green", nil })
+    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "green", nil })
 end)
 
 t.test("label adds and removes labels and sends the whole list", function()
@@ -916,7 +949,7 @@ t.test("edit outside Icebox refuses a text that drops a v2 section", function()
     t.ok(result.message:find("## Change, ## Out of scope", 1, true), result.message)
     t.eq(#backend.calls, 0)
     local cards = sample()
-    cards[1].column = "Icebox"
+    cards[1].column = support.COLUMN_NAME.ICEBOX
     backend = fake(cards)
     t.eq(commands.run("edit", { "11111111-a", "loose" }, backend).code, nil)
     t.eq(#backend.calls, 1)
@@ -942,7 +975,7 @@ t.test("discard posts the reason, labels the card and moves it to Done", functio
     t.eq(backend.calls[1], { "note", ID_A, "Not needed", { kind = "decision" } })
     t.eq(backend.calls[2][1], "set_labels")
     t.ok(table.concat(backend.calls[2][3], ","):find("discarded", 1, true) ~= nil)
-    t.eq(backend.calls[3], { "move", ID_A, "Done" })
+    t.eq(backend.calls[3], { "move", ID_A, support.COLUMN_NAME.DONE })
     t.eq(#backend.calls, 3)
 end)
 
@@ -951,7 +984,7 @@ t.test("discard without a reason only labels and moves, and refuses a blank one"
     local result = commands.run("discard", { "11111111-a" }, backend)
     t.eq(result.output, "discarded 11111111")
     t.eq(#backend.calls, 2)
-    t.eq(backend.calls[2], { "move", ID_A, "Done" })
+    t.eq(backend.calls[2], { "move", ID_A, support.COLUMN_NAME.DONE })
     t.eq(commands.run("discard", { "11111111-a", "--reason", " " }, backend).code, 2)
     t.eq(commands.run("discard", {}, backend).code, 2)
     t.eq(commands.run("discard", { "deadbeef" }, backend).code, 1)
@@ -976,7 +1009,7 @@ t.test("move to Done refuses a card with unticked outcomes and names them", func
         { id = "s3", name = "C works", done = false },
     }
     local backend = fake(cards)
-    local result = commands.run("move", { "11111111-a", "done" }, backend)
+    local result = commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
     t.eq(result.code, 1)
     t.eq(result.unqueued, true)
     t.eq(
@@ -990,12 +1023,22 @@ t.test("move to Done takes a planned card whose outcomes are all ticked", functi
     local cards = sample()
     cards[1].outcomes = { { id = "s1", name = "A works", done = true } }
     local backend = fake(cards)
-    t.eq(commands.run("move", { "11111111-a", "done" }, backend).output, "moved 11111111 to Done")
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
+    t.eq(
+        commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend).output,
+        "moved 11111111 to Done"
+    )
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
 end)
 
 t.test("move refuses an unsized card into every column but Icebox", function()
-    for _, column in ipairs({ "backlog", "ready", "progress", "review", "blocked", "done" }) do
+    for _, column in ipairs({
+        support.COLUMN.BACKLOG,
+        support.COLUMN.READY,
+        support.COLUMN.PROGRESS,
+        support.COLUMN.REVIEW,
+        support.COLUMN.BLOCKED,
+        support.COLUMN.DONE,
+    }) do
         local backend = fake(sample())
         local result = commands.run("move", { "cccccccc", column }, backend)
         t.eq(result.code, 1, column)
@@ -1003,12 +1046,18 @@ t.test("move refuses an unsized card into every column but Icebox", function()
         t.eq(#backend.calls, 0, column)
     end
     local backend = fake(sample())
-    t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)
-    t.eq(backend.calls, { { "move", ID_C, "Icebox" } })
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    t.eq(backend.calls, { { "move", ID_C, support.COLUMN_NAME.ICEBOX } })
 end)
 
 t.test("move refuses a sized card that lacks a section or outcomes outside Icebox", function()
-    for _, column in ipairs({ "backlog", "progress", "review", "blocked", "done" }) do
+    for _, column in ipairs({
+        support.COLUMN.BACKLOG,
+        support.COLUMN.PROGRESS,
+        support.COLUMN.REVIEW,
+        support.COLUMN.BLOCKED,
+        support.COLUMN.DONE,
+    }) do
         local card = planned()
         card.description = "loose idea"
         local backend = fake({ card })
@@ -1032,27 +1081,27 @@ t.test("an epic moves to Done once every child is Done and its outcome is ticked
     card.outcomes = { { id = "s1", name = "a", done = true } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = commands.run("move", { "cccccccc", "done" }, backend)
+    local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
     t.eq(result.output, "moved cccccccc to Done")
-    t.eq(backend.calls[#backend.calls], { "move", ID_C, "Done" })
+    t.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
 end)
 
 t.test("epic_move_refused", function()
     local card = planned()
-    card.column = "Ready"
+    card.column = support.COLUMN_NAME.READY
     card.epic = { done = 1, total = 3 }
     card.outcomes = { { id = "s1", name = "a", done = true } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    backend.limited = { "Review" }
-    local result = commands.run("move", { "cccccccc", "done" }, backend)
+    backend.limited = { support.COLUMN_NAME.REVIEW }
+    local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
     t.eq(result.code, 1)
     t.eq(result.unqueued, true)
     t.eq(
         result.message,
         "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open"
     )
-    result = commands.run("move", { "cccccccc", "review" }, backend)
+    result = commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
     t.eq(result.code, 1)
     t.eq(
         result.message,
@@ -1061,7 +1110,7 @@ t.test("epic_move_refused", function()
     for _, call in ipairs(backend.calls) do
         t.ok(call[1] ~= "move", "the refused move was sent")
     end
-    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
 end)
 
 t.test("discard closes an epic whose children are open", function()
@@ -1079,12 +1128,12 @@ t.test("an epic needs an outcome to enter a working column like a card without c
     card.epic = { done = 0, total = 2 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, 1)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
     card.outcomes = { { id = "s1", name = "a", done = false } }
-    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
-    t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, nil)
     backend = fake({ planned() })
-    t.eq(commands.run("move", { "cccccccc", "review" }, backend).code, 1)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, 1)
 end)
 
 t.test("an unsized epic is refused and a red one is allowed", function()
@@ -1094,11 +1143,11 @@ t.test("an unsized epic is refused and a red one is allowed", function()
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, 1)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
     card.color = "red"
     backend = fake({ card })
     backend.kin = { children = card.epic }
-    t.eq(commands.run("move", { "cccccccc", "backlog" }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
 end)
 
 t.test(
@@ -1110,7 +1159,7 @@ t.test(
         local result = commands.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
         t.eq(result.code, 1)
         t.ok(result.message:find("a size", 1, true), result.message)
-        card.column = "Icebox"
+        card.column = support.COLUMN_NAME.ICEBOX
         result = commands.run("discard", { "cccccccc" }, fake({ card }))
         t.eq(result.code, 1)
         card.color = "green"
@@ -1128,7 +1177,7 @@ t.test("move to Done refuses outcomes dev cannot read", function()
     local cards = sample()
     cards[1].outcomes_unreadable = true
     local backend = fake(cards)
-    local result = commands.run("move", { "11111111-a", "done" }, backend)
+    local result = commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
     t.eq(result.code, 1)
     t.eq(result.unqueued, true)
     t.eq(
@@ -1142,7 +1191,7 @@ t.test("move to a working column does not demand outcomes dev cannot read", func
     local cards = sample()
     cards[1].outcomes_unreadable = true
     local backend = fake(cards)
-    local result = commands.run("move", { "11111111-a", "review" }, backend)
+    local result = commands.run("move", { "11111111-a", support.COLUMN.REVIEW }, backend)
     t.eq(result.code, nil)
 end)
 
@@ -1152,10 +1201,10 @@ t.test("move to Done is never queued when the card cannot be read", function()
     backend.cards = function()
         return nil, message
     end
-    local result = commands.run("move", { "11111111-a", "done" }, backend)
+    local result = commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
     t.eq(result.message, message)
     t.eq(result.unqueued, true)
-    result = commands.run("move", { "11111111-a", "review" }, backend)
+    result = commands.run("move", { "11111111-a", support.COLUMN.REVIEW }, backend)
     t.eq(result.message, message)
     t.eq(result.unqueued, nil)
 end)
@@ -1166,7 +1215,7 @@ t.test("discard closes a card with unticked outcomes", function()
     local backend = fake(cards)
     local result = commands.run("discard", { "11111111-a", "--reason", "Dropped" }, backend)
     t.eq(result.output, "discarded 11111111")
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Done" })
+    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
 end)
 
 t.test("checks replaces the rows with one row per command", function()
@@ -1304,7 +1353,7 @@ t.test("link to BOARD:CARD resolves the card on the other board", function()
                 {
                     id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
                     name = "Far",
-                    column = "Ready",
+                    column = support.COLUMN_NAME.READY,
                     size = "unsized",
                     labels = {},
                     checks = {},
@@ -1453,11 +1502,11 @@ t.test("note and move resolve the card by prefix", function()
     local result = commands.run("note", { "cccccccc", "landed", "as", "abc" }, backend)
     t.eq(result.output, "noted cccccccc")
     t.eq(backend.calls[1], { "note", ID_C, "landed as abc", {} })
-    result = commands.run("move", { "cccccccc", "blocked" }, backend)
+    result = commands.run("move", { "cccccccc", support.COLUMN.BLOCKED }, backend)
     t.eq(result.output, "moved cccccccc to Blocked")
-    t.eq(backend.calls[2], { "move", ID_C, "Blocked" })
-    result = commands.run("move", { "cccccccc", "review" }, backend)
-    t.eq(backend.calls[3], { "move", ID_C, "Review" })
+    t.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.BLOCKED })
+    result = commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+    t.eq(backend.calls[3], { "move", ID_C, support.COLUMN_NAME.REVIEW })
 end)
 
 local COMMENT_1 = "aaaaaaaa-1111-4111-8111-111111111111"
@@ -1696,7 +1745,7 @@ t.test("move and note refuse before the backend is called", function()
     local backend = fake(sample())
     local result = commands.run("move", { "cccccccc", "doing" }, backend)
     t.eq(result.code, 2)
-    result = commands.run("move", { "deadbeef", "ready" }, backend)
+    result = commands.run("move", { "deadbeef", support.COLUMN.READY }, backend)
     t.eq(result.code, 1)
     result = commands.run("note", { "cccccccc" }, backend)
     t.eq(result.code, 2)
@@ -1708,23 +1757,38 @@ t.test(
     function()
         local backend = fake(sample())
         for _, args in ipairs({
-            { "X", "--column", "ready" },
-            { "X", "--column", "ready", "--size", "unsized" },
-            { "X", "--column", "ready", "--size", "3+" },
+            { "X", "--column", support.COLUMN.READY },
+            { "X", "--column", support.COLUMN.READY, "--size", "unsized" },
+            { "X", "--column", support.COLUMN.READY, "--size", "3+" },
         }) do
             t.eq(commands.run("add", args, backend).code, 2)
         end
         t.eq(#backend.calls, 0)
         t.eq(
-            commands.run(
-                "add",
-                { "X", "--column", "backlog", "--problem", "x", "--size", "1", "--done-when", "a" },
-                backend
-            ).code,
+            commands.run("add", {
+                "X",
+                "--column",
+                support.COLUMN.BACKLOG,
+                "--problem",
+                "x",
+                "--size",
+                "1",
+                "--done-when",
+                "a",
+            }, backend).code,
             nil
         )
-        local full =
-            { "X", "--column", "ready", "--size", "3", "--description", V1, "--checks", "dev test" }
+        local full = {
+            "X",
+            "--column",
+            support.COLUMN.READY,
+            "--size",
+            "3",
+            "--description",
+            V1,
+            "--checks",
+            "dev test",
+        }
         t.eq(commands.run("add", full, backend).code, nil)
     end
 )
@@ -1733,7 +1797,7 @@ local function colored(color)
     local card = {
         id = ID_C,
         name = "Card",
-        column = "Backlog",
+        column = support.COLUMN_NAME.BACKLOG,
         size = "x",
         labels = {},
         description = V1,
@@ -1746,13 +1810,13 @@ end
 t.test("move to Ready refuses a white, uncoloured or red card and names dev board size", function()
     for _, color in ipairs({ "white", "red" }) do
         local backend = fake({ colored(color) })
-        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
         t.eq(result.code, 1)
         t.ok(result.message:find("dev board size", 1, true), result.message)
         t.eq(#backend.calls, 0)
     end
     local backend = fake({ colored(nil) })
-    local result = commands.run("move", { "cccccccc", "Ready" }, backend)
+    local result = commands.run("move", { "cccccccc", support.COLUMN_NAME.READY }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("has no size", 1, true), result.message)
     t.eq(#backend.calls, 0)
@@ -1768,10 +1832,14 @@ t.test("add scaffolds the v2 headings, fills Problem and keeps a text that has t
     t.eq(backend.calls[1][4], "## Problem\nIt breaks.\n\n## Change\n\n## Out of scope\n")
     commands.run("add", { "X", "--description", V1, "--size", "1" }, backend)
     t.eq(backend.calls[2][4], V1)
-    commands.run("add", { "X", "--column", "icebox", "--description", "loose" }, backend)
-    t.eq(backend.calls[3], { "add", "X", "Icebox", "loose", nil })
-    commands.run("add", { "X", "--column", "icebox" }, backend)
-    t.eq(backend.calls[4], { "add", "X", "Icebox", nil, nil })
+    commands.run(
+        "add",
+        { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
+        backend
+    )
+    t.eq(backend.calls[3], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
+    commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend)
+    t.eq(backend.calls[4], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
 end)
 
 t.test("add composes the three sections from --problem, --change and --out-of-scope", function()
@@ -1854,14 +1922,24 @@ t.test("add into Backlog without a Problem is refused before the backend is call
     result = commands.run("add", { "X", "--change", "- do" }, backend)
     t.eq(result.code, 2)
     t.ok(result.message:find("text under ## Problem", 1, true), result.message)
-    result = commands.run("add", { "X", "--column", "backlog", "--out-of-scope", "n" }, backend)
+    result = commands.run(
+        "add",
+        { "X", "--column", support.COLUMN.BACKLOG, "--out-of-scope", "n" },
+        backend
+    )
     t.eq(result.code, 2)
     t.eq(#backend.calls, 0)
 end)
 
 t.test("add outside Icebox refuses a missing size, section or outcome in every column", function()
     local backend = fake(sample())
-    for _, column in ipairs({ "backlog", "progress", "review", "blocked", "done" }) do
+    for _, column in ipairs({
+        support.COLUMN.BACKLOG,
+        support.COLUMN.PROGRESS,
+        support.COLUMN.REVIEW,
+        support.COLUMN.BLOCKED,
+        support.COLUMN.DONE,
+    }) do
         local cases = {
             { { "--problem", "x", "--done-when", "a" }, "a size" },
             { { "--size", "1", "--done-when", "a" }, "text under ## Problem" },
@@ -1883,13 +1961,17 @@ end)
 
 t.test("add into Icebox stays free-form", function()
     local backend = fake(sample())
-    t.eq(commands.run("add", { "X", "--column", "icebox" }, backend).code, nil)
-    t.eq(backend.calls[1], { "add", "X", "Icebox", nil, nil })
+    t.eq(commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code, nil)
+    t.eq(backend.calls[1], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
     t.eq(
-        commands.run("add", { "X", "--column", "icebox", "--description", "loose" }, backend).code,
+        commands.run(
+            "add",
+            { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
+            backend
+        ).code,
         nil
     )
-    t.eq(backend.calls[2], { "add", "X", "Icebox", "loose", nil })
+    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
 end)
 
 t.test("missing and backlog_missing count a heading with text, not an empty one", function()
@@ -1943,7 +2025,7 @@ t.test("move to Ready refuses an empty Change or Out of scope and accepts all th
         card.outcomes =
             { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
         local backend = fake({ card })
-        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
         t.eq(result.code, 1)
         t.ok(result.message:find(case[2], 1, true), result.message)
         t.eq(#backend.calls, 0)
@@ -1952,37 +2034,37 @@ t.test("move to Ready refuses an empty Change or Out of scope and accepts all th
     card.description = V2
     card.outcomes =
         { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
-    t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
 end)
 
 t.test("move to Backlog refuses a card without a Problem and names what is missing", function()
     local card = colored("green")
     card.description = "loose idea"
     local backend = fake({ card })
-    local result = commands.run("move", { "cccccccc", "backlog" }, backend)
+    local result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("cannot enter Backlog", 1, true), result.message)
     t.ok(result.message:find("## Problem", 1, true), result.message)
     t.eq(#backend.calls, 0)
     card.description = SCAFFOLD:gsub("x\n", "")
-    result = commands.run("move", { "cccccccc", "backlog" }, fake({ card }))
+    result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card }))
     t.eq(result.code, 1)
     t.ok(result.message:find("text under ## Problem", 1, true), result.message)
     card.description = SCAFFOLD
     card.outcomes = { { id = "s1", name = "a", done = false } }
-    t.eq(commands.run("move", { "cccccccc", "backlog" }, fake({ card })).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card })).code, nil)
 end)
 
 t.test("add to Ready refuses a description without the headings or a Done when item", function()
     local backend = fake(sample())
     local result = commands.run(
         "add",
-        { "X", "--column", "ready", "--size", "1", "--description", "why" },
+        { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", "why" },
         backend
     )
     t.eq(result.code, 2)
     t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
-    result = commands.run("add", { "X", "--column", "ready", "--size", "1" }, backend)
+    result = commands.run("add", { "X", "--column", support.COLUMN.READY, "--size", "1" }, backend)
     t.eq(result.code, 2)
     t.eq(#backend.calls, 0)
 end)
@@ -2011,7 +2093,7 @@ end)
 
 t.test("add to Ready without a checks row names the missing row, or the missing field", function()
     local backend = fake(sample())
-    local args = { "X", "--column", "ready", "--size", "1", "--description", V1 }
+    local args = { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", V1 }
     local result = commands.run("add", args, backend)
     t.eq(result.code, 2)
     t.ok(result.message:find("checks row", 1, true), result.message)
@@ -2029,23 +2111,23 @@ t.test("add to Ready without a checks row names the missing row, or the missing 
     t.eq(result.code, 2)
     t.ok(result.message:find("no checks field", 1, true), result.message)
     t.eq(#backend.calls, 0)
-    t.eq(commands.run("add", { "X", "--column", "icebox" }, backend).code, nil)
+    t.eq(commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code, nil)
 end)
 
 t.test("move to Ready counts a card with no checks row as missing them", function()
     local card = colored("green")
     card.checks = {}
     local backend = fake({ card })
-    local result = commands.run("move", { "cccccccc", "ready" }, backend)
+    local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("has no checks row", 1, true), result.message)
     backend.nofield = true
-    result = commands.run("move", { "cccccccc", "ready" }, backend)
+    result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("no checks field", 1, true), result.message)
     t.ok(result.message:find("dev board init", 1, true), result.message)
     t.eq(#backend.calls, 0)
-    t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
 end)
 
 t.test("show prints the checks rows under the description", function()
@@ -2097,14 +2179,14 @@ t.test("move to Ready refuses a card missing a heading or a Done when item", fun
         local card = colored("green")
         card.description = case[1]
         local backend = fake({ card })
-        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
         t.eq(result.code, 1)
         t.ok(result.message:find(case[2], 1, true), result.message)
         t.eq(#backend.calls, 0)
     end
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
-    t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
 end)
 
 local function outcomes(count, ticked)
@@ -2120,14 +2202,14 @@ t.test("move to Ready counts 3 to 7 outcomes, and a v1 checklist when there are 
         local card = colored("green")
         card.description = V2
         card.outcomes = outcomes(count)
-        t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+        t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
     end
     for _, count in ipairs({ 0, 2, 8 }) do
         local card = colored("green")
         card.description = V2
         card.outcomes = outcomes(count)
         local backend = fake({ card })
-        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
         t.eq(result.code, 1)
         t.ok(result.message:find("card format v2", 1, true), result.message)
         t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
@@ -2135,7 +2217,7 @@ t.test("move to Ready counts 3 to 7 outcomes, and a v1 checklist when there are 
     end
     local card = colored("green")
     card.outcomes = {}
-    t.eq(commands.run("move", { "cccccccc", "ready" }, fake({ card })).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
 end)
 
 t.test("an epic with 1 to 3 outcomes enters Ready", function()
@@ -2145,8 +2227,8 @@ t.test("an epic with 1 to 3 outcomes enters Ready", function()
         card.epic = { done = 2, total = 2 }
         card.outcomes = outcomes(count)
         local backend = fake({ card })
-        t.eq(commands.run("move", { "cccccccc", "ready" }, backend).code, nil, count)
-        t.eq(backend.calls[#backend.calls], { "move", ID_C, "Ready" })
+        t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, backend).code, nil, count)
+        t.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.READY })
     end
 end)
 
@@ -2157,7 +2239,7 @@ t.test("an epic with no outcomes or more than 3 is refused with the epic rule", 
         card.epic = { done = 2, total = 2 }
         card.outcomes = outcomes(count)
         local backend = fake({ card })
-        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
         t.eq(result.code, 1)
         t.ok(result.message:find("1 to 3 Done when outcomes for an epic", 1, true), result.message)
         if count > 0 then
@@ -2173,7 +2255,7 @@ t.test("a card without children is still held to 3 to 7 outcomes at Ready", func
         card.description = V2
         card.outcomes = outcomes(count)
         local backend = fake({ card })
-        local result = commands.run("move", { "cccccccc", "ready" }, backend)
+        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
         t.eq(result.code, 1)
         t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
         t.eq(result.message:find("epic", 1, true), nil, result.message)
@@ -2201,7 +2283,7 @@ t.test("add --done-when hands the outcomes to the backend and checks them", func
     local ready = {
         "X",
         "--column",
-        "ready",
+        support.COLUMN.READY,
         "--size",
         "1",
         "--description",
@@ -2481,7 +2563,11 @@ t.test("outcome delete refuses a name that is not a lead", function()
 end)
 
 t.test("outcome delete by a lead notes the reason and the text", function()
-    for _, column in ipairs({ "Backlog", "Blocked", "Icebox" }) do
+    for _, column in ipairs({
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.ICEBOX,
+    }) do
         local card = colored("green")
         card.column = column
         card.outcomes = outcomes(3)
@@ -2524,7 +2610,13 @@ local function card_in(column)
 end
 
 t.test("outcome delete refuses a card in a ready-role column", function()
-    for _, column in ipairs({ "Ready", "In Progress", "Review", "Verify", "Release" }) do
+    for _, column in ipairs({
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+    }) do
         local backend = fake({ card_in(column) })
         local result = delete_in(backend, "cccccccc")
         t.eq(result.code, 1)
@@ -2536,8 +2628,8 @@ t.test("outcome delete refuses a card in a ready-role column", function()
 end)
 
 t.test("outcome delete refuses a card in a finished column", function()
-    for _, column in ipairs({ "Done", "Archive" }) do
-        local backend = fake({ card_in(column) }, nil, { "Done", "Archive" })
+    for _, column in ipairs({ support.COLUMN_NAME.DONE, "Archive" }) do
+        local backend = fake({ card_in(column) }, nil, { support.COLUMN_NAME.DONE, "Archive" })
         local result = delete_in(backend, "cccccccc")
         t.eq(result.code, 1)
         t.ok(result.message:find(column, 1, true), result.message)
@@ -2555,7 +2647,7 @@ t.test("outcome delete reads the renamed role columns", function()
         t.ok(result.message:find(column, 1, true), result.message)
         t.eq(#writes(backend), 0)
     end
-    for _, column in ipairs({ "Ready", "In Progress" }) do
+    for _, column in ipairs({ support.COLUMN_NAME.READY, support.COLUMN_NAME.PROGRESS }) do
         local backend = fake({ card_in(column) }, nil, { "Shipped" })
         backend.column_map = map
         t.eq(delete_in(backend, "cccccccc").code, 1, column)
@@ -2580,7 +2672,7 @@ t.test("outcome delete allows renamed blocked and backlog columns", function()
         backend.column_map = map
         t.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
     end
-    for _, column in ipairs({ "Blocked", "Backlog" }) do
+    for _, column in ipairs({ support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.BACKLOG }) do
         local backend = fake({ card_in(column) })
         backend.column_map = map
         t.eq(delete_in(backend, "cccccccc").code, 1, column)
@@ -2589,7 +2681,11 @@ t.test("outcome delete allows renamed blocked and backlog columns", function()
 end)
 
 t.test("outcome delete is allowed in Blocked and Backlog", function()
-    for _, column in ipairs({ "Blocked", "Backlog", "Icebox" }) do
+    for _, column in ipairs({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.ICEBOX,
+    }) do
         local backend = fake({ card_in(column) })
         t.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
         local calls = writes(backend)
@@ -2817,24 +2913,29 @@ t.test("move into Icebox never checks the description", function()
     local card = colored("white")
     card.description = nil
     local backend = fake({ card })
-    t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
 end)
 
 t.test("move to Ready takes a sized card, and other columns take a planned one", function()
     for _, color in ipairs({ "yellow", "green", "blue" }) do
         local backend = fake({ colored(color) })
         t.eq(
-            commands.run("move", { "cccccccc", "ready" }, backend).output,
+            commands.run("move", { "cccccccc", support.COLUMN.READY }, backend).output,
             "moved cccccccc to Ready"
         )
     end
-    for _, column in ipairs({ "backlog", "review", "blocked", "done" }) do
+    for _, column in ipairs({
+        support.COLUMN.BACKLOG,
+        support.COLUMN.REVIEW,
+        support.COLUMN.BLOCKED,
+        support.COLUMN.DONE,
+    }) do
         local backend = fake({ colored("green") })
         t.eq(commands.run("move", { "cccccccc", column }, backend).code, nil)
         t.eq(#backend.calls, 1)
     end
     local backend = fake({ colored("white") })
-    t.eq(commands.run("move", { "cccccccc", "icebox" }, backend).code, nil)
+    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
     t.eq(#backend.calls, 1)
 end)
 
@@ -2842,7 +2943,7 @@ t.test("move and edit refuse a needs:human card, and label --remove still frees 
     local cards = sample()
     cards[1].labels = { "needs:human" }
     local backend = fake(cards)
-    local result = commands.run("move", { "11111111-a", "backlog" }, backend)
+    local result = commands.run("move", { "11111111-a", support.COLUMN.BACKLOG }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("needs:human", 1, true), result.message)
     result = commands.run("edit", { "11111111-a", "text" }, backend)
@@ -2895,7 +2996,7 @@ end)
 local function blocked_cards()
     local cards = sample()
     cards[1].labels = { "needs:human", "docs" }
-    cards[1].column = "Blocked"
+    cards[1].column = support.COLUMN_NAME.BLOCKED
     return cards
 end
 
@@ -2939,8 +3040,8 @@ t.test("ask sends the parts it was given and lets the backend refuse a missing o
         {
             text = "Which?",
             choices = {
-                { column = "Ready", label = "Ship it" },
-                { column = "Icebox", label = "Park it" },
+                { column = support.COLUMN_NAME.READY, label = "Ship it" },
+                { column = support.COLUMN_NAME.ICEBOX, label = "Park it" },
             },
             recommended = 1,
         },
@@ -2991,12 +3092,12 @@ end)
 t.test("a needs:human card moves within its own column and not out of it", function()
     local cards = sample()
     cards[1].labels = { "needs:human" }
-    cards[1].column = "Icebox"
+    cards[1].column = support.COLUMN_NAME.ICEBOX
     local backend = fake(cards)
-    local result = commands.run("move", { "11111111-a", "icebox" }, backend)
+    local result = commands.run("move", { "11111111-a", support.COLUMN.ICEBOX }, backend)
     t.eq(result.output, "moved 11111111 to Icebox")
-    t.eq(backend.calls, { { "move", ID_A, "Icebox" } })
-    result = commands.run("move", { "11111111-a", "backlog" }, backend)
+    t.eq(backend.calls, { { "move", ID_A, support.COLUMN_NAME.ICEBOX } })
+    result = commands.run("move", { "11111111-a", support.COLUMN.BACKLOG }, backend)
     t.eq(result.code, 1)
     t.ok(result.message:find("needs:human", 1, true), result.message)
     t.eq(#backend.calls, 1)
@@ -3004,8 +3105,8 @@ end)
 
 local function column_of_three()
     local cards = sample()
-    cards[2].column = "Ready"
-    cards[3].column = "Ready"
+    cards[2].column = support.COLUMN_NAME.READY
+    cards[3].column = support.COLUMN_NAME.READY
     cards[3].labels = { "needs:human" }
     return cards
 end
@@ -3014,7 +3115,10 @@ t.test("order moves the named cards to positions 0, 1, 2 and prints the column",
     local backend = fake(column_of_three())
     local result = commands.run("order", { "cccccccc", "11111111-a" }, backend)
     t.eq(result.code, nil)
-    t.eq(backend.calls, { { "move", ID_C, "Ready", 0 }, { "move", ID_A, "Ready", 1 } })
+    t.eq(backend.calls, {
+        { "move", ID_C, support.COLUMN_NAME.READY, 0 },
+        { "move", ID_A, support.COLUMN_NAME.READY, 1 },
+    })
     t.eq(
         result.output,
         table.concat({
@@ -3052,7 +3156,7 @@ t.test("label adds needs:human only to a card in Blocked or Icebox", function()
     local added = commands.run("add", { "Idea", "--label", "needs:human" }, backend)
     t.eq(added.code, 2)
     t.eq(#backend.calls, 0)
-    for _, column in ipairs({ "Blocked", "Icebox" }) do
+    for _, column in ipairs({ support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.ICEBOX }) do
         local cards = sample()
         cards[1].column = column
         backend = fake(cards)
@@ -3064,9 +3168,9 @@ end)
 t.test("move to Ready allows an epic and a card without children", function()
     local backend = fake({ colored("green") })
     backend.kin = { children = { done = 0, total = 2 } }
-    local result = commands.run("move", { "cccccccc", "ready" }, backend)
+    local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
     t.eq(result.output, "moved cccccccc to Ready")
-    result = commands.run("move", { "cccccccc", "backlog" }, backend)
+    result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
     t.eq(result.output, "moved cccccccc to Backlog")
 end)
 
@@ -3104,20 +3208,27 @@ end)
 
 t.test("next --column takes Backlog or Icebox and refuses other columns", function()
     local backend = fake(sample())
-    t.eq(commands.run("next", { "--column", "backlog" }, backend).message, nil)
-    t.eq(commands.run("next", { "--column", "done" }, backend).code, 2)
+    t.eq(commands.run("next", { "--column", support.COLUMN.BACKLOG }, backend).message, nil)
+    t.eq(commands.run("next", { "--column", support.COLUMN.DONE }, backend).code, 2)
     t.eq(commands.run("next", { "--column" }, backend).code, 2)
     t.eq(commands.run("next", { "extra" }, backend).code, 2)
-    t.eq(commands.run("next", { "--column", "backlog" }, fake({})).output, "no cards in Backlog")
+    t.eq(
+        commands.run("next", { "--column", support.COLUMN.BACKLOG }, fake({})).output,
+        "no cards in Backlog"
+    )
 end)
 t.test("next --column takes the Review, Verify and Release stage columns", function()
-    for _, column in ipairs({ "Review", "Verify", "Release" }) do
+    for _, column in ipairs({
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+    }) do
         local backend = fake({})
         local result = commands.run("next", { "--column", column:lower() }, backend)
         t.eq(result.output, "no cards in " .. column)
         t.eq(backend.calls[#backend.calls], { "next", column, nil })
     end
-    t.eq(commands.run("next", { "--column", "progress" }, fake({})).code, 2)
+    t.eq(commands.run("next", { "--column", support.COLUMN.PROGRESS }, fake({})).code, 2)
 end)
 
 local NOW = assert(box.parse_time("2026-10-27T12:00:00Z"))
@@ -3145,7 +3256,10 @@ local function aged(columns, days, labels)
 end
 
 t.test("stale counts whole days, so 6 days is fresh and 7 is stale", function()
-    local cards, times = aged({ "Ready", "Ready", "Ready" }, { 6, 7, 30 })
+    local cards, times = aged(
+        { support.COLUMN_NAME.READY, support.COLUMN_NAME.READY, support.COLUMN_NAME.READY },
+        { 6, 7, 30 }
+    )
     cards[2].size = "2 Pomodori"
     local result = commands.run("stale", {}, fake(cards, times), NOW)
     t.eq(
@@ -3155,22 +3269,22 @@ t.test("stale counts whole days, so 6 days is fresh and 7 is stale", function()
 end)
 
 t.test("stale counts a card entered just under the limit as fresh", function()
-    local cards, times = aged({ "Ready" }, { 7 })
+    local cards, times = aged({ support.COLUMN_NAME.READY }, { 7 })
     times[cards[1].id] = os.date("!%Y-%m-%dT%H:%M:%SZ", NOW - 7 * box.SECONDS_PER_DAY + 1)
     t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
 end)
 
 t.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release only", function()
     local columns = {
-        "Icebox",
-        "Backlog",
-        "Ready",
-        "In Progress",
-        "Review",
-        "Verify",
-        "Release",
-        "Blocked",
-        "Done",
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
     }
     local cards, times = aged(columns, { 5, 40, 40, 40, 40, 40, 40, 40, 40 })
     local result = commands.run("stale", {}, fake(cards, times), NOW)
@@ -3178,13 +3292,20 @@ t.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release onl
     for line in result.output:gmatch("[^\n]+") do
         lines[#lines + 1] = line:match("^%d+%s+(%a+[ %a]-)%s%s")
     end
-    t.eq(lines, { "Backlog", "Ready", "In Progress", "Review", "Verify", "Release" })
+    t.eq(lines, {
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+    })
 end)
 
 t.test("stale marks a needs:human card whose newest comment is the owner's", function()
     local human = { "needs:human" }
     local cards, times = aged(
-        { "Ready", "Blocked", "Blocked" },
+        { support.COLUMN_NAME.READY, support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.BLOCKED },
         { 9, 20, 50 },
         { {}, human, human }
     )
@@ -3208,11 +3329,13 @@ end)
 
 t.test("stale lists every needs:human card apart at any age, and never as stale", function()
     local human = { "needs:human" }
-    local cards, times = aged(
-        { "Ready", "Backlog", "Blocked", "Done", "Ready" },
-        { 9, 20, 50, 60, 1 },
-        { {}, human, human, human, human }
-    )
+    local cards, times = aged({
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
+        support.COLUMN_NAME.READY,
+    }, { 9, 20, 50, 60, 1 }, { {}, human, human, human, human })
     cards[2].color = nil
     local result = commands.run("stale", {}, fake(cards, times), NOW)
     t.eq(
@@ -3224,7 +3347,7 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
             .. "00000005  Ready    1d   unsized  Card 5\n\nunsized outside Icebox:\n"
             .. "00000002  Backlog  Card 2"
     )
-    cards, times = aged({ "Ready" }, { 9 }, { human })
+    cards, times = aged({ support.COLUMN_NAME.READY }, { 9 }, { human })
     result = commands.run("stale", {}, fake(cards, times), NOW)
     t.eq(
         result.output,
@@ -3233,10 +3356,13 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
 end)
 
 t.test("stale lists an unlabelled open card whose newest comment is the owner's", function()
-    local cards, times = aged(
-        { "Ready", "In Progress", "Blocked", "Done", "Ready" },
-        { 1, 2, 3, 4, 10 }
-    )
+    local cards, times = aged({
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
+        support.COLUMN_NAME.READY,
+    }, { 1, 2, 3, 4, 10 })
     local backend = fake(cards, times)
     local replies = {
         [cards[1].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "1" } },
@@ -3263,10 +3389,14 @@ end)
 t.test(
     "stale lists the unsized cards outside Icebox at any age and leaves sized ones out",
     function()
-        local cards, times = aged(
-            { "Backlog", "Backlog", "Backlog", "Ready", "Icebox", "Done" },
-            { 0, 1, 2, 1, 1, 1 }
-        )
+        local cards, times = aged({
+            support.COLUMN_NAME.BACKLOG,
+            support.COLUMN_NAME.BACKLOG,
+            support.COLUMN_NAME.BACKLOG,
+            support.COLUMN_NAME.READY,
+            support.COLUMN_NAME.ICEBOX,
+            support.COLUMN_NAME.DONE,
+        }, { 0, 1, 2, 1, 1, 1 })
         cards[1].color = nil
         cards[3].color = "white"
         cards[4].color = nil
@@ -3287,11 +3417,13 @@ t.test(
 
 t.test("stale names a card it could not date instead of skipping it", function()
     local human = { "needs:human" }
-    local cards, times = aged(
-        { "Ready", "Blocked", "Done", "Icebox", "Ready" },
-        { 1, 1, 1, 1, 1 },
-        { {}, human, human, {}, {} }
-    )
+    local cards, times = aged({
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.READY,
+    }, { 1, 1, 1, 1, 1 }, { {}, human, human, {}, {} })
     times[cards[1].id] = nil
     times[cards[2].id] = nil
     times[cards[3].id] = nil
@@ -3307,7 +3439,7 @@ t.test("stale names a card it could not date instead of skipping it", function()
 end)
 
 t.test("stale --days moves the limit", function()
-    local cards, times = aged({ "Ready", "Ready" }, { 2, 3 })
+    local cards, times = aged({ support.COLUMN_NAME.READY, support.COLUMN_NAME.READY }, { 2, 3 })
     local result = commands.run("stale", { "--days", "3" }, fake(cards, times), NOW)
     t.eq(result.output, "00000002  Ready  3d  unsized  Card 2")
     result = commands.run("stale", { "--days", "1" }, fake(cards, times), NOW)
@@ -3319,11 +3451,14 @@ end)
 
 local function lead_cards()
     local lead, human = { "needs:lead" }, { "needs:lead", "needs:human" }
-    local cards, times = aged(
-        { "Blocked", "Blocked", "Blocked", "Ready", "Blocked", "Blocked" },
-        { 0, 0, 0, 0, 0, 0 },
-        { lead, lead, human, lead, lead, {} }
-    )
+    local cards, times = aged({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+    }, { 0, 0, 0, 0, 0, 0 }, { lead, lead, human, lead, lead, {} })
     for index, hours in ipairs({ 3, 0.5, 5, 5, 7, 9 }) do
         local at = NOW - hours * box.SECONDS_PER_HOUR
         times[cards[index].id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", at)
@@ -3361,36 +3496,47 @@ end)
 
 t.test("next --column blocked asks the backend for a needs:lead card", function()
     local backend = fake(sample())
-    commands.run("next", { "--column", "blocked" }, backend)
-    t.eq(backend.calls[1], { "next", "Blocked", "needs:lead" })
+    commands.run("next", { "--column", support.COLUMN.BLOCKED }, backend)
+    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
     backend = fake(sample())
     commands.run("next", {}, backend)
-    t.eq(backend.calls[1], { "next", "Ready", nil })
-    t.eq(commands.run("next", { "--column", "done" }, fake(sample())).code, 2)
+    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.READY, nil })
+    t.eq(commands.run("next", { "--column", support.COLUMN.DONE }, fake(sample())).code, 2)
 end)
 
 t.test("next --column blocked skips a needs:human card and a claimed one", function()
     local lead = { "needs:lead" }
-    local cards = aged(
-        { "Blocked", "Blocked", "Blocked", "Ready", "Blocked" },
-        { 0, 0, 0, 0, 0 },
-        { { "needs:lead", "needs:human" }, lead, lead, lead, lead }
-    )
+    local cards = aged({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.BLOCKED,
+    }, { 0, 0, 0, 0, 0 }, { { "needs:lead", "needs:human" }, lead, lead, lead, lead })
     cards[2].claimant = "someone"
-    local result = commands.run("next", { "--column", "blocked" }, fake(cards))
+    local result = commands.run("next", { "--column", support.COLUMN.BLOCKED }, fake(cards))
     t.ok(result.output:find("00000003", 1, true), result.output)
     cards[3].claimant = "someone"
     cards[5].labels = {}
-    t.eq(commands.run("next", { "--column", "blocked" }, fake(cards)).output, "no cards in Blocked")
+    t.eq(
+        commands.run("next", { "--column", support.COLUMN.BLOCKED }, fake(cards)).output,
+        "no cards in Blocked"
+    )
 end)
 
 t.test("stale lists a Blocked needs:planner card apart from the lead ones", function()
     local planner = { "needs:planner" }
-    local cards, times = aged(
-        { "Blocked", "Blocked", "Blocked", "Ready" },
-        { 0, 0, 0, 0 },
-        { planner, { "needs:lead" }, { "needs:planner", "needs:human" }, planner }
-    )
+    local cards, times = aged({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.READY,
+    }, { 0, 0, 0, 0 }, {
+        planner,
+        { "needs:lead" },
+        { "needs:planner", "needs:human" },
+        planner,
+    })
     for index, hours in ipairs({ 5, 3, 9, 9 }) do
         local at = NOW - hours * box.SECONDS_PER_HOUR
         times[cards[index].id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", at)
@@ -3419,13 +3565,16 @@ end)
 
 t.test("next --column blocked --for planner asks for a needs:planner card", function()
     local backend = fake(sample())
-    commands.run("next", { "--column", "blocked", "--for", "planner" }, backend)
-    t.eq(backend.calls[1], { "next", "Blocked", "needs:planner" })
+    commands.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "planner" }, backend)
+    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:planner" })
     backend = fake(sample())
-    commands.run("next", { "--column", "blocked", "--for", "lead" }, backend)
-    t.eq(backend.calls[1], { "next", "Blocked", "needs:lead" })
+    commands.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "lead" }, backend)
+    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
     t.eq(commands.run("next", { "--for", "planner" }, fake(sample())).code, 2)
-    t.eq(commands.run("next", { "--column", "blocked", "--for", "x" }, fake(sample())).code, 2)
+    t.eq(
+        commands.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "x" }, fake(sample())).code,
+        2
+    )
 end)
 
 t.test("escalate posts the tier and reason to the endpoint", function()
@@ -3485,11 +3634,14 @@ end)
 
 t.test("stale lists untouched Icebox cards", function()
     local human = { "needs:human" }
-    local cards, times = aged(
-        { "Icebox", "Icebox", "Icebox", "Icebox", "Icebox", "Ready" },
-        { 45, 31, 29, 90, 60, 1 },
-        { {}, {}, {}, {}, human, {} }
-    )
+    local cards, times = aged({
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.READY,
+    }, { 45, 31, 29, 90, 60, 1 }, { {}, {}, {}, {}, human, {} })
     local backend = fake(cards, times)
     function backend:comments(id)
         if id == cards[2].id then
@@ -3518,7 +3670,12 @@ t.test("stale lists untouched Icebox cards", function()
 end)
 
 t.test("stale keeps its output when an Icebox card cannot be dated or its comments read", function()
-    local cards, times = aged({ "Ready", "Icebox", "Icebox", "Icebox" }, { 9, 50, 50, 50 })
+    local cards, times = aged({
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.ICEBOX,
+    }, { 9, 50, 50, 50 })
     times[cards[2].id] = nil
     local backend = fake(cards, times)
     function backend:comments(id)
@@ -3540,7 +3697,10 @@ t.test("stale keeps its output when an Icebox card cannot be dated or its commen
 end)
 
 t.test("stale counts an Icebox card exactly at the limit as untouched", function()
-    local cards, times = aged({ "Icebox", "Icebox" }, { 30, 29 })
+    local cards, times = aged(
+        { support.COLUMN_NAME.ICEBOX, support.COLUMN_NAME.ICEBOX },
+        { 30, 29 }
+    )
     t.eq(
         commands.run("stale", {}, fake(cards, times), NOW).output,
         "no stale cards\n\nicebox, untouched for 30 days:\n00000001  Icebox  30d  unsized  Card 1"
@@ -3556,12 +3716,12 @@ end)
 
 t.test("stale says so when nothing is stale", function()
     t.eq(commands.run("stale", {}, fake({}), NOW).output, "no stale cards")
-    local cards, times = aged({ "Ready" }, { 1 })
+    local cards, times = aged({ support.COLUMN_NAME.READY }, { 1 })
     t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
 end)
 
 t.test("stale fails on a column time it cannot read", function()
-    local cards = aged({ "Ready" }, { 9 })
+    local cards = aged({ support.COLUMN_NAME.READY }, { 9 })
     local result = commands.run("stale", {}, fake(cards, { [cards[1].id] = "yesterday" }), NOW)
     t.eq(result.code, 1)
 end)
@@ -3876,7 +4036,7 @@ t.test("the token reaches curl on stdin and nowhere else", function()
     t.eq(out:find(TOKEN, 1, true), nil)
     t.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
     t.ok(read(root, "calls"):find("-K -", 1, true), read(root, "calls"))
-    out = dev(root, home, { "-v", "board", "move", "11111111-a", "done" })
+    out = dev(root, home, { "-v", "board", "move", "11111111-a", support.COLUMN.DONE })
     t.eq(out:find(TOKEN, 1, true), nil)
 end)
 
@@ -4682,7 +4842,7 @@ t.test(
     "move to Done on a Pomb board names the open outcomes, and discard still closes it",
     function()
         local root, home = sandbox({ export = SUBTASKS_EXPORT })
-        local out, code = dev(root, home, { "board", "move", "11111111", "done" })
+        local out, code = dev(root, home, { "board", "move", "11111111", support.COLUMN.DONE })
         t.eq(code, 1, out)
         t.ok(out:find("1 of 2 outcomes are unticked (1. A works)", 1, true), out)
         t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
@@ -4697,7 +4857,7 @@ t.test("move to Done on a Pomb board refuses subtasks dev cannot read", function
         .. ID_A
         .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why.","subtasks":"oops"}]}'
     local root, home = sandbox({ export = export })
-    local out, code = dev(root, home, { "board", "move", "11111111", "done" })
+    local out, code = dev(root, home, { "board", "move", "11111111", support.COLUMN.DONE })
     t.eq(code, 1, out)
     t.ok(out:find("cannot be read from Pomb", 1, true), out)
     t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
@@ -4736,12 +4896,12 @@ t.test("a renamed Pomb board is read through the column map and is_done", functi
     t.eq(code, 0, out)
     t.eq(out, "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
     t.ok(read(root, "calls"):find("ready=true&column_id=col-ready", 1, true), read(root, "calls"))
-    out, code = dev(root, home, { "board", "ls", "--column", "ready" })
+    out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
     t.eq(code, 0, out)
     t.ok(out:find("Next", 1, true), out)
     out, code = dev(root, home, { "board", "ls", "--column", "old" })
     t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "ls", "--column", "In Progress" })
+    out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN_NAME.PROGRESS })
     t.eq(code, 0, out)
 end)
 
@@ -4766,7 +4926,10 @@ local EPIC_TASK = '{"id":"'
 
 t.test("epic_next_skips_open_child", function()
     local root, home = sandbox({ task = EPIC_TASK:format(1) })
-    for _, args in ipairs({ { "board", "next" }, { "board", "next", "--column", "review" } }) do
+    for _, args in ipairs({
+        { "board", "next" },
+        { "board", "next", "--column", support.COLUMN.REVIEW },
+    }) do
         local out, code = dev(root, home, args)
         t.eq(code, 0, out)
         t.ok(out:find("^no ", 1), out)
@@ -4802,14 +4965,14 @@ t.test("epic_move_refused_by_settings", function()
         1
     )
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail })
-    for _, column in ipairs({ "backlog", "done" }) do
+    for _, column in ipairs({ support.COLUMN.BACKLOG, support.COLUMN.DONE }) do
         local out, code = dev(root, home, { "board", "move", "11111111-a", column })
         t.eq(code, 1, out)
         t.ok(out:find("is an epic and cannot enter", 1, true), out)
         t.ok(out:find("2 of 3 children are open", 1, true), out)
     end
     t.eq(read(root, "calls"):find("/move", 1, true), nil)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
     t.eq(code, 0, out)
     t.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
@@ -4829,7 +4992,7 @@ t.test("epic_move_pomb_refusal", function()
             .. text
             .. "\"}'; status=409 ;;\n*/claim/release) body= ;;"
     )
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
     t.eq(code, 1, out)
     t.ok(out:find(text, 1, true), out)
 end)
@@ -4842,7 +5005,7 @@ t.test("epic_reopen_out_of_done", function()
     )
     local task = EPIC_TASK:format(1):gsub("col%-ready", "col-done", 1)
     local root, home = sandbox({ export = export, task = task })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "backlog" })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BACKLOG })
     t.eq(code, 0, out)
     local calls = read(root, "calls")
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
@@ -4853,7 +5016,7 @@ t.test("next skips a card held by a blocker that is not in Done", function()
     local root, home = sandbox({
         links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]',
     })
-    local out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
     t.ok(code == 0, out)
     t.eq(out, "no cards in Backlog\n")
     out, code = dev(root, home, { "board", "next" })
@@ -4896,7 +5059,7 @@ t.test("next offers a Ready card whose blocker on another board is Done", functi
     t.ok(code == 0, out)
     t.ok(out:find("First", 1, true), out)
     t.ok(read(root, "calls"):find("&ready=true", 1, true), read(root, "calls"))
-    out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
     t.ok(code == 0, out)
     t.ok(out:find("First", 1, true), out)
 end)
@@ -4905,7 +5068,7 @@ t.test("next skips a backlog card whose blocker on another board cannot be read"
     local root, home = far_sandbox("far-done")
     assert(fs.write(root .. "/far.json", '{"message":"gone"}'))
     assert(fs.write(root .. "/far_gone", ""))
-    local out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
     t.ok(code == 0, out)
     t.eq(out, "no cards in Backlog\n")
 end)
@@ -4919,7 +5082,7 @@ end)
 
 t.test("next skips a backlog card whose blocker on another board is open", function()
     local root, home = far_sandbox("far-ready")
-    local out, code = dev(root, home, { "board", "next", "--column", "backlog" })
+    local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
     t.ok(code == 0, out)
     t.eq(out, "no cards in Backlog\n")
 end)
@@ -4931,7 +5094,7 @@ t.test("add posts the card to the named column", function()
         "add",
         "New card",
         "--column",
-        "ready",
+        support.COLUMN.READY,
         "--description",
         V1,
         "--size",
@@ -5017,7 +5180,7 @@ t.test("add to Ready with outcomes creates in Backlog and moves after the subtas
         "add",
         "New",
         "--column",
-        "ready",
+        support.COLUMN.READY,
         "--size",
         "1",
         "--description",
@@ -5065,7 +5228,7 @@ t.test("add --label needs:human reaches pomb after the card and its outcomes", f
         "--done-when",
         "A",
         "--column",
-        "blocked",
+        support.COLUMN.BLOCKED,
         "--label",
         "needs:human",
     })
@@ -5095,7 +5258,7 @@ t.test("a failed subtask on add --label needs:human still labels the card", func
         "--done-when",
         "A",
         "--column",
-        "blocked",
+        support.COLUMN.BLOCKED,
         "--label",
         "needs:human",
     })
@@ -5116,7 +5279,7 @@ local function add_locked(root, home)
         "--done-when",
         "A",
         "--column",
-        "blocked",
+        support.COLUMN.BLOCKED,
         "--label",
         "needs:human",
     })
@@ -5354,7 +5517,7 @@ t.test("note posts a comment of kind agent and move goes to the top of the colum
     calls = read(root, "calls")
     t.ok(calls:find('"kind":"decision"', 1, true), calls)
     t.ok(calls:find('"author":"reviewer"', 1, true), calls)
-    out = dev(root, home, { "board", "move", "11111111-a", "review" })
+    out = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
     t.eq(out, "moved 11111111 to Review\n")
     calls = read(root, "calls")
     t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
@@ -5907,7 +6070,7 @@ t.test("move out of progress stops the loop and sends the fence", function()
         return heartbeats(root) >= 2
     end))
     local pid = loop_pid(home)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "review" })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
     t.eq(code, 0)
     t.eq(out, "moved 11111111 to Review\n")
     local moved = read(root, "calls"):match("[^\n]*/move\n?")
@@ -5925,7 +6088,7 @@ end)
 t.test("move into progress does not release the claim", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    dev(root, home, { "board", "move", "11111111-a", "progress" })
+    dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
     t.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
@@ -5943,11 +6106,11 @@ end)
 
 t.test("a move into progress that takes the claim prints the card and its comments", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "progress" })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
     t.eq(code, 0, out)
     t.ok(out:find("^moved 11111111 to In Progress\n\n11111111  In Progress  "), out)
     t.ok(out:find("mine? no", 1, true), out)
-    out, code = dev(root, home, { "board", "move", "11111111-a", "progress" })
+    out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
     t.eq(code, 0, out)
     t.eq(out, "moved 11111111 to In Progress\n")
     dev(root, home, { "board", "release", "11111111-a" })
@@ -5958,7 +6121,7 @@ t.test("move into progress posts the claim then the move to In Progress", functi
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", "progress" },
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
     t.eq(code, 0, out)
@@ -6045,7 +6208,7 @@ t.test("DEV_AGENT shape refuses move into progress of an unclaimed card", functi
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", "progress" },
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "builder" }
     )
     t.eq(code, 2, out)
@@ -6055,11 +6218,11 @@ end)
 t.test("an old-shape claimant still moves and lands its claimed card", function()
     local old = "dotfiles/implementer/95f0e009/1"
     local card = colored("green")
-    card.column = "Ready"
+    card.column = support.COLUMN_NAME.READY
     card.claimant = old
     local backend = fake({ card })
     as_agent(old, function()
-        local result = commands.run("move", { "cccccccc", "backlog" }, backend)
+        local result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
         t.eq(result.code, nil, result.message)
         t.eq(result.output, "moved cccccccc to Backlog")
     end)
@@ -6070,7 +6233,7 @@ t.test("move into progress takes the claim of an unclaimed card under the agent 
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", "progress" },
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
     t.eq(code, 0, out)
@@ -6089,7 +6252,7 @@ t.test("epic_done_children_claim", function()
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", "progress" },
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
     t.eq(code, 0, out)
@@ -6112,7 +6275,7 @@ t.test("a move into progress that Pomb refuses releases the claim it just took",
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", "progress" },
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
     t.eq(code, 1)
@@ -6134,7 +6297,7 @@ t.test("a move into progress of a card claimed elsewhere takes no claim", functi
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", "progress" },
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
     t.eq(code, 1)
@@ -6152,7 +6315,7 @@ t.test("move to ready takes an epic like any card", function()
         export = export,
         task = EPIC_TASK:format(3),
     })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "ready" })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.READY })
     t.eq(code, 0, out)
     t.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
@@ -6179,7 +6342,7 @@ t.test("a release the server refuses after a move warns and the move succeeds", 
     local root, home = sandbox({ export = PLANNED_DONE_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/claim/release) body=; status=503 ;;")
-    local out, code = dev(root, home, { "board", "move", "11111111-a", "done" })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
     t.eq(code, 0)
     t.ok(out:find("moved 11111111 to Done", 1, true), out)
     t.ok(out:find("the claim was not released", 1, true), out)
@@ -6189,7 +6352,7 @@ end)
 t.test("move into progress keeps the loop and the state", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    dev(root, home, { "board", "move", "11111111-a", "progress" })
+    dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
     t.eq(fs.exists(state_file(home)), true)
     local seen = heartbeats(root)
     t.ok(wait_until(function()
@@ -6645,12 +6808,17 @@ t.test("wait returns the events oldest first with column names and the cursor", 
     t.eq(result.got, {
         cursor = "9",
         events = {
-            { kind = "task_added", task_id = "t1", column = "Ready", actor = "human" },
+            {
+                kind = "task_added",
+                task_id = "t1",
+                column = support.COLUMN_NAME.READY,
+                actor = "human",
+            },
             {
                 kind = "task_moved",
                 task_id = "t2",
-                column = "In Progress",
-                from_column = "Blocked",
+                column = support.COLUMN_NAME.PROGRESS,
+                from_column = support.COLUMN_NAME.BLOCKED,
                 at = assert(box.parse_time("2026-11-08T10:00:00Z")),
             },
         },
@@ -6770,12 +6938,20 @@ t.test(
     function()
         local result, seen, path = waited({
             got("1"),
-            got("2", { kind = "task_moved", task_id = ID_A, column = "In Progress" }),
+            got(
+                "2",
+                { kind = "task_moved", task_id = ID_A, column = support.COLUMN_NAME.PROGRESS }
+            ),
             got(
                 "3",
-                { kind = "task_updated", task_id = ID_A, column = "Ready" },
-                { kind = "task_added", task_id = ID_B, column = "Ready" },
-                { kind = "task_moved", task_id = ID_C, column = "Ready", from_column = "Backlog" }
+                { kind = "task_updated", task_id = ID_A, column = support.COLUMN_NAME.READY },
+                { kind = "task_added", task_id = ID_B, column = support.COLUMN_NAME.READY },
+                {
+                    kind = "task_moved",
+                    task_id = ID_C,
+                    column = support.COLUMN_NAME.READY,
+                    from_column = support.COLUMN_NAME.BACKLOG,
+                }
             ),
         }, { "--for", "ready" })
         t.eq(result.output, "added 11111111 to Ready\nmoved cccccccc to Ready")
@@ -6790,29 +6966,36 @@ t.test(
     function()
         local result, seen = waited({
             got("1"),
-            got("2", { kind = "comment_added", task_id = ID_A, column = "Blocked" }, {
-                kind = "task_moved",
-                task_id = ID_B,
-                column = "In Progress",
-                from_column = "Ready",
-            }, {
-                kind = "task_moved",
-                task_id = ID_D,
-                column = "Ready",
-                from_column = "Blocked",
-                actor = "agent",
-            }),
+            got(
+                "2",
+                { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED },
+                {
+                    kind = "task_moved",
+                    task_id = ID_B,
+                    column = support.COLUMN_NAME.PROGRESS,
+                    from_column = support.COLUMN_NAME.READY,
+                },
+                {
+                    kind = "task_moved",
+                    task_id = ID_D,
+                    column = support.COLUMN_NAME.READY,
+                    from_column = support.COLUMN_NAME.BLOCKED,
+                    actor = "agent",
+                }
+            ),
             got("3", {
                 kind = "task_moved",
                 task_id = ID_C,
-                column = "Ready",
-                from_column = "Blocked",
+                column = support.COLUMN_NAME.READY,
+                from_column = support.COLUMN_NAME.BLOCKED,
                 actor = "human",
                 at = 100,
             }),
             got("4"),
         }, { "--for", "human" }, {
-            cards = { { id = ID_A, column = "Blocked", labels = {}, done = false } },
+            cards = {
+                { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = {}, done = false },
+            },
             comments = {
                 [ID_A] = { { actor = "agent", at = "2026-11-02T10:00:00Z", body = "wait" } },
             },
@@ -6825,10 +7008,10 @@ t.test(
 t.test("wait --for human wakes on the owner's comment newer than its start", function()
     local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
     local cards = {
-        { id = ID_A, column = "Ready", labels = {}, done = false },
-        { id = ID_B, column = "Ready", labels = {}, done = false },
-        { id = ID_C, column = "Review", labels = {}, done = false },
-        { id = ID_D, column = "Done", labels = {}, done = true },
+        { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false },
+        { id = ID_B, column = support.COLUMN_NAME.READY, labels = {}, done = false },
+        { id = ID_C, column = support.COLUMN_NAME.REVIEW, labels = {}, done = false },
+        { id = ID_D, column = support.COLUMN_NAME.DONE, labels = {}, done = true },
     }
     local replies = {
         [ID_A] = { { actor = "human", at = "2026-11-02T08:00:00Z", body = "old" } },
@@ -6843,11 +7026,11 @@ t.test("wait --for human wakes on the owner's comment newer than its start", fun
         got("1"),
         got(
             "2",
-            { kind = "comment_added", task_id = ID_A, column = "Ready" },
-            { kind = "comment_added", task_id = ID_C, column = "Review" },
-            { kind = "comment_added", task_id = ID_D, column = "Done" }
+            { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY },
+            { kind = "comment_added", task_id = ID_C, column = support.COLUMN_NAME.REVIEW },
+            { kind = "comment_added", task_id = ID_D, column = support.COLUMN_NAME.DONE }
         ),
-        got("3", { kind = "comment_added", task_id = ID_B, column = "Ready" }),
+        got("3", { kind = "comment_added", task_id = ID_B, column = support.COLUMN_NAME.READY }),
         got("4"),
     }, { "--for", "human" }, {
         cards = cards,
@@ -6863,9 +7046,9 @@ t.test("wait --for human settles for 60 seconds and prints one line per card", f
     local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
     local at = "2026-11-02T10:00:00Z"
     local cards = {
-        { id = ID_A, column = "Ready", labels = {}, done = false },
-        { id = ID_B, column = "Blocked", labels = {}, done = false },
-        { id = ID_C, column = "Blocked", labels = {}, done = false },
+        { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false },
+        { id = ID_B, column = support.COLUMN_NAME.BLOCKED, labels = {}, done = false },
+        { id = ID_C, column = support.COLUMN_NAME.BLOCKED, labels = {}, done = false },
     }
     local replies = {
         [ID_A] = { { actor = "human", at = at, body = "1" } },
@@ -6873,15 +7056,15 @@ t.test("wait --for human settles for 60 seconds and prints one line per card", f
     }
     local result, seen = waited({
         got("1"),
-        got("2", { kind = "comment_added", task_id = ID_A, column = "Ready" }),
-        got("3", { kind = "comment_added", task_id = ID_A, column = "Ready" }, {
+        got("2", { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
+        got("3", { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY }, {
             kind = "task_moved",
             task_id = ID_B,
-            column = "Ready",
-            from_column = "Blocked",
+            column = support.COLUMN_NAME.READY,
+            from_column = support.COLUMN_NAME.BLOCKED,
             actor = "human",
             at = started + 7200,
-        }, { kind = "comment_added", task_id = ID_C, column = "Blocked" }),
+        }, { kind = "comment_added", task_id = ID_C, column = support.COLUMN_NAME.BLOCKED }),
         got("4"),
     }, { "--for", "human" }, { cards = cards, comments = replies, now = started })
     t.eq(result.output, "the owner commented on 11111111\nmoved 11111111 out of Blocked")
@@ -6890,14 +7073,14 @@ t.test("wait --for human settles for 60 seconds and prints one line per card", f
 end)
 
 t.test("wait --for human prints the lines it holds when the cursor is trimmed", function()
-    local cards = { { id = ID_A, column = "Blocked", labels = {}, done = false } }
+    local cards = { { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = {}, done = false } }
     local result = waited({
         got("1"),
         got("2", {
             kind = "task_moved",
             task_id = ID_A,
-            column = "Ready",
-            from_column = "Blocked",
+            column = support.COLUMN_NAME.READY,
+            from_column = support.COLUMN_NAME.BLOCKED,
             actor = "human",
             at = 100,
         }),
@@ -6982,23 +7165,32 @@ end)
 
 t.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
     local cards = {
-        { id = ID_A, column = "Blocked", labels = { "needs:lead" } },
-        { id = ID_B, column = "Blocked", labels = { "needs:lead", "needs:human" } },
-        { id = ID_C, column = "Ready", labels = { "needs:lead" } },
-        { id = ID_D, column = "Blocked", labels = { "needs:lead" }, claimant = "x" },
+        { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:lead" } },
+        {
+            id = ID_B,
+            column = support.COLUMN_NAME.BLOCKED,
+            labels = { "needs:lead", "needs:human" },
+        },
+        { id = ID_C, column = support.COLUMN_NAME.READY, labels = { "needs:lead" } },
+        {
+            id = ID_D,
+            column = support.COLUMN_NAME.BLOCKED,
+            labels = { "needs:lead" },
+            claimant = "x",
+        },
     }
     local result, seen, path = waited({
         got("1"),
         got(
             "2",
-            { kind = "task_moved", task_id = ID_C, column = "Ready" },
-            { kind = "task_added", task_id = ID_B, column = "Blocked" },
-            { kind = "task_updated", task_id = ID_D, column = "Blocked" }
+            { kind = "task_moved", task_id = ID_C, column = support.COLUMN_NAME.READY },
+            { kind = "task_added", task_id = ID_B, column = support.COLUMN_NAME.BLOCKED },
+            { kind = "task_updated", task_id = ID_D, column = support.COLUMN_NAME.BLOCKED }
         ),
         got(
             "3",
-            { kind = "task_updated", task_id = ID_A, column = "Blocked" },
-            { kind = "task_added", task_id = ID_A, column = "Blocked" }
+            { kind = "task_updated", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED },
+            { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }
         ),
     }, { "--for", "lead" }, { cards = cards })
     t.eq(result.output, "11111111 is labelled needs:lead in Blocked")
@@ -7008,39 +7200,47 @@ end)
 
 t.test("wait --for planner wakes once on a needs:planner card in Blocked", function()
     local cards = {
-        { id = ID_A, column = "Blocked", labels = { "needs:planner" } },
-        { id = ID_B, column = "Blocked", labels = { "needs:lead" } },
-        { id = ID_C, column = "Blocked", labels = { "needs:planner", "needs:human" } },
+        { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:planner" } },
+        { id = ID_B, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:lead" } },
+        {
+            id = ID_C,
+            column = support.COLUMN_NAME.BLOCKED,
+            labels = { "needs:planner", "needs:human" },
+        },
     }
     local result, seen, path = waited({
         got("1"),
         got(
             "2",
-            { kind = "task_added", task_id = ID_B, column = "Blocked" },
-            { kind = "task_updated", task_id = ID_C, column = "Blocked" }
+            { kind = "task_added", task_id = ID_B, column = support.COLUMN_NAME.BLOCKED },
+            { kind = "task_updated", task_id = ID_C, column = support.COLUMN_NAME.BLOCKED }
         ),
-        got("3", { kind = "task_updated", task_id = ID_A, column = "Blocked" }),
+        got("3", { kind = "task_updated", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "planner" }, { cards = cards })
     t.eq(result.output, "11111111 is labelled needs:planner in Blocked")
     t.eq(seen.kinds[1], "task_added,task_moved,task_updated")
     t.eq(fs.read(path .. ".planner.cursor"), "3\n")
 end)
 
-for _, stage in ipairs({ "Review", "Verify", "Release" }) do
+for _, stage in ipairs({
+    support.COLUMN_NAME.REVIEW,
+    support.COLUMN_NAME.VERIFY,
+    support.COLUMN_NAME.RELEASE,
+}) do
     t.test(
         "wait --for " .. stage:lower() .. " prints the unclaimed card that reached " .. stage,
         function()
             local cards = {
                 { id = ID_A, column = stage },
                 { id = ID_B, column = stage, claimant = "x" },
-                { id = ID_C, column = "Ready" },
+                { id = ID_C, column = support.COLUMN_NAME.READY },
             }
             local result, seen, path = waited({
                 got("1"),
                 got(
                     "2",
                     { kind = "task_moved", task_id = ID_B, column = stage },
-                    { kind = "task_moved", task_id = ID_C, column = "Ready" }
+                    { kind = "task_moved", task_id = ID_C, column = support.COLUMN_NAME.READY }
                 ),
                 got("3", { kind = "task_moved", task_id = ID_A, column = stage }),
             }, { "--for", stage:lower() }, { cards = cards })
@@ -7059,7 +7259,7 @@ end)
 t.test("wait --for lead leaves the cursor alone when the board cannot be read", function()
     local result, _, path = waited({
         got("1"),
-        got("2", { kind = "task_added", task_id = ID_A, column = "Blocked" }),
+        got("2", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "lead" }, { cards_error = "pomb is down" })
     t.eq(result.code, 1)
     t.eq(fs.read(path .. ".lead.cursor"), "1\n")
@@ -7067,7 +7267,7 @@ end)
 
 t.test("wait without --for matches every kind", function()
     local result, seen = waited({
-        got("1", { kind = "comment_added", task_id = ID_A, column = "Ready" }),
+        got("1", { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, {})
     t.eq(result.output, "commented on 11111111")
     t.eq(seen.kinds[1], "task_added,task_moved,task_updated,comment_added")
@@ -7077,7 +7277,7 @@ t.test("wait resumes from the stored cursor", function()
     local path = support.tempdir() .. "/wait"
     assert(fs.write(path .. ".ready.cursor", "41\n"))
     local result, seen = waited({
-        got("42", { kind = "task_added", task_id = ID_A, column = "Ready" }),
+        got("42", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { path = path })
     t.eq(result.output, "added 11111111 to Ready")
     t.eq(seen.afters, { "41" })
@@ -7087,8 +7287,8 @@ t.test("wait resumes from the stored cursor", function()
         got("10", {
             kind = "task_moved",
             task_id = ID_A,
-            column = "Ready",
-            from_column = "Blocked",
+            column = support.COLUMN_NAME.READY,
+            from_column = support.COLUMN_NAME.BLOCKED,
             actor = "human",
             at = 100,
         }),
@@ -7109,7 +7309,7 @@ end)
 t.test("wait retries Pomb being unreachable, then gives up after ten in a row", function()
     local result, seen = waited({
         { message = "board unavailable: cannot reach https://p (curl exit 7)" },
-        got("5", { kind = "task_added", task_id = ID_A, column = "Ready" }),
+        got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" })
     t.eq(result.output, "added 11111111 to Ready")
     t.eq(seen.naps, { 30 })
@@ -7133,7 +7333,8 @@ t.test(
         for i = 1, 14 do
             replies[i] = limited()
         end
-        replies[15] = got("5", { kind = "task_added", task_id = ID_A, column = "Ready" })
+        replies[15] =
+            got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY })
         local result, seen = waited(replies, { "--for", "ready" })
         t.eq(result.output, "added 11111111 to Ready")
         t.eq(seen.naps, { 30, 60, 120, 240, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 })
@@ -7397,7 +7598,7 @@ end)
 t.test("move to review on a board with In Review and no Review names dev board init", function()
     local backend = fake({ planned() })
     backend.limited = { "In Review" }
-    local result = commands.run("move", { "cccccccc", "review" }, backend)
+    local result = commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
     t.eq(result.code, 1)
     t.ok(
         result.message:find("run dev board init to move the board to the stage columns", 1, true),
@@ -7418,7 +7619,10 @@ end)
 
 t.test("wait on a board with In Review and no Review names dev board init", function()
     local backend = waiter({})
-    backend.rows = { { name = "In Review", is_done = false }, { name = "Done", is_done = true } }
+    backend.rows = {
+        { name = "In Review", is_done = false },
+        { name = support.COLUMN_NAME.DONE, is_done = true },
+    }
     local result = commands.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
     t.eq(result.code, 1)
     t.ok(
