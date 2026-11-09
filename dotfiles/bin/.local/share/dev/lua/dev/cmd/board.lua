@@ -2679,12 +2679,16 @@ function commands.checks(backend, args)
 end
 
 local function check_options(args)
-    local opts = { expect_fail = false, seconds = check.DEFAULT_SECONDS, words = {} }
+    local opts =
+        { expect_fail = false, end_hold = false, seconds = check.DEFAULT_SECONDS, words = {} }
+    local timed = false
     local i = 1
     while i <= #args do
         local arg = args[i]
         if arg == EXPECT_FAIL_FLAG then
             opts.expect_fail = true
+        elseif arg == "--end-hold" then
+            opts.end_hold = true
         elseif arg == TIMEOUT_FLAG then
             i = i + 1
             local value = args[i] and args[i]:match("^%d+$")
@@ -2698,6 +2702,7 @@ local function check_options(args)
                     )
             end
             opts.seconds = seconds
+            timed = true
         elseif #arg > 1 and arg:sub(1, 1) == "-" then
             return nil, usage("unknown flag " .. arg)
         else
@@ -2707,6 +2712,9 @@ local function check_options(args)
     end
     if #opts.words ~= 1 then
         return nil, usage("needs a card")
+    end
+    if opts.end_hold and (opts.expect_fail or timed) then
+        return nil, usage("The --end-hold flag takes the card and no other flag.")
     end
     return opts
 end
@@ -2829,6 +2837,57 @@ local function check_rows(opts)
     return { output = table.concat(lines, "\n") }
 end
 
+---End the check hold that the caller's name holds on the card, at the commit it recorded.
+---@param backend dev.board.Backend the board backend
+---@param short string the short id of the card
+---@return dev.cmd.board.Result result the outcome
+local function end_own_hold(backend, short)
+    local name, refused = agent_name()
+    if not name then
+        return refused or usage("The --end-hold flag needs DEV_AGENT set to the hold's name.")
+    end
+    local holds, why = turn.checking(backend)
+    if not holds then
+        return failure(
+            "The checks held on the landing turn card cannot be read, because " .. why .. "."
+        )
+    end
+    local mine, theirs = {}, nil
+    for _, hold in ipairs(holds) do
+        if hold.card == short then
+            if hold.name == name then
+                mine[#mine + 1] = hold
+            else
+                theirs = theirs or hold
+            end
+        end
+    end
+    if #mine == 0 and theirs then
+        return usage(
+            "The check hold on "
+                .. short
+                .. " is held by "
+                .. theirs.name
+                .. ", so "
+                .. name
+                .. " cannot end it."
+        )
+    end
+    if #mine == 0 then
+        return failure("There is no live check hold of " .. name .. " on " .. short .. ".")
+    end
+    for _, hold in ipairs(mine) do
+        local ended
+        ended, why = turn.end_check(backend, { name = name, card = short, commit = hold.commit })
+        if not ended then
+            return failure(
+                "The check hold on " .. short .. " was not ended, because " .. why .. "."
+            )
+        end
+    end
+    return { output = "ended the check hold on " .. short .. " held by " .. name }
+end
+
 function commands.check(backend, args)
     local opts, err = check_options(args)
     if not opts then
@@ -2843,6 +2902,9 @@ function commands.check(backend, args)
     local elsewhere = M.__workspace_refusal(backend, short)
     if elsewhere then
         return elsewhere
+    end
+    if opts.end_hold then
+        return end_own_hold(backend, short)
     end
     if #card.checks == 0 then
         return failure(short .. " has no checks rows; set them with dev board checks")

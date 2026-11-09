@@ -1556,6 +1556,16 @@ never handles the API.
   holds (see `land`). A project with no usable list writes none, and a hold
   that cannot be written or ended is reported on standard error and does not
   stop the check.
+
+  `check CARD --end-hold` ends the hold that the caller's own name holds on the
+  card, for a check whose shell was killed before it could end its hold. It runs
+  no rows and takes no other flag (exit 2). The name is `DEV_AGENT`, and without
+  it the command is a usage error (exit 2), as `land` is. The hold ends with the `dev-turn: checked`
+  note a check writes, at the commit the hold recorded, so `land` stops seeing
+  it. It ends each live hold of that name on the card. When the live hold on the
+  card belongs to another name it refuses (exit 2), since only that holder ends
+  it, and when the caller holds no live hold on the card it exits 1. The
+  workspace rule of `check` applies.
 - `review CARD --kind code|style|recheck --by NAME --rev REV --verdict clean|minor|needs-work`:
   Records that NAME reviewed the commit REV with that verdict, as one `status`
   comment on the card that begins with a reserved first line and has no other:
