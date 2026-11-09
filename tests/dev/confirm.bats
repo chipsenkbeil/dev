@@ -23,7 +23,7 @@ in_pty() {
         printf '\n'
         printf 'echo $? >"%s"\n' "$OUT.status"
     } >"$inner"
-    pty_run "$keys" "$delay" 2 "$inner" "${READY:-}" "$OUT.status" >"$OUT.pty"
+    pty_run "$keys" "$delay" "${PTY_AFTER:-2}" "$inner" "${READY:-}" "$OUT.status" "$OUT.pty" "${READY:+Working}" >"$OUT.pty"
 }
 
 status_is_130() {
@@ -197,6 +197,37 @@ with_dash_as_sh() {
     in_pty '\003' 0 "$SPIN" sh -c 'touch "$1"; sleep 7.654; echo done' sh "$READY"
     status_is_130
     process_gone 'sleep 7.654'
+}
+
+@test "ctrl-c under dash exits 130 and leaves no sleep on every one of twenty runs" {
+    with_dash_as_sh
+    local run
+    for run in $(seq 20); do
+        rm -f "$OUT.status"
+        READY="$BATS_TEST_TMPDIR/ready$run"
+        PTY_AFTER=0 in_pty '\003' 0 "$SPIN" sh -c 'touch "$1"; sleep 7.654; echo done' sh "$READY"
+        status_is_130
+        process_gone 'sleep 7.654'
+    done
+}
+
+dash_job_control_run() {
+    local mode=$1 inner="$BATS_TEST_TMPDIR/inner-dash.sh"
+    {
+        printf 'trap %q INT\n' "touch \"$OUT.hit\""
+        printf 'dash -c %q dash %q\n' "trap \"\" INT; $mode touch \"\$1\"; sleep 1" "$OUT.ready"
+        printf 'echo $? >"%s"\n' "$OUT.status"
+    } >"$inner"
+    pty_run '\003' 0 0 "$inner" "$OUT.ready" "$OUT.status" >"$OUT.pty"
+}
+
+@test "dash with job control hands the terminal away so a ctrl-c typed while it lives misses its parent" {
+    command -v dash >/dev/null 2>&1 || skip "dash not installed"
+    dash_job_control_run ''
+    [ -e "$OUT.hit" ]
+    rm -f "$OUT.hit" "$OUT.status" "$OUT.ready"
+    dash_job_control_run 'set -m;'
+    [ ! -e "$OUT.hit" ]
 }
 
 confirm_lines() {

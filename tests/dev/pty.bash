@@ -18,12 +18,26 @@ pty_wait_for() {
     done
 }
 
+pty_wait_for_text() {
+    local file=$1 text=$2 tries=0
+    [ -n "$text" ] || return 0
+    until grep -qF -- "$text" "$file" 2>/dev/null; do
+        tries=$((tries + 1))
+        if [ "$tries" -gt 200 ]; then
+            echo "Timed out waiting for $text in $file." >&2
+            exit 1
+        fi
+        sleep 0.05
+    done
+}
+
 pty_run() {
-    local keys=$1 before=$2 after=$3 inner=$4 ready=${5:-} finished=${6:-}
+    local keys=$1 before=$2 after=$3 inner=$4 ready=${5:-} finished=${6:-} shown=${7:-} text=${8:-}
     if script --version >/dev/null 2>&1; then
         {
             sleep "$before"
             pty_wait_for "$ready"
+            pty_wait_for_text "$shown" "$text"
             printf '%b' "$keys"
             sleep "$after"
             pty_wait_for "$finished"
@@ -32,6 +46,7 @@ pty_run() {
         {
             sleep "$before"
             pty_wait_for "$ready"
+            pty_wait_for_text "$shown" "$text"
             printf '%b' "$keys"
             sleep "$after"
             pty_wait_for "$finished"
