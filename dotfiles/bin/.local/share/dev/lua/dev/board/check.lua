@@ -161,7 +161,8 @@ local function jj_state(root)
         return nil, "jj could not name the working-copy commit of " .. root
     end
     if conflict == "conflict" then
-        return nil, "the working-copy commit has conflicts, so its checks mean nothing"
+        return nil,
+            "the working-copy commit has conflicts, so its checks mean nothing; resolve them, then run dev board check again"
     end
     return { commit = commit, change = change }
 end

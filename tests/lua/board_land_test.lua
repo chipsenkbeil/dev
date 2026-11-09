@@ -48,18 +48,6 @@ for word in "$@"; do
             exit 1
         fi
         ;;
-    file)
-        if [ -n "$FILE_LIST_FAIL_AT" ]; then
-            case "$*" in
-            *"$FILE_LIST_FAIL_AT"*) exit 1 ;;
-            esac
-        fi
-        ;;
-    *files\(\)*)
-        if [ -n "$FILES_FAIL" ]; then
-            exit 1
-        fi
-        ;;
     fetch)
         if [ -n "$FETCH_LOG" ]; then
             echo fetch >>"$FETCH_LOG"
@@ -1315,12 +1303,32 @@ if has_jj then
         refused(root, home, log, id, { "could not be read", "run dev board check again" })
     end)
 
-    testing.test("land refuses a rebase past a commit that touches the change's file", function()
+    testing.test("clean rebase carries the check", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)
+        local before = head(root)
         trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
         rebase_onto_trunk(root)
-        refused(root, home, log, id, { "touch files this change changes: shared.txt" })
+        testing.ok(head(root) ~= before, "the rebase must rewrite the commit")
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        testing.eq(code, 0, out)
+        local list = comments(home)
+        testing.ok(
+            list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
+            list[#list].body
+        )
+        testing.eq(column_of(home), "Done")
+    end)
+
+    testing.test("a rebase that leaves a conflict does not carry the check", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["shared.txt"] = "a\nb\nc\nd\ne\nf\nX\n" })
+        rebase_onto_trunk(root)
+        refused(root, home, log, id, {
+            "the working-copy commit has conflicts",
+            "run dev board check again",
+        })
     end)
 
     testing.test(
@@ -1356,37 +1364,6 @@ if has_jj then
         end
     )
 
-    testing.test("land names the overlap beside an unticked outcome", function()
-        local root, home, log, bare = jj_project()
-        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
-        rebase_onto_trunk(root)
-        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, "verify" }))
-        for _, kind in ipairs({ "code", "style" }) do
-            must(dev(root, home, log, {
-                "board",
-                "review",
-                id,
-                "--kind",
-                kind,
-                "--by",
-                "rev",
-                "--rev",
-                "@",
-                "--verdict",
-                "clean",
-            }))
-        end
-        must(dev(root, home, log, { "board", "check", id }))
-        trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
-        rebase_onto_trunk(root)
-        refused(root, home, log, id, {
-            "1 of 1 outcomes are unticked",
-            "touch files this change changes: shared.txt",
-        })
-    end)
-
     testing.test("land names the column beside the carry after an accepted rebase", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)
@@ -1398,50 +1375,25 @@ if has_jj then
         testing.eq(out:find("no run of dev board check", 1, true), nil, out)
     end)
 
-    testing.test(
-        "land refuses a carry when trunk changed a shared path the change does not touch",
-        function()
-            local root, home, log, bare = jj_project()
-            local id = review_ready(root, home, log, bare)
-            trunk_moves(root, bare, { ["lib/core.txt"] = "core\n" })
-            rebase_onto_trunk(root)
-            refused(
-                root,
-                home,
-                log,
-                id,
-                { "the shared paths differ from the checked commit", "lib/core.txt" }
-            )
-        end
-    )
+    testing.test("land carries over a rebase past a changed former shared path", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["lib/core.txt"] = "core\n" })
+        rebase_onto_trunk(root)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(home), "Done")
+    end)
 
-    testing.test("land carries nothing in a project that lists no shared paths", function()
+    testing.test("land carries in a project that lists no shared paths", function()
         local root, home, log, bare = jj_project("")
         local id = review_ready(root, home, log, bare)
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(root)
-        refused(root, home, log, id, { "lists no shared paths under [board.land]" })
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(home), "Done")
     end)
-
-    local BAD_LISTS = {
-        { 'shared = ["a\\\\b"]', "not a plain path" },
-        { 'shared = ["a\\"b"]', "not a plain path" },
-        { 'shared = [""]', "not a plain path" },
-        { "shared = [3]", "not a plain path" },
-        { 'shared = "lib"', "must be a list of paths" },
-        { "shared = []", "lists no shared paths" },
-        { 'shared = ["lib", "libb"]', "libb matches no file" },
-    }
-
-    for _, bad in ipairs(BAD_LISTS) do
-        testing.test("land carries nothing for " .. bad[1], function()
-            local root, home, log, bare = jj_project("\n[board.land]\n" .. bad[1] .. "\n")
-            local id = review_ready(root, home, log, bare)
-            trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-            rebase_onto_trunk(root)
-            refused(root, home, log, id, { bad[2] })
-        end)
-    end
 
     testing.test("land refuses the carry when jj cannot compare the checked commit", function()
         local root, home, log, bare = jj_project()
@@ -1455,21 +1407,6 @@ if has_jj then
             id,
             { "jj could not compare the checked commit" },
             { INTERDIFF_FAIL = "1" }
-        )
-    end)
-
-    testing.test("land refuses the carry when jj cannot list the changed files", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        refused(
-            root,
-            home,
-            log,
-            id,
-            { "jj could not list the files changed since the checked commit" },
-            { FILES_FAIL = "1" }
         )
     end)
 
@@ -1642,11 +1579,6 @@ if has_jj then
             switch = "ANCESTOR_FAIL_AT",
             message = "jj could not read the ancestor of the checked commit ",
         },
-        {
-            name = "shared path",
-            switch = "FILE_LIST_FAIL_AT",
-            message = "jj could not list the shared path lib",
-        },
     }
     for _, case in ipairs(failed_reads) do
         testing.test("land refuses at once when jj cannot read the older " .. case.name, function()
@@ -1745,7 +1677,10 @@ if has_jj then
         jj(root, "new", "master", "-m", "feat: other")
         assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
         jj(root, "rebase", "-r", "@", "-d", first)
-        refused(root, home, log, id, { "the working-copy commit has conflicts" })
+        refused(root, home, log, id, {
+            "the working-copy commit has conflicts",
+            "run dev board check again",
+        })
     end)
 
     testing.test("land refuses a card labelled needs:human", function()
@@ -2385,15 +2320,6 @@ if has_jj then
         trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
         rebased_and_checked(root, home, log, id)
         refused(root, home, log, id, { "the code review by rev2", "says needs-work" })
-    end)
-
-    testing.test("kept reviews still need a check at the rebased commit", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
-        rebase_onto_trunk(root)
-        local out = refused(root, home, log, id, { "no run of dev board check is recorded" })
-        testing.eq(out:find("code review", 1, true), nil, out)
     end)
 
     local function central_project()

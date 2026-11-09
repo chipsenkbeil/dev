@@ -405,34 +405,18 @@ local function carry_problem(root, state, commit)
             true
     end
     if differs ~= "" then
-        return string.format("this commit differs from the checked commit %s", label)
-    end
-    local mine = jj_out(root, "log", "-r", "@", "--no-graph", "-T", FILES_TEMPLATE)
-    local trunk = jj_out(root, "log", "-r", commit .. "-..@-", "--no-graph", "-T", FILES_TEMPLATE)
-    if not mine or not trunk then
         return string.format(
-            "jj could not list the files changed since the checked commit %s",
+            "this commit differs from the checked commit %s; run dev board check again",
             label
-        ),
-            true
-    end
-    local own, landed, overlap = file_set(mine), file_set(trunk), {}
-    for path in pairs(own) do
-        if landed[path] then
-            overlap[#overlap + 1] = path
-        end
-    end
-    table.sort(overlap)
-    if #overlap > 0 then
-        return string.format(
-            "trunk commits since the checked commit %s touch files this change changes: %s",
-            label,
-            table.concat(overlap, ", ")
         )
     end
 end
 
-local function shared_paths(list)
+---Read the shared paths from the config value.
+---@param list any the raw `board.land.shared` value
+---@return string[]? paths the paths, nil when the list is absent or not usable
+---@return string? problem why the list is not usable
+function M.shared_list(list)
     if list == nil or (type(list) == "table" and #list == 0) then
         return nil,
             "the config lists no shared paths under [board.land], so a check "
@@ -449,14 +433,6 @@ local function shared_paths(list)
         end
     end
     return list
-end
-
----Read the shared paths from the config value.
----@param list any the raw `board.land.shared` value
----@return string[]? paths the paths, nil when the list is absent or not usable
----@return string? problem why the list is not usable
-function M.shared_list(list)
-    return shared_paths(list)
 end
 
 local function sorted_paths(root, rev, template)
@@ -518,56 +494,11 @@ function M.overlap(mine, held, shared)
     return overlap
 end
 
-local function fileset(path)
-    return 'root:"' .. path .. '"'
-end
-
-local function shared_problem(root, commit, paths)
-    local label = M.short(commit)
-    local filesets = {}
-    for i, path in ipairs(paths) do
-        filesets[i] = fileset(path)
-        local here = jj_out(root, "file", "list", "-r", "@", "--", filesets[i])
-        local there = jj_out(root, "file", "list", "-r", commit, "--", filesets[i])
-        if here == nil or there == nil then
-            return string.format("jj could not list the shared path %s", path), true
-        end
-        if here == "" and there == "" then
-            return string.format(
-                "the shared path %s matches no file at the checked or the landing commit",
-                path
-            )
-        end
-    end
-    local differ =
-        jj_out(root, "diff", "--from", commit, "--to", "@", "--name-only", "--", unpack(filesets))
-    if differ == nil then
-        return string.format(
-            "jj could not compare the shared paths with the checked commit %s",
-            label
-        ),
-            true
-    end
-    if differ ~= "" then
-        local names = {}
-        for path in differ:gmatch("[^\n]+") do
-            names[#names + 1] = path
-        end
-        table.sort(names)
-        return string.format(
-            "the shared paths differ from the checked commit %s: %s",
-            label,
-            table.concat(names, ", ")
-        )
-    end
-end
-
 ---@class dev.board.land.Opts
 ---@field root string the project root, a jj project
 ---@field comments {body: string}[] the card's comments, oldest first
 ---@field state dev.board.check.State the commit that would land
 ---@field rows string[] the card's checks rows
----@field shared any? the raw `board.land.shared` config value
 
 ---Find a checked commit whose check and reviews a rebased commit may keep.
 ---
@@ -576,9 +507,7 @@ end
 ---1. The change id is the same as the checked commit's.
 ---2. The checked commit sits on one ancestor of trunk, and the landing commit's parent is trunk.
 ---3. The interdiff against the checked commit is empty.
----4. The trunk commits since the checked commit touch none of the change's files.
----5. The shared paths from the config hold the same tree at the checked and landing commits. A
----   project that lists none carries nothing.
+---4. The rebase left no conflict, which `land.state` checks before this runs.
 ---
 ---The checked commits are those of the change with a passing run and their reviews. They are tried
 ---newest first, the first that passes every test carries, and a refusal names the newest one's
@@ -602,10 +531,6 @@ function M.carry(opts)
     if #candidates == 0 then
         return nil
     end
-    local paths, refusal = shared_paths(opts.shared)
-    if not paths then
-        return nil, refusal
-    end
     local moved = M.trunk_problem(root)
     if moved then
         return nil, moved
@@ -613,9 +538,6 @@ function M.carry(opts)
     local newest_problem
     for _, commit in ipairs(candidates) do
         local problem, failed_read = carry_problem(root, state, commit)
-        if not problem then
-            problem, failed_read = shared_problem(root, commit, paths)
-        end
         if not problem then
             return commit
         end

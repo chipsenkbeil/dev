@@ -3102,7 +3102,6 @@ local function land_problems(backend, card, who)
             comments = who.comments,
             state = state,
             rows = card.checks,
-            shared = config.get(backend.root, "board.land.shared"),
         })
         if carried then
             lacking, unproven = {}, nil
@@ -3298,7 +3297,7 @@ local function land_held(opts)
     end
     if carried then
         text = string.format(
-            "%s The check and reviews were carried over from commit %s: the change id is the same, the interdiff is empty, and the trunk commits since touch none of its files.",
+            "%s The check and reviews were carried over from commit %s: the change id is the same, the interdiff is empty, and the rebase left no conflict.",
             text,
             land.short(carried)
         )

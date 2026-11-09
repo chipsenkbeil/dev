@@ -1643,9 +1643,8 @@ never handles the API.
 
   A landing waits for a held check that it would invalidate. The hold waits
   only on the files the held commit changes (a rename counts both paths). The
-  `shared` list governs only the carry, so a landing under a shared path that
-  touches none of those files goes ahead, and the held card reruns its check
-  once the carry refuses it.
+  `shared` list never makes a landing wait, so a landing that touches none of
+  those files goes ahead, and the held card carries its check over the rebase.
 
   `land` lists its own change's files and, for each live hold of another card,
   refuses when one of them is a file of the held commit. It waits for such a
@@ -1660,7 +1659,7 @@ never handles the API.
 
   A hold whose commit jj cannot read blocks no landing. A landing that
   overlaps no hold goes ahead while the check runs, and the held card then
-  carries its check over the rebase when the shared paths still match. A
+  carries its check over the rebase when the rebase left no conflict. A
   check that starts after the landing's last look can still be overlapped,
   which costs it a new check.
 
@@ -1732,21 +1731,14 @@ never handles the API.
   - the commit's parent is the current trunk
   - the checked commit sat on one ancestor of that trunk
   - `jj interdiff` between the checked commit and the landing one is empty
-  - the trunk commits since the checked commit's parent touch none of the
-    change's files (renames count both paths)
-  - every path in `shared` under `[board.land]` in the config holds the same
-    tree at the checked commit and at the landing one
+  - the rebase left no conflict
 
-  A project with no list, an empty list, a `shared` that is not a list, an
-  entry that is not a plain path (empty, or holding a quote or a backslash) or
-  an entry that matches no file at either commit carries nothing, so every
-  rebase needs a new check. A listed path that differs refuses and names the
-  paths. A carried check says nothing about a dependency the list leaves out,
-  so list every path the checks read.
+  A trunk commit that touched the same files, or a path under `shared`, does
+  not stop the carry. The release run tests the whole batch and catches a
+  clash the rebase cannot see.
 
-  `shared` lists the repo-relative paths that can change what the check
-  proves, such as a crate the change depends on. It governs only the carry
-  and never makes a landing wait for a hold:
+  `shared` lists the repo-relative paths a project opts into holding checks
+  with, and the carry never reads it:
 
   ```toml
   [board.land]
@@ -1757,24 +1749,9 @@ never handles the API.
   stands (an unticked outcome, the wrong column), to list in the refusal only
   what still blocks the landing.
 
-  This repo lists `.ci`, `.dev`, `.editorconfig` (`shfmt` reads it),
-  `.gitignore`, `bootstrap.sh`, `dotfiles` (the `restow` and clean tests link
-  every default package, and the tests read skills, hooks, agents and the style
-  lint set), `docs/dev` (the topic check reads it against the real verbs),
-  `docs/love2d` (a test needs the directory), `docs/style` (`dev init` copies
-  the guides), `scripts` and `tests`. Only `README.md`, `AGENTS.md`,
-  `CLAUDE.md`, `docs/mail.md`, `docs/aide-agent.md` and the three
-  `docs/*-provenance.md` files stay off the list (no test, lint or `.ci` job
-  opens them). `bootstrap_test.sh` checks that `bootstrap.sh` prints the name
-  `docs/mail.md`, not the file.
-
   `deploys = true` under the same `[board.land]` table makes `land` move the
   card to Release, where it waits until it is live. Without it `land` moves the
   card to Done. This repo does not set it.
-
-  Two runners landing code or skill changes against the same trunk commit may
-  need a new check for the second. The carry rule still asks the second
-  landing for a fresh check when a listed path moved.
 
   The landing turn keeps landings made through `dev board land` to one at a
   time, and a raw `jj land` takes no turn (see the `land` entry above).
@@ -1785,12 +1762,12 @@ never handles the API.
   card. `jj land --undo` and `jj land --dry-run` pass the guard. Neither one
   lands a change, and neither needs a card.
 
-  An overlap refuses and names the files. A different change id, a non-empty
-  interdiff or a review never recorded at the checked commit keeps the plain
-  refusals, and any jj read that fails refuses too. The done note then adds
-  that the check and reviews were carried over from the checked commit. When
-  no commit carries, the refusal gives the reason for the newest one, unless a
-  jj read fails first, which refuses at once and names that read.
+  A different change id, a non-empty interdiff or a review never recorded at
+  the checked commit keeps the plain refusals, and any jj read that fails
+  refuses too. The done note then adds that the check and reviews were carried
+  over from the checked commit. When no commit carries, the refusal gives the
+  reason for the newest one, unless a jj read fails first, which refuses at
+  once and names that read.
 
   A failed `jj land` leaves the card where it is, exits 1 and prints jj's
   output. A landing whose done note or move then fails exits 1 and says what to
@@ -1837,9 +1814,7 @@ never handles the API.
   a line that says so, so the runner fixes the cause and lands again. When the
   hold ran out or another card took the turn, `land` writes nothing, lands
   nothing and refuses with `the landing turn held for <id prefix> ran out or
-  was taken by another`, and `turn CARD` takes it again. A project with no
-  `shared` list still carries nothing across a rebase, so the hold is what
-  keeps trunk still while the runner rebases and checks.
+  was taken by another`, and `turn CARD` takes it again.
 - `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
   array of the words, each `test-edits` or `ci-edits` with duplicates dropped,
   and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with
