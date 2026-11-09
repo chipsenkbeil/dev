@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local manifest = require("dev.pkg.manifest")
@@ -147,22 +147,25 @@ local function run(dir, args, extra)
     return devos.capture(argv, { stderr = "stdout", env = env })
 end
 
-t.test("every rust row has a route or a drop on Intel macOS", function()
-    t.eq(rust_cells(), ROUTES)
+testing.test("every rust row has a route or a drop on Intel macOS", function()
+    testing.eq(rust_cells(), ROUTES)
 end)
 
-t.test("every release route of the rust group has a pin", function()
+testing.test("every release route of the rust group has a pin", function()
     local pins = assert(release.read(PINS))
     for tool, cell in pairs(rust_cells()) do
         local name = cell:match("^release:(.+)$")
         if name then
-            t.ok(pins[name], tool .. " names the pin " .. name .. ", which .dev/releases.tsv lacks")
+            testing.ok(
+                pins[name],
+                tool .. " names the pin " .. name .. ", which .dev/releases.tsv lacks"
+            )
         end
     end
-    t.ok(pins["rustup-init"], "rustup-init has no pin")
+    testing.ok(pins["rustup-init"], "rustup-init has no pin")
 end)
 
-t.test("the Darwin x86_64 dry run prints the rust steps in manifest order", function()
+testing.test("the Darwin x86_64 dry run prints the rust steps in manifest order", function()
     local dir = assert(fs.realpath(support.tempdir()))
     assert(fs.mkdir(dir .. "/stubs"))
     assert(fs.mkdir(dir .. "/home"))
@@ -180,27 +183,27 @@ t.test("the Darwin x86_64 dry run prints the rust steps in manifest order", func
         stderr = "stdout",
         env = { PATH = dir .. "/stubs", HOME = dir .. "/home", DEV_TOOLS_BIN = dir .. "/bin" },
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local last = 0
     for _, tool in ipairs(ORDER) do
         local at = out:find(tool .. " (dry-run):", 1, true)
             or out:find(tool .. " installed outside", 1, true)
-        t.ok(at, tool .. " has no step in " .. out)
-        t.ok(at > last, tool .. " is out of manifest order in " .. out)
+        testing.ok(at, tool .. " has no step in " .. out)
+        testing.ok(at > last, tool .. " is out of manifest order in " .. out)
         last = at
     end
     for _, tool in ipairs({ "zig", "cargo-zigbuild", "rust-darwin-targets" }) do
-        t.eq(out:find("+ " .. tool .. " (dry-run):", 1, true), nil, out)
+        testing.eq(out:find("+ " .. tool .. " (dry-run):", 1, true), nil, out)
     end
-    t.ok(out:find("luajit scripts/install-rustup-darwin.lua", 1, true), out)
-    t.ok(out:find("cargo-deny-0.20.2-x86_64-apple-darwin.tar.gz", 1, true), out)
-    t.ok(out:find("cargo-nextest-0.9.150-universal-apple-darwin.tar.gz", 1, true), out)
-    t.ok(out:find("sccache-v0.19.0-x86_64-apple-darwin.tar.gz", 1, true), out)
-    t.ok(out:find("cargo-binstall-x86_64-apple-darwin.zip", 1, true), out)
+    testing.ok(out:find("luajit scripts/install-rustup-darwin.lua", 1, true), out)
+    testing.ok(out:find("cargo-deny-0.20.2-x86_64-apple-darwin.tar.gz", 1, true), out)
+    testing.ok(out:find("cargo-nextest-0.9.150-universal-apple-darwin.tar.gz", 1, true), out)
+    testing.ok(out:find("sccache-v0.19.0-x86_64-apple-darwin.tar.gz", 1, true), out)
+    testing.ok(out:find("cargo-binstall-x86_64-apple-darwin.zip", 1, true), out)
     fs.remove(dir, { recursive = true })
 end)
 
-t.test("cargo-binstall comes before every cargo cell in the manifest", function()
+testing.test("cargo-binstall comes before every cargo cell in the manifest", function()
     local rows = manifest.parse(assert(fs.read(REPO .. "/.dev/tools.tsv")))
     local column = assert(manifest.column(rows, COLUMN))
     local binstall, first_cargo
@@ -212,70 +215,76 @@ t.test("cargo-binstall comes before every cargo cell in the manifest", function(
             first_cargo = i
         end
     end
-    t.ok(binstall and first_cargo and binstall < first_cargo, "cargo-binstall must come first")
+    testing.ok(
+        binstall and first_cargo and binstall < first_cargo,
+        "cargo-binstall must come first"
+    )
 end)
 
-t.test("the rustup script installs the pinned toolchain from its pin and passes check", function()
-    local dir = sandbox()
-    local _, absent = run(dir, { "--check" })
-    t.eq(absent, 1)
-    local out, code = run(dir)
-    t.eq(code, 0, out)
-    local log = assert(fs.read(dir .. "/calls.log"))
-    t.ok(
-        log:find("https://example.test/rustup/9.9.9/x86_64-apple-darwin/rustup-init", 1, true),
-        log
-    )
-    t.ok(
-        log:find("rustup-init -y --no-modify-path --default-toolchain " .. TOOLCHAIN, 1, true),
-        log
-    )
-    t.ok(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), out)
-    local _, present = run(dir, { "--check" })
-    t.eq(present, 0)
-    fs.remove(dir, { recursive = true })
-end)
+testing.test(
+    "the rustup script installs the pinned toolchain from its pin and passes check",
+    function()
+        local dir = sandbox()
+        local _, absent = run(dir, { "--check" })
+        testing.eq(absent, 1)
+        local out, code = run(dir)
+        testing.eq(code, 0, out)
+        local log = assert(fs.read(dir .. "/calls.log"))
+        testing.ok(
+            log:find("https://example.test/rustup/9.9.9/x86_64-apple-darwin/rustup-init", 1, true),
+            log
+        )
+        testing.ok(
+            log:find("rustup-init -y --no-modify-path --default-toolchain " .. TOOLCHAIN, 1, true),
+            log
+        )
+        testing.ok(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), out)
+        local _, present = run(dir, { "--check" })
+        testing.eq(present, 0)
+        fs.remove(dir, { recursive = true })
+    end
+)
 
-t.test("the rustup script check accepts a rustup on PATH", function()
+testing.test("the rustup script check accepts a rustup on PATH", function()
     local dir = sandbox()
     write_executable(dir .. "/stubs/rustup", "#!/bin/sh\n")
     local _, code = run(dir, { "--check" })
-    t.eq(code, 0)
+    testing.eq(code, 0)
     fs.remove(dir, { recursive = true })
 end)
 
-t.test("the rustup script refuses a download that does not match its pin", function()
+testing.test("the rustup script refuses a download that does not match its pin", function()
     local dir = sandbox(string.rep("0", 64))
     local out, code = run(dir)
-    t.ok(code ~= 0, out)
-    t.ok(out:find("sha256 mismatch", 1, true), out)
-    t.eq(fs.read(dir .. "/calls.log"):find("rustup-init -y", 1, true), nil)
-    t.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
-    t.eq(fs.list(dir .. "/tmp"), {})
+    testing.ok(code ~= 0, out)
+    testing.ok(out:find("sha256 mismatch", 1, true), out)
+    testing.eq(fs.read(dir .. "/calls.log"):find("rustup-init -y", 1, true), nil)
+    testing.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
+    testing.eq(fs.list(dir .. "/tmp"), {})
     fs.remove(dir, { recursive = true })
 end)
 
-t.test("the rustup script dry run prints every step and changes nothing", function()
+testing.test("the rustup script dry run prints every step and changes nothing", function()
     local dir = sandbox()
     local out, code = run(dir, { "--dry-run" })
-    t.eq(code, 0, out)
-    t.ok(out:find("(expect " .. sha256(dir .. "/assets/rustup-init") .. ")", 1, true), out)
-    t.ok(out:find("'--default-toolchain' '" .. TOOLCHAIN .. "'", 1, true), out)
-    t.ok(out:find("'install' '-m' '755'", 1, true), out)
-    t.ok(out:find("'<tmp>/rustup-init' '-y'", 1, true), out)
-    t.eq(fs.read(dir .. "/calls.log"), nil)
-    t.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("(expect " .. sha256(dir .. "/assets/rustup-init") .. ")", 1, true), out)
+    testing.ok(out:find("'--default-toolchain' '" .. TOOLCHAIN .. "'", 1, true), out)
+    testing.ok(out:find("'install' '-m' '755'", 1, true), out)
+    testing.ok(out:find("'<tmp>/rustup-init' '-y'", 1, true), out)
+    testing.eq(fs.read(dir .. "/calls.log"), nil)
+    testing.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
     fs.remove(dir, { recursive = true })
 end)
 
-t.test("the rustup script skips the install when rustup is already there", function()
+testing.test("the rustup script skips the install when rustup is already there", function()
     local dir = sandbox()
     assert(fs.mkdir(dir .. "/home/.cargo/bin", { parents = true }))
     write_executable(dir .. "/home/.cargo/bin/rustup", "#!/bin/sh\n")
     local out, code = run(dir)
-    t.eq(code, 0, out)
-    t.ok(out:find("skipping", 1, true), out)
-    t.eq(fs.read(dir .. "/calls.log"), nil)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("skipping", 1, true), out)
+    testing.eq(fs.read(dir .. "/calls.log"), nil)
     fs.remove(dir, { recursive = true })
 end)
 
@@ -391,20 +400,20 @@ end
 
 local function check_rust_group(dir, cargo_bin, extra)
     local out, code = install_rust_group(dir, extra or {})
-    t.eq(code, 0, out)
-    t.eq(out:find("install failed", 1, true), nil, out)
-    t.ok(fs.is_exec(cargo_bin .. "/rustup"), out)
-    t.ok(fs.is_exec(cargo_bin .. "/cargo-sort"), out)
-    t.ok(fs.is_file(dir .. "/assets/nightly"), out)
+    testing.eq(code, 0, out)
+    testing.eq(out:find("install failed", 1, true), nil, out)
+    testing.ok(fs.is_exec(cargo_bin .. "/rustup"), out)
+    testing.ok(fs.is_exec(cargo_bin .. "/cargo-sort"), out)
+    testing.ok(fs.is_file(dir .. "/assets/nightly"), out)
     local log = assert(fs.read(dir .. "/calls.log"))
-    t.ok(log:find("rustup toolchain install nightly --profile minimal", 1, true), log)
-    t.ok(
+    testing.ok(log:find("rustup toolchain install nightly --profile minimal", 1, true), log)
+    testing.ok(
         log:find("cargo-binstall --no-confirm --disable-telemetry --locked cargo-sort", 1, true),
         log
     )
 end
 
-t.test(
+testing.test(
     "the rust group installs in one run on an Intel Mac with no cargo or user bin on PATH",
     function()
         if devos.getuid() == 0 then
@@ -412,13 +421,13 @@ t.test(
         end
         local dir = rust_group_sandbox()
         check_rust_group(dir, dir .. "/home/.cargo/bin")
-        t.ok(fs.is_exec(dir .. "/home/.local/bin/cargo-binstall"))
-        t.ok(fs.is_exec(dir .. "/home/.local/bin/sccache"))
+        testing.ok(fs.is_exec(dir .. "/home/.local/bin/cargo-binstall"))
+        testing.ok(fs.is_exec(dir .. "/home/.local/bin/sccache"))
         fs.remove(dir, { recursive = true })
     end
 )
 
-t.test("the rust group honours CARGO_HOME and DEV_TOOLS_BIN when they are set", function()
+testing.test("the rust group honours CARGO_HOME and DEV_TOOLS_BIN when they are set", function()
     if devos.getuid() == 0 then
         return
     end
@@ -427,7 +436,7 @@ t.test("the rust group honours CARGO_HOME and DEV_TOOLS_BIN when they are set", 
         CARGO_HOME = dir .. "/cargo",
         DEV_TOOLS_BIN = dir .. "/tools",
     })
-    t.ok(fs.is_exec(dir .. "/tools/cargo-binstall"))
-    t.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
+    testing.ok(fs.is_exec(dir .. "/tools/cargo-binstall"))
+    testing.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
     fs.remove(dir, { recursive = true })
 end)

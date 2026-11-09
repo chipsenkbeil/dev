@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local commands = require("dev.cmd.board")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -69,7 +69,7 @@ local function findings(output)
     return lines
 end
 
-t.test("lint reports one line per rule a card breaks and exits 1", function()
+testing.test("lint reports one line per rule a card breaks and exits 1", function()
     local words = string.rep(" word", 400)
     local cards = {
         card(1, "Backlog", { color = false }),
@@ -87,8 +87,8 @@ t.test("lint reports one line per rule a card breaks and exits 1", function()
     }
     cards[3].outcomes = {}
     local result = commands.run("lint", {}, backend(cards))
-    t.eq(result.code, 1)
-    t.eq(findings(result.output), {
+    testing.eq(result.code, 1)
+    testing.eq(findings(result.output), {
         "00000001 Backlog lacks a size",
         "00000002 Backlog lacks ## Change",
         "00000003 Backlog lacks Done when outcomes",
@@ -104,31 +104,34 @@ t.test("lint reports one line per rule a card breaks and exits 1", function()
     })
 end)
 
-t.test("lint flags an empty Change or Out of scope and a Change: line under Problem", function()
-    local empty_change = "## Problem\nwhy\n\n## Change\n\n## Out of scope\nnone"
-    local line_in_problem =
-        "## Problem\nwhy\nChange: rewrite it\n\n## Change\nx\n\n## Out of scope\nn"
-    local scope_in_problem =
-        "## Problem\nwhy\nOut of scope: docs\n\n## Change\nx\n\n## Out of scope\nn"
-    local cards = {
-        card(1, "Backlog", { description = empty_change, outcomes = outcomes(0) }),
-        card(2, "Ready", { description = line_in_problem, outcomes = outcomes(0) }),
-        card(3, "Icebox", { description = empty_change, outcomes = {} }),
-        card(4, "Backlog", { description = scope_in_problem, outcomes = outcomes(0) }),
-        card(5, "Done", { description = empty_change }),
-    }
-    local result = commands.run("lint", {}, backend(cards))
-    t.eq(result.code, 1)
-    t.eq(findings(result.output), {
-        "00000001 Backlog lacks text under ## Change",
-        "00000002 Ready lacks a Problem free of Change: and Out of scope: lines",
-        "00000004 Backlog lacks a Problem free of Change: and Out of scope: lines",
-    })
-    result = commands.run("lint", { "--strict" }, backend({ cards[5] }))
-    t.eq(findings(result.output), { "00000005 Done lacks text under ## Change" })
-end)
+testing.test(
+    "lint flags an empty Change or Out of scope and a Change: line under Problem",
+    function()
+        local empty_change = "## Problem\nwhy\n\n## Change\n\n## Out of scope\nnone"
+        local line_in_problem =
+            "## Problem\nwhy\nChange: rewrite it\n\n## Change\nx\n\n## Out of scope\nn"
+        local scope_in_problem =
+            "## Problem\nwhy\nOut of scope: docs\n\n## Change\nx\n\n## Out of scope\nn"
+        local cards = {
+            card(1, "Backlog", { description = empty_change, outcomes = outcomes(0) }),
+            card(2, "Ready", { description = line_in_problem, outcomes = outcomes(0) }),
+            card(3, "Icebox", { description = empty_change, outcomes = {} }),
+            card(4, "Backlog", { description = scope_in_problem, outcomes = outcomes(0) }),
+            card(5, "Done", { description = empty_change }),
+        }
+        local result = commands.run("lint", {}, backend(cards))
+        testing.eq(result.code, 1)
+        testing.eq(findings(result.output), {
+            "00000001 Backlog lacks text under ## Change",
+            "00000002 Ready lacks a Problem free of Change: and Out of scope: lines",
+            "00000004 Backlog lacks a Problem free of Change: and Out of scope: lines",
+        })
+        result = commands.run("lint", { "--strict" }, backend({ cards[5] }))
+        testing.eq(findings(result.output), { "00000005 Done lacks text under ## Change" })
+    end
+)
 
-t.test("lint holds an epic to 1 to 3 outcomes and to its children", function()
+testing.test("lint holds an epic to 1 to 3 outcomes and to its children", function()
     local cards = {
         card(1, "Backlog", { outcomes = {} }),
         card(2, "Done", { outcomes = {} }),
@@ -162,7 +165,7 @@ t.test("lint holds an epic to 1 to 3 outcomes and to its children", function()
         return { children = total and total > 0 and { done = total, total = total } or nil }
     end
     local result = commands.run("lint", {}, fake)
-    t.eq(findings(result.output), {
+    testing.eq(findings(result.output), {
         "00000001 Backlog lacks Done when outcomes",
         "00000002 Done lacks Done when outcomes",
         "00000002 Done 1 of 2 children open",
@@ -172,46 +175,52 @@ t.test("lint holds an epic to 1 to 3 outcomes and to its children", function()
     })
 end)
 
-t.test("lint gives an epic no claimant exemption", function()
+testing.test("lint gives an epic no claimant exemption", function()
     local cards = {
         card(1, "In Progress", { claimant = false, outcomes = outcomes(2) }),
         card(2, "In Progress", { claimant = false, outcomes = outcomes(3) }),
     }
     local fake = backend(cards, { children = { [cards[1].id] = 2 } })
-    t.eq(findings(commands.run("lint", {}, fake).output), {
+    testing.eq(findings(commands.run("lint", {}, fake).output), {
         "00000001 In Progress in progress with no claimant",
         "00000002 In Progress in progress with no claimant",
     })
 end)
 
-t.test("lint asks a card without children for a checks row and an epic for none", function()
+testing.test("lint asks a card without children for a checks row and an epic for none", function()
     local cards = {
         card(1, "In Progress", { outcomes = outcomes(2), checks = {} }),
         card(2, "In Progress", { outcomes = outcomes(3), checks = {} }),
     }
     local fake = backend(cards, { children = { [cards[1].id] = 2 } })
-    t.eq(findings(commands.run("lint", {}, fake).output), { "00000002 In Progress no checks row" })
+    testing.eq(
+        findings(commands.run("lint", {}, fake).output),
+        { "00000002 In Progress no checks row" }
+    )
 end)
 
-t.test("lint flags a Done card with outcomes and an open child", function()
+testing.test("lint flags a Done card with outcomes and an open child", function()
     local fake = backend({ card(1, "Done") })
     function fake:family()
         return { children = { done = 1, total = 2 } }
     end
-    t.eq(findings(commands.run("lint", {}, fake).output), { "00000001 Done 1 of 2 children open" })
+    testing.eq(
+        findings(commands.run("lint", {}, fake).output),
+        { "00000001 Done 1 of 2 children open" }
+    )
 end)
 
-t.test("lint fails when the children of a card cannot be read", function()
+testing.test("lint fails when the children of a card cannot be read", function()
     local fake = backend({ card(1, "Done") })
     function fake:family()
         return nil, "pomb is down"
     end
     local result = commands.run("lint", {}, fake)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("pomb is down", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("pomb is down", 1, true), result.message)
 end)
 
-t.test("lint passes a clean board with exit 0 and no code", function()
+testing.test("lint passes a clean board with exit 0 and no code", function()
     local cards = {
         card(1, "Icebox", { description = false, color = false, outcomes = {} }),
         card(2, "Done", { description = V1, outcomes = {} }),
@@ -229,12 +238,12 @@ t.test("lint passes a clean board with exit 0 and no code", function()
         children = { [cards[7].id] = 2 },
     }
     local result = commands.run("lint", {}, backend(cards, held))
-    t.eq(result.output, "no findings")
-    t.eq(result.code, nil)
-    t.eq(result.message, nil)
+    testing.eq(result.output, "no findings")
+    testing.eq(result.code, nil)
+    testing.eq(result.message, nil)
 end)
 
-t.test("lint reads comments only for a Blocked card and writes nothing", function()
+testing.test("lint reads comments only for a Blocked card and writes nothing", function()
     local cards = {
         card(1, "Ready"),
         card(2, "Blocked"),
@@ -243,21 +252,21 @@ t.test("lint reads comments only for a Blocked card and writes nothing", functio
     }
     local fake = backend(cards, { children = {} })
     commands.run("lint", {}, fake)
-    t.eq(fake.calls, { "family", "family", "comments", "links", "family", "family" })
+    testing.eq(fake.calls, { "family", "family", "comments", "links", "family", "family" })
 end)
 
-t.test("lint refuses an argument", function()
-    t.eq(commands.run("lint", { "extra" }, backend({})).code, 2)
+testing.test("lint refuses an argument", function()
+    testing.eq(commands.run("lint", { "extra" }, backend({})).code, 2)
 end)
 
-t.test("lint fails when a card's comments cannot be read", function()
+testing.test("lint fails when a card's comments cannot be read", function()
     local fake = backend({ card(1, "Blocked") })
     function fake:comments()
         return nil, "pomb is down"
     end
     local result = commands.run("lint", {}, fake)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("pomb is down", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("pomb is down", 1, true), result.message)
 end)
 
 local function local_board(config)
@@ -269,7 +278,7 @@ local function local_board(config)
         return support.dev(root, args, { env = env })
     end
     local out, code = dev({ "board", "init" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     return dev, home .. "/state/dev/boards/mine.json"
 end
 
@@ -287,20 +296,20 @@ local function bare_done_card(dev, path)
         "--done-when",
         "a",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local id = assert(out:match("added (%x+)"), out)
     out, code = dev({ "board", "discard", id })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local doc = assert(json.decode(assert(fs.read(path))))
     doc.cards[1].description = ""
     assert(fs.write(path, assert(json.encode(doc))))
 end
 
-t.test("dev board lint exits 1 on a bad local board and 0 on a clean one", function()
+testing.test("dev board lint exits 1 on a bad local board and 0 on a clean one", function()
     local dev = local_board(LOCAL)
     local out, code = dev({ "board", "lint" })
-    t.eq(code, 0, out)
-    t.eq(out, "no findings\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "no findings\n")
     out, code = dev({
         "board",
         "add",
@@ -314,54 +323,57 @@ t.test("dev board lint exits 1 on a bad local board and 0 on a clean one", funct
         "--done-when",
         "ok",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev({ "board", "lint" })
-    t.eq(code, 1, out)
-    t.ok(out:find("Backlog +over 400 words"), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Backlog +over 400 words"), out)
 end)
 
-t.test("strict holds a Done card to the v2 sections, by flag and by the config", function()
+testing.test("strict holds a Done card to the v2 sections, by flag and by the config", function()
     local dev, path = local_board(LOCAL)
     bare_done_card(dev, path)
     local out, code = dev({ "board", "lint" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev({ "board", "lint", "--strict" })
-    t.eq(code, 1, out)
-    t.ok(out:find("Done +lacks ## Problem"), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Done +lacks ## Problem"), out)
     dev, path = local_board(LOCAL .. "\n[board.lint]\nstrict = true\n")
     bare_done_card(dev, path)
     out, code = dev({ "board", "lint" })
-    t.eq(code, 1, out)
-    t.ok(out:find("Done +lacks ## Change"), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Done +lacks ## Change"), out)
 end)
 
-t.test("a strict setting that is not a boolean is refused", function()
+testing.test("a strict setting that is not a boolean is refused", function()
     local dev = local_board(LOCAL .. '\n[board.lint]\nstrict = "yes"\n')
     local out, code = dev({ "board", "lint" })
-    t.eq(code, 1, out)
-    t.ok(out:find("[board.lint] strict must be true or false", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("[board.lint] strict must be true or false", 1, true), out)
 end)
 
-t.test("strict adds the sections to a Done card and a discarded one, and nothing else", function()
-    local cards = {
-        card(1, "Done", { description = false }),
-        card(2, "Done", { description = false, labels = { "discarded" }, outcomes = {} }),
-        card(3, "Icebox", { description = false }),
-    }
-    t.eq(commands.run("lint", {}, backend(cards)).output, "no findings")
-    local result = commands.run("lint", { "--strict" }, backend(cards))
-    t.eq(result.code, 1)
-    t.eq(findings(result.output), {
-        "00000001 Done lacks ## Problem",
-        "00000001 Done lacks ## Change",
-        "00000001 Done lacks ## Out of scope",
-        "00000002 Done lacks ## Problem",
-        "00000002 Done lacks ## Change",
-        "00000002 Done lacks ## Out of scope",
-    })
-end)
+testing.test(
+    "strict adds the sections to a Done card and a discarded one, and nothing else",
+    function()
+        local cards = {
+            card(1, "Done", { description = false }),
+            card(2, "Done", { description = false, labels = { "discarded" }, outcomes = {} }),
+            card(3, "Icebox", { description = false }),
+        }
+        testing.eq(commands.run("lint", {}, backend(cards)).output, "no findings")
+        local result = commands.run("lint", { "--strict" }, backend(cards))
+        testing.eq(result.code, 1)
+        testing.eq(findings(result.output), {
+            "00000001 Done lacks ## Problem",
+            "00000001 Done lacks ## Change",
+            "00000001 Done lacks ## Out of scope",
+            "00000002 Done lacks ## Problem",
+            "00000002 Done lacks ## Change",
+            "00000002 Done lacks ## Out of scope",
+        })
+    end
+)
 
-t.test(
+testing.test(
     "lint marks a finding only the owner can fix and exits 0 when only those are left",
     function()
         local cards = {
@@ -371,37 +383,43 @@ t.test(
         }
         local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
         local result = commands.run("lint", {}, backend(cards, held))
-        t.eq(result.code, nil)
-        t.eq(findings(result.output), {
+        testing.eq(result.code, nil)
+        testing.eq(findings(result.output), {
             "00000001 Blocked lacks ## Change (owner)",
             "00000001 Blocked lacks ## Out of scope (owner)",
         })
         result = commands.run("lint", { "--strict" }, backend(cards, held))
-        t.eq(result.code, nil)
+        testing.eq(result.code, nil)
     end
 )
 
-t.test("lint exits 1 for a missing size or a misplaced label on a needs:human card", function()
-    local sizeless = card(1, "Blocked", { labels = { "needs:human" }, color = false })
-    local misplaced = card(2, "Ready", { labels = { "needs:human" } })
-    local held = { comments = { [sizeless.id] = { { kind = "question", body = "which?" } } } }
-    local result = commands.run("lint", {}, backend({ sizeless }, held))
-    t.eq(result.code, 1)
-    t.eq(findings(result.output), { "00000001 Blocked lacks a size" })
-    result = commands.run("lint", {}, backend({ misplaced }))
-    t.eq(result.code, 1)
-    t.eq(findings(result.output), { "00000002 Ready needs:human outside Blocked and Icebox" })
-end)
+testing.test(
+    "lint exits 1 for a missing size or a misplaced label on a needs:human card",
+    function()
+        local sizeless = card(1, "Blocked", { labels = { "needs:human" }, color = false })
+        local misplaced = card(2, "Ready", { labels = { "needs:human" } })
+        local held = { comments = { [sizeless.id] = { { kind = "question", body = "which?" } } } }
+        local result = commands.run("lint", {}, backend({ sizeless }, held))
+        testing.eq(result.code, 1)
+        testing.eq(findings(result.output), { "00000001 Blocked lacks a size" })
+        result = commands.run("lint", {}, backend({ misplaced }))
+        testing.eq(result.code, 1)
+        testing.eq(
+            findings(result.output),
+            { "00000002 Ready needs:human outside Blocked and Icebox" }
+        )
+    end
+)
 
-t.test("lint exits 1 when an owner finding sits beside an agent finding", function()
+testing.test("lint exits 1 when an owner finding sits beside an agent finding", function()
     local cards = {
         card(1, "Blocked", { labels = { "needs:human" }, description = "## Problem\nwhy" }),
         card(2, "Ready", { checks = {} }),
     }
     local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
     local result = commands.run("lint", {}, backend(cards, held))
-    t.eq(result.code, 1)
-    t.eq(findings(result.output), {
+    testing.eq(result.code, 1)
+    testing.eq(findings(result.output), {
         "00000001 Blocked lacks ## Change (owner)",
         "00000001 Blocked lacks ## Out of scope (owner)",
         "00000002 Ready no checks row",

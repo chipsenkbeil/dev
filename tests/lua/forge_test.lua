@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
@@ -94,24 +94,24 @@ local CASES = {
 }
 
 for _, case in ipairs(CASES) do
-    t.test("git: " .. case.name, function()
+    testing.test("git: " .. case.name, function()
         local root = repo(case.remotes, case.config)
         local got, err = forge.resolve(root)
         if case.err then
-            t.eq(got, nil)
-            t.eq(err, case.err)
+            testing.eq(got, nil)
+            testing.eq(err, case.err)
         else
-            t.eq({ got.kind, got.remote, got.why }, case.want)
+            testing.eq({ got.kind, got.remote, got.why }, case.want)
         end
         fs.remove(root, { recursive = true })
     end)
 end
 
-t.test("a directory with neither .jj nor .git has no forge", function()
+testing.test("a directory with neither .jj nor .git has no forge", function()
     local root = assert(fs.realpath(support.tempdir()))
     local got, err = forge.resolve(root)
-    t.eq(got, nil)
-    t.eq(err, "neither .jj nor .git found in " .. root)
+    testing.eq(got, nil)
+    testing.eq(err, "neither .jj nor .git found in " .. root)
     fs.remove(root, { recursive = true })
 end)
 
@@ -129,19 +129,19 @@ if has_jj then
         return root
     end
 
-    t.test("jj: a gerrit remote means gerrit", function()
+    testing.test("jj: a gerrit remote means gerrit", function()
         local root = jj_repo({ { "origin", GITHUB }, { "gerrit", "ssh://c@g:29418/r" } })
         local got = forge.resolve(root)
-        t.eq({ got.kind, got.remote }, { "gerrit", "gerrit" })
-        t.eq(vcs.backend(root), "jj")
-        t.eq(vcs.remotes(root, "jj"), { "gerrit", "origin" })
+        testing.eq({ got.kind, got.remote }, { "gerrit", "gerrit" })
+        testing.eq(vcs.backend(root), "jj")
+        testing.eq(vcs.remotes(root, "jj"), { "gerrit", "origin" })
         fs.remove(root, { recursive = true })
     end)
 
-    t.test("jj: forge.kind is read from the git store under .jj", function()
+    testing.test("jj: forge.kind is read from the git store under .jj", function()
         local root = jj_repo({ { "origin", LOCAL } }, { { "forge.kind", "github" } })
         local got = forge.resolve(root)
-        t.eq(
+        testing.eq(
             { got.kind, got.remote, got.why },
             { "github", "origin", "git config forge.kind=github" }
         )
@@ -149,7 +149,7 @@ if has_jj then
     end)
 end
 
-t.test("the guard path is refused when DEV_SELF is not absolute", function()
+testing.test("the guard path is refused when DEV_SELF is not absolute", function()
     local root = repo({ { "origin", LOCAL } })
     git(
         root,
@@ -165,8 +165,8 @@ t.test("the guard path is refused when DEV_SELF is not absolute", function()
     )
     for _, self in ipairs({ "", "dev" }) do
         local out, code = support.dev(root, { "push" }, { env = { DEV_SELF = self } })
-        t.eq(code, 1)
-        t.eq(
+        testing.eq(code, 1)
+        testing.eq(
             out,
             "dev: DEV_SELF is not an absolute path, refusing to push without the attribution check\n"
         )
@@ -174,13 +174,13 @@ t.test("the guard path is refused when DEV_SELF is not absolute", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test("trunk prefers master over main and is nil without either", function()
-    t.eq(vcs.trunk({ "main", "master" }), "master")
-    t.eq(vcs.trunk({ "dev", "main" }), "main")
-    t.eq(vcs.trunk({ "dev" }), nil)
+testing.test("trunk prefers master over main and is nil without either", function()
+    testing.eq(vcs.trunk({ "main", "master" }), "master")
+    testing.eq(vcs.trunk({ "dev", "main" }), "main")
+    testing.eq(vcs.trunk({ "dev" }), nil)
 end)
 
-t.test("git branches and remotes list what git has", function()
+testing.test("git branches and remotes list what git has", function()
     local root = repo({})
     git(
         root,
@@ -195,8 +195,8 @@ t.test("git branches and remotes list what git has", function()
         "x"
     )
     git(root, "branch", "-M", "main")
-    t.eq(vcs.branches(root, "git"), { "main" })
+    testing.eq(vcs.branches(root, "git"), { "main" })
     git(root, "remote", "add", "origin", LOCAL)
-    t.eq(vcs.remotes(root, "git"), { "origin" })
+    testing.eq(vcs.remotes(root, "git"), { "origin" })
     fs.remove(root, { recursive = true })
 end)

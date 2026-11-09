@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local manifest = require("dev.pkg.manifest")
@@ -35,29 +35,32 @@ local function names_arch(url)
     return false
 end
 
-t.test("every release cell of the Intel macOS column has a pin", function()
+testing.test("every release cell of the Intel macOS column has a pin", function()
     local pins = assert(release.read(PINS))
     for tool, name in pairs(release_cells()) do
-        t.ok(pins[name], tool .. " names the pin " .. name .. ", which .dev/releases.tsv lacks")
+        testing.ok(
+            pins[name],
+            tool .. " names the pin " .. name .. ", which .dev/releases.tsv lacks"
+        )
     end
 end)
 
-t.test("the first base tools route through a release pin on Intel macOS", function()
+testing.test("the first base tools route through a release pin on Intel macOS", function()
     local cells = release_cells()
     for _, tool in ipairs(PINNED_TOOLS) do
-        t.ok(cells[tool], tool .. " has no release: cell in " .. COLUMN)
+        testing.ok(cells[tool], tool .. " has no release: cell in " .. COLUMN)
     end
 end)
 
-t.test("every pin has a 64 digit sha256 and an https url naming the architecture", function()
+testing.test("every pin has a 64 digit sha256 and an https url naming the architecture", function()
     local pins = assert(release.read(PINS))
     for name, pin in pairs(pins) do
-        t.ok(
+        testing.ok(
             #pin.sha256 == SHA256_HEX_DIGITS and pin.sha256:find("^%x+$"),
             name .. " has a bad sha256"
         )
-        t.ok(pin.url:find("^https://"), name .. " url is not https")
-        t.ok(
+        testing.ok(pin.url:find("^https://"), name .. " url is not https")
+        testing.ok(
             SOURCE_PINS[name] or UNNAMED_ARCH_PINS[name] or names_arch(pin.url),
             name .. " url names no x86_64, amd64 or universal asset"
         )

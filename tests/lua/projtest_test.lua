@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local testenv = require("dev.testenv")
 local fs = require("dev.fs")
 
@@ -23,56 +23,59 @@ local function run(root)
     return testenv.verb(root, { "test" }, { env = ENV })
 end
 
-t.test("a passing .dev/tests file runs and dev test exits 0", function()
+testing.test("a passing .dev/tests file runs and dev test exits 0", function()
     local root = project({ ["a_test.lua"] = 't.test("adds", function() t.eq(1 + 1, 2) end)\n' })
     local out, code, err = run(root)
-    t.eq(code, 0, err)
-    t.ok(out:find("ok - adds", 1, true), out)
+    testing.eq(code, 0, err)
+    testing.ok(out:find("ok - adds", 1, true), out)
 end)
 
-t.test("a failing case prints not ok with its message and dev test exits 1", function()
+testing.test("a failing case prints not ok with its message and dev test exits 1", function()
     local root = project({
         ["a_test.lua"] = 't.test("breaks", function() error("boom here") end)\n'
             .. 't.test("fine", function() end)\n',
     })
     local out, code = run(root)
-    t.eq(code, 1)
-    t.ok(out:find("not ok - breaks", 1, true), out)
-    t.ok(out:find("boom here", 1, true), out)
-    t.ok(out:find("ok - fine", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("not ok - breaks", 1, true), out)
+    testing.ok(out:find("boom here", 1, true), out)
+    testing.ok(out:find("ok - fine", 1, true), out)
 end)
 
-t.test("a test file that fails to load fails the run", function()
+testing.test("a test file that fails to load fails the run", function()
     local root = project({ ["a_test.lua"] = "this is not lua (\n" })
     local out, code = run(root)
-    t.eq(code, 1)
-    t.ok(out:find("not ok - load a_test.lua", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("not ok - load a_test.lua", 1, true), out)
 end)
 
-t.test("no .dev/tests prints SKIP and exits 0", function()
+testing.test("no .dev/tests prints SKIP and exits 0", function()
     local out, code, err = run(project())
-    t.eq(code, 0, err)
-    t.ok(out:find("SKIP .dev/tests (none)", 1, true), out)
+    testing.eq(code, 0, err)
+    testing.ok(out:find("SKIP .dev/tests (none)", 1, true), out)
 end)
 
-t.test("testenv.fake puts a command on PATH and verb returns its exit code and stderr", function()
-    local root = project()
-    testenv.fake(root, "tool", { code = 3, out = "hello", err = "oops" })
-    local probe = 'return require("dev.os").run({ "tool", "a", "b" })\n'
-    assert(fs.write(root .. "/.dev/probe.lua", probe))
-    local out, code, err = testenv.verb(root, { "probe" }, { env = ENV })
-    t.eq(code, 3)
-    t.ok(out:find("hello", 1, true), out)
-    t.ok(err:find("oops", 1, true), err)
-    t.eq(testenv.calls(root, "tool"), { "a b" })
-end)
+testing.test(
+    "testenv.fake puts a command on PATH and verb returns its exit code and stderr",
+    function()
+        local root = project()
+        testenv.fake(root, "tool", { code = 3, out = "hello", err = "oops" })
+        local probe = 'return require("dev.os").run({ "tool", "a", "b" })\n'
+        assert(fs.write(root .. "/.dev/probe.lua", probe))
+        local out, code, err = testenv.verb(root, { "probe" }, { env = ENV })
+        testing.eq(code, 3)
+        testing.ok(out:find("hello", 1, true), out)
+        testing.ok(err:find("oops", 1, true), err)
+        testing.eq(testenv.calls(root, "tool"), { "a b" })
+    end
+)
 
-t.test("the files run in sorted order", function()
+testing.test("the files run in sorted order", function()
     local root = project({
         ["b_test.lua"] = 't.test("second", function() end)\n',
         ["a_test.lua"] = 't.test("first", function() end)\n',
     })
     local out, code, err = run(root)
-    t.eq(code, 0, err)
-    t.ok(out:find("ok - first\nok - second\n", 1, true), out)
+    testing.eq(code, 0, err)
+    testing.ok(out:find("ok - first\nok - second\n", 1, true), out)
 end)

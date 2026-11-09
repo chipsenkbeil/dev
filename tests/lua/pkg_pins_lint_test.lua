@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local manifest = require("dev.pkg.manifest")
@@ -37,29 +37,29 @@ local function set_of(list)
     return set
 end
 
-t.test("no base row has an empty darwin-x86_64 cell", function()
+testing.test("no base row has an empty darwin-x86_64 cell", function()
     for tool, cell in pairs(base_cells()) do
-        t.ok(cell ~= "", tool .. " has an empty " .. COLUMN .. " cell")
+        testing.ok(cell ~= "", tool .. " has an empty " .. COLUMN .. " cell")
     end
 end)
 
-t.test("the lint tools are pinned releases", function()
+testing.test("the lint tools are pinned releases", function()
     local cells = base_cells()
     local pins = assert(release.read(PINS))
     for _, tool in ipairs(LINT_PINS) do
-        t.eq(cells[tool], "release:" .. tool)
-        t.ok(pins[tool], tool .. " has no pin")
+        testing.eq(cells[tool], "release:" .. tool)
+        testing.ok(pins[tool], tool .. " has no pin")
     end
 end)
 
-t.test("git, zsh and dash are system tools", function()
+testing.test("git, zsh and dash are system tools", function()
     local cells = base_cells()
     for _, tool in ipairs(SYSTEM_TOOLS) do
-        t.eq(cells[tool], "system:" .. tool)
+        testing.eq(cells[tool], "system:" .. tool)
     end
 end)
 
-t.test("the dropped base rows are exactly the dash cells", function()
+testing.test("the dropped base rows are exactly the dash cells", function()
     local expected = set_of(DROPPED)
     local dashes = {}
     for tool, cell in pairs(base_cells()) do
@@ -67,10 +67,10 @@ t.test("the dropped base rows are exactly the dash cells", function()
             dashes[tool] = true
         end
     end
-    t.eq(dashes, expected)
+    testing.eq(dashes, expected)
 end)
 
-t.test("the Darwin x86_64 dry run prints the release steps for the lint pins", function()
+testing.test("the Darwin x86_64 dry run prints the release steps for the lint pins", function()
     local dir = assert(fs.realpath(support.tempdir()))
     assert(fs.mkdir(dir .. "/stubs"))
     assert(fs.mkdir(dir .. "/home"))
@@ -94,16 +94,16 @@ t.test("the Darwin x86_64 dry run prints the release steps for the lint pins", f
             DEV_TOOLS_BIN = dir .. "/bin",
         },
     })
-    t.eq(code, 0)
+    testing.eq(code, 0)
     for _, tool in ipairs(LINT_PINS) do
-        t.ok(out:find(tool .. " (dry-run):", 1, true), out)
+        testing.ok(out:find(tool .. " (dry-run):", 1, true), out)
     end
-    t.ok(out:find("shellcheck-v0.11.0.darwin.x86_64.tar.xz", 1, true), out)
-    t.ok(out:find("shfmt_v3.14.1_darwin_amd64", 1, true), out)
-    t.ok(out:find("stylua-macos-x86_64.zip", 1, true), out)
-    t.ok(not out:find("cargo", 1, true), out)
+    testing.ok(out:find("shellcheck-v0.11.0.darwin.x86_64.tar.xz", 1, true), out)
+    testing.ok(out:find("shfmt_v3.14.1_darwin_amd64", 1, true), out)
+    testing.ok(out:find("stylua-macos-x86_64.zip", 1, true), out)
+    testing.ok(not out:find("cargo", 1, true), out)
     for _, tool in ipairs(SOURCE_BUILDS) do
-        t.ok(
+        testing.ok(
             out:find(
                 tool .. " (dry-run):\n      luajit scripts/install-" .. tool .. ".lua",
                 1,
@@ -113,24 +113,27 @@ t.test("the Darwin x86_64 dry run prints the release steps for the lint pins", f
         )
     end
     for _, tool in ipairs(SYSTEM_TOOLS) do
-        t.ok(out:find(tool .. " installed outside dev tools", 1, true), out)
+        testing.ok(out:find(tool .. " installed outside dev tools", 1, true), out)
     end
     fs.remove(dir, { recursive = true })
 end)
 
-t.test("bats and stow are pinned source builds in the base group", function()
+testing.test("bats and stow are pinned source builds in the base group", function()
     local cells = base_cells()
     local pins = assert(release.read(PINS))
     for _, tool in ipairs(SOURCE_BUILDS) do
-        t.eq(cells[tool], "script:scripts/install-" .. tool .. ".lua,bin:-")
-        t.ok(pins[tool], tool .. " has no pin")
-        t.ok(fs.is_file(REPO .. "/scripts/install-" .. tool .. ".lua"), tool .. " has no script")
+        testing.eq(cells[tool], "script:scripts/install-" .. tool .. ".lua,bin:-")
+        testing.ok(pins[tool], tool .. " has no pin")
+        testing.ok(
+            fs.is_file(REPO .. "/scripts/install-" .. tool .. ".lua"),
+            tool .. " has no script"
+        )
     end
 end)
 
-t.test("no base row on darwin-x86_64 needs cargo or rustup", function()
+testing.test("no base row on darwin-x86_64 needs cargo or rustup", function()
     for tool, cell in pairs(base_cells()) do
-        t.ok(not cell:find("^cargo:"), tool .. " builds with cargo in the base group")
-        t.ok(not cell:find("rustup", 1, true), tool .. " needs rustup in the base group")
+        testing.ok(not cell:find("^cargo:"), tool .. " builds with cargo in the base group")
+        testing.ok(not cell:find("rustup", 1, true), tool .. " needs rustup in the base group")
     end
 end)

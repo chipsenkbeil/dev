@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
@@ -68,21 +68,24 @@ local function lines_of(path)
     return lines
 end
 
-t.test("create asks for the target, then the shape, then creates", function()
+testing.test("create asks for the target, then the shape, then creates", function()
     local root = sandbox({ targets = TARGETS, shapes = SHAPES, create = CREATED })
     local out, code = support.dev(
         root,
         { "box", "create", "--keep", "proj" },
         env(root, { FAKE_PICK = "linux-dev medium" })
     )
-    t.eq(code, 0)
-    t.eq(out, "Created proj-x1 · linux-dev @ example-box · medium · kept · dev connect proj-x1\n")
-    t.eq(lines_of(root .. "/log"), {
+    testing.eq(code, 0)
+    testing.eq(
+        out,
+        "Created proj-x1 · linux-dev @ example-box · medium · kept · dev connect proj-x1\n"
+    )
+    testing.eq(lines_of(root .. "/log"), {
         "fleet targets --box --json",
         "fleet targets --box --target linux-dev --json",
         "box create --target linux-dev --shape medium --by human:tester --keep --json -- proj",
     })
-    t.eq(lines_of(root .. "/picks"), {
+    testing.eq(lines_of(root .. "/picks"), {
         "picker title=What should the proj box run? auto=nil note=example-box 8 GiB free",
         "linux-dev\tlinux-dev\tLinux · devbox\tfrom small\t@ example-box",
         "linux-rust\tlinux-rust\tLinux · linux-rust\tfrom medium\t@ example-box\t!needs 8 GiB more",
@@ -95,94 +98,100 @@ t.test("create asks for the target, then the shape, then creates", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a shape below the target's minimum is greyed", function()
+testing.test("a shape below the target's minimum is greyed", function()
     local root = sandbox({ targets = TARGETS, shapes = SHAPES, create = CREATED })
     local _, code = support.dev(
         root,
         { "box", "create", "proj" },
         env(root, { FAKE_PICK = "linux-mid medium" })
     )
-    t.eq(code, 0)
+    testing.eq(code, 0)
     local picks = lines_of(root .. "/picks")
-    t.eq(picks[6], "small\tsmall\t4 CPU\t8 GiB\t\t!below linux-mid's minimum")
+    testing.eq(picks[6], "small\tsmall\t4 CPU\t8 GiB\t\t!below linux-mid's minimum")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("--target skips both pickers and takes ci's default shape", function()
+testing.test("--target skips both pickers and takes ci's default shape", function()
     local root = sandbox({ create = CREATED })
     local _, code =
         support.dev(root, { "box", "create", "--target", "linux-dev", "proj" }, env(root))
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         lines_of(root .. "/log"),
         { "box create --target linux-dev --by human:tester --json -- proj" }
     )
-    t.eq(lines_of(root .. "/picks"), {})
+    testing.eq(lines_of(root .. "/picks"), {})
     fs.remove(root, { recursive = true })
 end)
 
-t.test("--shape skips the second picker only", function()
+testing.test("--shape skips the second picker only", function()
     local root = sandbox({ targets = TARGETS, shapes = SHAPES, create = CREATED })
     local _, code = support.dev(
         root,
         { "box", "create", "--shape", "large", "proj" },
         env(root, { FAKE_PICK = "linux-dev" })
     )
-    t.eq(code, 0)
+    testing.eq(code, 0)
     local log = lines_of(root .. "/log")
-    t.eq(log[#log], "box create --target linux-dev --shape large --by human:tester --json -- proj")
-    t.eq(#log, 2)
+    testing.eq(
+        log[#log],
+        "box create --target linux-dev --shape large --by human:tester --json -- proj"
+    )
+    testing.eq(#log, 2)
     fs.remove(root, { recursive = true })
 end)
 
-t.test("--arch passes the architecture to ci box create", function()
+testing.test("--arch passes the architecture to ci box create", function()
     local root = sandbox({ create = CREATED })
     local _, code = support.dev(
         root,
         { "box", "create", "--arch", "aarch64", "--target", "linux-dev", "proj" },
         env(root)
     )
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         lines_of(root .. "/log"),
         { "box create --target linux-dev --arch aarch64 --by human:tester --json -- proj" }
     )
     fs.remove(root, { recursive = true })
 end)
 
-t.test("without --arch ci gets no --arch flag", function()
+testing.test("without --arch ci gets no --arch flag", function()
     local root = sandbox({ create = CREATED })
     local _, code =
         support.dev(root, { "box", "create", "--target", "linux-dev", "proj" }, env(root))
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         lines_of(root .. "/log"),
         { "box create --target linux-dev --by human:tester --json -- proj" }
     )
     fs.remove(root, { recursive = true })
 end)
 
-t.test("without a terminal there are no pickers and ci applies its defaults", function()
+testing.test("without a terminal there are no pickers and ci applies its defaults", function()
     local root = sandbox({ create = CREATED })
     local out, code = support.dev(root, { "box", "create", "proj" }, env(root, { FAKE_TTY = "0" }))
-    t.eq(code, 0)
-    t.eq(out, "Created proj-x1 · linux-dev @ example-box · medium · kept · dev connect proj-x1\n")
-    t.eq(lines_of(root .. "/log"), { "box create --by human:tester --json -- proj" })
+    testing.eq(code, 0)
+    testing.eq(
+        out,
+        "Created proj-x1 · linux-dev @ example-box · medium · kept · dev connect proj-x1\n"
+    )
+    testing.eq(lines_of(root .. "/log"), { "box create --by human:tester --json -- proj" })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("cancelling a picker exits 1 and creates nothing", function()
+testing.test("cancelling a picker exits 1 and creates nothing", function()
     local root = sandbox({ targets = TARGETS, shapes = SHAPES, create = CREATED })
     local _, code =
         support.dev(root, { "box", "create", "proj" }, env(root, { FAKE_PICK = "CANCEL" }))
-    t.eq(code, 1)
+    testing.eq(code, 1)
     for _, line in ipairs(lines_of(root .. "/log")) do
-        t.eq(line:find("box create", 1, true), nil)
+        testing.eq(line:find("box create", 1, true), nil)
     end
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a target that waits for room can be picked and says why", function()
+testing.test("a target that waits for room can be picked and says why", function()
     local waiting = TARGETS:gsub('"linux%-rust"', '"linux-wait"')
     local shapes = SHAPES:gsub(
         '"linux%-mid","below_min":false,"machines":%[{"machine":"example%-box","fits":"start"',
@@ -195,32 +204,32 @@ t.test("a target that waits for room can be picked and says why", function()
         { "box", "create", "proj" },
         env(root, { FAKE_PICK = "linux-wait medium" })
     )
-    t.eq(code, 0)
+    testing.eq(code, 0)
     local picks = lines_of(root .. "/picks")
-    t.eq(
+    testing.eq(
         picks[3],
         "linux-wait\tlinux-wait\tLinux · linux-wait\tfrom medium\t@ example-box\twaits for room · needs 8 GiB more"
     )
     fs.remove(root, { recursive = true })
 end)
 
-t.test("when no target fits, dev names the running box to stop", function()
+testing.test("when no target fits, dev names the running box to stop", function()
     local only = [[{"ok":true,"targets":[
 {"target":"linux-rust","os":"linux","machines":["example-box"],"image":"linux-rust","min_shape":"medium","can_take_box_now":false,"reason":"needs 8 GiB more"}]}]]
     local root = sandbox({ targets = only, shapes = SHAPES, ls = LISTING, create = CREATED })
     local out, code = support.dev(root, { "box", "create", "proj" }, env(root))
-    t.eq(code, 1)
-    t.eq(out, "dev box create: no target fits now, stop a running box to make room: b1\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev box create: no target fits now, stop a running box to make room: b1\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a machine ci could not ask makes every shape unpickable", function()
+testing.test("a machine ci could not ask makes every shape unpickable", function()
     local down = SHAPES:gsub('"fits":"start"', '"fits":null'):gsub('"fits":"wait"', '"fits":null')
     local root = sandbox({ targets = TARGETS, shapes = down, ls = LISTING, create = CREATED })
     local out, code =
         support.dev(root, { "box", "create", "proj" }, env(root, { FAKE_PICK = "linux-dev" }))
-    t.eq(code, 1)
-    t.eq(
+    testing.eq(code, 1)
+    testing.eq(
         out,
         "dev box create: no shape of linux-dev fits now, stop a running box to make room: b1\n"
     )

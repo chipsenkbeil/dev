@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local board = require("dev.board")
 local devos = require("dev.os")
 local fs = require("dev.fs")
@@ -230,58 +230,58 @@ local function color(layout, value)
     end
 end
 
-t.test("a missing board ends in the standard state", function()
+testing.test("a missing board ends in the standard state", function()
     local layout = fake_layout({ exists = false })
     local changes, message, lines = run(layout)
-    t.eq(message, nil)
-    t.eq(names(layout.state.columns), STANDARD)
-    t.eq(layout.state.columns[9].is_done, true)
-    t.eq(color(layout, "yellow").label, "1 Pomodoro")
-    t.eq(color(layout, "green").label, "2 Pomodori")
-    t.eq(color(layout, "blue").label, "3 Pomodori")
-    t.eq(color(layout, "red").label, ">3 Pomodori")
-    t.eq(color(layout, "white").label, "Unsized")
-    t.eq(color(layout, "white").is_default, true)
-    t.eq(color(layout, "yellow").is_default, false)
-    t.eq(lines[1], "created board demo from the agent project template")
-    t.eq(changes, #lines)
+    testing.eq(message, nil)
+    testing.eq(names(layout.state.columns), STANDARD)
+    testing.eq(layout.state.columns[9].is_done, true)
+    testing.eq(color(layout, "yellow").label, "1 Pomodoro")
+    testing.eq(color(layout, "green").label, "2 Pomodori")
+    testing.eq(color(layout, "blue").label, "3 Pomodori")
+    testing.eq(color(layout, "red").label, ">3 Pomodori")
+    testing.eq(color(layout, "white").label, "Unsized")
+    testing.eq(color(layout, "white").is_default, true)
+    testing.eq(color(layout, "yellow").is_default, false)
+    testing.eq(lines[1], "created board demo from the agent project template")
+    testing.eq(changes, #lines)
 end)
 
-t.test("a board without the checks field gains it once and keeps it", function()
+testing.test("a board without the checks field gains it once and keeps it", function()
     local layout = fake_layout({ has_checks = false, columns = template_columns() })
     local changes, message, lines = run(layout)
-    t.eq(message, nil)
-    t.ok(changes >= 1)
+    testing.eq(message, nil)
+    testing.ok(changes >= 1)
     local said = 0
     for _, line in ipairs(lines) do
         said = said + (line == "added the checks field dev.checks" and 1 or 0)
     end
-    t.eq(said, 1)
+    testing.eq(said, 1)
     local added = 0
     for _, write in ipairs(layout.state.writes) do
         added = added + (write[1] == "add_checks_field" and 1 or 0)
     end
-    t.eq(added, 1)
+    testing.eq(added, 1)
     run(layout)
     added = 0
     for _, write in ipairs(layout.state.writes) do
         added = added + (write[1] == "add_checks_field" and 1 or 0)
     end
-    t.eq(added, 1)
+    testing.eq(added, 1)
 end)
 
-t.test("a second run changes nothing and says nothing", function()
+testing.test("a second run changes nothing and says nothing", function()
     local layout = fake_layout({ exists = false })
     run(layout)
     local writes = #layout.state.writes
     local changes, message, lines = run(layout)
-    t.eq(message, nil)
-    t.eq(changes, 0)
-    t.eq(lines, {})
-    t.eq(#layout.state.writes, writes)
+    testing.eq(message, nil)
+    testing.eq(changes, 0)
+    testing.eq(lines, {})
+    testing.eq(#layout.state.writes, writes)
 end)
 
-t.test("an old board keeps its cards and gains what is missing", function()
+testing.test("an old board keeps its cards and gains what is missing", function()
     local layout = fake_layout({
         columns = {
             { id = "col-Done", name = support.COLUMN_NAME.DONE, is_done = true },
@@ -290,8 +290,8 @@ t.test("an old board keeps its cards and gains what is missing", function()
         },
     })
     local changes, message = run(layout)
-    t.eq(message, nil)
-    t.eq(names(layout.state.columns), {
+    testing.eq(message, nil)
+    testing.eq(names(layout.state.columns), {
         support.COLUMN_NAME.ICEBOX,
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN.READY,
@@ -302,132 +302,141 @@ t.test("an old board keeps its cards and gains what is missing", function()
         support.COLUMN_NAME.BLOCKED,
         support.COLUMN_NAME.DONE,
     })
-    t.ok(changes > 0)
+    testing.ok(changes > 0)
     local again = run(layout)
-    t.eq(again, 0)
+    testing.eq(again, 0)
 end)
 
-t.test("an In Review column is renamed to Review with its id and cards kept", function()
+testing.test("an In Review column is renamed to Review with its id and cards kept", function()
     local layout = fake_layout({ columns = template_columns() })
     local _, message, lines = run(layout)
-    t.eq(message, nil)
-    t.eq(names(layout.state.columns), STANDARD)
+    testing.eq(message, nil)
+    testing.eq(names(layout.state.columns), STANDARD)
     local review = layout.state.columns[5]
-    t.eq(review.id, "col-In Review")
-    t.eq(lines[1], "renamed column In Review to Review")
+    testing.eq(review.id, "col-In Review")
+    testing.eq(lines[1], "renamed column In Review to Review")
     local renames = 0
     for _, write in ipairs(layout.state.writes) do
         renames = renames + (write[1] == "rename_column" and 1 or 0)
     end
-    t.eq(renames, 1)
+    testing.eq(renames, 1)
     local again, _, said = run(layout)
-    t.eq(again, 0)
-    t.eq(said, {})
+    testing.eq(again, 0)
+    testing.eq(said, {})
 end)
 
-t.test("a board with both In Review and Review renames nothing", function()
+testing.test("a board with both In Review and Review renames nothing", function()
     local columns = template_columns()
     columns[#columns + 1] =
         { id = "col-Review", name = support.COLUMN_NAME.REVIEW, is_done = false }
     local layout = fake_layout({ columns = columns })
     run(layout)
     for _, write in ipairs(layout.state.writes) do
-        t.ok(write[1] ~= "rename_column")
+        testing.ok(write[1] ~= "rename_column")
     end
 end)
 
-t.test("a column init does not recognise is reported and kept where it was named", function()
+testing.test("a column init does not recognise is reported and kept where it was named", function()
     local columns = template_columns()
     table.insert(columns, 3, { id = "col-odd", name = "Someday", is_done = false })
     local layout = fake_layout({ columns = columns })
     local _, message, lines = run(layout)
-    t.eq(message, nil)
+    testing.eq(message, nil)
     local kept = 0
     for _, line in ipairs(lines) do
         if line == 'kept column "Someday", which is not part of the standard board' then
             kept = kept + 1
         end
     end
-    t.eq(kept, 1)
-    t.eq(layout.state.columns[#layout.state.columns].name, "Someday")
-    t.eq(layout.state.columns[#layout.state.columns].id, "col-odd")
+    testing.eq(kept, 1)
+    testing.eq(layout.state.columns[#layout.state.columns].name, "Someday")
+    testing.eq(layout.state.columns[#layout.state.columns].id, "col-odd")
     for _, write in ipairs(layout.state.writes) do
-        t.ok(write[1] ~= "rename")
+        testing.ok(write[1] ~= "rename")
     end
     local _, _, second = run(layout)
-    t.eq(#second, 1)
-    t.ok(second[1]:find("kept column", 1, true))
-    t.eq(#layout.state.writes > 0, true)
+    testing.eq(#second, 1)
+    testing.ok(second[1]:find("kept column", 1, true))
+    testing.eq(#layout.state.writes > 0, true)
 end)
 
-t.test("a Done column that does not count as done is marked", function()
+testing.test("a Done column that does not count as done is marked", function()
     local columns = template_columns()
     columns[6].is_done = false
     local layout = fake_layout({ columns = columns })
     local _, _, lines = run(layout)
-    t.eq(layout.state.columns[9].is_done, true)
-    t.ok(table.concat(lines, "\n"):find("marked Done", 1, true), lines[1])
+    testing.eq(layout.state.columns[9].is_done, true)
+    testing.ok(table.concat(lines, "\n"):find("marked Done", 1, true), lines[1])
 end)
 
-t.test("size words come off names and set the colour of a card still at the default", function()
-    local layout = fake_layout({
-        columns = template_columns(),
-        cards = {
-            { id = "aaaaaaaa-1", name = "Plain card", color_id = "yellow-id" },
-            { id = "bbbbbbbb-1", name = "Make it (blue)", color_id = "yellow-id" },
-            { id = "cccccccc-1", name = "Big thing (red, split)", color_id = nil },
-            { id = "dddddddd-1", name = "Chosen (yellow)", color_id = "green-id" },
-            { id = "eeeeeeee-1", name = "Small (green)", color_id = "white-id" },
-            { id = "ffffffff-1", name = "(blue)", color_id = nil },
-        },
-    })
-    local _, message, lines = run(layout)
-    t.eq(message, nil)
-    local cards = layout.state.cards
-    t.eq(cards[1].name, "Plain card")
-    t.eq(cards[2].name, "Make it")
-    t.eq(cards[2].color_id, "blue-id")
-    t.eq(cards[3].name, "Big thing")
-    t.eq(cards[3].color_id, "red-id")
-    t.eq(cards[4].name, "Chosen")
-    t.eq(cards[4].color_id, "green-id")
-    t.eq(cards[5].name, "Small")
-    t.eq(cards[5].color_id, "green-id")
-    t.eq(cards[6].name, "(blue)")
-    local joined = table.concat(lines, "\n")
-    t.ok(joined:find('renamed card bbbbbbbb to "Make it" and coloured it blue', 1, true), joined)
-    t.ok(
-        joined:find('renamed card dddddddd to "Chosen"\n', 1, true)
-            or joined:find('renamed card dddddddd to "Chosen"$'),
-        joined
-    )
-    t.ok(joined:find("kept card ffffffff", 1, true), joined)
-    local again = run(layout)
-    t.eq(again, 0)
-end)
-
-t.test("split_size takes the five trailing size words and nothing else", function()
-    t.eq({ init.split_size("A (yellow)") }, { "A", "yellow" })
-    t.eq({ init.split_size("A (green)") }, { "A", "green" })
-    t.eq({ init.split_size("A b (blue)") }, { "A b", "blue" })
-    t.eq({ init.split_size("A (red)") }, { "A", "red" })
-    t.eq({ init.split_size("A (red, split)") }, { "A", "red" })
-    t.eq({ init.split_size("A (red) (blue)") }, { "A", "blue" })
-    t.eq(init.split_size("A (blue) later"), nil)
-    t.eq(init.split_size("A (purple)"), nil)
-    t.eq(init.split_size("A blue"), nil)
-end)
-
-t.test("a refused change says to use --admin and stops with the changes so far said", function()
-    local layout = fake_layout({ columns = template_columns() })
-    function layout:set_color()
-        return nil, "board unavailable: pomb answered 403: insufficient_scope"
+testing.test(
+    "size words come off names and set the colour of a card still at the default",
+    function()
+        local layout = fake_layout({
+            columns = template_columns(),
+            cards = {
+                { id = "aaaaaaaa-1", name = "Plain card", color_id = "yellow-id" },
+                { id = "bbbbbbbb-1", name = "Make it (blue)", color_id = "yellow-id" },
+                { id = "cccccccc-1", name = "Big thing (red, split)", color_id = nil },
+                { id = "dddddddd-1", name = "Chosen (yellow)", color_id = "green-id" },
+                { id = "eeeeeeee-1", name = "Small (green)", color_id = "white-id" },
+                { id = "ffffffff-1", name = "(blue)", color_id = nil },
+            },
+        })
+        local _, message, lines = run(layout)
+        testing.eq(message, nil)
+        local cards = layout.state.cards
+        testing.eq(cards[1].name, "Plain card")
+        testing.eq(cards[2].name, "Make it")
+        testing.eq(cards[2].color_id, "blue-id")
+        testing.eq(cards[3].name, "Big thing")
+        testing.eq(cards[3].color_id, "red-id")
+        testing.eq(cards[4].name, "Chosen")
+        testing.eq(cards[4].color_id, "green-id")
+        testing.eq(cards[5].name, "Small")
+        testing.eq(cards[5].color_id, "green-id")
+        testing.eq(cards[6].name, "(blue)")
+        local joined = table.concat(lines, "\n")
+        testing.ok(
+            joined:find('renamed card bbbbbbbb to "Make it" and coloured it blue', 1, true),
+            joined
+        )
+        testing.ok(
+            joined:find('renamed card dddddddd to "Chosen"\n', 1, true)
+                or joined:find('renamed card dddddddd to "Chosen"$'),
+            joined
+        )
+        testing.ok(joined:find("kept card ffffffff", 1, true), joined)
+        local again = run(layout)
+        testing.eq(again, 0)
     end
-    local changes, message, lines = run(layout)
-    t.eq(changes, nil)
-    t.ok(message:find("run dev board init --admin", 1, true), message)
-    t.eq(lines[2], "added column Icebox")
+)
+
+testing.test("split_size takes the five trailing size words and nothing else", function()
+    testing.eq({ init.split_size("A (yellow)") }, { "A", "yellow" })
+    testing.eq({ init.split_size("A (green)") }, { "A", "green" })
+    testing.eq({ init.split_size("A b (blue)") }, { "A b", "blue" })
+    testing.eq({ init.split_size("A (red)") }, { "A", "red" })
+    testing.eq({ init.split_size("A (red, split)") }, { "A", "red" })
+    testing.eq({ init.split_size("A (red) (blue)") }, { "A", "blue" })
+    testing.eq(init.split_size("A (blue) later"), nil)
+    testing.eq(init.split_size("A (purple)"), nil)
+    testing.eq(init.split_size("A blue"), nil)
 end)
+
+testing.test(
+    "a refused change says to use --admin and stops with the changes so far said",
+    function()
+        local layout = fake_layout({ columns = template_columns() })
+        function layout:set_color()
+            return nil, "board unavailable: pomb answered 403: insufficient_scope"
+        end
+        local changes, message, lines = run(layout)
+        testing.eq(changes, nil)
+        testing.ok(message:find("run dev board init --admin", 1, true), message)
+        testing.eq(lines[2], "added column Icebox")
+    end
+)
 
 local PERMISSIONS = '[{"name":"cards.read","presets":["read","work","lead","admin"]},'
     .. '{"name":"boards.write","presets":["lead","admin"]},{"name":"templates.write","presets":["admin"]}]'
@@ -605,17 +614,17 @@ local function writes(root)
     return count
 end
 
-t.test("init on a board already at the standard says so and writes nothing", function()
+testing.test("init on a board already at the standard says so and writes nothing", function()
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0)
-    t.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
-    t.eq(writes(root), 0)
-    t.ok(read(root, "calls"):find("pass show secrets/lead/token/pomb", 1, true))
-    t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
+    testing.eq(code, 0)
+    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.eq(writes(root), 0)
+    testing.ok(read(root, "calls"):find("pass show secrets/lead/token/pomb", 1, true))
+    testing.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
 end)
 
-t.test("init --admin pairs through pending, slow_down and success", function()
+testing.test("init --admin pairs through pending, slow_down and success", function()
     local root, home, tmp = sandbox({
         script = '428|{"code":"authorization_pending","message":"wait"}\n'
             .. '429|{"code":"slow_down","message":"slower"}\n'
@@ -625,50 +634,53 @@ t.test("init --admin pairs through pending, slow_down and success", function()
             .. '","name":"n","scopes":["admin"]}\n',
     })
     local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         out,
         "approve the admin sign-in at https://pomb.example/device\n"
             .. "code: ABCD-EFGH\n"
             .. UNCHANGED
             .. "board demo already follows the standard, nothing to change\n"
     )
-    t.eq(read(root, "polls"), "4\n")
+    testing.eq(read(root, "polls"), "4\n")
     local calls = read(root, "calls")
-    t.ok(calls:find('"client_name":"dev-board-init@', 1, true), calls)
-    t.ok(calls:find('"scopes":["admin"]', 1, true), calls)
-    t.eq(calls:find("pass show", 1, true), nil)
-    t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. ADMIN_TOKEN .. '"\n')
+    testing.ok(calls:find('"client_name":"dev-board-init@', 1, true), calls)
+    testing.ok(calls:find('"scopes":["admin"]', 1, true), calls)
+    testing.eq(calls:find("pass show", 1, true), nil)
+    testing.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. ADMIN_TOKEN .. '"\n')
 end)
 
-t.test("the device token never reaches argv, the environment, a file or the output", function()
-    local root, home, tmp = sandbox()
-    local out = dev(root, home, tmp, { "-vv", "board", "init", "--admin" })
-    t.eq(out:find(ADMIN_TOKEN, 1, true), nil)
-    t.eq(read(root, "calls"):find(ADMIN_TOKEN, 1, true), nil)
-    t.eq(read(root, "env"):find(ADMIN_TOKEN, 1, true), nil)
-    t.eq(read(root, "calls"):find(DEVICE_CODE, 1, true), nil)
-    t.eq(read(root, "env"):find(DEVICE_CODE, 1, true), nil)
-    t.ok(read(root, "bodies"):find(DEVICE_CODE, 1, true))
-    t.eq(read(root, "bodies"):find(ADMIN_TOKEN, 1, true), nil)
-    t.eq(fs.list(tmp), {})
-    t.eq(fs.list(home .. "/state") == nil or #fs.list(home .. "/state") == 0, true)
-    local found = devos.capture({ "grep", "-rl", ADMIN_TOKEN, home, tmp })
-    t.eq(found, "")
-end)
+testing.test(
+    "the device token never reaches argv, the environment, a file or the output",
+    function()
+        local root, home, tmp = sandbox()
+        local out = dev(root, home, tmp, { "-vv", "board", "init", "--admin" })
+        testing.eq(out:find(ADMIN_TOKEN, 1, true), nil)
+        testing.eq(read(root, "calls"):find(ADMIN_TOKEN, 1, true), nil)
+        testing.eq(read(root, "env"):find(ADMIN_TOKEN, 1, true), nil)
+        testing.eq(read(root, "calls"):find(DEVICE_CODE, 1, true), nil)
+        testing.eq(read(root, "env"):find(DEVICE_CODE, 1, true), nil)
+        testing.ok(read(root, "bodies"):find(DEVICE_CODE, 1, true))
+        testing.eq(read(root, "bodies"):find(ADMIN_TOKEN, 1, true), nil)
+        testing.eq(fs.list(tmp), {})
+        testing.eq(fs.list(home .. "/state") == nil or #fs.list(home .. "/state") == 0, true)
+        local found = devos.capture({ "grep", "-rl", ADMIN_TOKEN, home, tmp })
+        testing.eq(found, "")
+    end
+)
 
-t.test("a denied sign-in ends the run with no board call", function()
+testing.test("a denied sign-in ends the run with no board call", function()
     local root, home, tmp = sandbox({
         script = '403|{"code":"access_denied","message":"no"}\n',
     })
     local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
-    t.eq(code, 1)
-    t.ok(out:find("dev: the sign-in was denied", 1, true), out)
-    t.eq(read(root, "calls"):find("/api/boards", 1, true), nil)
-    t.eq(fs.list(tmp), {})
+    testing.eq(code, 1)
+    testing.ok(out:find("dev: the sign-in was denied", 1, true), out)
+    testing.eq(read(root, "calls"):find("/api/boards", 1, true), nil)
+    testing.eq(fs.list(tmp), {})
 end)
 
-t.test("an expired or unknown sign-in ends the run", function()
+testing.test("an expired or unknown sign-in ends the run", function()
     for _, case in ipairs({
         { '410|{"code":"device_code_expired","message":"x"}\n', "not approved in time" },
         { '400|{"code":"invalid_grant","message":"x"}\n', "no longer knows" },
@@ -677,115 +689,115 @@ t.test("an expired or unknown sign-in ends the run", function()
     }) do
         local root, home, tmp = sandbox({ script = case[1] })
         local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
-        t.eq(code, 1)
-        t.ok(out:find(case[2], 1, true), out)
+        testing.eq(code, 1)
+        testing.ok(out:find(case[2], 1, true), out)
     end
 end)
 
-t.test("a token the approver lowered is refused", function()
+testing.test("a token the approver lowered is refused", function()
     local root, home, tmp = sandbox()
     assert(fs.write(root .. "/whoami.json", '{"kind":"token","name":"x","scope":"work"}'))
     local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
-    t.eq(code, 1)
-    t.ok(out:find("the approved token has the work scope, init needs admin", 1, true), out)
-    t.eq(writes(root), 0)
+    testing.eq(code, 1)
+    testing.ok(out:find("the approved token has the work scope, init needs admin", 1, true), out)
+    testing.eq(writes(root), 0)
 end)
 
-t.test("init without a lead token or --admin says what to set", function()
+testing.test("init without a lead token or --admin says what to set", function()
     local root, home, tmp = sandbox({ user = '[board.pomb]\nurl = "https://pomb.example"\n' })
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 1)
-    t.ok(out:find("lead_token is not set", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("lead_token is not set", 1, true), out)
 end)
 
-t.test("a project with no [board] section needs --name and then gets one", function()
+testing.test("a project with no [board] section needs --name and then gets one", function()
     local root, home, tmp = sandbox({ project = "" })
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 1)
-    t.ok(out:find("pass --name N", 1, true), out)
-    t.eq(read(root, ".dev/config.toml"), "")
+    testing.eq(code, 1)
+    testing.ok(out:find("pass --name N", 1, true), out)
+    testing.eq(read(root, ".dev/config.toml"), "")
     out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         out,
         UNCHANGED
             .. "wrote [board] to .dev/config.toml\n"
             .. "board demo already follows the standard, nothing to change\n"
     )
-    t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
+    testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
     out, code = dev(root, home, tmp, { "board", "status" })
-    t.eq(out, "backend: pomb\nboard: demo\n")
+    testing.eq(out, "backend: pomb\nboard: demo\n")
 end)
 
-t.test("a project with no .dev/config.toml takes --name and gets the file", function()
+testing.test("a project with no .dev/config.toml takes --name and gets the file", function()
     local root, home, tmp = sandbox({ project = false })
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 1)
-    t.ok(out:find("pass --name N", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("pass --name N", 1, true), out)
     out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         out,
         UNCHANGED
             .. "wrote [board] to .dev/config.toml\n"
             .. "board demo already follows the standard, nothing to change\n"
     )
-    t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
+    testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
 end)
 
-t.test("a project with no .dev directory gets it and the file", function()
+testing.test("a project with no .dev directory gets it and the file", function()
     local root, home, tmp = sandbox({ project = false })
     assert(fs.remove(root .. "/.dev", { recursive = true }))
     local out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
-    t.eq(code, 0, out)
-    t.eq(
+    testing.eq(code, 0, out)
+    testing.eq(
         out,
         UNCHANGED
             .. "wrote [board] to .dev/config.toml\n"
             .. "board demo already follows the standard, nothing to change\n"
     )
-    t.ok(fs.is_dir(root .. "/.dev"))
-    t.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
+    testing.ok(fs.is_dir(root .. "/.dev"))
+    testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
 end)
 
-t.test("the section is appended after other config", function()
+testing.test("the section is appended after other config", function()
     local root, home, tmp = sandbox({ project = '[remote]\nrunner = "ci"' })
     dev(root, home, tmp, { "board", "init", "--name", "demo" })
-    t.eq(
+    testing.eq(
         read(root, ".dev/config.toml"),
         '[remote]\nrunner = "ci"\n\n[board]\nbackend = "pomb"\nname = "demo"\n'
     )
 end)
 
-t.test("--name that disagrees with the [board] name is a usage error", function()
+testing.test("--name that disagrees with the [board] name is a usage error", function()
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init", "--name", "other" })
-    t.eq(code, 2)
-    t.ok(out:find("--name other is not the [board] name demo", 1, true), out)
-    t.eq(read(root, "calls"), "")
+    testing.eq(code, 2)
+    testing.ok(out:find("--name other is not the [board] name demo", 1, true), out)
+    testing.eq(read(root, "calls"), "")
 end)
 
-t.test("init refuses an unknown flag and a stray argument", function()
+testing.test("init refuses an unknown flag and a stray argument", function()
     local root, home, tmp = sandbox()
     local _, code = dev(root, home, tmp, { "board", "init", "--bogus" })
-    t.eq(code, 2)
+    testing.eq(code, 2)
     _, code = dev(root, home, tmp, { "board", "init", "extra" })
-    t.eq(code, 2)
+    testing.eq(code, 2)
 end)
 
 local function calls_of(root)
     return (read(root, "calls"):gsub("\n%%", " %%"))
 end
 
-t.test("init defines the checks field once with the dev definition", function()
+testing.test("init defines the checks field once with the dev definition", function()
     local root, home, tmp = sandbox({ fields = "[]" })
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(out, UNCHANGED .. "added the checks field dev.checks\nboard demo: 1 change\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, UNCHANGED .. "added the checks field dev.checks\nboard demo: 1 change\n")
     local body = '{"columns":[{"key":"run","kind":"text","label":"Run","options":[],"required":true},'
         .. '{"key":"on","kind":"multiselect","label":"On","options":["local"],"required":false}],'
         .. '"key":"dev.checks","kind":"table","label":"Checks","required":true}'
-    t.ok(
+    testing.ok(
         calls_of(root):find(
             "--data-raw " .. body .. " https://pomb.example/api/boards/board-1/fields",
             1,
@@ -793,14 +805,14 @@ t.test("init defines the checks field once with the dev definition", function()
         ),
         calls_of(root)
     )
-    t.eq(writes(root), 1)
+    testing.eq(writes(root), 1)
     root, home, tmp = sandbox()
     out = dev(root, home, tmp, { "board", "init" })
-    t.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
-    t.eq(writes(root), 0)
+    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.eq(writes(root), 0)
 end)
 
-t.test("init sends the changes an old board needs as the API's own calls", function()
+testing.test("init sends the changes an old board needs as the API's own calls", function()
     local root, home, tmp = sandbox()
     local last = DETAIL
     local ordered = {
@@ -843,10 +855,10 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
         )
     )
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0)
+    testing.eq(code, 0)
     local calls = calls_of(root)
-    t.ok(calls:find("-X POST", 1, true), calls)
-    t.ok(
+    testing.ok(calls:find("-X POST", 1, true), calls)
+    testing.ok(
         calls:find(
             '--data-raw {"position":0} https://pomb.example/api/columns/col-Icebox/move',
             1,
@@ -854,8 +866,8 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
         ),
         calls
     )
-    t.ok(calls:find("-X PATCH", 1, true), calls)
-    t.ok(
+    testing.ok(calls:find("-X PATCH", 1, true), calls)
+    testing.ok(
         calls:find(
             '--data-raw {"description":"One pomodoro or less","label":"1 Pomodoro"} https://pomb.example/api/boards/board-1/colors/yellow-id',
             1,
@@ -863,7 +875,7 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
         ),
         calls
     )
-    t.ok(
+    testing.ok(
         calls:find(
             '--data-raw {"is_default":true} https://pomb.example/api/boards/board-1/colors/white-id',
             1,
@@ -871,7 +883,7 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
         ),
         calls
     )
-    t.ok(
+    testing.ok(
         calls:find(
             '--data-raw {"color_id":"blue-id","name":"Keep it"} https://pomb.example/api/tasks/11111111-aaaa',
             1,
@@ -879,14 +891,14 @@ t.test("init sends the changes an old board needs as the API's own calls", funct
         ),
         calls
     )
-    t.ok(out:find("moved column Icebox to position 0\n", 1, true), out)
-    t.ok(out:find('named yellow "1 Pomodoro"\n', 1, true), out)
-    t.ok(out:find("made white the default colour\n", 1, true), out)
-    t.ok(out:find('renamed card 11111111 to "Keep it" and coloured it blue\n', 1, true), out)
-    t.eq(out:find(TOKEN, 1, true), nil)
+    testing.ok(out:find("moved column Icebox to position 0\n", 1, true), out)
+    testing.ok(out:find('named yellow "1 Pomodoro"\n', 1, true), out)
+    testing.ok(out:find("made white the default colour\n", 1, true), out)
+    testing.ok(out:find('renamed card 11111111 to "Keep it" and coloured it blue\n', 1, true), out)
+    testing.eq(out:find(TOKEN, 1, true), nil)
 end)
 
-t.test("init renames In Review to Review through the column update", function()
+testing.test("init renames In Review to Review through the column update", function()
     local root, home, tmp = sandbox()
     local parts = {}
     for _, name in ipairs({
@@ -911,8 +923,8 @@ t.test("init renames In Review to Review through the column update", function()
     local body = DETAIL .. table.concat(parts, ",") .. "]," .. GROUPS .. "}"
     assert(fs.write(root .. "/detail.json", body))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.ok(
+    testing.eq(code, 0, out)
+    testing.ok(
         calls_of(root):find(
             '--data-raw {"name":"Review"} https://pomb.example/api/columns/col-InReview',
             1,
@@ -920,16 +932,16 @@ t.test("init renames In Review to Review through the column update", function()
         ),
         calls_of(root)
     )
-    t.ok(out:find("renamed column In Review to Review\n", 1, true), out)
+    testing.ok(out:find("renamed column In Review to Review\n", 1, true), out)
 end)
 
-t.test("init makes a missing board from the agent project template", function()
+testing.test("init makes a missing board from the agent project template", function()
     local root, home, tmp = sandbox()
     assert(fs.write(root .. "/boards.json", "[]"))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0)
+    testing.eq(code, 0)
     local calls = calls_of(root)
-    t.ok(
+    testing.ok(
         calls:find(
             '--data-raw {"name":"demo","template_id":"tpl-1"} https://pomb.example/api/boards',
             1,
@@ -937,10 +949,10 @@ t.test("init makes a missing board from the agent project template", function()
         ),
         calls
     )
-    t.ok(out:find("created board demo from the agent project template\n", 1, true), out)
+    testing.ok(out:find("created board demo from the agent project template\n", 1, true), out)
 end)
 
-t.test("init adds a column with the done flag where it belongs", function()
+testing.test("init adds a column with the done flag where it belongs", function()
     local root, home, tmp = sandbox()
     assert(
         fs.write(
@@ -949,9 +961,9 @@ t.test("init adds a column with the done flag where it belongs", function()
         )
     )
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 1)
+    testing.eq(code, 1)
     local calls = calls_of(root)
-    t.ok(
+    testing.ok(
         calls:find(
             '--data-raw {"board_id":"board-1","is_done":true,"name":"Done"} https://pomb.example/api/columns',
             1,
@@ -959,16 +971,16 @@ t.test("init adds a column with the done flag where it belongs", function()
         ),
         calls
     )
-    t.ok(calls:find('"is_done":false,"name":"Icebox"', 1, true), calls)
-    t.ok(out:find("added column Icebox\n", 1, true), out)
-    t.ok(out:find("still has no Icebox column", 1, true), out)
+    testing.ok(calls:find('"is_done":false,"name":"Icebox"', 1, true), calls)
+    testing.ok(out:find("added column Icebox\n", 1, true), out)
+    testing.ok(out:find("still has no Icebox column", 1, true), out)
 end)
 
-t.test("board names the columns init lays out", function()
-    t.eq(board.roles().list, STANDARD)
+testing.test("board names the columns init lays out", function()
+    testing.eq(board.roles().list, STANDARD)
 end)
 
-t.test("a run that stops while stripping can be repeated without losing a size", function()
+testing.test("a run that stops while stripping can be repeated without losing a size", function()
     local layout = fake_layout({
         columns = template_columns(),
         cards = { { id = "aaaaaaaa-1", name = "Thing (red)", color_id = "yellow-id" } },
@@ -978,14 +990,14 @@ t.test("a run that stops while stripping can be repeated without losing a size",
         return nil, "board unavailable: pomb answered 503: down"
     end
     local changes = run(layout)
-    t.eq(changes, nil)
+    testing.eq(changes, nil)
     layout.set_card = set_card
     run(layout)
-    t.eq(layout.state.cards[1].name, "Thing")
-    t.eq(layout.state.cards[1].color_id, "red-id")
+    testing.eq(layout.state.cards[1].name, "Thing")
+    testing.eq(layout.state.cards[1].color_id, "red-id")
 end)
 
-t.test("colours outside the size palette are disabled and the five are enabled", function()
+testing.test("colours outside the size palette are disabled and the five are enabled", function()
     local colors = stock_palette()
     for _, value in ipairs({ "purple", "brown" }) do
         colors[#colors + 1] = {
@@ -1000,7 +1012,7 @@ t.test("colours outside the size palette are disabled and the five are enabled",
     color({ state = { colors = colors } }, "white").enabled = false
     local layout = fake_layout({ columns = template_columns(), colors = colors })
     local _, message, lines = run(layout)
-    t.eq(message, nil)
+    testing.eq(message, nil)
     local joined = table.concat(lines, "\n")
     for _, line in ipairs({
         "enabled white",
@@ -1008,34 +1020,34 @@ t.test("colours outside the size palette are disabled and the five are enabled",
         "disabled purple",
         "disabled brown",
     }) do
-        t.ok(joined:find(line .. "\n", 1, true) or joined:find(line .. "$"), joined)
+        testing.ok(joined:find(line .. "\n", 1, true) or joined:find(line .. "$"), joined)
     end
     for _, value in ipairs({ "yellow", "green", "blue", "red", "white" }) do
-        t.eq(color(layout, value).enabled, true)
+        testing.eq(color(layout, value).enabled, true)
     end
     for _, value in ipairs({ "orange", "purple", "brown" }) do
-        t.eq(color(layout, value).enabled, false)
+        testing.eq(color(layout, value).enabled, false)
     end
     local again, _, second = run(layout)
-    t.eq(again, 0)
-    t.eq(second, {})
+    testing.eq(again, 0)
+    testing.eq(second, {})
 end)
 
-t.test("a card wearing a disabled colour is reported on every run and left alone", function()
+testing.test("a card wearing a disabled colour is reported on every run and left alone", function()
     local layout = fake_layout({
         columns = template_columns(),
         cards = { { id = "aaaaaaaa-1", name = "Odd", color_id = "orange-id" } },
     })
     local _, _, lines = run(layout)
     local report = "card aaaaaaaa wears the disabled colour orange, left as it is"
-    t.eq(lines[#lines], report)
-    t.eq(layout.state.cards[1].color_id, "orange-id")
+    testing.eq(lines[#lines], report)
+    testing.eq(layout.state.cards[1].color_id, "orange-id")
     local changes, _, second = run(layout)
-    t.eq(changes, 0)
-    t.eq(second, { report })
+    testing.eq(changes, 0)
+    testing.eq(second, { report })
 end)
 
-t.test("a token that may not enable colours leaves them and carries on", function()
+testing.test("a token that may not enable colours leaves them and carries on", function()
     local layout = fake_layout({ columns = template_columns() })
     local set_color = layout.set_color
     function layout:set_color(id, fields)
@@ -1045,45 +1057,45 @@ t.test("a token that may not enable colours leaves them and carries on", functio
         return set_color(self, id, fields)
     end
     local changes, message, lines = run(layout)
-    t.eq(message, nil)
-    t.ok(changes > 0)
+    testing.eq(message, nil)
+    testing.ok(changes > 0)
     local left = 0
     for _, line in ipairs(lines) do
         if line:find("run dev board init --admin", 1, true) then
             left = left + 1
         end
     end
-    t.eq(left, 1)
-    t.eq(color(layout, "orange").enabled, true)
-    t.eq(color(layout, "white").is_default, true)
+    testing.eq(left, 1)
+    testing.eq(color(layout, "orange").enabled, true)
+    testing.eq(color(layout, "white").is_default, true)
 end)
 
-t.test("init sends enabled through the palette PATCH for each colour", function()
+testing.test("init sends enabled through the palette PATCH for each colour", function()
     local root, home, tmp = sandbox()
     local orange = ',{"id":"orange-id","value":"orange","label":"Orange",'
         .. '"description":"","is_default":false,"enabled":true}]'
     assert(fs.write(root .. "/colors.json", colors_json():gsub("%]$", "") .. orange))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0)
+    testing.eq(code, 0)
     local patch = '--data-raw {"enabled":false} '
         .. "https://pomb.example/api/boards/board-1/colors/orange-id"
-    t.ok(calls_of(root):find(patch, 1, true), calls_of(root))
-    t.eq(out, UNCHANGED .. "disabled orange\nboard demo: 1 change\n")
+    testing.ok(calls_of(root):find(patch, 1, true), calls_of(root))
+    testing.eq(out, UNCHANGED .. "disabled orange\nboard demo: 1 change\n")
 end)
 
-t.test("agent-roles-create: a first init posts the board id and prints names", function()
+testing.test("agent-roles-create: a first init posts the board id and prints names", function()
     local root, home, tmp = sandbox({
         roles = '200|{"created":["planner","implementer","reviewer","verifier","release","lead"],'
             .. '"roles":[]}\n',
     })
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(
+    testing.eq(code, 0, out)
+    testing.eq(
         out,
         "created agent roles planner, implementer, reviewer, verifier, release, lead\n"
             .. "board demo: 1 change\n"
     )
-    t.ok(
+    testing.ok(
         calls_of(root):find(
             '--data-raw {"boards":["board-1"]} https://pomb.example/api/v1/agent-roles/standard',
             1,
@@ -1093,78 +1105,81 @@ t.test("agent-roles-create: a first init posts the board id and prints names", f
     )
 end)
 
-t.test("agent-roles-unchanged: a rerun prints unchanged and counts no change", function()
+testing.test("agent-roles-unchanged: a rerun prints unchanged and counts no change", function()
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
-    t.ok(calls_of(root):find("/api/v1/agent-roles/standard", 1, true), calls_of(root))
+    testing.eq(code, 0, out)
+    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.ok(calls_of(root):find("/api/v1/agent-roles/standard", 1, true), calls_of(root))
 end)
 
-t.test("agent-roles-create: the step runs once through a layout", function()
+testing.test("agent-roles-create: the step runs once through a layout", function()
     local layout = fake_layout({ columns = template_columns() })
     local lines = {}
     local changes = init.run(layout, "demo", function(line)
         lines[#lines + 1] = line
     end)
-    t.ok(changes >= 1)
-    t.ok(table.concat(lines, "\n"):find("created agent roles planner, implementer", 1, true))
+    testing.ok(changes >= 1)
+    testing.ok(table.concat(lines, "\n"):find("created agent roles planner, implementer", 1, true))
     lines = {}
-    t.eq(
+    testing.eq(
         init.run(layout, "demo", function(line)
             lines[#lines + 1] = line
         end),
         0
     )
-    t.eq(lines, { "agent roles unchanged" })
+    testing.eq(lines, { "agent roles unchanged" })
 end)
 
-t.test("a board with no roles says nothing about them", function()
+testing.test("a board with no roles says nothing about them", function()
     local layout = fake_layout({ columns = template_columns(), roles = false })
     local lines = {}
     init.run(layout, "demo", function(line)
         lines[#lines + 1] = line
     end)
     for _, line in ipairs(lines) do
-        t.eq(line:find("agent roles", 1, true), nil, line)
+        testing.eq(line:find("agent roles", 1, true), nil, line)
     end
 end)
 
-t.test("agent-roles-exceeds-grant: a board the init token does not hold is named", function()
+testing.test("agent-roles-exceeds-grant: a board the init token does not hold is named", function()
     local root, home, tmp = sandbox({
         roles = '403|{"code":"exceeds_grant","message":"the calling token does not hold board board-1"}\n',
     })
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 1)
-    t.ok(out:find("the token does not hold board demo (board-1)", 1, true), out)
-    t.ok(out:find("add the board to the token", 1, true), out)
-    t.eq(out:find("--admin", 1, true), nil)
+    testing.eq(code, 1)
+    testing.ok(out:find("the token does not hold board demo (board-1)", 1, true), out)
+    testing.ok(out:find("add the board to the token", 1, true), out)
+    testing.eq(out:find("--admin", 1, true), nil)
 end)
 
-t.test("agent-roles-denied: a permission_denied names the missing permission", function()
+testing.test("agent-roles-denied: a permission_denied names the missing permission", function()
     local root, home, tmp = sandbox({
         roles = '403|{"code":"permission_denied","message":"no","permission":"settings.write",'
             .. '"board_id":null}\n',
     })
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 1)
-    t.ok(out:find("lacks the settings.write permission", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("lacks the settings.write permission", 1, true), out)
 end)
 
-t.test("init --admin accepts a token with the admin preset's permissions on every board", function()
-    local root, home, tmp = sandbox()
-    assert(
-        fs.write(
-            root .. "/whoami.json",
-            '{"permissions":["cards.read","boards.write","templates.write"],"boards":"all"}'
+testing.test(
+    "init --admin accepts a token with the admin preset's permissions on every board",
+    function()
+        local root, home, tmp = sandbox()
+        assert(
+            fs.write(
+                root .. "/whoami.json",
+                '{"permissions":["cards.read","boards.write","templates.write"],"boards":"all"}'
+            )
         )
-    )
-    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
-    t.eq(code, 0)
-    t.ok(out:find("already follows the standard", 1, true), out)
-end)
+        local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+        testing.eq(code, 0)
+        testing.ok(out:find("already follows the standard", 1, true), out)
+    end
+)
 
-t.test("init --admin refuses a token missing an admin permission or some boards", function()
+testing.test("init --admin refuses a token missing an admin permission or some boards", function()
     for _, case in ipairs({
         {
             '{"permissions":["cards.read","boards.write"],"boards":"all"}',
@@ -1179,23 +1194,23 @@ t.test("init --admin refuses a token missing an admin permission or some boards"
         local root, home, tmp = sandbox()
         assert(fs.write(root .. "/whoami.json", case[1]))
         local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
-        t.eq(code, 1)
-        t.ok(out:find(case[2], 1, true), out)
-        t.eq(writes(root), 0)
+        testing.eq(code, 1)
+        testing.ok(out:find(case[2], 1, true), out)
+        testing.eq(writes(root), 0)
     end
 end)
 
-t.test("init --admin refuses a catalog that lists no admin preset", function()
+testing.test("init --admin refuses a catalog that lists no admin preset", function()
     local root, home, tmp = sandbox()
     assert(fs.write(root .. "/whoami.json", '{"permissions":[],"boards":"all"}'))
     assert(fs.write(root .. "/permissions.json", "[]"))
     local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
-    t.eq(code, 1)
-    t.ok(out:find("lists no admin preset", 1, true), out)
-    t.eq(writes(root), 0)
+    testing.eq(code, 1)
+    testing.ok(out:find("lists no admin preset", 1, true), out)
+    testing.eq(writes(root), 0)
 end)
 
-t.test(
+testing.test(
     "init on a permission_denied with no board suggests --admin, with a board does not",
     function()
         local layout = fake_layout({ columns = template_columns() })
@@ -1205,18 +1220,18 @@ t.test(
                     .. "on every board; use a token that has it"
         end
         local _, message = run(layout)
-        t.ok(message:find("run dev board init --admin", 1, true), message)
+        testing.ok(message:find("run dev board init --admin", 1, true), message)
         function layout:set_color()
             return nil,
                 "board unavailable: this token has the boards.write permission but is not assigned "
                     .. "to board b; add the board to the token"
         end
         _, message = run(layout)
-        t.eq(message:find("--admin", 1, true), nil)
+        testing.eq(message:find("--admin", 1, true), nil)
     end
 )
 
-t.test("init marks blocked on a new board", function()
+testing.test("init marks blocked on a new board", function()
     local layout = fake_layout({ exists = false })
     local create = layout.create
     function layout:create()
@@ -1227,52 +1242,52 @@ t.test("init marks blocked on a new board", function()
         return made, template
     end
     local changes, message, lines = run(layout)
-    t.eq(message, nil)
-    t.eq(layout.state.columns[8].is_blocked, true)
-    t.ok(
+    testing.eq(message, nil)
+    testing.eq(layout.state.columns[8].is_blocked, true)
+    testing.ok(
         table
             .concat(lines, "\n")
             :find("marked Blocked as the column of cards waiting on an answer", 1, true)
     )
-    t.ok(changes > 0)
+    testing.ok(changes > 0)
 end)
 
-t.test("init blocked rerun says nothing", function()
+testing.test("init blocked rerun says nothing", function()
     local columns = template_columns()
     for _, column in ipairs(columns) do
         column.is_blocked = false
     end
     local layout = fake_layout({ columns = columns })
     local first = run(layout)
-    t.eq(layout.state.columns[8].is_blocked, true)
+    testing.eq(layout.state.columns[8].is_blocked, true)
     local again, message, said = run(layout)
-    t.eq(message, nil)
-    t.eq(again, 0)
-    t.eq(said, {})
-    t.ok(first > 0)
+    testing.eq(message, nil)
+    testing.eq(again, 0)
+    testing.eq(said, {})
+    testing.ok(first > 0)
     local marks = 0
     for _, write in ipairs(layout.state.writes) do
         marks = marks + (write[1] == "mark_blocked" and 1 or 0)
     end
-    t.eq(marks, 1)
+    testing.eq(marks, 1)
 end)
 
-t.test("init refuses when pomb lacks is blocked", function()
+testing.test("init refuses when pomb lacks is blocked", function()
     local columns = template_columns()
     for _, column in ipairs(columns) do
         column.is_blocked = nil
     end
     local layout = fake_layout({ columns = columns, without_blocked = true })
     local changes, message = run(layout)
-    t.eq(changes, nil)
-    t.ok(message:find("cannot mark a Blocked column", 1, true), message)
-    t.ok(message:find("dev board ask", 1, true), message)
+    testing.eq(changes, nil)
+    testing.ok(message:find("cannot mark a Blocked column", 1, true), message)
+    testing.ok(message:find("dev board ask", 1, true), message)
     for _, write in ipairs(layout.state.writes) do
-        t.ok(write[1] ~= "mark_blocked")
+        testing.ok(write[1] ~= "mark_blocked")
     end
 end)
 
-t.test("init sends is blocked through the column update", function()
+testing.test("init sends is blocked through the column update", function()
     local root, home, tmp = sandbox()
     local unmarked = detail():gsub(
         '("name":"Blocked","wip_limit":null,"is_done":false,"is_blocked":)true',
@@ -1280,24 +1295,27 @@ t.test("init sends is blocked through the column update", function()
     )
     assert(fs.write(root .. "/detail.json", unmarked))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.ok(
+    testing.eq(code, 0, out)
+    testing.ok(
         calls_of(root):find(
             '%-X PATCH[^\n]*%-%-data%-raw {"is_blocked":true} https://pomb%.example/api/columns/col%-Blocked'
         ),
         calls_of(root)
     )
-    t.ok(out:find("marked Blocked as the column of cards waiting on an answer\n", 1, true), out)
+    testing.ok(
+        out:find("marked Blocked as the column of cards waiting on an answer\n", 1, true),
+        out
+    )
 end)
 
-t.test("init stops before any write when the column views carry no is blocked", function()
+testing.test("init stops before any write when the column views carry no is blocked", function()
     local root, home, tmp = sandbox()
     local bare = detail():gsub(',"is_blocked":%a+', "")
     assert(fs.write(root .. "/detail.json", bare))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 1)
-    t.ok(out:find("cannot mark a Blocked column yet", 1, true), out)
-    t.eq(writes(root), 0)
+    testing.eq(code, 1)
+    testing.ok(out:find("cannot mark a Blocked column yet", 1, true), out)
+    testing.eq(writes(root), 0)
 end)
 
 local function limit_posts(root)
@@ -1309,13 +1327,13 @@ local function limit_posts(root)
     return count
 end
 
-t.test("init creates the limit group of 4 on a board that has none", function()
+testing.test("init creates the limit group of 4 on a board that has none", function()
     local root, home, tmp = sandbox()
     assert(fs.write(root .. "/detail.json", (detail():gsub(',"limit_groups":%b[]', ""))))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(limit_posts(root), 1)
-    t.ok(
+    testing.eq(code, 0, out)
+    testing.eq(limit_posts(root), 1)
+    testing.ok(
         calls_of(root):find(
             '--data-raw {"column_ids":["col-InProgress","col-Review","col-Verify"],"limit":4} https://pomb.example/api/boards/board-1/limit-groups',
             1,
@@ -1323,28 +1341,28 @@ t.test("init creates the limit group of 4 on a board that has none", function()
         ),
         calls_of(root)
     )
-    t.ok(out:find("created limit group In Progress, Review and Verify at 4\n", 1, true), out)
-    t.ok(out:find("board demo: 1 change\n", 1, true), out)
+    testing.ok(out:find("created limit group In Progress, Review and Verify at 4\n", 1, true), out)
+    testing.ok(out:find("board demo: 1 change\n", 1, true), out)
 end)
 
-t.test("init leaves a board that has a limit group alone and says nothing", function()
+testing.test("init leaves a board that has a limit group alone and says nothing", function()
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(limit_posts(root), 0)
-    t.eq(out:find("limit group", 1, true), nil)
+    testing.eq(code, 0, out)
+    testing.eq(limit_posts(root), 0)
+    testing.eq(out:find("limit group", 1, true), nil)
 end)
 
-t.test("init leaves a board with any other limit group alone", function()
+testing.test("init leaves a board with any other limit group alone", function()
     local root, home, tmp = sandbox()
     local other = detail():gsub('"column_ids":%b[]', '"column_ids":["col-Ready","col-InProgress"]')
     assert(fs.write(root .. "/detail.json", other))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(limit_posts(root), 0)
+    testing.eq(code, 0, out)
+    testing.eq(limit_posts(root), 0)
 end)
 
-t.test("init says to use --admin when Pomb refuses the limit group", function()
+testing.test("init says to use --admin when Pomb refuses the limit group", function()
     local layout = fake_layout({ columns = template_columns() })
     function layout:limit_groups()
         return {}
@@ -1353,11 +1371,11 @@ t.test("init says to use --admin when Pomb refuses the limit group", function()
         return nil, "board unavailable: pomb answered 403: insufficient_scope"
     end
     local changes, message = run(layout)
-    t.eq(changes, nil)
-    t.ok(message:find("run dev board init --admin", 1, true), message)
+    testing.eq(changes, nil)
+    testing.ok(message:find("run dev board init --admin", 1, true), message)
 end)
 
-t.test("a layout with no limits gets no limit group", function()
+testing.test("a layout with no limits gets no limit group", function()
     local layout = fake_layout({ columns = template_columns() })
     function layout:limit_groups()
         return false
@@ -1366,25 +1384,25 @@ t.test("a layout with no limits gets no limit group", function()
         error("must not be called")
     end
     local changes, message = run(layout)
-    t.eq(message, nil)
-    t.ok(changes > 0)
+    testing.eq(message, nil)
+    testing.ok(changes > 0)
 end)
 
-t.test("a missing board gets one limit group once", function()
+testing.test("a missing board gets one limit group once", function()
     local layout = fake_layout({ exists = false })
     local _, _, lines = run(layout)
     local said = 0
     for _, line in ipairs(lines) do
         said = said + (line == "created limit group In Progress, Review and Verify at 4" and 1 or 0)
     end
-    t.eq(said, 1)
-    t.eq(layout.state.groups[1].limit, 4)
-    t.eq(
+    testing.eq(said, 1)
+    testing.eq(layout.state.groups[1].limit, 4)
+    testing.eq(
         layout.state.groups[1].column_names,
         { support.COLUMN_NAME.PROGRESS, support.COLUMN_NAME.REVIEW, support.COLUMN_NAME.VERIFY }
     )
     local changes
     changes, _, lines = run(layout)
-    t.eq(changes, 0)
-    t.eq(#lines, 0)
+    testing.eq(changes, 0)
+    testing.eq(#lines, 0)
 end)

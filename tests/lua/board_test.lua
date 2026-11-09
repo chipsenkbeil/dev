@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local board = require("dev.board")
 local box = require("dev.cmd.box")
 local commands = require("dev.cmd.board")
@@ -278,33 +278,33 @@ local function planned()
     }
 end
 
-t.test("column takes the names and the short forms in any case", function()
+testing.test("column takes the names and the short forms in any case", function()
     local roles = board.roles()
-    t.eq(roles:column(support.COLUMN.READY), support.COLUMN_NAME.READY)
-    t.eq(roles:column("PROGRESS"), support.COLUMN_NAME.PROGRESS)
-    t.eq(roles:column(support.COLUMN.REVIEW), support.COLUMN_NAME.REVIEW)
+    testing.eq(roles:column(support.COLUMN.READY), support.COLUMN_NAME.READY)
+    testing.eq(roles:column("PROGRESS"), support.COLUMN_NAME.PROGRESS)
+    testing.eq(roles:column(support.COLUMN.REVIEW), support.COLUMN_NAME.REVIEW)
     for _, short in ipairs({
         support.COLUMN.BLOCKED,
         support.COLUMN.DONE,
         support.COLUMN.BACKLOG,
         support.COLUMN.ICEBOX,
     }) do
-        t.eq(roles:column(short):lower(), short)
+        testing.eq(roles:column(short):lower(), short)
     end
-    t.eq(roles:column("doing"), nil)
+    testing.eq(roles:column("doing"), nil)
 end)
 
-t.test("roles take the mapped names, the role words and the finished columns", function()
+testing.test("roles take the mapped names, the role words and the finished columns", function()
     local roles = board.roles(
         { ready = "Next", progress = "Doing", done = "Shipped" },
         { "Old", "Shipped" }
     )
-    t.eq(roles:column(support.COLUMN.READY), "Next")
-    t.eq(roles:column("PROGRESS"), "Doing")
-    t.eq(roles:column("in progress"), nil)
-    t.eq(roles:column(support.COLUMN.DONE), "Shipped")
-    t.eq(roles:column("old"), "Old")
-    t.eq(roles.list, {
+    testing.eq(roles:column(support.COLUMN.READY), "Next")
+    testing.eq(roles:column("PROGRESS"), "Doing")
+    testing.eq(roles:column("in progress"), nil)
+    testing.eq(roles:column(support.COLUMN.DONE), "Shipped")
+    testing.eq(roles:column("old"), "Old")
+    testing.eq(roles.list, {
         support.COLUMN_NAME.ICEBOX,
         support.COLUMN_NAME.BACKLOG,
         "Next",
@@ -315,86 +315,92 @@ t.test("roles take the mapped names, the role words and the finished columns", f
         support.COLUMN_NAME.BLOCKED,
         "Shipped",
     })
-    t.eq(board.roles(nil, { "Old", "Shipped" }):done_column(), "Old")
-    t.eq(board.roles():done_column(), support.COLUMN_NAME.DONE)
+    testing.eq(board.roles(nil, { "Old", "Shipped" }):done_column(), "Old")
+    testing.eq(board.roles():done_column(), support.COLUMN_NAME.DONE)
 end)
 
-t.test("a renamed board runs through the column map", function()
+testing.test("a renamed board runs through the column map", function()
     local backend = fake({
         { id = ID_A, name = "A", column = "Next", size = "1 Pomodoro", labels = {}, checks = {} },
         { id = ID_B, name = "B", column = "Inbox", size = "unsized", labels = {}, checks = {} },
     }, nil, { "Shipped" })
     backend.column_map = { backlog = "Inbox", ready = "Next", done = "Shipped" }
-    t.eq(
+    testing.eq(
         commands.run("ls", { "--column", support.COLUMN.READY }, backend).output,
         "11111111  Next  1 Pomodoro  -  A"
     )
-    t.eq(
+    testing.eq(
         commands.run("ls", { "--column", support.COLUMN.BACKLOG }, backend).output,
         "11111111  Inbox  unsized  -  B"
     )
-    t.eq(commands.run("ls", { "--column", "doing" }, backend).code, 2)
-    t.eq(
+    testing.eq(commands.run("ls", { "--column", "doing" }, backend).code, 2)
+    testing.eq(
         commands.run("add", { "C", "--problem", "x", "--size", "1", "--done-when", "a" }, backend).output,
         "added cccccccc Inbox"
     )
 end)
 
-t.test("ls hides every finished column and discard picks the mapped one, else the first", function()
+testing.test(
+    "ls hides every finished column and discard picks the mapped one, else the first",
+    function()
+        local cards = sample()
+        cards[2].column = "Archive"
+        local backend = fake(cards, nil, { support.COLUMN_NAME.DONE, "Archive" })
+        testing.eq(
+            commands.run("ls", {}, backend).output,
+            "11111111  Ready  1 Pomodoro  docs  Write docs"
+        )
+        testing.eq(commands.run("ls", { "--column", "archive" }, backend).message, nil)
+        commands.run("discard", { "11111111-a" }, backend)
+        testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+        backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
+        backend.column_map = { done = support.COLUMN_NAME.DONE }
+        commands.run("discard", { "11111111-a" }, backend)
+        testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+        backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
+        commands.run("discard", { "11111111-a" }, backend)
+        testing.eq(backend.calls[#backend.calls], { "move", ID_A, "Archive" })
+    end
+)
+
+testing.test("resolve takes a unique prefix of at least 8 characters", function()
     local cards = sample()
-    cards[2].column = "Archive"
-    local backend = fake(cards, nil, { support.COLUMN_NAME.DONE, "Archive" })
-    t.eq(commands.run("ls", {}, backend).output, "11111111  Ready  1 Pomodoro  docs  Write docs")
-    t.eq(commands.run("ls", { "--column", "archive" }, backend).message, nil)
-    commands.run("discard", { "11111111-a" }, backend)
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
-    backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
-    backend.column_map = { done = support.COLUMN_NAME.DONE }
-    commands.run("discard", { "11111111-a" }, backend)
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
-    backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
-    commands.run("discard", { "11111111-a" }, backend)
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, "Archive" })
+    testing.eq(board.resolve(cards, "11111111-a").id, ID_A)
+    testing.eq(board.resolve(cards, ID_B).id, ID_B)
+    testing.eq(board.resolve(cards, "CCCCCCCC").id, ID_C)
 end)
 
-t.test("resolve takes a unique prefix of at least 8 characters", function()
-    local cards = sample()
-    t.eq(board.resolve(cards, "11111111-a").id, ID_A)
-    t.eq(board.resolve(cards, ID_B).id, ID_B)
-    t.eq(board.resolve(cards, "CCCCCCCC").id, ID_C)
-end)
-
-t.test("resolve refuses a short, unknown or ambiguous prefix", function()
+testing.test("resolve refuses a short, unknown or ambiguous prefix", function()
     local cards = sample()
     local card, message = board.resolve(cards, "1111111")
-    t.eq(card, nil)
-    t.ok(message:find("at least 8", 1, true), message)
+    testing.eq(card, nil)
+    testing.ok(message:find("at least 8", 1, true), message)
     card, message = board.resolve(cards, "11111111")
-    t.eq(card, nil)
-    t.ok(message:find("more than one card", 1, true), message)
+    testing.eq(card, nil)
+    testing.ok(message:find("more than one card", 1, true), message)
     card, message = board.resolve(cards, "deadbeef")
-    t.eq(card, nil)
-    t.ok(message:find("no card starts with deadbeef", 1, true), message)
+    testing.eq(card, nil)
+    testing.ok(message:find("no card starts with deadbeef", 1, true), message)
     card, message = board.resolve(cards, "zzzzzzzz")
-    t.eq(card, nil)
-    t.ok(message:find("hex", 1, true), message)
+    testing.eq(card, nil)
+    testing.ok(message:find("hex", 1, true), message)
 end)
 
-t.test("ls hides Done and aligns the columns", function()
+testing.test("ls hides Done and aligns the columns", function()
     local result = commands.run("ls", {}, fake(sample()))
-    t.eq(
+    testing.eq(
         result.output,
         "11111111  Ready    1 Pomodoro  docs  Write docs\n11111111  Backlog  unsized     -     Fix lint"
     )
 end)
 
-t.test("ls filters by column and label", function()
+testing.test("ls filters by column and label", function()
     local result = commands.run("ls", { "--column", support.COLUMN.DONE }, fake(sample()))
-    t.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
+    testing.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
     result = commands.run("ls", { "--label", "docs" }, fake(sample()))
-    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
+    testing.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
     result = commands.run("ls", { "--label", "none" }, fake(sample()))
-    t.eq(result.output, "no cards")
+    testing.eq(result.output, "no cards")
 end)
 
 local function coloured(cards, args)
@@ -425,52 +431,55 @@ local function progress_sample()
     return cards
 end
 
-t.test("ls on a colour terminal draws the summary, legend, dots and meter", function()
+testing.test("ls on a colour terminal draws the summary, legend, dots and meter", function()
     local result = coloured(progress_sample())
-    t.ok(result.page, "output goes through the pager")
+    testing.ok(result.page, "output goes through the pager")
     local lines = split(strip(result.output))
-    t.eq(lines[1], "2 cards · 1 ready · 1 blocked")
-    t.eq(lines[2], "size  ● 1  ●● 2  ●●● 3  ●●●● >3  ○○○ unsized")
-    t.eq(lines[3], "")
-    t.ok(lines[4]:find("^ID +COLUMN +SIZE +LABELS +DONE +NAME$"), lines[4])
-    t.ok(lines[5]:find("^11111111  Ready +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[5])
-    t.ok(lines[6]:find("^11111111  Blocked +○○○ +%- +%- +Fix lint$"), lines[6])
-    t.ok(result.output:find("\27[33m", 1, true), "yellow is painted")
+    testing.eq(lines[1], "2 cards · 1 ready · 1 blocked")
+    testing.eq(lines[2], "size  ● 1  ●● 2  ●●● 3  ●●●● >3  ○○○ unsized")
+    testing.eq(lines[3], "")
+    testing.ok(lines[4]:find("^ID +COLUMN +SIZE +LABELS +DONE +NAME$"), lines[4])
+    testing.ok(
+        lines[5]:find("^11111111  Ready +● +docs +▰▰▱▱ 2/4 +Write docs$"),
+        lines[5]
+    )
+    testing.ok(lines[6]:find("^11111111  Blocked +○○○ +%- +%- +Fix lint$"), lines[6])
+    testing.ok(result.output:find("\27[33m", 1, true), "yellow is painted")
 end)
 
-t.test("ls on a colour terminal paints no empty colour code in the meter", function()
+testing.test("ls on a colour terminal paints no empty colour code in the meter", function()
     local empty_code = "\27%[[%d;]*m\27%[0m"
     local cards = progress_sample()
     cards[1].outcomes = { { done = false }, { done = false } }
     cards[2].outcomes = { { done = true }, { done = true } }
     local result = coloured(cards)
-    t.eq(result.output:find(empty_code), nil, result.output)
-    t.ok(strip(result.output):find("▱▱▱▱ 0/2", 1, true), result.output)
-    t.ok(strip(result.output):find("▰▰▰▰ 2/2", 1, true), result.output)
-    t.ok(result.output:find("\27[32m▰▰▰▰\27[0m", 1, true), result.output)
+    testing.eq(result.output:find(empty_code), nil, result.output)
+    testing.ok(strip(result.output):find("▱▱▱▱ 0/2", 1, true), result.output)
+    testing.ok(strip(result.output):find("▰▰▰▰ 2/2", 1, true), result.output)
+    testing.ok(result.output:find("\27[32m▰▰▰▰\27[0m", 1, true), result.output)
 end)
 
-t.test("ls shows the held by column only when a listed card is claimed", function()
+testing.test("ls shows the held by column only when a listed card is claimed", function()
     local cards = progress_sample()
     cards[1].claimant = "dev@host:1"
     local result = coloured(cards)
-    t.ok(strip(result.output):find("HELD BY", 1, true), result.output)
-    t.ok(strip(result.output):find("dev@host:1", 1, true), result.output)
+    testing.ok(strip(result.output):find("HELD BY", 1, true), result.output)
+    testing.ok(strip(result.output):find("dev@host:1", 1, true), result.output)
 end)
 
-t.test("ls --group lists the cards under a heading and count per column", function()
+testing.test("ls --group lists the cards under a heading and count per column", function()
     local result = coloured(progress_sample(), { "--group" })
     local lines = split(strip(result.output))
-    t.eq(lines[3], "")
-    t.eq(lines[4], "Ready  1 card")
-    t.ok(lines[5]:find("^  11111111 +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[5])
-    t.eq(lines[6], "")
-    t.eq(lines[7], "Blocked  1 card")
-    t.eq(lines[#lines], "Done is left out unless --column done")
+    testing.eq(lines[3], "")
+    testing.eq(lines[4], "Ready  1 card")
+    testing.ok(lines[5]:find("^  11111111 +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[5])
+    testing.eq(lines[6], "")
+    testing.eq(lines[7], "Blocked  1 card")
+    testing.eq(lines[#lines], "Done is left out unless --column done")
     local filtered =
         strip(coloured(progress_sample(), { "--group", "--column", support.COLUMN.BLOCKED }).output)
-    t.ok(filtered:find("Done is left out unless --column done", 1, true), filtered)
-    t.eq(
+    testing.ok(filtered:find("Done is left out unless --column done", 1, true), filtered)
+    testing.eq(
         coloured(sample(), { "--group", "--column", support.COLUMN.DONE }).output:find(
             "left out",
             1,
@@ -480,7 +489,7 @@ t.test("ls --group lists the cards under a heading and count per column", functi
     )
 end)
 
-t.test("ls filters by column, label and size in both layouts", function()
+testing.test("ls filters by column, label and size in both layouts", function()
     for _, group in ipairs({ {}, { "--group" } }) do
         local function run(...)
             local args = { ... }
@@ -489,46 +498,49 @@ t.test("ls filters by column, label and size in both layouts", function()
             end
             return strip(coloured(progress_sample(), args).output)
         end
-        t.ok(run("--column", support.COLUMN.BLOCKED):find("Fix lint", 1, true))
-        t.eq(run("--column", support.COLUMN.BLOCKED):find("Write docs", 1, true), nil)
-        t.ok(run("--label", "docs"):find("Write docs", 1, true))
-        t.eq(run("--label", "docs"):find("Fix lint", 1, true), nil)
-        t.ok(run("--size", "1"):find("Write docs", 1, true))
-        t.eq(run("--size", "1"):find("Fix lint", 1, true), nil)
-        t.eq(coloured(progress_sample(), { "--label", "none" }).output, "no cards")
+        testing.ok(run("--column", support.COLUMN.BLOCKED):find("Fix lint", 1, true))
+        testing.eq(run("--column", support.COLUMN.BLOCKED):find("Write docs", 1, true), nil)
+        testing.ok(run("--label", "docs"):find("Write docs", 1, true))
+        testing.eq(run("--label", "docs"):find("Fix lint", 1, true), nil)
+        testing.ok(run("--size", "1"):find("Write docs", 1, true))
+        testing.eq(run("--size", "1"):find("Fix lint", 1, true), nil)
+        testing.eq(coloured(progress_sample(), { "--label", "none" }).output, "no cards")
     end
 end)
 
-t.test("ls without colour is the plain lines, --group included", function()
+testing.test("ls without colour is the plain lines, --group included", function()
     local plain = ui.context({ color = false, interactive = false, width = 100 })
     local expected =
         "11111111  Ready    1 Pomodoro  docs  Write docs\n11111111  Backlog  unsized     -     Fix lint"
     for _, args in ipairs({ {}, { "--group" } }) do
         local result = commands.run("ls", args, fake(sample()), nil, plain)
-        t.eq(result.output, expected)
-        t.eq(result.page, nil)
+        testing.eq(result.output, expected)
+        testing.eq(result.page, nil)
     end
 end)
 
-t.test("ls refuses an unknown column and an unknown flag with a usage error", function()
+testing.test("ls refuses an unknown column and an unknown flag with a usage error", function()
     local result = commands.run("ls", { "--column", "doing" }, fake(sample()))
-    t.eq(result.code, 2)
-    t.ok(result.message:find("unknown column doing", 1, true), result.message)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("unknown column doing", 1, true), result.message)
     result = commands.run("ls", { "--bogus" }, fake(sample()))
-    t.eq(result.code, 2)
+    testing.eq(result.code, 2)
     result = commands.run("ls", { "--column" }, fake(sample()))
-    t.eq(result.code, 2)
+    testing.eq(result.code, 2)
 end)
 
-t.test("add defaults to Backlog and joins the words of the name", function()
+testing.test("add defaults to Backlog and joins the words of the name", function()
     local backend = fake(sample())
     local result = commands.run(
         "add",
         { "A", "new", "card", "--problem", "x", "--size", "1", "--done-when", "a" },
         backend
     )
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.calls[1], { "add", "A new card", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(
+        backend.calls[1],
+        { "add", "A new card", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" }
+    )
     result = commands.run("add", {
         "X",
         "--column",
@@ -540,11 +552,11 @@ t.test("add defaults to Backlog and joins the words of the name", function()
         "--checks",
         "dev test",
     }, backend)
-    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.READY, V1, "green" })
-    t.eq(commands.run("add", {}, backend).code, 2)
+    testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.READY, V1, "green" })
+    testing.eq(commands.run("add", {}, backend).code, 2)
 end)
 
-t.test("add --checks refuses the rows checks refuses and writes nothing", function()
+testing.test("add --checks refuses the rows checks refuses and writes nothing", function()
     for _, row in ipairs({ "rg 'a' f", "rg a.*b f", "dev.--remote.lint" }) do
         local backend = fake(sample())
         local result = commands.run(
@@ -552,13 +564,13 @@ t.test("add --checks refuses the rows checks refuses and writes nothing", functi
             { "X", "--problem", "x", "--checks", "dev test", "--checks", row },
             backend
         )
-        t.eq(result.code, 2)
-        t.ok(result.message:find(row, 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find(row, 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
 end)
 
-t.test("add --board files on the named board and leaves this one alone", function()
+testing.test("add --board files on the named board and leaves this one alone", function()
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
@@ -567,29 +579,29 @@ t.test("add --board files on the named board and leaves this one alone", functio
         { "Far", "--board", "ci", "--problem", "x", "--size", "1", "--done-when", "a" },
         backend
     )
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.calls[1], { "other_board", "ci" })
-    t.eq(#backend.calls, 1)
-    t.eq(sibling.calls[1], { "add", "Far", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(backend.calls[1], { "other_board", "ci" })
+    testing.eq(#backend.calls, 1)
+    testing.eq(sibling.calls[1], { "add", "Far", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
 end)
 
-t.test("add --board refuses a board that is not there", function()
+testing.test("add --board refuses a board that is not there", function()
     local backend = fake(sample())
     local result = commands.run("add", { "Far", "--board", "nope", "--size", "1" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no board named nope", 1, true), result.message)
     local sibling = fake(sample())
     function sibling:find()
         return false
     end
     backend.sibling = sibling
     result = commands.run("add", { "Far", "--board", "ci", "--size", "1" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("no board named ci", 1, true), result.message)
-    t.eq(#sibling.calls, 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no board named ci", 1, true), result.message)
+    testing.eq(#sibling.calls, 0)
 end)
 
-t.test("add --blocked-by links the new card to each blocker", function()
+testing.test("add --blocked-by links the new card to each blocker", function()
     local backend = fake(sample())
     local result = commands.run("add", {
         "X",
@@ -604,13 +616,13 @@ t.test("add --blocked-by links the new card to each blocker", function()
         "--blocked-by",
         "11111111-b",
     }, backend)
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.calls[2], { "link", ID_C, "blocked_by", ID_A })
-    t.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_B })
-    t.eq(#backend.calls, 3)
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(backend.calls[2], { "link", ID_C, "blocked_by", ID_A })
+    testing.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_B })
+    testing.eq(#backend.calls, 3)
 end)
 
-t.test("add --from links the new card as related to the card it came from", function()
+testing.test("add --from links the new card as related to the card it came from", function()
     local backend = fake(sample())
     local result = commands.run("add", {
         "X",
@@ -623,34 +635,34 @@ t.test("add --from links the new card as related to the card it came from", func
         "--from",
         "11111111-a",
     }, backend)
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.calls[2], { "link", ID_C, "related", ID_A })
-    t.eq(#backend.calls, 2)
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(backend.calls[2], { "link", ID_C, "related", ID_A })
+    testing.eq(#backend.calls, 2)
 end)
 
-t.test("add --from refuses an unknown card before it adds", function()
+testing.test("add --from refuses an unknown card before it adds", function()
     local backend = fake(sample())
     local result = commands.run(
         "add",
         { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--from", "deadbeef" },
         backend
     )
-    t.eq(result.code, 1)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("add --blocked-by refuses an unknown blocker before it adds", function()
+testing.test("add --blocked-by refuses an unknown blocker before it adds", function()
     local backend = fake(sample())
     local result = commands.run(
         "add",
         { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--blocked-by", "deadbeef" },
         backend
     )
-    t.eq(result.code, 1)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("add --board with --blocked-by looks the blocker up on the named board", function()
+testing.test("add --board with --blocked-by looks the blocker up on the named board", function()
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
@@ -667,11 +679,11 @@ t.test("add --board with --blocked-by looks the blocker up on the named board", 
         "--blocked-by",
         "11111111-a",
     }, backend)
-    t.eq(sibling.calls[2], { "link", ID_C, "blocked_by", ID_A })
-    t.eq(#backend.calls, 1)
+    testing.eq(sibling.calls[2], { "link", ID_C, "blocked_by", ID_A })
+    testing.eq(#backend.calls, 1)
 end)
 
-t.test("add names the card when its blocked-by link fails", function()
+testing.test("add names the card when its blocked-by link fails", function()
     local backend = fake(sample())
     function backend:link()
         return nil, "pomb refused"
@@ -681,15 +693,15 @@ t.test("add names the card when its blocked-by link fails", function()
         { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--blocked-by", "11111111-a" },
         backend
     )
-    t.eq(result.code, 1)
-    t.ok(
+    testing.eq(result.code, 1)
+    testing.ok(
         result.message:find("cccccccc was added to Backlog but its blocked_by link", 1, true),
         result.message
     )
-    t.ok(result.unqueued)
+    testing.ok(result.unqueued)
 end)
 
-t.test("add names the card when its from link fails", function()
+testing.test("add names the card when its from link fails", function()
     local backend = fake(sample())
     function backend:link()
         return nil, "pomb refused"
@@ -699,15 +711,15 @@ t.test("add names the card when its from link fails", function()
         { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--from", "11111111-a" },
         backend
     )
-    t.eq(result.code, 1)
-    t.ok(
+    testing.eq(result.code, 1)
+    testing.ok(
         result.message:find("cccccccc was added to Backlog but its related link", 1, true),
         result.message
     )
-    t.ok(result.unqueued)
+    testing.ok(result.unqueued)
 end)
 
-t.test("add --board with --from looks the card up on the named board", function()
+testing.test("add --board with --from looks the card up on the named board", function()
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
@@ -724,11 +736,11 @@ t.test("add --board with --from looks the card up on the named board", function(
         "--from",
         "11111111-a",
     }, backend)
-    t.eq(sibling.calls[2], { "link", ID_C, "related", ID_A })
-    t.eq(#backend.calls, 1)
+    testing.eq(sibling.calls[2], { "link", ID_C, "related", ID_A })
+    testing.eq(#backend.calls, 1)
 end)
 
-t.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", function()
+testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", function()
     local backend = fake(sample())
     local far = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
     backend.sibling = {
@@ -759,18 +771,18 @@ t.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", funct
         "--blocked-by",
         "ci:dddddddd",
     }, backend)
-    t.eq(backend.calls[1], { "other_board", "ci" })
-    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
-    t.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_A })
-    t.eq(backend.calls[4], { "link", ID_C, "blocked_by", far })
-    t.eq(#backend.calls, 4)
+    testing.eq(backend.calls[1], { "other_board", "ci" })
+    testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
+    testing.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_A })
+    testing.eq(backend.calls[4], { "link", ID_C, "blocked_by", far })
+    testing.eq(#backend.calls, 4)
 end)
 
-t.test("add --size passes the colour its size word names", function()
+testing.test("add --size passes the colour its size word names", function()
     local backend = fake(sample())
     for word, color in pairs({ ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }) do
         commands.run("add", { "X", "--problem", "x", "--size", word, "--done-when", "a" }, backend)
-        t.eq(
+        testing.eq(
             backend.calls[#backend.calls],
             { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, color }
         )
@@ -781,80 +793,80 @@ t.test("add --size passes the colour its size word names", function()
         { "X", "--problem", "x", "--size", "UNSIZED", "--done-when", "a" },
         backend
     )
-    t.eq(refused.code, 2)
-    t.ok(refused.message:find("a size", 1, true), refused.message)
-    t.eq(#backend.calls, calls)
+    testing.eq(refused.code, 2)
+    testing.ok(refused.message:find("a size", 1, true), refused.message)
+    testing.eq(#backend.calls, calls)
     commands.run(
         "add",
         { "X", "--column", support.COLUMN.ICEBOX, "--size", "UNSIZED", "--description", "loose" },
         backend
     )
-    t.eq(
+    testing.eq(
         backend.calls[#backend.calls],
         { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", "white" }
     )
     local result = commands.run("add", { "X", "--size", "4" }, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("unknown size 4", 1, true), result.message)
-    t.eq(commands.run("add", { "X", "--size" }, backend).code, 2)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("unknown size 4", 1, true), result.message)
+    testing.eq(commands.run("add", { "X", "--size" }, backend).code, 2)
 end)
 
-t.test("size sets the colour of each size word and resolves the card by prefix", function()
+testing.test("size sets the colour of each size word and resolves the card by prefix", function()
     local backend = fake(sample())
     local want = { ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }
     for word, color in pairs(want) do
         local result = commands.run("size", { "cccccccc", word }, backend)
-        t.eq(result.output, "sized cccccccc " .. word)
-        t.eq(backend.calls[#backend.calls], { "set_size", ID_C, color, nil })
+        testing.eq(result.output, "sized cccccccc " .. word)
+        testing.eq(backend.calls[#backend.calls], { "set_size", ID_C, color, nil })
     end
 end)
 
-t.test("size unsized is refused outside Icebox and works inside it", function()
+testing.test("size unsized is refused outside Icebox and works inside it", function()
     local backend = fake(sample())
     local result = commands.run("size", { "cccccccc", "unsized" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("keeps a size", 1, true), result.message)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("keeps a size", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
     local cards = sample()
     cards[3].column = support.COLUMN_NAME.ICEBOX
     backend = fake(cards)
     result = commands.run("size", { "cccccccc", "unsized" }, backend)
-    t.eq(result.output, "sized cccccccc unsized")
-    t.eq(backend.calls[#backend.calls], { "set_size", ID_C, "white", nil })
+    testing.eq(result.output, "sized cccccccc unsized")
+    testing.eq(backend.calls[#backend.calls], { "set_size", ID_C, "white", nil })
 end)
 
-t.test("size refuses a bad size, a missing argument and an unknown card", function()
+testing.test("size refuses a bad size, a missing argument and an unknown card", function()
     local backend = fake(sample())
     local result = commands.run("size", { "cccccccc", "4" }, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("the sizes are 1, 2, 3, 3+, unsized", 1, true), result.message)
-    t.eq(commands.run("size", { "cccccccc" }, backend).code, 2)
-    t.eq(commands.run("size", { "cccccccc", "2", "3" }, backend).code, 2)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("the sizes are 1, 2, 3, 3+, unsized", 1, true), result.message)
+    testing.eq(commands.run("size", { "cccccccc" }, backend).code, 2)
+    testing.eq(commands.run("size", { "cccccccc", "2", "3" }, backend).code, 2)
     result = commands.run("size", { "deadbeef", "2" }, backend)
-    t.eq(result.code, 1)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("ls --size keeps the cards of one colour and counts no colour as unsized", function()
+testing.test("ls --size keeps the cards of one colour and counts no colour as unsized", function()
     local cards = sample()
     cards[1].color = "yellow"
     cards[2].color = "white"
     cards[3].color = "blue"
     local result = commands.run("ls", { "--size", "1" }, fake(cards))
-    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
+    testing.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
     result = commands.run("ls", { "--size", "unsized" }, fake(cards))
-    t.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
+    testing.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
     cards[2].color = nil
     result = commands.run("ls", { "--size", "unsized" }, fake(cards))
-    t.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
+    testing.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
     result = commands.run("ls", { "--size", "3", "--column", support.COLUMN.DONE }, fake(cards))
-    t.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
+    testing.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
     result = commands.run("ls", { "--size", "2" }, fake(cards))
-    t.eq(result.output, "no cards")
-    t.eq(commands.run("ls", { "--size", "9" }, fake(cards)).code, 2)
+    testing.eq(result.output, "no cards")
+    testing.eq(commands.run("ls", { "--size", "9" }, fake(cards)).code, 2)
 end)
 
-t.test("add --label may repeat and drops a duplicate", function()
+testing.test("add --label may repeat and drops a duplicate", function()
     local backend = fake(sample())
     commands.run("add", {
         "X",
@@ -871,137 +883,143 @@ t.test("add --label may repeat and drops a duplicate", function()
         "--label",
         "a",
     }, backend)
-    t.eq(
+    testing.eq(
         backend.calls[1],
         { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "green", { "a", "needs:lead" } }
     )
     commands.run("add", { "X", "--problem", "x", "--size", "2", "--done-when", "a" }, backend)
-    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "green", nil })
+    testing.eq(
+        backend.calls[2],
+        { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "green", nil }
+    )
 end)
 
-t.test("label adds and removes labels and sends the whole list", function()
+testing.test("label adds and removes labels and sends the whole list", function()
     local backend = fake(sample())
     local result = commands.run("label", { "11111111-a", "+needs:lead", "+x" }, backend)
-    t.eq(result.output, "labelled 11111111 docs,needs:lead,x")
-    t.eq(backend.calls[1], { "set_labels", ID_A, { "docs", "needs:lead", "x" }, nil })
+    testing.eq(result.output, "labelled 11111111 docs,needs:lead,x")
+    testing.eq(backend.calls[1], { "set_labels", ID_A, { "docs", "needs:lead", "x" }, nil })
     result = commands.run("label", { "11111111-a", "--remove", "docs" }, backend)
-    t.eq(result.output, "labelled 11111111 -")
-    t.eq(backend.calls[2], { "set_labels", ID_A, {}, nil })
+    testing.eq(result.output, "labelled 11111111 -")
+    testing.eq(backend.calls[2], { "set_labels", ID_A, {}, nil })
     result = commands.run("label", { "11111111-a", "new", "--remove", "new", "+docs" }, backend)
-    t.eq(result.output, "labelled 11111111 docs")
-    t.eq(#backend.calls, 2)
+    testing.eq(result.output, "labelled 11111111 docs")
+    testing.eq(#backend.calls, 2)
     result = commands.run(
         "label",
         { "11111111-a", "x", "--remove", "docs", "--remove", "x", "y" },
         backend
     )
-    t.eq(result.output, "labelled 11111111 y")
-    t.eq(backend.calls[3], { "set_labels", ID_A, { "y" }, nil })
+    testing.eq(result.output, "labelled 11111111 y")
+    testing.eq(backend.calls[3], { "set_labels", ID_A, { "y" }, nil })
 end)
 
-t.test("label still replays a queued leading-dash removal", function()
+testing.test("label still replays a queued leading-dash removal", function()
     local backend = fake(sample())
     local result =
         commands.run("label", { "11111111-a", "-docs", "+new", "-new", "+docs" }, backend)
-    t.eq(result.output, "labelled 11111111 docs")
+    testing.eq(result.output, "labelled 11111111 docs")
     result = commands.run("label", { "11111111-a", "-docs" }, backend)
-    t.eq(result.output, "labelled 11111111 -")
-    t.eq(backend.calls[1], { "set_labels", ID_A, {}, nil })
+    testing.eq(result.output, "labelled 11111111 -")
+    testing.eq(backend.calls[1], { "set_labels", ID_A, {}, nil })
 end)
 
-t.test("adding a label the card has or removing one it lacks sends nothing", function()
+testing.test("adding a label the card has or removing one it lacks sends nothing", function()
     local backend = fake(sample())
-    t.eq(commands.run("label", { "11111111-a", "+docs" }, backend).output, "labelled 11111111 docs")
-    t.eq(
+    testing.eq(
+        commands.run("label", { "11111111-a", "+docs" }, backend).output,
+        "labelled 11111111 docs"
+    )
+    testing.eq(
         commands.run("label", { "11111111-a", "--remove", "nope" }, backend).output,
         "labelled 11111111 docs"
     )
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("label refuses a bad label, a bad --remove value and a missing card", function()
+testing.test("label refuses a bad label, a bad --remove value and a missing card", function()
     local backend = fake(sample())
     for _, word in ipairs({ "+two words", "+--x", "+", "-", "+a\tb", "two words" }) do
-        t.eq(commands.run("label", { "11111111-a", word }, backend).code, 2)
+        testing.eq(commands.run("label", { "11111111-a", word }, backend).code, 2)
     end
-    t.eq(commands.run("label", { "11111111-a", "--remove" }, backend).code, 2)
-    t.eq(commands.run("label", { "11111111-a", "--remove", "a b" }, backend).code, 2)
-    t.eq(commands.run("label", { "11111111-a", "--remove", "-a" }, backend).code, 2)
-    t.eq(commands.run("label", { "11111111-a" }, backend).code, 2)
-    t.eq(commands.run("add", { "X", "--label", "a b" }, backend).code, 2)
-    t.eq(commands.run("add", { "X", "--label", "-a" }, backend).code, 2)
-    t.eq(commands.run("label", { "deadbeef", "+x" }, backend).code, 1)
-    t.eq(#backend.calls, 0)
+    testing.eq(commands.run("label", { "11111111-a", "--remove" }, backend).code, 2)
+    testing.eq(commands.run("label", { "11111111-a", "--remove", "a b" }, backend).code, 2)
+    testing.eq(commands.run("label", { "11111111-a", "--remove", "-a" }, backend).code, 2)
+    testing.eq(commands.run("label", { "11111111-a" }, backend).code, 2)
+    testing.eq(commands.run("add", { "X", "--label", "a b" }, backend).code, 2)
+    testing.eq(commands.run("add", { "X", "--label", "-a" }, backend).code, 2)
+    testing.eq(commands.run("label", { "deadbeef", "+x" }, backend).code, 1)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("edit sends the whole new description and prints one line", function()
+testing.test("edit sends the whole new description and prints one line", function()
     local backend = fake(sample())
     local text = "## Problem\nnew plan\n\n## Change\n- x\n\n## Out of scope\nnone"
     local result = commands.run("edit", { "11111111-a", text }, backend)
-    t.eq(result.output, "edited 11111111")
-    t.eq(backend.calls[1], { "set_description", ID_A, text, nil })
+    testing.eq(result.output, "edited 11111111")
+    testing.eq(backend.calls[1], { "set_description", ID_A, text, nil })
 end)
 
-t.test("edit outside Icebox refuses a text that drops a v2 section", function()
+testing.test("edit outside Icebox refuses a text that drops a v2 section", function()
     local backend = fake(sample())
     local result = commands.run("edit", { "11111111-a", "## Problem\nnew plan" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("## Change, ## Out of scope", 1, true), result.message)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("## Change, ## Out of scope", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.ICEBOX
     backend = fake(cards)
-    t.eq(commands.run("edit", { "11111111-a", "loose" }, backend).code, nil)
-    t.eq(#backend.calls, 1)
+    testing.eq(commands.run("edit", { "11111111-a", "loose" }, backend).code, nil)
+    testing.eq(#backend.calls, 1)
 end)
 
-t.test("rename sends the new title and prints renamed", function()
+testing.test("rename sends the new title and prints renamed", function()
     local backend = fake(sample())
     local result = commands.run("rename", { "11111111-a", "Better", "title" }, backend)
-    t.eq(result.output, "renamed 11111111")
-    t.eq(backend.calls[1], { "set_name", ID_A, "Better title", nil })
-    t.eq(commands.run("rename", { "11111111-a" }, backend).code, 2)
-    t.eq(commands.run("rename", { "11111111-a", "  " }, backend).code, 2)
-    t.eq(commands.run("rename", { "11111111-a", "x", "--force" }, backend).code, 2)
-    t.eq(commands.run("rename", { "11111111-a", 'say "hi"' }, backend).code, 2)
-    t.eq(commands.run("rename", { "deadbeef", "x" }, backend).code, 1)
-    t.eq(#backend.calls, 1)
+    testing.eq(result.output, "renamed 11111111")
+    testing.eq(backend.calls[1], { "set_name", ID_A, "Better title", nil })
+    testing.eq(commands.run("rename", { "11111111-a" }, backend).code, 2)
+    testing.eq(commands.run("rename", { "11111111-a", "  " }, backend).code, 2)
+    testing.eq(commands.run("rename", { "11111111-a", "x", "--force" }, backend).code, 2)
+    testing.eq(commands.run("rename", { "11111111-a", 'say "hi"' }, backend).code, 2)
+    testing.eq(commands.run("rename", { "deadbeef", "x" }, backend).code, 1)
+    testing.eq(#backend.calls, 1)
 end)
 
-t.test("discard posts the reason, labels the card and moves it to Done", function()
+testing.test("discard posts the reason, labels the card and moves it to Done", function()
     local backend = fake(sample())
     local result = commands.run("discard", { "11111111-a", "--reason", "Not needed" }, backend)
-    t.eq(result.output, "discarded 11111111")
-    t.eq(backend.calls[1], { "note", ID_A, "Not needed", { kind = "decision" } })
-    t.eq(backend.calls[2][1], "set_labels")
-    t.ok(table.concat(backend.calls[2][3], ","):find("discarded", 1, true) ~= nil)
-    t.eq(backend.calls[3], { "move", ID_A, support.COLUMN_NAME.DONE })
-    t.eq(#backend.calls, 3)
+    testing.eq(result.output, "discarded 11111111")
+    testing.eq(backend.calls[1], { "note", ID_A, "Not needed", { kind = "decision" } })
+    testing.eq(backend.calls[2][1], "set_labels")
+    testing.ok(table.concat(backend.calls[2][3], ","):find("discarded", 1, true) ~= nil)
+    testing.eq(backend.calls[3], { "move", ID_A, support.COLUMN_NAME.DONE })
+    testing.eq(#backend.calls, 3)
 end)
 
-t.test("discard without a reason only labels and moves, and refuses a blank one", function()
+testing.test("discard without a reason only labels and moves, and refuses a blank one", function()
     local backend = fake(sample())
     local result = commands.run("discard", { "11111111-a" }, backend)
-    t.eq(result.output, "discarded 11111111")
-    t.eq(#backend.calls, 2)
-    t.eq(backend.calls[2], { "move", ID_A, support.COLUMN_NAME.DONE })
-    t.eq(commands.run("discard", { "11111111-a", "--reason", " " }, backend).code, 2)
-    t.eq(commands.run("discard", {}, backend).code, 2)
-    t.eq(commands.run("discard", { "deadbeef" }, backend).code, 1)
-    t.eq(#backend.calls, 2)
+    testing.eq(result.output, "discarded 11111111")
+    testing.eq(#backend.calls, 2)
+    testing.eq(backend.calls[2], { "move", ID_A, support.COLUMN_NAME.DONE })
+    testing.eq(commands.run("discard", { "11111111-a", "--reason", " " }, backend).code, 2)
+    testing.eq(commands.run("discard", {}, backend).code, 2)
+    testing.eq(commands.run("discard", { "deadbeef" }, backend).code, 1)
+    testing.eq(#backend.calls, 2)
 end)
 
-t.test("discard refuses a needs:human card before anything is written", function()
+testing.test("discard refuses a needs:human card before anything is written", function()
     local cards = sample()
     cards[1].labels = { "needs:human" }
     local backend = fake(cards)
     local result = commands.run("discard", { "11111111-a", "--reason", "Dropped" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("needs:human", 1, true), result.message)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("needs:human", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("move to Done refuses a card with unticked outcomes and names them", function()
+testing.test("move to Done refuses a card with unticked outcomes and names them", function()
     local cards = sample()
     cards[1].outcomes = {
         { id = "s1", name = "A works", done = true },
@@ -1010,27 +1028,27 @@ t.test("move to Done refuses a card with unticked outcomes and names them", func
     }
     local backend = fake(cards)
     local result = commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.unqueued, true)
-    t.eq(
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+    testing.eq(
         result.message,
         "11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it"
     )
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("move to Done takes a planned card whose outcomes are all ticked", function()
+testing.test("move to Done takes a planned card whose outcomes are all ticked", function()
     local cards = sample()
     cards[1].outcomes = { { id = "s1", name = "A works", done = true } }
     local backend = fake(cards)
-    t.eq(
+    testing.eq(
         commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend).output,
         "moved 11111111 to Done"
     )
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+    testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
 end)
 
-t.test("move refuses an unsized card into every column but Icebox", function()
+testing.test("move refuses an unsized card into every column but Icebox", function()
     for _, column in ipairs({
         support.COLUMN.BACKLOG,
         support.COLUMN.READY,
@@ -1041,16 +1059,16 @@ t.test("move refuses an unsized card into every column but Icebox", function()
     }) do
         local backend = fake(sample())
         local result = commands.run("move", { "cccccccc", column }, backend)
-        t.eq(result.code, 1, column)
-        t.ok(result.message:find("size", 1, true), result.message)
-        t.eq(#backend.calls, 0, column)
+        testing.eq(result.code, 1, column)
+        testing.ok(result.message:find("size", 1, true), result.message)
+        testing.eq(#backend.calls, 0, column)
     end
     local backend = fake(sample())
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
-    t.eq(backend.calls, { { "move", ID_C, support.COLUMN_NAME.ICEBOX } })
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(backend.calls, { { "move", ID_C, support.COLUMN_NAME.ICEBOX } })
 end)
 
-t.test("move refuses a sized card that lacks a section or outcomes outside Icebox", function()
+testing.test("move refuses a sized card that lacks a section or outcomes outside Icebox", function()
     for _, column in ipairs({
         support.COLUMN.BACKLOG,
         support.COLUMN.PROGRESS,
@@ -1062,31 +1080,31 @@ t.test("move refuses a sized card that lacks a section or outcomes outside Icebo
         card.description = "loose idea"
         local backend = fake({ card })
         local result = commands.run("move", { "cccccccc", column }, backend)
-        t.eq(result.code, 1, column)
-        t.ok(result.message:find("## Change", 1, true), result.message)
-        t.eq(#backend.calls, 0, column)
+        testing.eq(result.code, 1, column)
+        testing.ok(result.message:find("## Change", 1, true), result.message)
+        testing.eq(#backend.calls, 0, column)
         card = planned()
         card.description = V2
         backend = fake({ card })
         result = commands.run("move", { "cccccccc", column }, backend)
-        t.eq(result.code, 1, column)
-        t.ok(result.message:find("Done when outcomes", 1, true), result.message)
-        t.eq(#backend.calls, 0, column)
+        testing.eq(result.code, 1, column)
+        testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
+        testing.eq(#backend.calls, 0, column)
     end
 end)
 
-t.test("an epic moves to Done once every child is Done and its outcome is ticked", function()
+testing.test("an epic moves to Done once every child is Done and its outcome is ticked", function()
     local card = planned()
     card.epic = { done = 3, total = 3 }
     card.outcomes = { { id = "s1", name = "a", done = true } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
     local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
-    t.eq(result.output, "moved cccccccc to Done")
-    t.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
+    testing.eq(result.output, "moved cccccccc to Done")
+    testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
 end)
 
-t.test("epic_move_refused", function()
+testing.test("epic_move_refused", function()
     local card = planned()
     card.column = support.COLUMN_NAME.READY
     card.epic = { done = 1, total = 3 }
@@ -1095,257 +1113,260 @@ t.test("epic_move_refused", function()
     backend.kin = { children = card.epic }
     backend.limited = { support.COLUMN_NAME.REVIEW }
     local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.unqueued, true)
-    t.eq(
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+    testing.eq(
         result.message,
         "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open"
     )
     result = commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
-    t.eq(result.code, 1)
-    t.eq(
+    testing.eq(result.code, 1)
+    testing.eq(
         result.message,
         "cccccccc is an epic and cannot enter Review, a WIP-limited column: 2 of 3 children are open"
     )
     for _, call in ipairs(backend.calls) do
-        t.ok(call[1] ~= "move", "the refused move was sent")
+        testing.ok(call[1] ~= "move", "the refused move was sent")
     end
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
 end)
 
-t.test("discard closes an epic whose children are open", function()
+testing.test("discard closes an epic whose children are open", function()
     local backend = fake({ planned() })
     backend.kin = { children = { done = 0, total = 2 } }
     local result = commands.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
-    t.eq(result.output, "discarded cccccccc")
+    testing.eq(result.output, "discarded cccccccc")
     for _, call in ipairs(backend.calls) do
-        t.ok(call[1] ~= "family", "discard read the children")
+        testing.ok(call[1] ~= "family", "discard read the children")
     end
 end)
 
-t.test("an epic needs an outcome to enter a working column like a card without children", function()
-    local card = planned()
-    card.epic = { done = 0, total = 2 }
-    local backend = fake({ card })
-    backend.kin = { children = card.epic }
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
-    card.outcomes = { { id = "s1", name = "a", done = false } }
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, nil)
-    backend = fake({ planned() })
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, 1)
-end)
+testing.test(
+    "an epic needs an outcome to enter a working column like a card without children",
+    function()
+        local card = planned()
+        card.epic = { done = 0, total = 2 }
+        local backend = fake({ card })
+        backend.kin = { children = card.epic }
+        testing.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
+        card.outcomes = { { id = "s1", name = "a", done = false } }
+        testing.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+        testing.eq(commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, nil)
+        backend = fake({ planned() })
+        testing.eq(commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, 1)
+    end
+)
 
-t.test("an unsized epic is refused and a red one is allowed", function()
+testing.test("an unsized epic is refused and a red one is allowed", function()
     local card = planned()
     card.color = nil
     card.epic = { done = 0, total = 2 }
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
     card.color = "red"
     backend = fake({ card })
     backend.kin = { children = card.epic }
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
 end)
 
-t.test(
+testing.test(
     "discard refuses an unsized card or one without sections, and takes one without outcomes",
     function()
         local card = planned()
         card.color = nil
         local backend = fake({ card })
         local result = commands.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("a size", 1, true), result.message)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("a size", 1, true), result.message)
         card.column = support.COLUMN_NAME.ICEBOX
         result = commands.run("discard", { "cccccccc" }, fake({ card }))
-        t.eq(result.code, 1)
+        testing.eq(result.code, 1)
         card.color = "green"
         card.description = "loose"
         result = commands.run("discard", { "cccccccc" }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("## Change", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("## Change", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
         card.description = V2
-        t.eq(commands.run("discard", { "cccccccc" }, backend).output, "discarded cccccccc")
+        testing.eq(commands.run("discard", { "cccccccc" }, backend).output, "discarded cccccccc")
     end
 )
 
-t.test("move to Done refuses outcomes dev cannot read", function()
+testing.test("move to Done refuses outcomes dev cannot read", function()
     local cards = sample()
     cards[1].outcomes_unreadable = true
     local backend = fake(cards)
     local result = commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.unqueued, true)
-    t.eq(
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+    testing.eq(
         result.message,
         "11111111 cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked"
     )
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("move to a working column does not demand outcomes dev cannot read", function()
+testing.test("move to a working column does not demand outcomes dev cannot read", function()
     local cards = sample()
     cards[1].outcomes_unreadable = true
     local backend = fake(cards)
     local result = commands.run("move", { "11111111-a", support.COLUMN.REVIEW }, backend)
-    t.eq(result.code, nil)
+    testing.eq(result.code, nil)
 end)
 
-t.test("move to Done is never queued when the card cannot be read", function()
+testing.test("move to Done is never queued when the card cannot be read", function()
     local backend = fake(sample())
     local message = "board unavailable: cannot reach pomb.example (curl exit 7)"
     backend.cards = function()
         return nil, message
     end
     local result = commands.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
-    t.eq(result.message, message)
-    t.eq(result.unqueued, true)
+    testing.eq(result.message, message)
+    testing.eq(result.unqueued, true)
     result = commands.run("move", { "11111111-a", support.COLUMN.REVIEW }, backend)
-    t.eq(result.message, message)
-    t.eq(result.unqueued, nil)
+    testing.eq(result.message, message)
+    testing.eq(result.unqueued, nil)
 end)
 
-t.test("discard closes a card with unticked outcomes", function()
+testing.test("discard closes a card with unticked outcomes", function()
     local cards = sample()
     cards[1].outcomes = { { id = "s1", name = "A works", done = false } }
     local backend = fake(cards)
     local result = commands.run("discard", { "11111111-a", "--reason", "Dropped" }, backend)
-    t.eq(result.output, "discarded 11111111")
-    t.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+    testing.eq(result.output, "discarded 11111111")
+    testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
 end)
 
-t.test("checks replaces the rows with one row per command", function()
+testing.test("checks replaces the rows with one row per command", function()
     local backend = fake(sample())
     local result = commands.run("checks", { "11111111-a", "dev lint", "dev test" }, backend)
-    t.eq(result.output, "set checks 11111111, 2 rows")
-    t.eq(backend.calls[1], { "set_checks", ID_A, { "dev lint", "dev test" }, nil })
+    testing.eq(result.output, "set checks 11111111, 2 rows")
+    testing.eq(backend.calls[1], { "set_checks", ID_A, { "dev lint", "dev test" }, nil })
     result = commands.run("checks", { "11111111-a", "dev lint" }, fake(sample()))
-    t.eq(result.output, "set checks 11111111, 1 row")
+    testing.eq(result.output, "set checks 11111111, 1 row")
 end)
 
-t.test("checks refuses the rows add --checks refuses and writes nothing", function()
+testing.test("checks refuses the rows add --checks refuses and writes nothing", function()
     for _, row in ipairs({ "rg 'a' f", "rg a.*b f", "dev.--remote.lint", "rg a|b" }) do
         local backend = fake(sample())
         local result = commands.run("checks", { "11111111-a", "dev lint", row }, backend)
-        t.eq(result.code, 2)
-        t.ok(result.message:find(row, 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find(row, 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
     local backend = fake(sample())
-    t.eq(
+    testing.eq(
         commands.run("checks", { "11111111-a", "! rg -q a f" }, backend).output,
         "set checks 11111111, 1 row"
     )
 end)
 
-t.test(
+testing.test(
     "checks refuses no command, a blank command, an unknown card and a board without the field",
     function()
         local backend = fake(sample())
-        t.eq(commands.run("checks", { "11111111-a" }, backend).code, 2)
-        t.eq(commands.run("checks", {}, backend).code, 2)
-        t.eq(commands.run("checks", { "11111111-a", "dev lint", " " }, backend).code, 2)
-        t.eq(commands.run("checks", { "deadbeef", "dev lint" }, backend).code, 1)
+        testing.eq(commands.run("checks", { "11111111-a" }, backend).code, 2)
+        testing.eq(commands.run("checks", {}, backend).code, 2)
+        testing.eq(commands.run("checks", { "11111111-a", "dev lint", " " }, backend).code, 2)
+        testing.eq(commands.run("checks", { "deadbeef", "dev lint" }, backend).code, 1)
         backend.nofield = true
         local result = commands.run("checks", { "11111111-a", "dev lint" }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("no checks field", 1, true), result.message)
-        t.ok(result.message:find("dev board init", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("no checks field", 1, true), result.message)
+        testing.ok(result.message:find("dev board init", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
 )
 
-t.test("allow replaces the field with the words once each, and none sends null", function()
+testing.test("allow replaces the field with the words once each, and none sends null", function()
     local backend = fake(sample())
     local result =
         commands.run("allow", { "11111111-a", "ci-edits", "test-edits", "ci-edits" }, backend)
-    t.eq(result.output, "set allow 11111111, ci-edits test-edits")
-    t.eq(
+    testing.eq(result.output, "set allow 11111111, ci-edits test-edits")
+    testing.eq(
         backend.calls[1],
         { "set_field", ID_A, "dev.allow", { "ci-edits", "test-edits" }, nil }
     )
     result = commands.run("allow", { "11111111-a", "none" }, backend)
-    t.eq(result.output, "cleared allow 11111111")
-    t.eq(backend.calls[2], { "set_field", ID_A, "dev.allow", json.null, nil })
+    testing.eq(result.output, "cleared allow 11111111")
+    testing.eq(backend.calls[2], { "set_field", ID_A, "dev.allow", json.null, nil })
 end)
 
-t.test(
+testing.test(
     "allow refuses no word, another word, none beside a word, an unknown card and a board without the field",
     function()
         local backend = fake(sample())
-        t.eq(commands.run("allow", { "11111111-a" }, backend).code, 2)
-        t.eq(commands.run("allow", {}, backend).code, 2)
-        t.eq(commands.run("allow", { "11111111-a", "everything" }, backend).code, 2)
-        t.eq(commands.run("allow", { "11111111-a", "test-edits", "none" }, backend).code, 2)
-        t.eq(commands.run("allow", { "deadbeef", "none" }, backend).code, 1)
+        testing.eq(commands.run("allow", { "11111111-a" }, backend).code, 2)
+        testing.eq(commands.run("allow", {}, backend).code, 2)
+        testing.eq(commands.run("allow", { "11111111-a", "everything" }, backend).code, 2)
+        testing.eq(commands.run("allow", { "11111111-a", "test-edits", "none" }, backend).code, 2)
+        testing.eq(commands.run("allow", { "deadbeef", "none" }, backend).code, 1)
         backend.nofield = true
         local result = commands.run("allow", { "11111111-a", "test-edits" }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("no dev.allow field", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("no dev.allow field", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
 )
 
-t.test("tests and files replace the field with one name per line", function()
+testing.test("tests and files replace the field with one name per line", function()
     local backend = fake(sample())
     local result =
         commands.run("tests", { "11111111-a", "one_should_be_one", "tests::two" }, backend)
-    t.eq(result.output, "set tests 11111111, 2 names")
-    t.eq(
+    testing.eq(result.output, "set tests 11111111, 2 names")
+    testing.eq(
         backend.calls[1],
         { "set_field", ID_A, "dev.tests", "one_should_be_one\ntests::two", nil }
     )
     result = commands.run("files", { "11111111-a", "src/a.rs" }, backend)
-    t.eq(result.output, "set files 11111111, 1 name")
-    t.eq(backend.calls[2], { "set_field", ID_A, "dev.files", "src/a.rs", nil })
+    testing.eq(result.output, "set files 11111111, 1 name")
+    testing.eq(backend.calls[2], { "set_field", ID_A, "dev.files", "src/a.rs", nil })
 end)
 
-t.test(
+testing.test(
     "tests and files refuse no name, a blank name, a line break, an unknown card and a board without the field",
     function()
         local backend = fake(sample())
         for _, sub in ipairs({ "tests", "files" }) do
-            t.eq(commands.run(sub, { "11111111-a" }, backend).code, 2)
-            t.eq(commands.run(sub, {}, backend).code, 2)
-            t.eq(commands.run(sub, { "11111111-a", "a", " " }, backend).code, 2)
-            t.eq(commands.run(sub, { "11111111-a", "a\nb" }, backend).code, 2)
-            t.eq(commands.run(sub, { "deadbeef", "a" }, backend).code, 1)
+            testing.eq(commands.run(sub, { "11111111-a" }, backend).code, 2)
+            testing.eq(commands.run(sub, {}, backend).code, 2)
+            testing.eq(commands.run(sub, { "11111111-a", "a", " " }, backend).code, 2)
+            testing.eq(commands.run(sub, { "11111111-a", "a\nb" }, backend).code, 2)
+            testing.eq(commands.run(sub, { "deadbeef", "a" }, backend).code, 1)
         end
         backend.nofield = true
         local result = commands.run("files", { "11111111-a", "a" }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("no dev.files field", 1, true), result.message)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("no dev.files field", 1, true), result.message)
         result = commands.run("tests", { "11111111-a", "a" }, backend)
-        t.ok(result.message:find("no dev.tests field", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.ok(result.message:find("no dev.tests field", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
 )
 
-t.test("edit refuses a missing text, an extra word and an unknown card", function()
+testing.test("edit refuses a missing text, an extra word and an unknown card", function()
     local backend = fake(sample())
-    t.eq(commands.run("edit", { "11111111-a" }, backend).code, 2)
-    t.eq(commands.run("edit", { "11111111-a", "x", "y" }, backend).code, 2)
-    t.eq(commands.run("edit", { "deadbeef", "x" }, backend).code, 1)
-    t.eq(#backend.calls, 0)
+    testing.eq(commands.run("edit", { "11111111-a" }, backend).code, 2)
+    testing.eq(commands.run("edit", { "11111111-a", "x", "y" }, backend).code, 2)
+    testing.eq(commands.run("edit", { "deadbeef", "x" }, backend).code, 1)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("link sends the full ids of the card and the other card", function()
+testing.test("link sends the full ids of the card and the other card", function()
     local backend = fake(sample())
     local result = commands.run("link", { "11111111-a", "blocked_by", "cccccccc" }, backend)
-    t.eq(result.output, "linked 11111111 blocked_by cccccccc")
-    t.eq(backend.calls[1], { "link", ID_A, "blocked_by", ID_C })
+    testing.eq(result.output, "linked 11111111 blocked_by cccccccc")
+    testing.eq(backend.calls[1], { "link", ID_A, "blocked_by", ID_C })
     result = commands.run("link", { "cccccccc", "blocks", "11111111-b" }, backend)
-    t.eq(result.output, "linked cccccccc blocks 11111111")
-    t.eq(backend.calls[2], { "link", ID_C, "blocks", ID_B })
+    testing.eq(result.output, "linked cccccccc blocks 11111111")
+    testing.eq(backend.calls[2], { "link", ID_C, "blocks", ID_B })
     result = commands.run("link", { "cccccccc", "related", "11111111-a" }, backend)
-    t.eq(backend.calls[3], { "link", ID_C, "related", ID_A })
+    testing.eq(backend.calls[3], { "link", ID_C, "related", ID_A })
 end)
 
-t.test("link to BOARD:CARD resolves the card on the other board", function()
+testing.test("link to BOARD:CARD resolves the card on the other board", function()
     local backend = fake(sample())
     local elsewhere = {
         cards = function()
@@ -1363,25 +1384,28 @@ t.test("link to BOARD:CARD resolves the card on the other board", function()
     }
     backend.sibling = elsewhere
     local result = commands.run("link", { "11111111-a", "blocked_by", "ci:dddddddd" }, backend)
-    t.eq(result.output, "linked 11111111 blocked_by ci:dddddddd")
-    t.eq(backend.calls[1], { "other_board", "ci" })
-    t.eq(backend.calls[2], { "link", ID_A, "blocked_by", "dddddddd-dddd-4ddd-8ddd-dddddddddddd" })
+    testing.eq(result.output, "linked 11111111 blocked_by ci:dddddddd")
+    testing.eq(backend.calls[1], { "other_board", "ci" })
+    testing.eq(
+        backend.calls[2],
+        { "link", ID_A, "blocked_by", "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }
+    )
     result = commands.run("link", { "11111111-a", "parent", "ci:dddddddd" }, backend)
-    t.eq(result.code, 1)
-    t.eq(
+    testing.eq(result.code, 1)
+    testing.eq(
         result.message,
         "ci:dddddddd is not an epic, make it one with dev board epic dddddddd from the project that owns that board"
     )
     result = commands.run("link", { "11111111-a", "related", "nope:dddddddd" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no board named nope", 1, true), result.message)
     result = commands.run("link", { "11111111-a", "related", "ci:eeeeeeee" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("no card starts with eeeeeeee", 1, true), result.message)
-    t.eq(#backend.calls, 5)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no card starts with eeeeeeee", 1, true), result.message)
+    testing.eq(#backend.calls, 5)
 end)
 
-t.test("links lists each link with the kind, the id prefix and the board", function()
+testing.test("links lists each link with the kind, the id prefix and the board", function()
     local backend = fake(sample())
     backend.held = {
         { kind = "blocked_by", id = ID_C },
@@ -1389,38 +1413,47 @@ t.test("links lists each link with the kind, the id prefix and the board", funct
         { kind = "related", id = ID_B },
     }
     local result = commands.run("links", { "11111111-a" }, backend)
-    t.eq(
+    testing.eq(
         result.output,
         "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -"
     )
-    t.eq(backend.calls[1], { "links", ID_A })
-    t.eq(commands.run("links", { "11111111-b" }, fake(sample())).output, "no links")
-    t.eq(commands.run("links", {}, backend).code, 2)
-    t.eq(commands.run("links", { "deadbeef" }, backend).code, 1)
+    testing.eq(backend.calls[1], { "links", ID_A })
+    testing.eq(commands.run("links", { "11111111-b" }, fake(sample())).output, "no links")
+    testing.eq(commands.run("links", {}, backend).code, 2)
+    testing.eq(commands.run("links", { "deadbeef" }, backend).code, 1)
 end)
 
-t.test("unlink removes the held link of that kind and target, and refuses one it lacks", function()
-    local backend = fake(sample())
-    backend.held = { { kind = "blocked_by", id = ID_C }, { kind = "related", id = ID_B } }
-    local result = commands.run("unlink", { "11111111-a", "blocked_by", "cccccccc" }, backend)
-    t.eq(result.output, "unlinked 11111111 blocked_by cccccccc")
-    t.eq(backend.calls[2], { "unlink", ID_A, "blocked_by", ID_C })
-    result = commands.run("unlink", { "11111111-a", "blocks", "cccccccc" }, backend)
-    t.eq(result.code, 1)
-    t.eq(
-        result.message,
-        "the card holds no blocks link to cccccccc, its links are\n"
-            .. "blocked_by  cccccccc  -\nrelated     11111111  -"
-    )
-    t.eq(backend.calls[3], { "links", ID_A })
-    backend.held = {}
-    result = commands.run("unlink", { "11111111-a", "related", "cccccccc" }, backend)
-    t.eq(result.message, "the card holds no related link to cccccccc, it holds no links")
-    t.eq(commands.run("unlink", { "11111111-a", "blocked_by" }, backend).code, 2)
-    t.eq(commands.run("unlink", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
-    t.eq(commands.run("unlink", { "deadbeef", "blocked_by", "cccccccc" }, backend).code, 1)
-    t.eq(commands.run("unlink", { "11111111-a", "blocked_by", "deadbeef" }, backend).code, 1)
-end)
+testing.test(
+    "unlink removes the held link of that kind and target, and refuses one it lacks",
+    function()
+        local backend = fake(sample())
+        backend.held = { { kind = "blocked_by", id = ID_C }, { kind = "related", id = ID_B } }
+        local result = commands.run("unlink", { "11111111-a", "blocked_by", "cccccccc" }, backend)
+        testing.eq(result.output, "unlinked 11111111 blocked_by cccccccc")
+        testing.eq(backend.calls[2], { "unlink", ID_A, "blocked_by", ID_C })
+        result = commands.run("unlink", { "11111111-a", "blocks", "cccccccc" }, backend)
+        testing.eq(result.code, 1)
+        testing.eq(
+            result.message,
+            "the card holds no blocks link to cccccccc, its links are\n"
+                .. "blocked_by  cccccccc  -\nrelated     11111111  -"
+        )
+        testing.eq(backend.calls[3], { "links", ID_A })
+        backend.held = {}
+        result = commands.run("unlink", { "11111111-a", "related", "cccccccc" }, backend)
+        testing.eq(result.message, "the card holds no related link to cccccccc, it holds no links")
+        testing.eq(commands.run("unlink", { "11111111-a", "blocked_by" }, backend).code, 2)
+        testing.eq(commands.run("unlink", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
+        testing.eq(
+            commands.run("unlink", { "deadbeef", "blocked_by", "cccccccc" }, backend).code,
+            1
+        )
+        testing.eq(
+            commands.run("unlink", { "11111111-a", "blocked_by", "deadbeef" }, backend).code,
+            1
+        )
+    end
+)
 
 local function with_epic()
     local cards = sample()
@@ -1428,85 +1461,85 @@ local function with_epic()
     return fake(cards)
 end
 
-t.test("link refuses a parent that is not an epic before any request", function()
+testing.test("link refuses a parent that is not an epic before any request", function()
     local backend = fake(sample())
     local result = commands.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.message, "11111111 is not an epic, make it one with dev board epic 11111111")
-    t.eq(backend.calls[1], nil)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "11111111 is not an epic, make it one with dev board epic 11111111")
+    testing.eq(backend.calls[1], nil)
     result = commands.run("link", { "cccccccc", "related", "11111111-a" }, backend)
-    t.eq(result.output, "linked cccccccc related 11111111")
+    testing.eq(result.output, "linked cccccccc related 11111111")
 end)
 
-t.test("epic turns a card into an epic and prints the refusal as given", function()
+testing.test("epic turns a card into an epic and prints the refusal as given", function()
     local backend = fake(sample())
     local result = commands.run("epic", { "11111111-b" }, backend)
-    t.eq(result.output, "made 11111111 an epic")
-    t.eq(backend.calls[1], { "make_epic", ID_B, nil })
+    testing.eq(result.output, "made 11111111 an epic")
+    testing.eq(backend.calls[1], { "make_epic", ID_B, nil })
     backend.refusal = "pomb answered 409: the card holds a live claim"
     result = commands.run("epic", { "11111111-b" }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.message, "pomb answered 409: the card holds a live claim")
-    t.eq(commands.run("epic", {}, backend).code, 2)
-    t.eq(commands.run("epic", { "deadbeef" }, backend).code, 1)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "pomb answered 409: the card holds a live claim")
+    testing.eq(commands.run("epic", {}, backend).code, 2)
+    testing.eq(commands.run("epic", { "deadbeef" }, backend).code, 1)
 end)
 
-t.test("add --epic creates an epic through the backend", function()
+testing.test("add --epic creates an epic through the backend", function()
     local backend = fake(sample())
     local result = commands.run(
         "add",
         { "Big", "--epic", "--problem", "x", "--size", "1", "--done-when", "a" },
         backend
     )
-    t.eq(result.code, nil, result.message)
-    t.eq(backend.opts.epic, true)
+    testing.eq(result.code, nil, result.message)
+    testing.eq(backend.opts.epic, true)
     commands.run("add", { "Small", "--problem", "x", "--size", "1", "--done-when", "a" }, backend)
-    t.eq(backend.opts.epic, nil)
+    testing.eq(backend.opts.epic, nil)
 end)
 
-t.test("link takes parent, and show prints the epic and the children", function()
+testing.test("link takes parent, and show prints the epic and the children", function()
     local backend = with_epic()
     local result = commands.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
-    t.eq(result.output, "linked cccccccc parent 11111111")
-    t.eq(backend.calls[1], { "link", ID_C, "parent", ID_A })
+    testing.eq(result.output, "linked cccccccc parent 11111111")
+    testing.eq(backend.calls[1], { "link", ID_C, "parent", ID_A })
     backend.kin = { parent = { id = ID_A, name = "Epic" } }
     result = commands.run("show", { "11111111-b" }, backend)
-    t.eq(
+    testing.eq(
         result.output,
         "11111111  Backlog  unsized  -  Fix lint\nparent: 11111111 Epic\n\nno description\n\nno comments"
     )
     backend.kin = { children = { done = 1, total = 3 } }
     result = commands.run("show", { "11111111-b" }, backend)
-    t.eq(
+    testing.eq(
         result.output,
         "11111111  Backlog  unsized  -  Fix lint\nchildren: 1 of 3 done\n\nno description\n\nno comments"
     )
 end)
 
-t.test("link refuses a bad kind, a missing word and an unknown card", function()
+testing.test("link refuses a bad kind, a missing word and an unknown card", function()
     local backend = fake(sample())
-    t.eq(commands.run("link", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
-    t.eq(commands.run("link", { "11111111-a", "blocks" }, backend).code, 2)
-    t.eq(commands.run("link", { "11111111-a", "blocks", "cccccccc", "x" }, backend).code, 2)
-    t.eq(commands.run("link", { "deadbeef", "blocks", "cccccccc" }, backend).code, 1)
-    t.eq(commands.run("link", { "11111111-a", "blocks", "deadbeef" }, backend).code, 1)
-    t.eq(#backend.calls, 0)
+    testing.eq(commands.run("link", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
+    testing.eq(commands.run("link", { "11111111-a", "blocks" }, backend).code, 2)
+    testing.eq(commands.run("link", { "11111111-a", "blocks", "cccccccc", "x" }, backend).code, 2)
+    testing.eq(commands.run("link", { "deadbeef", "blocks", "cccccccc" }, backend).code, 1)
+    testing.eq(commands.run("link", { "11111111-a", "blocks", "deadbeef" }, backend).code, 1)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("note and move resolve the card by prefix", function()
+testing.test("note and move resolve the card by prefix", function()
     local cards = sample()
     cards[3].color = "green"
     cards[3].description = V2
     cards[3].outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake(cards)
     local result = commands.run("note", { "cccccccc", "landed", "as", "abc" }, backend)
-    t.eq(result.output, "noted cccccccc")
-    t.eq(backend.calls[1], { "note", ID_C, "landed as abc", {} })
+    testing.eq(result.output, "noted cccccccc")
+    testing.eq(backend.calls[1], { "note", ID_C, "landed as abc", {} })
     result = commands.run("move", { "cccccccc", support.COLUMN.BLOCKED }, backend)
-    t.eq(result.output, "moved cccccccc to Blocked")
-    t.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.BLOCKED })
+    testing.eq(result.output, "moved cccccccc to Blocked")
+    testing.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.BLOCKED })
     result = commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
-    t.eq(backend.calls[3], { "move", ID_C, support.COLUMN_NAME.REVIEW })
+    testing.eq(backend.calls[3], { "move", ID_C, support.COLUMN_NAME.REVIEW })
 end)
 
 local COMMENT_1 = "aaaaaaaa-1111-4111-8111-111111111111"
@@ -1529,100 +1562,106 @@ local function with_comments()
     return backend
 end
 
-t.test("notes lists each comment with its id prefix, writer, time and first line", function()
+testing.test("notes lists each comment with its id prefix, writer, time and first line", function()
     local backend = with_comments()
     local result = commands.run("notes", { "cccccccc" }, backend)
-    t.eq(
+    testing.eq(
         result.output,
         "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
             .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
     )
-    t.eq(commands.run("notes", { "cccccccc" }, fake(sample())).output, "no comments")
-    t.eq(commands.run("notes", {}, backend).code, 2)
-    t.eq(commands.run("notes", { "deadbeef" }, backend).code, 1)
+    testing.eq(commands.run("notes", { "cccccccc" }, fake(sample())).output, "no comments")
+    testing.eq(commands.run("notes", {}, backend).code, 2)
+    testing.eq(commands.run("notes", { "deadbeef" }, backend).code, 1)
 end)
 
-t.test("show indents the rest of a multi-line body under its body, notes keeps one line", function()
-    local backend = fake(sample())
-    backend.listed = {
-        {
-            id = COMMENT_1,
-            who = "worker",
-            at = "2026-10-27T09:30:12Z",
-            body = "1. first\r\n\r\n2. second\n\n",
-            kind = "decision",
-            author = "reviewer",
-        },
-        { id = COMMENT_2, who = "human", at = "2026-10-27T10:00:00Z", body = "ok\nmore" },
-    }
-    local result = commands.run("show", { "cccccccc" }, backend)
-    t.eq(
-        result.output,
-        "cccccccc  Done  unsized  -  Old thing\n\nno description\n\n"
-            .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n\n"
-            .. (" "):rep(BODY_COLUMN)
-            .. "2. second\n"
-            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok\n"
-            .. (" "):rep(BODY_COLUMN)
-            .. "more"
-    )
-    t.eq(
-        commands.run("notes", { "cccccccc" }, backend).output,
-        "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n"
-            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
-    )
-end)
+testing.test(
+    "show indents the rest of a multi-line body under its body, notes keeps one line",
+    function()
+        local backend = fake(sample())
+        backend.listed = {
+            {
+                id = COMMENT_1,
+                who = "worker",
+                at = "2026-10-27T09:30:12Z",
+                body = "1. first\r\n\r\n2. second\n\n",
+                kind = "decision",
+                author = "reviewer",
+            },
+            { id = COMMENT_2, who = "human", at = "2026-10-27T10:00:00Z", body = "ok\nmore" },
+        }
+        local result = commands.run("show", { "cccccccc" }, backend)
+        testing.eq(
+            result.output,
+            "cccccccc  Done  unsized  -  Old thing\n\nno description\n\n"
+                .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n\n"
+                .. (" "):rep(BODY_COLUMN)
+                .. "2. second\n"
+                .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok\n"
+                .. (" "):rep(BODY_COLUMN)
+                .. "more"
+        )
+        testing.eq(
+            commands.run("notes", { "cccccccc" }, backend).output,
+            "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n"
+                .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
+        )
+    end
+)
 
-t.test("note --board files the note on the crossboard card's board", function()
+testing.test("note --board files the note on the crossboard card's board", function()
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
     local result =
         commands.run("note", { "11111111-a", "--board", "ci", "--kind", "decision", "ok" }, backend)
-    t.eq(result.output, "noted 11111111")
-    t.eq(backend.calls, { { "other_board", "ci" } })
-    t.eq(sibling.calls[1], { "note", ID_A, "ok", { kind = "decision" } })
+    testing.eq(result.output, "noted 11111111")
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+    testing.eq(sibling.calls[1], { "note", ID_A, "ok", { kind = "decision" } })
 end)
 
-t.test("show --board prints the crossboard card from the named board", function()
+testing.test("show --board prints the crossboard card from the named board", function()
     local backend = fake(sample())
     local far = sample()
     far[1].name = "Far card"
     local sibling = fake(far)
     backend.sibling = sibling
     local result = commands.run("show", { "11111111-a", "--board", "ci" }, backend)
-    t.eq(result.code, nil)
-    t.ok(result.output:find("Far card", 1, true), result.output)
-    t.eq(backend.calls, { { "other_board", "ci" } })
-    t.eq(sibling.calls[1], { "comments", ID_A })
+    testing.eq(result.code, nil)
+    testing.ok(result.output:find("Far card", 1, true), result.output)
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+    testing.eq(sibling.calls[1], { "comments", ID_A })
 end)
 
-t.test("note and show --board refuse a crossboard board that is not there", function()
+testing.test("note and show --board refuse a crossboard board that is not there", function()
     local backend = fake(sample())
     local result = commands.run("note", { "11111111-a", "--board", "nope", "ok" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no board named nope", 1, true), result.message)
     result = commands.run("show", { "11111111-a", "--board", "nope" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("no board named nope", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no board named nope", 1, true), result.message)
     result = commands.run("show", { "11111111-a", "--board" }, backend)
-    t.eq(result.code, 2)
-    t.eq(#backend.calls, 2)
+    testing.eq(result.code, 2)
+    testing.eq(#backend.calls, 2)
 end)
 
-t.test("note --board refuses crossboard --edit and --delete before it looks anything up", function()
-    local backend = fake(sample())
-    for _, args in ipairs({
-        { "11111111-a", "--board", "ci", "--edit", "aaaaaaaa", "x" },
-        { "11111111-a", "--board", "ci", "--delete", "aaaaaaaa" },
-    }) do
-        local result = commands.run("note", args, backend)
-        t.eq(result.code, 2)
+testing.test(
+    "note --board refuses crossboard --edit and --delete before it looks anything up",
+    function()
+        local backend = fake(sample())
+        for _, args in ipairs({
+            { "11111111-a", "--board", "ci", "--edit", "aaaaaaaa", "x" },
+            { "11111111-a", "--board", "ci", "--delete", "aaaaaaaa" },
+        }) do
+            local result = commands.run("note", args, backend)
+            testing.eq(result.code, 2)
+        end
+        testing.eq(#backend.calls, 0)
     end
-    t.eq(#backend.calls, 0)
-end)
+)
 
-t.test("note --kind question names dev board ask", function()
+testing.test("note --kind question names dev board ask", function()
     local backend = fake(sample())
     local count = #backend.calls
     for _, args in ipairs({
@@ -1630,8 +1669,8 @@ t.test("note --kind question names dev board ask", function()
         { "cccccccc", "--kind", "Question", "Which way?" },
     }) do
         local result = commands.run("note", args, backend)
-        t.eq(result.code, 2)
-        t.ok(
+        testing.eq(result.code, 2)
+        testing.ok(
             result.message:find(
                 "dev board ask CARD --question TEXT --choice COLUMN=LABEL --recommend N --why TEXT",
                 1,
@@ -1640,17 +1679,20 @@ t.test("note --kind question names dev board ask", function()
             result.message
         )
     end
-    t.eq(#backend.calls, count)
+    testing.eq(#backend.calls, count)
 end)
 
-t.test("note sends a lowercase kind and a trimmed role, and refuses a bad one", function()
+testing.test("note sends a lowercase kind and a trimmed role, and refuses a bad one", function()
     local backend = fake(sample())
     local args = { "cccccccc", "--kind", "Decision", "--as", " reviewer ", "go", "ahead" }
     local result = commands.run("note", args, backend)
-    t.eq(result.output, "noted cccccccc")
-    t.eq(backend.calls[1], { "note", ID_C, "go ahead", { kind = "decision", author = "reviewer" } })
+    testing.eq(result.output, "noted cccccccc")
+    testing.eq(
+        backend.calls[1],
+        { "note", ID_C, "go ahead", { kind = "decision", author = "reviewer" } }
+    )
     result = commands.run("note", { "cccccccc", "--as", "planner", "text" }, backend)
-    t.eq(backend.calls[2], { "note", ID_C, "text", { author = "planner" } })
+    testing.eq(backend.calls[2], { "note", ID_C, "text", { author = "planner" } })
     local count = #backend.calls
     for _, bad in ipairs({
         { "cccccccc", "--kind", "chatter", "text" },
@@ -1659,22 +1701,22 @@ t.test("note sends a lowercase kind and a trimmed role, and refuses a bad one", 
         { "cccccccc", "--as", string.rep("x", 81), "text" },
         { "cccccccc", "--as", "a\nb", "text" },
     }) do
-        t.eq(commands.run("note", bad, backend).code, 2)
+        testing.eq(commands.run("note", bad, backend).code, 2)
     end
-    t.eq(#backend.calls, count)
+    testing.eq(#backend.calls, count)
     result = commands.run("note", { "cccccccc", "see", "the", "--as", "flag" }, backend)
-    t.eq(backend.calls[count + 1], { "note", ID_C, "see the --as flag", {} })
-    t.eq(
+    testing.eq(backend.calls[count + 1], { "note", ID_C, "see the --as flag", {} })
+    testing.eq(
         commands.run("note", { "cccccccc", "--kind", "done", "--edit", "bbbbbbbb", "x" }, backend).code,
         2
     )
-    t.eq(
+    testing.eq(
         #commands.run("note", { "cccccccc", "--as", string.rep("x", 80), "t" }, backend).output > 0,
         true
     )
 end)
 
-t.test("show prints the card line, its description and its comments", function()
+testing.test("show prints the card line, its description and its comments", function()
     local cards = sample()
     cards[1].description = "Why it matters.\nSecond line."
     local backend = with_comments()
@@ -1682,7 +1724,7 @@ t.test("show prints the card line, its description and its comments", function()
         return cards
     end
     local result = commands.run("show", { "11111111-a" }, backend)
-    t.eq(
+    testing.eq(
         result.output,
         "11111111  Ready  1 Pomodoro  docs  Write docs\n\nWhy it matters.\nSecond line.\n\n"
             .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
@@ -1690,27 +1732,30 @@ t.test("show prints the card line, its description and its comments", function()
             .. "second\n"
             .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
     )
-    t.eq(backend.calls[#backend.calls], { "family", ID_A })
+    testing.eq(backend.calls[#backend.calls], { "family", ID_A })
     result = commands.run("show", { "bbbbbbbb-b" }, fake(sample()))
-    t.eq(result.code, 1)
+    testing.eq(result.code, 1)
     result = commands.run("show", { "11111111-b" }, fake(sample()))
-    t.eq(result.output, "11111111  Backlog  unsized  -  Fix lint\n\nno description\n\nno comments")
-    t.eq(commands.run("show", {}, backend).code, 2)
-    t.eq(commands.run("show", { "deadbeef" }, backend).code, 1)
+    testing.eq(
+        result.output,
+        "11111111  Backlog  unsized  -  Fix lint\n\nno description\n\nno comments"
+    )
+    testing.eq(commands.run("show", {}, backend).code, 2)
+    testing.eq(commands.run("show", { "deadbeef" }, backend).code, 1)
 end)
 
-t.test("note --edit and --delete resolve the comment by prefix", function()
+testing.test("note --edit and --delete resolve the comment by prefix", function()
     local backend = with_comments()
     local result =
         commands.run("note", { "cccccccc", "--edit", "bbbbbbbb", "fixed", "it" }, backend)
-    t.eq(result.output, "edited cccccccc bbbbbbbb")
-    t.eq(backend.calls[2], { "edit_note", ID_C, COMMENT_2, "fixed it" })
+    testing.eq(result.output, "edited cccccccc bbbbbbbb")
+    testing.eq(backend.calls[2], { "edit_note", ID_C, COMMENT_2, "fixed it" })
     result = commands.run("note", { "cccccccc", "--delete", "aaaaaaaa-1" }, backend)
-    t.eq(result.output, "deleted cccccccc aaaaaaaa")
-    t.eq(backend.calls[4], { "delete_note", ID_C, COMMENT_1 })
+    testing.eq(result.output, "deleted cccccccc aaaaaaaa")
+    testing.eq(backend.calls[4], { "delete_note", ID_C, COMMENT_1 })
 end)
 
-t.test("note --edit and --delete refuse a bad comment prefix or a bad shape", function()
+testing.test("note --edit and --delete refuse a bad comment prefix or a bad shape", function()
     local backend = with_comments()
     for _, args in ipairs({
         { "cccccccc", "--edit", "bbbb", "x" },
@@ -1718,13 +1763,13 @@ t.test("note --edit and --delete refuse a bad comment prefix or a bad shape", fu
         { "cccccccc", "--delete", "cccccccc" },
     }) do
         local result = commands.run("note", args, backend)
-        t.eq(result.code, 1)
+        testing.eq(result.code, 1)
     end
-    t.eq(
+    testing.eq(
         commands.run("note", { "cccccccc", "--delete", "bbbb" }, backend).message,
         "a comment id needs at least 8 hex characters: bbbb"
     )
-    t.eq(
+    testing.eq(
         commands.run("note", { "cccccccc", "--delete", "cccccccc" }, backend).message,
         "no comment starts with cccccccc"
     )
@@ -1734,25 +1779,25 @@ t.test("note --edit and --delete refuse a bad comment prefix or a bad shape", fu
         { "cccccccc", "--delete" },
         { "cccccccc", "--delete", "bbbbbbbb", "extra" },
     }) do
-        t.eq(commands.run("note", args, backend).code, 2)
+        testing.eq(commands.run("note", args, backend).code, 2)
     end
     for _, call in ipairs(backend.calls) do
-        t.ok(call[1] == "comments", call[1])
+        testing.ok(call[1] == "comments", call[1])
     end
 end)
 
-t.test("move and note refuse before the backend is called", function()
+testing.test("move and note refuse before the backend is called", function()
     local backend = fake(sample())
     local result = commands.run("move", { "cccccccc", "doing" }, backend)
-    t.eq(result.code, 2)
+    testing.eq(result.code, 2)
     result = commands.run("move", { "deadbeef", support.COLUMN.READY }, backend)
-    t.eq(result.code, 1)
+    testing.eq(result.code, 1)
     result = commands.run("note", { "cccccccc" }, backend)
-    t.eq(result.code, 2)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 2)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test(
+testing.test(
     "add to Ready refuses a card with no size or a red one before the backend is called",
     function()
         local backend = fake(sample())
@@ -1761,10 +1806,10 @@ t.test(
             { "X", "--column", support.COLUMN.READY, "--size", "unsized" },
             { "X", "--column", support.COLUMN.READY, "--size", "3+" },
         }) do
-            t.eq(commands.run("add", args, backend).code, 2)
+            testing.eq(commands.run("add", args, backend).code, 2)
         end
-        t.eq(#backend.calls, 0)
-        t.eq(
+        testing.eq(#backend.calls, 0)
+        testing.eq(
             commands.run("add", {
                 "X",
                 "--column",
@@ -1789,7 +1834,7 @@ t.test(
             "--checks",
             "dev test",
         }
-        t.eq(commands.run("add", full, backend).code, nil)
+        testing.eq(commands.run("add", full, backend).code, nil)
     end
 )
 
@@ -1807,80 +1852,89 @@ local function colored(color)
     return card
 end
 
-t.test("move to Ready refuses a white, uncoloured or red card and names dev board size", function()
-    for _, color in ipairs({ "white", "red" }) do
-        local backend = fake({ colored(color) })
-        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("dev board size", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+testing.test(
+    "move to Ready refuses a white, uncoloured or red card and names dev board size",
+    function()
+        for _, color in ipairs({ "white", "red" }) do
+            local backend = fake({ colored(color) })
+            local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find("dev board size", 1, true), result.message)
+            testing.eq(#backend.calls, 0)
+        end
+        local backend = fake({ colored(nil) })
+        local result = commands.run("move", { "cccccccc", support.COLUMN_NAME.READY }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("has no size", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
-    local backend = fake({ colored(nil) })
-    local result = commands.run("move", { "cccccccc", support.COLUMN_NAME.READY }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("has no size", 1, true), result.message)
-    t.eq(#backend.calls, 0)
-end)
+)
 
-t.test("add scaffolds the v2 headings, fills Problem and keeps a text that has them", function()
-    local backend = fake(sample())
-    commands.run(
-        "add",
-        { "X", "--description", "It breaks.", "--size", "1", "--done-when", "a" },
-        backend
-    )
-    t.eq(backend.calls[1][4], "## Problem\nIt breaks.\n\n## Change\n\n## Out of scope\n")
-    commands.run("add", { "X", "--description", V1, "--size", "1" }, backend)
-    t.eq(backend.calls[2][4], V1)
-    commands.run(
-        "add",
-        { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
-        backend
-    )
-    t.eq(backend.calls[3], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
-    commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend)
-    t.eq(backend.calls[4], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
-end)
+testing.test(
+    "add scaffolds the v2 headings, fills Problem and keeps a text that has them",
+    function()
+        local backend = fake(sample())
+        commands.run(
+            "add",
+            { "X", "--description", "It breaks.", "--size", "1", "--done-when", "a" },
+            backend
+        )
+        testing.eq(backend.calls[1][4], "## Problem\nIt breaks.\n\n## Change\n\n## Out of scope\n")
+        commands.run("add", { "X", "--description", V1, "--size", "1" }, backend)
+        testing.eq(backend.calls[2][4], V1)
+        commands.run(
+            "add",
+            { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
+            backend
+        )
+        testing.eq(backend.calls[3], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
+        commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend)
+        testing.eq(backend.calls[4], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
+    end
+)
 
-t.test("add composes the three sections from --problem, --change and --out-of-scope", function()
-    local backend = fake(sample())
-    local result = commands.run("add", {
-        "X",
-        "--problem",
-        "It breaks.",
-        "--change",
-        "- fix it",
-        "--out-of-scope",
-        "nothing",
-        "--size",
-        "1",
-        "--done-when",
-        "a",
-    }, backend)
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(
-        backend.calls[1][4],
-        "## Problem\nIt breaks.\n\n## Change\n- fix it\n\n## Out of scope\nnothing\n"
-    )
-    commands.run(
-        "add",
-        { "X", "--problem", "  only  ", "--size", "1", "--done-when", "a" },
-        backend
-    )
-    t.eq(backend.calls[2][4], "## Problem\nonly\n\n## Change\n\n## Out of scope\n")
-end)
+testing.test(
+    "add composes the three sections from --problem, --change and --out-of-scope",
+    function()
+        local backend = fake(sample())
+        local result = commands.run("add", {
+            "X",
+            "--problem",
+            "It breaks.",
+            "--change",
+            "- fix it",
+            "--out-of-scope",
+            "nothing",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        }, backend)
+        testing.eq(result.output, "added cccccccc Backlog")
+        testing.eq(
+            backend.calls[1][4],
+            "## Problem\nIt breaks.\n\n## Change\n- fix it\n\n## Out of scope\nnothing\n"
+        )
+        commands.run(
+            "add",
+            { "X", "--problem", "  only  ", "--size", "1", "--done-when", "a" },
+            backend
+        )
+        testing.eq(backend.calls[2][4], "## Problem\nonly\n\n## Change\n\n## Out of scope\n")
+    end
+)
 
-t.test("add refuses --description together with a section flag", function()
+testing.test("add refuses --description together with a section flag", function()
     local backend = fake(sample())
     for _, flag in ipairs({ "--problem", "--change", "--out-of-scope" }) do
         local result = commands.run("add", { "X", "--description", "text", flag, "y" }, backend)
-        t.eq(result.code, 2)
-        t.ok(result.message:find("--description", 1, true), result.message)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("--description", 1, true), result.message)
     end
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("add keeps each repeated --change as its own line, in order", function()
+testing.test("add keeps each repeated --change as its own line, in order", function()
     local backend = fake(sample())
     local result = commands.run("add", {
         "X",
@@ -1897,73 +1951,79 @@ t.test("add keeps each repeated --change as its own line, in order", function()
         "--done-when",
         "a",
     }, backend)
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(
         backend.calls[1][4],
         "## Problem\np\n\n## Change\n- one\n- two\n- three\n\n## Out of scope\n"
     )
 end)
 
-t.test("add refuses a repeated --problem or --out-of-scope by name", function()
+testing.test("add refuses a repeated --problem or --out-of-scope by name", function()
     local backend = fake(sample())
     for _, flag in ipairs({ "--problem", "--out-of-scope" }) do
         local result = commands.run("add", { "X", flag, "a", flag, "b" }, backend)
-        t.eq(result.code, 2)
-        t.ok(result.message:find(flag, 1, true), result.message)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find(flag, 1, true), result.message)
     end
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("add into Backlog without a Problem is refused before the backend is called", function()
-    local backend = fake(sample())
-    local result = commands.run("add", { "X" }, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("text under ## Problem", 1, true), result.message)
-    result = commands.run("add", { "X", "--change", "- do" }, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("text under ## Problem", 1, true), result.message)
-    result = commands.run(
-        "add",
-        { "X", "--column", support.COLUMN.BACKLOG, "--out-of-scope", "n" },
-        backend
-    )
-    t.eq(result.code, 2)
-    t.eq(#backend.calls, 0)
-end)
+testing.test(
+    "add into Backlog without a Problem is refused before the backend is called",
+    function()
+        local backend = fake(sample())
+        local result = commands.run("add", { "X" }, backend)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
+        result = commands.run("add", { "X", "--change", "- do" }, backend)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
+        result = commands.run(
+            "add",
+            { "X", "--column", support.COLUMN.BACKLOG, "--out-of-scope", "n" },
+            backend
+        )
+        testing.eq(result.code, 2)
+        testing.eq(#backend.calls, 0)
+    end
+)
 
-t.test("add outside Icebox refuses a missing size, section or outcome in every column", function()
-    local backend = fake(sample())
-    for _, column in ipairs({
-        support.COLUMN.BACKLOG,
-        support.COLUMN.PROGRESS,
-        support.COLUMN.REVIEW,
-        support.COLUMN.BLOCKED,
-        support.COLUMN.DONE,
-    }) do
-        local cases = {
-            { { "--problem", "x", "--done-when", "a" }, "a size" },
-            { { "--size", "1", "--done-when", "a" }, "text under ## Problem" },
-            { { "--size", "1", "--problem", "x" }, "Done when outcomes" },
-            { { "--size", "unsized", "--problem", "x", "--done-when", "a" }, "a size" },
-        }
-        for _, case in ipairs(cases) do
-            local args = { "X", "--column", column }
-            for _, word in ipairs(case[1]) do
-                args[#args + 1] = word
+testing.test(
+    "add outside Icebox refuses a missing size, section or outcome in every column",
+    function()
+        local backend = fake(sample())
+        for _, column in ipairs({
+            support.COLUMN.BACKLOG,
+            support.COLUMN.PROGRESS,
+            support.COLUMN.REVIEW,
+            support.COLUMN.BLOCKED,
+            support.COLUMN.DONE,
+        }) do
+            local cases = {
+                { { "--problem", "x", "--done-when", "a" }, "a size" },
+                { { "--size", "1", "--done-when", "a" }, "text under ## Problem" },
+                { { "--size", "1", "--problem", "x" }, "Done when outcomes" },
+                { { "--size", "unsized", "--problem", "x", "--done-when", "a" }, "a size" },
+            }
+            for _, case in ipairs(cases) do
+                local args = { "X", "--column", column }
+                for _, word in ipairs(case[1]) do
+                    args[#args + 1] = word
+                end
+                local result = commands.run("add", args, backend)
+                testing.eq(result.code, 2, column)
+                testing.ok(result.message:find(case[2], 1, true), result.message)
             end
-            local result = commands.run("add", args, backend)
-            t.eq(result.code, 2, column)
-            t.ok(result.message:find(case[2], 1, true), result.message)
         end
+        testing.eq(#backend.calls, 0)
     end
-    t.eq(#backend.calls, 0)
-end)
+)
 
-t.test("add into Icebox stays free-form", function()
+testing.test("add into Icebox stays free-form", function()
     local backend = fake(sample())
-    t.eq(commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code, nil)
-    t.eq(backend.calls[1], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
-    t.eq(
+    testing.eq(commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(backend.calls[1], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
+    testing.eq(
         commands.run(
             "add",
             { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
@@ -1971,105 +2031,121 @@ t.test("add into Icebox stays free-form", function()
         ).code,
         nil
     )
-    t.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
+    testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
 end)
 
-t.test("missing and backlog_missing count a heading with text, not an empty one", function()
-    t.eq(board.backlog_missing(V2), {})
-    t.eq(board.backlog_missing(SCAFFOLD), {})
-    t.eq(board.backlog_missing("## Problem\n\n## Change\nc\n## Out of scope\no"), {
+testing.test("missing and backlog_missing count a heading with text, not an empty one", function()
+    testing.eq(board.backlog_missing(V2), {})
+    testing.eq(board.backlog_missing(SCAFFOLD), {})
+    testing.eq(board.backlog_missing("## Problem\n\n## Change\nc\n## Out of scope\no"), {
         "text under ## Problem",
     })
-    t.eq(board.backlog_missing("## Problem\nx"), { "## Change", "## Out of scope" })
-    t.eq(board.backlog_missing(nil), { "## Problem", "## Change", "## Out of scope" })
-    t.eq(board.missing(V1, 0, 0), {})
-    t.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3, 0), {
+    testing.eq(board.backlog_missing("## Problem\nx"), { "## Change", "## Out of scope" })
+    testing.eq(board.backlog_missing(nil), { "## Problem", "## Change", "## Out of scope" })
+    testing.eq(board.missing(V1, 0, 0), {})
+    testing.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3, 0), {
         "text under ## Change",
     })
-    t.eq(board.missing("## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", 3, 0), {
+    testing.eq(board.missing("## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", 3, 0), {
         "text under ## Out of scope",
     })
-    t.eq(board.missing(V2, 3, 0), {})
+    testing.eq(board.missing(V2, 3, 0), {})
 end)
 
-t.test(
+testing.test(
     "shapes flags an empty Change or Out of scope and a Change: or Out of scope: line",
     function()
-        t.eq(board.shapes(V2), {})
-        t.eq(board.shapes("## Problem\nx\n\n## Change\n\n## Out of scope\n"), {
+        testing.eq(board.shapes(V2), {})
+        testing.eq(board.shapes("## Problem\nx\n\n## Change\n\n## Out of scope\n"), {
             "text under ## Change",
             "text under ## Out of scope",
         })
-        t.eq(board.shapes("## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn"), {
+        testing.eq(board.shapes("## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn"), {
             "a Problem free of Change: and Out of scope: lines",
         })
-        t.eq(board.shapes("## Problem\nChanged: y\n\n## Change\nc\n\n## Out of scope\nn"), {})
+        testing.eq(board.shapes("## Problem\nChanged: y\n\n## Change\nc\n\n## Out of scope\nn"), {})
     end
 )
 
-t.test("move to Ready refuses an empty Change or Out of scope and accepts all three", function()
-    for _, case in ipairs({
-        { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", "text under ## Change" },
-        { "## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", "text under ## Out of scope" },
-        {
-            "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn",
-            "a Problem free of Change: and Out of scope: lines",
-        },
-        {
-            "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn",
-            "a Problem free of Change: and Out of scope: lines",
-        },
-    }) do
+testing.test(
+    "move to Ready refuses an empty Change or Out of scope and accepts all three",
+    function()
+        for _, case in ipairs({
+            { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", "text under ## Change" },
+            { "## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", "text under ## Out of scope" },
+            {
+                "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn",
+                "a Problem free of Change: and Out of scope: lines",
+            },
+            {
+                "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn",
+                "a Problem free of Change: and Out of scope: lines",
+            },
+        }) do
+            local card = colored("green")
+            card.description = case[1]
+            card.outcomes =
+                { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
+            local backend = fake({ card })
+            local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find(case[2], 1, true), result.message)
+            testing.eq(#backend.calls, 0)
+        end
         local card = colored("green")
-        card.description = case[1]
+        card.description = V2
         card.outcomes =
             { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
-        local backend = fake({ card })
-        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find(case[2], 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(
+            commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
+            nil
+        )
     end
-    local card = colored("green")
-    card.description = V2
-    card.outcomes =
-        { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
-end)
+)
 
-t.test("move to Backlog refuses a card without a Problem and names what is missing", function()
-    local card = colored("green")
-    card.description = "loose idea"
-    local backend = fake({ card })
-    local result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("cannot enter Backlog", 1, true), result.message)
-    t.ok(result.message:find("## Problem", 1, true), result.message)
-    t.eq(#backend.calls, 0)
-    card.description = SCAFFOLD:gsub("x\n", "")
-    result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card }))
-    t.eq(result.code, 1)
-    t.ok(result.message:find("text under ## Problem", 1, true), result.message)
-    card.description = SCAFFOLD
-    card.outcomes = { { id = "s1", name = "a", done = false } }
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card })).code, nil)
-end)
+testing.test(
+    "move to Backlog refuses a card without a Problem and names what is missing",
+    function()
+        local card = colored("green")
+        card.description = "loose idea"
+        local backend = fake({ card })
+        local result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("cannot enter Backlog", 1, true), result.message)
+        testing.ok(result.message:find("## Problem", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
+        card.description = SCAFFOLD:gsub("x\n", "")
+        result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card }))
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
+        card.description = SCAFFOLD
+        card.outcomes = { { id = "s1", name = "a", done = false } }
+        testing.eq(
+            commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card })).code,
+            nil
+        )
+    end
+)
 
-t.test("add to Ready refuses a description without the headings or a Done when item", function()
-    local backend = fake(sample())
-    local result = commands.run(
-        "add",
-        { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", "why" },
-        backend
-    )
-    t.eq(result.code, 2)
-    t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
-    result = commands.run("add", { "X", "--column", support.COLUMN.READY, "--size", "1" }, backend)
-    t.eq(result.code, 2)
-    t.eq(#backend.calls, 0)
-end)
+testing.test(
+    "add to Ready refuses a description without the headings or a Done when item",
+    function()
+        local backend = fake(sample())
+        local result = commands.run(
+            "add",
+            { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", "why" },
+            backend
+        )
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+        result =
+            commands.run("add", { "X", "--column", support.COLUMN.READY, "--size", "1" }, backend)
+        testing.eq(result.code, 2)
+        testing.eq(#backend.calls, 0)
+    end
+)
 
-t.test("add --checks gives the card one row per command", function()
+testing.test("add --checks gives the card one row per command", function()
     local backend = fake(sample())
     local result = commands.run("add", {
         "X",
@@ -2084,70 +2160,79 @@ t.test("add --checks gives the card one row per command", function()
         "--checks",
         "dev test",
     }, backend)
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.opts.checks, { "dev lint", "dev test" })
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(backend.opts.checks, { "dev lint", "dev test" })
     result = commands.run("add", { "X", "--problem", "x", "--checks", "  " }, backend)
-    t.eq(result.code, 2)
-    t.eq(commands.run("add", { "X", "--checks" }, backend).code, 2)
+    testing.eq(result.code, 2)
+    testing.eq(commands.run("add", { "X", "--checks" }, backend).code, 2)
 end)
 
-t.test("add to Ready without a checks row names the missing row, or the missing field", function()
-    local backend = fake(sample())
-    local args = { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", V1 }
-    local result = commands.run("add", args, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("checks row", 1, true), result.message)
-    t.ok(result.message:find("--checks", 1, true), result.message)
-    backend.nofield = true
-    result = commands.run("add", args, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("no checks field", 1, true), result.message)
-    t.ok(result.message:find("dev board init", 1, true), result.message)
-    result = commands.run(
-        "add",
-        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--checks", "dev test" },
-        backend
-    )
-    t.eq(result.code, 2)
-    t.ok(result.message:find("no checks field", 1, true), result.message)
-    t.eq(#backend.calls, 0)
-    t.eq(commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code, nil)
-end)
+testing.test(
+    "add to Ready without a checks row names the missing row, or the missing field",
+    function()
+        local backend = fake(sample())
+        local args = { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", V1 }
+        local result = commands.run("add", args, backend)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("checks row", 1, true), result.message)
+        testing.ok(result.message:find("--checks", 1, true), result.message)
+        backend.nofield = true
+        result = commands.run("add", args, backend)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("no checks field", 1, true), result.message)
+        testing.ok(result.message:find("dev board init", 1, true), result.message)
+        result = commands.run(
+            "add",
+            { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--checks", "dev test" },
+            backend
+        )
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("no checks field", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
+        testing.eq(
+            commands.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code,
+            nil
+        )
+    end
+)
 
-t.test("move to Ready counts a card with no checks row as missing them", function()
+testing.test("move to Ready counts a card with no checks row as missing them", function()
     local card = colored("green")
     card.checks = {}
     local backend = fake({ card })
     local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("has no checks row", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("has no checks row", 1, true), result.message)
     backend.nofield = true
     result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("no checks field", 1, true), result.message)
-    t.ok(result.message:find("dev board init", 1, true), result.message)
-    t.eq(#backend.calls, 0)
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no checks field", 1, true), result.message)
+    testing.ok(result.message:find("dev board init", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
 end)
 
-t.test("show prints the checks rows under the description", function()
+testing.test("show prints the checks rows under the description", function()
     local card = colored("green")
     card.checks = { "dev lint", "dev test" }
     local result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.ok(result.output:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), result.output)
+    testing.ok(
+        result.output:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true),
+        result.output
+    )
     card.checks = {}
     result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.eq(result.output:find("checks:", 1, true), nil)
+    testing.eq(result.output:find("checks:", 1, true), nil)
 end)
 
-t.test("show prints the allow, tests and files blocks when set", function()
+testing.test("show prints the allow, tests and files blocks when set", function()
     local card = colored("green")
     card.checks = { "dev lint" }
     card.allow = { "test-edits" }
     card.tests = { "one", "two" }
     card.files = { "src/a.rs" }
     local result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.ok(
+    testing.ok(
         result.output:find(
             "\n\nchecks:\n- dev lint\n\nallow:\n- test-edits\n\ntests:\n- one\n- two\n\nfiles:\n- src/a.rs\n\n",
             1,
@@ -2157,12 +2242,12 @@ t.test("show prints the allow, tests and files blocks when set", function()
     )
     card.allow, card.tests, card.files = {}, {}, {}
     result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.eq(result.output:find("allow:", 1, true), nil)
-    t.eq(result.output:find("tests:", 1, true), nil)
-    t.eq(result.output:find("files:", 1, true), nil)
+    testing.eq(result.output:find("allow:", 1, true), nil)
+    testing.eq(result.output:find("tests:", 1, true), nil)
+    testing.eq(result.output:find("files:", 1, true), nil)
 end)
 
-t.test("move to Ready refuses a card missing a heading or a Done when item", function()
+testing.test("move to Ready refuses a card missing a heading or a Done when item", function()
     local cases = {
         { nil, "## Problem, ## Change, ## Out of scope, 3 to 7 Done when outcomes" },
         { "## Problem\nx\n\n## Change\ny\n\n## Done when\n- [ ] z", "## Out of scope" },
@@ -2180,13 +2265,13 @@ t.test("move to Ready refuses a card missing a heading or a Done when item", fun
         card.description = case[1]
         local backend = fake({ card })
         local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find(case[2], 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find(case[2], 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
 end)
 
 local function outcomes(count, ticked)
@@ -2197,42 +2282,55 @@ local function outcomes(count, ticked)
     return list
 end
 
-t.test("move to Ready counts 3 to 7 outcomes, and a v1 checklist when there are none", function()
-    for _, count in ipairs({ 3, 5, 7 }) do
+testing.test(
+    "move to Ready counts 3 to 7 outcomes, and a v1 checklist when there are none",
+    function()
+        for _, count in ipairs({ 3, 5, 7 }) do
+            local card = colored("green")
+            card.description = V2
+            card.outcomes = outcomes(count)
+            testing.eq(
+                commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
+                nil
+            )
+        end
+        for _, count in ipairs({ 0, 2, 8 }) do
+            local card = colored("green")
+            card.description = V2
+            card.outcomes = outcomes(count)
+            local backend = fake({ card })
+            local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find("card format v2", 1, true), result.message)
+            testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+            testing.eq(#backend.calls, 0)
+        end
         local card = colored("green")
-        card.description = V2
-        card.outcomes = outcomes(count)
-        t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
+        card.outcomes = {}
+        testing.eq(
+            commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
+            nil
+        )
     end
-    for _, count in ipairs({ 0, 2, 8 }) do
-        local card = colored("green")
-        card.description = V2
-        card.outcomes = outcomes(count)
-        local backend = fake({ card })
-        local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("card format v2", 1, true), result.message)
-        t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
-        t.eq(#backend.calls, 0)
-    end
-    local card = colored("green")
-    card.outcomes = {}
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code, nil)
-end)
+)
 
-t.test("an epic with 1 to 3 outcomes enters Ready", function()
+testing.test("an epic with 1 to 3 outcomes enters Ready", function()
     for _, count in ipairs({ 1, 2, 3 }) do
         local card = colored("green")
         card.description = V2
         card.epic = { done = 2, total = 2 }
         card.outcomes = outcomes(count)
         local backend = fake({ card })
-        t.eq(commands.run("move", { "cccccccc", support.COLUMN.READY }, backend).code, nil, count)
-        t.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.READY })
+        testing.eq(
+            commands.run("move", { "cccccccc", support.COLUMN.READY }, backend).code,
+            nil,
+            count
+        )
+        testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.READY })
     end
 end)
 
-t.test("an epic with no outcomes or more than 3 is refused with the epic rule", function()
+testing.test("an epic with no outcomes or more than 3 is refused with the epic rule", function()
     for _, count in ipairs({ 0, 4, 7 }) do
         local card = colored("green")
         card.description = V2
@@ -2240,46 +2338,49 @@ t.test("an epic with no outcomes or more than 3 is refused with the epic rule", 
         card.outcomes = outcomes(count)
         local backend = fake({ card })
         local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("1 to 3 Done when outcomes for an epic", 1, true), result.message)
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find("1 to 3 Done when outcomes for an epic", 1, true),
+            result.message
+        )
         if count > 0 then
-            t.ok(result.message:find("not " .. count, 1, true), result.message)
+            testing.ok(result.message:find("not " .. count, 1, true), result.message)
         end
-        t.eq(#backend.calls, 0)
+        testing.eq(#backend.calls, 0)
     end
 end)
 
-t.test("a card without children is still held to 3 to 7 outcomes at Ready", function()
+testing.test("a card without children is still held to 3 to 7 outcomes at Ready", function()
     for _, count in ipairs({ 1, 2, 8 }) do
         local card = colored("green")
         card.description = V2
         card.outcomes = outcomes(count)
         local backend = fake({ card })
         local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
-        t.eq(result.message:find("epic", 1, true), nil, result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+        testing.eq(result.message:find("epic", 1, true), nil, result.message)
+        testing.eq(#backend.calls, 0)
     end
 end)
 
-t.test("add --done-when hands the outcomes to the backend and checks them", function()
+testing.test("add --done-when hands the outcomes to the backend and checks them", function()
     local backend = fake(sample())
     local result = commands.run(
         "add",
         { "X", "--problem", "x", "--size", "1", "--done-when", "A works", "--done-when", "B works" },
         backend
     )
-    t.eq(result.output, "added cccccccc Backlog")
-    t.eq(backend.opts.outcomes, { "A works", "B works" })
-    t.eq(commands.run("add", { "X", "--problem", "x", "--done-when", " " }, backend).code, 2)
-    t.eq(commands.run("add", { "X", "--done-when" }, backend).code, 2)
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(backend.opts.outcomes, { "A works", "B works" })
+    testing.eq(commands.run("add", { "X", "--problem", "x", "--done-when", " " }, backend).code, 2)
+    testing.eq(commands.run("add", { "X", "--done-when" }, backend).code, 2)
     local many = { "X", "--problem", "x" }
     for i = 1, 8 do
         many[#many + 1] = "--done-when"
         many[#many + 1] = "o" .. i
     end
-    t.eq(commands.run("add", many, backend).code, 2)
+    testing.eq(commands.run("add", many, backend).code, 2)
     local ready = {
         "X",
         "--column",
@@ -2296,24 +2397,24 @@ t.test("add --done-when hands the outcomes to the backend and checks them", func
         "b",
     }
     result = commands.run("add", ready, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
     ready[#ready + 1] = "--done-when"
     ready[#ready + 1] = "c"
-    t.eq(commands.run("add", ready, backend).code, nil)
+    testing.eq(commands.run("add", ready, backend).code, nil)
     result = commands.run(
         "add",
         { "X", "--problem", "x", "--size", "1", "--done-when", "see src/a.lua" },
         backend
     )
-    t.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    testing.eq(result.warnings, { "card prose holds a path: src/a.lua" })
 end)
 
-t.test("show lists the outcomes with their ticks, and ls adds a done column", function()
+testing.test("show lists the outcomes with their ticks, and ls adds a done column", function()
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
     local result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.ok(
+    testing.ok(
         result.output:find(
             "\n\ndone when:\n- [x] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3\n\n",
             1,
@@ -2322,12 +2423,12 @@ t.test("show lists the outcomes with their ticks, and ls adds a done column", fu
         result.output
     )
     result = commands.run("ls", {}, fake({ card }))
-    t.eq(result.output, "cccccccc  Backlog  x  -  1/3  Card")
+    testing.eq(result.output, "cccccccc  Backlog  x  -  1/3  Card")
     local plain = colored("green")
-    t.eq(commands.run("ls", {}, fake({ plain })).output, "cccccccc  Backlog  x  -  Card")
+    testing.eq(commands.run("ls", {}, fake({ plain })).output, "cccccccc  Backlog  x  -  Card")
 end)
 
-t.test("show prints the done when block once and only when a card has outcomes", function()
+testing.test("show prints the done when block once and only when a card has outcomes", function()
     local function count(text, needle)
         local n = 0
         for _ in text:gmatch(needle) do
@@ -2341,104 +2442,107 @@ t.test("show prints the done when block once and only when a card has outcomes",
     card.description = checklist
     card.outcomes = outcomes(3, 1)
     local result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.eq(count(result.output, "Outcome 1"), 1, result.output)
-    t.eq(count(result.output, "[Dd]one when"), 1, result.output)
-    t.ok(
+    testing.eq(count(result.output, "Outcome 1"), 1, result.output)
+    testing.eq(count(result.output, "[Dd]one when"), 1, result.output)
+    testing.ok(
         result.output:find("## Problem\nwhy\n\ndone when:\n- [x] Outcome 1", 1, true),
         result.output
     )
     card.description = "## Done when\n- [ ] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3"
     result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.eq(count(result.output, "Outcome 1"), 1, result.output)
-    t.ok(result.output:find("\n\nno description\n\ndone when:\n", 1, true), result.output)
+    testing.eq(count(result.output, "Outcome 1"), 1, result.output)
+    testing.ok(result.output:find("\n\nno description\n\ndone when:\n", 1, true), result.output)
     card.description = checklist
     card.outcomes = {}
     result = commands.run("show", { "cccccccc" }, fake({ card }))
-    t.eq(count(result.output, "done when:"), 0, result.output)
-    t.eq(count(result.output, "## Done when"), 1, result.output)
-    t.eq(count(result.output, "Outcome 1"), 1, result.output)
+    testing.eq(count(result.output, "done when:"), 0, result.output)
+    testing.eq(count(result.output, "## Done when"), 1, result.output)
+    testing.eq(count(result.output, "Outcome 1"), 1, result.output)
 end)
 
-t.test("outcome appends, rewords, ticks and unticks by number", function()
+testing.test("outcome appends, rewords, ticks and unticks by number", function()
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
     local backend = fake({ card })
     local result = commands.run("outcome", { "cccccccc", "Fourth", "works" }, backend)
-    t.eq(result.output, "outcome cccccccc 4 added")
-    t.eq(backend.calls[1], { "add_outcome", ID_C, "Fourth works", nil })
+    testing.eq(result.output, "outcome cccccccc 4 added")
+    testing.eq(backend.calls[1], { "add_outcome", ID_C, "Fourth works", nil })
     result = commands.run(
         "outcome",
         { "cccccccc", "--rename", "2", "New", "words", "--reason", "it was vague" },
         backend
     )
-    t.eq(result.output, "outcome cccccccc 2 reworded")
-    t.eq(backend.calls[2], { "set_outcome", ID_C, "s2", { name = "New words" }, nil })
+    testing.eq(result.output, "outcome cccccccc 2 reworded")
+    testing.eq(backend.calls[2], { "set_outcome", ID_C, "s2", { name = "New words" }, nil })
     result = commands.run("outcome", { "cccccccc", "--tick", "2" }, backend)
-    t.eq(result.output, "outcome cccccccc 2 ticked")
-    t.eq(backend.calls[4], { "set_outcome", ID_C, "s2", { done = true }, nil })
+    testing.eq(result.output, "outcome cccccccc 2 ticked")
+    testing.eq(backend.calls[4], { "set_outcome", ID_C, "s2", { done = true }, nil })
     result = commands.run("outcome", { "cccccccc", "--untick", "1" }, backend)
-    t.eq(result.output, "outcome cccccccc 1 unticked")
-    t.eq(backend.calls[5], { "set_outcome", ID_C, "s1", { done = false }, nil })
+    testing.eq(result.output, "outcome cccccccc 1 unticked")
+    testing.eq(backend.calls[5], { "set_outcome", ID_C, "s1", { done = false }, nil })
 end)
 
-t.test(
+testing.test(
     "outcome refuses text that holds a flag or is only a number, and accepts a sentence",
     function()
         local card = colored("green")
         card.outcomes = outcomes(3)
         local backend = fake({ card })
         local result = commands.run("outcome", { "cccccccc", "1", "--tick" }, backend)
-        t.eq(result.code, 2)
-        t.ok(result.message:find("dev board outcome CARD --tick 1", 1, true), result.message)
-        t.eq(commands.run("outcome", { "cccccccc", "2", "--untick" }, backend).code, 2)
-        t.eq(commands.run("outcome", { "cccccccc", "Fix", "--convert" }, backend).code, 2)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("dev board outcome CARD --tick 1", 1, true), result.message)
+        testing.eq(commands.run("outcome", { "cccccccc", "2", "--untick" }, backend).code, 2)
+        testing.eq(commands.run("outcome", { "cccccccc", "Fix", "--convert" }, backend).code, 2)
         result = commands.run("outcome", { "cccccccc", "2" }, backend)
-        t.eq(result.code, 2)
-        t.ok(result.message:find("--tick 2", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("--tick 2", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
         result =
             commands.run("outcome", { "cccccccc", "Use --tick 2 to mark an outcome." }, backend)
-        t.eq(result.output, "outcome cccccccc 4 added")
-        t.eq(backend.calls[1], { "add_outcome", ID_C, "Use --tick 2 to mark an outcome.", nil })
+        testing.eq(result.output, "outcome cccccccc 4 added")
+        testing.eq(
+            backend.calls[1],
+            { "add_outcome", ID_C, "Use --tick 2 to mark an outcome.", nil }
+        )
     end
 )
 
-t.test("outcome refuses an N past the last outcome and a bad N", function()
+testing.test("outcome refuses an N past the last outcome and a bad N", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
     local result = commands.run("outcome", { "cccccccc", "--tick", "3" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("the card has 2 outcomes, so there is no outcome 3", 1, true))
-    t.eq(
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("the card has 2 outcomes, so there is no outcome 3", 1, true))
+    testing.eq(
         commands.run("outcome", { "cccccccc", "--rename", "9", "x", "--reason", "y" }, backend).code,
         1
     )
     for _, word in ipairs({ "0", "-1", "x", "1.5" }) do
-        t.eq(commands.run("outcome", { "cccccccc", "--tick", word }, backend).code, 2)
+        testing.eq(commands.run("outcome", { "cccccccc", "--tick", word }, backend).code, 2)
     end
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("outcome --rename without --reason is refused and changes nothing", function()
+testing.test("outcome --rename without --reason is refused and changes nothing", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
     local result = commands.run("outcome", { "cccccccc", "--rename", "1", "New" }, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("--rename needs --reason TEXT", 1, true), result.message)
-    t.eq(
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("--rename needs --reason TEXT", 1, true), result.message)
+    testing.eq(
         commands.run("outcome", { "cccccccc", "--rename", "1", "New", "--reason" }, backend).code,
         2
     )
-    t.eq(
+    testing.eq(
         commands.run("outcome", { "cccccccc", "--rename", "1", "--reason", "why" }, backend).code,
         2
     )
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("outcome --rename ends the new text at the first --reason", function()
+testing.test("outcome --rename ends the new text at the first --reason", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
@@ -2447,12 +2551,12 @@ t.test("outcome --rename ends the new text at the first --reason", function()
         { "cccccccc", "--rename", "1", "New", "--reason", "use", "--reason", "flag" },
         backend
     )
-    t.eq(result.output, "outcome cccccccc 1 reworded")
-    t.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { name = "New" }, nil })
-    t.ok(backend.calls[2][3]:find("Reason: use --reason flag", 1, true), backend.calls[2][3])
+    testing.eq(result.output, "outcome cccccccc 1 reworded")
+    testing.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { name = "New" }, nil })
+    testing.ok(backend.calls[2][3]:find("Reason: use --reason flag", 1, true), backend.calls[2][3])
 end)
 
-t.test("outcome --rename names the old text and the reason when the note fails", function()
+testing.test("outcome --rename names the old text and the reason when the note fails", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local old = card.outcomes[2].name
@@ -2462,16 +2566,19 @@ t.test("outcome --rename names the old text and the reason when the note fails",
     end
     local result =
         commands.run("outcome", { "cccccccc", "--rename", "2", "New", "--reason", "why" }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.unqueued, true)
-    t.ok(result.message:find("was renamed but the note failed", 1, true), result.message)
-    t.ok(result.message:find(old, 1, true) and result.message:find("why", 1, true), result.message)
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+    testing.ok(result.message:find("was renamed but the note failed", 1, true), result.message)
+    testing.ok(
+        result.message:find(old, 1, true) and result.message:find("why", 1, true),
+        result.message
+    )
     result =
         commands.run("outcome", { "cccccccc", "--rename", "1", "New", "--reason", " " }, backend)
-    t.eq(result.code, 2)
+    testing.eq(result.code, 2)
 end)
 
-t.test(
+testing.test(
     "outcome --rename posts one decision note with the old text, the new text and the reason",
     function()
         local card = colored("green")
@@ -2483,9 +2590,9 @@ t.test(
             { "cccccccc", "--rename", "2", "New", "words", "--reason", "it", "was", "vague" },
             backend
         )
-        t.eq(result.output, "outcome cccccccc 2 reworded")
-        t.eq(#backend.calls, 2)
-        t.eq(backend.calls[2], {
+        testing.eq(result.output, "outcome cccccccc 2 reworded")
+        testing.eq(#backend.calls, 2)
+        testing.eq(backend.calls[2], {
             "note",
             ID_C,
             "Renamed outcome 2 from: " .. old .. " to: New words Reason: it was vague",
@@ -2494,20 +2601,20 @@ t.test(
     end
 )
 
-t.test("outcome refuses missing arguments, blank text and a missing card", function()
+testing.test("outcome refuses missing arguments, blank text and a missing card", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
-    t.eq(commands.run("outcome", { "cccccccc" }, backend).code, 2)
-    t.eq(commands.run("outcome", { "cccccccc", "--tick" }, backend).code, 2)
-    t.eq(commands.run("outcome", { "cccccccc", "--tick", "1", "2" }, backend).code, 2)
-    t.eq(commands.run("outcome", { "cccccccc", "--rename", "1" }, backend).code, 2)
-    t.eq(commands.run("outcome", { "cccccccc", "   " }, backend).code, 2)
-    t.eq(commands.run("outcome", { "deadbeef", "x" }, backend).code, 1)
-    t.eq(#backend.calls, 0)
+    testing.eq(commands.run("outcome", { "cccccccc" }, backend).code, 2)
+    testing.eq(commands.run("outcome", { "cccccccc", "--tick" }, backend).code, 2)
+    testing.eq(commands.run("outcome", { "cccccccc", "--tick", "1", "2" }, backend).code, 2)
+    testing.eq(commands.run("outcome", { "cccccccc", "--rename", "1" }, backend).code, 2)
+    testing.eq(commands.run("outcome", { "cccccccc", "   " }, backend).code, 2)
+    testing.eq(commands.run("outcome", { "deadbeef", "x" }, backend).code, 1)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test(
+testing.test(
     "a claimant cannot tick its card's outcome, another name can, and untick stays open",
     function()
         local card = colored("green")
@@ -2516,15 +2623,15 @@ t.test(
         local backend = fake({ card })
         local result =
             commands.run("outcome", { "cccccccc", "--tick", "1", "--as", "project-run/a" }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
         result =
             commands.run("outcome", { "cccccccc", "--tick", "1", "--as", "project-run/b" }, backend)
-        t.eq(result.output, "outcome cccccccc 1 ticked by project-run/b")
-        t.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { done = true }, nil })
+        testing.eq(result.output, "outcome cccccccc 1 ticked by project-run/b")
+        testing.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { done = true }, nil })
         result = commands.run("outcome", { "cccccccc", "--untick", "1" }, backend)
-        t.eq(result.output, "outcome cccccccc 1 unticked")
+        testing.eq(result.output, "outcome cccccccc 1 unticked")
     end
 )
 
@@ -2546,7 +2653,7 @@ local function writes(backend)
     return calls
 end
 
-t.test("outcome delete refuses a name that is not a lead", function()
+testing.test("outcome delete refuses a name that is not a lead", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
@@ -2554,15 +2661,18 @@ t.test("outcome delete refuses a name that is not a lead", function()
         as_agent(name, function()
             local result =
                 commands.run("outcome", { "cccccccc", "--delete", "1", "--reason", "x" }, backend)
-            t.eq(result.code, 1)
-            t.ok(result.message:find("only the lead deletes an outcome", 1, true), result.message)
-            t.ok(result.message:find(name, 1, true), result.message)
+            testing.eq(result.code, 1)
+            testing.ok(
+                result.message:find("only the lead deletes an outcome", 1, true),
+                result.message
+            )
+            testing.ok(result.message:find(name, 1, true), result.message)
         end)
     end
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("outcome delete by a lead notes the reason and the text", function()
+testing.test("outcome delete by a lead notes the reason and the text", function()
     for _, column in ipairs({
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.BLOCKED,
@@ -2578,15 +2688,15 @@ t.test("outcome delete by a lead notes the reason and the text", function()
                 { "cccccccc", "--delete", "2", "--reason", "never", "achievable" },
                 backend
             )
-            t.eq(result.output, "outcome cccccccc 2 deleted")
+            testing.eq(result.output, "outcome cccccccc 2 deleted")
         end)
         local calls = writes(backend)
-        t.eq(calls[1], { "delete_outcome", ID_C, "s2", nil })
-        t.eq(
+        testing.eq(calls[1], { "delete_outcome", ID_C, "s2", nil })
+        testing.eq(
             calls[2][3],
             "Deleted outcome 2: " .. card.outcomes[2].name .. " Reason: never achievable"
         )
-        t.eq(calls[2][4], { kind = "decision" })
+        testing.eq(calls[2][4], { kind = "decision" })
     end
 end)
 
@@ -2609,7 +2719,7 @@ local function card_in(column)
     return card
 end
 
-t.test("outcome delete refuses a card in a ready-role column", function()
+testing.test("outcome delete refuses a card in a ready-role column", function()
     for _, column in ipairs({
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.PROGRESS,
@@ -2619,115 +2729,124 @@ t.test("outcome delete refuses a card in a ready-role column", function()
     }) do
         local backend = fake({ card_in(column) })
         local result = delete_in(backend, "cccccccc")
-        t.eq(result.code, 1)
-        t.ok(result.message:find(column, 1, true), result.message)
-        t.ok(result.message:find("fixed from Ready on", 1, true), result.message)
-        t.eq(result.unqueued, true)
-        t.eq(#writes(backend), 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find(column, 1, true), result.message)
+        testing.ok(result.message:find("fixed from Ready on", 1, true), result.message)
+        testing.eq(result.unqueued, true)
+        testing.eq(#writes(backend), 0)
     end
 end)
 
-t.test("outcome delete refuses a card in a finished column", function()
+testing.test("outcome delete refuses a card in a finished column", function()
     for _, column in ipairs({ support.COLUMN_NAME.DONE, "Archive" }) do
         local backend = fake({ card_in(column) }, nil, { support.COLUMN_NAME.DONE, "Archive" })
         local result = delete_in(backend, "cccccccc")
-        t.eq(result.code, 1)
-        t.ok(result.message:find(column, 1, true), result.message)
-        t.eq(#writes(backend), 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find(column, 1, true), result.message)
+        testing.eq(#writes(backend), 0)
     end
 end)
 
-t.test("outcome delete reads the renamed role columns", function()
+testing.test("outcome delete reads the renamed role columns", function()
     local map = { ready = "Next", progress = "Doing", review = "Looking", done = "Shipped" }
     for _, column in ipairs({ "Next", "Doing", "Looking", "Shipped" }) do
         local backend = fake({ card_in(column) }, nil, { "Shipped" })
         backend.column_map = map
         local result = delete_in(backend, "cccccccc")
-        t.eq(result.code, 1, column)
-        t.ok(result.message:find(column, 1, true), result.message)
-        t.eq(#writes(backend), 0)
+        testing.eq(result.code, 1, column)
+        testing.ok(result.message:find(column, 1, true), result.message)
+        testing.eq(#writes(backend), 0)
     end
     for _, column in ipairs({ support.COLUMN_NAME.READY, support.COLUMN_NAME.PROGRESS }) do
         local backend = fake({ card_in(column) }, nil, { "Shipped" })
         backend.column_map = map
-        t.eq(delete_in(backend, "cccccccc").code, 1, column)
-        t.eq(#writes(backend), 0)
+        testing.eq(delete_in(backend, "cccccccc").code, 1, column)
+        testing.eq(#writes(backend), 0)
     end
 end)
 
-t.test("outcome delete refuses an unmapped column", function()
+testing.test("outcome delete refuses an unmapped column", function()
     local backend = fake({ card_in("QA") })
     local result = delete_in(backend, "cccccccc")
-    t.eq(result.code, 1)
-    t.ok(result.message:find("QA", 1, true), result.message)
-    t.ok(result.message:find("fixed from Ready on", 1, true), result.message)
-    t.eq(result.unqueued, true)
-    t.eq(#writes(backend), 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("QA", 1, true), result.message)
+    testing.ok(result.message:find("fixed from Ready on", 1, true), result.message)
+    testing.eq(result.unqueued, true)
+    testing.eq(#writes(backend), 0)
 end)
 
-t.test("outcome delete allows renamed blocked and backlog columns", function()
+testing.test("outcome delete allows renamed blocked and backlog columns", function()
     local map = { blocked = "Parked", backlog = "Someday" }
     for _, column in ipairs({ "Parked", "parked", "SOMEDAY" }) do
         local backend = fake({ card_in(column) })
         backend.column_map = map
-        t.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
+        testing.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
     end
     for _, column in ipairs({ support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.BACKLOG }) do
         local backend = fake({ card_in(column) })
         backend.column_map = map
-        t.eq(delete_in(backend, "cccccccc").code, 1, column)
-        t.eq(#writes(backend), 0)
+        testing.eq(delete_in(backend, "cccccccc").code, 1, column)
+        testing.eq(#writes(backend), 0)
     end
 end)
 
-t.test("outcome delete is allowed in Blocked and Backlog", function()
+testing.test("outcome delete is allowed in Blocked and Backlog", function()
     for _, column in ipairs({
         support.COLUMN_NAME.BLOCKED,
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.ICEBOX,
     }) do
         local backend = fake({ card_in(column) })
-        t.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
+        testing.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
         local calls = writes(backend)
-        t.eq(calls[1], { "delete_outcome", ID_C, "s1", nil })
-        t.eq(calls[2][4], { kind = "decision" })
+        testing.eq(calls[1], { "delete_outcome", ID_C, "s1", nil })
+        testing.eq(calls[2][4], { kind = "decision" })
     end
 end)
 
-t.test("outcome delete by a lead needs a reason", function()
+testing.test("outcome delete by a lead needs a reason", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
     as_agent(LEAD, function()
-        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
-        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "--reason" }, backend).code, 2)
-        t.eq(
+        testing.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
+        testing.eq(
+            commands.run("outcome", { "cccccccc", "--delete", "1", "--reason" }, backend).code,
+            2
+        )
+        testing.eq(
             commands.run("outcome", { "cccccccc", "--delete", "1", "--reason", "  " }, backend).code,
             2
         )
     end)
     as_agent("dotfiles/implementer/95f0e009/1", function()
-        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
+        testing.eq(commands.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
     end)
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("outcome --delete by a lead needs a number, and a bad number deletes nothing", function()
-    local card = colored("green")
-    card.outcomes = outcomes(2)
-    local backend = fake({ card })
-    as_agent(LEAD, function()
-        t.eq(commands.run("outcome", { "cccccccc", "--delete" }, backend).code, 2)
-        t.eq(commands.run("outcome", { "cccccccc", "--delete", "1", "why" }, backend).code, 2)
-        t.eq(
-            commands.run("outcome", { "cccccccc", "--delete", "3", "--reason", "x" }, backend).code,
-            1
-        )
-    end)
-    t.eq(#writes(backend), 0)
-end)
+testing.test(
+    "outcome --delete by a lead needs a number, and a bad number deletes nothing",
+    function()
+        local card = colored("green")
+        card.outcomes = outcomes(2)
+        local backend = fake({ card })
+        as_agent(LEAD, function()
+            testing.eq(commands.run("outcome", { "cccccccc", "--delete" }, backend).code, 2)
+            testing.eq(
+                commands.run("outcome", { "cccccccc", "--delete", "1", "why" }, backend).code,
+                2
+            )
+            testing.eq(
+                commands.run("outcome", { "cccccccc", "--delete", "3", "--reason", "x" }, backend).code,
+                1
+            )
+        end)
+        testing.eq(#writes(backend), 0)
+    end
+)
 
-t.test("the claimant cannot delete an outcome under any name it is given", function()
+testing.test("the claimant cannot delete an outcome under any name it is given", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     card.claimant = "project-run/a"
@@ -2738,18 +2857,18 @@ t.test("the claimant cannot delete an outcome under any name it is given", funct
             { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/a" },
             backend
         )
-        t.eq(result.code, 1)
-        t.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
-        t.ok(result.message:find("Pass the change back", 1, true), result.message)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
+        testing.ok(result.message:find("Pass the change back", 1, true), result.message)
         for _, call in ipairs(backend.calls) do
-            t.eq(call[1], "comments")
+            testing.eq(call[1], "comments")
         end
         result = commands.run(
             "outcome",
             { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/b" },
             backend
         )
-        t.eq(result.output, "outcome cccccccc 1 deleted")
+        testing.eq(result.output, "outcome cccccccc 1 deleted")
     end)
 end)
 
@@ -2762,7 +2881,7 @@ local function released_by(name, claimant)
     return backend
 end
 
-t.test("a name that released the card cannot reclaim the finish line", function()
+testing.test("a name that released the card cannot reclaim the finish line", function()
     local released = "project-run/a"
     local backend = released_by(released)
     as_agent(released, function()
@@ -2774,46 +2893,46 @@ t.test("a name that released the card cannot reclaim the finish line", function(
         }
         for _, run in ipairs(runs) do
             local result = commands.run(run[1], run[2], backend)
-            t.eq(result.code, 1, run[2][2])
-            t.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
+            testing.eq(result.code, 1, run[2][2])
+            testing.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
         end
     end)
     for _, call in ipairs(backend.calls) do
-        t.eq(call[1], "comments")
+        testing.eq(call[1], "comments")
     end
 end)
 
-t.test("an --as name of a former claimant cannot reclaim the finish line", function()
+testing.test("an --as name of a former claimant cannot reclaim the finish line", function()
     local released = "project-run/a"
     local backend = released_by(released)
     as_agent("project-run/b", function()
         local result =
             commands.run("outcome", { "cccccccc", "--convert", "--as", released }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
     end)
     for _, call in ipairs(backend.calls) do
-        t.eq(call[1], "comments")
+        testing.eq(call[1], "comments")
     end
 end)
 
-t.test("a failed comments read refuses the reclaim check with its message", function()
+testing.test("a failed comments read refuses the reclaim check with its message", function()
     local backend = released_by("project-run/a")
     backend.listed_error = "comments are unavailable"
     as_agent("project-run/b", function()
         local result = commands.run("checks", { "cccccccc", "dev test" }, backend)
-        t.eq(result.code, 1)
-        t.eq(result.message, "comments are unavailable")
+        testing.eq(result.code, 1)
+        testing.eq(result.message, "comments are unavailable")
     end)
     for _, call in ipairs(backend.calls) do
-        t.eq(call[1], "comments")
+        testing.eq(call[1], "comments")
     end
 end)
 
-t.test("a name that never claimed the card and the lead can still change it", function()
+testing.test("a name that never claimed the card and the lead can still change it", function()
     local backend = released_by("project-run/a")
     as_agent("project-run/b", function()
-        t.eq(commands.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
+        testing.eq(commands.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
     end)
     as_agent("lead", function()
         local result = commands.run(
@@ -2821,7 +2940,7 @@ t.test("a name that never claimed the card and the lead can still change it", fu
             { "cccccccc", "--rename", "1", "New", "--reason", "x" },
             backend
         )
-        t.eq(result.code, nil)
+        testing.eq(result.code, nil)
     end)
     backend = released_by("lead", "lead")
     as_agent("lead", function()
@@ -2830,96 +2949,102 @@ t.test("a name that never claimed the card and the lead can still change it", fu
             { "cccccccc", "--rename", "1", "New", "--reason", "x" },
             backend
         )
-        t.eq(result.code, nil)
+        testing.eq(result.code, nil)
     end)
 end)
 
-t.test("review refuses the claimant for every kind and says a reviewer must record it", function()
-    local card = colored("green")
-    card.claimant = "project-run/a"
-    local backend = fake({ card })
-    for _, kind in ipairs({ "code", "style", "recheck" }) do
-        local result = commands.run("review", {
-            "cccccccc",
-            "--kind",
-            kind,
-            "--by",
-            "project-run/a",
-            "--rev",
-            "@",
-            "--verdict",
-            "clean",
-        }, backend)
-        t.eq(result.code, 1)
-        t.ok(
-            result.message:find(
-                "is claimed by project-run/a, so project-run/a cannot review its own change",
-                1,
-                true
-            ),
-            result.message
-        )
-        t.ok(
-            result.message:find("; a reviewer other than project-run/a must record it", 1, true),
-            result.message
-        )
+testing.test(
+    "review refuses the claimant for every kind and says a reviewer must record it",
+    function()
+        local card = colored("green")
+        card.claimant = "project-run/a"
+        local backend = fake({ card })
+        for _, kind in ipairs({ "code", "style", "recheck" }) do
+            local result = commands.run("review", {
+                "cccccccc",
+                "--kind",
+                kind,
+                "--by",
+                "project-run/a",
+                "--rev",
+                "@",
+                "--verdict",
+                "clean",
+            }, backend)
+            testing.eq(result.code, 1)
+            testing.ok(
+                result.message:find(
+                    "is claimed by project-run/a, so project-run/a cannot review its own change",
+                    1,
+                    true
+                ),
+                result.message
+            )
+            testing.ok(
+                result.message:find("; a reviewer other than project-run/a must record it", 1, true),
+                result.message
+            )
+        end
+        for _, call in ipairs(backend.calls) do
+            testing.eq(call[1], "comments")
+        end
     end
-    for _, call in ipairs(backend.calls) do
-        t.eq(call[1], "comments")
-    end
-end)
+)
 
-t.test("--as is read only on a tick or convert, and names one word", function()
+testing.test("--as is read only on a tick or convert, and names one word", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
-    t.eq(commands.run("outcome", { "cccccccc", "--untick", "1", "--as", "x" }, backend).code, 2)
-    t.eq(
+    testing.eq(
+        commands.run("outcome", { "cccccccc", "--untick", "1", "--as", "x" }, backend).code,
+        2
+    )
+    testing.eq(
         commands.run("outcome", { "cccccccc", "--tick", "1", "--as", "two words" }, backend).code,
         2
     )
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
     local result = commands.run("outcome", { "cccccccc", "Text", "--as", "x" }, backend)
-    t.eq(result.output, "outcome cccccccc 3 added")
-    t.eq(backend.calls[1], { "add_outcome", ID_C, "Text --as x", nil })
+    testing.eq(result.output, "outcome cccccccc 3 added")
+    testing.eq(backend.calls[1], { "add_outcome", ID_C, "Text --as x", nil })
 end)
 
-t.test("convert refuses a claimant's ticks but moves an unticked checklist", function()
+testing.test("convert refuses a claimant's ticks but moves an unticked checklist", function()
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
     card.claimant = "project-run/a"
     local backend = fake({ card })
     local result =
         commands.run("outcome", { "cccccccc", "--convert", "--as", "project-run/a" }, backend)
-    t.eq(result.code, 1)
+    testing.eq(result.code, 1)
     for _, call in ipairs(backend.calls) do
-        t.eq(call[1], "comments")
+        testing.eq(call[1], "comments")
     end
     card.description = V1
     result = commands.run("outcome", { "cccccccc", "--convert" }, backend)
-    t.ok(not (result.message or ""):find("claimed", 1, true), result.message)
-    t.eq(backend.calls[#backend.calls][1], "add_outcome")
+    testing.ok(not (result.message or ""):find("claimed", 1, true), result.message)
+    testing.eq(backend.calls[#backend.calls][1], "add_outcome")
 end)
 
-t.test("outcome warns about a path in the text and still writes", function()
+testing.test("outcome warns about a path in the text and still writes", function()
     local card = colored("green")
     local backend = fake({ card })
     local result = commands.run("outcome", { "cccccccc", "see src/a.lua" }, backend)
-    t.eq(result.warnings, { "card prose holds a path: src/a.lua" })
-    t.eq(#backend.calls, 1)
+    testing.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    testing.eq(#backend.calls, 1)
 end)
 
-t.test("move into Icebox never checks the description", function()
+testing.test("move into Icebox never checks the description", function()
     local card = colored("white")
     card.description = nil
     local backend = fake({ card })
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
 end)
 
-t.test("move to Ready takes a sized card, and other columns take a planned one", function()
+testing.test("move to Ready takes a sized card, and other columns take a planned one", function()
     for _, color in ipairs({ "yellow", "green", "blue" }) do
         local backend = fake({ colored(color) })
-        t.eq(
+        testing.eq(
             commands.run("move", { "cccccccc", support.COLUMN.READY }, backend).output,
             "moved cccccccc to Ready"
         )
@@ -2931,49 +3056,55 @@ t.test("move to Ready takes a sized card, and other columns take a planned one",
         support.COLUMN.DONE,
     }) do
         local backend = fake({ colored("green") })
-        t.eq(commands.run("move", { "cccccccc", column }, backend).code, nil)
-        t.eq(#backend.calls, 1)
+        testing.eq(commands.run("move", { "cccccccc", column }, backend).code, nil)
+        testing.eq(#backend.calls, 1)
     end
     local backend = fake({ colored("white") })
-    t.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
-    t.eq(#backend.calls, 1)
+    testing.eq(commands.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(#backend.calls, 1)
 end)
 
-t.test("move and edit refuse a needs:human card, and label --remove still frees it", function()
-    local cards = sample()
-    cards[1].labels = { "needs:human" }
-    local backend = fake(cards)
-    local result = commands.run("move", { "11111111-a", support.COLUMN.BACKLOG }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("needs:human", 1, true), result.message)
-    result = commands.run("edit", { "11111111-a", "text" }, backend)
-    t.eq(result.code, 1)
-    result = commands.run("rename", { "11111111-a", "text" }, backend)
-    t.eq(result.code, 1)
-    t.eq(#backend.calls, 0)
-    t.eq(commands.run("note", { "11111111-a", "hello" }, backend).output, "noted 11111111")
-    result = commands.run("label", { "11111111-a", "--remove", "needs:human" }, backend)
-    t.eq(result.output, "labelled 11111111 -")
-end)
+testing.test(
+    "move and edit refuse a needs:human card, and label --remove still frees it",
+    function()
+        local cards = sample()
+        cards[1].labels = { "needs:human" }
+        local backend = fake(cards)
+        local result = commands.run("move", { "11111111-a", support.COLUMN.BACKLOG }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("needs:human", 1, true), result.message)
+        result = commands.run("edit", { "11111111-a", "text" }, backend)
+        testing.eq(result.code, 1)
+        result = commands.run("rename", { "11111111-a", "text" }, backend)
+        testing.eq(result.code, 1)
+        testing.eq(#backend.calls, 0)
+        testing.eq(
+            commands.run("note", { "11111111-a", "hello" }, backend).output,
+            "noted 11111111"
+        )
+        result = commands.run("label", { "11111111-a", "--remove", "needs:human" }, backend)
+        testing.eq(result.output, "labelled 11111111 -")
+    end
+)
 
-t.test("label refuses to add standalone-ok for an agent and still removes it", function()
+testing.test("label refuses to add standalone-ok for an agent and still removes it", function()
     local held = sample()
     held[1].labels = { "standalone-ok" }
     as_agent("dotfiles/implementer/x", function()
         local result =
             commands.run("label", { "11111111-a", "--remove", "standalone-ok" }, fake(held))
-        t.eq(result.output, "labelled 11111111 -")
+        testing.eq(result.output, "labelled 11111111 -")
         result = commands.run("label", { "11111111-a", "+standalone-ok" }, fake(sample()))
-        t.eq(result.code, 1)
-        t.ok(result.message:find("only by the owner", 1, true), result.message)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("only by the owner", 1, true), result.message)
     end)
     as_agent("", function()
         local result = commands.run("label", { "11111111-a", "+standalone-ok" }, fake(sample()))
-        t.eq(result.output, "labelled 11111111 docs,standalone-ok")
+        testing.eq(result.output, "labelled 11111111 docs,standalone-ok")
     end)
 end)
 
-t.test("add refuses the standalone-ok label for an agent", function()
+testing.test("add refuses the standalone-ok label for an agent", function()
     as_agent("dotfiles/implementer/x", function()
         local backend = fake(sample())
         local result = commands.run("add", {
@@ -2987,9 +3118,9 @@ t.test("add refuses the standalone-ok label for an agent", function()
             "--label",
             "standalone-ok",
         }, backend)
-        t.eq(result.code, 1)
-        t.ok(result.message:find("only by the owner", 1, true), result.message)
-        t.eq(#backend.calls, 0)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("only by the owner", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end)
 end)
 
@@ -3000,81 +3131,90 @@ local function blocked_cards()
     return cards
 end
 
-t.test("answer sends the choice and the quote to the backend and touches nothing else", function()
-    local backend = fake(blocked_cards())
-    local result = commands.run(
-        "answer",
-        { "11111111-a", "--choice", "2", "--quote", "go", "with", "two" },
-        backend
-    )
-    t.eq(result.output, "answered 11111111 with choice 2")
-    t.eq(backend.calls, { { "answer", ID_A, 2, "go with two", nil } })
-end)
+testing.test(
+    "answer sends the choice and the quote to the backend and touches nothing else",
+    function()
+        local backend = fake(blocked_cards())
+        local result = commands.run(
+            "answer",
+            { "11111111-a", "--choice", "2", "--quote", "go", "with", "two" },
+            backend
+        )
+        testing.eq(result.output, "answered 11111111 with choice 2")
+        testing.eq(backend.calls, { { "answer", ID_A, 2, "go with two", nil } })
+    end
+)
 
-t.test("answer prints the backend's refusal and exits 1", function()
+testing.test("answer prints the backend's refusal and exits 1", function()
     local backend = fake(blocked_cards())
     backend.refusal = "pomb answered 409: the question is answered already"
     local result =
         commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.message, backend.refusal)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, backend.refusal)
 end)
 
-t.test("ask sends the parts it was given and lets the backend refuse a missing one", function()
-    local backend = fake(sample())
-    local result = commands.run("ask", {
-        "11111111-a",
-        "--question",
-        "Which?",
-        "--choice",
-        "Ready=Ship it",
-        "--choice",
-        "Icebox = Park it",
-        "--recommend",
-        "1",
-    }, backend)
-    t.eq(result.output, "asked 11111111")
-    t.eq(backend.calls[1], {
-        "ask",
-        ID_A,
-        {
-            text = "Which?",
-            choices = {
-                { column = support.COLUMN_NAME.READY, label = "Ship it" },
-                { column = support.COLUMN_NAME.ICEBOX, label = "Park it" },
+testing.test(
+    "ask sends the parts it was given and lets the backend refuse a missing one",
+    function()
+        local backend = fake(sample())
+        local result = commands.run("ask", {
+            "11111111-a",
+            "--question",
+            "Which?",
+            "--choice",
+            "Ready=Ship it",
+            "--choice",
+            "Icebox = Park it",
+            "--recommend",
+            "1",
+        }, backend)
+        testing.eq(result.output, "asked 11111111")
+        testing.eq(backend.calls[1], {
+            "ask",
+            ID_A,
+            {
+                text = "Which?",
+                choices = {
+                    { column = support.COLUMN_NAME.READY, label = "Ship it" },
+                    { column = support.COLUMN_NAME.ICEBOX, label = "Park it" },
+                },
+                recommended = 1,
             },
-            recommended = 1,
-        },
-        nil,
-    })
-end)
-
-t.test("ask refuses a bad choice, a bad recommendation, an unknown flag and no card", function()
-    local backend = fake(sample())
-    for _, args in ipairs({
-        { "11111111-a", "--choice", "no equals sign" },
-        { "11111111-a", "--choice", "=label" },
-        { "11111111-a", "--recommend", "x" },
-        { "11111111-a", "--bogus", "x" },
-        { "11111111-a", "--why" },
-    }) do
-        t.eq(commands.run("ask", args, backend).code, 2, table.concat(args, " "))
+            nil,
+        })
     end
-    t.eq(commands.run("ask", {}, backend).code, 2)
-    t.eq(#backend.calls, 0)
-end)
+)
 
-t.test("answer refuses a card without needs:human and writes nothing", function()
+testing.test(
+    "ask refuses a bad choice, a bad recommendation, an unknown flag and no card",
+    function()
+        local backend = fake(sample())
+        for _, args in ipairs({
+            { "11111111-a", "--choice", "no equals sign" },
+            { "11111111-a", "--choice", "=label" },
+            { "11111111-a", "--recommend", "x" },
+            { "11111111-a", "--bogus", "x" },
+            { "11111111-a", "--why" },
+        }) do
+            testing.eq(commands.run("ask", args, backend).code, 2, table.concat(args, " "))
+        end
+        testing.eq(commands.run("ask", {}, backend).code, 2)
+        testing.eq(#backend.calls, 0)
+    end
+)
+
+testing.test("answer refuses a card without needs:human and writes nothing", function()
     local cards = sample()
     local backend = fake(cards)
     local result =
         commands.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("is not needs:human", 1, true), result.message)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("is not needs:human", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("answer refuses an empty quote, a bad choice and missing flags", function()
+testing.test("answer refuses an empty quote, a bad choice and missing flags", function()
     local backend = fake(blocked_cards())
     for _, args in ipairs({
         { "11111111-a", "--choice", "1", "--quote" },
@@ -3084,23 +3224,23 @@ t.test("answer refuses an empty quote, a bad choice and missing flags", function
         { "11111111-a", "--quote", "yes" },
         { "11111111-a" },
     }) do
-        t.eq(commands.run("answer", args, backend).code, 2, table.concat(args, " "))
+        testing.eq(commands.run("answer", args, backend).code, 2, table.concat(args, " "))
     end
-    t.eq(#backend.calls, 0)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("a needs:human card moves within its own column and not out of it", function()
+testing.test("a needs:human card moves within its own column and not out of it", function()
     local cards = sample()
     cards[1].labels = { "needs:human" }
     cards[1].column = support.COLUMN_NAME.ICEBOX
     local backend = fake(cards)
     local result = commands.run("move", { "11111111-a", support.COLUMN.ICEBOX }, backend)
-    t.eq(result.output, "moved 11111111 to Icebox")
-    t.eq(backend.calls, { { "move", ID_A, support.COLUMN_NAME.ICEBOX } })
+    testing.eq(result.output, "moved 11111111 to Icebox")
+    testing.eq(backend.calls, { { "move", ID_A, support.COLUMN_NAME.ICEBOX } })
     result = commands.run("move", { "11111111-a", support.COLUMN.BACKLOG }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("needs:human", 1, true), result.message)
-    t.eq(#backend.calls, 1)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("needs:human", 1, true), result.message)
+    testing.eq(#backend.calls, 1)
 end)
 
 local function column_of_three()
@@ -3111,15 +3251,15 @@ local function column_of_three()
     return cards
 end
 
-t.test("order moves the named cards to positions 0, 1, 2 and prints the column", function()
+testing.test("order moves the named cards to positions 0, 1, 2 and prints the column", function()
     local backend = fake(column_of_three())
     local result = commands.run("order", { "cccccccc", "11111111-a" }, backend)
-    t.eq(result.code, nil)
-    t.eq(backend.calls, {
+    testing.eq(result.code, nil)
+    testing.eq(backend.calls, {
         { "move", ID_C, support.COLUMN_NAME.READY, 0 },
         { "move", ID_A, support.COLUMN_NAME.READY, 1 },
     })
-    t.eq(
+    testing.eq(
         result.output,
         table.concat({
             "cccccccc  Ready  unsized  needs:human  Old thing",
@@ -3129,59 +3269,65 @@ t.test("order moves the named cards to positions 0, 1, 2 and prints the column",
     )
 end)
 
-t.test("order refuses cards of two columns, an unknown card and a card named twice", function()
-    local cards = sample()
-    local backend = fake(cards)
-    local result = commands.run("order", { "11111111-a", "11111111-b", "cccccccc" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("one column", 1, true), result.message)
-    result = commands.run("order", { "11111111-a", "deadbeef" }, backend)
-    t.eq(result.code, 1)
-    cards = column_of_three()
-    backend = fake(cards)
-    result = commands.run("order", { "11111111-a", "11111111-a" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("twice", 1, true), result.message)
-    t.eq(commands.run("order", {}, backend).code, 2)
-    t.eq(commands.run("order", { "--bogus" }, backend).code, 2)
-    t.eq(#backend.calls, 0)
-end)
+testing.test(
+    "order refuses cards of two columns, an unknown card and a card named twice",
+    function()
+        local cards = sample()
+        local backend = fake(cards)
+        local result = commands.run("order", { "11111111-a", "11111111-b", "cccccccc" }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("one column", 1, true), result.message)
+        result = commands.run("order", { "11111111-a", "deadbeef" }, backend)
+        testing.eq(result.code, 1)
+        cards = column_of_three()
+        backend = fake(cards)
+        result = commands.run("order", { "11111111-a", "11111111-a" }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("twice", 1, true), result.message)
+        testing.eq(commands.run("order", {}, backend).code, 2)
+        testing.eq(commands.run("order", { "--bogus" }, backend).code, 2)
+        testing.eq(#backend.calls, 0)
+    end
+)
 
-t.test("label adds needs:human only to a card in Blocked or Icebox", function()
+testing.test("label adds needs:human only to a card in Blocked or Icebox", function()
     local backend = fake(sample())
     local result = commands.run("label", { "11111111-a", "+needs:human" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("Blocked or Icebox", 1, true), result.message)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("Blocked or Icebox", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
     local added = commands.run("add", { "Idea", "--label", "needs:human" }, backend)
-    t.eq(added.code, 2)
-    t.eq(#backend.calls, 0)
+    testing.eq(added.code, 2)
+    testing.eq(#backend.calls, 0)
     for _, column in ipairs({ support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.ICEBOX }) do
         local cards = sample()
         cards[1].column = column
         backend = fake(cards)
         result = commands.run("label", { "11111111-a", "needs:human" }, backend)
-        t.eq(result.output, "labelled 11111111 docs,needs:human")
+        testing.eq(result.output, "labelled 11111111 docs,needs:human")
     end
 end)
 
-t.test("move to Ready allows an epic and a card without children", function()
+testing.test("move to Ready allows an epic and a card without children", function()
     local backend = fake({ colored("green") })
     backend.kin = { children = { done = 0, total = 2 } }
     local result = commands.run("move", { "cccccccc", support.COLUMN.READY }, backend)
-    t.eq(result.output, "moved cccccccc to Ready")
+    testing.eq(result.output, "moved cccccccc to Ready")
     result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
-    t.eq(result.output, "moved cccccccc to Backlog")
+    testing.eq(result.output, "moved cccccccc to Backlog")
 end)
 
-t.test("next shows the top card or says none", function()
+testing.test("next shows the top card or says none", function()
     local result = commands.run("next", {}, fake(sample()))
-    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs  0 comments, 0 the owner's")
+    testing.eq(
+        result.output,
+        "11111111  Ready  1 Pomodoro  docs  Write docs  0 comments, 0 the owner's"
+    )
     result = commands.run("next", {}, fake({}))
-    t.eq(result.output, "no ready cards")
+    testing.eq(result.output, "no ready cards")
 end)
 
-t.test("next counts the comments of the card and how many are the owner's", function()
+testing.test("next counts the comments of the card and how many are the owner's", function()
     local backend = fake(sample())
     backend.listed = {
         {
@@ -3194,30 +3340,36 @@ t.test("next counts the comments of the card and how many are the owner's", func
         { id = COMMENT_2, who = "me", actor = "human", at = "2026-10-27T10:00:00Z", body = "b" },
     }
     local result = commands.run("next", {}, backend)
-    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs  2 comments, 1 the owner's")
+    testing.eq(
+        result.output,
+        "11111111  Ready  1 Pomodoro  docs  Write docs  2 comments, 1 the owner's"
+    )
     backend.listed = { backend.listed[2] }
     result = commands.run("next", {}, backend)
-    t.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs  1 comment, 1 the owner's")
+    testing.eq(
+        result.output,
+        "11111111  Ready  1 Pomodoro  docs  Write docs  1 comment, 1 the owner's"
+    )
     function backend:comments()
         return nil, "no comments for you"
     end
     result = commands.run("next", {}, backend)
-    t.eq(result.code, 1)
-    t.eq(result.message, "no comments for you")
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "no comments for you")
 end)
 
-t.test("next --column takes Backlog or Icebox and refuses other columns", function()
+testing.test("next --column takes Backlog or Icebox and refuses other columns", function()
     local backend = fake(sample())
-    t.eq(commands.run("next", { "--column", support.COLUMN.BACKLOG }, backend).message, nil)
-    t.eq(commands.run("next", { "--column", support.COLUMN.DONE }, backend).code, 2)
-    t.eq(commands.run("next", { "--column" }, backend).code, 2)
-    t.eq(commands.run("next", { "extra" }, backend).code, 2)
-    t.eq(
+    testing.eq(commands.run("next", { "--column", support.COLUMN.BACKLOG }, backend).message, nil)
+    testing.eq(commands.run("next", { "--column", support.COLUMN.DONE }, backend).code, 2)
+    testing.eq(commands.run("next", { "--column" }, backend).code, 2)
+    testing.eq(commands.run("next", { "extra" }, backend).code, 2)
+    testing.eq(
         commands.run("next", { "--column", support.COLUMN.BACKLOG }, fake({})).output,
         "no cards in Backlog"
     )
 end)
-t.test("next --column takes the Review, Verify and Release stage columns", function()
+testing.test("next --column takes the Review, Verify and Release stage columns", function()
     for _, column in ipairs({
         support.COLUMN_NAME.REVIEW,
         support.COLUMN_NAME.VERIFY,
@@ -3225,10 +3377,10 @@ t.test("next --column takes the Review, Verify and Release stage columns", funct
     }) do
         local backend = fake({})
         local result = commands.run("next", { "--column", column:lower() }, backend)
-        t.eq(result.output, "no cards in " .. column)
-        t.eq(backend.calls[#backend.calls], { "next", column, nil })
+        testing.eq(result.output, "no cards in " .. column)
+        testing.eq(backend.calls[#backend.calls], { "next", column, nil })
     end
-    t.eq(commands.run("next", { "--column", support.COLUMN.PROGRESS }, fake({})).code, 2)
+    testing.eq(commands.run("next", { "--column", support.COLUMN.PROGRESS }, fake({})).code, 2)
 end)
 
 local NOW = assert(box.parse_time("2026-10-27T12:00:00Z"))
@@ -3255,26 +3407,26 @@ local function aged(columns, days, labels)
     return cards, times
 end
 
-t.test("stale counts whole days, so 6 days is fresh and 7 is stale", function()
+testing.test("stale counts whole days, so 6 days is fresh and 7 is stale", function()
     local cards, times = aged(
         { support.COLUMN_NAME.READY, support.COLUMN_NAME.READY, support.COLUMN_NAME.READY },
         { 6, 7, 30 }
     )
     cards[2].size = "2 Pomodori"
     local result = commands.run("stale", {}, fake(cards, times), NOW)
-    t.eq(
+    testing.eq(
         result.output,
         "00000003  Ready  30d  unsized     Card 3\n00000002  Ready  7d   2 Pomodori  Card 2"
     )
 end)
 
-t.test("stale counts a card entered just under the limit as fresh", function()
+testing.test("stale counts a card entered just under the limit as fresh", function()
     local cards, times = aged({ support.COLUMN_NAME.READY }, { 7 })
     times[cards[1].id] = os.date("!%Y-%m-%dT%H:%M:%SZ", NOW - 7 * box.SECONDS_PER_DAY + 1)
-    t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+    testing.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
 end)
 
-t.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release only", function()
+testing.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release only", function()
     local columns = {
         support.COLUMN_NAME.ICEBOX,
         support.COLUMN_NAME.BACKLOG,
@@ -3292,7 +3444,7 @@ t.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release onl
     for line in result.output:gmatch("[^\n]+") do
         lines[#lines + 1] = line:match("^%d+%s+(%a+[ %a]-)%s%s")
     end
-    t.eq(lines, {
+    testing.eq(lines, {
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.PROGRESS,
@@ -3302,7 +3454,7 @@ t.test("stale covers Backlog, Ready, In Progress, Review, Verify and Release onl
     })
 end)
 
-t.test("stale marks a needs:human card whose newest comment is the owner's", function()
+testing.test("stale marks a needs:human card whose newest comment is the owner's", function()
     local human = { "needs:human" }
     local cards, times = aged(
         { support.COLUMN_NAME.READY, support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.BLOCKED },
@@ -3318,16 +3470,16 @@ t.test("stale marks a needs:human card whose newest comment is the owner's", fun
         return replies[id] or {}
     end
     local output = commands.run("stale", {}, backend, NOW).output
-    t.ok(output:find(cards[2].name .. " (answered, waiting for your move)", 1, true), output)
-    t.ok(not output:find(cards[3].name .. " (answered", 1, true), output)
+    testing.ok(output:find(cards[2].name .. " (answered, waiting for your move)", 1, true), output)
+    testing.ok(not output:find(cards[3].name .. " (answered", 1, true), output)
     function backend:comments()
         return nil, "pomb is down"
     end
     output = commands.run("stale", {}, backend, NOW).output
-    t.ok(output:find("could not read the comments of " .. cards[2].id, 1, true), output)
+    testing.ok(output:find("could not read the comments of " .. cards[2].id, 1, true), output)
 end)
 
-t.test("stale lists every needs:human card apart at any age, and never as stale", function()
+testing.test("stale lists every needs:human card apart at any age, and never as stale", function()
     local human = { "needs:human" }
     local cards, times = aged({
         support.COLUMN_NAME.READY,
@@ -3338,7 +3490,7 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
     }, { 9, 20, 50, 60, 1 }, { {}, human, human, human, human })
     cards[2].color = nil
     local result = commands.run("stale", {}, fake(cards, times), NOW)
-    t.eq(
+    testing.eq(
         result.output,
         "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n"
             .. "00000003  Blocked  50d  unsized  Card 3\n\n"
@@ -3349,13 +3501,13 @@ t.test("stale lists every needs:human card apart at any age, and never as stale"
     )
     cards, times = aged({ support.COLUMN_NAME.READY }, { 9 }, { human })
     result = commands.run("stale", {}, fake(cards, times), NOW)
-    t.eq(
+    testing.eq(
         result.output,
         "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Ready  9d  unsized  Card 1"
     )
 end)
 
-t.test("stale lists an unlabelled open card whose newest comment is the owner's", function()
+testing.test("stale lists an unlabelled open card whose newest comment is the owner's", function()
     local cards, times = aged({
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.PROGRESS,
@@ -3378,7 +3530,7 @@ t.test("stale lists an unlabelled open card whose newest comment is the owner's"
         return replies[id] or {}
     end
     local output = commands.run("stale", {}, backend, NOW).output
-    t.eq(
+    testing.eq(
         output,
         "00000005  Ready  10d  unsized  Card 5\n\nnewest comment is the owner's:\n"
             .. "00000003  Blocked  3d  unsized  Card 3\n"
@@ -3386,7 +3538,7 @@ t.test("stale lists an unlabelled open card whose newest comment is the owner's"
     )
 end)
 
-t.test(
+testing.test(
     "stale lists the unsized cards outside Icebox at any age and leaves sized ones out",
     function()
         local cards, times = aged({
@@ -3402,7 +3554,7 @@ t.test(
         cards[4].color = nil
         cards[5].color = nil
         cards[6].color = nil
-        t.eq(
+        testing.eq(
             commands.run("stale", {}, fake(cards, times), NOW).output,
             "no stale cards\n\nunsized outside Icebox:\n00000001  Backlog  Card 1\n00000003  Backlog  Card 3\n"
                 .. "00000004  Ready    Card 4\n00000006  Done     Card 6"
@@ -3411,11 +3563,11 @@ t.test(
         cards[3].color = "blue"
         cards[4].color = "green"
         cards[6].color = "green"
-        t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+        testing.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
     end
 )
 
-t.test("stale names a card it could not date instead of skipping it", function()
+testing.test("stale names a card it could not date instead of skipping it", function()
     local human = { "needs:human" }
     local cards, times = aged({
         support.COLUMN_NAME.READY,
@@ -3428,7 +3580,7 @@ t.test("stale names a card it could not date instead of skipping it", function()
     times[cards[2].id] = nil
     times[cards[3].id] = nil
     local result = commands.run("stale", {}, fake(cards, times), NOW)
-    t.eq(
+    testing.eq(
         result.output,
         "no stale cards\n\ncould not date "
             .. cards[1].id
@@ -3438,12 +3590,12 @@ t.test("stale names a card it could not date instead of skipping it", function()
     )
 end)
 
-t.test("stale --days moves the limit", function()
+testing.test("stale --days moves the limit", function()
     local cards, times = aged({ support.COLUMN_NAME.READY, support.COLUMN_NAME.READY }, { 2, 3 })
     local result = commands.run("stale", { "--days", "3" }, fake(cards, times), NOW)
-    t.eq(result.output, "00000002  Ready  3d  unsized  Card 2")
+    testing.eq(result.output, "00000002  Ready  3d  unsized  Card 2")
     result = commands.run("stale", { "--days", "1" }, fake(cards, times), NOW)
-    t.eq(
+    testing.eq(
         result.output,
         "00000002  Ready  3d  unsized  Card 2\n00000001  Ready  2d  unsized  Card 1"
     )
@@ -3466,10 +3618,10 @@ local function lead_cards()
     return cards, times
 end
 
-t.test("stale lists a Blocked needs:lead card past an hour, oldest first", function()
+testing.test("stale lists a Blocked needs:lead card past an hour, oldest first", function()
     local cards, times = lead_cards()
     local result = commands.run("stale", {}, fake(cards, times), NOW)
-    t.eq(
+    testing.eq(
         result.output,
         "no stale cards\n\nfor the owner (needs:human):\n00000003  Blocked  0d  unsized  Card 3\n\n"
             .. "for a lead (needs:lead):\n00000005  Blocked  7h  unsized  Card 5\n"
@@ -3477,34 +3629,34 @@ t.test("stale lists a Blocked needs:lead card past an hour, oldest first", funct
     )
 end)
 
-t.test("stale --lead-hours moves the bound and refuses a bad value", function()
+testing.test("stale --lead-hours moves the bound and refuses a bad value", function()
     local cards, times = lead_cards()
     local result = commands.run("stale", { "--lead-hours", "4" }, fake(cards, times), NOW)
-    t.ok(
+    testing.ok(
         result.output:find(
             "for a lead (needs:lead):\n00000005  Blocked  7h  unsized  Card 5",
             1,
             true
         )
     )
-    t.ok(not result.output:find("Card 1", 1, true), result.output)
+    testing.ok(not result.output:find("Card 1", 1, true), result.output)
     for _, word in ipairs({ "0", "x", "1.5", "" }) do
-        t.eq(commands.run("stale", { "--lead-hours", word }, fake({}), NOW).code, 2, word)
+        testing.eq(commands.run("stale", { "--lead-hours", word }, fake({}), NOW).code, 2, word)
     end
-    t.eq(commands.run("stale", { "--lead-hours" }, fake({}), NOW).code, 2)
+    testing.eq(commands.run("stale", { "--lead-hours" }, fake({}), NOW).code, 2)
 end)
 
-t.test("next --column blocked asks the backend for a needs:lead card", function()
+testing.test("next --column blocked asks the backend for a needs:lead card", function()
     local backend = fake(sample())
     commands.run("next", { "--column", support.COLUMN.BLOCKED }, backend)
-    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
+    testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
     backend = fake(sample())
     commands.run("next", {}, backend)
-    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.READY, nil })
-    t.eq(commands.run("next", { "--column", support.COLUMN.DONE }, fake(sample())).code, 2)
+    testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.READY, nil })
+    testing.eq(commands.run("next", { "--column", support.COLUMN.DONE }, fake(sample())).code, 2)
 end)
 
-t.test("next --column blocked skips a needs:human card and a claimed one", function()
+testing.test("next --column blocked skips a needs:human card and a claimed one", function()
     local lead = { "needs:lead" }
     local cards = aged({
         support.COLUMN_NAME.BLOCKED,
@@ -3515,16 +3667,16 @@ t.test("next --column blocked skips a needs:human card and a claimed one", funct
     }, { 0, 0, 0, 0, 0 }, { { "needs:lead", "needs:human" }, lead, lead, lead, lead })
     cards[2].claimant = "someone"
     local result = commands.run("next", { "--column", support.COLUMN.BLOCKED }, fake(cards))
-    t.ok(result.output:find("00000003", 1, true), result.output)
+    testing.ok(result.output:find("00000003", 1, true), result.output)
     cards[3].claimant = "someone"
     cards[5].labels = {}
-    t.eq(
+    testing.eq(
         commands.run("next", { "--column", support.COLUMN.BLOCKED }, fake(cards)).output,
         "no cards in Blocked"
     )
 end)
 
-t.test("stale lists a Blocked needs:planner card apart from the lead ones", function()
+testing.test("stale lists a Blocked needs:planner card apart from the lead ones", function()
     local planner = { "needs:planner" }
     local cards, times = aged({
         support.COLUMN_NAME.BLOCKED,
@@ -3542,7 +3694,7 @@ t.test("stale lists a Blocked needs:planner card apart from the lead ones", func
         times[cards[index].id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", at)
     end
     local result = commands.run("stale", {}, fake(cards, times), NOW)
-    t.ok(
+    testing.ok(
         result.output:find(
             "for a lead (needs:lead):\n00000002  Blocked  3h  unsized  Card 2",
             1,
@@ -3550,7 +3702,7 @@ t.test("stale lists a Blocked needs:planner card apart from the lead ones", func
         ),
         result.output
     )
-    t.ok(
+    testing.ok(
         result.output:find(
             "for a planner (needs:planner):\n00000001  Blocked  5h  unsized  Card 1",
             1,
@@ -3558,81 +3710,81 @@ t.test("stale lists a Blocked needs:planner card apart from the lead ones", func
         ),
         result.output
     )
-    t.ok(not result.output:find("Card 4", 1, true), result.output)
+    testing.ok(not result.output:find("Card 4", 1, true), result.output)
     result = commands.run("stale", { "--lead-hours", "6" }, fake(cards, times), NOW)
-    t.ok(not result.output:find("for a planner", 1, true), result.output)
+    testing.ok(not result.output:find("for a planner", 1, true), result.output)
 end)
 
-t.test("next --column blocked --for planner asks for a needs:planner card", function()
+testing.test("next --column blocked --for planner asks for a needs:planner card", function()
     local backend = fake(sample())
     commands.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "planner" }, backend)
-    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:planner" })
+    testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:planner" })
     backend = fake(sample())
     commands.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "lead" }, backend)
-    t.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
-    t.eq(commands.run("next", { "--for", "planner" }, fake(sample())).code, 2)
-    t.eq(
+    testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
+    testing.eq(commands.run("next", { "--for", "planner" }, fake(sample())).code, 2)
+    testing.eq(
         commands.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "x" }, fake(sample())).code,
         2
     )
 end)
 
-t.test("escalate posts the tier and reason to the endpoint", function()
+testing.test("escalate posts the tier and reason to the endpoint", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner", "docs" }
     local backend = fake(cards)
     local result =
         commands.run("escalate", { "11111111-a", "outcome", "2", "is", "bogus" }, backend)
-    t.eq(result.output, "escalated 11111111 to needs:lead")
-    t.eq(backend.calls, { { "escalate", ID_A, "lead", "outcome 2 is bogus", nil } })
+    testing.eq(result.output, "escalated 11111111 to needs:lead")
+    testing.eq(backend.calls, { { "escalate", ID_A, "lead", "outcome 2 is bogus", nil } })
 end)
 
-t.test("escalate refuses a card without needs:planner and an empty reason", function()
+testing.test("escalate refuses a card without needs:planner and an empty reason", function()
     local backend = fake(blocked_cards())
     local result = commands.run("escalate", { "11111111-a", "why" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("is not needs:planner", 1, true), result.message)
-    t.eq(commands.run("escalate", { "11111111-a" }, backend).code, 2)
-    t.eq(commands.run("escalate", { "11111111-a", "  " }, backend).code, 2)
-    t.eq(#backend.calls, 0)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("is not needs:planner", 1, true), result.message)
+    testing.eq(commands.run("escalate", { "11111111-a" }, backend).code, 2)
+    testing.eq(commands.run("escalate", { "11111111-a", "  " }, backend).code, 2)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("escalate refuses the ask flags and points to dev board ask", function()
+testing.test("escalate refuses the ask flags and points to dev board ask", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner" }
     local backend = fake(cards)
     for _, flag in ipairs({ "--question", "--choice", "--recommend", "--why" }) do
         local result = commands.run("escalate", { "11111111-a", flag, "x" }, backend)
-        t.eq(result.code, 2, flag)
-        t.ok(result.message:find(flag, 1, true), result.message)
-        t.ok(result.message:find("dev board ask", 1, true), result.message)
+        testing.eq(result.code, 2, flag)
+        testing.ok(result.message:find(flag, 1, true), result.message)
+        testing.ok(result.message:find("dev board ask", 1, true), result.message)
     end
-    t.eq(commands.run("escalate", { "11111111-a", "--why=x" }, backend).code, 2)
-    t.eq(#backend.calls, 0)
+    testing.eq(commands.run("escalate", { "11111111-a", "--why=x" }, backend).code, 2)
+    testing.eq(#backend.calls, 0)
 end)
 
-t.test("escalate prints the refusal and writes nothing", function()
+testing.test("escalate prints the refusal and writes nothing", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner" }
     local backend = fake(cards)
     backend.refusal = "pomb answered 403: card_locked"
     local result = commands.run("escalate", { "11111111-a", "why" }, backend)
-    t.eq(result.code, 1)
-    t.eq(result.message, "pomb answered 403: card_locked")
-    t.eq(#backend.calls, 1)
-    t.eq(backend.calls[1][1], "escalate")
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "pomb answered 403: card_locked")
+    testing.eq(#backend.calls, 1)
+    testing.eq(backend.calls[1][1], "escalate")
 end)
 
-t.test("stale refuses a bad --days with a usage error", function()
+testing.test("stale refuses a bad --days with a usage error", function()
     for _, word in ipairs({ "0", "-1", "x", "1.5", "" }) do
         local result = commands.run("stale", { "--days", word }, fake({}), NOW)
-        t.eq(result.code, 2, word)
+        testing.eq(result.code, 2, word)
     end
-    t.eq(commands.run("stale", { "--days" }, fake({}), NOW).code, 2)
-    t.eq(commands.run("stale", { "extra" }, fake({}), NOW).code, 2)
+    testing.eq(commands.run("stale", { "--days" }, fake({}), NOW).code, 2)
+    testing.eq(commands.run("stale", { "extra" }, fake({}), NOW).code, 2)
 end)
 
-t.test("stale lists untouched Icebox cards", function()
+testing.test("stale lists untouched Icebox cards", function()
     local human = { "needs:human" }
     local cards, times = aged({
         support.COLUMN_NAME.ICEBOX,
@@ -3652,14 +3804,14 @@ t.test("stale lists untouched Icebox cards", function()
         end
         return {}
     end
-    t.eq(
+    testing.eq(
         commands.run("stale", {}, backend, NOW).output,
         "no stale cards\n\nfor the owner (needs:human):\n"
             .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 30 days:\n"
             .. "00000001  Icebox  45d  unsized  Card 1\n"
             .. "00000004  Icebox  40d  unsized  Card 4"
     )
-    t.eq(
+    testing.eq(
         commands.run("stale", { "--icebox-days", "10" }, backend, NOW).output,
         "no stale cards\n\nfor the owner (needs:human):\n"
             .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 10 days:\n"
@@ -3669,61 +3821,64 @@ t.test("stale lists untouched Icebox cards", function()
     )
 end)
 
-t.test("stale keeps its output when an Icebox card cannot be dated or its comments read", function()
-    local cards, times = aged({
-        support.COLUMN_NAME.READY,
-        support.COLUMN_NAME.ICEBOX,
-        support.COLUMN_NAME.ICEBOX,
-        support.COLUMN_NAME.ICEBOX,
-    }, { 9, 50, 50, 50 })
-    times[cards[2].id] = nil
-    local backend = fake(cards, times)
-    function backend:comments(id)
-        if id == cards[3].id then
-            return nil, "boom"
+testing.test(
+    "stale keeps its output when an Icebox card cannot be dated or its comments read",
+    function()
+        local cards, times = aged({
+            support.COLUMN_NAME.READY,
+            support.COLUMN_NAME.ICEBOX,
+            support.COLUMN_NAME.ICEBOX,
+            support.COLUMN_NAME.ICEBOX,
+        }, { 9, 50, 50, 50 })
+        times[cards[2].id] = nil
+        local backend = fake(cards, times)
+        function backend:comments(id)
+            if id == cards[3].id then
+                return nil, "boom"
+            end
+            return { { at = "later" } }
         end
-        return { { at = "later" } }
+        testing.eq(
+            commands.run("stale", {}, backend, NOW).output,
+            "00000001  Ready  9d  unsized  Card 1\n\ncould not date "
+                .. cards[2].id
+                .. " Card 2\ncould not read the comments of "
+                .. cards[3].id
+                .. " Card 3\ncould not read the comments of "
+                .. cards[4].id
+                .. " Card 4"
+        )
     end
-    t.eq(
-        commands.run("stale", {}, backend, NOW).output,
-        "00000001  Ready  9d  unsized  Card 1\n\ncould not date "
-            .. cards[2].id
-            .. " Card 2\ncould not read the comments of "
-            .. cards[3].id
-            .. " Card 3\ncould not read the comments of "
-            .. cards[4].id
-            .. " Card 4"
-    )
-end)
+)
 
-t.test("stale counts an Icebox card exactly at the limit as untouched", function()
+testing.test("stale counts an Icebox card exactly at the limit as untouched", function()
     local cards, times = aged(
         { support.COLUMN_NAME.ICEBOX, support.COLUMN_NAME.ICEBOX },
         { 30, 29 }
     )
-    t.eq(
+    testing.eq(
         commands.run("stale", {}, fake(cards, times), NOW).output,
         "no stale cards\n\nicebox, untouched for 30 days:\n00000001  Icebox  30d  unsized  Card 1"
     )
 end)
 
-t.test("stale refuses a bad --icebox-days with a usage error", function()
+testing.test("stale refuses a bad --icebox-days with a usage error", function()
     for _, word in ipairs({ "0", "-1", "x", "1.5", "" }) do
-        t.eq(commands.run("stale", { "--icebox-days", word }, fake({}), NOW).code, 2, word)
+        testing.eq(commands.run("stale", { "--icebox-days", word }, fake({}), NOW).code, 2, word)
     end
-    t.eq(commands.run("stale", { "--icebox-days" }, fake({}), NOW).code, 2)
+    testing.eq(commands.run("stale", { "--icebox-days" }, fake({}), NOW).code, 2)
 end)
 
-t.test("stale says so when nothing is stale", function()
-    t.eq(commands.run("stale", {}, fake({}), NOW).output, "no stale cards")
+testing.test("stale says so when nothing is stale", function()
+    testing.eq(commands.run("stale", {}, fake({}), NOW).output, "no stale cards")
     local cards, times = aged({ support.COLUMN_NAME.READY }, { 1 })
-    t.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+    testing.eq(commands.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
 end)
 
-t.test("stale fails on a column time it cannot read", function()
+testing.test("stale fails on a column time it cannot read", function()
     local cards = aged({ support.COLUMN_NAME.READY }, { 9 })
     local result = commands.run("stale", {}, fake(cards, { [cards[1].id] = "yesterday" }), NOW)
-    t.eq(result.code, 1)
+    testing.eq(result.code, 1)
 end)
 
 local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
@@ -3934,25 +4089,25 @@ local function read(root, name)
     return fs.read(root .. "/" .. name) or ""
 end
 
-t.test("every subcommand without a [board] section says so and exits 1", function()
+testing.test("every subcommand without a [board] section says so and exits 1", function()
     local root, home = sandbox({ project = "" })
     for _, args in ipairs({ { "board", "status" }, { "board", "ls" }, { "board", "next" } }) do
         local out, code = dev(root, home, args)
-        t.eq(out, "dev: no board for this project\n")
-        t.eq(code, 1)
+        testing.eq(out, "dev: no board for this project\n")
+        testing.eq(code, 1)
     end
-    t.eq(read(root, "calls"), "")
+    testing.eq(read(root, "calls"), "")
 end)
 
-t.test("status prints the backend and the board without reaching out", function()
+testing.test("status prints the backend and the board without reaching out", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "status" })
-    t.eq(out, "backend: pomb\nboard: dotfiles\n")
-    t.eq(code, 0)
-    t.eq(read(root, "calls"), "")
+    testing.eq(out, "backend: pomb\nboard: dotfiles\n")
+    testing.eq(code, 0)
+    testing.eq(read(root, "calls"), "")
 end)
 
-t.test("boards lists every board the token sees and columns reads one by name", function()
+testing.test("boards lists every board the token sees and columns reads one by name", function()
     local boards = '[{"id":"board-1","name":"dotfiles","archived":false},'
         .. '{"id":"board-2","name":"General","archived":false}]'
     local root, home = sandbox()
@@ -3966,59 +4121,59 @@ t.test("boards lists every board the token sees and columns reads one by name", 
         )
     )
     local out, code = dev(root, home, { "board", "boards" })
-    t.eq(code, 0, out)
-    t.eq(out, "dotfiles\nGeneral\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "dotfiles\nGeneral\n")
     local columns = "Icebox\nBacklog\nReady\nIn Progress\nReview\nBlocked\nDone (done)\n"
     out, code = dev(root, home, { "board", "columns" })
-    t.eq(code, 0, out)
-    t.eq(out, columns)
+    testing.eq(code, 0, out)
+    testing.eq(out, columns)
     out, code = dev(root, home, { "board", "columns", "General" })
-    t.eq(code, 0, out)
-    t.eq(out, "Todo\nDoing\nFinished (done)\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "Todo\nDoing\nFinished (done)\n")
     out, code = dev(root, home, { "board", "columns", "dotfiles" })
-    t.eq(code, 0, out)
-    t.eq(out, columns)
+    testing.eq(code, 0, out)
+    testing.eq(out, columns)
     out, code = dev(root, home, { "board", "columns", "nosuch" })
-    t.eq(code, 1, out)
-    t.ok(out:find("no board named nosuch", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("no board named nosuch", 1, true), out)
     out, code = dev(root, home, { "board", "columns", "dotfiles", "extra" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
 end)
 
-t.test("the board name defaults to the project directory", function()
+testing.test("the board name defaults to the project directory", function()
     local root, home = sandbox({ project = '[board]\nbackend = "pomb"\n' })
     local out = dev(root, home, { "board", "status" })
-    t.eq(out, "backend: pomb\nboard: " .. fs.basename(root) .. "\n")
+    testing.eq(out, "backend: pomb\nboard: " .. fs.basename(root) .. "\n")
 end)
 
-t.test("a local board that was never laid out says to run init", function()
+testing.test("a local board that was never laid out says to run init", function()
     local root, home = sandbox({ project = '[board]\nbackend = "local"\n' })
     local out, code = dev(root, home, { "board", "ls" })
-    t.ok(out:find(", run dev board init\n", 1, true), out)
-    t.eq(code, 1)
+    testing.ok(out:find(", run dev board init\n", 1, true), out)
+    testing.eq(code, 1)
     out, code = dev(root, home, { "board", "status" })
-    t.eq(out, "backend: local\nboard: " .. fs.basename(root) .. "\n")
+    testing.eq(out, "backend: local\nboard: " .. fs.basename(root) .. "\n")
 end)
 
-t.test("an unknown backend is refused", function()
+testing.test("an unknown backend is refused", function()
     local root, home = sandbox({ project = '[board]\nbackend = "jira"\n' })
     local out, code = dev(root, home, { "board", "status" })
-    t.ok(out:find('must be "pomb" or "local"', 1, true), out)
-    t.eq(code, 1)
+    testing.ok(out:find('must be "pomb" or "local"', 1, true), out)
+    testing.eq(code, 1)
 end)
 
-t.test("ls lists the cards in column order through pass and curl", function()
+testing.test("ls lists the cards in column order through pass and curl", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         out,
         "cccccccc  Backlog  Unsized     -     Early\n"
             .. "11111111  Ready    1 Pomodoro  docs  First\n"
             .. "11111111  Ready    unsized     -     Second\n"
     )
     local calls = read(root, "calls")
-    t.ok(
+    testing.ok(
         calls:find(
             "pass show secrets/worker/token/pomb opts=--pinentry-mode error --batch",
             1,
@@ -4026,33 +4181,33 @@ t.test("ls lists the cards in column order through pass and curl", function()
         ),
         calls
     )
-    t.ok(calls:find("https://pomb.example/api/boards/board-1/export-data", 1, true), calls)
+    testing.ok(calls:find("https://pomb.example/api/boards/board-1/export-data", 1, true), calls)
 end)
 
-t.test("the token reaches curl on stdin and nowhere else", function()
+testing.test("the token reaches curl on stdin and nowhere else", function()
     local root, home = sandbox()
     local out = dev(root, home, { "-vv", "board", "ls" })
-    t.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
-    t.eq(out:find(TOKEN, 1, true), nil)
-    t.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
-    t.ok(read(root, "calls"):find("-K -", 1, true), read(root, "calls"))
+    testing.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
+    testing.eq(out:find(TOKEN, 1, true), nil)
+    testing.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
+    testing.ok(read(root, "calls"):find("-K -", 1, true), read(root, "calls"))
     out = dev(root, home, { "-v", "board", "move", "11111111-a", support.COLUMN.DONE })
-    t.eq(out:find(TOKEN, 1, true), nil)
+    testing.eq(out:find(TOKEN, 1, true), nil)
 end)
 
-t.test("the token is not in the environment curl or pass is started with", function()
+testing.test("the token is not in the environment curl or pass is started with", function()
     local root, home = sandbox()
     executable(root .. "/bin/curl", (CURL:gsub("cat >", 'env >"$ROOT/env"\ncat >', 1)))
     dev(root, home, { "board", "ls" })
-    t.eq(read(root, "env"):find(TOKEN, 1, true), nil)
+    testing.eq(read(root, "env"):find(TOKEN, 1, true), nil)
 end)
 
-t.test("a locked store fails at once and curl never runs", function()
+testing.test("a locked store fails at once and curl never runs", function()
     local root, home = sandbox({ locked = true })
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("board unavailable: pass is locked", 1, true), out)
-    t.eq(read(root, "calls"):find("curl", 1, true), nil)
+    testing.eq(code, 1)
+    testing.ok(out:find("board unavailable: pass is locked", 1, true), out)
+    testing.eq(read(root, "calls"):find("curl", 1, true), nil)
 end)
 
 local SHARE = devos.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/board/"
@@ -4084,22 +4239,22 @@ local function shell(root, lock, script, polls)
     })
 end
 
-t.test("concurrent pass reads queue on one lock and none times out", function()
+testing.test("concurrent pass reads queue on one lock and none times out", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
     local cmd = "bash " .. SHARE .. "passlock.sh Agents/x"
     local out = shell(root, lock, "(" .. cmd .. ") & (" .. cmd .. ") & (" .. cmd .. ") & wait")
-    t.eq(select(2, out:gsub(TOKEN, "")), 3, out)
+    testing.eq(select(2, out:gsub(TOKEN, "")), 3, out)
     local order = {}
     for kind in read(root, "events"):gmatch("(%a+) %d+") do
         order[#order + 1] = kind
     end
-    t.eq(order, { "start", "end", "start", "end", "start", "end" })
-    t.eq(fs.read(lock .. "/pid"), nil)
+    testing.eq(order, { "start", "end", "start", "end", "start", "end" })
+    testing.eq(fs.read(lock .. "/pid"), nil)
 end)
 
-t.test("a lock left by a killed process does not block a later read", function()
+testing.test("a lock left by a killed process does not block a later read", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
@@ -4115,11 +4270,11 @@ t.test("a lock left by a killed process does not block a later read", function()
             .. "passlock.sh Agents/x; echo code=$?",
         "50"
     )
-    t.ok(out:find(TOKEN, 1, true), out)
-    t.ok(out:find("code=0", 1, true), out)
+    testing.ok(out:find(TOKEN, 1, true), out)
+    testing.ok(out:find("code=0", 1, true), out)
 end)
 
-t.test("an old lock is taken over even when its pid is alive again", function()
+testing.test("an old lock is taken over even when its pid is alive again", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
@@ -4137,11 +4292,11 @@ t.test("an old lock is taken over even when its pid is alive again", function()
             .. "passlock.sh Agents/x; echo code=$?; kill $holder",
         "50"
     )
-    t.ok(out:find(TOKEN, 1, true), out)
-    t.ok(out:find("code=0", 1, true), out)
+    testing.ok(out:find(TOKEN, 1, true), out)
+    testing.ok(out:find("code=0", 1, true), out)
 end)
 
-t.test("a lock with no owner is taken over after a short wait", function()
+testing.test("a lock with no owner is taken over after a short wait", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
@@ -4151,11 +4306,11 @@ t.test("a lock with no owner is taken over after a short wait", function()
         "mkdir " .. lock .. "; bash " .. SHARE .. "passlock.sh Agents/x; echo code=$?",
         "100"
     )
-    t.ok(out:find(TOKEN, 1, true), out)
-    t.ok(out:find("code=0", 1, true), out)
+    testing.ok(out:find(TOKEN, 1, true), out)
+    testing.ok(out:find("code=0", 1, true), out)
 end)
 
-t.test("a lock held by a live process times out with 124", function()
+testing.test("a lock held by a live process times out with 124", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
@@ -4173,11 +4328,11 @@ t.test("a lock held by a live process times out with 124", function()
             .. "passlock.sh Agents/x; echo code=$?; kill $holder",
         "3"
     )
-    t.ok(out:find("code=124", 1, true), out)
-    t.eq(out:find(TOKEN, 1, true), nil)
+    testing.ok(out:find("code=124", 1, true), out)
+    testing.eq(out:find(TOKEN, 1, true), nil)
 end)
 
-t.test("a process reads each pass entry once", function()
+testing.test("a process reads each pass entry once", function()
     local root, home = sandbox()
     local script = string.format(
         "package.path = %q; local pomb = require('dev.board.pomb'); "
@@ -4195,9 +4350,9 @@ t.test("a process reads each pass entry once", function()
         },
         stderr = "stdout",
     })
-    t.eq(code, 0, out)
-    t.eq(out, "true\n")
-    t.eq(select(2, read(root, "calls"):gsub("pass show", "")), 1)
+    testing.eq(code, 0, out)
+    testing.eq(out, "true\n")
+    testing.eq(select(2, read(root, "calls"):gsub("pass show", "")), 1)
 end)
 
 local SECURITY = [[#!/bin/sh
@@ -4236,56 +4391,56 @@ local function occurrences(text, word)
     return select(2, text:gsub(word, ""))
 end
 
-t.test("a pass read is stored in the Keychain and the next read skips pass", function()
+testing.test("a pass read is stored in the Keychain and the next read skips pass", function()
     local root = sandbox()
     with_security(root)
     local out = passlock_once(root)
-    t.eq(out, TOKEN .. "\ncode=0\n")
-    t.eq(read(root, "kc"), TOKEN .. "\n")
+    testing.eq(out, TOKEN .. "\ncode=0\n")
+    testing.eq(read(root, "kc"), TOKEN .. "\n")
     out = passlock_once(root)
-    t.eq(out, TOKEN .. "\nkeychain\ncode=0\n")
-    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    testing.eq(out, TOKEN .. "\nkeychain\ncode=0\n")
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
-t.test("the token is in no argument list handed to security", function()
+testing.test("the token is in no argument list handed to security", function()
     local root = sandbox()
     with_security(root)
     passlock_once(root)
     passlock_once(root)
     local seen = read(root, "seccalls")
-    t.ok(seen:find("security -i", 1, true), seen)
-    t.eq(seen:find(TOKEN, 1, true), nil)
+    testing.ok(seen:find("security -i", 1, true), seen)
+    testing.eq(seen:find(TOKEN, 1, true), nil)
 end)
 
-t.test("each pass entry has its own Keychain item", function()
+testing.test("each pass entry has its own Keychain item", function()
     local root = sandbox()
     with_security(root)
     passlock_once(root, "Agents/x")
     assert(os.remove(root .. "/kc"))
     passlock_once(root, "Agents/y")
     local seen = read(root, "seccalls")
-    t.ok(seen:find("put dev-pomb-token:Agents/x\n", 1, true), seen)
-    t.ok(seen:find("put dev-pomb-token:Agents/y\n", 1, true), seen)
-    t.ok(seen:find(" -s dev-pomb-token:Agents/y -w\n", 1, true), seen)
+    testing.ok(seen:find("put dev-pomb-token:Agents/x\n", 1, true), seen)
+    testing.ok(seen:find("put dev-pomb-token:Agents/y\n", 1, true), seen)
+    testing.ok(seen:find(" -s dev-pomb-token:Agents/y -w\n", 1, true), seen)
 end)
 
-t.test("a failing Keychain falls back to pass and never fails the read", function()
+testing.test("a failing Keychain falls back to pass and never fails the read", function()
     local root = sandbox()
     with_security(root, "#!/bin/sh\nexit 1\n")
-    t.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
-    t.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
-    t.eq(occurrences(read(root, "calls"), "pass show"), 2)
+    testing.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
+    testing.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 2)
 end)
 
-t.test("a Keychain item that is not plain text is ignored", function()
+testing.test("a Keychain item that is not plain text is ignored", function()
     local root = sandbox()
     with_security(root)
     assert(fs.write(root .. "/kc", "bad token; evil\n"))
-    t.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
-    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    testing.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
-t.test("a read that finds the Keychain filled after the lock releases the lock", function()
+testing.test("a read that finds the Keychain filled after the lock releases the lock", function()
     local root = sandbox()
     with_security(
         root,
@@ -4297,29 +4452,32 @@ t.test("a read that finds the Keychain filled after the lock releases the lock",
             .. '    : >"$ROOT/seen"; exit 44\n'
             .. "fi\n"
     )
-    t.eq(passlock_once(root), TOKEN .. "\nkeychain\ncode=0\n")
-    t.eq(occurrences(read(root, "calls"), "pass show"), 0)
-    t.eq(fs.read(root .. "/pass.lock/pid"), nil)
-    t.eq(fs.exists(root .. "/pass.lock"), false)
+    testing.eq(passlock_once(root), TOKEN .. "\nkeychain\ncode=0\n")
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    testing.eq(fs.read(root .. "/pass.lock/pid"), nil)
+    testing.eq(fs.exists(root .. "/pass.lock"), false)
 end)
 
-t.test("dropping an item that is already gone succeeds and a failing delete does not", function()
-    local root = sandbox()
-    local drop = "bash " .. SHARE .. "keychain.sh drop Agents/x; echo code=$?"
-    with_security(root, "#!/bin/sh\nexit 44\n")
-    t.eq(shell(root, root .. "/pass.lock", drop), "code=0\n")
-    with_security(root, "#!/bin/sh\nexit 1\n")
-    t.eq(shell(root, root .. "/pass.lock", drop), "code=1\n")
-end)
+testing.test(
+    "dropping an item that is already gone succeeds and a failing delete does not",
+    function()
+        local root = sandbox()
+        local drop = "bash " .. SHARE .. "keychain.sh drop Agents/x; echo code=$?"
+        with_security(root, "#!/bin/sh\nexit 44\n")
+        testing.eq(shell(root, root .. "/pass.lock", drop), "code=0\n")
+        with_security(root, "#!/bin/sh\nexit 1\n")
+        testing.eq(shell(root, root .. "/pass.lock", drop), "code=1\n")
+    end
+)
 
-t.test("a refused pass read stores nothing", function()
+testing.test("a refused pass read stores nothing", function()
     local root = sandbox({ locked = true })
     with_security(root)
-    t.ok(passlock_once(root):find("code=1", 1, true))
-    t.eq(fs.read(root .. "/kc"), nil)
+    testing.ok(passlock_once(root):find("code=1", 1, true))
+    testing.eq(fs.read(root .. "/kc"), nil)
 end)
 
-t.test("a cached token Pomb refuses is dropped and read again from pass once", function()
+testing.test("a cached token Pomb refuses is dropped and read again from pass once", function()
     local root, home = sandbox()
     with_security(root)
     assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
@@ -4335,13 +4493,16 @@ t.test("a cached token Pomb refuses is dropped and read again from pass once", f
             .. 'exec "$ROOT/bin/curl_real" "$@" <"$ROOT/in"\n'
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 0, out)
-    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
-    t.ok(read(root, "seccalls"):find("delete-generic-password", 1, true), read(root, "seccalls"))
-    t.eq(read(root, "kc"), TOKEN .. "\n")
+    testing.eq(code, 0, out)
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    testing.ok(
+        read(root, "seccalls"):find("delete-generic-password", 1, true),
+        read(root, "seccalls")
+    )
+    testing.eq(read(root, "kc"), TOKEN .. "\n")
 end)
 
-t.test("a cached token Pomb refuses stays reported when the delete fails", function()
+testing.test("a cached token Pomb refuses stays reported when the delete fails", function()
     local root, home = sandbox()
     with_security(root, SECURITY:gsub('rm %-f "%$ROOT/kc"', "exit 1", 1))
     assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
@@ -4350,12 +4511,12 @@ t.test("a cached token Pomb refuses stays reported when the delete fails", funct
         '#!/bin/sh\ncat >/dev/null\nprintf \'{"message":"bad"}\\n401\'\n'
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("pomb answered 401", 1, true), out)
-    t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    testing.eq(code, 1)
+    testing.ok(out:find("pomb answered 401", 1, true), out)
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
 end)
 
-t.test("a token read fresh from pass that Pomb refuses is not retried", function()
+testing.test("a token read fresh from pass that Pomb refuses is not retried", function()
     local root, home = sandbox()
     with_security(root)
     executable(
@@ -4364,12 +4525,12 @@ t.test("a token read fresh from pass that Pomb refuses is not retried", function
             .. 'printf \'{"message":"bad"}\\n401\'\n'
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("pomb answered 401", 1, true), out)
-    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    testing.eq(code, 1)
+    testing.ok(out:find("pomb answered 401", 1, true), out)
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
-t.test("the keep-alive loop drops a refused cached token", function()
+testing.test("the keep-alive loop drops a refused cached token", function()
     local root = sandbox()
     with_security(root)
     assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
@@ -4385,11 +4546,14 @@ t.test("the keep-alive loop drops a refused cached token", function()
             .. "/state card 7 3 https://pomb.example Agents/x 0",
         "600"
     )
-    t.ok(read(root, "seccalls"):find("delete-generic-password", 1, true), read(root, "seccalls"))
-    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    testing.ok(
+        read(root, "seccalls"):find("delete-generic-password", 1, true),
+        read(root, "seccalls")
+    )
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
-t.test("the keep-alive loop reads the token under the same lock", function()
+testing.test("the keep-alive loop reads the token under the same lock", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
@@ -4404,60 +4568,60 @@ t.test("the keep-alive loop reads the token under the same lock", function()
             .. "/state card 7 1 https://pomb.example Agents/x 0",
         "600"
     )
-    t.ok(read(root, "events"):find("held=1", 1, true), out .. read(root, "events"))
+    testing.ok(read(root, "events"):find("held=1", 1, true), out .. read(root, "events"))
 end)
 
-t.test("a token that is not plain text is refused without echoing it", function()
+testing.test("a token that is not plain text is refused without echoing it", function()
     local root, home = sandbox()
     executable(root .. "/bin/pass", "#!/bin/sh\necho 'bad token\"; evil'\n")
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("empty or not plain text", 1, true), out)
-    t.eq(out:find("evil", 1, true), nil)
+    testing.eq(code, 1)
+    testing.ok(out:find("empty or not plain text", 1, true), out)
+    testing.eq(out:find("evil", 1, true), nil)
 end)
 
-t.test("a project config cannot choose the server or the token", function()
+testing.test("a project config cannot choose the server or the token", function()
     local root, home = sandbox({
         project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'
             .. '[board.pomb]\nurl = "https://evil.example"\ntoken = "pass:Other/entry"\n',
     })
     dev(root, home, { "board", "ls" })
     local calls = read(root, "calls")
-    t.eq(calls:find("evil", 1, true), nil)
-    t.eq(calls:find("Other/entry", 1, true), nil)
-    t.ok(calls:find("pomb.example", 1, true), calls)
+    testing.eq(calls:find("evil", 1, true), nil)
+    testing.eq(calls:find("Other/entry", 1, true), nil)
+    testing.ok(calls:find("pomb.example", 1, true), calls)
 end)
 
-t.test("a missing user url or token reference is a plain error", function()
+testing.test("a missing user url or token reference is a plain error", function()
     local root, home = sandbox({ user = "" })
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("[board.pomb] url", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("[board.pomb] url", 1, true), out)
     root, home =
         sandbox({ user = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "$(pass x)"\n' })
     out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("pass:<entry>", 1, true), out)
-    t.eq(read(root, "calls"), "")
+    testing.eq(code, 1)
+    testing.ok(out:find("pass:<entry>", 1, true), out)
+    testing.eq(read(root, "calls"), "")
 end)
 
-t.test("an http error reports the server's message", function()
+testing.test("an http error reports the server's message", function()
     local root, home = sandbox()
     executable(
         root .. "/bin/curl",
         '#!/bin/sh\ncat >/dev/null\nprintf \'{"code":"x","message":"nope"}\\n403\'\n'
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("board unavailable: pomb answered 403: nope", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("board unavailable: pomb answered 403: nope", 1, true), out)
 end)
 
-t.test("an unreachable server reports the curl exit", function()
+testing.test("an unreachable server reports the curl exit", function()
     local root, home = sandbox()
     executable(root .. "/bin/curl", "#!/bin/sh\ncat >/dev/null\nexit 7\n")
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(
+    testing.eq(code, 1)
+    testing.ok(
         out:find("board unavailable: cannot reach https://pomb.example (curl exit 7)", 1, true),
         out
     )
@@ -4471,36 +4635,36 @@ local SUBTASKS_EXPORT = '{"tasks":['
 
 local BACKLOG_EXPORT = (SUBTASKS_EXPORT:gsub("col%-ready", "col-backlog"))
 
-t.test("outcome posts a subtask and patches the Nth by its id", function()
+testing.test("outcome posts a subtask and patches the Nth by its id", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
-    t.eq(code, 0, out)
-    t.eq(out, "outcome 11111111 3 added\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome 11111111 3 added\n")
     out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
-    t.eq(out, "outcome 11111111 1 ticked\n")
+    testing.eq(out, "outcome 11111111 1 ticked\n")
     out = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--rename", "2", "B holds", "--reason", "clearer" }
     )
-    t.eq(out, "outcome 11111111 2 reworded\n")
+    testing.eq(out, "outcome 11111111 2 reworded\n")
     out = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
-    t.eq(out, "outcome 11111111 2 unticked\n")
+    testing.eq(out, "outcome 11111111 2 unticked\n")
     local calls = read(root, "calls")
-    t.ok(
+    testing.ok(
         calls:find("-X POST", 1, true) and calls:find("/api/tasks/" .. ID_A .. "/subtasks", 1, true),
         calls
     )
-    t.ok(calls:find('--data-raw {"name":"C works"}', 1, true), calls)
-    t.ok(calls:find("-X PATCH", 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-a", 1, true), calls)
-    t.ok(calls:find('--data-raw {"done":true}', 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-b", 1, true), calls)
-    t.ok(calls:find('--data-raw {"name":"B holds"}', 1, true), calls)
-    t.ok(calls:find('--data-raw {"done":false}', 1, true), calls)
+    testing.ok(calls:find('--data-raw {"name":"C works"}', 1, true), calls)
+    testing.ok(calls:find("-X PATCH", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-a", 1, true), calls)
+    testing.ok(calls:find('--data-raw {"done":true}', 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-b", 1, true), calls)
+    testing.ok(calls:find('--data-raw {"name":"B holds"}', 1, true), calls)
+    testing.ok(calls:find('--data-raw {"done":false}', 1, true), calls)
 end)
 
-t.test("a claimed card's tick needs a name other than the claimant's", function()
+testing.test("a claimed card's tick needs a name other than the claimant's", function()
     local claimed = (
         SUBTASKS_EXPORT:gsub(
             '"position":1,',
@@ -4510,32 +4674,32 @@ t.test("a claimed card's tick needs a name other than the claimant's", function(
     )
     local root, home = sandbox({ export = claimed })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
-    t.eq(code, 2, out)
-    t.ok(out:find("needs the ticker's name", 1, true), out)
+    testing.eq(code, 2, out)
+    testing.ok(out:find("needs the ticker's name", 1, true), out)
     out, code = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--tick", "1" },
         { agent = "project-run/a" }
     )
-    t.eq(code, 1, out)
-    t.ok(out:find("claimed by project-run/a", 1, true), out)
-    t.eq(read(root, "calls"):find('--data-raw {"done":true}', 1, true), nil)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("claimed by project-run/a", 1, true), out)
+    testing.eq(read(root, "calls"):find('--data-raw {"done":true}', 1, true), nil)
     out, code = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
-    t.eq(out, "outcome 11111111 2 unticked\n", out)
-    t.ok(read(root, "calls"):find('--data-raw {"done":false}', 1, true), out)
+    testing.eq(out, "outcome 11111111 2 unticked\n", out)
+    testing.ok(read(root, "calls"):find('--data-raw {"done":false}', 1, true), out)
     out, code = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--tick", "1" },
         { agent = "project-run/b" }
     )
-    t.eq(code, 0, out)
-    t.eq(out, "outcome 11111111 1 ticked by project-run/b\n", out)
-    t.ok(read(root, "calls"):find('--data-raw {"done":true}', 1, true), out)
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome 11111111 1 ticked by project-run/b\n", out)
+    testing.ok(read(root, "calls"):find('--data-raw {"done":true}', 1, true), out)
 end)
 
-t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", function()
+testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", function()
     local claimed = (
         BACKLOG_EXPORT:gsub(
             '"position":1,',
@@ -4556,71 +4720,74 @@ t.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", fu
         "--as",
         "project-run/a",
     }, { agent = LEAD })
-    t.eq(code, 1, out)
-    t.ok(out:find("claimed by project-run/a", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("claimed by project-run/a", 1, true), out)
     out, code = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--rename", "1", "New", "--reason", "r" },
         own
     )
-    t.eq(code, 1, out)
-    t.ok(out:find("claimed by project-run/a", 1, true), out)
-    t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
-    t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("claimed by project-run/a", 1, true), out)
+    testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+    testing.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
     out, code = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
         { agent = LEAD }
     )
-    t.eq(code, 0, out)
-    t.eq(out, "outcome 11111111 2 deleted\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome 11111111 2 deleted\n")
     local calls = read(root, "calls")
-    t.ok(calls:find("-X DELETE", 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-b", 1, true), calls)
-    t.ok(calls:find("Deleted outcome 2: B works Reason: never possible", 1, true), calls)
+    testing.ok(calls:find("-X DELETE", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-b", 1, true), calls)
+    testing.ok(calls:find("Deleted outcome 2: B works Reason: never possible", 1, true), calls)
 end)
 
-t.test("a refused outcome delete prints Pomb's reason, writes no note and is not queued", function()
-    local cases = {
-        {
-            body = '{"code":"permission_denied","permission":"subtasks.delete","message":"denied"}',
-            want = "needs subtasks.delete, which only the lead token holds",
-        },
-        {
-            body = '{"code":"permission_denied","permission":"subtasks.delete","board_id":"board-9","message":"denied"}',
-            want = "Set [board.pomb] lead_token",
-        },
-        {
-            body = '{"code":"permission_denied","permission":"subtasks.edit","message":"denied"}',
-            want = "lacks the subtasks.edit permission",
-        },
-        {
-            body = '{"code":"card_locked","message":"this task carries a locking label, so only the owner can change it"}',
-            want = "pomb locked this card while it is labelled needs:human",
-        },
-    }
-    for _, case in ipairs(cases) do
-        local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
-        executable(
-            root .. "/bin/curl",
-            "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in */subtasks/*) cat >/dev/null; printf '%s\\n403' '"
-                .. case.body
-                .. "'; exit 0 ;; esac\n"
-                .. CURL:gsub("^#!/bin/sh\n", "")
-        )
-        local out, code = dev(
-            root,
-            home,
-            { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" }
-        )
-        t.eq(code, 1, out)
-        t.ok(out:find(case.want, 1, true), out)
-        t.eq(read(root, "calls"):find("/comments", 1, true), nil)
-        t.eq(fs.exists(queue_file(home)), false)
+testing.test(
+    "a refused outcome delete prints Pomb's reason, writes no note and is not queued",
+    function()
+        local cases = {
+            {
+                body = '{"code":"permission_denied","permission":"subtasks.delete","message":"denied"}',
+                want = "needs subtasks.delete, which only the lead token holds",
+            },
+            {
+                body = '{"code":"permission_denied","permission":"subtasks.delete","board_id":"board-9","message":"denied"}',
+                want = "Set [board.pomb] lead_token",
+            },
+            {
+                body = '{"code":"permission_denied","permission":"subtasks.edit","message":"denied"}',
+                want = "lacks the subtasks.edit permission",
+            },
+            {
+                body = '{"code":"card_locked","message":"this task carries a locking label, so only the owner can change it"}',
+                want = "pomb locked this card while it is labelled needs:human",
+            },
+        }
+        for _, case in ipairs(cases) do
+            local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
+            executable(
+                root .. "/bin/curl",
+                "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in */subtasks/*) cat >/dev/null; printf '%s\\n403' '"
+                    .. case.body
+                    .. "'; exit 0 ;; esac\n"
+                    .. CURL:gsub("^#!/bin/sh\n", "")
+            )
+            local out, code = dev(
+                root,
+                home,
+                { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" }
+            )
+            testing.eq(code, 1, out)
+            testing.ok(out:find(case.want, 1, true), out)
+            testing.eq(read(root, "calls"):find("/comments", 1, true), nil)
+            testing.eq(fs.exists(queue_file(home)), false)
+        end
     end
-end)
+)
 
 local WORK_SECRET = "pomb_WORKtoken0123456789"
 local LEAD_SECRET = "pomb_LEADtoken0123456789"
@@ -4647,7 +4814,7 @@ local function two_tokens(root)
     )
 end
 
-t.test("outcome delete on a pomb board sends the DELETE with the lead token", function()
+testing.test("outcome delete on a pomb board sends the DELETE with the lead token", function()
     local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
     two_tokens(root)
     local out, code = dev(
@@ -4656,15 +4823,18 @@ t.test("outcome delete on a pomb board sends the DELETE with the lead token", fu
         { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
         { agent = LEAD, env = { DEV_BOARD_TOKEN = ISSUED_SECRET } }
     )
-    t.eq(code, 0, out)
-    t.eq(out, "outcome 11111111 2 deleted\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome 11111111 2 deleted\n")
     local sent = read(root, "delete_stdin")
-    t.ok(sent:find("Bearer " .. LEAD_SECRET, 1, true), "the DELETE did not carry the lead token")
-    t.eq(sent:find(WORK_SECRET, 1, true), nil)
-    t.eq(sent:find(ISSUED_SECRET, 1, true), nil)
+    testing.ok(
+        sent:find("Bearer " .. LEAD_SECRET, 1, true),
+        "the DELETE did not carry the lead token"
+    )
+    testing.eq(sent:find(WORK_SECRET, 1, true), nil)
+    testing.eq(sent:find(ISSUED_SECRET, 1, true), nil)
 end)
 
-t.test("outcome delete with no lead token exits 1 naming subtasks.delete", function()
+testing.test("outcome delete with no lead token exits 1 naming subtasks.delete", function()
     local root, home = sandbox({ export = BACKLOG_EXPORT })
     local out, code = dev(
         root,
@@ -4672,14 +4842,14 @@ t.test("outcome delete with no lead token exits 1 naming subtasks.delete", funct
         { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
         { agent = LEAD }
     )
-    t.eq(code, 1, out)
-    t.ok(out:find("lead_token is not set", 1, true), out)
-    t.ok(out:find("subtasks.delete", 1, true), out)
-    t.eq(read(root, "calls"), "")
-    t.eq(fs.exists(queue_file(home)), false)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("lead_token is not set", 1, true), out)
+    testing.ok(out:find("subtasks.delete", 1, true), out)
+    testing.eq(read(root, "calls"), "")
+    testing.eq(fs.exists(queue_file(home)), false)
 end)
 
-t.test("a 403 on outcome delete names subtasks.delete and the lead token", function()
+testing.test("a 403 on outcome delete names subtasks.delete and the lead token", function()
     local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
     executable(
         root .. "/bin/curl",
@@ -4694,14 +4864,14 @@ t.test("a 403 on outcome delete names subtasks.delete and the lead token", funct
         { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
         { agent = LEAD }
     )
-    t.eq(code, 1, out)
-    t.ok(out:find("subtasks.delete", 1, true), out)
-    t.ok(out:find("lead token", 1, true), out)
-    t.eq(read(root, "calls"):find("-X POST", 1, true), nil)
-    t.eq(fs.exists(queue_file(home)), false)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("subtasks.delete", 1, true), out)
+    testing.ok(out:find("lead token", 1, true), out)
+    testing.eq(read(root, "calls"):find("-X POST", 1, true), nil)
+    testing.eq(fs.exists(queue_file(home)), false)
 end)
 
-t.test(
+testing.test(
     "outcome delete refuses a non-lead name before any request and a locked column before the DELETE",
     function()
         local root, home = sandbox({ export = SUBTASKS_EXPORT, user = LEAD_USER })
@@ -4711,29 +4881,29 @@ t.test(
             { "board", "outcome", "11111111", "--delete", "1", "--reason", "x" },
             { agent = "dotfiles/implementer/82f0e002/1" }
         )
-        t.eq(code, 1, out)
-        t.ok(out:find("only the lead deletes an outcome", 1, true), out)
-        t.eq(read(root, "calls"), "")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("only the lead deletes an outcome", 1, true), out)
+        testing.eq(read(root, "calls"), "")
         out, code = dev(
             root,
             home,
             { "board", "outcome", "11111111", "--delete", "1", "--reason", "x" },
             { agent = LEAD }
         )
-        t.eq(code, 1, out)
-        t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+        testing.eq(code, 1, out)
+        testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
     end
 )
 
-t.test("outcome past the last subtask exits 1 and changes nothing", function()
+testing.test("outcome past the last subtask exits 1 and changes nothing", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
-    t.eq(code, 1)
-    t.ok(out:find("the card has 2 outcomes, so there is no outcome 3", 1, true), out)
-    t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
+    testing.eq(code, 1)
+    testing.ok(out:find("the card has 2 outcomes, so there is no outcome 3", 1, true), out)
+    testing.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
 end)
 
-t.test("outcome queues a tick but not an append when the write cannot reach Pomb", function()
+testing.test("outcome queues a tick but not an append when the write cannot reach Pomb", function()
     local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
     executable(
         root .. "/bin/curl",
@@ -4741,31 +4911,31 @@ t.test("outcome queues a tick but not an append when the write cannot reach Pomb
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
-    t.eq(code, 1)
-    t.ok(out:find("curl exit 28", 1, true), out)
-    t.eq(fs.exists(queue_file(home)), false)
+    testing.eq(code, 1)
+    testing.ok(out:find("curl exit 28", 1, true), out)
+    testing.eq(fs.exists(queue_file(home)), false)
     out, code = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" }
     )
-    t.eq(code, 1)
-    t.ok(out:find("curl exit 28", 1, true), out)
-    t.eq(fs.exists(queue_file(home)), false)
+    testing.eq(code, 1)
+    testing.ok(out:find("curl exit 28", 1, true), out)
+    testing.eq(fs.exists(queue_file(home)), false)
     out, code = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--tick", "1" },
         { agent = "project-run/b" }
     )
-    t.eq(code, 0)
-    t.eq(out, "queued: Pomb unreachable, will sync\n")
+    testing.eq(code, 0)
+    testing.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(queue_file(home)))
-    t.ok(queued:find('"outcome"', 1, true) and queued:find('"--tick"', 1, true), queued)
-    t.ok(queued:find('"--as"', 1, true) and queued:find('"project-run/b"', 1, true), queued)
+    testing.ok(queued:find('"outcome"', 1, true) and queued:find('"--tick"', 1, true), queued)
+    testing.ok(queued:find('"--as"', 1, true) and queued:find('"project-run/b"', 1, true), queued)
 end)
 
-t.test("outcome --rename is never queued when the write cannot reach Pomb", function()
+testing.test("outcome --rename is never queued when the write cannot reach Pomb", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     executable(
         root .. "/bin/curl",
@@ -4774,12 +4944,12 @@ t.test("outcome --rename is never queued when the write cannot reach Pomb", func
     )
     local out, code =
         dev(root, home, { "board", "outcome", "11111111", "--rename", "1", "New", "--reason", "r" })
-    t.eq(code, 1, out)
-    t.ok(out:find("curl exit 28", 1, true), out)
-    t.eq(fs.exists(queue_file(home)), false)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("curl exit 28", 1, true), out)
+    testing.eq(fs.exists(queue_file(home)), false)
 end)
 
-t.test("an unclaimed card's tick ignores an invalid DEV_AGENT", function()
+testing.test("an unclaimed card's tick ignores an invalid DEV_AGENT", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(
         root,
@@ -4787,12 +4957,12 @@ t.test("an unclaimed card's tick ignores an invalid DEV_AGENT", function()
         { "board", "outcome", "11111111", "--tick", "1" },
         { agent = "bad name" }
     )
-    t.eq(code, 0, out)
-    t.eq(out, "outcome 11111111 1 ticked\n", out)
-    t.ok(read(root, "calls"):find('--data-raw {"done":true}', 1, true), out)
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome 11111111 1 ticked\n", out)
+    testing.ok(read(root, "calls"):find('--data-raw {"done":true}', 1, true), out)
 end)
 
-t.test("rename is queued while Pomb is unreachable", function()
+testing.test("rename is queued while Pomb is unreachable", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     executable(
         root .. "/bin/curl",
@@ -4800,13 +4970,13 @@ t.test("rename is queued while Pomb is unreachable", function()
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "rename", "11111111", "Better", "title" })
-    t.eq(code, 0)
-    t.eq(out, "queued: Pomb unreachable, will sync\n")
+    testing.eq(code, 0)
+    testing.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(queue_file(home)))
-    t.ok(queued:find('"rename"', 1, true) and queued:find('"Better"', 1, true), queued)
+    testing.ok(queued:find('"rename"', 1, true) and queued:find('"Better"', 1, true), queued)
 end)
 
-t.test("discard queues each step it could not take, in order, once", function()
+testing.test("discard queues each step it could not take, in order, once", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     executable(
         root .. "/bin/curl",
@@ -4814,16 +4984,16 @@ t.test("discard queues each step it could not take, in order, once", function()
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
-    t.eq(code, 0)
-    t.eq(out, "queued: Pomb unreachable, will sync\n")
+    testing.eq(code, 0)
+    testing.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(queue_file(home)))
     local note = assert(queued:find('"note"', 1, true), queued)
     local label = assert(queued:find('"label"', note, true), queued)
     local move = assert(queued:find('"discard_move"', label, true), queued)
-    t.ok(queued:find('"Dropped"', 1, true) and move > label, queued)
+    testing.ok(queued:find('"Dropped"', 1, true) and move > label, queued)
 end)
 
-t.test("discard does not queue the note again once it has been posted", function()
+testing.test("discard does not queue the note again once it has been posted", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     executable(
         root .. "/bin/curl",
@@ -4831,46 +5001,46 @@ t.test("discard does not queue the note again once it has been posted", function
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
-    t.eq(code, 0)
-    t.eq(out, "queued: Pomb unreachable, will sync\n")
+    testing.eq(code, 0)
+    testing.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(queue_file(home)))
-    t.ok(not queued:find('"note"', 1, true), queued)
-    t.ok(queued:find('"label"', 1, true) < queued:find('"discard_move"', 1, true), queued)
+    testing.ok(not queued:find('"note"', 1, true), queued)
+    testing.ok(queued:find('"label"', 1, true) < queued:find('"discard_move"', 1, true), queued)
 end)
 
-t.test(
+testing.test(
     "move to Done on a Pomb board names the open outcomes, and discard still closes it",
     function()
         local root, home = sandbox({ export = SUBTASKS_EXPORT })
         local out, code = dev(root, home, { "board", "move", "11111111", support.COLUMN.DONE })
-        t.eq(code, 1, out)
-        t.ok(out:find("1 of 2 outcomes are unticked (1. A works)", 1, true), out)
-        t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
+        testing.eq(code, 1, out)
+        testing.ok(out:find("1 of 2 outcomes are unticked (1. A works)", 1, true), out)
+        testing.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
         out, code = dev(root, home, { "board", "discard", "11111111" })
-        t.eq(code, 0, out)
-        t.eq(out, "discarded 11111111\n")
+        testing.eq(code, 0, out)
+        testing.eq(out, "discarded 11111111\n")
     end
 )
 
-t.test("move to Done on a Pomb board refuses subtasks dev cannot read", function()
+testing.test("move to Done on a Pomb board refuses subtasks dev cannot read", function()
     local export = '{"tasks":[{"id":"'
         .. ID_A
         .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why.","subtasks":"oops"}]}'
     local root, home = sandbox({ export = export })
     local out, code = dev(root, home, { "board", "move", "11111111", support.COLUMN.DONE })
-    t.eq(code, 1, out)
-    t.ok(out:find("cannot be read from Pomb", 1, true), out)
-    t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
+    testing.eq(code, 1, out)
+    testing.ok(out:find("cannot be read from Pomb", 1, true), out)
+    testing.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
-t.test("outcome sends the claim's fence on the subtask call", function()
+testing.test("outcome sends the claim's fence on the subtask call", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "take", "11111111" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local calls = read(root, "calls")
-    t.ok(
+    testing.ok(
         calls:find(
             'If-Claim-Fence: 7 --data-raw {"done":true} https://pomb.example/api/tasks/'
                 .. ID_A
@@ -4883,7 +5053,7 @@ t.test("outcome sends the claim's fence on the subtask call", function()
     dev(root, home, { "board", "release", "11111111" })
 end)
 
-t.test("a renamed Pomb board is read through the column map and is_done", function()
+testing.test("a renamed Pomb board is read through the column map and is_done", function()
     local detail = DETAIL:gsub('"Ready"', '"Next"'):gsub(
         '"Done","is_done":true}',
         '"Shipped","is_done":true},{"id":"col-old","name":"Old","is_done":true}'
@@ -4893,24 +5063,27 @@ t.test("a renamed Pomb board is read through the column map and is_done", functi
         project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "Next"\n',
     })
     local out, code = dev(root, home, { "board", "next" })
-    t.eq(code, 0, out)
-    t.eq(out, "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
-    t.ok(read(root, "calls"):find("ready=true&column_id=col-ready", 1, true), read(root, "calls"))
+    testing.eq(code, 0, out)
+    testing.eq(out, "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
+    testing.ok(
+        read(root, "calls"):find("ready=true&column_id=col-ready", 1, true),
+        read(root, "calls")
+    )
     out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
-    t.eq(code, 0, out)
-    t.ok(out:find("Next", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Next", 1, true), out)
     out, code = dev(root, home, { "board", "ls", "--column", "old" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN_NAME.PROGRESS })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end)
 
-t.test("next asks for the unclaimed unblocked top of Ready", function()
+testing.test("next asks for the unclaimed unblocked top of Ready", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "next" })
-    t.eq(code, 0)
-    t.eq(out, "11111111  Ready  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
-    t.ok(
+    testing.eq(code, 0)
+    testing.eq(out, "11111111  Ready  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
+    testing.ok(
         read(root, "calls"):find(
             "/api/boards/board-1/tasks?limit=50&claimed=false&ready=true&column_id=col-ready",
             1,
@@ -4924,23 +5097,23 @@ local EPIC_TASK = '{"id":"'
     .. ID_A
     .. '","name":"First","column_id":"col-ready","color_id":"yellow-id","labels":["docs"],"kind":"epic","children_total":3,"children_done":%d}'
 
-t.test("epic_next_skips_open_child", function()
+testing.test("epic_next_skips_open_child", function()
     local root, home = sandbox({ task = EPIC_TASK:format(1) })
     for _, args in ipairs({
         { "board", "next" },
         { "board", "next", "--column", support.COLUMN.REVIEW },
     }) do
         local out, code = dev(root, home, args)
-        t.eq(code, 0, out)
-        t.ok(out:find("^no ", 1), out)
+        testing.eq(code, 0, out)
+        testing.ok(out:find("^no ", 1), out)
     end
     root, home = sandbox({ task = EPIC_TASK:format(3) })
     local out, code = dev(root, home, { "board", "next" })
-    t.eq(code, 0, out)
-    t.ok(out:find("First", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("First", 1, true), out)
 end)
 
-t.test("epic_ls_marks", function()
+testing.test("epic_ls_marks", function()
     local export = EXPORT:gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
@@ -4948,16 +5121,16 @@ t.test("epic_ls_marks", function()
     )
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 0, out)
-    t.ok(out:find("[epic 2 of 3 open] First", 1, true), out)
-    t.eq(out:find("[epic", out:find("Second", 1, true), true), nil)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("[epic 2 of 3 open] First", 1, true), out)
+    testing.eq(out:find("[epic", out:find("Second", 1, true), true), nil)
     out, code = dev(root, home, { "board", "show", "11111111-a" })
-    t.eq(code, 0, out)
-    t.ok(out:find("kind: epic, 2 open\n", 1, true), out)
-    t.ok(out:find("children: 1 of 3 done\n", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("kind: epic, 2 open\n", 1, true), out)
+    testing.ok(out:find("children: 1 of 3 done\n", 1, true), out)
 end)
 
-t.test("epic_move_refused_by_settings", function()
+testing.test("epic_move_refused_by_settings", function()
     local detail = DETAIL:gsub('"name":"Backlog"', '"name":"Backlog","wip_limit":2', 1)
     local export = PLANNED_EXPORT:gsub(
         '"name":"First"',
@@ -4967,17 +5140,17 @@ t.test("epic_move_refused_by_settings", function()
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail })
     for _, column in ipairs({ support.COLUMN.BACKLOG, support.COLUMN.DONE }) do
         local out, code = dev(root, home, { "board", "move", "11111111-a", column })
-        t.eq(code, 1, out)
-        t.ok(out:find("is an epic and cannot enter", 1, true), out)
-        t.ok(out:find("2 of 3 children are open", 1, true), out)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("is an epic and cannot enter", 1, true), out)
+        testing.ok(out:find("2 of 3 children are open", 1, true), out)
     end
-    t.eq(read(root, "calls"):find("/move", 1, true), nil)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
-    t.eq(code, 0, out)
-    t.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
-t.test("epic_move_pomb_refusal", function()
+testing.test("epic_move_pomb_refusal", function()
     local text =
         "the epic still has open children (2), so it cannot enter a WIP-limited or Done column"
     local export = PLANNED_EXPORT:gsub(
@@ -4993,11 +5166,11 @@ t.test("epic_move_pomb_refusal", function()
             .. "\"}'; status=409 ;;\n*/claim/release) body= ;;"
     )
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
-    t.eq(code, 1, out)
-    t.ok(out:find(text, 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find(text, 1, true), out)
 end)
 
-t.test("epic_reopen_out_of_done", function()
+testing.test("epic_reopen_out_of_done", function()
     local export = PLANNED_EXPORT:gsub(
         '"name":"First","column_id":"col%-ready"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1,"column_id":"col-done"',
@@ -5006,22 +5179,22 @@ t.test("epic_reopen_out_of_done", function()
     local task = EPIC_TASK:format(1):gsub("col%-ready", "col-done", 1)
     local root, home = sandbox({ export = export, task = task })
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BACKLOG })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local calls = read(root, "calls")
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
-    t.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
+    testing.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
 end)
 
-t.test("next skips a card held by a blocker that is not in Done", function()
+testing.test("next skips a card held by a blocker that is not in Done", function()
     local root, home = sandbox({
         links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]',
     })
     local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
-    t.ok(code == 0, out)
-    t.eq(out, "no cards in Backlog\n")
+    testing.ok(code == 0, out)
+    testing.eq(out, "no cards in Backlog\n")
     out, code = dev(root, home, { "board", "next" })
-    t.ok(code == 0, out)
-    t.eq(out, "no ready cards\n")
+    testing.ok(code == 0, out)
+    testing.eq(out, "no ready cards\n")
 end)
 
 local function far_sandbox(column)
@@ -5053,41 +5226,41 @@ local function far_sandbox(column)
     return root, home
 end
 
-t.test("next offers a Ready card whose blocker on another board is Done", function()
+testing.test("next offers a Ready card whose blocker on another board is Done", function()
     local root, home = far_sandbox("far-done")
     local out, code = dev(root, home, { "board", "next" })
-    t.ok(code == 0, out)
-    t.ok(out:find("First", 1, true), out)
-    t.ok(read(root, "calls"):find("&ready=true", 1, true), read(root, "calls"))
+    testing.ok(code == 0, out)
+    testing.ok(out:find("First", 1, true), out)
+    testing.ok(read(root, "calls"):find("&ready=true", 1, true), read(root, "calls"))
     out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
-    t.ok(code == 0, out)
-    t.ok(out:find("First", 1, true), out)
+    testing.ok(code == 0, out)
+    testing.ok(out:find("First", 1, true), out)
 end)
 
-t.test("next skips a backlog card whose blocker on another board cannot be read", function()
+testing.test("next skips a backlog card whose blocker on another board cannot be read", function()
     local root, home = far_sandbox("far-done")
     assert(fs.write(root .. "/far.json", '{"message":"gone"}'))
     assert(fs.write(root .. "/far_gone", ""))
     local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
-    t.ok(code == 0, out)
-    t.eq(out, "no cards in Backlog\n")
+    testing.ok(code == 0, out)
+    testing.eq(out, "no cards in Backlog\n")
 end)
 
-t.test("next skips a Ready card whose blocker on another board is open", function()
+testing.test("next skips a Ready card whose blocker on another board is open", function()
     local root, home = far_sandbox("far-ready")
     local out, code = dev(root, home, { "board", "next" })
-    t.ok(code == 0, out)
-    t.eq(out, "no ready cards\n")
+    testing.ok(code == 0, out)
+    testing.eq(out, "no ready cards\n")
 end)
 
-t.test("next skips a backlog card whose blocker on another board is open", function()
+testing.test("next skips a backlog card whose blocker on another board is open", function()
     local root, home = far_sandbox("far-ready")
     local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
-    t.ok(code == 0, out)
-    t.eq(out, "no cards in Backlog\n")
+    testing.ok(code == 0, out)
+    testing.eq(out, "no cards in Backlog\n")
 end)
 
-t.test("add posts the card to the named column", function()
+testing.test("add posts the card to the named column", function()
     local root, home = sandbox()
     local out, code = dev(root, home, {
         "board",
@@ -5102,12 +5275,12 @@ t.test("add posts the card to the named column", function()
         "--checks",
         "dev test",
     })
-    t.eq(code, 0)
-    t.eq(out, "added 11111111 Ready\n")
+    testing.eq(code, 0)
+    testing.eq(out, "added 11111111 Ready\n")
     local calls = read(root, "calls")
-    t.ok(calls:find('"fields":{"dev.checks":[{"run":"dev test"}]}', 1, true), calls)
-    t.ok(calls:find("-X POST", 1, true), calls)
-    t.ok(
+    testing.ok(calls:find('"fields":{"dev.checks":[{"run":"dev test"}]}', 1, true), calls)
+    testing.ok(calls:find("-X POST", 1, true), calls)
+    testing.ok(
         calls:find(
             '--data-raw {"name":"New card","column_id":"col-ready","description":"why"}',
             1,
@@ -5117,7 +5290,7 @@ t.test("add posts the card to the named column", function()
     )
 end)
 
-t.test("add --done-when posts one subtask per outcome after the card", function()
+testing.test("add --done-when posts one subtask per outcome after the card", function()
     local root, home = sandbox()
     local out, code = dev(root, home, {
         "board",
@@ -5132,11 +5305,11 @@ t.test("add --done-when posts one subtask per outcome after the card", function(
         "--done-when",
         "B works",
     })
-    t.eq(code, 0)
-    t.eq(out, "added 11111111 Ready\n")
+    testing.eq(code, 0)
+    testing.eq(out, "added 11111111 Ready\n")
     local calls = read(root, "calls")
     local first = calls:find("/api/tasks --", 1, true) or calls:find("-X POST", 1, true)
-    t.ok(first, calls)
+    testing.ok(first, calls)
     local count, at = 0, 1
     while true do
         local found, stop = calls:find("/api/tasks/" .. ID_A .. "/subtasks", at, true)
@@ -5145,64 +5318,73 @@ t.test("add --done-when posts one subtask per outcome after the card", function(
         end
         count, at = count + 1, stop + 1
     end
-    t.eq(count, 2)
-    t.ok(calls:find('--data-raw {"name":"A works"}', 1, true), calls)
-    t.ok(calls:find('--data-raw {"name":"B works"}', 1, true), calls)
+    testing.eq(count, 2)
+    testing.ok(calls:find('--data-raw {"name":"A works"}', 1, true), calls)
+    testing.ok(calls:find('--data-raw {"name":"B works"}', 1, true), calls)
 end)
 
-t.test("a failed subtask names the card and what was not added, and is never queued", function()
-    local root, home = sandbox()
-    assert(fs.write(root .. "/sub_fail", "2"))
-    local out, code = dev(root, home, {
-        "board",
-        "add",
-        "New",
-        "--problem",
-        "x",
-        "--size",
-        "1",
-        "--done-when",
-        "A",
-        "--done-when",
-        "B",
-        "--done-when",
-        "C",
-    })
-    t.eq(code, 1)
-    t.ok(out:find("11111111 was added to Backlog but outcome 2 of 3 was not:", 1, true), out)
-    t.eq(out:find("queued", 1, true), nil)
-end)
+testing.test(
+    "a failed subtask names the card and what was not added, and is never queued",
+    function()
+        local root, home = sandbox()
+        assert(fs.write(root .. "/sub_fail", "2"))
+        local out, code = dev(root, home, {
+            "board",
+            "add",
+            "New",
+            "--problem",
+            "x",
+            "--size",
+            "1",
+            "--done-when",
+            "A",
+            "--done-when",
+            "B",
+            "--done-when",
+            "C",
+        })
+        testing.eq(code, 1)
+        testing.ok(
+            out:find("11111111 was added to Backlog but outcome 2 of 3 was not:", 1, true),
+            out
+        )
+        testing.eq(out:find("queued", 1, true), nil)
+    end
+)
 
-t.test("add to Ready with outcomes creates in Backlog and moves after the subtasks", function()
-    local root, home = sandbox()
-    local out, code = dev(root, home, {
-        "board",
-        "add",
-        "New",
-        "--column",
-        support.COLUMN.READY,
-        "--size",
-        "1",
-        "--description",
-        V2,
-        "--checks",
-        "dev test",
-        "--done-when",
-        "a",
-        "--done-when",
-        "b",
-        "--done-when",
-        "c",
-    })
-    t.eq(code, 0, out)
-    local calls = read(root, "calls")
-    t.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
-    local sub = calls:find("/subtasks", 1, true)
-    local move = calls:find("/move", 1, true)
-    t.ok(sub and move and sub < move, calls)
-end)
+testing.test(
+    "add to Ready with outcomes creates in Backlog and moves after the subtasks",
+    function()
+        local root, home = sandbox()
+        local out, code = dev(root, home, {
+            "board",
+            "add",
+            "New",
+            "--column",
+            support.COLUMN.READY,
+            "--size",
+            "1",
+            "--description",
+            V2,
+            "--checks",
+            "dev test",
+            "--done-when",
+            "a",
+            "--done-when",
+            "b",
+            "--done-when",
+            "c",
+        })
+        testing.eq(code, 0, out)
+        local calls = read(root, "calls")
+        testing.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
+        local sub = calls:find("/subtasks", 1, true)
+        local move = calls:find("/move", 1, true)
+        testing.ok(sub and move and sub < move, calls)
+    end
+)
 
-t.test("show and ls read the subtasks from the export", function()
+testing.test("show and ls read the subtasks from the export", function()
     local export = EXPORT:gsub(
         '"description":"Why it matters.",',
         '"description":"Why it matters.","subtasks":[{"id":"s1","name":"Docs written","done":true},'
@@ -5210,12 +5392,12 @@ t.test("show and ls read the subtasks from the export", function()
     )
     local root, home = sandbox({ export = export })
     local out = dev(root, home, { "board", "show", "11111111-a" })
-    t.ok(out:find("done when:\n- [x] Docs written\n- [ ] Lint clean\n", 1, true), out)
+    testing.ok(out:find("done when:\n- [x] Docs written\n- [ ] Lint clean\n", 1, true), out)
     out = dev(root, home, { "board", "ls" })
-    t.ok(out:find("1/2", 1, true), out)
+    testing.ok(out:find("1/2", 1, true), out)
 end)
 
-t.test("add --label needs:human reaches pomb after the card and its outcomes", function()
+testing.test("add --label needs:human reaches pomb after the card and its outcomes", function()
     local root, home = sandbox()
     local out, code = dev(root, home, {
         "board",
@@ -5232,19 +5414,19 @@ t.test("add --label needs:human reaches pomb after the card and its outcomes", f
         "--label",
         "needs:human",
     })
-    t.eq(code, 0)
-    t.ok(out:find("added 11111111", 1, true), out)
+    testing.eq(code, 0)
+    testing.ok(out:find("added 11111111", 1, true), out)
     local calls = read(root, "calls")
     local created = calls:find("/api/tasks\n", 1, true)
     local outcome = calls:find("/subtasks", 1, true)
     local labelled = calls:find('--data-raw {"labels":["needs:human"]}', 1, true)
-    t.ok(created and outcome and labelled, calls)
-    t.ok(created < outcome and outcome < labelled, calls)
+    testing.ok(created and outcome and labelled, calls)
+    testing.ok(created < outcome and outcome < labelled, calls)
     local _, hits = calls:gsub("needs:human", "")
-    t.eq(hits, 1)
+    testing.eq(hits, 1)
 end)
 
-t.test("a failed subtask on add --label needs:human still labels the card", function()
+testing.test("a failed subtask on add --label needs:human still labels the card", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/sub_fail", "1"))
     local out, code = dev(root, home, {
@@ -5262,9 +5444,9 @@ t.test("a failed subtask on add --label needs:human still labels the card", func
         "--label",
         "needs:human",
     })
-    t.eq(code, 1)
-    t.ok(out:find("outcome 1 of 1 was not", 1, true), out)
-    t.ok(read(root, "calls"):find('--data-raw {"labels":["needs:human"]}', 1, true))
+    testing.eq(code, 1)
+    testing.ok(out:find("outcome 1 of 1 was not", 1, true), out)
+    testing.ok(read(root, "calls"):find('--data-raw {"labels":["needs:human"]}', 1, true))
 end)
 
 local function add_locked(root, home)
@@ -5285,75 +5467,75 @@ local function add_locked(root, home)
     })
 end
 
-t.test("add --label needs:human names the card when its label is refused", function()
+testing.test("add --label needs:human names the card when its label is refused", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/label_fail", ""))
     local out, code = add_locked(root, home)
-    t.eq(code, 1)
-    t.ok(out:find("but its labels were not set, so run dev board label on it", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("but its labels were not set, so run dev board label on it", 1, true), out)
 end)
 
-t.test("a failed subtask and a refused label on add --label needs:human say both", function()
+testing.test("a failed subtask and a refused label on add --label needs:human say both", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/sub_fail", "1"))
     assert(fs.write(root .. "/label_fail", ""))
     local out, code = add_locked(root, home)
-    t.eq(code, 1)
-    t.ok(out:find("outcome 1 of 1 was not", 1, true), out)
-    t.ok(out:find("its labels were not set either", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("outcome 1 of 1 was not", 1, true), out)
+    testing.ok(out:find("its labels were not set either", 1, true), out)
 end)
 
-t.test("add --size and size reach pomb with the id of the colour, not its label", function()
+testing.test("add --size and size reach pomb with the id of the colour, not its label", function()
     local root, home = sandbox()
     local out, code = dev(
         root,
         home,
         { "board", "add", "New", "--problem", "x", "--size", "3+", "--done-when", "a" }
     )
-    t.eq(code, 0)
-    t.eq(out, "added 11111111 Ready\n")
+    testing.eq(code, 0)
+    testing.eq(out, "added 11111111 Ready\n")
     local calls = read(root, "calls")
-    t.ok(calls:find('"color_id":"red-id"', 1, true), calls)
+    testing.ok(calls:find('"color_id":"red-id"', 1, true), calls)
     out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
-    t.eq(code, 0)
-    t.eq(out, "sized 11111111 2\n")
+    testing.eq(code, 0)
+    testing.eq(out, "sized 11111111 2\n")
     calls = read(root, "calls")
-    t.ok(calls:find("-X PATCH", 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
-    t.ok(calls:find('--data-raw {"color_id":"green-id"}', 1, true), calls)
+    testing.ok(calls:find("-X PATCH", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
+    testing.ok(calls:find('--data-raw {"color_id":"green-id"}', 1, true), calls)
     out, code = dev(root, home, { "board", "size", "11111111-a", "unsized" })
-    t.eq(code, 1)
-    t.ok(out:find("keeps a size", 1, true), out)
-    t.eq(read(root, "calls"):find('{"color_id":"white-id"}', 1, true), nil)
+    testing.eq(code, 1)
+    testing.ok(out:find("keeps a size", 1, true), out)
+    testing.eq(read(root, "calls"):find('{"color_id":"white-id"}', 1, true), nil)
     local iced = EXPORT:gsub('"column_id":"col%-backlog"', '"column_id":"col-icebox"')
     root, home = sandbox({ export = iced })
     out, code = dev(root, home, { "board", "size", "cccccccc", "unsized" })
-    t.eq(code, 0, out)
-    t.ok(read(root, "calls"):find('{"color_id":"white-id"}', 1, true))
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find('{"color_id":"white-id"}', 1, true))
 end)
 
-t.test("a board with no colour of the size asked for is reported", function()
+testing.test("a board with no colour of the size asked for is reported", function()
     local root, home = sandbox()
     assert(
         fs.write(root .. "/colors.json", '[{"id":"white-id","value":"white","label":"Unsized"}]')
     )
     local out, code = dev(root, home, { "board", "size", "11111111-a", "1" })
-    t.eq(code, 1)
-    t.ok(out:find("board unavailable: the board has no yellow colour", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("board unavailable: the board has no yellow colour", 1, true), out)
     out, code = dev(root, home, { "board", "size", "11111111-a", "7" })
-    t.eq(code, 2)
+    testing.eq(code, 2)
 end)
 
-t.test("ls --size reads the colour value from the palette whatever its label", function()
+testing.test("ls --size reads the colour value from the palette whatever its label", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "ls", "--size", "1" })
-    t.eq(code, 0)
-    t.eq(out, "11111111  Ready  1 Pomodoro  docs  First\n")
+    testing.eq(code, 0)
+    testing.eq(out, "11111111  Ready  1 Pomodoro  docs  First\n")
     out = dev(root, home, { "board", "ls", "--size", "unsized" })
-    t.eq(out, "cccccccc  Backlog  Unsized  -  Early\n11111111  Ready    unsized  -  Second\n")
+    testing.eq(out, "cccccccc  Backlog  Unsized  -  Early\n11111111  Ready    unsized  -  Second\n")
 end)
 
-t.test("add --label and label reach pomb as the whole list", function()
+testing.test("add --label and label reach pomb as the whole list", function()
     local root, home = sandbox()
     local out, code = dev(root, home, {
         "board",
@@ -5370,57 +5552,57 @@ t.test("add --label and label reach pomb as the whole list", function()
         "--label",
         "b",
     })
-    t.eq(code, 0)
-    t.eq(out, "added 11111111 Ready\n")
-    t.ok(read(root, "calls"):find('"labels":["a","b"]', 1, true), read(root, "calls"))
+    testing.eq(code, 0)
+    testing.eq(out, "added 11111111 Ready\n")
+    testing.ok(read(root, "calls"):find('"labels":["a","b"]', 1, true), read(root, "calls"))
     out, code = dev(root, home, { "board", "label", "11111111-a", "+needs:lead" })
-    t.eq(code, 0)
-    t.eq(out, "labelled 11111111 docs,needs:lead\n")
+    testing.eq(code, 0)
+    testing.eq(out, "labelled 11111111 docs,needs:lead\n")
     local calls = read(root, "calls")
-    t.ok(calls:find("-X PATCH", 1, true), calls)
-    t.ok(calls:find('--data-raw {"labels":["docs","needs:lead"]}', 1, true), calls)
+    testing.ok(calls:find("-X PATCH", 1, true), calls)
+    testing.ok(calls:find('--data-raw {"labels":["docs","needs:lead"]}', 1, true), calls)
     out, code = dev(root, home, { "board", "label", "11111111-a", "--remove", "docs" })
-    t.eq(code, 0)
-    t.eq(out, "labelled 11111111 -\n")
-    t.ok(read(root, "calls"):find('--data-raw {"labels":[]}', 1, true))
+    testing.eq(code, 0)
+    testing.eq(out, "labelled 11111111 -\n")
+    testing.ok(read(root, "calls"):find('--data-raw {"labels":[]}', 1, true))
     out, code = dev(root, home, { "board", "label", "11111111-a", "+two words" })
-    t.eq(code, 2)
+    testing.eq(code, 2)
 end)
 
-t.test("label sends the fence of a claim this machine holds", function()
+testing.test("label sends the fence of a claim this machine holds", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
     local _, code = dev(root, home, { "board", "label", "11111111-a", "+x" })
-    t.eq(code, 0)
+    testing.eq(code, 0)
     local patched = read(root, "calls"):match("%-X PATCH.-/api/tasks/")
-    t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    testing.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("pomb escalate posts the tier and reason with the fence", function()
+testing.test("pomb escalate posts the tier and reason with the fence", function()
     local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:planner"]', 1)
     local root, home = sandbox({ export = export })
     dev(root, home, { "board", "take", "11111111-a" })
     local out, code = dev(root, home, { "board", "escalate", "11111111-a", "pick", "one" })
-    t.eq(out, "escalated 11111111 to needs:lead\n")
-    t.eq(code, 0)
+    testing.eq(out, "escalated 11111111 to needs:lead\n")
+    testing.eq(code, 0)
     local calls = read(root, "calls")
     local posted = calls:match("[^\n]*\n[^\n]*/api/tasks/" .. ID_A:gsub("%-", "%%-") .. "/escalate")
-    t.ok(posted and posted:find("If-Claim-Fence: 7", 1, true), calls)
-    t.ok(posted:find('"tier":"lead"', 1, true), calls)
-    t.ok(posted:find('"reason":"pick one"', 1, true), calls)
-    t.ok(not calls:find("-X PATCH", 1, true), calls)
+    testing.ok(posted and posted:find("If-Claim-Fence: 7", 1, true), calls)
+    testing.ok(posted:find('"tier":"lead"', 1, true), calls)
+    testing.ok(posted:find('"reason":"pick one"', 1, true), calls)
+    testing.ok(not calls:find("-X PATCH", 1, true), calls)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("checks patches the task's checks field whole, with the claim's fence", function()
+testing.test("checks patches the task's checks field whole, with the claim's fence", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
     local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint", "dev test" })
-    t.eq(code, 0, out)
-    t.eq(out, "set checks 11111111, 2 rows\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "set checks 11111111, 2 rows\n")
     local calls = read(root, "calls")
-    t.ok(
+    testing.ok(
         calls:find(
             '--data-raw {"fields":{"dev.checks":[{"run":"dev lint"},{"run":"dev test"}]}}',
             1,
@@ -5429,46 +5611,53 @@ t.test("checks patches the task's checks field whole, with the claim's fence", f
         calls
     )
     local patched = calls:match("%-X PATCH.-/api/tasks/")
-    t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    testing.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("checks on a Pomb board without the checks field is refused before any write", function()
-    local root, home = sandbox({ fields = "[]" })
-    local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint" })
-    t.eq(code, 1)
-    t.ok(out:find("no checks field", 1, true), out)
-    t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
-end)
-
-t.test("allow, tests and files patch the task's fields whole, with the claim's fence", function()
-    local root, home = sandbox()
-    dev(root, home, { "board", "take", "11111111-a" })
-    local out, code = dev(root, home, { "board", "allow", "11111111-a", "test-edits", "ci-edits" })
-    t.eq(code, 0, out)
-    t.eq(out, "set allow 11111111, test-edits ci-edits\n")
-    out, code = dev(root, home, { "board", "tests", "11111111-a", "one", "tests::two" })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "files", "11111111-a", "src/a.rs", "src/b.rs" })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "allow", "11111111-a", "none" })
-    t.eq(code, 0, out)
-    t.eq(out, "cleared allow 11111111\n")
-    local calls = read(root, "calls")
-    for _, body in ipairs({
-        '--data-raw {"fields":{"dev.allow":["test-edits","ci-edits"]}}',
-        '--data-raw {"fields":{"dev.tests":"one\\ntests::two"}}',
-        '--data-raw {"fields":{"dev.files":"src/a.rs\\nsrc/b.rs"}}',
-        '--data-raw {"fields":{"dev.allow":null}}',
-    }) do
-        t.ok(calls:find(body, 1, true), calls)
+testing.test(
+    "checks on a Pomb board without the checks field is refused before any write",
+    function()
+        local root, home = sandbox({ fields = "[]" })
+        local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint" })
+        testing.eq(code, 1)
+        testing.ok(out:find("no checks field", 1, true), out)
+        testing.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
     end
-    local patched = calls:match("%-X PATCH.-/api/tasks/")
-    t.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
-    dev(root, home, { "board", "release", "11111111-a" })
-end)
+)
 
-t.test(
+testing.test(
+    "allow, tests and files patch the task's fields whole, with the claim's fence",
+    function()
+        local root, home = sandbox()
+        dev(root, home, { "board", "take", "11111111-a" })
+        local out, code =
+            dev(root, home, { "board", "allow", "11111111-a", "test-edits", "ci-edits" })
+        testing.eq(code, 0, out)
+        testing.eq(out, "set allow 11111111, test-edits ci-edits\n")
+        out, code = dev(root, home, { "board", "tests", "11111111-a", "one", "tests::two" })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "files", "11111111-a", "src/a.rs", "src/b.rs" })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "allow", "11111111-a", "none" })
+        testing.eq(code, 0, out)
+        testing.eq(out, "cleared allow 11111111\n")
+        local calls = read(root, "calls")
+        for _, body in ipairs({
+            '--data-raw {"fields":{"dev.allow":["test-edits","ci-edits"]}}',
+            '--data-raw {"fields":{"dev.tests":"one\\ntests::two"}}',
+            '--data-raw {"fields":{"dev.files":"src/a.rs\\nsrc/b.rs"}}',
+            '--data-raw {"fields":{"dev.allow":null}}',
+        }) do
+            testing.ok(calls:find(body, 1, true), calls)
+        end
+        local patched = calls:match("%-X PATCH.-/api/tasks/")
+        testing.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+        dev(root, home, { "board", "release", "11111111-a" })
+    end
+)
+
+testing.test(
     "allow, tests and files on a Pomb board without the field are refused before any write",
     function()
         local root, home = sandbox({ fields = "[]" })
@@ -5478,14 +5667,14 @@ t.test(
             { "files", "src/a.rs", "dev.files" },
         }) do
             local out, code = dev(root, home, { "board", case[1], "11111111-a", case[2] })
-            t.eq(code, 1)
-            t.ok(out:find("no " .. case[3] .. " field", 1, true), out)
+            testing.eq(code, 1)
+            testing.ok(out:find("no " .. case[3] .. " field", 1, true), out)
         end
-        t.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
+        testing.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
     end
 )
 
-t.test("show prints the allow, tests and files fields a Pomb card holds", function()
+testing.test("show prints the allow, tests and files fields a Pomb card holds", function()
     local root, home = sandbox({
         export = '{"tasks":[{"id":"'
             .. ID_A
@@ -5493,36 +5682,36 @@ t.test("show prints the allow, tests and files fields a Pomb card holds", functi
             .. '"fields":{"dev.allow":["ci-edits"],"dev.tests":"one\\ntwo","dev.files":"src/a.rs"}}]}',
     })
     local out, code = dev(root, home, { "board", "show", "11111111-a" })
-    t.eq(code, 0, out)
-    t.ok(
+    testing.eq(code, 0, out)
+    testing.ok(
         out:find("allow:\n- ci-edits\n\ntests:\n- one\n- two\n\nfiles:\n- src/a.rs\n", 1, true),
         out
     )
 end)
 
-t.test("note posts a comment of kind agent and move goes to the top of the column", function()
+testing.test("note posts a comment of kind agent and move goes to the top of the column", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local out = dev(root, home, { "board", "note", "11111111-a", "landed", "it" })
-    t.eq(out, "noted 11111111\n")
+    testing.eq(out, "noted 11111111\n")
     local calls = read(root, "calls")
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
-    t.ok(calls:find('"kind":"agent"', 1, true), calls)
-    t.ok(not calls:find('"author"', 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
+    testing.ok(calls:find('"kind":"agent"', 1, true), calls)
+    testing.ok(not calls:find('"author"', 1, true), calls)
     out = dev(
         root,
         home,
         { "board", "note", "11111111-a", "--kind", "decision", "--as", "reviewer", "ok" }
     )
-    t.eq(out, "noted 11111111\n")
+    testing.eq(out, "noted 11111111\n")
     calls = read(root, "calls")
-    t.ok(calls:find('"kind":"decision"', 1, true), calls)
-    t.ok(calls:find('"author":"reviewer"', 1, true), calls)
+    testing.ok(calls:find('"kind":"decision"', 1, true), calls)
+    testing.ok(calls:find('"author":"reviewer"', 1, true), calls)
     out = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
-    t.eq(out, "moved 11111111 to Review\n")
+    testing.eq(out, "moved 11111111 to Review\n")
     calls = read(root, "calls")
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
-    t.ok(calls:find('"column_id":"col-review"', 1, true), calls)
-    t.ok(calls:find('"position":0', 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
+    testing.ok(calls:find('"column_id":"col-review"', 1, true), calls)
+    testing.ok(calls:find('"position":0', 1, true), calls)
 end)
 
 local function owner_card_sandbox()
@@ -5534,7 +5723,7 @@ local function owner_card_sandbox()
     return sandbox({ export = export })
 end
 
-t.test("ask posts a structured question", function()
+testing.test("ask posts a structured question", function()
     local root, home = sandbox()
     local out, code = dev(root, home, {
         "board",
@@ -5551,21 +5740,21 @@ t.test("ask posts a structured question", function()
         "--why",
         "Only he can choose",
     })
-    t.eq(out, "asked 11111111\n")
-    t.eq(code, 0)
+    testing.eq(out, "asked 11111111\n")
+    testing.eq(code, 0)
     local calls = read(root, "calls")
-    t.ok(calls:find("-X POST", 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
-    t.ok(calls:find('"kind":"question"', 1, true), calls)
-    t.ok(calls:find('"text":"Which way?"', 1, true), calls)
-    t.ok(calls:find('"label":"Ship it"', 1, true), calls)
-    t.ok(calls:find('"column_id":"col-ready"', 1, true), calls)
-    t.ok(calls:find('"column_id":"col-icebox"', 1, true), calls)
-    t.ok(calls:find('"recommended":2', 1, true), calls)
-    t.ok(calls:find('"why":"Only he can choose"', 1, true), calls)
+    testing.ok(calls:find("-X POST", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
+    testing.ok(calls:find('"kind":"question"', 1, true), calls)
+    testing.ok(calls:find('"text":"Which way?"', 1, true), calls)
+    testing.ok(calls:find('"label":"Ship it"', 1, true), calls)
+    testing.ok(calls:find('"column_id":"col-ready"', 1, true), calls)
+    testing.ok(calls:find('"column_id":"col-icebox"', 1, true), calls)
+    testing.ok(calls:find('"recommended":2', 1, true), calls)
+    testing.ok(calls:find('"why":"Only he can choose"', 1, true), calls)
 end)
 
-t.test("ask prints the refusal as worded", function()
+testing.test("ask prints the refusal as worded", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
     local out, code = dev(root, home, {
@@ -5581,11 +5770,11 @@ t.test("ask prints the refusal as worded", function()
         "--recommend",
         "1",
     })
-    t.eq(code, 1)
-    t.ok(out:find("question.why is required", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("question.why is required", 1, true), out)
 end)
 
-t.test("ask names a choice whose column the board lacks and posts nothing", function()
+testing.test("ask names a choice whose column the board lacks and posts nothing", function()
     local root, home = sandbox()
     local out, code = dev(root, home, {
         "board",
@@ -5594,9 +5783,9 @@ t.test("ask names a choice whose column the board lacks and posts nothing", func
         "--choice",
         "Nowhere=Lost",
     })
-    t.eq(code, 1)
-    t.ok(out:find("choice 1 names Nowhere, which is no column", 1, true), out)
-    t.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
+    testing.eq(code, 1)
+    testing.ok(out:find("choice 1 names Nowhere, which is no column", 1, true), out)
+    testing.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
 end)
 
 local QUESTION_COMMENT = '[{"id":"qqqqqqqq-1111-4111-8111-111111111111","author":"api-token",'
@@ -5605,7 +5794,7 @@ local QUESTION_COMMENT = '[{"id":"qqqqqqqq-1111-4111-8111-111111111111","author"
     .. '{"label":"Ship it","column_id":"col-ready"},{"label":"Park it","column_id":"col-icebox"}],'
     .. '"recommended":1,"why":"w","answer":%s}}]'
 
-t.test("answer records the choice through Pomb", function()
+testing.test("answer records the choice through Pomb", function()
     local root, home = owner_card_sandbox()
     local plain = '{"id":"pppppppp-2222-4222-8222-222222222222","author":"x","actor_kind":"user",'
         .. '"token_name":null,"created_at":"2026-10-27T10:00:00Z","body":"later","question":null}'
@@ -5616,10 +5805,10 @@ t.test("answer records the choice through Pomb", function()
         home,
         { "board", "answer", "11111111-a", "--choice", "2", "--quote", "go with two" }
     )
-    t.eq(out, "answered 11111111 with choice 2\n")
-    t.eq(code, 0)
+    testing.eq(out, "answered 11111111 with choice 2\n")
+    testing.eq(code, 0)
     local calls = read(root, "calls")
-    t.ok(
+    testing.ok(
         calls:find(
             "/api/tasks/" .. ID_A .. "/comments/qqqqqqqq-1111-4111-8111-111111111111/answer",
             1,
@@ -5627,145 +5816,164 @@ t.test("answer records the choice through Pomb", function()
         ),
         calls
     )
-    t.ok(calls:find('"choice":2', 1, true), calls)
-    t.ok(calls:find('"quote":"go with two"', 1, true), calls)
+    testing.ok(calls:find('"choice":2', 1, true), calls)
+    testing.ok(calls:find('"quote":"go with two"', 1, true), calls)
 end)
 
-t.test("answer refuses a card whose question is answered already before calling Pomb", function()
-    local root, home = owner_card_sandbox()
-    assert(
-        fs.write(
-            root .. "/comments.json",
-            QUESTION_COMMENT:format('{"choice":1,"answered_by":"o","answered_at":"x"}')
+testing.test(
+    "answer refuses a card whose question is answered already before calling Pomb",
+    function()
+        local root, home = owner_card_sandbox()
+        assert(
+            fs.write(
+                root .. "/comments.json",
+                QUESTION_COMMENT:format('{"choice":1,"answered_by":"o","answered_at":"x"}')
+            )
         )
-    )
-    local out, code =
-        dev(root, home, { "board", "answer", "11111111-a", "--choice", "1", "--quote", "yes" })
-    t.eq(code, 1)
-    t.ok(out:find("no open question", 1, true), out)
-    t.ok(not read(root, "calls"):find("/answer", 1, true), read(root, "calls"))
-end)
+        local out, code =
+            dev(root, home, { "board", "answer", "11111111-a", "--choice", "1", "--quote", "yes" })
+        testing.eq(code, 1)
+        testing.ok(out:find("no open question", 1, true), out)
+        testing.ok(not read(root, "calls"):find("/answer", 1, true), read(root, "calls"))
+    end
+)
 
-t.test("answer refuses an empty quote before calling Pomb", function()
+testing.test("answer refuses an empty quote before calling Pomb", function()
     local root, home = owner_card_sandbox()
     local _, code =
         dev(root, home, { "board", "answer", "11111111-a", "--choice", "1", "--quote", " " })
-    t.eq(code, 2)
-    t.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
+    testing.eq(code, 2)
+    testing.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
 end)
 
-t.test("order sends each position to Pomb and refuses two columns first", function()
+testing.test("order sends each position to Pomb and refuses two columns first", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "order", "11111111-b", "11111111-a" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local calls = read(root, "calls")
     local first = calls:find("/api/tasks/" .. ID_B .. "/move", 1, true)
     local second = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
-    t.ok(first and second and first < second, calls)
-    t.ok(calls:find('"position":0', 1, true), calls)
-    t.ok(calls:find('"position":1', 1, true), calls)
+    testing.ok(first and second and first < second, calls)
+    testing.ok(calls:find('"position":0', 1, true), calls)
+    testing.ok(calls:find('"position":1', 1, true), calls)
     root, home = sandbox()
     out, code = dev(root, home, { "board", "order", "11111111-a", "cccccccc" })
-    t.eq(code, 1, out)
-    t.ok(out:find("one column", 1, true), out)
-    t.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
+    testing.eq(code, 1, out)
+    testing.ok(out:find("one column", 1, true), out)
+    testing.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
-t.test("links reads the task's links and names the board of a link to another board", function()
-    local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
-        .. ID_C
-        .. '","board_id":"board-1"},'
-        .. '{"id":"l2","kind":"blocks","target_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","board_id":"board-2"},'
-        .. '{"id":"l3","kind":"related","target_id":"'
-        .. ID_B
-        .. '","board_id":null}]'
-    local root, home = sandbox({ links = links })
-    assert(
-        fs.write(
-            root .. "/boards.json",
-            '[{"id":"board-1","name":"dotfiles"},{"id":"board-2","name":"ci"}]'
+testing.test(
+    "links reads the task's links and names the board of a link to another board",
+    function()
+        local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
+            .. ID_C
+            .. '","board_id":"board-1"},'
+            .. '{"id":"l2","kind":"blocks","target_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","board_id":"board-2"},'
+            .. '{"id":"l3","kind":"related","target_id":"'
+            .. ID_B
+            .. '","board_id":null}]'
+        local root, home = sandbox({ links = links })
+        assert(
+            fs.write(
+                root .. "/boards.json",
+                '[{"id":"board-1","name":"dotfiles"},{"id":"board-2","name":"ci"}]'
+            )
         )
-    )
-    local out, code = dev(root, home, { "board", "links", "11111111-a" })
-    t.eq(code, 0, out)
-    t.eq(out, "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -\n")
-    t.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links", 1, true), read(root, "calls"))
-    root, home = sandbox()
-    out, code = dev(root, home, { "board", "links", "11111111-a" })
-    t.eq(code, 0, out)
-    t.eq(out, "no links\n")
-end)
+        local out, code = dev(root, home, { "board", "links", "11111111-a" })
+        testing.eq(code, 0, out)
+        testing.eq(
+            out,
+            "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -\n"
+        )
+        testing.ok(
+            read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links", 1, true),
+            read(root, "calls")
+        )
+        root, home = sandbox()
+        out, code = dev(root, home, { "board", "links", "11111111-a" })
+        testing.eq(code, 0, out)
+        testing.eq(out, "no links\n")
+    end
+)
 
-t.test("unlink deletes the link the token holds and reports a refused delete plainly", function()
-    local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
-        .. ID_C
-        .. '","board_id":"board-1"}]'
-    local root, home = sandbox({ links = links })
-    local out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
-    t.eq(code, 0, out)
-    t.eq(out, "unlinked 11111111 blocked_by cccccccc\n")
-    local calls = read(root, "calls")
-    t.ok(calls:find("-X DELETE", 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
-    local _, deletes_before = read(root, "calls"):gsub("%-X DELETE", "")
-    out, code = dev(root, home, { "board", "unlink", "11111111-a", "related", "cccccccc" })
-    t.eq(code, 1, out)
-    t.ok(out:find("the card holds no related link to cccccccc, its links are", 1, true), out)
-    local _, deletes_after = read(root, "calls"):gsub("%-X DELETE", "")
-    t.eq(deletes_after, deletes_before)
-    root, home = sandbox({ links = links })
-    curl_with(
-        root,
-        [[*/links/l1) body='{"code":"permission_denied","permission":"links.delete","message":"m","board_id":null}'; status=403 ;;
+testing.test(
+    "unlink deletes the link the token holds and reports a refused delete plainly",
+    function()
+        local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
+            .. ID_C
+            .. '","board_id":"board-1"}]'
+        local root, home = sandbox({ links = links })
+        local out, code =
+            dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
+        testing.eq(code, 0, out)
+        testing.eq(out, "unlinked 11111111 blocked_by cccccccc\n")
+        local calls = read(root, "calls")
+        testing.ok(calls:find("-X DELETE", 1, true), calls)
+        testing.ok(calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
+        local _, deletes_before = read(root, "calls"):gsub("%-X DELETE", "")
+        out, code = dev(root, home, { "board", "unlink", "11111111-a", "related", "cccccccc" })
+        testing.eq(code, 1, out)
+        testing.ok(
+            out:find("the card holds no related link to cccccccc, its links are", 1, true),
+            out
+        )
+        local _, deletes_after = read(root, "calls"):gsub("%-X DELETE", "")
+        testing.eq(deletes_after, deletes_before)
+        root, home = sandbox({ links = links })
+        curl_with(
+            root,
+            [[*/links/l1) body='{"code":"permission_denied","permission":"links.delete","message":"m","board_id":null}'; status=403 ;;
 */claim/release) body= ;;]]
-    )
-    out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
-    t.eq(code, 1, out)
-    t.eq(
-        out,
-        "dev: pomb kept the link: this token can delete only the links it created, and this one"
-            .. " was made by another token or before Pomb 0.5.40\n"
-    )
-    t.ok(
-        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links/l1", 1, true),
-        read(root, "calls")
-    )
-    root, home = sandbox({ links = links })
-    curl_with(
-        root,
-        [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.edit","message":"no write","board_id":"board-9"}'; status=403 ;;
+        )
+        out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
+        testing.eq(code, 1, out)
+        testing.eq(
+            out,
+            "dev: pomb kept the link: this token can delete only the links it created, and this one"
+                .. " was made by another token or before Pomb 0.5.40\n"
+        )
+        testing.ok(
+            read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links/l1", 1, true),
+            read(root, "calls")
+        )
+        root, home = sandbox({ links = links })
+        curl_with(
+            root,
+            [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.edit","message":"no write","board_id":"board-9"}'; status=403 ;;
 */claim/release) body= ;;]]
-    )
-    out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
-    t.eq(code, 1, out)
-    t.ok(not out:find("kept the link", 1, true), out)
-end)
+        )
+        out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
+        testing.eq(code, 1, out)
+        testing.ok(not out:find("kept the link", 1, true), out)
+    end
+)
 
-t.test("unlink of a blocks view deletes the blocked_by link on the holder's task", function()
+testing.test("unlink of a blocks view deletes the blocked_by link on the holder's task", function()
     local links = '[{"id":"l1","kind":"blocks","target_id":"' .. ID_C .. '","board_id":"board-1"}]'
     local holder = '[{"id":"l9","kind":"blocked_by","target_id":"'
         .. ID_A
         .. '","board_id":"board-1"}]'
     local root, home = sandbox({ links = links, holder_links = holder })
     local out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocks", "cccccccc" })
-    t.eq(code, 0, out)
-    t.eq(out, "unlinked 11111111 blocks cccccccc\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "unlinked 11111111 blocks cccccccc\n")
     local calls = read(root, "calls")
-    t.ok(calls:find("/api/tasks/" .. ID_C .. "/links/l9", 1, true), calls)
-    t.ok(not calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_C .. "/links/l9", 1, true), calls)
+    testing.ok(not calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
 end)
 
-t.test("notes, note --edit and note --delete reach pomb's comment routes", function()
+testing.test("notes, note --edit and note --delete reach pomb's comment routes", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "notes", "11111111-a" })
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         out,
         "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
     )
     out, code = dev(root, home, { "board", "show", "11111111-a" })
-    t.eq(code, 0)
-    t.eq(
+    testing.eq(code, 0)
+    testing.eq(
         out,
         "11111111  Ready  1 Pomodoro  docs  First\n\nWhy it matters.\n\n"
             .. "checks:\n- dev test\n- dev lint\n\n"
@@ -5774,11 +5982,11 @@ t.test("notes, note --edit and note --delete reach pomb's comment routes", funct
             .. "line\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
     )
     out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "aaaaaaaa", "better" })
-    t.eq(code, 0)
-    t.eq(out, "edited 11111111 aaaaaaaa\n")
+    testing.eq(code, 0)
+    testing.eq(out, "edited 11111111 aaaaaaaa\n")
     local calls = read(root, "calls")
-    t.ok(calls:find("-X PATCH", 1, true), calls)
-    t.ok(
+    testing.ok(calls:find("-X PATCH", 1, true), calls)
+    testing.ok(
         calls:find(
             "/api/tasks/" .. ID_A .. "/comments/aaaaaaaa-1111-4111-8111-111111111111",
             1,
@@ -5786,27 +5994,27 @@ t.test("notes, note --edit and note --delete reach pomb's comment routes", funct
         ),
         calls
     )
-    t.ok(calls:find('--data-raw {"body":"better"}', 1, true), calls)
+    testing.ok(calls:find('--data-raw {"body":"better"}', 1, true), calls)
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "aaaaaaaa" })
-    t.eq(code, 0)
-    t.eq(out, "deleted 11111111 aaaaaaaa\n")
-    t.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
+    testing.eq(code, 0)
+    testing.eq(out, "deleted 11111111 aaaaaaaa\n")
+    testing.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
 end)
 
-t.test("a 403 on a comment says it is not yours and exits 1", function()
+testing.test("a 403 on a comment says it is not yours and exits 1", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "dddddddd", "x" })
-    t.eq(code, 1)
-    t.eq(out, "dev: that comment is not yours to change\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev: that comment is not yours to change\n")
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "dddddddd" })
-    t.eq(code, 1)
-    t.eq(out, "dev: that comment is not yours to change\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev: that comment is not yours to change\n")
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
-    t.eq(code, 1)
-    t.eq(out, "dev: a comment id needs at least 8 hex characters: eeee\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev: a comment id needs at least 8 hex characters: eeee\n")
 end)
 
-t.test("a card_locked 403 on a comment says the card is locked and exits 1", function()
+testing.test("a card_locked 403 on a comment says the card is locked and exits 1", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/locked", ""))
     for _, args in ipairs({
@@ -5815,14 +6023,14 @@ t.test("a card_locked 403 on a comment says the card is locked and exits 1", fun
         { "board", "note", "11111111-a", "a new note" },
     }) do
         local out, code = dev(root, home, args)
-        t.eq(code, 1)
-        t.ok(out:find("labelled needs:human", 1, true), out)
-        t.ok(out:find("Reordering and resizing", 1, true), out)
-        t.eq(out:find("not yours", 1, true), nil)
+        testing.eq(code, 1)
+        testing.ok(out:find("labelled needs:human", 1, true), out)
+        testing.ok(out:find("Reordering and resizing", 1, true), out)
+        testing.eq(out:find("not yours", 1, true), nil)
     end
 end)
 
-t.test("prose warnings reach standard error and the write still happens", function()
+testing.test("prose warnings reach standard error and the write still happens", function()
     local root, home = sandbox()
     local warning = "warning: card prose holds a path: src/a.lua\n"
     local cases = {
@@ -5856,16 +6064,16 @@ t.test("prose warnings reach standard error and the write still happens", functi
     for _, case in ipairs(cases) do
         local before = #read(root, "calls")
         local out, code, errors = dev(root, home, case.args, { split = true, input = case.input })
-        t.eq(code, 0)
-        t.eq(errors, warning)
-        t.eq(out:find("warning", 1, true), nil)
+        testing.eq(code, 0)
+        testing.eq(errors, warning)
+        testing.eq(out:find("warning", 1, true), nil)
         local calls = read(root, "calls"):sub(before + 1)
-        t.ok(calls:find("-X " .. case.verb, 1, true), calls)
-        t.ok(calls:find(case.marker, 1, true), calls)
+        testing.ok(calls:find("-X " .. case.verb, 1, true), calls)
+        testing.ok(calls:find(case.marker, 1, true), calls)
     end
 end)
 
-t.test("edit finds the board from a subdirectory and not from outside the project", function()
+testing.test("edit finds the board from a subdirectory and not from outside the project", function()
     local root, home = sandbox()
     local text = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n"
     local sub = root .. "/src/deep"
@@ -5877,8 +6085,8 @@ t.test("edit finds the board from a subdirectory and not from outside the projec
             { "board", "edit", "11111111-a" },
             { input = text, cwd = cwd }
         )
-        t.eq(code, 0, out)
-        t.eq(out, "edited 11111111\n")
+        testing.eq(code, 0, out)
+        testing.eq(out, "edited 11111111\n")
     end
     for _, word in ipairs({ "edit", "show" }) do
         local out, code = dev(
@@ -5887,12 +6095,12 @@ t.test("edit finds the board from a subdirectory and not from outside the projec
             { "board", word, "11111111-a" },
             { input = text, cwd = home }
         )
-        t.eq(code, 1, out)
-        t.eq(out, "dev: no board for this project\n")
+        testing.eq(code, 1, out)
+        testing.eq(out, "dev: no board for this project\n")
     end
 end)
 
-t.test("a nonexistent column on the board is reported", function()
+testing.test("a nonexistent column on the board is reported", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/detail.json", '{"id":"board-1","name":"dotfiles","columns":[]}'))
     local out, code = dev(
@@ -5900,65 +6108,65 @@ t.test("a nonexistent column on the board is reported", function()
         home,
         { "board", "add", "x", "--problem", "x", "--size", "1", "--done-when", "a" }
     )
-    t.eq(code, 1)
-    t.ok(out:find("the board has no Backlog column", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("the board has no Backlog column", 1, true), out)
 end)
 
-t.test("board refuses --remote like the other machine-local nouns", function()
+testing.test("board refuses --remote like the other machine-local nouns", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "--remote", "--", "board", "ls" })
-    t.eq(code, 2)
-    t.eq(out, "dev board ls: runs on this machine only, so --remote does not apply\n")
+    testing.eq(code, 2)
+    testing.eq(out, "dev board ls: runs on this machine only, so --remote does not apply\n")
 end)
 
-t.test("capture_input hands the input to stdin and keeps it out of argv", function()
+testing.test("capture_input hands the input to stdin and keeps it out of argv", function()
     local out, code = devos.capture_input({ "sh", "-c", "cat; echo done" }, "secret\n")
-    t.eq(out, "secret\ndone\n")
-    t.eq(code, 0)
+    testing.eq(out, "secret\ndone\n")
+    testing.eq(code, 0)
     out, code = devos.capture_input({ "sh", "-c", "cat >/dev/null; exit 5" }, "x")
-    t.eq(code, 5)
-    t.raises(function()
+    testing.eq(code, 5)
+    testing.raises(function()
         devos.capture_input({ "cat" }, "x", { stdout = "null" })
     end, "standard output")
 end)
 
-t.test("capture_input merges standard error into the output when asked", function()
+testing.test("capture_input merges standard error into the output when asked", function()
     local out, code = devos.capture_input(
         { "sh", "-c", "cat >/dev/null; echo oops >&2" },
         "x",
         { stderr = "stdout" }
     )
-    t.eq(out, "oops\n")
-    t.eq(code, 0)
+    testing.eq(out, "oops\n")
+    testing.eq(code, 0)
 end)
 
-t.test("capture_input leaves no temporary file behind", function()
+testing.test("capture_input leaves no temporary file behind", function()
     local dir = support.tempdir()
     local script = string.format(
         "package.path = %q; local o = require('dev.os'); o.capture_input({'cat'}, 'x'); o.capture_input({'sh', '-c', 'cat >/dev/null; exit 3'}, 'x')",
         support.absolute_path()
     )
     local _, code = devos.capture({ "luajit", "-e", script }, { env = { TMPDIR = dir } })
-    t.eq(code, 0)
-    t.eq(fs.list(dir), {})
+    testing.eq(code, 0)
+    testing.eq(fs.list(dir), {})
 end)
 
-t.test("a non-JSON answer from the server is reported as unreadable", function()
+testing.test("a non-JSON answer from the server is reported as unreadable", function()
     local root, home = sandbox()
     executable(
         root .. "/bin/curl",
         "#!/bin/sh\ncat >/dev/null\nprintf '<html>bad gateway</html>\\n502'\n"
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("board unavailable: pomb sent an answer dev cannot read", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("board unavailable: pomb sent an answer dev cannot read", 1, true), out)
 end)
 
-t.test("a note may begin with a dash", function()
+testing.test("a note may begin with a dash", function()
     local backend = fake(sample())
     local result = commands.run("note", { "cccccccc", "- fixed", "it" }, backend)
-    t.eq(backend.calls[1], { "note", ID_C, "- fixed it", {} })
-    t.eq(result.output, "noted cccccccc")
+    testing.eq(backend.calls[1], { "note", ID_C, "- fixed it", {} })
+    testing.eq(result.output, "noted cccccccc")
 end)
 
 local function heartbeats(root)
@@ -6004,119 +6212,123 @@ local function settle(root)
     return before
 end
 
-t.test("take claims the card and renews the claim while the loop runs", function()
+testing.test("take claims the card and renews the claim while the loop runs", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
-    t.eq(code, 0)
-    t.ok(out:find("took 11111111, fence 7, renewing every 5m for up to 50m", 1, true), out)
+    testing.eq(code, 0)
+    testing.ok(out:find("took 11111111, fence 7, renewing every 5m for up to 50m", 1, true), out)
     local calls = read(root, "calls")
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/claim", 1, true), calls)
-    t.ok(calls:find('"ttl_seconds":900', 1, true), calls)
-    t.ok(calls:find('"claimant":"dev@', 1, true), calls)
-    t.ok(wait_until(function()
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/claim", 1, true), calls)
+    testing.ok(calls:find('"ttl_seconds":900', 1, true), calls)
+    testing.ok(calls:find('"claimant":"dev@', 1, true), calls)
+    testing.ok(wait_until(function()
         return heartbeats(root) >= 3
     end))
-    t.ok(read(root, "calls"):find('{"fence":7}', 1, true))
-    t.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/heartbeat", 1, true))
+    testing.ok(read(root, "calls"):find('{"fence":7}', 1, true))
+    testing.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/heartbeat", 1, true))
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("the state file holds the card, the fence and the pid at mode 600", function()
+testing.test("the state file holds the card, the fence and the pid at mode 600", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
     local state = read(home, "state/dev/board/" .. ID_A)
-    t.ok(state:find("card=" .. ID_A .. "\nfence=7\npid=", 1, true), state)
-    t.ok(state:find("pid=%d+\n$"), state)
-    t.eq(state:find(TOKEN, 1, true), nil)
+    testing.ok(state:find("card=" .. ID_A .. "\nfence=7\npid=", 1, true), state)
+    testing.ok(state:find("pid=%d+\n$"), state)
+    testing.eq(state:find(TOKEN, 1, true), nil)
     local mode = devos.capture({ "ls", "-l", state_file(home) })
-    t.ok(mode:find("^%-rw%-%-%-%-%-%-%-"), mode)
+    testing.ok(mode:find("^%-rw%-%-%-%-%-%-%-"), mode)
     mode = devos.capture({ "ls", "-ld", home .. "/state/dev/board" })
-    t.ok(mode:find("^drwx%-%-%-%-%-%-"), mode)
+    testing.ok(mode:find("^drwx%-%-%-%-%-%-"), mode)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("release gives the claim up, removes the state and stops the loop", function()
+testing.test("release gives the claim up, removes the state and stops the loop", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
-    t.ok(wait_until(function()
+    testing.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
     local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
-    t.eq(code, 0)
-    t.eq(out, "released 11111111\n")
-    t.ok(
+    testing.eq(code, 0)
+    testing.eq(out, "released 11111111\n")
+    testing.ok(
         read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/release", 1, true),
         read(root, "calls")
     )
-    t.eq(fs.exists(state_file(home)), false)
-    t.ok(loop_gone(pid))
+    testing.eq(fs.exists(state_file(home)), false)
+    testing.ok(loop_gone(pid))
     local after = settle(root)
-    t.eq(heartbeats(root), after)
+    testing.eq(heartbeats(root), after)
 end)
 
-t.test("release without a taken claim is a plain error", function()
+testing.test("release without a taken claim is a plain error", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
-    t.eq(code, 1)
-    t.ok(out:find("no claim was taken", 1, true), out)
-    t.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
+    testing.eq(code, 1)
+    testing.ok(out:find("no claim was taken", 1, true), out)
+    testing.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
 end)
 
-t.test("move out of progress stops the loop and sends the fence", function()
+testing.test("move out of progress stops the loop and sends the fence", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    t.ok(wait_until(function()
+    testing.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
     local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
-    t.eq(code, 0)
-    t.eq(out, "moved 11111111 to Review\n")
+    testing.eq(code, 0)
+    testing.eq(out, "moved 11111111 to Review\n")
     local moved = read(root, "calls"):match("[^\n]*/move\n?")
-    t.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
-    t.ok(
+    testing.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
+    testing.ok(
         read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/release", 1, true),
         read(root, "calls")
     )
-    t.eq(fs.exists(state_file(home)), false)
-    t.ok(loop_gone(pid))
+    testing.eq(fs.exists(state_file(home)), false)
+    testing.ok(loop_gone(pid))
     local after = settle(root)
-    t.eq(heartbeats(root), after)
+    testing.eq(heartbeats(root), after)
 end)
 
-t.test("move into progress does not release the claim", function()
+testing.test("move into progress does not release the claim", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
-    t.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
+    testing.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("take prints the card with every comment in full after the claim", function()
+testing.test("take prints the card with every comment in full after the claim", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
-    t.eq(code, 0, out)
-    t.ok(out:find("^took 11111111, fence 7"), out)
-    t.ok(out:find("\n\n11111111  Ready  1 Pomodoro  docs  First\n", 1, true), out)
-    t.ok(out:find("first\n", 1, true) and out:find("line", 1, true), out)
-    t.ok(out:find("mine? no", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111, fence 7"), out)
+    testing.ok(out:find("\n\n11111111  Ready  1 Pomodoro  docs  First\n", 1, true), out)
+    testing.ok(out:find("first\n", 1, true) and out:find("line", 1, true), out)
+    testing.ok(out:find("mine? no", 1, true), out)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("a move into progress that takes the claim prints the card and its comments", function()
-    local root, home = sandbox({ export = PLANNED_EXPORT })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
-    t.eq(code, 0, out)
-    t.ok(out:find("^moved 11111111 to In Progress\n\n11111111  In Progress  "), out)
-    t.ok(out:find("mine? no", 1, true), out)
-    out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
-    t.eq(code, 0, out)
-    t.eq(out, "moved 11111111 to In Progress\n")
-    dev(root, home, { "board", "release", "11111111-a" })
-end)
+testing.test(
+    "a move into progress that takes the claim prints the card and its comments",
+    function()
+        local root, home = sandbox({ export = PLANNED_EXPORT })
+        local out, code =
+            dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("^moved 11111111 to In Progress\n\n11111111  In Progress  "), out)
+        testing.ok(out:find("mine? no", 1, true), out)
+        out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
+        testing.eq(code, 0, out)
+        testing.eq(out, "moved 11111111 to In Progress\n")
+        dev(root, home, { "board", "release", "11111111-a" })
+    end
+)
 
-t.test("move into progress posts the claim then the move to In Progress", function()
+testing.test("move into progress posts the claim then the move to In Progress", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(
         root,
@@ -6124,19 +6336,19 @@ t.test("move into progress posts the claim then the move to In Progress", functi
         { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
-    t.eq(code, 0, out)
-    t.ok(out:find("^moved 11111111 to " .. PROGRESS_NAME .. "\n"), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^moved 11111111 to " .. PROGRESS_NAME .. "\n"), out)
     local calls = read(root, "calls")
     local claim = calls:find("/api/tasks/" .. ID_A .. "/claim\n", 1, true)
     local moved = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
-    t.ok(claim and moved and claim < moved, calls)
+    testing.ok(claim and moved and claim < moved, calls)
     local move_line = calls:match("[^\n]*/move\n?")
-    t.ok(move_line:find('"column_id":"' .. PROGRESS_COLUMN .. '"', 1, true), move_line)
-    t.ok(move_line:find("If-Claim-Fence: 7", 1, true), move_line)
+    testing.ok(move_line:find('"column_id":"' .. PROGRESS_COLUMN .. '"', 1, true), move_line)
+    testing.ok(move_line:find("If-Claim-Fence: 7", 1, true), move_line)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("take keeps the claim and warns when the card cannot be read after it", function()
+testing.test("take keeps the claim and warns when the card cannot be read after it", function()
     local root, home = sandbox()
     executable(
         root .. "/bin/curl",
@@ -6146,64 +6358,73 @@ t.test("take keeps the claim and warns when the card cannot be read after it", f
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
-    t.eq(code, 0, out)
-    t.ok(out:find("took 11111111, fence 7", 1, true), out)
-    t.ok(out:find("dev: took 11111111, but ", 1, true), out)
-    t.eq(fs.exists(state_file(home)), true)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("took 11111111, fence 7", 1, true), out)
+    testing.ok(out:find("dev: took 11111111, but ", 1, true), out)
+    testing.eq(fs.exists(state_file(home)), true)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("take names the claimant from --as, then DEV_AGENT, else dev@host", function()
+testing.test("take names the claimant from --as, then DEV_AGENT, else dev@host", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", "project-alt/x" })
-    t.eq(code, 0, out)
-    t.ok(read(root, "calls"):find('"claimant":"project-alt/x"', 1, true), read(root, "calls"))
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find('"claimant":"project-alt/x"', 1, true), read(root, "calls"))
     dev(root, home, { "board", "release", "11111111-a" })
     out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "dotfiles/env" })
-    t.eq(code, 0, out)
-    t.ok(read(root, "calls"):find('"claimant":"dotfiles/env"', 1, true), read(root, "calls"))
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find('"claimant":"dotfiles/env"', 1, true), read(root, "calls"))
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("take refuses a name that is not one word of the allowed characters", function()
+testing.test("take refuses a name that is not one word of the allowed characters", function()
     local root, home = sandbox()
     for _, name in ipairs({ "two words", "semi;colon", "a:b" }) do
         local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
-        t.eq(code, 2, out)
+        testing.eq(code, 2, out)
     end
-    t.eq(commands.run("take", { "11111111-a", "--as", "" }, fake(sample())).code, 2)
+    testing.eq(commands.run("take", { "11111111-a", "--as", "" }, fake(sample())).code, 2)
     local _, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "bad name" })
-    t.eq(code, 2)
-    t.eq(read(root, "calls"):find("/claim", 1, true), nil)
+    testing.eq(code, 2)
+    testing.eq(read(root, "calls"):find("/claim", 1, true), nil)
 end)
 
-t.test("DEV_AGENT shape accepts repo/role and repo/role/card", function()
+testing.test("DEV_AGENT shape accepts repo/role and repo/role/card", function()
     for _, name in ipairs({ "dotfiles/lead", "infra/runner/39f0e015", "a.b_c/d-e/1" }) do
         local root, home = sandbox()
         local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
-        t.eq(code, 0, out)
-        t.ok(read(root, "calls"):find('"claimant":"' .. name .. '"', 1, true), read(root, "calls"))
+        testing.eq(code, 0, out)
+        testing.ok(
+            read(root, "calls"):find('"claimant":"' .. name .. '"', 1, true),
+            read(root, "calls")
+        )
         dev(root, home, { "board", "release", "11111111-a" })
     end
 end)
 
-t.test("DEV_AGENT shape refuses one part, four parts, a space and an empty segment", function()
-    local names =
-        { "lander", "dotfiles/implementer/38f0e013/1", "a b/c", "a//b", "/a", "a/b/", "a/b c" }
-    for _, name in ipairs(names) do
-        local root, home = sandbox()
-        local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
-        t.eq(code, 2, out)
-        if not name:find(" ", 1, true) then
-            t.ok(out:find("an agent name is <repo>/<role>[/<card>], got " .. name, 1, true), out)
+testing.test(
+    "DEV_AGENT shape refuses one part, four parts, a space and an empty segment",
+    function()
+        local names =
+            { "lander", "dotfiles/implementer/38f0e013/1", "a b/c", "a//b", "/a", "a/b/", "a/b c" }
+        for _, name in ipairs(names) do
+            local root, home = sandbox()
+            local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
+            testing.eq(code, 2, out)
+            if not name:find(" ", 1, true) then
+                testing.ok(
+                    out:find("an agent name is <repo>/<role>[/<card>], got " .. name, 1, true),
+                    out
+                )
+            end
+            testing.eq(read(root, "calls"):find("/claim", 1, true), nil)
+            out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
+            testing.eq(code, 2, out)
         end
-        t.eq(read(root, "calls"):find("/claim", 1, true), nil)
-        out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
-        t.eq(code, 2, out)
     end
-end)
+)
 
-t.test("DEV_AGENT shape refuses move into progress of an unclaimed card", function()
+testing.test("DEV_AGENT shape refuses move into progress of an unclaimed card", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(
         root,
@@ -6211,11 +6432,11 @@ t.test("DEV_AGENT shape refuses move into progress of an unclaimed card", functi
         { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "builder" }
     )
-    t.eq(code, 2, out)
-    t.eq(read(root, "calls"):find("/claim", 1, true), nil)
+    testing.eq(code, 2, out)
+    testing.eq(read(root, "calls"):find("/claim", 1, true), nil)
 end)
 
-t.test("an old-shape claimant still moves and lands its claimed card", function()
+testing.test("an old-shape claimant still moves and lands its claimed card", function()
     local old = "dotfiles/implementer/95f0e009/1"
     local card = colored("green")
     card.column = support.COLUMN_NAME.READY
@@ -6223,28 +6444,31 @@ t.test("an old-shape claimant still moves and lands its claimed card", function(
     local backend = fake({ card })
     as_agent(old, function()
         local result = commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
-        t.eq(result.code, nil, result.message)
-        t.eq(result.output, "moved cccccccc to Backlog")
+        testing.eq(result.code, nil, result.message)
+        testing.eq(result.output, "moved cccccccc to Backlog")
     end)
 end)
 
-t.test("move into progress takes the claim of an unclaimed card under the agent name", function()
-    local root, home = sandbox({ export = PLANNED_EXPORT })
-    local out, code = dev(
-        root,
-        home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
-        { agent = "r/one" }
-    )
-    t.eq(code, 0, out)
-    local calls = read(root, "calls")
-    t.ok(calls:find('"claimant":"r/one"', 1, true), calls)
-    t.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
-    t.eq(fs.exists(state_file(home)), true)
-    dev(root, home, { "board", "release", "11111111-a" })
-end)
+testing.test(
+    "move into progress takes the claim of an unclaimed card under the agent name",
+    function()
+        local root, home = sandbox({ export = PLANNED_EXPORT })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+            { agent = "r/one" }
+        )
+        testing.eq(code, 0, out)
+        local calls = read(root, "calls")
+        testing.ok(calls:find('"claimant":"r/one"', 1, true), calls)
+        testing.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
+        testing.eq(fs.exists(state_file(home)), true)
+        dev(root, home, { "board", "release", "11111111-a" })
+    end
+)
 
-t.test("epic_done_children_claim", function()
+testing.test("epic_done_children_claim", function()
     local root, home = sandbox({
         export = PLANNED_EXPORT,
         task = EPIC_TASK:format(3),
@@ -6255,11 +6479,11 @@ t.test("epic_done_children_claim", function()
         { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local calls = read(root, "calls")
-    t.ok(calls:find("/claim", 1, true), calls)
-    t.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
-    t.eq(fs.exists(state_file(home)), true)
+    testing.ok(calls:find("/claim", 1, true), calls)
+    testing.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
+    testing.eq(fs.exists(state_file(home)), true)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -6269,7 +6493,7 @@ local function refusing_moves(root)
     curl_with(root, REFUSED_MOVE)
 end
 
-t.test("a move into progress that Pomb refuses releases the claim it just took", function()
+testing.test("a move into progress that Pomb refuses releases the claim it just took", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     refusing_moves(root)
     local out, code = dev(
@@ -6278,18 +6502,18 @@ t.test("a move into progress that Pomb refuses releases the claim it just took",
         { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
-    t.eq(code, 1)
-    t.ok(out:find("no room", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("no room", 1, true), out)
     local calls = read(root, "calls")
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/claim\n", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/claim\n", 1, true), calls)
     local moved = calls:match("[^\n]*/move\n?")
-    t.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/claim/release", 1, true), calls)
-    t.ok(calls:find('{"fence":7}', 1, true), calls)
-    t.eq(fs.exists(state_file(home)), false)
+    testing.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/claim/release", 1, true), calls)
+    testing.ok(calls:find('{"fence":7}', 1, true), calls)
+    testing.eq(fs.exists(state_file(home)), false)
 end)
 
-t.test("a move into progress of a card claimed elsewhere takes no claim", function()
+testing.test("a move into progress of a card claimed elsewhere takes no claim", function()
     local live = '"claim":{"claimant":"dev@box:42","expires_at":"2999-01-01T00:00:00Z"}'
     local export = PLANNED_EXPORT:gsub('"labels":%["docs"%]', '"labels":["docs"],' .. live, 1)
     local root, home = sandbox({ export = export })
@@ -6300,14 +6524,14 @@ t.test("a move into progress of a card claimed elsewhere takes no claim", functi
         { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
         { agent = "r/one" }
     )
-    t.eq(code, 1)
-    t.ok(out:find("no room", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("no room", 1, true), out)
     local calls = read(root, "calls")
-    t.eq(calls:find("/claim", 1, true), nil)
-    t.eq(fs.exists(state_file(home)), false)
+    testing.eq(calls:find("/claim", 1, true), nil)
+    testing.eq(fs.exists(state_file(home)), false)
 end)
 
-t.test("move to ready takes an epic like any card", function()
+testing.test("move to ready takes an epic like any card", function()
     local description =
         "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a"
     local export = EXPORT:gsub("Why it matters%.", description, 1)
@@ -6316,86 +6540,92 @@ t.test("move to ready takes an epic like any card", function()
         task = EPIC_TASK:format(3),
     })
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.READY })
-    t.eq(code, 0, out)
-    t.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
-t.test("a queued change that hits the needs:human refusal is dropped with its reason", function()
-    local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:human"]', 1)
-    local root, home = sandbox({ export = export })
-    local queue = queue_file(home)
-    assert(fs.mkdir(home .. "/state/dev/boards", { parents = true }))
-    assert(
-        fs.write(
-            queue,
-            '[{"sub":"move","args":["11111111-a","review"],"at":"2026-10-30T00:00:00Z"}]\n'
+testing.test(
+    "a queued change that hits the needs:human refusal is dropped with its reason",
+    function()
+        local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:human"]', 1)
+        local root, home = sandbox({ export = export })
+        local queue = queue_file(home)
+        assert(fs.mkdir(home .. "/state/dev/boards", { parents = true }))
+        assert(
+            fs.write(
+                queue,
+                '[{"sub":"move","args":["11111111-a","review"],"at":"2026-10-30T00:00:00Z"}]\n'
+            )
         )
-    )
-    local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 0, out)
-    t.ok(out:find("dropped move 11111111-a: 11111111 is labelled needs:human", 1, true), out)
-    t.eq(fs.exists(queue), false)
-    t.eq(read(root, "calls"):find("/move", 1, true), nil)
-end)
+        local out, code = dev(root, home, { "board", "ls" })
+        testing.eq(code, 0, out)
+        testing.ok(
+            out:find("dropped move 11111111-a: 11111111 is labelled needs:human", 1, true),
+            out
+        )
+        testing.eq(fs.exists(queue), false)
+        testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+    end
+)
 
-t.test("a release the server refuses after a move warns and the move succeeds", function()
+testing.test("a release the server refuses after a move warns and the move succeeds", function()
     local root, home = sandbox({ export = PLANNED_DONE_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/claim/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
-    t.eq(code, 0)
-    t.ok(out:find("moved 11111111 to Done", 1, true), out)
-    t.ok(out:find("the claim was not released", 1, true), out)
-    t.eq(fs.exists(state_file(home)), false)
+    testing.eq(code, 0)
+    testing.ok(out:find("moved 11111111 to Done", 1, true), out)
+    testing.ok(out:find("the claim was not released", 1, true), out)
+    testing.eq(fs.exists(state_file(home)), false)
 end)
 
-t.test("move into progress keeps the loop and the state", function()
+testing.test("move into progress keeps the loop and the state", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
-    t.eq(fs.exists(state_file(home)), true)
+    testing.eq(fs.exists(state_file(home)), true)
     local seen = heartbeats(root)
-    t.ok(wait_until(function()
+    testing.ok(wait_until(function()
         return heartbeats(root) > seen
     end))
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("the loop ends by itself after twice the card's size", function()
+testing.test("the loop ends by itself after twice the card's size", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
-    t.ok(wait_until(function()
+    testing.ok(wait_until(function()
         return not fs.exists(state_file(home))
     end))
-    t.eq(settle(root), 10)
+    testing.eq(settle(root), 10)
 end)
 
-t.test("a renewal the server refuses ends the loop", function()
+testing.test("a renewal the server refuses ends the loop", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/hb_status", "409"))
     dev(root, home, { "board", "take", "11111111-a" })
-    t.ok(wait_until(function()
+    testing.ok(wait_until(function()
         return not fs.exists(state_file(home))
     end))
-    t.eq(settle(root), 1)
+    testing.eq(settle(root), 1)
 end)
 
-t.test("a renewal that cannot reach the server keeps trying", function()
+testing.test("a renewal that cannot reach the server keeps trying", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/hb_status", "503"))
     dev(root, home, { "board", "take", "11111111-a" })
-    t.ok(wait_until(function()
+    testing.ok(wait_until(function()
         return heartbeats(root) >= 3
     end))
-    t.eq(fs.exists(state_file(home)), true)
+    testing.eq(fs.exists(state_file(home)), true)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("a second take renews with the stored fence", function()
+testing.test("a second take renews with the stored fence", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "take", "11111111-a" })
-    t.ok(
+    testing.ok(
         read(root, "calls"):find('"fence":7,"ttl_seconds"', 1, true)
             or read(root, "calls"):find('"ttl_seconds":900,"fence":7', 1, true),
         read(root, "calls")
@@ -6403,41 +6633,41 @@ t.test("a second take renews with the stored fence", function()
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-t.test("take and release want exactly one card", function()
+testing.test("take and release want exactly one card", function()
     local root, home = sandbox()
     for _, sub in ipairs({ "take", "release" }) do
         local _, code = dev(root, home, { "board", sub })
-        t.eq(code, 2)
+        testing.eq(code, 2)
         _, code = dev(root, home, { "board", sub, "11111111-a", "extra" })
-        t.eq(code, 2)
+        testing.eq(code, 2)
     end
 end)
 
-t.test("the token never reaches argv, the environment, the state or the output", function()
+testing.test("the token never reaches argv, the environment, the state or the output", function()
     local root, home = sandbox()
     executable(
         root .. "/bin/curl",
         (CURL:gsub('cat >"$ROOT/stdin"', 'env >>"$ROOT/env"\ncat >"$ROOT/stdin.$$"', 1))
     )
     local out = dev(root, home, { "-vv", "board", "take", "11111111-a" })
-    t.ok(wait_until(function()
+    testing.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
     local ps = devos.capture({ "ps", "-ax", "-o", "command=" })
     out = out .. dev(root, home, { "-vv", "board", "release", "11111111-a" })
-    t.eq(out:find(TOKEN, 1, true), nil)
-    t.eq(ps:find(TOKEN, 1, true), nil)
-    t.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
-    t.eq(read(root, "env"):find(TOKEN, 1, true), nil)
-    t.eq(read(home, "state/dev/board/" .. ID_A):find(TOKEN, 1, true), nil)
+    testing.eq(out:find(TOKEN, 1, true), nil)
+    testing.eq(ps:find(TOKEN, 1, true), nil)
+    testing.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
+    testing.eq(read(root, "env"):find(TOKEN, 1, true), nil)
+    testing.eq(read(home, "state/dev/board/" .. ID_A):find(TOKEN, 1, true), nil)
     local header = 'header = "Authorization: Bearer ' .. TOKEN .. '"\n'
     local seen = devos.capture({ "sh", "-c", 'cat "$1"/stdin.*', "sh", root })
-    t.ok(seen:find(header, 1, true), seen)
-    t.eq((seen:gsub(header:gsub("%p", "%%%0"), "")), "")
-    t.ok(read(root, "calls"):find("-K -", 1, true))
+    testing.ok(seen:find(header, 1, true), seen)
+    testing.eq((seen:gsub(header:gsub("%p", "%%%0"), "")), "")
+    testing.ok(read(root, "calls"):find("-K -", 1, true))
 end)
 
-t.test("ls shows who holds a live claim and ignores an expired one", function()
+testing.test("ls shows who holds a live claim and ignores an expired one", function()
     local root, home = sandbox()
     local live = '"claim":{"claimant":"dev@box:42","expires_at":"2999-01-01T00:00:00Z"}'
     local dead = '"claim":{"claimant":"dev@old:1","expires_at":"2001-01-01T00:00:00Z"}'
@@ -6456,60 +6686,60 @@ t.test("ls shows who holds a live claim and ignores an expired one", function()
         )
     )
     local out = dev(root, home, { "board", "ls" })
-    t.eq(
+    testing.eq(
         out,
         "11111111  Ready  unsized  -  dev@box:42  First\n"
             .. "11111111  Ready  unsized  -  -           Second\n"
     )
 end)
 
-t.test("ls adds no holder column while nobody holds a claim", function()
+testing.test("ls adds no holder column while nobody holds a claim", function()
     local cards = sample()
     local result = commands.run("ls", {}, fake(cards))
-    t.eq(result.output:find("dev@", 1, true), nil)
+    testing.eq(result.output:find("dev@", 1, true), nil)
     cards[1].claimant = "dev@box:1"
     result = commands.run("ls", {}, fake(cards))
-    t.eq(
+    testing.eq(
         result.output,
         "11111111  Ready    1 Pomodoro  docs  dev@box:1  Write docs\n"
             .. "11111111  Backlog  unsized     -     -          Fix lint"
     )
 end)
 
-t.test("a release the server refuses keeps the state so it can be retried", function()
+testing.test("a release the server refuses keeps the state so it can be retried", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/claim/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
-    t.eq(code, 1)
-    t.ok(out:find("pomb answered 503", 1, true), out)
-    t.eq(fs.exists(state_file(home)), true)
+    testing.eq(code, 1)
+    testing.ok(out:find("pomb answered 503", 1, true), out)
+    testing.eq(fs.exists(state_file(home)), true)
     executable(root .. "/bin/curl", CURL)
     _, code = dev(root, home, { "board", "release", "11111111-a" })
-    t.eq(code, 0)
+    testing.eq(code, 0)
 end)
 
-t.test("stale reads column_entered_at from every page of the tasks view", function()
+testing.test("stale reads column_entered_at from every page of the tasks view", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "stale" })
-    t.eq(code, 0)
-    t.ok(
+    testing.eq(code, 0)
+    testing.ok(
         out:find(
             "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n\nnewest comment is the owner's:\n.-\n\nunsized outside Icebox:\n"
         ),
         out
     )
-    t.ok(out:find("unsized outside Icebox:.*cccccccc  Backlog +Early.*could not date"), out)
-    t.ok(out:find("unsized outside Icebox:.*11111111  Ready +Second.*could not date"), out)
-    t.ok(out:find("could not date cccccccc%S+ Early\n$"), out)
+    testing.ok(out:find("unsized outside Icebox:.*cccccccc  Backlog +Early.*could not date"), out)
+    testing.ok(out:find("unsized outside Icebox:.*11111111  Ready +Second.*could not date"), out)
+    testing.ok(out:find("could not date cccccccc%S+ Early\n$"), out)
     local calls = read(root, "calls")
-    t.ok(
+    testing.ok(
         calls:find("/tasks?limit=500 ", 1, true) or calls:find("/tasks?limit=500\n", 1, true),
         calls
     )
-    t.ok(calls:find("/tasks?limit=500&cursor=c2", 1, true), calls)
+    testing.ok(calls:find("/tasks?limit=500&cursor=c2", 1, true), calls)
     out, code = dev(root, home, { "board", "stale", "--days", "x" })
-    t.eq(code, 2)
+    testing.eq(code, 2)
 end)
 
 local function answering(root, routes)
@@ -6522,7 +6752,7 @@ local function answering(root, routes)
     )
 end
 
-t.test("a permission_denied with no board says the token lacks it everywhere", function()
+testing.test("a permission_denied with no board says the token lacks it everywhere", function()
     local root, home = sandbox()
     answering(
         root,
@@ -6530,15 +6760,15 @@ t.test("a permission_denied with no board says the token lacks it everywhere", f
 ]]
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(
+    testing.eq(code, 1)
+    testing.eq(
         out,
         "dev: board unavailable: pomb answered 403: this token lacks the tasks.edit permission "
             .. "on every board; use a token that has it\n"
     )
 end)
 
-t.test("a permission_denied with a board says the board is not assigned", function()
+testing.test("a permission_denied with a board says the board is not assigned", function()
     local root, home = sandbox()
     answering(
         root,
@@ -6546,8 +6776,8 @@ t.test("a permission_denied with a board says the board is not assigned", functi
 ]]
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(
+    testing.eq(code, 1)
+    testing.eq(
         out,
         "dev: board unavailable: this token has the tasks.edit permission but is not assigned "
             .. "to board board-9; add the board to the token\n"
@@ -6565,7 +6795,7 @@ local function refusing(root, who, status_line)
     )
 end
 
-t.test("role-refusal-denied names the refused permission and the role", function()
+testing.test("role-refusal-denied names the refused permission and the role", function()
     local root, home = sandbox()
     refusing(
         root,
@@ -6573,15 +6803,15 @@ t.test("role-refusal-denied names the refused permission and the role", function
         '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":null}\\n403'
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(
+    testing.eq(code, 1)
+    testing.eq(
         out,
         "dev: board unavailable: pomb answered 403: this token (role implementer) lacks the "
             .. "tasks.edit permission on every board; use a token that has it\n"
     )
 end)
 
-t.test("role-refusal-exceeds-grant names the refused action and the role", function()
+testing.test("role-refusal-exceeds-grant names the refused action and the role", function()
     local root, home = sandbox()
     refusing(
         root,
@@ -6589,11 +6819,14 @@ t.test("role-refusal-exceeds-grant names the refused action and the role", funct
         '{"code":"exceeds_grant","action":"tasks.bin","message":"m"}\\n403'
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(out, "dev: board unavailable: pomb answered 403: the implementer role cannot tasks.bin\n")
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "dev: board unavailable: pomb answered 403: the implementer role cannot tasks.bin\n"
+    )
 end)
 
-t.test("role-refusal-norole keeps the refusal text with no role named", function()
+testing.test("role-refusal-norole keeps the refusal text with no role named", function()
     local root, home = sandbox()
     refusing(
         root,
@@ -6601,11 +6834,11 @@ t.test("role-refusal-norole keeps the refusal text with no role named", function
         '{"code":"exceeds_grant","action":"tasks.bin","message":"too much"}\\n403'
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(out, "dev: board unavailable: pomb answered 403: too much\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev: board unavailable: pomb answered 403: too much\n")
 end)
 
-t.test("role-refusal-expired says the role token expired and to mint it again", function()
+testing.test("role-refusal-expired says the role token expired and to mint it again", function()
     local root, home = sandbox()
     answering(
         root,
@@ -6613,11 +6846,14 @@ t.test("role-refusal-expired says the role token expired and to mint it again", 
 ]]
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(out, "dev: board unavailable: the role token expired; mint it again from its issuer\n")
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "dev: board unavailable: the role token expired; mint it again from its issuer\n"
+    )
 end)
 
-t.test("an insufficient_scope 403 still reports the server's message", function()
+testing.test("an insufficient_scope 403 still reports the server's message", function()
     local root, home = sandbox()
     answering(
         root,
@@ -6625,11 +6861,14 @@ t.test("an insufficient_scope 403 still reports the server's message", function(
 ]]
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(out, "dev: board unavailable: pomb answered 403: insufficient token scope: needs admin\n")
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "dev: board unavailable: pomb answered 403: insufficient token scope: needs admin\n"
+    )
 end)
 
-t.test("a board missing from a token's assigned boards gets its own message", function()
+testing.test("a board missing from a token's assigned boards gets its own message", function()
     local root, home = sandbox()
     answering(
         root,
@@ -6638,27 +6877,27 @@ t.test("a board missing from a token's assigned boards gets its own message", fu
 ]]
     )
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.eq(
+    testing.eq(code, 1)
+    testing.eq(
         out,
         "dev: board unavailable: pomb lists no board named dotfiles for this token, which is "
             .. "assigned only to Other; if the board exists, add it to the token\n"
     )
 end)
 
-t.test("a missing board stays plain on a token that sees every board", function()
+testing.test("a missing board stays plain on a token that sees every board", function()
     for _, who in ipairs({ '{"scope":"work"}', '{"permissions":["tasks.read"],"boards":"all"}' }) do
         local root, home = sandbox()
         answering(root, "*/api/v1/auth/whoami) printf '" .. who .. [[\n200' ;;
 */api/boards) printf '[{"id":"b1","name":"Other"}]\n200' ;;
 ]])
         local out, code = dev(root, home, { "board", "ls" })
-        t.eq(code, 1)
-        t.eq(out, "dev: board unavailable: pomb has no board named dotfiles\n")
+        testing.eq(code, 1)
+        testing.eq(out, "dev: board unavailable: pomb has no board named dotfiles\n")
     end
 end)
 
-t.test(
+testing.test(
     "add --checks on a Pomb board without the checks field is refused before any write",
     function()
         local root, home = sandbox({ fields = "[]" })
@@ -6675,89 +6914,101 @@ t.test(
             "--checks",
             "dev test",
         })
-        t.eq(code, 2)
-        t.ok(out:find("no checks field", 1, true), out)
-        t.eq(read(root, "calls"):find("-X POST", 1, true), nil)
+        testing.eq(code, 2)
+        testing.ok(out:find("no checks field", 1, true), out)
+        testing.eq(read(root, "calls"):find("-X POST", 1, true), nil)
     end
 )
 
-t.test("prose_warnings names each hex id, hash and path outside the Change section", function()
-    t.eq(board.prose_warnings("fixed in 2af0e003 and 0ef0e008."), {
-        "card prose holds a hex id or hash: 2af0e003",
-        "card prose holds a hex id or hash: 0ef0e008",
-    })
-    t.eq(board.prose_warnings("see `dotfiles/bin/dev.lua`, ~/notes and ./run, /etc/hosts"), {
-        "card prose holds a path: dotfiles/bin/dev.lua",
-        "card prose holds a path: ~/notes",
-        "card prose holds a path: ./run",
-        "card prose holds a path: /etc/hosts",
-    })
-    t.eq(board.prose_warnings("## Problem\nsee a/b.lua\n\n## Change\n- a/b.lua 2af0e003\n"), {
-        "card prose holds a path: a/b.lua",
-    })
-    t.eq(
-        board.prose_warnings(
-            "## Done when\n- [ ] x\n## Change\nsrc/a.lua\n## Out of scope\nsrc/a.lua"
-        ),
-        {
-            "card prose holds a path: src/a.lua",
-        }
-    )
-end)
+testing.test(
+    "prose_warnings names each hex id, hash and path outside the Change section",
+    function()
+        testing.eq(board.prose_warnings("fixed in 2af0e003 and 0ef0e008."), {
+            "card prose holds a hex id or hash: 2af0e003",
+            "card prose holds a hex id or hash: 0ef0e008",
+        })
+        testing.eq(
+            board.prose_warnings("see `dotfiles/bin/dev.lua`, ~/notes and ./run, /etc/hosts"),
+            {
+                "card prose holds a path: dotfiles/bin/dev.lua",
+                "card prose holds a path: ~/notes",
+                "card prose holds a path: ./run",
+                "card prose holds a path: /etc/hosts",
+            }
+        )
+        testing.eq(
+            board.prose_warnings("## Problem\nsee a/b.lua\n\n## Change\n- a/b.lua 2af0e003\n"),
+            {
+                "card prose holds a path: a/b.lua",
+            }
+        )
+        testing.eq(
+            board.prose_warnings(
+                "## Done when\n- [ ] x\n## Change\nsrc/a.lua\n## Out of scope\nsrc/a.lua"
+            ),
+            {
+                "card prose holds a path: src/a.lua",
+            }
+        )
+    end
+)
 
-t.test("prose_warnings leaves a lone slash command alone", function()
-    t.eq(board.prose_warnings("type /exit or /quit to leave"), {})
-    t.eq(board.prose_warnings("see /etc/hosts, ~/x and /a.lua"), {
+testing.test("prose_warnings leaves a lone slash command alone", function()
+    testing.eq(board.prose_warnings("type /exit or /quit to leave"), {})
+    testing.eq(board.prose_warnings("see /etc/hosts, ~/x and /a.lua"), {
         "card prose holds a path: /etc/hosts",
         "card prose holds a path: ~/x",
         "card prose holds a path: /a.lua",
     })
 end)
 
-t.test("prose_warnings leaves clean prose, plain words, numbers and URLs alone", function()
-    t.eq(board.prose_warnings("a decade of facade 1234567 and 20261028, and/or I/O, v1.2"), {})
-    t.eq(board.prose_warnings("https://example.com/a/b.html deadbeef12 is read"), {
+testing.test("prose_warnings leaves clean prose, plain words, numbers and URLs alone", function()
+    testing.eq(
+        board.prose_warnings("a decade of facade 1234567 and 20261028, and/or I/O, v1.2"),
+        {}
+    )
+    testing.eq(board.prose_warnings("https://example.com/a/b.html deadbeef12 is read"), {
         "card prose holds a hex id or hash: deadbeef12",
     })
-    t.eq(board.prose_warnings(nil), {})
-    t.eq(board.prose_warnings(""), {})
+    testing.eq(board.prose_warnings(nil), {})
+    testing.eq(board.prose_warnings(""), {})
 end)
 
-t.test("add, note and edit report prose warnings and still write", function()
+testing.test("add, note and edit report prose warnings and still write", function()
     local backend = fake(sample())
     local result =
         commands.run("note", { "cccccccc", "see", "2af0e003", "and", "0ef0e008" }, backend)
-    t.eq(result.output, "noted cccccccc")
-    t.eq(#result.warnings, 2)
-    t.eq(#backend.calls, 1)
+    testing.eq(result.output, "noted cccccccc")
+    testing.eq(#result.warnings, 2)
+    testing.eq(#backend.calls, 1)
     result = commands.run("note", { "cccccccc", "all", "clear" }, backend)
-    t.eq(#result.warnings, 0)
+    testing.eq(#result.warnings, 0)
     result = commands.run(
         "add",
         { "X", "--description", "in src/a.lua", "--size", "1", "--done-when", "a" },
         backend
     )
-    t.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    testing.eq(result.warnings, { "card prose holds a path: src/a.lua" })
     result = commands.run("add", { "X", "--description", V1, "--size", "1" }, backend)
-    t.eq(result.warnings, {})
+    testing.eq(result.warnings, {})
     result = commands.run(
         "edit",
         { "cccccccc", "## Change\n- a/b.lua\n## Problem\nx/y.sh\n## Out of scope\nn" },
         backend
     )
-    t.eq(result.warnings, { "card prose holds a path: x/y.sh" })
+    testing.eq(result.warnings, { "card prose holds a path: x/y.sh" })
 end)
 
-t.test("split_checklist takes the Done when items and leaves the rest", function()
+testing.test("split_checklist takes the Done when items and leaves the rest", function()
     local items, rest = board.split_checklist(
         "## Problem\nP\n\n\n## Done when\n* [X] one\n  - [ ] two\n\n## Out of scope\nN\n"
     )
-    t.eq(items, { { name = "one", done = true }, { name = "two", done = false } })
-    t.eq(rest, "## Problem\nP\n\n\n## Out of scope\nN")
+    testing.eq(items, { { name = "one", done = true }, { name = "two", done = false } })
+    testing.eq(rest, "## Problem\nP\n\n\n## Out of scope\nN")
     items, rest = board.split_checklist("## Done when\n- [ ] only\n")
-    t.eq(#items, 1)
-    t.eq(rest, "")
-    t.eq(board.split_checklist("## Problem\n- [ ] not under the heading\n"), nil)
+    testing.eq(#items, 1)
+    testing.eq(rest, "")
+    testing.eq(board.split_checklist("## Problem\n- [ ] not under the heading\n"), nil)
 end)
 
 local function waiting(root, home, call, status)
@@ -6779,7 +7030,7 @@ local function waiting(root, home, call, status)
         },
         stderr = "stdout",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     return assert(require("dev.json").decode(out), out)
 end
 
@@ -6796,7 +7047,7 @@ local function wait_route(root, reply)
     )
 end
 
-t.test("wait returns the events oldest first with column names and the cursor", function()
+testing.test("wait returns the events oldest first with column names and the cursor", function()
     local root, home = sandbox()
     wait_route(
         root,
@@ -6805,7 +7056,7 @@ t.test("wait returns the events oldest first with column names and the cursor", 
             .. '{"cursor":"9","kind":"task_moved","task_id":"t2","column_id":"col-progress","from_column_id":"col-blocked","at":"2026-11-08T10:00:00Z","token_name":null}]}'
     )
     local result = waiting(root, home, "'7', {'task_added', 'task_moved'}, 20")
-    t.eq(result.got, {
+    testing.eq(result.got, {
         cursor = "9",
         events = {
             {
@@ -6824,62 +7075,68 @@ t.test("wait returns the events oldest first with column names and the cursor", 
         },
     })
     local calls = read(root, "calls")
-    t.ok(calls:find("/events/wait?timeout=20&after=7&kinds=task_added,task_moved", 1, true), calls)
+    testing.ok(
+        calls:find("/events/wait?timeout=20&after=7&kinds=task_added,task_moved", 1, true),
+        calls
+    )
 end)
 
-t.test("wait returns an empty list and the cursor to send again", function()
+testing.test("wait returns an empty list and the cursor to send again", function()
     local root, home = sandbox()
     wait_route(root, '{"cursor":"7","events":[]}')
-    t.eq(waiting(root, home, "'7'").got, { cursor = "7", events = {} })
+    testing.eq(waiting(root, home, "'7'").got, { cursor = "7", events = {} })
     local calls = read(root, "calls")
-    t.ok(calls:find("/events/wait?timeout=50&after=7\n", 1, true), calls)
+    testing.ok(calls:find("/events/wait?timeout=50&after=7\n", 1, true), calls)
 end)
 
-t.test("wait with no cursor sends none", function()
+testing.test("wait with no cursor sends none", function()
     local root, home = sandbox()
     wait_route(root, '{"cursor":"3","events":[]}')
-    t.eq(waiting(root, home, "nil, nil, 0").got.cursor, "3")
+    testing.eq(waiting(root, home, "nil, nil, 0").got.cursor, "3")
     local calls = read(root, "calls")
-    t.ok(calls:find("/events/wait?timeout=0\n", 1, true), calls)
+    testing.ok(calls:find("/events/wait?timeout=0\n", 1, true), calls)
 end)
 
-t.test("wait returns the oldest cursor of a 410", function()
+testing.test("wait returns the oldest cursor of a 410", function()
     local root, home = sandbox()
     wait_route(root, '{"code":"cursor_expired","message":"too old","oldest_cursor":"41"}')
     local result = waiting(root, home, "'1'", "410")
-    t.eq(result.got, nil)
-    t.eq(result.oldest, "41")
-    t.ok(result.message:find("pomb answered 410: too old", 1, true), result.message)
+    testing.eq(result.got, nil)
+    testing.eq(result.oldest, "41")
+    testing.ok(result.message:find("pomb answered 410: too old", 1, true), result.message)
 end)
 
-t.test("wait gives curl a max-time above the wait's timeout", function()
+testing.test("wait gives curl a max-time above the wait's timeout", function()
     local root, home = sandbox()
     wait_route(root, '{"cursor":"7","events":[]}')
     waiting(root, home, "'7', nil, 50")
     local calls = read(root, "calls")
-    t.ok(calls:find("--max-time 60 ", 1, true), calls)
-    t.ok(calls:find("--max-time 30 ", 1, true), calls)
+    testing.ok(calls:find("--max-time 60 ", 1, true), calls)
+    testing.ok(calls:find("--max-time 30 ", 1, true), calls)
 end)
 
-t.test("wait surfaces too_many_waits as a 429 and keeps no cursor", function()
+testing.test("wait surfaces too_many_waits as a 429 and keeps no cursor", function()
     local root, home = sandbox()
     wait_route(root, '{"code":"too_many_waits","message":"end one"}')
     local result = waiting(root, home, "'7'", "429")
-    t.eq(result.got, nil)
-    t.eq(result.oldest, nil)
-    t.ok(result.message:find("pomb answered 429: end one", 1, true), result.message)
-    t.eq(result.refused, true)
+    testing.eq(result.got, nil)
+    testing.eq(result.oldest, nil)
+    testing.ok(result.message:find("pomb answered 429: end one", 1, true), result.message)
+    testing.eq(result.refused, true)
 end)
 
-t.test("wait does not flag a 429 with another code or another status as too many waits", function()
-    local root, home = sandbox()
-    wait_route(root, '{"code":"rate_limited","message":"slow down"}')
-    local result = waiting(root, home, "'7'", "429")
-    t.eq(result.refused, nil)
-    wait_route(root, '{"code":"too_many_waits","message":"end one"}')
-    result = waiting(root, home, "'7'", "503")
-    t.eq(result.refused, nil)
-end)
+testing.test(
+    "wait does not flag a 429 with another code or another status as too many waits",
+    function()
+        local root, home = sandbox()
+        wait_route(root, '{"code":"rate_limited","message":"slow down"}')
+        local result = waiting(root, home, "'7'", "429")
+        testing.eq(result.refused, nil)
+        wait_route(root, '{"code":"too_many_waits","message":"end one"}')
+        result = waiting(root, home, "'7'", "503")
+        testing.eq(result.refused, nil)
+    end
+)
 
 local function waiter(replies)
     local seen = { afters = {}, kinds = {}, timeouts = {}, naps = {}, notices = {} }
@@ -6933,7 +7190,7 @@ local function got(cursor, ...)
     return { got = { cursor = cursor, events = { ... } } }
 end
 
-t.test(
+testing.test(
     "wait --for ready prints the card added to or moved into Ready and ignores the rest",
     function()
         local result, seen, path = waited({
@@ -6954,14 +7211,14 @@ t.test(
                 }
             ),
         }, { "--for", "ready" })
-        t.eq(result.output, "added 11111111 to Ready\nmoved cccccccc to Ready")
-        t.eq(seen.afters, { "none", "1", "2" })
-        t.eq(seen.kinds[1], "task_added,task_moved")
-        t.eq(fs.read(path .. ".ready.cursor"), "3\n")
+        testing.eq(result.output, "added 11111111 to Ready\nmoved cccccccc to Ready")
+        testing.eq(seen.afters, { "none", "1", "2" })
+        testing.eq(seen.kinds[1], "task_added,task_moved")
+        testing.eq(fs.read(path .. ".ready.cursor"), "3\n")
     end
 )
 
-t.test(
+testing.test(
     "wait --for human wakes on the owner's move out of Blocked, not an agent's move or comment",
     function()
         local result, seen = waited({
@@ -7000,12 +7257,12 @@ t.test(
                 [ID_A] = { { actor = "agent", at = "2026-11-02T10:00:00Z", body = "wait" } },
             },
         })
-        t.eq(result.output, "moved cccccccc out of Blocked")
-        t.eq(seen.kinds[1], "task_moved,comment_added")
+        testing.eq(result.output, "moved cccccccc out of Blocked")
+        testing.eq(seen.kinds[1], "task_moved,comment_added")
     end
 )
 
-t.test("wait --for human wakes on the owner's comment newer than its start", function()
+testing.test("wait --for human wakes on the owner's comment newer than its start", function()
     local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false },
@@ -7037,12 +7294,12 @@ t.test("wait --for human wakes on the owner's comment newer than its start", fun
         comments = replies,
         now = started,
     })
-    t.eq(result.output, "the owner commented on 11111111")
-    t.eq(seen.kinds[1], "task_moved,comment_added")
-    t.eq(seen.afters, { "none", "1", "2", "3" })
+    testing.eq(result.output, "the owner commented on 11111111")
+    testing.eq(seen.kinds[1], "task_moved,comment_added")
+    testing.eq(seen.afters, { "none", "1", "2", "3" })
 end)
 
-t.test("wait --for human settles for 60 seconds and prints one line per card", function()
+testing.test("wait --for human settles for 60 seconds and prints one line per card", function()
     local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
     local at = "2026-11-02T10:00:00Z"
     local cards = {
@@ -7067,12 +7324,12 @@ t.test("wait --for human settles for 60 seconds and prints one line per card", f
         }, { kind = "comment_added", task_id = ID_C, column = support.COLUMN_NAME.BLOCKED }),
         got("4"),
     }, { "--for", "human" }, { cards = cards, comments = replies, now = started })
-    t.eq(result.output, "the owner commented on 11111111\nmoved 11111111 out of Blocked")
-    t.eq(seen.afters, { "none", "1", "2", "3" })
-    t.eq(seen.timeouts, { "default", "default", 60, 60 })
+    testing.eq(result.output, "the owner commented on 11111111\nmoved 11111111 out of Blocked")
+    testing.eq(seen.afters, { "none", "1", "2", "3" })
+    testing.eq(seen.timeouts, { "default", "default", 60, 60 })
 end)
 
-t.test("wait --for human prints the lines it holds when the cursor is trimmed", function()
+testing.test("wait --for human prints the lines it holds when the cursor is trimmed", function()
     local cards = { { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = {}, done = false } }
     local result = waited({
         got("1"),
@@ -7086,10 +7343,10 @@ t.test("wait --for human prints the lines it holds when the cursor is trimmed", 
         }),
         { oldest = "9" },
     }, { "--for", "human" }, { cards = cards })
-    t.eq(result.output, "moved 11111111 out of Blocked")
+    testing.eq(result.output, "moved 11111111 out of Blocked")
 end)
 
-t.test("wait --for human ignores a human move older than the wait's start", function()
+testing.test("wait --for human ignores a human move older than the wait's start", function()
     local cards = { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
     local result = waited({
         got("1", {
@@ -7110,10 +7367,10 @@ t.test("wait --for human ignores a human move older than the wait's start", func
         }),
         got("3"),
     }, { "--for", "human" }, { cards = cards, now = 100 })
-    t.eq(result.output, "moved cccccccc out of " .. board.DEFAULT_NAMES.blocked)
+    testing.eq(result.output, "moved cccccccc out of " .. board.DEFAULT_NAMES.blocked)
 end)
 
-t.test("wait --for human keeps waiting on a trimmed stream with no moved card", function()
+testing.test("wait --for human keeps waiting on a trimmed stream with no moved card", function()
     local cards = {
         { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false },
         { id = ID_B, column = board.DEFAULT_NAMES.icebox, labels = {}, done = false },
@@ -7130,12 +7387,12 @@ t.test("wait --for human keeps waiting on a trimmed stream with no moved card", 
         { oldest = "20" },
         { message = "stop" },
     }, { "--for", "human" }, { cards = cards })
-    t.eq(result.message, "stop")
-    t.eq(seen.afters, { "none", "9", "10", "11", "20" })
-    t.eq(fs.read(path .. ".human.cursor"), "20\n")
+    testing.eq(result.message, "stop")
+    testing.eq(seen.afters, { "none", "9", "10", "11", "20" })
+    testing.eq(fs.read(path .. ".human.cursor"), "20\n")
 end)
 
-t.test("wait --for human names the card that left Blocked on a trimmed stream", function()
+testing.test("wait --for human names the card that left Blocked on a trimmed stream", function()
     local before =
         { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
     local after = { { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false } }
@@ -7158,12 +7415,12 @@ t.test("wait --for human names the card that left Blocked on a trimmed stream", 
         end,
         notice = function() end,
     })
-    t.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
-    t.eq(seen.afters, { "none" })
-    t.eq(fs.read(path .. ".human.cursor"), "9\n")
+    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
+    testing.eq(seen.afters, { "none" })
+    testing.eq(fs.read(path .. ".human.cursor"), "9\n")
 end)
 
-t.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
+testing.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:lead" } },
         {
@@ -7193,12 +7450,12 @@ t.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
             { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }
         ),
     }, { "--for", "lead" }, { cards = cards })
-    t.eq(result.output, "11111111 is labelled needs:lead in Blocked")
-    t.eq(seen.kinds[1], "task_added,task_moved,task_updated")
-    t.eq(fs.read(path .. ".lead.cursor"), "3\n")
+    testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
+    testing.eq(seen.kinds[1], "task_added,task_moved,task_updated")
+    testing.eq(fs.read(path .. ".lead.cursor"), "3\n")
 end)
 
-t.test("wait --for planner wakes once on a needs:planner card in Blocked", function()
+testing.test("wait --for planner wakes once on a needs:planner card in Blocked", function()
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:planner" } },
         { id = ID_B, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:lead" } },
@@ -7217,9 +7474,9 @@ t.test("wait --for planner wakes once on a needs:planner card in Blocked", funct
         ),
         got("3", { kind = "task_updated", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "planner" }, { cards = cards })
-    t.eq(result.output, "11111111 is labelled needs:planner in Blocked")
-    t.eq(seen.kinds[1], "task_added,task_moved,task_updated")
-    t.eq(fs.read(path .. ".planner.cursor"), "3\n")
+    testing.eq(result.output, "11111111 is labelled needs:planner in Blocked")
+    testing.eq(seen.kinds[1], "task_added,task_moved,task_updated")
+    testing.eq(fs.read(path .. ".planner.cursor"), "3\n")
 end)
 
 for _, stage in ipairs({
@@ -7227,7 +7484,7 @@ for _, stage in ipairs({
     support.COLUMN_NAME.VERIFY,
     support.COLUMN_NAME.RELEASE,
 }) do
-    t.test(
+    testing.test(
         "wait --for " .. stage:lower() .. " prints the unclaimed card that reached " .. stage,
         function()
             local cards = {
@@ -7244,44 +7501,44 @@ for _, stage in ipairs({
                 ),
                 got("3", { kind = "task_moved", task_id = ID_A, column = stage }),
             }, { "--for", stage:lower() }, { cards = cards })
-            t.eq(result.output, "moved 11111111 to " .. stage)
-            t.eq(seen.kinds[1], "task_added,task_moved")
-            t.eq(fs.read(path .. "." .. stage:lower() .. ".cursor"), "3\n")
+            testing.eq(result.output, "moved 11111111 to " .. stage)
+            testing.eq(seen.kinds[1], "task_added,task_moved")
+            testing.eq(fs.read(path .. "." .. stage:lower() .. ".cursor"), "3\n")
         end
     )
 end
 
-t.test("wait refuses a --for that names no stage", function()
+testing.test("wait refuses a --for that names no stage", function()
     local result = waited({}, { "--for", "verifier" })
-    t.eq(result.code, 2)
+    testing.eq(result.code, 2)
 end)
 
-t.test("wait --for lead leaves the cursor alone when the board cannot be read", function()
+testing.test("wait --for lead leaves the cursor alone when the board cannot be read", function()
     local result, _, path = waited({
         got("1"),
         got("2", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "lead" }, { cards_error = "pomb is down" })
-    t.eq(result.code, 1)
-    t.eq(fs.read(path .. ".lead.cursor"), "1\n")
+    testing.eq(result.code, 1)
+    testing.eq(fs.read(path .. ".lead.cursor"), "1\n")
 end)
 
-t.test("wait without --for matches every kind", function()
+testing.test("wait without --for matches every kind", function()
     local result, seen = waited({
         got("1", { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, {})
-    t.eq(result.output, "commented on 11111111")
-    t.eq(seen.kinds[1], "task_added,task_moved,task_updated,comment_added")
+    testing.eq(result.output, "commented on 11111111")
+    testing.eq(seen.kinds[1], "task_added,task_moved,task_updated,comment_added")
 end)
 
-t.test("wait resumes from the stored cursor", function()
+testing.test("wait resumes from the stored cursor", function()
     local path = support.tempdir() .. "/wait"
     assert(fs.write(path .. ".ready.cursor", "41\n"))
     local result, seen = waited({
         got("42", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { path = path })
-    t.eq(result.output, "added 11111111 to Ready")
-    t.eq(seen.afters, { "41" })
-    t.eq(fs.read(path .. ".ready.cursor"), "42\n")
+    testing.eq(result.output, "added 11111111 to Ready")
+    testing.eq(seen.afters, { "41" })
+    testing.eq(fs.read(path .. ".ready.cursor"), "42\n")
     local _, other = waited({
         got("9"),
         got("10", {
@@ -7294,39 +7551,42 @@ t.test("wait resumes from the stored cursor", function()
         }),
         got("11"),
     }, { "--for", "human" }, { path = path, cards = {} })
-    t.eq(other.afters, { "none", "9", "10" })
+    testing.eq(other.afters, { "none", "9", "10" })
 end)
 
-t.test("wait stores the oldest cursor of an expired one and says events were trimmed", function()
-    local result, _, path = waited({
-        { message = "board unavailable: pomb answered 410: too old", oldest = "17" },
-    }, { "--for", "ready" })
-    t.eq(result.output, "events were trimmed, check the board")
-    t.eq(result.message, nil)
-    t.eq(fs.read(path .. ".ready.cursor"), "17\n")
-end)
+testing.test(
+    "wait stores the oldest cursor of an expired one and says events were trimmed",
+    function()
+        local result, _, path = waited({
+            { message = "board unavailable: pomb answered 410: too old", oldest = "17" },
+        }, { "--for", "ready" })
+        testing.eq(result.output, "events were trimmed, check the board")
+        testing.eq(result.message, nil)
+        testing.eq(fs.read(path .. ".ready.cursor"), "17\n")
+    end
+)
 
-t.test("wait retries Pomb being unreachable, then gives up after ten in a row", function()
+testing.test("wait retries Pomb being unreachable, then gives up after ten in a row", function()
     local result, seen = waited({
         { message = "board unavailable: cannot reach https://p (curl exit 7)" },
         got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" })
-    t.eq(result.output, "added 11111111 to Ready")
-    t.eq(seen.naps, { 30 })
+    testing.eq(result.output, "added 11111111 to Ready")
+    testing.eq(seen.naps, { 30 })
     local down = {}
     for i = 1, 10 do
         down[i] = { message = "board unavailable: cannot reach https://p (curl exit 6)" }
     end
     result, seen = waited(down, {})
-    t.ok(result.message:find("curl exit 6", 1, true), result.message)
-    t.eq(#seen.naps, 9)
+    testing.ok(result.message:find("curl exit 6", 1, true), result.message)
+    testing.eq(#seen.naps, 9)
 end)
 
 local function limited()
     return { message = "board unavailable: pomb answered 429: end one", refused = true }
 end
 
-t.test(
+testing.test(
     "wait keeps waiting through too many open waits, with a pause that grows to 5 minutes",
     function()
         local replies = {}
@@ -7336,12 +7596,15 @@ t.test(
         replies[15] =
             got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY })
         local result, seen = waited(replies, { "--for", "ready" })
-        t.eq(result.output, "added 11111111 to Ready")
-        t.eq(seen.naps, { 30, 60, 120, 240, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 })
+        testing.eq(result.output, "added 11111111 to Ready")
+        testing.eq(
+            seen.naps,
+            { 30, 60, 120, 240, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 }
+        )
     end
 )
 
-t.test("wait spreads the pause with the random source and never passes the step", function()
+testing.test("wait spreads the pause with the random source and never passes the step", function()
     local backend =
         waiter({ limited(), limited(), got("5", { kind = "task_updated", task_id = ID_A }) })
     local naps = {}
@@ -7356,22 +7619,22 @@ t.test("wait spreads the pause with the random source and never passes the step"
         end,
         notice = function() end,
     })
-    t.eq(naps, { 30, 45 })
+    testing.eq(naps, { 30, 45 })
 end)
 
-t.test("wait reports too many open waits once", function()
+testing.test("wait reports too many open waits once", function()
     local result, seen = waited({
         limited(),
         limited(),
         got("5", { kind = "task_updated", task_id = ID_A }),
     }, {})
-    t.eq(result.output, "updated 11111111")
-    t.eq(#seen.notices, 1)
-    t.ok(seen.notices[1]:find("too many open waits", 1, true), seen.notices[1])
-    t.eq(seen.naps, { 30, 60 })
+    testing.eq(result.output, "updated 11111111")
+    testing.eq(#seen.notices, 1)
+    testing.ok(seen.notices[1]:find("too many open waits", 1, true), seen.notices[1])
+    testing.eq(seen.naps, { 30, 60 })
 end)
 
-t.test("wait does not count too many open waits toward the ten failures", function()
+testing.test("wait does not count too many open waits toward the ten failures", function()
     local replies = {}
     for _ = 1, 9 do
         replies[#replies + 1] =
@@ -7384,33 +7647,33 @@ t.test("wait does not count too many open waits toward the ten failures", functi
     end
     replies[#replies + 1] = got("5", { kind = "task_updated", task_id = ID_A })
     local result = waited(replies, {})
-    t.eq(result.output, "updated 11111111")
+    testing.eq(result.output, "updated 11111111")
 end)
 
-t.test("wait treats a 429 without the too_many_waits flag as a plain refusal", function()
+testing.test("wait treats a 429 without the too_many_waits flag as a plain refusal", function()
     local result, seen = waited({
         { message = "board unavailable: pomb answered 429: slow down" },
     }, {})
-    t.eq(result.code, 1)
-    t.eq(#seen.naps, 0)
+    testing.eq(result.code, 1)
+    testing.eq(#seen.naps, 0)
 end)
 
-t.test("wait fails at once on a refusal", function()
+testing.test("wait fails at once on a refusal", function()
     local result, seen = waited({
         { message = "board unavailable: pomb answered 401: bad token" },
     }, {})
-    t.eq(result.code, 1)
-    t.eq(#seen.naps, 0)
+    testing.eq(result.code, 1)
+    testing.eq(#seen.naps, 0)
 end)
 
-t.test("wait rejects an unknown --for value and a card", function()
+testing.test("wait rejects an unknown --for value and a card", function()
     local result = waited({}, { "--for", "everyone" })
-    t.eq(result.code, 2)
-    t.ok(result.message:find("release, human, lead and planner", 1, true), result.message)
-    t.eq(waited({}, { "abc" }).code, 2)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("release, human, lead and planner", 1, true), result.message)
+    testing.eq(waited({}, { "abc" }).code, 2)
 end)
 
-t.test("delete needs a card and a reason", function()
+testing.test("delete needs a card and a reason", function()
     local backend = fake(sample())
     for _, args in ipairs({
         {},
@@ -7419,42 +7682,49 @@ t.test("delete needs a card and a reason", function()
         { "--reason", "x" },
     }) do
         local result = commands.run("delete", args, backend)
-        t.eq(result.code, 2)
-        t.eq(result.message, "needs a card and --reason TEXT")
+        testing.eq(result.code, 2)
+        testing.eq(result.message, "needs a card and --reason TEXT")
     end
-    t.eq(backend.calls, {})
+    testing.eq(backend.calls, {})
 end)
 
-t.test("delete notes the reason, then moves the card to the bin with the lead token", function()
-    local root, home = sandbox({ user = LEAD_USER })
-    local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "duplicate" })
-    t.eq(code, 0, out)
-    t.eq(out, "moved 11111111 to the bin\n")
-    local calls = read(root, "calls")
-    local noted = calls:find("-X POST", 1, true)
-    local binned = calls:find("-X DELETE", 1, true)
-    t.ok(noted and binned and noted < binned, calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "\n", 1, true), calls)
-    t.ok(calls:find("pass show secrets/lead/token/pomb", 1, true), calls)
-    t.eq(calls:find("pass show secrets/worker", 1, true), nil)
-    t.ok(calls:find("the lead deletes this card, reason: duplicate", 1, true), calls)
-end)
+testing.test(
+    "delete notes the reason, then moves the card to the bin with the lead token",
+    function()
+        local root, home = sandbox({ user = LEAD_USER })
+        local out, code =
+            dev(root, home, { "board", "delete", "11111111-a", "--reason", "duplicate" })
+        testing.eq(code, 0, out)
+        testing.eq(out, "moved 11111111 to the bin\n")
+        local calls = read(root, "calls")
+        local noted = calls:find("-X POST", 1, true)
+        local binned = calls:find("-X DELETE", 1, true)
+        testing.ok(noted and binned and noted < binned, calls)
+        testing.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
+        testing.ok(calls:find("/api/tasks/" .. ID_A .. "\n", 1, true), calls)
+        testing.ok(calls:find("pass show secrets/lead/token/pomb", 1, true), calls)
+        testing.eq(calls:find("pass show secrets/worker", 1, true), nil)
+        testing.ok(calls:find("the lead deletes this card, reason: duplicate", 1, true), calls)
+    end
+)
 
-t.test("delete-lead-role deletes a card for a DEV_AGENT whose role segment is lead", function()
-    local root, home = sandbox({ user = LEAD_USER })
-    local out, code = dev(
-        root,
-        home,
-        { "board", "delete", "11111111-a", "--reason", "duplicate" },
-        { agent = "dotfiles/lead/82f0e002/1" }
-    )
-    t.eq(code, 0, out)
-    t.eq(out, "moved 11111111 to the bin\n")
-    t.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
-end)
+testing.test(
+    "delete-lead-role deletes a card for a DEV_AGENT whose role segment is lead",
+    function()
+        local root, home = sandbox({ user = LEAD_USER })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "delete", "11111111-a", "--reason", "duplicate" },
+            { agent = "dotfiles/lead/82f0e002/1" }
+        )
+        testing.eq(code, 0, out)
+        testing.eq(out, "moved 11111111 to the bin\n")
+        testing.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
+    end
+)
 
-t.test("delete-runner-role refuses a runner name, with no call and no token read", function()
+testing.test("delete-runner-role refuses a runner name, with no call and no token read", function()
     for _, name in ipairs({
         "dotfiles/implementer/82f0e002/1",
         "dotfiles/leader/82f0e002/1",
@@ -7468,37 +7738,37 @@ t.test("delete-runner-role refuses a runner name, with no call and no token read
             { "board", "delete", "11111111-a", "--reason", "duplicate" },
             { agent = name }
         )
-        t.eq(code, 1, out)
-        t.ok(out:find("only the lead deletes a card", 1, true), out)
-        t.ok(out:find(name, 1, true), out)
-        t.eq(read(root, "calls"), "")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("only the lead deletes a card", 1, true), out)
+        testing.ok(out:find(name, 1, true), out)
+        testing.eq(read(root, "calls"), "")
     end
 end)
 
-t.test("lead-name-helper counts a name with no slash or a lead role as the lead", function()
-    t.eq(commands.is_lead(""), true)
-    t.eq(commands.is_lead("project-lead"), true)
-    t.eq(commands.is_lead("dotfiles/lead/82f0e002/1"), true)
-    t.eq(commands.is_lead("dotfiles/lead"), true)
-    t.eq(commands.is_lead("dotfiles/implementer/82f0e002/1"), false)
-    t.eq(commands.is_lead("dotfiles/leader/82f0e002/1"), false)
-    t.eq(commands.is_lead("lead/implementer/82f0e002/1"), false)
-    t.eq(commands.is_lead("project-run/pombbin"), false)
+testing.test("lead-name-helper counts a name with no slash or a lead role as the lead", function()
+    testing.eq(commands.is_lead(""), true)
+    testing.eq(commands.is_lead("project-lead"), true)
+    testing.eq(commands.is_lead("dotfiles/lead/82f0e002/1"), true)
+    testing.eq(commands.is_lead("dotfiles/lead"), true)
+    testing.eq(commands.is_lead("dotfiles/implementer/82f0e002/1"), false)
+    testing.eq(commands.is_lead("dotfiles/leader/82f0e002/1"), false)
+    testing.eq(commands.is_lead("lead/implementer/82f0e002/1"), false)
+    testing.eq(commands.is_lead("project-run/pombbin"), false)
 end)
 
-t.test("delete without a lead token or on a local board does nothing", function()
+testing.test("delete without a lead token or on a local board does nothing", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
-    t.eq(code, 1, out)
-    t.ok(out:find("lead_token is not set", 1, true), out)
-    t.eq(read(root, "calls"), "")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("lead_token is not set", 1, true), out)
+    testing.eq(read(root, "calls"), "")
     root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "scratch"\n' })
     out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
-    t.eq(code, 1, out)
-    t.ok(out:find("keeps no recycle bin", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("keeps no recycle bin", 1, true), out)
 end)
 
-t.test("delete shows Pomb's permission_denied and card_locked as they come", function()
+testing.test("delete shows Pomb's permission_denied and card_locked as they come", function()
     local root, home = sandbox({ user = LEAD_USER })
     assert(
         fs.write(
@@ -7507,14 +7777,14 @@ t.test("delete shows Pomb's permission_denied and card_locked as they come", fun
         )
     )
     local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
-    t.eq(code, 1, out)
-    t.ok(out:find("tasks.bin", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("tasks.bin", 1, true), out)
     root, home = sandbox({ user = LEAD_USER })
     assert(fs.write(root .. "/locked", ""))
     out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
-    t.eq(code, 1, out)
-    t.ok(out:find("labelled needs:human", 1, true), out)
-    t.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("labelled needs:human", 1, true), out)
+    testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
 end)
 
 local ISSUED = "pomb_ISSUEDrole0123456789"
@@ -7523,32 +7793,32 @@ local function issued_dev(root, home, token)
     return dev(root, home, { "board", "ls" }, { env = { DEV_BOARD_TOKEN = token } })
 end
 
-t.test(
+testing.test(
     "DEV_BOARD_TOKEN is sent as the bearer token and pass and the Keychain are never read",
     function()
         local root, home = sandbox()
         with_security(root)
         local out, code = issued_dev(root, home, ISSUED)
-        t.eq(code, 0, out)
-        t.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
-        t.eq(occurrences(read(root, "calls"), "pass show"), 0)
-        t.eq(read(root, "seccalls"), "")
+        testing.eq(code, 0, out)
+        testing.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
+        testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+        testing.eq(read(root, "seccalls"), "")
     end
 )
 
-t.test("DEV_BOARD_TOKEN unset or empty reads pass as before", function()
+testing.test("DEV_BOARD_TOKEN unset or empty reads pass as before", function()
     local root, home = sandbox()
     local out, code = issued_dev(root, home, "")
-    t.eq(code, 0, out)
-    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
-    t.ok(read(root, "stdin"):find("Bearer " .. TOKEN, 1, true), read(root, "stdin"))
+    testing.eq(code, 0, out)
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    testing.ok(read(root, "stdin"):find("Bearer " .. TOKEN, 1, true), read(root, "stdin"))
     root, home = sandbox()
     out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 0, out)
-    t.eq(occurrences(read(root, "calls"), "pass show"), 1)
+    testing.eq(code, 0, out)
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
-t.test(
+testing.test(
     "DEV_BOARD_TOKEN refused with 401 names the issued token and never falls back to pass",
     function()
         local root, home = sandbox()
@@ -7559,73 +7829,83 @@ t.test(
                 .. 'printf \'{"message":"bad"}\\n401\''
         )
         local out, code = issued_dev(root, home, ISSUED)
-        t.eq(code, 1)
-        t.ok(out:find("issued token", 1, true), out)
-        t.eq(occurrences(read(root, "calls"), "pass show"), 0)
+        testing.eq(code, 1)
+        testing.ok(out:find("issued token", 1, true), out)
+        testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
     end
 )
 
-t.test("DEV_BOARD_TOKEN never reaches the output, the arguments or the log", function()
+testing.test("DEV_BOARD_TOKEN never reaches the output, the arguments or the log", function()
     local root, home = sandbox()
     local out = issued_dev(root, home, ISSUED)
-    t.eq(out:find(ISSUED, 1, true), nil, out)
-    t.eq(read(root, "calls"):find(ISSUED, 1, true), nil)
+    testing.eq(out:find(ISSUED, 1, true), nil, out)
+    testing.eq(read(root, "calls"):find(ISSUED, 1, true), nil)
     executable(root .. "/bin/curl", '#!/bin/sh\ncat >/dev/null\nprintf \'{"message":"bad"}\\n401\'')
     out = issued_dev(root, home, ISSUED)
-    t.eq(out:find(ISSUED, 1, true), nil, out)
-    t.eq(read(root, "calls"):find(ISSUED, 1, true), nil)
+    testing.eq(out:find(ISSUED, 1, true), nil, out)
+    testing.eq(read(root, "calls"):find(ISSUED, 1, true), nil)
 end)
 
-t.test("the keep-alive loop under DEV_BOARD_TOKEN sends that token and never reads pass", function()
-    local root = sandbox()
-    assert(fs.write(root .. "/state", "fence=7\n"))
-    shell(
-        root,
-        root .. "/pass.lock",
-        "DEV_BOARD_TOKEN="
-            .. ISSUED
-            .. " bash "
-            .. SHARE
-            .. "keepalive.sh "
-            .. root
-            .. "/state card 7 1 https://pomb.example Agents/x 0",
-        "600"
-    )
-    t.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
-    t.eq(occurrences(read(root, "calls"), "pass show"), 0)
-end)
+testing.test(
+    "the keep-alive loop under DEV_BOARD_TOKEN sends that token and never reads pass",
+    function()
+        local root = sandbox()
+        assert(fs.write(root .. "/state", "fence=7\n"))
+        shell(
+            root,
+            root .. "/pass.lock",
+            "DEV_BOARD_TOKEN="
+                .. ISSUED
+                .. " bash "
+                .. SHARE
+                .. "keepalive.sh "
+                .. root
+                .. "/state card 7 1 https://pomb.example Agents/x 0",
+            "600"
+        )
+        testing.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
+        testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    end
+)
 
-t.test("move to review on a board with In Review and no Review names dev board init", function()
-    local backend = fake({ planned() })
-    backend.limited = { "In Review" }
-    local result = commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
-    t.eq(result.code, 1)
-    t.ok(
-        result.message:find("run dev board init to move the board to the stage columns", 1, true),
-        result.message
-    )
-    t.ok(result.message:find("no Review column", 1, true), result.message)
-    result = commands.run("move", { "cccccccc", "In Review" }, backend)
-    t.eq(result.code, 1)
-    t.ok(result.message:find("run dev board init to move", 1, true), result.message)
-end)
+testing.test(
+    "move to review on a board with In Review and no Review names dev board init",
+    function()
+        local backend = fake({ planned() })
+        backend.limited = { "In Review" }
+        local result = commands.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find(
+                "run dev board init to move the board to the stage columns",
+                1,
+                true
+            ),
+            result.message
+        )
+        testing.ok(result.message:find("no Review column", 1, true), result.message)
+        result = commands.run("move", { "cccccccc", "In Review" }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("run dev board init to move", 1, true), result.message)
+    end
+)
 
-t.test("move to review keeps the plain refusal on a board without In Review", function()
+testing.test("move to review keeps the plain refusal on a board without In Review", function()
     local backend = fake({ planned() })
     local result = commands.run("move", { "cccccccc", "In Review" }, backend)
-    t.eq(result.code, 2)
-    t.ok(result.message:find("unknown column In Review", 1, true), result.message)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("unknown column In Review", 1, true), result.message)
 end)
 
-t.test("wait on a board with In Review and no Review names dev board init", function()
+testing.test("wait on a board with In Review and no Review names dev board init", function()
     local backend = waiter({})
     backend.rows = {
         { name = "In Review", is_done = false },
         { name = support.COLUMN_NAME.DONE, is_done = true },
     }
     local result = commands.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
-    t.eq(result.code, 1)
-    t.ok(
+    testing.eq(result.code, 1)
+    testing.ok(
         result.message:find("run dev board init to move the board to the stage columns", 1, true),
         result.message
     )
@@ -7649,23 +7929,23 @@ local function attach_files(root)
     return dir
 end
 
-t.test("attach uploads a new file once and skips a name the card already holds", function()
+testing.test("attach uploads a new file once and skips a name the card already holds", function()
     local root, home = sandbox()
     local dir = attach_files(root)
     local out, code =
         dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png", dir .. "/old.png" })
-    t.eq(code, 0, out)
-    t.eq(out, "attached 99887766 new.png\nskipped old.png\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "attached 99887766 new.png\nskipped old.png\n")
     local calls = read(root, "calls")
-    t.ok(calls:find("-X POST", 1, true), calls)
-    t.ok(calls:find("/api/tasks/" .. ID_A .. "/attachments", 1, true), calls)
-    t.ok(calls:find('-F file=@"' .. dir .. '/new.png"', 1, true), calls)
-    t.ok(not calls:find('old.png"', 1, true), calls)
-    t.ok(not calls:find("Content-Type: application/json -w", 1, true), calls)
-    t.ok(not read(root, "calls"):find(TOKEN, 1, true), "token in argv")
+    testing.ok(calls:find("-X POST", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/attachments", 1, true), calls)
+    testing.ok(calls:find('-F file=@"' .. dir .. '/new.png"', 1, true), calls)
+    testing.ok(not calls:find('old.png"', 1, true), calls)
+    testing.ok(not calls:find("Content-Type: application/json -w", 1, true), calls)
+    testing.ok(not read(root, "calls"):find(TOKEN, 1, true), "token in argv")
 end)
 
-t.test("attach prints Pomb's refusal as Pomb words it and checks no size or type", function()
+testing.test("attach prints Pomb's refusal as Pomb words it and checks no size or type", function()
     local root, home = sandbox()
     local dir = attach_files(root)
     assert(
@@ -7675,11 +7955,11 @@ t.test("attach prints Pomb's refusal as Pomb words it and checks no size or type
         )
     )
     local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
-    t.eq(code, 1)
-    t.ok(out:find("new.png: the task holds its most attachments", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("new.png: the task holds its most attachments", 1, true), out)
 end)
 
-t.test("attach keeps uploading the other files after Pomb refuses one", function()
+testing.test("attach keeps uploading the other files after Pomb refuses one", function()
     local root, home = sandbox()
     local dir = attach_files(root)
     assert(
@@ -7698,68 +7978,71 @@ t.test("attach keeps uploading the other files after Pomb refuses one", function
     )
     local out, code =
         dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png", dir .. "/third.png" })
-    t.eq(code, 1)
-    t.ok(out:find("new.png: same bytes\nattached 55443322 third.png", 1, true), out)
-    t.eq(fs.read(root .. "/post_n"), "2\n")
+    testing.eq(code, 1)
+    testing.ok(out:find("new.png: same bytes\nattached 55443322 third.png", 1, true), out)
+    testing.eq(fs.read(root .. "/post_n"), "2\n")
 end)
 
-t.test("attach retries a busy answer after a nap and then uploads", function()
+testing.test("attach retries a busy answer after a nap and then uploads", function()
     local root, home = sandbox()
     local dir = attach_files(root)
     assert(fs.write(root .. "/busy", "1"))
     local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
-    t.eq(code, 0, out)
-    t.eq(out, "attached 99887766 new.png\n")
-    t.eq(fs.read(root .. "/post_n"), "2\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "attached 99887766 new.png\n")
+    testing.eq(fs.read(root .. "/post_n"), "2\n")
 end)
 
-t.test("attach gives up on a busy answer that stays", function()
+testing.test("attach gives up on a busy answer that stays", function()
     local root, home = sandbox()
     local dir = attach_files(root)
     assert(fs.write(root .. "/busy", "9"))
     local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
-    t.eq(code, 1)
-    t.ok(out:find("pomb answered 503", 1, true), out)
-    t.eq(fs.read(root .. "/post_n"), "3\n")
+    testing.eq(code, 1)
+    testing.ok(out:find("pomb answered 503", 1, true), out)
+    testing.eq(fs.read(root .. "/post_n"), "3\n")
 end)
 
-t.test("attachments lists id prefix, size and name, or says there are none", function()
+testing.test("attachments lists id prefix, size and name, or says there are none", function()
     local root, home = sandbox()
     attach_files(root)
     local out, code = dev(root, home, { "board", "attachments", "11111111-a" })
-    t.eq(code, 0, out)
-    t.eq(out, "abcdef12  2048  old.png\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "abcdef12  2048  old.png\n")
     assert(fs.write(root .. "/attachments.json", "[]"))
     out = dev(root, home, { "board", "attachments", "11111111-a" })
-    t.eq(out, "no attachments\n")
+    testing.eq(out, "no attachments\n")
 end)
 
-t.test("detach removes an attachment by id prefix and reports a missing permission", function()
-    local root, home = sandbox()
-    attach_files(root)
-    local out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
-    t.eq(code, 0, out)
-    t.eq(out, "detached abcdef12 old.png\n")
-    local calls = read(root, "calls")
-    t.ok(calls:find("-X DELETE", 1, true), calls)
-    t.ok(
-        calls:find(
-            "/api/tasks/" .. ID_A .. "/attachments/abcdef12-0000-4000-8000-000000000001",
-            1,
-            true
-        ),
-        calls
-    )
-    assert(
-        fs.write(
-            root .. "/detach_body",
-            '{"code":"permission_denied","permission":"attachments.delete","message":"no"}'
+testing.test(
+    "detach removes an attachment by id prefix and reports a missing permission",
+    function()
+        local root, home = sandbox()
+        attach_files(root)
+        local out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
+        testing.eq(code, 0, out)
+        testing.eq(out, "detached abcdef12 old.png\n")
+        local calls = read(root, "calls")
+        testing.ok(calls:find("-X DELETE", 1, true), calls)
+        testing.ok(
+            calls:find(
+                "/api/tasks/" .. ID_A .. "/attachments/abcdef12-0000-4000-8000-000000000001",
+                1,
+                true
+            ),
+            calls
         )
-    )
-    out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
-    t.eq(code, 1)
-    t.ok(out:find("lacks the attachments.delete permission", 1, true), out)
-    out, code = dev(root, home, { "board", "detach", "11111111-a", "ffff" })
-    t.eq(code, 1)
-    t.ok(out:find("holds no attachment with the id ffff", 1, true), out)
-end)
+        assert(
+            fs.write(
+                root .. "/detach_body",
+                '{"code":"permission_denied","permission":"attachments.delete","message":"no"}'
+            )
+        )
+        out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
+        testing.eq(code, 1)
+        testing.ok(out:find("lacks the attachments.delete permission", 1, true), out)
+        out, code = dev(root, home, { "board", "detach", "11111111-a", "ffff" })
+        testing.eq(code, 1)
+        testing.ok(out:find("holds no attachment with the id ffff", 1, true), out)
+    end
+)

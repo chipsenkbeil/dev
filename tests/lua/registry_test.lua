@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
@@ -33,65 +33,71 @@ local function make_project()
     return root
 end
 
-t.test(".lua beats .sh and needs no exec bit, while an unexecutable .sh is no verb", function()
-    local root = make_project()
-    local reg = registry.load(root)
-    local row = reg:find({ "a" })
-    t.eq(row.lang, "lua")
-    t.eq(row.desc, "From the Lua script.")
-    t.eq(row.kind, "local")
-    t.eq(reg:find({ "off" }), nil)
-    t.eq(reg:flags({ "a" }), { "--lua" })
-    fs.remove(root, { recursive = true })
-end)
+testing.test(
+    ".lua beats .sh and needs no exec bit, while an unexecutable .sh is no verb",
+    function()
+        local root = make_project()
+        local reg = registry.load(root)
+        local row = reg:find({ "a" })
+        testing.eq(row.lang, "lua")
+        testing.eq(row.desc, "From the Lua script.")
+        testing.eq(row.kind, "local")
+        testing.eq(reg:find({ "off" }), nil)
+        testing.eq(reg:flags({ "a" }), { "--lua" })
+        fs.remove(root, { recursive = true })
+    end
+)
 
-t.test("a directory with scripts is a noun whose subs are listed without __ helpers", function()
-    local root = make_project()
-    local reg = registry.load(root)
-    t.ok(reg:is_noun("n"), "n should be a noun")
-    t.eq(words(reg:subs("n")), { "n x" })
-    t.eq(reg:find({ "n", "__y" }).desc, "Hidden sub.")
-    t.eq(reg:find({ "n" }).group, "Mine")
-    t.eq(reg:find({ "n" }).desc, "x")
-    t.eq(reg:is_noun("a"), false)
-    t.eq(reg:subs("a"), {})
-    fs.remove(root, { recursive = true })
-end)
+testing.test(
+    "a directory with scripts is a noun whose subs are listed without __ helpers",
+    function()
+        local root = make_project()
+        local reg = registry.load(root)
+        testing.ok(reg:is_noun("n"), "n should be a noun")
+        testing.eq(words(reg:subs("n")), { "n x" })
+        testing.eq(reg:find({ "n", "__y" }).desc, "Hidden sub.")
+        testing.eq(reg:find({ "n" }).group, "Mine")
+        testing.eq(reg:find({ "n" }).desc, "x")
+        testing.eq(reg:is_noun("a"), false)
+        testing.eq(reg:subs("a"), {})
+        fs.remove(root, { recursive = true })
+    end
+)
 
-t.test("DESCRIPTION supplies a noun's description", function()
+testing.test("DESCRIPTION supplies a noun's description", function()
     local root = make_project()
     assert(fs.write(root .. "/.dev/n/DESCRIPTION", "The n noun\nsecond line\n"))
-    t.eq(registry.load(root):find({ "n" }).desc, "The n noun")
+    testing.eq(registry.load(root):find({ "n" }).desc, "The n noun")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("verbs lists builtins, then project verbs, and keeps __ helpers out", function()
+testing.test("verbs lists builtins, then project verbs, and keeps __ helpers out", function()
     local root = make_project()
     local names = words(registry.load(root):verbs())
-    t.eq(names[1], "lint")
-    t.eq({ unpack(names, #names - 2) }, { "a", "quiet", "n" })
-    t.eq(registry.load(root):find({ "__h" }).desc, "Helper.")
+    testing.eq(names[1], "lint")
+    testing.eq({ unpack(names, #names - 2) }, { "a", "quiet", "n" })
+    testing.eq(registry.load(root):find({ "__h" }).desc, "Helper.")
     local seen = {}
     for _, name in ipairs(names) do
         seen[name] = true
     end
-    t.eq(seen.__h, nil)
-    t.eq(seen.off, nil)
+    testing.eq(seen.__h, nil)
+    testing.eq(seen.off, nil)
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a hidden header and a group header place a local verb", function()
+testing.test("a hidden header and a group header place a local verb", function()
     local root = make_project()
     local reg = registry.load(root)
-    t.eq(reg:find({ "quiet" }).hidden, true)
-    t.eq(reg:find({ "quiet" }).group, fs.basename(root))
-    t.eq(reg:find({ "a" }).hidden, false)
-    t.eq(reg:find({ "bootstrap" }).hidden, true)
-    t.eq(reg:find({ "lint" }).group, "Check your work")
+    testing.eq(reg:find({ "quiet" }).hidden, true)
+    testing.eq(reg:find({ "quiet" }).group, fs.basename(root))
+    testing.eq(reg:find({ "a" }).hidden, false)
+    testing.eq(reg:find({ "bootstrap" }).hidden, true)
+    testing.eq(reg:find({ "lint" }).group, "Check your work")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a script named like a builtin noun or builtin subcommand replaces neither", function()
+testing.test("a script named like a builtin noun or builtin subcommand replaces neither", function()
     local root = make_project()
     scripted(root, ".dev/box.sh", "#!/usr/bin/env bash\n# Fake box.\n")
     scripted(
@@ -101,44 +107,44 @@ t.test("a script named like a builtin noun or builtin subcommand replaces neithe
     )
     scripted(root, ".dev/tools/extra.sh", "#!/usr/bin/env bash\n# Extra tool.\n")
     local reg = registry.load(root)
-    t.eq(reg:find({ "box" }).kind, "builtin")
-    t.eq(reg:is_noun("box"), true)
-    t.eq(reg:find({ "tools", "install" }).kind, "builtin")
-    t.eq(
+    testing.eq(reg:find({ "box" }).kind, "builtin")
+    testing.eq(reg:is_noun("box"), true)
+    testing.eq(reg:find({ "tools", "install" }).kind, "builtin")
+    testing.eq(
         reg:flags({ "tools", "install" }),
         { "--dry-run", "--force", "--group", "--system", "--user" }
     )
-    t.eq(reg:flags({ "tools" }), {})
-    t.eq(reg:find({ "tools", "extra" }).kind, "local")
-    t.eq(reg:find({ "tools" }).desc, "Install and check the tools in .dev/tools.tsv")
+    testing.eq(reg:flags({ "tools" }), {})
+    testing.eq(reg:find({ "tools", "extra" }).kind, "local")
+    testing.eq(reg:find({ "tools" }).desc, "Install and check the tools in .dev/tools.tsv")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a script named like a builtin verb overrides it and keeps its place", function()
+testing.test("a script named like a builtin verb overrides it and keeps its place", function()
     local root = make_project()
     scripted(root, ".dev/lint.sh", "#!/usr/bin/env bash\n# My lint.\n# flags: --mine\n")
     scripted(root, ".dev/deploy.sh", "#!/usr/bin/env bash\n# My deploy.\n# group: Elsewhere\n")
     local reg = registry.load(root)
     local lint = reg:find({ "lint" })
-    t.eq(lint.kind, "override")
-    t.eq(lint.desc, "My lint.")
-    t.eq(lint.group, "Check your work")
-    t.eq(reg:flags({ "lint" }), { "--mine" })
-    t.eq(reg:find({ "deploy" }).group, "Elsewhere")
+    testing.eq(lint.kind, "override")
+    testing.eq(lint.desc, "My lint.")
+    testing.eq(lint.group, "Check your work")
+    testing.eq(reg:flags({ "lint" }), { "--mine" })
+    testing.eq(reg:find({ "deploy" }).group, "Elsewhere")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a flat script takes the whole name from a directory of the same name", function()
+testing.test("a flat script takes the whole name from a directory of the same name", function()
     local root = make_project()
     scripted(root, ".dev/n.sh", "#!/usr/bin/env bash\n# Flat n.\n")
     local reg = registry.load(root)
-    t.eq(reg:is_noun("n"), false)
-    t.eq(reg:find({ "n" }).desc, "Flat n.")
-    t.eq(reg:find({ "n", "x" }), nil)
+    testing.eq(reg:is_noun("n"), false)
+    testing.eq(reg:find({ "n" }).desc, "Flat n.")
+    testing.eq(reg:find({ "n", "x" }), nil)
     fs.remove(root, { recursive = true })
 end)
 
-t.test("--help in a flags line is dropped with the warning", function()
+testing.test("--help in a flags line is dropped with the warning", function()
     local root = make_project()
     scripted(root, ".dev/w.sh", "#!/usr/bin/env bash\n# W.\n# flags: --ok --help\n")
     local warned = {}
@@ -147,8 +153,8 @@ t.test("--help in a flags line is dropped with the warning", function()
             warned[#warned + 1] = message
         end,
     })
-    t.eq(reg:flags({ "w" }), { "--ok" })
-    t.eq(warned, {
+    testing.eq(reg:flags({ "w" }), { "--ok" })
+    testing.eq(warned, {
         "dev: "
             .. root
             .. "/.dev/w.sh: the flags line declares --help, which dev reserves before --",
@@ -156,27 +162,27 @@ t.test("--help in a flags line is dropped with the warning", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a noun with no description file lists its subcommand names", function()
+testing.test("a noun with no description file lists its subcommand names", function()
     local root = make_project()
     scripted(root, ".dev/n/z.sh", "#!/usr/bin/env bash\n# Sub z.\n")
-    t.eq(registry.load(root):find({ "n" }).desc, "x, z")
+    testing.eq(registry.load(root):find({ "n" }).desc, "x, z")
     fs.remove(root, { recursive = true })
 end)
 
-t.test(".dev/lua, .dev/topics and .dev/standalone are never nouns", function()
+testing.test(".dev/lua, .dev/topics and .dev/standalone are never nouns", function()
     local root = make_project()
     scripted(root, ".dev/lua/helper.lua", "return {}\n", "644")
     scripted(root, ".dev/topics/guide.sh", "#!/usr/bin/env bash\n# Not a verb.\n")
     scripted(root, ".dev/standalone/run.sh", "#!/usr/bin/env bash\n# Not a verb.\n")
     local reg = registry.load(root)
-    t.eq(reg:is_noun("lua"), false)
-    t.eq(reg:is_noun("topics"), false)
-    t.eq(reg:find({ "lua" }), nil)
-    t.eq(reg:find({ "topics", "guide" }), nil)
-    t.eq(reg:is_noun("standalone"), false)
-    t.eq(reg:find({ "standalone", "run" }), nil)
+    testing.eq(reg:is_noun("lua"), false)
+    testing.eq(reg:is_noun("topics"), false)
+    testing.eq(reg:find({ "lua" }), nil)
+    testing.eq(reg:find({ "topics", "guide" }), nil)
+    testing.eq(reg:is_noun("standalone"), false)
+    testing.eq(reg:find({ "standalone", "run" }), nil)
     for _, row in ipairs(reg:verbs()) do
-        t.ok(
+        testing.ok(
             row.name ~= "lua" and row.name ~= "topics" and row.name ~= "standalone",
             "reserved directory listed as " .. row.name
         )
@@ -184,42 +190,45 @@ t.test(".dev/lua, .dev/topics and .dev/standalone are never nouns", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test("builtin flags come from the table and unknown commands give none", function()
+testing.test("builtin flags come from the table and unknown commands give none", function()
     local reg = registry.load(support.tempdir())
-    t.eq(reg:flags({ "help" }), { "-a", "-k", "--topics", "--no-pager" })
-    t.eq(reg:flags({ "lint" }), {})
-    t.eq(reg:flags({ "nope" }), {})
-    t.eq(reg:find({ "bad word" }), nil)
+    testing.eq(reg:flags({ "help" }), { "-a", "-k", "--topics", "--no-pager" })
+    testing.eq(reg:flags({ "lint" }), {})
+    testing.eq(reg:flags({ "nope" }), {})
+    testing.eq(reg:find({ "bad word" }), nil)
 end)
 
-t.test("detect_type follows the existing order", function()
+testing.test("detect_type follows the existing order", function()
     local root = support.tempdir()
-    t.eq(project.detect_type(root), nil)
+    testing.eq(project.detect_type(root), nil)
     assert(fs.write(root .. "/Makefile", ""))
-    t.eq(project.detect_type(root), "make")
+    testing.eq(project.detect_type(root), "make")
     scripted(root, "src/deep/x.lua", "", "644")
-    t.eq(project.detect_type(root), "lua")
+    testing.eq(project.detect_type(root), "lua")
     assert(fs.write(root .. "/package.json", "{}"))
-    t.eq(project.detect_type(root), "node")
+    testing.eq(project.detect_type(root), "node")
     assert(fs.write(root .. "/project.godot", ""))
-    t.eq(project.detect_type(root), "godot")
+    testing.eq(project.detect_type(root), "godot")
     assert(fs.write(root .. "/main.lua", ""))
     assert(fs.write(root .. "/conf.lua", ""))
-    t.eq(project.detect_type(root), "love2d")
+    testing.eq(project.detect_type(root), "love2d")
     assert(fs.write(root .. "/Cargo.toml", ""))
-    t.eq(project.detect_type(root), "rust")
+    testing.eq(project.detect_type(root), "rust")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("detect_type ignores Lua files in hidden, node_modules and target directories", function()
-    local root = support.tempdir()
-    for _, dir in ipairs({ ".hidden", "node_modules", "target" }) do
-        scripted(root, dir .. "/x.lua", "", "644")
+testing.test(
+    "detect_type ignores Lua files in hidden, node_modules and target directories",
+    function()
+        local root = support.tempdir()
+        for _, dir in ipairs({ ".hidden", "node_modules", "target" }) do
+            scripted(root, dir .. "/x.lua", "", "644")
+        end
+        scripted(root, ".dot.lua", "", "644")
+        testing.eq(project.detect_type(root), nil)
+        fs.remove(root, { recursive = true })
     end
-    scripted(root, ".dot.lua", "", "644")
-    t.eq(project.detect_type(root), nil)
-    fs.remove(root, { recursive = true })
-end)
+)
 
 local function root_from(dir, opts)
     local script = string.format(
@@ -230,15 +239,15 @@ local function root_from(dir, opts)
     return devos.capture({ "luajit", "-e", script }, { cwd = dir, env = opts.env })
 end
 
-t.test("root finds the nearest .dev from a subdirectory", function()
+testing.test("root finds the nearest .dev from a subdirectory", function()
     local root = support.tempdir()
     assert(fs.mkdir(root .. "/.dev"))
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
-    t.eq(root_from(root .. "/sub/deep", {}), assert(fs.realpath(root)) .. "\n")
+    testing.eq(root_from(root .. "/sub/deep", {}), assert(fs.realpath(root)) .. "\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("as uid 0, root only tests for .jj, .git and .dev and runs no VCS command", function()
+testing.test("as uid 0, root only tests for .jj, .git and .dev and runs no VCS command", function()
     local root = support.tempdir()
     local bin = support.tempdir()
     local marker = bin .. "/ran"
@@ -247,30 +256,30 @@ t.test("as uid 0, root only tests for .jj, .git and .dev and runs no VCS command
     assert(fs.write(root .. "/.git", ""))
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
     local env = { PATH = bin .. ":" .. os.getenv("PATH") }
-    t.eq(
+    testing.eq(
         root_from(root .. "/sub/deep", { uid0 = true, env = env }),
         assert(fs.realpath(root)) .. "\n"
     )
-    t.eq(fs.exists(marker), false)
+    testing.eq(fs.exists(marker), false)
     fs.remove(root, { recursive = true })
     fs.remove(bin, { recursive = true })
 end)
 
-t.test("dotfile scripts and dot directories are neither verbs nor nouns", function()
+testing.test("dotfile scripts and dot directories are neither verbs nor nouns", function()
     local root = make_project()
     scripted(root, ".dev/.hid.sh", "#!/usr/bin/env bash\n# Hidden file.\n")
     scripted(root, ".dev/.dd/x.sh", "#!/usr/bin/env bash\n# In a dot dir.\n")
     scripted(root, ".dev/n/.dot.sh", "#!/usr/bin/env bash\n# Dot sub.\n")
     local reg = registry.load(root)
     for _, row in ipairs(reg:verbs()) do
-        t.ok(row.name:sub(1, 1) ~= ".", "dot name listed as " .. row.name)
+        testing.ok(row.name:sub(1, 1) ~= ".", "dot name listed as " .. row.name)
     end
-    t.eq(reg:find({ "n", ".dot" }), nil)
-    t.eq(words(reg:subs("n")), { "n x" })
+    testing.eq(reg:find({ "n", ".dot" }), nil)
+    testing.eq(words(reg:subs("n")), { "n x" })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("local verbs come in the order the shell glob gives", function()
+testing.test("local verbs come in the order the shell glob gives", function()
     local root = support.tempdir()
     for _, name in ipairs({ "UP", "Up.Case", "a", "B", "b-c", "Zed" }) do
         scripted(root, ".dev/" .. name .. ".sh", "#!/usr/bin/env bash\n# " .. name .. ".\n")
@@ -281,7 +290,7 @@ t.test("local verbs come in the order the shell glob gives", function()
         want[#want + 1] = name
     end
     local got = words(registry.load(root):verbs())
-    t.eq({ unpack(got, #got - #want + 1) }, want)
+    testing.eq({ unpack(got, #got - #want + 1) }, want)
     fs.remove(root, { recursive = true })
 end)
 
@@ -289,7 +298,7 @@ local function git_repo(root)
     return devos.run({ "git", "init", "-q", root }, { stdout = "null" }) == 0
 end
 
-t.test("root asks git for the toplevel when no jj answers", function()
+testing.test("root asks git for the toplevel when no jj answers", function()
     if not devos.which("git") then
         print("skip - git is not installed")
         return
@@ -298,11 +307,11 @@ t.test("root asks git for the toplevel when no jj answers", function()
     assert(git_repo(root), "git init failed")
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
     local env = { PATH = "/usr/bin:/bin:" .. fs.dirname(devos.which("git")) }
-    t.eq(root_from(root .. "/sub/deep", { env = env }), assert(fs.realpath(root)) .. "\n")
+    testing.eq(root_from(root .. "/sub/deep", { env = env }), assert(fs.realpath(root)) .. "\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("root asks jj for the workspace root first", function()
+testing.test("root asks jj for the workspace root first", function()
     if not (devos.which("jj") and devos.which("git")) then
         print("skip - jj or git is not installed")
         return
@@ -313,7 +322,7 @@ t.test("root asks jj for the workspace root first", function()
         "jj init failed"
     )
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
-    t.eq(root_from(root .. "/sub/deep", {}), assert(fs.realpath(root)) .. "\n")
+    testing.eq(root_from(root .. "/sub/deep", {}), assert(fs.realpath(root)) .. "\n")
     fs.remove(root, { recursive = true })
 end)
 
@@ -329,7 +338,7 @@ local function have_vcs()
     return false
 end
 
-t.test("root is a git worktree nested under a colocated jj checkout", function()
+testing.test("root is a git worktree nested under a colocated jj checkout", function()
     if not have_vcs() then
         return
     end
@@ -349,13 +358,13 @@ t.test("root is a git worktree nested under a colocated jj checkout", function()
     assert(quiet({ "git", "worktree", "add", "--detach", root .. "/wt/tree" }, root))
     assert(fs.mkdir(root .. "/wt/tree/sub/deep", { parents = true }))
     local want = assert(fs.realpath(root .. "/wt/tree")) .. "\n"
-    t.eq(root_from(root .. "/wt/tree", {}), want)
-    t.eq(root_from(root .. "/wt/tree/sub/deep", {}), want)
-    t.eq(root_from(root, {}), assert(fs.realpath(root)) .. "\n")
+    testing.eq(root_from(root .. "/wt/tree", {}), want)
+    testing.eq(root_from(root .. "/wt/tree/sub/deep", {}), want)
+    testing.eq(root_from(root, {}), assert(fs.realpath(root)) .. "\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("root keeps the jj checkout over an unrelated git clone nested in it", function()
+testing.test("root keeps the jj checkout over an unrelated git clone nested in it", function()
     if not have_vcs() then
         return
     end
@@ -364,12 +373,12 @@ t.test("root keeps the jj checkout over an unrelated git clone nested in it", fu
     assert(git_repo(root .. "/clone"), "git init failed")
     assert(fs.mkdir(root .. "/clone/sub", { parents = true }))
     local want = assert(fs.realpath(root)) .. "\n"
-    t.eq(root_from(root .. "/clone", {}), want)
-    t.eq(root_from(root .. "/clone/sub", {}), want)
+    testing.eq(root_from(root .. "/clone", {}), want)
+    testing.eq(root_from(root .. "/clone/sub", {}), want)
     fs.remove(root, { recursive = true })
 end)
 
-t.test("root keeps a jj workspace nested in a foreign git repo", function()
+testing.test("root keeps a jj workspace nested in a foreign git repo", function()
     if not have_vcs() then
         return
     end
@@ -383,18 +392,18 @@ t.test("root keeps a jj workspace nested in a foreign git repo", function()
     )
     assert(fs.mkdir(outer .. "/ws/sub", { parents = true }))
     local want = assert(fs.realpath(outer .. "/ws")) .. "\n"
-    t.eq(root_from(outer .. "/ws", {}), want)
-    t.eq(root_from(outer .. "/ws/sub", {}), want)
+    testing.eq(root_from(outer .. "/ws", {}), want)
+    testing.eq(root_from(outer .. "/ws/sub", {}), want)
     fs.remove(outer, { recursive = true })
 end)
 
-t.test("detect_type finds a nested Lua file within the search depth only", function()
+testing.test("detect_type finds a nested Lua file within the search depth only", function()
     local root = support.tempdir()
     assert(fs.write(root .. "/Makefile", ""))
     scripted(root, "a/b/c/deep.lua", "", "644")
     scripted(root, "a/b/c/d/e/too_deep.lua", "", "644")
-    t.eq(project.detect_type(root), "lua")
+    testing.eq(project.detect_type(root), "lua")
     fs.remove(root .. "/a/b/c/deep.lua")
-    t.eq(project.detect_type(root), "make")
+    testing.eq(project.detect_type(root), "make")
     fs.remove(root, { recursive = true })
 end)

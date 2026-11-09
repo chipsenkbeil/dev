@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local registry = require("dev.registry")
@@ -29,27 +29,27 @@ local function problems(root)
     return out
 end
 
-t.test("a topic naming a missing verb is reported at its line", function()
+testing.test("a topic naming a missing verb is reported at its line", function()
     local root = project({ ["topics/a.md"] = "# a: A topic\n\nSee `dev nope` here.\n" })
-    t.eq(problems(root), { ".dev/topics/a.md:3: `dev nope`: no verb nope" })
+    testing.eq(problems(root), { ".dev/topics/a.md:3: `dev nope`: no verb nope" })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a fenced command is checked, a placeholder and a global flag are not", function()
+testing.test("a fenced command is checked, a placeholder and a global flag are not", function()
     local root = project({
         ["topics/a.md"] = "# a: A topic\n\n```\ndev -vv --remote lint\ndev -C some/dir lint\n"
             .. "dev <verb> --x\ndev nope\n```\n",
     })
-    t.eq(problems(root), { ".dev/topics/a.md:7: no verb nope" })
+    testing.eq(problems(root), { ".dev/topics/a.md:7: no verb nope" })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a flag the verb does not list and a missing subcommand are reported", function()
+testing.test("a flag the verb does not list and a missing subcommand are reported", function()
     local root = project({
         ["topics/a.md"] = "# a: A topic\n\n`dev help --nope`\n`dev tools nope`\n`dev help -a`\n"
             .. "`dev box ls [--all] --x=1`\n",
     })
-    t.eq(problems(root), {
+    testing.eq(problems(root), {
         ".dev/topics/a.md:3: `dev help --nope`: dev help takes no flag --nope",
         ".dev/topics/a.md:4: `dev tools nope`: dev tools has no subcommand nope",
         ".dev/topics/a.md:6: `dev box ls [--all] --x=1`: dev box ls takes no flag --x",
@@ -57,13 +57,13 @@ t.test("a flag the verb does not list and a missing subcommand are reported", fu
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a bad first line and a topic named like a verb are reported", function()
+testing.test("a bad first line and a topic named like a verb are reported", function()
     local root = project({
         ["topics/a.md"] = "# b: Wrong name\n",
         ["topics/lint.md"] = "# lint: A topic\n",
         ["topics/c.md"] = "# c: \n",
     })
-    t.eq(problems(root), {
+    testing.eq(problems(root), {
         '.dev/topics/a.md:1: the first line must be "# a: <summary>"',
         '.dev/topics/c.md:1: the first line must be "# c: <summary>"',
         ".dev/topics/lint.md:1: topic lint is also a verb",
@@ -71,40 +71,40 @@ t.test("a bad first line and a topic named like a verb are reported", function()
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a script that declares -h or --help is reported", function()
+testing.test("a script that declares -h or --help is reported", function()
     local root = project({
         ["a.sh"] = "#!/usr/bin/env bash\n# A.\n# flags: -h --ok\n",
         ["n/x.sh"] = "#!/usr/bin/env bash\n# X.\n# flags: --help\n",
         ["fine.sh"] = "#!/usr/bin/env bash\n# Fine.\n# flags: --ok\n",
     })
     local message = "the flags line declares -h or --help, which dev reserves before --"
-    t.eq(problems(root), { ".dev/a.sh:1: " .. message, ".dev/n/x.sh:1: " .. message })
+    testing.eq(problems(root), { ".dev/a.sh:1: " .. message, ".dev/n/x.sh:1: " .. message })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a project verb's declared flags are accepted in a topic", function()
+testing.test("a project verb's declared flags are accepted in a topic", function()
     local root = project({
         ["a.sh"] = "#!/usr/bin/env bash\n# A.\n# flags: --ok\n",
         ["topics/b.md"] = "# b: A topic\n\n`dev a --ok` and `dev a --bad`\n",
     })
-    t.eq(problems(root), { ".dev/topics/b.md:3: `dev a --bad`: dev a takes no flag --bad" })
+    testing.eq(problems(root), { ".dev/topics/b.md:3: `dev a --bad`: dev a takes no flag --bad" })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a .lua script that declares -h in its flags line is reported", function()
+testing.test("a .lua script that declares -h in its flags line is reported", function()
     local root = project({ ["a.lua"] = "--[[\nA.\nflags: -h --ok\n]]\nreturn 0\n" })
-    t.eq(problems(root), {
+    testing.eq(problems(root), {
         ".dev/a.lua:1: the flags line declares -h or --help, which dev reserves before --",
     })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("built-in topics are not checked against another project's verbs", function()
+testing.test("built-in topics are not checked against another project's verbs", function()
     local root = project({ ["topics/b.md"] = "# b: A topic\n\n`dev nope`\n" })
     local reg = registry.load(root, { warn = function() end })
     for _, found in ipairs(topics.check(reg)) do
-        t.ok(found.file:sub(1, 5) == ".dev/", found.file .. ": " .. found.message)
+        testing.ok(found.file:sub(1, 5) == ".dev/", found.file .. ": " .. found.message)
     end
-    t.eq(#problems(root), 1)
+    testing.eq(#problems(root), 1)
     fs.remove(root, { recursive = true })
 end)

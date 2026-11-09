@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
@@ -13,56 +13,68 @@ local function lint_for(root)
     return lintset.new({ root = root, verbose = 0 })
 end
 
-t.test("spacing flags a comment right under code and passes a blank line before it", function()
-    t.eq(lintset.spacing("local a = 1\n-- why\nlocal b = 2\n", "--"), { 2 })
-    t.eq(lintset.spacing("local a = 1\n\n-- why\nlocal b = 2\n", "--"), {})
-    t.eq(lintset.spacing("f(function()\n    -- why\n    g()\nend)\n", "--"), {})
+testing.test(
+    "spacing flags a comment right under code and passes a blank line before it",
+    function()
+        testing.eq(lintset.spacing("local a = 1\n-- why\nlocal b = 2\n", "--"), { 2 })
+        testing.eq(lintset.spacing("local a = 1\n\n-- why\nlocal b = 2\n", "--"), {})
+        testing.eq(lintset.spacing("f(function()\n    -- why\n    g()\nend)\n", "--"), {})
+    end
+)
+
+testing.test(
+    "spacing passes a comment inside a method chain and flags one after the chain",
+    function()
+        testing.eq(lintset.spacing("let a = x\n    .iter()\n    // keep\n    .map(f);\n", "//"), {})
+        testing.eq(
+            lintset.spacing("let a = x\n    .map(f);\n    // keep\nlet b = 1;\n", "//"),
+            { 3 }
+        )
+    end
+)
+
+testing.test("spacing flags a comment between match arms and passes one in a literal", function()
+    testing.eq(
+        lintset.spacing("match x {\n    0 => 1,\n    // rest\n    _ => 2,\n}\n", "//"),
+        { 3 }
+    )
+    testing.eq(lintset.spacing("let l = vec![\n    1,\n    // two\n    2,\n];\n", "//"), {})
 end)
 
-t.test("spacing passes a comment inside a method chain and flags one after the chain", function()
-    t.eq(lintset.spacing("let a = x\n    .iter()\n    // keep\n    .map(f);\n", "//"), {})
-    t.eq(lintset.spacing("let a = x\n    .map(f);\n    // keep\nlet b = 1;\n", "//"), { 3 })
-end)
-
-t.test("spacing flags a comment between match arms and passes one in a literal", function()
-    t.eq(lintset.spacing("match x {\n    0 => 1,\n    // rest\n    _ => 2,\n}\n", "//"), { 3 })
-    t.eq(lintset.spacing("let l = vec![\n    1,\n    // two\n    2,\n];\n", "//"), {})
-end)
-
-t.test("spacing in shell passes a comment heading the next case arm", function()
-    t.eq(
+testing.test("spacing in shell passes a comment heading the next case arm", function()
+    testing.eq(
         lintset.spacing(
             "case b in\na)\n    echo a\n    ;;\n# b arm\nb)\n    echo b\n    ;;\nesac\n",
             "#"
         ),
         {}
     )
-    t.eq(lintset.spacing("run \\\n    --flag\n# then\nfinish\n", "#"), { 3 })
+    testing.eq(lintset.spacing("run \\\n    --flag\n# then\nfinish\n", "#"), { 3 })
 end)
 
-t.test("spacing skips doc comments and block comments", function()
-    t.eq(lintset.spacing("local a = 1\n--- doc\nlocal b\n", "--"), {})
-    t.eq(lintset.spacing("local a = 1\n\n--[[\nnote\n]]\nlocal b\n", "--"), {})
+testing.test("spacing skips doc comments and block comments", function()
+    testing.eq(lintset.spacing("local a = 1\n--- doc\nlocal b\n", "--"), {})
+    testing.eq(lintset.spacing("local a = 1\n\n--[[\nnote\n]]\nlocal b\n", "--"), {})
 end)
 
-t.test("runs flags three comment lines and passes lists and doc comments", function()
-    t.eq(lintset.runs("a\n-- one\n-- two\n-- three\nb\n", "--"), { { line = 2, count = 3 } })
-    t.eq(lintset.runs("a\n-- one\n-- two\nb\n", "--"), {})
-    t.eq(lintset.runs("a\n// 1. one\n// two\n// three\nb\n", "//"), {})
-    t.eq(lintset.runs("a\n/// one\n/// two\n/// three\nb\n", "//"), {})
-    t.eq(lintset.runs("// one\n// two\n// three", "//"), { { line = 1, count = 3 } })
+testing.test("runs flags three comment lines and passes lists and doc comments", function()
+    testing.eq(lintset.runs("a\n-- one\n-- two\n-- three\nb\n", "--"), { { line = 2, count = 3 } })
+    testing.eq(lintset.runs("a\n-- one\n-- two\nb\n", "--"), {})
+    testing.eq(lintset.runs("a\n// 1. one\n// two\n// three\nb\n", "//"), {})
+    testing.eq(lintset.runs("a\n/// one\n/// two\n/// three\nb\n", "//"), {})
+    testing.eq(lintset.runs("// one\n// two\n// three", "//"), { { line = 1, count = 3 } })
 end)
 
-t.test("periods finds a lone one-liner ending in a period and fix drops only that", function()
+testing.test("periods finds a lone one-liner ending in a period and fix drops only that", function()
     local text =
         "fn a() {\n    // Drop it.\n    f();\n\n    // Keep.\n    // This.\n    f();\n    // Wait...\n    f();\n}\n\n/// Doc.\nfn b() {}\n"
-    t.eq(lintset.periods(text), { 2 })
+    testing.eq(lintset.periods(text), { 2 })
     local fixed = lintset.fix_periods(text)
-    t.eq(fixed, (text:gsub("Drop it%.", "Drop it")))
-    t.eq(lintset.fix_periods(fixed), fixed)
+    testing.eq(fixed, (text:gsub("Drop it%.", "Drop it")))
+    testing.eq(lintset.fix_periods(fixed), fixed)
 end)
 
-t.test("files honours lint-ignore and the hidden switch in a git work tree", function()
+testing.test("files honours lint-ignore and the hidden switch in a git work tree", function()
     if not devos.which("git") then
         print("skip - git is not installed")
         return
@@ -76,32 +88,32 @@ t.test("files honours lint-ignore and the hidden switch in a git work tree", fun
     local lint = lint_for(root)
     local files = lint:files({ "*.rs" })
     table.sort(files)
-    t.eq(files, { ".dev/evidence/old.rs", "src/new.rs" })
+    testing.eq(files, { ".dev/evidence/old.rs", "src/new.rs" })
     assert(
         fs.write(root .. "/.dev/lint-ignore", "# note\n\n.dev/evidence/**\n"),
         "fixture setup failed"
     )
-    t.eq(lint:files({ "*.rs" }), { "src/new.rs" })
+    testing.eq(lint:files({ "*.rs" }), { "src/new.rs" })
     fs.remove(root .. "/.dev/lint-ignore")
     lint.skip_hidden = true
-    t.eq(lint:files({ "*.rs" }), { "src/new.rs" })
+    testing.eq(lint:files({ "*.rs" }), { "src/new.rs" })
     fs.remove(root, { recursive = true })
 end)
 
-t.test("finish names the failed checks and returns 1", function()
+testing.test("finish names the failed checks and returns 1", function()
     local lint = lint_for("/")
-    t.eq(lint:finish(), 0)
+    testing.eq(lint:finish(), 0)
     lint.failed = { "a", "b" }
-    t.eq(lint:finish(), 1)
+    testing.eq(lint:finish(), 1)
 end)
 
-t.test("standalone warns without failing the lint", function()
+testing.test("standalone warns without failing the lint", function()
     local root = support.tempdir()
     assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir failed")
     assert(fs.write(root .. "/.dev/x.sh", "#!/bin/sh\n"), "fixture setup failed")
     local lint = lint_for(root)
     lint:standalone()
-    t.eq(lint.failed, {})
-    t.eq(lint:finish(), 0)
+    testing.eq(lint.failed, {})
+    testing.eq(lint:finish(), 0)
     fs.remove(root, { recursive = true })
 end)

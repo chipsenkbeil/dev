@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -47,7 +47,7 @@ end
 local function local_board(project)
     local root, home = setup(project or '[board]\nbackend = "local"\nname = "mine"\n')
     local out, code = dev(root, home, { "board", "init" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     return root, home
 end
 
@@ -66,18 +66,18 @@ end
 local function tick_first(root, home, id)
     local out, code =
         dev(root, home, { "board", "outcome", id, "--tick", "1", "--as", "r/reviewer" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end
 
 local function mode(path)
     return string.format("%o", bit.band(assert(fs.stat(path)).mode, 511))
 end
 
-t.test("init lays out the nine columns and the palette and is idempotent", function()
+testing.test("init lays out the nine columns and the palette and is idempotent", function()
     local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
     local out, code = dev(root, home, { "board", "init" })
-    t.eq(code, 0, out)
-    t.ok(out:find("created board mine with no template", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("created board mine with no template", 1, true), out)
     for _, column in ipairs({
         "Icebox",
         "Backlog",
@@ -89,17 +89,17 @@ t.test("init lays out the nine columns and the palette and is idempotent", funct
         "Blocked",
         "Done",
     }) do
-        t.ok(out:find("added column " .. column, 1, true), out)
+        testing.ok(out:find("added column " .. column, 1, true), out)
     end
-    t.ok(out:find('named yellow "1 Pomodoro"', 1, true), out)
-    t.ok(out:find('named white "Unsized"', 1, true), out)
-    t.ok(out:find("made white the default colour", 1, true), out)
+    testing.ok(out:find('named yellow "1 Pomodoro"', 1, true), out)
+    testing.ok(out:find('named white "Unsized"', 1, true), out)
+    testing.ok(out:find("made white the default colour", 1, true), out)
     local doc = document(file_of(home))
     local names = {}
     for _, column in ipairs(doc.columns) do
         names[#names + 1] = column.name
     end
-    t.eq(names, {
+    testing.eq(names, {
         "Icebox",
         "Backlog",
         "Ready",
@@ -110,12 +110,12 @@ t.test("init lays out the nine columns and the palette and is idempotent", funct
         "Blocked",
         "Done",
     })
-    t.eq(doc.columns[9].is_done, true)
+    testing.eq(doc.columns[9].is_done, true)
     local labels = {}
     for _, color in ipairs(doc.colors) do
         labels[#labels + 1] = color.value .. "=" .. color.label
     end
-    t.eq(labels, {
+    testing.eq(labels, {
         "yellow=1 Pomodoro",
         "green=2 Pomodori",
         "blue=3 Pomodori",
@@ -123,52 +123,52 @@ t.test("init lays out the nine columns and the palette and is idempotent", funct
         "white=Unsized",
     })
     out, code = dev(root, home, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(out, "board mine already follows the standard, nothing to change\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "board mine already follows the standard, nothing to change\n")
 end)
 
-t.test("the board file is private and writes leave no temporary file", function()
+testing.test("the board file is private and writes leave no temporary file", function()
     local root, home = local_board()
     dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
-    t.eq(mode(file_of(home)), "600")
-    t.eq(mode(home .. "/state/dev/boards"), "700")
+    testing.eq(mode(file_of(home)), "600")
+    testing.eq(mode(home .. "/state/dev/boards"), "700")
     local names = fs.list(home .. "/state/dev/boards")
-    t.eq(names, { "mine.json", "mine.json.lock" })
+    testing.eq(names, { "mine.json", "mine.json.lock" })
 end)
 
-t.test("show and note refuse a crossboard --board on a local board", function()
+testing.test("show and note refuse a crossboard --board on a local board", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "show", "11111111", "--board", "other" })
-    t.eq(code, 1, out)
-    t.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+    testing.eq(code, 1, out)
+    testing.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
     out, code = dev(root, home, { "board", "note", "11111111", "--board", "other", "text" })
-    t.eq(code, 1, out)
-    t.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+    testing.eq(code, 1, out)
+    testing.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
 end)
 
-t.test("boards and columns answer for a local board's own name only", function()
+testing.test("boards and columns answer for a local board's own name only", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "boards" })
-    t.eq(code, 0, out)
-    t.eq(out, "mine\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "mine\n")
     local columns =
         "Icebox\nBacklog\nReady\nIn Progress\nReview\nVerify\nRelease\nBlocked\nDone (done)\n"
     out, code = dev(root, home, { "board", "columns" })
-    t.eq(code, 0, out)
-    t.eq(out, columns)
+    testing.eq(code, 0, out)
+    testing.eq(out, columns)
     out, code = dev(root, home, { "board", "columns", "mine" })
-    t.eq(code, 0, out)
-    t.eq(out, columns)
+    testing.eq(code, 0, out)
+    testing.eq(out, columns)
     out, code = dev(root, home, { "board", "columns", "other" })
-    t.eq(code, 1, out)
-    t.eq(out, "dev: a local board knows only its own columns, so other is not reachable\n")
+    testing.eq(code, 1, out)
+    testing.eq(out, "dev: a local board knows only its own columns, so other is not reachable\n")
     out, code = dev(root, home, { "board", "columns", "mine", "extra" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "boards", "extra" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
 end)
 
-t.test("add, ls, next, move, size and label work on a local board", function()
+testing.test("add, ls, next, move, size and label work on a local board", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -187,9 +187,9 @@ t.test("add, ls, next, move, size and label work on a local board", function()
         "--checks",
         "dev test",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local a = prefix_of(out)
-    t.ok(out:find("Ready", 1, true), out)
+    testing.ok(out:find("Ready", 1, true), out)
     out = dev(
         root,
         home,
@@ -197,7 +197,7 @@ t.test("add, ls, next, move, size and label work on a local board", function()
     )
     local b = prefix_of(out)
     out = dev(root, home, { "board", "ls" })
-    t.eq(
+    testing.eq(
         out,
         b
             .. "  Backlog  1 Pomodoro  -                0/1  Second\n"
@@ -205,27 +205,30 @@ t.test("add, ls, next, move, size and label work on a local board", function()
             .. "  Ready    2 Pomodori  docs,needs:lead  -    Write docs\n"
     )
     out = dev(root, home, { "board", "ls", "--size", "3+" })
-    t.eq(out, "no cards\n")
+    testing.eq(out, "no cards\n")
     out = dev(root, home, { "board", "ls", "--label", "docs" })
-    t.ok(out:find("Write docs", 1, true), out)
+    testing.ok(out:find("Write docs", 1, true), out)
     out = dev(root, home, { "board", "next" })
-    t.eq(out, a .. "  Ready  2 Pomodori  docs,needs:lead  Write docs  0 comments, 0 the owner's\n")
+    testing.eq(
+        out,
+        a .. "  Ready  2 Pomodori  docs,needs:lead  Write docs  0 comments, 0 the owner's\n"
+    )
     out = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
-    t.eq(out, "moved " .. a .. " to Review\n")
+    testing.eq(out, "moved " .. a .. " to Review\n")
     out = dev(root, home, { "board", "next" })
-    t.eq(out, "no ready cards\n")
+    testing.eq(out, "no ready cards\n")
     out = dev(root, home, { "board", "size", b, "1" })
-    t.eq(out, "sized " .. b .. " 1\n")
+    testing.eq(out, "sized " .. b .. " 1\n")
     out = dev(root, home, { "board", "label", a, "+extra", "--remove", "docs" })
-    t.eq(out, "labelled " .. a .. " needs:lead,extra\n")
+    testing.eq(out, "labelled " .. a .. " needs:lead,extra\n")
     out = dev(root, home, { "board", "move", a, COLUMN.DONE })
     out = dev(root, home, { "board", "ls" })
-    t.eq(out, b .. "  Backlog  1 Pomodoro  -  0/1  Second\n")
+    testing.eq(out, b .. "  Backlog  1 Pomodoro  -  0/1  Second\n")
     out = dev(root, home, { "board", "ls", "--column", COLUMN.DONE })
-    t.ok(out:find("Done  2 Pomodori", 1, true), out)
+    testing.ok(out:find("Done  2 Pomodori", 1, true), out)
 end)
 
-t.test("edit replaces a local card's description from a file or standard input", function()
+testing.test("edit replaces a local card's description from a file or standard input", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -238,64 +241,67 @@ t.test("edit replaces a local card's description from a file or standard input",
     )
     assert(fs.write(root .. "/plan.md", "## Problem\nfrom a file\n\n"))
     local out, code = dev(root, home, { "board", "edit", a, "--file", root .. "/plan.md" })
-    t.eq(code, 0, out)
-    t.eq(out, "edited " .. a .. "\n")
-    t.eq(document(file_of(home)).cards[1].description, "## Problem\nfrom a file")
+    testing.eq(code, 0, out)
+    testing.eq(out, "edited " .. a .. "\n")
+    testing.eq(document(file_of(home)).cards[1].description, "## Problem\nfrom a file")
     out, code = support.dev(
         root,
         { "board", "edit", a },
         { env = env_of(home), input = "from standard input\n" }
     )
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out = dev(root, home, { "board", "show", a })
-    t.eq(out, a .. "  Icebox  Unsized  -  Card\n\nfrom standard input\n\nno comments\n")
+    testing.eq(out, a .. "  Icebox  Unsized  -  Card\n\nfrom standard input\n\nno comments\n")
 end)
 
-t.test(
+testing.test(
     "stale does not mark a local needs:human card that only an agent has commented on",
     function()
         local root, home = local_board()
         local a =
             prefix_of((dev(root, home, { "board", "add", "First", "--column", COLUMN.ICEBOX })))
         local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
         out, code = dev(root, home, { "board", "note", a, "still open" })
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
         out = dev(root, home, { "board", "stale" })
-        t.ok(out:find("for the owner (needs:human):", 1, true), out)
-        t.ok(not out:find("answered", 1, true), out)
+        testing.ok(out:find("for the owner (needs:human):", 1, true), out)
+        testing.ok(not out:find("answered", 1, true), out)
     end
 )
 
-t.test("answer posts the quote and frees a local needs:human card", function()
+testing.test("answer posts the quote and frees a local needs:human card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", COLUMN.ICEBOX })))
     local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "answer", a, "--choice", "2", "--quote", "go ahead" })
-    t.eq(code, 0, out)
-    t.eq(out, "answered " .. a .. " with choice 2\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "answered " .. a .. " with choice 2\n")
     out = dev(root, home, { "board", "show", a })
-    t.ok(out:find("Owner's answer, typed in this session: choice 2, quote: go ahead", 1, true), out)
-    t.ok(not out:find("needs:human", 1, true), out)
+    testing.ok(
+        out:find("Owner's answer, typed in this session: choice 2, quote: go ahead", 1, true),
+        out
+    )
+    testing.ok(not out:find("needs:human", 1, true), out)
     out, code = dev(root, home, { "board", "answer", a, "--choice", "2", "--quote", "again" })
-    t.eq(code, 1, out)
+    testing.eq(code, 1, out)
 end)
 
-t.test("next --column backlog skips a needs:human card", function()
+testing.test("next --column backlog skips a needs:human card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", COLUMN.ICEBOX })))
     local b = prefix_of((dev(root, home, { "board", "add", "Second", "--column", COLUMN.ICEBOX })))
     local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "next", "--column", COLUMN.ICEBOX })
-    t.eq(code, 0, out)
-    t.ok(out:find(b, 1, true) and not out:find(a, 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find(b, 1, true) and not out:find(a, 1, true), out)
     out = dev(root, home, { "board", "next", "--column", COLUMN.BACKLOG })
-    t.eq(out, "no cards in Backlog\n")
+    testing.eq(out, "no cards in Backlog\n")
 end)
 
-t.test("next --column blocked returns the top unclaimed needs:lead card only", function()
+testing.test("next --column blocked returns the top unclaimed needs:lead card only", function()
     local root, home = local_board()
     local function blocked(name, label)
         local out, code = dev(root, home, {
@@ -313,7 +319,7 @@ t.test("next --column blocked returns the top unclaimed needs:lead card only", f
             "--label",
             label,
         })
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
         return prefix_of(out)
     end
     blocked("Plain", "docs")
@@ -321,17 +327,17 @@ t.test("next --column blocked returns the top unclaimed needs:lead card only", f
     local claimed = blocked("Claimed", "needs:lead")
     local free = blocked("Free", "needs:lead")
     local out, code = dev(root, home, { "board", "take", claimed })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "next", "--column", COLUMN.BLOCKED })
-    t.eq(code, 0, out)
-    t.ok(out:find(free, 1, true) and out:find("Free", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find(free, 1, true) and out:find("Free", 1, true), out)
     out, code = dev(root, home, { "board", "label", free, "needs:human" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out = dev(root, home, { "board", "next", "--column", COLUMN.BLOCKED })
-    t.eq(out, "no cards in Blocked\n")
+    testing.eq(out, "no cards in Blocked\n")
 end)
 
-t.test("rename sets a local card's title and refuses a blank one", function()
+testing.test("rename sets a local card's title and refuses a blank one", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -343,15 +349,15 @@ t.test("rename sets a local card's title and refuses a blank one", function()
         )
     )
     local out, code = dev(root, home, { "board", "rename", a, "Better", "title" })
-    t.eq(code, 0, out)
-    t.eq(out, "renamed " .. a .. "\n")
-    t.eq(document(file_of(home)).cards[1].name, "Better title")
+    testing.eq(code, 0, out)
+    testing.eq(out, "renamed " .. a .. "\n")
+    testing.eq(document(file_of(home)).cards[1].name, "Better title")
     out, code = dev(root, home, { "board", "rename", a, " " })
-    t.eq(code, 2, out)
-    t.eq(document(file_of(home)).cards[1].name, "Better title")
+    testing.eq(code, 2, out)
+    testing.eq(document(file_of(home)).cards[1].name, "Better title")
 end)
 
-t.test("discard notes the reason, labels the card and moves it to Done", function()
+testing.test("discard notes the reason, labels the card and moves it to Done", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -363,17 +369,17 @@ t.test("discard notes the reason, labels the card and moves it to Done", functio
         )
     )
     local out, code = dev(root, home, { "board", "discard", a, "--reason", "Not needed" })
-    t.eq(code, 0, out)
-    t.eq(out, "discarded " .. a .. "\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "discarded " .. a .. "\n")
     local card = document(file_of(home)).cards[1]
-    t.eq(card.comments[1].kind, "decision")
-    t.eq(card.comments[1].body, "Not needed")
-    t.eq(card.labels[1], "discarded")
+    testing.eq(card.comments[1].kind, "decision")
+    testing.eq(card.comments[1].body, "Not needed")
+    testing.eq(card.labels[1], "discarded")
     out = dev(root, home, { "board", "ls", "--column", "Done" })
-    t.ok(out:find(a, 1, true), out)
+    testing.ok(out:find(a, 1, true), out)
 end)
 
-t.test("discard refuses a needs:human card and writes nothing", function()
+testing.test("discard refuses a needs:human card and writes nothing", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -389,16 +395,16 @@ t.test("discard refuses a needs:human card and writes nothing", function()
         "a",
     })))
     local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "discard", a, "--reason", "Dropped" })
-    t.eq(code, 1, out)
-    t.ok(out:find("needs:human", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("needs:human", 1, true), out)
     local card = document(file_of(home)).cards[1]
-    t.eq(#(card.comments or {}), 0)
-    t.eq(card.labels[1], "needs:human")
+    testing.eq(#(card.comments or {}), 0)
+    testing.eq(card.labels[1], "needs:human")
 end)
 
-t.test("discard closes an unplanned Icebox card given a reason", function()
+testing.test("discard closes an unplanned Icebox card given a reason", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -410,37 +416,40 @@ t.test("discard closes an unplanned Icebox card given a reason", function()
         )
     )
     local out, code = dev(root, home, { "board", "discard", a, "--reason", "Answered" })
-    t.eq(code, 0, out)
-    t.eq(out, "discarded " .. a .. "\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "discarded " .. a .. "\n")
     local card = document(file_of(home)).cards[1]
-    t.eq(card.comments[1].body, "Answered")
-    t.eq(card.labels[1], "discarded")
+    testing.eq(card.comments[1].body, "Answered")
+    testing.eq(card.labels[1], "discarded")
     out = dev(root, home, { "board", "ls", "--column", "Done" })
-    t.ok(out:find(a, 1, true), out)
+    testing.ok(out:find(a, 1, true), out)
 end)
 
-t.test("discard refuses an unplanned Icebox card without a reason and writes nothing", function()
-    local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--column", COLUMN.ICEBOX, "--description", "keep" }
+testing.test(
+    "discard refuses an unplanned Icebox card without a reason and writes nothing",
+    function()
+        local root, home = local_board()
+        local a = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "Card", "--column", COLUMN.ICEBOX, "--description", "keep" }
+                )
             )
         )
-    )
-    local out, code = dev(root, home, { "board", "discard", a })
-    t.eq(code, 1, out)
-    t.ok(out:find("is not planned and cannot be discarded", 1, true), out)
-    local card = document(file_of(home)).cards[1]
-    t.eq(#(card.comments or {}), 0)
-    t.eq(#(card.labels or {}), 0)
-    out = dev(root, home, { "board", "ls", "--column", COLUMN.ICEBOX })
-    t.ok(out:find(a, 1, true), out)
-end)
+        local out, code = dev(root, home, { "board", "discard", a })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("is not planned and cannot be discarded", 1, true), out)
+        local card = document(file_of(home)).cards[1]
+        testing.eq(#(card.comments or {}), 0)
+        testing.eq(#(card.labels or {}), 0)
+        out = dev(root, home, { "board", "ls", "--column", COLUMN.ICEBOX })
+        testing.ok(out:find(a, 1, true), out)
+    end
+)
 
-t.test("discard refuses an unplanned card outside Icebox even with a reason", function()
+testing.test("discard refuses an unplanned card outside Icebox even with a reason", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -459,15 +468,15 @@ t.test("discard refuses an unplanned card outside Icebox even with a reason", fu
     doc.cards[1].description = "keep"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     local out, code = dev(root, home, { "board", "discard", a, "--reason", "Dropped" })
-    t.eq(code, 1, out)
-    t.ok(out:find("is not planned and cannot be discarded", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is not planned and cannot be discarded", 1, true), out)
     local card = document(file_of(home)).cards[1]
-    t.eq(#(card.comments or {}), 0)
+    testing.eq(#(card.comments or {}), 0)
     out = dev(root, home, { "board", "ls", "--column", COLUMN.BACKLOG })
-    t.ok(out:find(a, 1, true), out)
+    testing.ok(out:find(a, 1, true), out)
 end)
 
-t.test(
+testing.test(
     "move to Done waits for every outcome to be ticked, and discard drops an open card",
     function()
         local root, home = local_board()
@@ -483,13 +492,13 @@ t.test(
             "First works",
         })))
         local out, code = dev(root, home, { "board", "move", a, COLUMN.DONE })
-        t.eq(code, 1, out)
-        t.ok(out:find("1 of 1 outcomes are unticked (1. First works)", 1, true), out)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("1 of 1 outcomes are unticked (1. First works)", 1, true), out)
         out, code = dev(root, home, { "board", "outcome", a, "--tick", "1", "--as", "r/reviewer" })
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
         out, code = dev(root, home, { "board", "move", a, COLUMN.DONE })
-        t.eq(code, 0, out)
-        t.eq(out, "moved " .. a .. " to Done\n")
+        testing.eq(code, 0, out)
+        testing.eq(out, "moved " .. a .. " to Done\n")
         local b = prefix_of((dev(root, home, {
             "board",
             "add",
@@ -502,14 +511,14 @@ t.test(
             "Never works",
         })))
         out, code = dev(root, home, { "board", "discard", b, "--reason", "Not needed" })
-        t.eq(code, 0, out)
-        t.eq(out, "discarded " .. b .. "\n")
+        testing.eq(code, 0, out)
+        testing.eq(out, "discarded " .. b .. "\n")
         out = dev(root, home, { "board", "ls", "--column", "Done" })
-        t.ok(out:find(b, 1, true), out)
+        testing.ok(out:find(b, 1, true), out)
     end
 )
 
-t.test("edit refuses empty text, a missing file and an extra word", function()
+testing.test("edit refuses empty text, a missing file and an extra word", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -525,15 +534,15 @@ t.test("edit refuses empty text, a missing file and an extra word", function()
         { "board", "edit", a },
         { env = env_of(home), input = " \n\n" }
     )
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "edit", a, "--file", root .. "/missing.md" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "edit", a, "extra" })
-    t.eq(code, 2, out)
-    t.eq(document(file_of(home)).cards[1].description, "keep")
+    testing.eq(code, 2, out)
+    testing.eq(document(file_of(home)).cards[1].description, "keep")
 end)
 
-t.test("edit is refused under another process's claim fence", function()
+testing.test("edit is refused under another process's claim fence", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -553,11 +562,11 @@ t.test("edit is refused under another process's claim fence", function()
         { "board", "edit", a },
         { env = env_of(home), input = "new\n" }
     )
-    t.eq(code, 1, out)
-    t.eq(document(file_of(home)).cards[1].description, "keep")
+    testing.eq(code, 1, out)
+    testing.eq(document(file_of(home)).cards[1].description, "keep")
 end)
 
-t.test("show prints a local card's description and notes", function()
+testing.test("show prints a local card's description and notes", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -569,13 +578,13 @@ t.test("show prints a local card's description and notes", function()
         "why it matters",
     })))
     local out = dev(root, home, { "board", "show", a })
-    t.eq(out, a .. "  Icebox  Unsized  -  Card\n\nwhy it matters\n\nno comments\n")
+    testing.eq(out, a .. "  Icebox  Unsized  -  Card\n\nwhy it matters\n\nno comments\n")
     dev(root, home, { "board", "note", a, "hello" })
     out = dev(root, home, { "board", "show", a })
-    t.ok(out:find("\n\nwhy it matters\n\n%x+  agent  .-  hello\n$"), out)
+    testing.ok(out:find("\n\nwhy it matters\n\n%x+  agent  .-  hello\n$"), out)
 end)
 
-t.test("notes, edit and delete work on a local board and refuse another author's", function()
+testing.test("notes, edit and delete work on a local board and refuse another author's", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -587,26 +596,26 @@ t.test("notes, edit and delete work on a local board and refuse another author's
         )
     )
     local out = dev(root, home, { "board", "note", a, "first", "thought" })
-    t.eq(out, "noted " .. a .. "\n")
+    testing.eq(out, "noted " .. a .. "\n")
     dev(root, home, { "board", "note", a, "second" })
     out = dev(root, home, { "board", "notes", a })
     local first = assert(out:match("^(%x+)"))
-    t.ok(out:find("agent  ", 1, true) and out:find("first thought", 1, true), out)
+    testing.ok(out:find("agent  ", 1, true) and out:find("first thought", 1, true), out)
     local second = assert(out:match("\n(%x+)"))
     out = dev(root, home, { "board", "note", a, "--edit", first, "better", "words" })
-    t.eq(out, "edited " .. a .. " " .. first .. "\n")
+    testing.eq(out, "edited " .. a .. " " .. first .. "\n")
     out = dev(root, home, { "board", "note", a, "--delete", second })
-    t.eq(out, "deleted " .. a .. " " .. second .. "\n")
+    testing.eq(out, "deleted " .. a .. " " .. second .. "\n")
     out = dev(root, home, { "board", "notes", a })
-    t.ok(out:find("better words", 1, true) and not out:find("second", 1, true), out)
+    testing.ok(out:find("better words", 1, true) and not out:find("second", 1, true), out)
     local doc = document(file_of(home))
     doc.cards[1].comments[1].who = "human"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     out = dev(root, home, { "board", "note", a, "--edit", first, "x" })
-    t.eq(out, "dev: that comment is not yours to change\n")
+    testing.eq(out, "dev: that comment is not yours to change\n")
 end)
 
-t.test("note --kind and --as are stored on a local comment and notes prints them", function()
+testing.test("note --kind and --as are stored on a local comment and notes prints them", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -620,17 +629,20 @@ t.test("note --kind and --as are stored on a local comment and notes prints them
     dev(root, home, { "board", "note", a, "--kind", "decision", "--as", "reviewer", "ship", "it" })
     dev(root, home, { "board", "note", a, "plain" })
     local out = dev(root, home, { "board", "notes", a })
-    t.ok(out:find("agent  decision  reviewer  ", 1, true) and out:find("ship it", 1, true), out)
-    t.ok(out:find("agent  agent     -         ", 1, true), out)
+    testing.ok(
+        out:find("agent  decision  reviewer  ", 1, true) and out:find("ship it", 1, true),
+        out
+    )
+    testing.ok(out:find("agent  agent     -         ", 1, true), out)
     out = dev(root, home, { "board", "note", a, "--kind", "chatter", "x" })
-    t.ok(out:find("unknown kind chatter", 1, true), out)
+    testing.ok(out:find("unknown kind chatter", 1, true), out)
     local first = assert(dev(root, home, { "board", "notes", a }):match("^(%x+)"))
     dev(root, home, { "board", "note", a, "--edit", first, "changed" })
     out = dev(root, home, { "board", "notes", a })
-    t.ok(out:find("decision  reviewer  ", 1, true) and out:find("changed", 1, true), out)
+    testing.ok(out:find("decision  reviewer  ", 1, true) and out:find("changed", 1, true), out)
 end)
 
-t.test("local escalate swaps the label in one write", function()
+testing.test("local escalate swaps the label in one write", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -643,16 +655,16 @@ t.test("local escalate swaps the label in one write", function()
     )
     dev(root, home, { "board", "label", a, "+docs", "+needs:planner" })
     local out, code = dev(root, home, { "board", "escalate", a, "pick", "one" })
-    t.eq(code, 0, out)
-    t.eq(out, "escalated " .. a .. " to needs:lead\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "escalated " .. a .. " to needs:lead\n")
     local card = document(file_of(home)).cards[1]
-    t.eq(card.labels, { "docs", "needs:lead" })
-    t.eq(#card.comments, 1)
-    t.eq(card.comments[1].kind, "blocked")
-    t.eq(card.comments[1].body, "pick one")
+    testing.eq(card.labels, { "docs", "needs:lead" })
+    testing.eq(#card.comments, 1)
+    testing.eq(card.comments[1].kind, "blocked")
+    testing.eq(card.comments[1].body, "pick one")
 end)
 
-t.test(
+testing.test(
     "link stores blocked_by, blocks and related on a local board and keeps next honest",
     function()
         local root, home = local_board()
@@ -673,189 +685,198 @@ t.test(
         end
         local first, second, third = add("First"), add("Second"), add("Third")
         local out, code = dev(root, home, { "board", "link", first, "blocked_by", second })
-        t.eq(out, "linked " .. first .. " blocked_by " .. second .. "\n")
-        t.eq(code, 0)
-        t.eq(dev(root, home, { "board", "link", first, "blocked_by", second }), out)
+        testing.eq(out, "linked " .. first .. " blocked_by " .. second .. "\n")
+        testing.eq(code, 0)
+        testing.eq(dev(root, home, { "board", "link", first, "blocked_by", second }), out)
         out = dev(root, home, { "board", "link", third, "blocks", second })
-        t.eq(out, "linked " .. third .. " blocks " .. second .. "\n")
+        testing.eq(out, "linked " .. third .. " blocks " .. second .. "\n")
         out = dev(root, home, { "board", "link", first, "related", third })
-        t.eq(out, "linked " .. first .. " related " .. third .. "\n")
+        testing.eq(out, "linked " .. first .. " related " .. third .. "\n")
         local held = {}
         for _, card in ipairs(document(file_of(home)).cards) do
             held[card.id:sub(1, 8)] = card.links
         end
-        t.eq(#held[first], 2)
-        t.eq(held[first][1].kind, "blocked_by")
-        t.eq(held[first][1].target_id:sub(1, 8), second)
-        t.eq(held[first][2].kind, "related")
-        t.eq(#held[second], 1)
-        t.eq(held[second][1].kind, "blocked_by")
-        t.eq(held[second][1].target_id:sub(1, 8), third)
-        t.eq(held[third], nil)
+        testing.eq(#held[first], 2)
+        testing.eq(held[first][1].kind, "blocked_by")
+        testing.eq(held[first][1].target_id:sub(1, 8), second)
+        testing.eq(held[first][2].kind, "related")
+        testing.eq(#held[second], 1)
+        testing.eq(held[second][1].kind, "blocked_by")
+        testing.eq(held[second][1].target_id:sub(1, 8), third)
+        testing.eq(held[third], nil)
         out = dev(root, home, { "board", "next" })
-        t.ok(out:find("^" .. third), out)
+        testing.ok(out:find("^" .. third), out)
         dev(root, home, { "board", "move", third, COLUMN.DONE })
         out = dev(root, home, { "board", "next" })
-        t.ok(out:find("^" .. second), out)
+        testing.ok(out:find("^" .. second), out)
         dev(root, home, { "board", "move", second, COLUMN.DONE })
         out = dev(root, home, { "board", "next" })
-        t.ok(out:find("^" .. first), out)
+        testing.ok(out:find("^" .. first), out)
     end
 )
 
-t.test("links lists a card's own links and the reverse side of links other cards hold", function()
-    local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+testing.test(
+    "links lists a card's own links and the reverse side of links other cards hold",
+    function()
+        local root, home = local_board()
+        local a = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
             )
         )
-    )
-    local b = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
+        local b = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
             )
         )
-    )
-    local c = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
+        local c = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
             )
         )
-    )
-    dev(root, home, { "board", "link", a, "blocked_by", b })
-    dev(root, home, { "board", "link", a, "related", c })
-    local out, code = dev(root, home, { "board", "links", a })
-    t.eq(code, 0, out)
-    t.eq(out, "blocked_by  " .. b .. "  -\nrelated     " .. c .. "  -\n")
-    out = dev(root, home, { "board", "links", b })
-    t.eq(out, "blocks  " .. a .. "  -\n")
-    out = dev(root, home, { "board", "links", c })
-    t.eq(out, "related  " .. a .. "  -\n")
-    dev(root, home, { "board", "link", c, "related", a })
-    out = dev(root, home, { "board", "links", c })
-    t.eq(out, "related  " .. a .. "  -\n")
-    local d = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "D", "--problem", "x", "--size", "1", "--done-when", "a" }
+        dev(root, home, { "board", "link", a, "blocked_by", b })
+        dev(root, home, { "board", "link", a, "related", c })
+        local out, code = dev(root, home, { "board", "links", a })
+        testing.eq(code, 0, out)
+        testing.eq(out, "blocked_by  " .. b .. "  -\nrelated     " .. c .. "  -\n")
+        out = dev(root, home, { "board", "links", b })
+        testing.eq(out, "blocks  " .. a .. "  -\n")
+        out = dev(root, home, { "board", "links", c })
+        testing.eq(out, "related  " .. a .. "  -\n")
+        dev(root, home, { "board", "link", c, "related", a })
+        out = dev(root, home, { "board", "links", c })
+        testing.eq(out, "related  " .. a .. "  -\n")
+        local d = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "D", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
             )
         )
-    )
-    out = dev(root, home, { "board", "links", d })
-    t.eq(out, "no links\n")
-    out, code = dev(root, home, { "board", "links", "deadbeef" })
-    t.eq(code, 1, out)
-end)
-
-t.test("unlink removes a link from the card that holds it, and refuses one it lacks", function()
-    local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
-    local b = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
-    local c = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
-    dev(root, home, { "board", "link", a, "blocked_by", b })
-    dev(root, home, { "board", "link", a, "related", c })
-    local out, code = dev(root, home, { "board", "unlink", a, "related", c })
-    t.eq(code, 0, out)
-    t.eq(out, "unlinked " .. a .. " related " .. c .. "\n")
-    t.eq(dev(root, home, { "board", "links", a }), "blocked_by  " .. b .. "  -\n")
-    out, code = dev(root, home, { "board", "unlink", c, "related", a })
-    t.eq(code, 1, out)
-    out, code = dev(root, home, { "board", "unlink", b, "blocks", a })
-    t.eq(code, 0, out)
-    t.eq(dev(root, home, { "board", "links", a }), "no links\n")
-    out, code = dev(root, home, { "board", "unlink", a, "blocked_by", b })
-    t.eq(code, 1, out)
-    t.ok(out:find("the card holds no blocked_by link to " .. b, 1, true), out)
-end)
-
-t.test("link refuses itself, a cycle, another board and a bad kind on a local board", function()
-    local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
-    local b = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
-    local c = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
-    local out, code = dev(root, home, { "board", "link", a, "related", a })
-    t.eq(code, 1, out)
-    t.ok(out:find("itself", 1, true), out)
-    dev(root, home, { "board", "link", a, "blocked_by", b })
-    dev(root, home, { "board", "link", b, "blocked_by", c })
-    out, code = dev(root, home, { "board", "link", c, "blocked_by", a })
-    t.eq(code, 1, out)
-    t.ok(out:find("wait on each other", 1, true), out)
-    out, code = dev(root, home, { "board", "link", a, "blocks", c })
-    t.eq(code, 1, out)
-    out, code = dev(root, home, { "board", "link", a, "related", "other:" .. b })
-    t.eq(code, 1, out)
-    t.ok(out:find("links only its own cards", 1, true), out)
-    out, code = dev(root, home, { "board", "link", a, "needs", b })
-    t.eq(code, 2, out)
-    local links = 0
-    for _, card in ipairs(document(file_of(home)).cards) do
-        links = links + #(card.links or {})
+        out = dev(root, home, { "board", "links", d })
+        testing.eq(out, "no links\n")
+        out, code = dev(root, home, { "board", "links", "deadbeef" })
+        testing.eq(code, 1, out)
     end
-    t.eq(links, 2)
-end)
+)
 
-t.test("a local board refuses what the needs:human and epic rules forbid", function()
+testing.test(
+    "unlink removes a link from the card that holds it, and refuses one it lacks",
+    function()
+        local root, home = local_board()
+        local a = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
+            )
+        )
+        local b = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
+            )
+        )
+        local c = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
+            )
+        )
+        dev(root, home, { "board", "link", a, "blocked_by", b })
+        dev(root, home, { "board", "link", a, "related", c })
+        local out, code = dev(root, home, { "board", "unlink", a, "related", c })
+        testing.eq(code, 0, out)
+        testing.eq(out, "unlinked " .. a .. " related " .. c .. "\n")
+        testing.eq(dev(root, home, { "board", "links", a }), "blocked_by  " .. b .. "  -\n")
+        out, code = dev(root, home, { "board", "unlink", c, "related", a })
+        testing.eq(code, 1, out)
+        out, code = dev(root, home, { "board", "unlink", b, "blocks", a })
+        testing.eq(code, 0, out)
+        testing.eq(dev(root, home, { "board", "links", a }), "no links\n")
+        out, code = dev(root, home, { "board", "unlink", a, "blocked_by", b })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("the card holds no blocked_by link to " .. b, 1, true), out)
+    end
+)
+
+testing.test(
+    "link refuses itself, a cycle, another board and a bad kind on a local board",
+    function()
+        local root, home = local_board()
+        local a = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
+            )
+        )
+        local b = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
+            )
+        )
+        local c = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
+                )
+            )
+        )
+        local out, code = dev(root, home, { "board", "link", a, "related", a })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("itself", 1, true), out)
+        dev(root, home, { "board", "link", a, "blocked_by", b })
+        dev(root, home, { "board", "link", b, "blocked_by", c })
+        out, code = dev(root, home, { "board", "link", c, "blocked_by", a })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("wait on each other", 1, true), out)
+        out, code = dev(root, home, { "board", "link", a, "blocks", c })
+        testing.eq(code, 1, out)
+        out, code = dev(root, home, { "board", "link", a, "related", "other:" .. b })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("links only its own cards", 1, true), out)
+        out, code = dev(root, home, { "board", "link", a, "needs", b })
+        testing.eq(code, 2, out)
+        local links = 0
+        for _, card in ipairs(document(file_of(home)).cards) do
+            links = links + #(card.links or {})
+        end
+        testing.eq(links, 2)
+    end
+)
+
+testing.test("a local board refuses what the needs:human and epic rules forbid", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of(
@@ -881,31 +902,31 @@ t.test("a local board refuses what the needs:human and epic rules forbid", funct
         "dev test",
     })))
     local out, code = dev(root, home, { "board", "label", card, "needs:human" })
-    t.eq(code, 1, out)
-    t.ok(out:find("Blocked or Icebox", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Blocked or Icebox", 1, true), out)
     dev(root, home, { "board", "move", card, COLUMN.BLOCKED })
     out, code = dev(root, home, { "board", "label", card, "needs:human" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "move", card, COLUMN.BACKLOG })
-    t.eq(code, 1, out)
-    t.ok(out:find("needs:human", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("needs:human", 1, true), out)
     assert(fs.write(root .. "/plan.md", "new text\n"))
     out, code = dev(root, home, { "board", "edit", card, "--file", root .. "/plan.md" })
-    t.eq(code, 1, out)
-    t.ok(out:find("needs:human", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("needs:human", 1, true), out)
     out, code = dev(root, home, { "board", "note", card, "still allowed" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "label", card, "--remove", "needs:human" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "move", card, COLUMN.BACKLOG })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     dev(root, home, { "board", "epic", epic })
     dev(root, home, { "board", "link", child, "parent", epic })
     out, code = dev(root, home, { "board", "move", epic, COLUMN.READY })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end)
 
-t.test("link parent sets one epic and show and links report it", function()
+testing.test("link parent sets one epic and show and links report it", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of(
@@ -923,44 +944,44 @@ t.test("link parent sets one epic and show and links report it", function()
     dev(root, home, { "board", "epic", one })
     dev(root, home, { "board", "epic", other })
     local out, code = dev(root, home, { "board", "link", one, "parent", epic })
-    t.eq(out, "linked " .. one .. " parent " .. epic .. "\n")
-    t.eq(code, 0)
-    t.eq(dev(root, home, { "board", "link", one, "parent", epic }), out)
+    testing.eq(out, "linked " .. one .. " parent " .. epic .. "\n")
+    testing.eq(code, 0)
+    testing.eq(dev(root, home, { "board", "link", one, "parent", epic }), out)
     dev(root, home, { "board", "link", two, "parent", epic })
     out, code = dev(root, home, { "board", "link", one, "parent", other })
-    t.eq(code, 1, out)
-    t.ok(out:find("already has an epic", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("already has an epic", 1, true), out)
     out, code = dev(root, home, { "board", "link", other, "parent", one })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out = dev(root, home, { "board", "show", one })
-    t.ok(out:find("\nchildren: 0 of 1 done\n", 1, true), out)
+    testing.ok(out:find("\nchildren: 0 of 1 done\n", 1, true), out)
     out, code = dev(root, home, { "board", "link", epic, "parent", other })
-    t.eq(code, 1, out)
-    t.ok(out:find("cycle of epics", 1, true), out)
-    t.ok(out:find(epic, 1, true) and out:find(other, 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("cycle of epics", 1, true), out)
+    testing.ok(out:find(epic, 1, true) and out:find(other, 1, true), out)
     out, code = dev(root, home, { "board", "link", epic, "parent", epic })
-    t.eq(code, 1, out)
+    testing.eq(code, 1, out)
     out = dev(root, home, { "board", "show", one })
-    t.ok(out:find("\nparent: " .. epic .. " Epic\n", 1, true), out)
+    testing.ok(out:find("\nparent: " .. epic .. " Epic\n", 1, true), out)
     out = dev(root, home, { "board", "show", epic })
-    t.ok(out:find("\nchildren: 0 of 2 done\n", 1, true), out)
+    testing.ok(out:find("\nchildren: 0 of 2 done\n", 1, true), out)
     tick_first(root, home, one)
     out, code = dev(root, home, { "board", "move", one, COLUMN.DONE })
-    t.eq(code, 1, out)
-    t.ok(out:find("1 of 1 children are open", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("1 of 1 children are open", 1, true), out)
     tick_first(root, home, other)
     dev(root, home, { "board", "move", other, COLUMN.DONE })
     out, code = dev(root, home, { "board", "move", one, COLUMN.DONE })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out = dev(root, home, { "board", "show", epic })
-    t.ok(out:find("\nchildren: 1 of 2 done\n", 1, true), out)
+    testing.ok(out:find("\nchildren: 1 of 2 done\n", 1, true), out)
     out = dev(root, home, { "board", "links", one })
-    t.ok(out:find("parent", 1, true) and out:find(epic, 1, true), out)
+    testing.ok(out:find("parent", 1, true) and out:find(epic, 1, true), out)
     out = dev(root, home, { "board", "links", epic })
-    t.ok(out:find("child", 1, true) and out:find(one, 1, true), out)
+    testing.ok(out:find("child", 1, true) and out:find(one, 1, true), out)
 end)
 
-t.test("stale counts the days a card sat in its column", function()
+testing.test("stale counts the days a card sat in its column", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -992,11 +1013,11 @@ t.test("stale counts the days a card sat in its column", function()
     doc.cards[1].entered_at = "2020-01-01T00:00:00Z"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     local out = dev(root, home, { "board", "stale" })
-    t.ok(out:find(a .. "  Ready  ", 1, true) and out:find("Old", 1, true), out)
-    t.ok(not out:find("New", 1, true), out)
+    testing.ok(out:find(a .. "  Ready  ", 1, true) and out:find("Old", 1, true), out)
+    testing.ok(not out:find("New", 1, true), out)
 end)
 
-t.test("a local board keeps an unsized or red card out of Ready", function()
+testing.test("a local board keeps an unsized or red card out of Ready", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -1010,27 +1031,27 @@ t.test("a local board keeps an unsized or red card out of Ready", function()
         "dev test",
     })))
     local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 1)
-    t.ok(out:find("dev board size", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("dev board size", 1, true), out)
     out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
-    t.eq(code, 1)
-    t.ok(out:find("a size", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("a size", 1, true), out)
     out, code = dev(root, home, { "board", "add", "Direct", "--column", COLUMN.READY })
-    t.eq(code, 2)
+    testing.eq(code, 2)
     out, code = dev(root, home, { "board", "add", "Direct", "--problem", "x" })
-    t.eq(code, 2)
-    t.ok(out:find("a size", 1, true), out)
+    testing.eq(code, 2)
+    testing.ok(out:find("a size", 1, true), out)
     dev(root, home, { "board", "size", a, "3+" })
     out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 1)
-    t.ok(out:find("red", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("red", 1, true), out)
     dev(root, home, { "board", "size", a, "2" })
     out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 0, out)
-    t.eq(dev(root, home, { "board", "stale" }), "no stale cards\n")
+    testing.eq(code, 0, out)
+    testing.eq(dev(root, home, { "board", "stale" }), "no stale cards\n")
 end)
 
-t.test(
+testing.test(
     "a local board scaffolds the v2 headings and keeps a card without them out of Ready",
     function()
         local root, home = local_board()
@@ -1047,31 +1068,31 @@ t.test(
             "--checks",
             "dev test",
         })))
-        t.eq(
+        testing.eq(
             document(file_of(home)).cards[1].description,
             "## Problem\nx\n\n## Change\n\n## Out of scope\n"
         )
         local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-        t.eq(code, 1)
-        t.ok(out:find("3 to 7 Done when outcomes", 1, true), out)
+        testing.eq(code, 1)
+        testing.ok(out:find("3 to 7 Done when outcomes", 1, true), out)
         out, code =
             dev(root, home, { "board", "add", "Direct", "--column", COLUMN.READY, "--size", "1" })
-        t.eq(code, 2)
-        t.ok(out:find("card format v2", 1, true), out)
+        testing.eq(code, 2)
+        testing.ok(out:find("card format v2", 1, true), out)
         local ice =
             prefix_of((dev(root, home, { "board", "add", "Loose", "--column", COLUMN.ICEBOX })))
         out = dev(root, home, { "board", "show", ice })
-        t.ok(out:find("no description", 1, true), out)
+        testing.ok(out:find("no description", 1, true), out)
         local file = root .. "/v1.md"
         assert(fs.write(file, V1))
         out, code = dev(root, home, { "board", "edit", a, "--file", file })
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
         out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
     end
 )
 
-t.test("a local board keeps --done-when outcomes on the card and shows them", function()
+testing.test("a local board keeps --done-when outcomes on the card and shows them", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -1086,19 +1107,19 @@ t.test("a local board keeps --done-when outcomes on the card and shows them", fu
         "--done-when",
         "B works",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local a = prefix_of(out)
     local outcomes = document(file_of(home)).cards[1].outcomes
-    t.eq(#outcomes, 2)
-    t.eq(outcomes[1].name, "A works")
-    t.eq(outcomes[1].done, false)
+    testing.eq(#outcomes, 2)
+    testing.eq(outcomes[1].name, "A works")
+    testing.eq(outcomes[1].done, false)
     out = dev(root, home, { "board", "show", a })
-    t.ok(out:find("done when:\n- [ ] A works\n- [ ] B works\n", 1, true), out)
+    testing.ok(out:find("done when:\n- [ ] A works\n- [ ] B works\n", 1, true), out)
     out = dev(root, home, { "board", "ls" })
-    t.ok(out:find("0/2", 1, true), out)
+    testing.ok(out:find("0/2", 1, true), out)
 end)
 
-t.test("a local board appends, rewords, ticks and unticks outcomes by number", function()
+testing.test("a local board appends, rewords, ticks and unticks outcomes by number", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -1113,33 +1134,33 @@ t.test("a local board appends, rewords, ticks and unticks outcomes by number", f
         "--done-when",
         "B works",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local a = prefix_of(out)
     out, code = dev(root, home, { "board", "outcome", a, "C works" })
-    t.eq(out, "outcome " .. a .. " 3 added\n")
+    testing.eq(out, "outcome " .. a .. " 3 added\n")
     out = dev(root, home, { "board", "outcome", a, "--tick", "2" })
-    t.eq(out, "outcome " .. a .. " 2 ticked\n")
+    testing.eq(out, "outcome " .. a .. " 2 ticked\n")
     out = dev(
         root,
         home,
         { "board", "outcome", a, "--rename", "1", "A holds", "--reason", "clearer" }
     )
-    t.eq(out, "outcome " .. a .. " 1 reworded\n")
+    testing.eq(out, "outcome " .. a .. " 1 reworded\n")
     out = dev(root, home, { "board", "show", a })
-    t.ok(out:find("done when:\n- [ ] A holds\n- [x] B works\n- [ ] C works\n", 1, true), out)
+    testing.ok(out:find("done when:\n- [ ] A holds\n- [x] B works\n- [ ] C works\n", 1, true), out)
     out = dev(root, home, { "board", "outcome", a, "--untick", "2" })
-    t.eq(out, "outcome " .. a .. " 2 unticked\n")
+    testing.eq(out, "outcome " .. a .. " 2 unticked\n")
     local rows = document(file_of(home)).cards[1].outcomes
-    t.eq(#rows, 3)
-    t.eq(rows[1].name, "A holds")
-    t.eq(rows[2].done, false)
-    t.eq(rows[2].name, "B works")
+    testing.eq(#rows, 3)
+    testing.eq(rows[1].name, "A holds")
+    testing.eq(rows[2].done, false)
+    testing.eq(rows[2].name, "B works")
     out, code = dev(root, home, { "board", "outcome", a, "--tick", "4" })
-    t.eq(code, 1)
-    t.ok(out:find("the card has 3 outcomes, so there is no outcome 4", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("the card has 3 outcomes, so there is no outcome 4", 1, true), out)
 end)
 
-t.test(
+testing.test(
     "a local board lets only the lead delete an outcome, renumbers and keeps its text in a note",
     function()
         local root, home = local_board()
@@ -1158,39 +1179,39 @@ t.test(
             "--done-when",
             "C works",
         })
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
         local a = prefix_of(out)
         local lead = { DEV_AGENT = "dotfiles/lead/1" }
         out, code = dev(root, home, { "board", "outcome", a, "--delete", "2" }, lead)
-        t.eq(code, 2, out)
+        testing.eq(code, 2, out)
         out, code = dev(
             root,
             home,
             { "board", "outcome", a, "--delete", "2", "--reason", "never possible" },
             { DEV_AGENT = "dotfiles/implementer/95f0e009/1" }
         )
-        t.eq(code, 1, out)
-        t.ok(out:find("only the lead deletes an outcome", 1, true), out)
-        t.eq(#document(file_of(home)).cards[1].outcomes, 3)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("only the lead deletes an outcome", 1, true), out)
+        testing.eq(#document(file_of(home)).cards[1].outcomes, 3)
         out, code = dev(
             root,
             home,
             { "board", "outcome", a, "--delete", "2", "--reason", "never possible" },
             lead
         )
-        t.eq(code, 0, out)
-        t.eq(out, "outcome " .. a .. " 2 deleted\n")
+        testing.eq(code, 0, out)
+        testing.eq(out, "outcome " .. a .. " 2 deleted\n")
         local card = document(file_of(home)).cards[1]
-        t.eq(#card.outcomes, 2)
-        t.eq(card.outcomes[1].name, "A works")
-        t.eq(card.outcomes[2].name, "C works")
+        testing.eq(#card.outcomes, 2)
+        testing.eq(card.outcomes[1].name, "A works")
+        testing.eq(card.outcomes[2].name, "C works")
         local note = card.comments[#card.comments]
-        t.eq(note.kind, "decision")
-        t.eq(note.body, "Deleted outcome 2: B works Reason: never possible")
+        testing.eq(note.kind, "decision")
+        testing.eq(note.body, "Deleted outcome 2: B works Reason: never possible")
     end
 )
 
-t.test("outcome delete on a local board needs no lead token", function()
+testing.test("outcome delete on a local board needs no lead token", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -1205,21 +1226,21 @@ t.test("outcome delete on a local board needs no lead token", function()
         "--done-when",
         "B works",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local a = prefix_of(out)
-    t.eq(fs.read(home .. "/.config/dev/config.toml"):find("lead_token", 1, true), nil)
+    testing.eq(fs.read(home .. "/.config/dev/config.toml"):find("lead_token", 1, true), nil)
     out, code = dev(
         root,
         home,
         { "board", "outcome", a, "--delete", "1", "--reason", "never possible" },
         { DEV_AGENT = "dotfiles/lead/1" }
     )
-    t.eq(code, 0, out)
-    t.eq(out, "outcome " .. a .. " 1 deleted\n")
-    t.eq(#document(file_of(home)).cards[1].outcomes, 1)
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome " .. a .. " 1 deleted\n")
+    testing.eq(#document(file_of(home)).cards[1].outcomes, 1)
 end)
 
-t.test("outcome delete refuses from Ready on on a local board", function()
+testing.test("outcome delete refuses from Ready on on a local board", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -1242,62 +1263,62 @@ t.test("outcome delete refuses from Ready on on a local board", function()
         "--checks",
         "dev test",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local a = prefix_of(out)
     local lead = { DEV_AGENT = "dotfiles/lead/1" }
     out, code = dev(root, home, { "board", "move", a, COLUMN.READY }, lead)
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(
         root,
         home,
         { "board", "outcome", a, "--delete", "1", "--reason", "never possible" },
         lead
     )
-    t.eq(code, 1, out)
-    t.ok(out:find("Ready", 1, true) and out:find("fixed from Ready on", 1, true), out)
-    t.eq(#document(file_of(home)).cards[1].outcomes, 3)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Ready", 1, true) and out:find("fixed from Ready on", 1, true), out)
+    testing.eq(#document(file_of(home)).cards[1].outcomes, 3)
 end)
 
-t.test("a local board converts a v1 checklist into outcomes and ticks", function()
+testing.test("a local board converts a v1 checklist into outcomes and ticks", function()
     local root, home = local_board()
     local v1 =
         "## Problem\nP\n\n## Change\nC\n\n## Done when\n- [ ] A works\n- [x] B works\n- [ ] C works\n\n## Out of scope\nNone\n"
     local out, code = dev(root, home, { "board", "add", "Old", "--description", v1, "--size", "1" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local a = prefix_of(out)
     out, code = dev(root, home, { "board", "outcome", a, "--convert" })
-    t.eq(code, 0, out)
-    t.eq(out, "outcome " .. a .. " converted 3 outcomes\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome " .. a .. " converted 3 outcomes\n")
     local card = document(file_of(home)).cards[1]
-    t.eq(#card.outcomes, 3)
-    t.eq(card.outcomes[1].name, "A works")
-    t.eq(card.outcomes[1].done, false)
-    t.eq(card.outcomes[2].done, true)
-    t.eq(card.outcomes[3].done, false)
-    t.ok(not card.description:find("Done when", 1, true), card.description)
-    t.ok(
+    testing.eq(#card.outcomes, 3)
+    testing.eq(card.outcomes[1].name, "A works")
+    testing.eq(card.outcomes[1].done, false)
+    testing.eq(card.outcomes[2].done, true)
+    testing.eq(card.outcomes[3].done, false)
+    testing.ok(not card.description:find("Done when", 1, true), card.description)
+    testing.ok(
         card.description:find("## Problem\nP\n\n## Change\nC\n\n## Out of scope\nNone", 1, true),
         card.description
     )
     out, code = dev(root, home, { "board", "outcome", a, "--convert" })
-    t.eq(code, 0, out)
-    t.eq(out, "outcome " .. a .. " left alone: it already has outcomes\n")
-    t.eq(#document(file_of(home)).cards[1].outcomes, 3)
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome " .. a .. " left alone: it already has outcomes\n")
+    testing.eq(#document(file_of(home)).cards[1].outcomes, 3)
 end)
 
-t.test("outcome --convert leaves a card with no checklist alone", function()
+testing.test("outcome --convert leaves a card with no checklist alone", function()
     local root, home = local_board()
     local a = prefix_of(
         (dev(root, home, { "board", "add", "Plain", "--column", COLUMN.ICEBOX, "--problem", "x" }))
     )
     local out, code = dev(root, home, { "board", "outcome", a, "--convert" })
-    t.eq(code, 0, out)
-    t.eq(out, "outcome " .. a .. " left alone: it has no Done when checklist\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome " .. a .. " left alone: it has no Done when checklist\n")
     out, code = dev(root, home, { "board", "outcome", a, "--convert", "extra" })
-    t.eq(code, 2)
+    testing.eq(code, 2)
 end)
 
-t.test("a local board ticks an outcome while this machine holds the claim", function()
+testing.test("a local board ticks an outcome while this machine holds the claim", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -1311,13 +1332,13 @@ t.test("a local board ticks an outcome while this machine holds the claim", func
         "A works",
     })))
     local out, code = dev(root, home, { "board", "take", a })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "outcome", a, "--tick", "1" })
-    t.eq(code, 2, out)
-    t.eq(document(file_of(home)).cards[1].outcomes[1].done, false)
+    testing.eq(code, 2, out)
+    testing.eq(document(file_of(home)).cards[1].outcomes[1].done, false)
     out, code = dev(root, home, { "board", "outcome", a, "--tick", "1", "--as", "r/reviewer" })
-    t.eq(code, 0, out)
-    t.eq(document(file_of(home)).cards[1].outcomes[1].done, true)
+    testing.eq(code, 0, out)
+    testing.eq(document(file_of(home)).cards[1].outcomes[1].done, true)
 end)
 
 local function card_named(doc, name)
@@ -1328,7 +1349,7 @@ local function card_named(doc, name)
     end
 end
 
-t.test(
+testing.test(
     "take --as and move into progress name the holder, and an epic is claimed like any card",
     function()
         local root, home = local_board()
@@ -1349,20 +1370,20 @@ t.test(
         end
         local a, b, c = ready("Alpha"), ready("Beta"), ready("Gamma")
         local out, code = dev(root, home, { "board", "take", a, "--as", "r/one" })
-        t.eq(code, 0, out)
-        t.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/one")
+        testing.eq(code, 0, out)
+        testing.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/one")
         _, code = dev(root, home, { "board", "take", b, "--as", "bad name" })
-        t.eq(code, 2)
+        testing.eq(code, 2)
         out, code = dev(
             root,
             home,
             { "board", "move", b, COLUMN.PROGRESS },
             { DEV_AGENT = "r/two" }
         )
-        t.eq(code, 0, out)
-        t.eq(card_named(document(file_of(home)), "Beta").claim.claimant, "r/two")
+        testing.eq(code, 0, out)
+        testing.eq(card_named(document(file_of(home)), "Beta").claim.claimant, "r/two")
         out = dev(root, home, { "board", "ls" })
-        t.ok(out:find("r/two", 1, true), out)
+        testing.ok(out:find("r/two", 1, true), out)
         dev(root, home, { "board", "epic", a })
         dev(root, home, { "board", "link", c, "parent", a })
         out, code = dev(
@@ -1371,8 +1392,8 @@ t.test(
             { "board", "move", a, COLUMN.PROGRESS },
             { DEV_AGENT = "r/three" }
         )
-        t.eq(code, 0, out)
-        t.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/one")
+        testing.eq(code, 0, out)
+        testing.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/one")
         dev(root, home, { "board", "release", a })
         out, code = dev(
             root,
@@ -1380,12 +1401,12 @@ t.test(
             { "board", "move", a, COLUMN.PROGRESS },
             { DEV_AGENT = "r/three" }
         )
-        t.eq(code, 0, out)
-        t.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/three")
+        testing.eq(code, 0, out)
+        testing.eq(card_named(document(file_of(home)), "Alpha").claim.claimant, "r/three")
     end
 )
 
-t.test("move out of progress releases the claim and warns about nothing", function()
+testing.test("move out of progress releases the claim and warns about nothing", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -1401,48 +1422,51 @@ t.test("move out of progress releases the claim and warns about nothing", functi
         "dev test",
     })))
     dev(root, home, { "board", "take", a })
-    t.ok(document(file_of(home)).cards[1].claim ~= nil, "claim held")
+    testing.ok(document(file_of(home)).cards[1].claim ~= nil, "claim held")
     dev(root, home, { "board", "note", a, "built it, tried it, learned it" })
     local out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
-    t.eq(code, 0, out)
-    t.eq(out, "moved " .. a .. " to Review\n")
-    t.eq(document(file_of(home)).cards[1].claim, nil)
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved " .. a .. " to Review\n")
+    testing.eq(document(file_of(home)).cards[1].claim, nil)
 end)
 
-t.test("move out of progress waits for a note of what was built, tried and learned", function()
-    local root, home = local_board()
-    local a = prefix_of((dev(root, home, {
-        "board",
-        "add",
-        "Card",
-        "--column",
-        COLUMN.READY,
-        "--size",
-        "1",
-        "--description",
-        V1,
-        "--checks",
-        "dev test",
-    })))
-    dev(root, home, { "board", "take", a })
-    dev(root, home, { "board", "move", a, COLUMN.PROGRESS })
-    for _, column in ipairs({ COLUMN.REVIEW, COLUMN.READY, COLUMN.BLOCKED }) do
-        local out, code = dev(root, home, { "board", "move", a, column })
-        t.eq(code, 1, out)
-        t.ok(out:find("built, tried and learned", 1, true), out)
-        t.ok(document(file_of(home)).cards[1].claim ~= nil, "claim kept")
+testing.test(
+    "move out of progress waits for a note of what was built, tried and learned",
+    function()
+        local root, home = local_board()
+        local a = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "Card",
+            "--column",
+            COLUMN.READY,
+            "--size",
+            "1",
+            "--description",
+            V1,
+            "--checks",
+            "dev test",
+        })))
+        dev(root, home, { "board", "take", a })
+        dev(root, home, { "board", "move", a, COLUMN.PROGRESS })
+        for _, column in ipairs({ COLUMN.REVIEW, COLUMN.READY, COLUMN.BLOCKED }) do
+            local out, code = dev(root, home, { "board", "move", a, column })
+            testing.eq(code, 1, out)
+            testing.ok(out:find("built, tried and learned", 1, true), out)
+            testing.ok(document(file_of(home)).cards[1].claim ~= nil, "claim kept")
+        end
+        dev(root, home, { "board", "note", a, "--kind", "decision", "ruled" })
+        local out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
+        testing.eq(code, 1, out)
+        out, code = dev(root, home, { "board", "note", a, "built, tried, learned" })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
+        testing.eq(code, 0, out)
+        testing.eq(document(file_of(home)).cards[1].claim, nil)
     end
-    dev(root, home, { "board", "note", a, "--kind", "decision", "ruled" })
-    local out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
-    t.eq(code, 1, out)
-    out, code = dev(root, home, { "board", "note", a, "built, tried, learned" })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
-    t.eq(code, 0, out)
-    t.eq(document(file_of(home)).cards[1].claim, nil)
-end)
+)
 
-t.test("a second claim needs a fresh note of what was built, tried and learned", function()
+testing.test("a second claim needs a fresh note of what was built, tried and learned", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -1461,15 +1485,15 @@ t.test("a second claim needs a fresh note of what was built, tried and learned",
     dev(root, home, { "board", "move", a, COLUMN.PROGRESS })
     dev(root, home, { "board", "note", a, "built, tried, learned" })
     local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     dev(root, home, { "board", "take", a })
     dev(root, home, { "board", "move", a, COLUMN.PROGRESS })
     out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
-    t.eq(code, 1, out)
-    t.ok(out:find("built, tried and learned", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("built, tried and learned", 1, true), out)
 end)
 
-t.test("take holds a claim with an expiry and no loop, and release gives it up", function()
+testing.test("take holds a claim with an expiry and no loop, and release gives it up", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -1485,29 +1509,32 @@ t.test("take holds a claim with an expiry and no loop, and release gives it up",
         "dev test",
     })))
     local out, code = dev(root, home, { "board", "take", a })
-    t.eq(code, 0, out)
-    t.eq(out:find("took " .. a .. ", fence 1, held for 50m\n\n", 1, true), 1, out)
+    testing.eq(code, 0, out)
+    testing.eq(out:find("took " .. a .. ", fence 1, held for 50m\n\n", 1, true), 1, out)
     local doc = document(file_of(home))
-    t.eq(doc.cards[1].claim.fence, 1)
-    t.ok(doc.cards[1].claim.expires_at > os.date("!%Y-%m-%dT%H:%M:%SZ"), "expiry in the future")
+    testing.eq(doc.cards[1].claim.fence, 1)
+    testing.ok(
+        doc.cards[1].claim.expires_at > os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        "expiry in the future"
+    )
     out = dev(root, home, { "board", "ls" })
-    t.ok(out:find("dev@", 1, true), out)
+    testing.ok(out:find("dev@", 1, true), out)
     out = dev(root, home, { "board", "next" })
-    t.eq(out, "no ready cards\n")
+    testing.eq(out, "no ready cards\n")
     out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
-    t.eq(code, 1)
-    t.ok(out:find("is claimed by dev@", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("is claimed by dev@", 1, true), out)
     out = dev(root, home, { "board", "take", a })
-    t.eq(out:find("took " .. a .. ", fence 1, held for 50m\n\n", 1, true), 1, out)
+    testing.eq(out:find("took " .. a .. ", fence 1, held for 50m\n\n", 1, true), 1, out)
     out = dev(root, home, { "board", "release", a })
-    t.eq(out, "released " .. a .. "\n")
+    testing.eq(out, "released " .. a .. "\n")
     out = dev(root, home, { "board", "next" })
-    t.ok(out:find("Card", 1, true), out)
+    testing.ok(out:find("Card", 1, true), out)
     out = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
-    t.eq(out:find("took " .. a .. ", fence 2, held for 50m\n\n", 1, true), 1, out)
+    testing.eq(out:find("took " .. a .. ", fence 2, held for 50m\n\n", 1, true), 1, out)
 end)
 
-t.test("a stale fence is refused once another process holds the claim", function()
+testing.test("a stale fence is refused once another process holds the claim", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -1523,11 +1550,11 @@ t.test("a stale fence is refused once another process holds the claim", function
     doc.cards[1].claim.fence = 9
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     local out, code = dev(root, home, { "board", "note", a, "hello" })
-    t.eq(code, 1)
-    t.ok(out:find("is held by dev@", 1, true) and out:find("fence 9", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("is held by dev@", 1, true) and out:find("fence 9", 1, true), out)
 end)
 
-t.test("an expired claim does not block the card", function()
+testing.test("an expired claim does not block the card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -1547,12 +1574,12 @@ t.test("an expired claim does not block the card", function()
     doc.cards[1].claim.expires_at = "2020-01-01T00:00:00Z"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     local out = dev(root, home, { "board", "next" })
-    t.ok(out:find("Card", 1, true), out)
+    testing.ok(out:find("Card", 1, true), out)
     out = dev(root, home, { "board", "note", a, "still works" })
-    t.eq(out, "noted " .. a .. "\n")
+    testing.eq(out, "noted " .. a .. "\n")
 end)
 
-t.test("a tracked path keeps the board in the project, readable by everyone", function()
+testing.test("a tracked path keeps the board in the project, readable by everyone", function()
     local root, home = local_board('[board]\nbackend = "local"\npath = ".dev/board.json"\n')
     local out = dev(
         root,
@@ -1560,57 +1587,57 @@ t.test("a tracked path keeps the board in the project, readable by everyone", fu
         { "board", "add", "Tracked", "--problem", "x", "--size", "1", "--done-when", "a" }
     )
     prefix_of(out)
-    t.ok(fs.exists(root .. "/.dev/board.json"))
-    t.eq(fs.exists(home .. "/state/dev/boards/mine.json"), false)
-    t.eq(document(root .. "/.dev/board.json").cards[1].name, "Tracked")
-    t.ok(mode(root .. "/.dev/board.json") ~= "600", "not private")
+    testing.ok(fs.exists(root .. "/.dev/board.json"))
+    testing.eq(fs.exists(home .. "/state/dev/boards/mine.json"), false)
+    testing.eq(document(root .. "/.dev/board.json").cards[1].name, "Tracked")
+    testing.ok(mode(root .. "/.dev/board.json") ~= "600", "not private")
     local text = assert(fs.read(root .. "/.dev/board.json"))
-    t.ok(select(2, text:gsub("\n", "")) > 4, "one line per card")
+    testing.ok(select(2, text:gsub("\n", "")) > 4, "one line per card")
 end)
 
-t.test("a path outside the project, or on a pomb board, is refused", function()
+testing.test("a path outside the project, or on a pomb board, is refused", function()
     for _, path in ipairs({ "../board.json", "/etc/board.json", "a//b.json", ".dev/../x.json" }) do
         local root, home = setup('[board]\nbackend = "local"\npath = "' .. path .. '"\n')
         local out, code = dev(root, home, { "board", "ls" })
-        t.eq(code, 1, path)
-        t.ok(out:find("[board] path must be a relative path", 1, true), out)
+        testing.eq(code, 1, path)
+        testing.ok(out:find("[board] path must be a relative path", 1, true), out)
     end
     local root, home = setup('[board]\nbackend = "pomb"\npath = ".dev/board.json"\n')
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find('path only applies to backend = "local"', 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find('path only applies to backend = "local"', 1, true), out)
 end)
 
-t.test("a local board's name has to make a file name unless a path is set", function()
+testing.test("a local board's name has to make a file name unless a path is set", function()
     local root, home = setup('[board]\nbackend = "local"\nname = "a/b"\n')
     local out, code = dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("name must be letters, digits", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("name must be letters, digits", 1, true), out)
 end)
 
-t.test("init refuses --admin on a local board and a different --name", function()
+testing.test("init refuses --admin on a local board and a different --name", function()
     local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
     local out, code = dev(root, home, { "board", "init", "--admin" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "init", "--name", "other" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
 end)
 
-t.test("sync on a local board says there is nothing to sync", function()
+testing.test("sync on a local board says there is nothing to sync", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "sync" })
-    t.eq(code, 1)
-    t.eq(out, "dev: a local board has nothing to sync\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev: a local board has nothing to sync\n")
 end)
 
-t.test("wait on a local board says there is nothing to wait on", function()
+testing.test("wait on a local board says there is nothing to wait on", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "wait", "--for", COLUMN.READY })
-    t.eq(code, 1)
-    t.eq(out, "dev: a local board has nothing to wait on\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev: a local board has nothing to wait on\n")
 end)
 
-t.test("six processes writing at once lose no card", function()
+testing.test("six processes writing at once lose no card", function()
     local root, home = local_board()
     local script = string.format(
         'for i in 1 2 3 4 5 6; do luajit %s board add "card $i" --problem x --size 1 --done-when a & done; wait',
@@ -1626,9 +1653,9 @@ t.test("six processes writing at once lose no card", function()
             DEV_SELF = REPO .. "/dotfiles/bin/.local/bin/dev",
         },
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local doc = document(file_of(home))
-    t.eq(#doc.cards, 6)
+    testing.eq(#doc.cards, 6)
     local ids = {}
     for _, card in ipairs(doc.cards) do
         ids[card.id] = true
@@ -1637,8 +1664,8 @@ t.test("six processes writing at once lose no card", function()
     for _ in pairs(ids) do
         count = count + 1
     end
-    t.eq(count, 6)
-    t.eq(fs.list(home .. "/state/dev/boards"), { "mine.json", "mine.json.lock" })
+    testing.eq(count, 6)
+    testing.eq(fs.list(home .. "/state/dev/boards"), { "mine.json", "mine.json.lock" })
 end)
 
 local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
@@ -1732,14 +1759,14 @@ end
 
 local QUEUED = "queued: Pomb unreachable, will sync\n"
 
-t.test("writes while Pomb is unreachable are queued and the queue is private", function()
+testing.test("writes while Pomb is unreachable are queued and the queue is private", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     local out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.REVIEW })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
     out = pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "kept", "words" })
-    t.eq(out, QUEUED)
+    testing.eq(out, QUEUED)
     out = pomb_dev(root, home, {
         "board",
         "add",
@@ -1753,32 +1780,32 @@ t.test("writes while Pomb is unreachable are queued and the queue is private", f
         "--label",
         "docs",
     })
-    t.eq(out, QUEUED)
+    testing.eq(out, QUEUED)
     out = pomb_dev(root, home, { "board", "size", ID_B:sub(1, 8), "3" })
-    t.eq(out, QUEUED)
+    testing.eq(out, QUEUED)
     out = pomb_dev(root, home, { "board", "label", ID_B:sub(1, 8), "+x" })
-    t.eq(out, QUEUED)
+    testing.eq(out, QUEUED)
     local entries = document(queue_path(home))
-    t.eq(#entries, 5)
-    t.eq(entries[1].sub, "move")
-    t.eq(entries[1].args, { ID_A:sub(1, 8), COLUMN.REVIEW })
-    t.eq(entries[2].args, { ID_A:sub(1, 8), "kept", "words" })
-    t.eq(entries[3].sub, "add")
-    t.eq(mode(queue_path(home)), "600")
-    t.eq(mode(home .. "/state/dev/boards"), "700")
-    t.ok(not assert(fs.read(queue_path(home))):find(TOKEN, 1, true), "no token in the queue")
-    t.eq(calls(root), "")
+    testing.eq(#entries, 5)
+    testing.eq(entries[1].sub, "move")
+    testing.eq(entries[1].args, { ID_A:sub(1, 8), COLUMN.REVIEW })
+    testing.eq(entries[2].args, { ID_A:sub(1, 8), "kept", "words" })
+    testing.eq(entries[3].sub, "add")
+    testing.eq(mode(queue_path(home)), "600")
+    testing.eq(mode(home .. "/state/dev/boards"), "700")
+    testing.ok(not assert(fs.read(queue_path(home))):find(TOKEN, 1, true), "no token in the queue")
+    testing.eq(calls(root), "")
 end)
 
-t.test("a queued note keeps its kind and role", function()
+testing.test("a queued note keeps its kind and role", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     local args = { ID_A:sub(1, 8), "--kind", "decision", "--as", "reviewer", "kept" }
-    t.eq(pomb_dev(root, home, { "board", "note", unpack(args) }), QUEUED)
-    t.eq(document(queue_path(home))[1].args, args)
+    testing.eq(pomb_dev(root, home, { "board", "note", unpack(args) }), QUEUED)
+    testing.eq(document(queue_path(home))[1].args, args)
 end)
 
-t.test("a queued discard replays its move without the outcome check", function()
+testing.test("a queued discard replays its move without the outcome check", function()
     local root, home = pomb()
     assert(
         fs.write(
@@ -1798,43 +1825,43 @@ t.test("a queued discard replays its move without the outcome check", function()
     assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
     local out, code =
         pomb_dev(root, home, { "board", "discard", ID_A:sub(1, 8), "--reason", "Dropped" })
-    t.eq(code, 0, out)
-    t.eq(out, QUEUED)
+    testing.eq(code, 0, out)
+    testing.eq(out, QUEUED)
     assert(fs.write(root .. "/bin/curl", CURL))
     assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
     out, code = pomb_dev(root, home, { "board", "sync" })
-    t.eq(code, 0, out)
-    t.ok(out:find("synced discard_move aaaaaaaa", 1, true), out)
-    t.ok(calls(root):find("/move", 1, true), calls(root))
+    testing.eq(code, 0, out)
+    testing.ok(out:find("synced discard_move aaaaaaaa", 1, true), out)
+    testing.ok(calls(root):find("/move", 1, true), calls(root))
 end)
 
-t.test("a move to Done is refused and not queued while Pomb is unreachable", function()
+testing.test("a move to Done is refused and not queued while Pomb is unreachable", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     local out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.DONE })
-    t.eq(code, 1, out)
-    t.ok(out:find("board unavailable", 1, true), out)
-    t.eq(fs.exists(queue_path(home)), false)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("board unavailable", 1, true), out)
+    testing.eq(fs.exists(queue_path(home)), false)
 end)
 
-t.test("after a gateway error only a change that is safe to repeat is queued", function()
+testing.test("after a gateway error only a change that is safe to repeat is queued", function()
     local root, home = pomb()
     assert(fs.write(root .. "/gateway", ""))
     local out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.REVIEW })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
     out, code = pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "once" })
-    t.eq(code, 1, out)
+    testing.eq(code, 1, out)
     out, code = pomb_dev(
         root,
         home,
         { "board", "add", "Once", "--problem", "x", "--size", "1", "--done-when", "a" }
     )
-    t.eq(code, 1, out)
-    t.eq(#document(queue_path(home)), 1)
+    testing.eq(code, 1, out)
+    testing.eq(#document(queue_path(home)), 1)
 end)
 
-t.test("a hand-edited board file keeps its other keys and gets its name back", function()
+testing.test("a hand-edited board file keeps its other keys and gets its name back", function()
     local root, home = local_board()
     local doc = document(file_of(home))
     doc.name = nil
@@ -1842,71 +1869,71 @@ t.test("a hand-edited board file keeps its other keys and gets its name back", f
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
     doc = document(file_of(home))
-    t.eq(doc.note, "kept")
-    t.eq(doc.name, "mine")
+    testing.eq(doc.note, "kept")
+    testing.eq(doc.name, "mine")
 end)
 
-t.test("a tracked board leaves no lock file in the project", function()
+testing.test("a tracked board leaves no lock file in the project", function()
     local root, home = local_board('[board]\nbackend = "local"\npath = ".dev/board.json"\n')
     dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
-    t.eq(fs.list(root .. "/.dev"), { "board.json", "config.toml" })
+    testing.eq(fs.list(root .. "/.dev"), { "board.json", "config.toml" })
 end)
 
-t.test("show reads the epic and the children of a card from the task view", function()
+testing.test("show reads the epic and the children of a card from the task view", function()
     local root, home = pomb()
     local out, code = pomb_dev(root, home, { "board", "show", ID_A:sub(1, 8) })
-    t.eq(code, 0, out)
-    t.ok(out:find("\nparent: bbbbbbbb Epic\nchildren: 1 of 3 done\n\n", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("\nparent: bbbbbbbb Epic\nchildren: 1 of 3 done\n\n", 1, true), out)
 end)
 
-t.test("a locked pass queues a write the same way", function()
+testing.test("a locked pass queues a write the same way", function()
     local root, home = pomb({ locked = true })
     local out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.REVIEW })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
-    t.eq(#document(queue_path(home)), 1)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
+    testing.eq(#document(queue_path(home)), 1)
 end)
 
-t.test("reads, usage errors and refusals are not queued", function()
+testing.test("reads, usage errors and refusals are not queued", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     local out, code = pomb_dev(root, home, { "board", "ls" })
-    t.eq(code, 1)
-    t.ok(out:find("cannot reach", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("cannot reach", 1, true), out)
     out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), "nowhere" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "--edit", "aaaaaaaa", "x" })
-    t.eq(code, 1, out)
+    testing.eq(code, 1, out)
     out, code = pomb_dev(root, home, { "board", "take", ID_A:sub(1, 8) })
-    t.eq(code, 1, out)
-    t.eq(fs.exists(queue_path(home)), false)
+    testing.eq(code, 1, out)
+    testing.eq(fs.exists(queue_path(home)), false)
 end)
 
-t.test("link posts to the task and queues while Pomb is unreachable", function()
+testing.test("link posts to the task and queues while Pomb is unreachable", function()
     local root, home = pomb()
     local out, code =
         pomb_dev(root, home, { "board", "link", ID_A:sub(1, 8), "blocks", ID_B:sub(1, 8) })
-    t.eq(code, 0, out)
-    t.eq(out, "linked aaaaaaaa blocks bbbbbbbb\n")
-    t.ok(calls(root):find("/api/tasks/" .. ID_A .. "/links", 1, true), calls(root))
-    t.eq(fs.read(root .. "/bodies"), '{"kind":"blocks","target_id":"' .. ID_B .. '"}\n')
+    testing.eq(code, 0, out)
+    testing.eq(out, "linked aaaaaaaa blocks bbbbbbbb\n")
+    testing.ok(calls(root):find("/api/tasks/" .. ID_A .. "/links", 1, true), calls(root))
+    testing.eq(fs.read(root .. "/bodies"), '{"kind":"blocks","target_id":"' .. ID_B .. '"}\n')
     assert(fs.write(root .. "/down", ""))
     out, code = pomb_dev(root, home, { "board", "link", ID_B:sub(1, 8), "related", ID_A:sub(1, 8) })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
     local entries = document(queue_path(home))
-    t.eq(#entries, 1)
-    t.eq(entries[1].sub, "link")
-    t.eq(entries[1].args, { ID_B:sub(1, 8), "related", ID_A:sub(1, 8) })
+    testing.eq(#entries, 1)
+    testing.eq(entries[1].sub, "link")
+    testing.eq(entries[1].args, { ID_B:sub(1, 8), "related", ID_A:sub(1, 8) })
     assert(fs.remove(root .. "/down"))
     out = pomb_dev(root, home, { "board", "sync" })
-    t.eq(out, "synced link bbbbbbbb\nsynced\n")
-    t.ok(calls(root):find("/api/tasks/" .. ID_B .. "/links", 1, true), calls(root))
+    testing.eq(out, "synced link bbbbbbbb\nsynced\n")
+    testing.ok(calls(root):find("/api/tasks/" .. ID_B .. "/links", 1, true), calls(root))
 end)
 
 local WAITING = "## Problem\nwaiting plan\n\n## Change\n- x\n\n## Out of scope\nnone"
 
-t.test("edit patches the task, and a queued edit replays with its text", function()
+testing.test("edit patches the task, and a queued edit replays with its text", function()
     local root, home = pomb()
     assert(
         fs.write(
@@ -1916,10 +1943,10 @@ t.test("edit patches the task, and a queued edit replays with its text", functio
     )
     local out, code =
         pomb_dev(root, home, { "board", "edit", ID_A:sub(1, 8), "--file", root .. "/plan.md" })
-    t.eq(code, 0, out)
-    t.eq(out, "edited aaaaaaaa\n")
-    t.ok(calls(root):find("/api/tasks/" .. ID_A .. "\n", 1, true), calls(root))
-    t.eq(
+    testing.eq(code, 0, out)
+    testing.eq(out, "edited aaaaaaaa\n")
+    testing.ok(calls(root):find("/api/tasks/" .. ID_A .. "\n", 1, true), calls(root))
+    testing.eq(
         fs.read(root .. "/bodies"),
         '{"description":"## Problem\\nnew plan\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone"}\n'
     )
@@ -1928,19 +1955,19 @@ t.test("edit patches the task, and a queued edit replays with its text", functio
         env = env_of(home, { ROOT = root }),
         input = WAITING .. "\n",
     })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
     local entries = document(queue_path(home))
-    t.eq(#entries, 1)
-    t.eq(entries[1].sub, "edit")
-    t.eq(entries[1].args, { ID_B:sub(1, 8), WAITING })
+    testing.eq(#entries, 1)
+    testing.eq(entries[1].sub, "edit")
+    testing.eq(entries[1].args, { ID_B:sub(1, 8), WAITING })
     assert(fs.remove(root .. "/down"))
     out = pomb_dev(root, home, { "board", "sync" })
-    t.eq(out, "synced edit bbbbbbbb\nsynced\n")
-    t.ok(calls(root):find("/api/tasks/" .. ID_B .. "\n", 1, true), calls(root))
+    testing.eq(out, "synced edit bbbbbbbb\nsynced\n")
+    testing.ok(calls(root):find("/api/tasks/" .. ID_B .. "\n", 1, true), calls(root))
 end)
 
-t.test("a local board replaces a card's checks and then lets it enter Ready", function()
+testing.test("a local board replaces a card's checks and then lets it enter Ready", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -1957,39 +1984,39 @@ t.test("a local board replaces a card's checks and then lets it enter Ready", fu
     assert(fs.write(file, V1))
     assert(dev(root, home, { "board", "edit", a, "--file", file }))
     local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 1)
+    testing.eq(code, 1)
     out, code = dev(root, home, { "board", "checks", a, "dev lint", "dev test" })
-    t.eq(code, 0, out)
-    t.eq(out, "set checks " .. a .. ", 2 rows\n")
-    t.eq(document(file_of(home)).cards[1].checks, { "dev lint", "dev test" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "set checks " .. a .. ", 2 rows\n")
+    testing.eq(document(file_of(home)).cards[1].checks, { "dev lint", "dev test" })
     out = dev(root, home, { "board", "show", a })
-    t.ok(out:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), out)
+    testing.ok(out:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), out)
     out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "checks", a, "dev fmt" })
-    t.eq(code, 0, out)
-    t.eq(document(file_of(home)).cards[1].checks, { "dev fmt" })
+    testing.eq(code, 0, out)
+    testing.eq(document(file_of(home)).cards[1].checks, { "dev fmt" })
     out, code = dev(root, home, { "board", "checks", a })
-    t.eq(code, 2)
-    t.eq(document(file_of(home)).cards[1].checks, { "dev fmt" })
+    testing.eq(code, 2)
+    testing.eq(document(file_of(home)).cards[1].checks, { "dev fmt" })
 end)
 
-t.test("a queued checks replaces the rows when Pomb answers again", function()
+testing.test("a queued checks replaces the rows when Pomb answers again", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     local out, code = pomb_dev(root, home, { "board", "checks", ID_A:sub(1, 8), "dev lint" })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
     local entries = document(queue_path(home))
-    t.eq(entries[1].sub, "checks")
-    t.eq(entries[1].args, { ID_A:sub(1, 8), "dev lint" })
+    testing.eq(entries[1].sub, "checks")
+    testing.eq(entries[1].args, { ID_A:sub(1, 8), "dev lint" })
     assert(fs.remove(root .. "/down"))
     out = pomb_dev(root, home, { "board", "sync" })
-    t.eq(out, "synced checks aaaaaaaa\nsynced\n")
-    t.ok(fs.read(root .. "/bodies"):find('"dev.checks":[{"run":"dev lint"}]', 1, true))
+    testing.eq(out, "synced checks aaaaaaaa\nsynced\n")
+    testing.ok(fs.read(root .. "/bodies"):find('"dev.checks":[{"run":"dev lint"}]', 1, true))
 end)
 
-t.test("a local board stores a card's allow, tests and files and shows them", function()
+testing.test("a local board stores a card's allow, tests and files and shows them", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -2003,17 +2030,17 @@ t.test("a local board stores a card's allow, tests and files and shows them", fu
         "1",
     })))
     local out, code = dev(root, home, { "board", "allow", a, "ci-edits", "test-edits" })
-    t.eq(code, 0, out)
-    t.eq(out, "set allow " .. a .. ", ci-edits test-edits\n")
-    t.eq(document(file_of(home)).cards[1].allow, { "ci-edits", "test-edits" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "set allow " .. a .. ", ci-edits test-edits\n")
+    testing.eq(document(file_of(home)).cards[1].allow, { "ci-edits", "test-edits" })
     out, code = dev(root, home, { "board", "tests", a, "one", "tests::two" })
-    t.eq(code, 0, out)
-    t.eq(document(file_of(home)).cards[1].tests, "one\ntests::two")
+    testing.eq(code, 0, out)
+    testing.eq(document(file_of(home)).cards[1].tests, "one\ntests::two")
     out, code = dev(root, home, { "board", "files", a, "src/a.rs" })
-    t.eq(code, 0, out)
-    t.eq(document(file_of(home)).cards[1].files, "src/a.rs")
+    testing.eq(code, 0, out)
+    testing.eq(document(file_of(home)).cards[1].files, "src/a.rs")
     out = dev(root, home, { "board", "show", a })
-    t.ok(
+    testing.ok(
         out:find(
             "allow:\n- ci-edits\n- test-edits\n\ntests:\n- one\n- tests::two\n\nfiles:\n- src/a.rs\n\n",
             1,
@@ -2022,49 +2049,49 @@ t.test("a local board stores a card's allow, tests and files and shows them", fu
         out
     )
     out, code = dev(root, home, { "board", "allow", a, "none" })
-    t.eq(code, 0, out)
-    t.eq(out, "cleared allow " .. a .. "\n")
-    t.eq(document(file_of(home)).cards[1].allow, nil)
+    testing.eq(code, 0, out)
+    testing.eq(out, "cleared allow " .. a .. "\n")
+    testing.eq(document(file_of(home)).cards[1].allow, nil)
     out, code = dev(root, home, { "board", "allow", a, "everything" })
-    t.eq(code, 2)
-    t.eq(document(file_of(home)).cards[1].allow, nil)
+    testing.eq(code, 2)
+    testing.eq(document(file_of(home)).cards[1].allow, nil)
 end)
 
-t.test("queued allow, tests and files replace the fields when Pomb answers again", function()
+testing.test("queued allow, tests and files replace the fields when Pomb answers again", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     local id = ID_A:sub(1, 8)
     local out, code = pomb_dev(root, home, { "board", "allow", id, "test-edits" })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
     out = pomb_dev(root, home, { "board", "tests", id, "one" })
-    t.eq(out, QUEUED)
+    testing.eq(out, QUEUED)
     out = pomb_dev(root, home, { "board", "files", id, "src/a.rs" })
-    t.eq(out, QUEUED)
+    testing.eq(out, QUEUED)
     local entries = document(queue_path(home))
-    t.eq(#entries, 3)
-    t.eq(entries[1].sub, "allow")
-    t.eq(entries[1].args, { id, "test-edits" })
+    testing.eq(#entries, 3)
+    testing.eq(entries[1].sub, "allow")
+    testing.eq(entries[1].args, { id, "test-edits" })
     assert(fs.remove(root .. "/down"))
     out = pomb_dev(root, home, { "board", "sync" })
-    t.eq(out, "synced allow aaaaaaaa\nsynced tests aaaaaaaa\nsynced files aaaaaaaa\nsynced\n")
+    testing.eq(out, "synced allow aaaaaaaa\nsynced tests aaaaaaaa\nsynced files aaaaaaaa\nsynced\n")
     local bodies = fs.read(root .. "/bodies")
-    t.ok(bodies:find('"dev.allow":["test-edits"]', 1, true), bodies)
-    t.ok(bodies:find('"dev.tests":"one"', 1, true), bodies)
-    t.ok(bodies:find('"dev.files":"src/a.rs"', 1, true), bodies)
+    testing.ok(bodies:find('"dev.allow":["test-edits"]', 1, true), bodies)
+    testing.ok(bodies:find('"dev.tests":"one"', 1, true), bodies)
+    testing.ok(bodies:find('"dev.files":"src/a.rs"', 1, true), bodies)
 end)
 
-t.test("a gateway error still queues an edit, which is safe to repeat", function()
+testing.test("a gateway error still queues an edit, which is safe to repeat", function()
     local root, home = pomb()
     assert(fs.write(root .. "/plan.md", "again\n"))
     assert(fs.write(root .. "/gateway", ""))
     local out, code =
         pomb_dev(root, home, { "board", "edit", ID_A:sub(1, 8), "--file", root .. "/plan.md" })
-    t.eq(out, QUEUED)
-    t.eq(code, 0)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
 end)
 
-t.test("sync replays the queue in order and empties it", function()
+testing.test("sync replays the queue in order and empties it", function()
     local root, home = pomb()
     assert(fs.write(root .. "/export.json", PLANNED_EXPORT))
     assert(fs.write(root .. "/down", ""))
@@ -2077,62 +2104,62 @@ t.test("sync replays the queue in order and empties it", function()
     )
     assert(fs.remove(root .. "/down"))
     local out, code = pomb_dev(root, home, { "board", "sync" })
-    t.eq(code, 0, out)
-    t.eq(out, "synced move aaaaaaaa\nsynced note bbbbbbbb\nsynced add Later\nsynced\n")
-    t.eq(fs.exists(queue_path(home)), false)
+    testing.eq(code, 0, out)
+    testing.eq(out, "synced move aaaaaaaa\nsynced note bbbbbbbb\nsynced add Later\nsynced\n")
+    testing.eq(fs.exists(queue_path(home)), false)
     local log = calls(root)
     local move = assert(log:find("POST [^\n]*/move", 1))
     local note = assert(log:find("POST [^\n]*/comments", 1))
     local add = assert(log:find("POST [^\n]*/api/tasks\n", 1))
-    t.ok(move < note and note < add, log)
+    testing.ok(move < note and note < add, log)
     out = pomb_dev(root, home, { "board", "sync" })
-    t.eq(out, "nothing queued\n")
+    testing.eq(out, "nothing queued\n")
 end)
 
-t.test("a replay Pomb refuses is reported and dropped, the rest still go", function()
+testing.test("a replay Pomb refuses is reported and dropped, the rest still go", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     pomb_dev(root, home, { "board", "move", "deadbeef", COLUMN.REVIEW })
     pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "still goes" })
     assert(fs.remove(root .. "/down"))
     local out, code = pomb_dev(root, home, { "board", "sync" })
-    t.eq(code, 0, out)
-    t.ok(out:find("dropped move deadbeef: no card starts with deadbeef", 1, true), out)
-    t.ok(out:find("synced note aaaaaaaa", 1, true), out)
-    t.eq(fs.exists(queue_path(home)), false)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("dropped move deadbeef: no card starts with deadbeef", 1, true), out)
+    testing.ok(out:find("synced note aaaaaaaa", 1, true), out)
+    testing.eq(fs.exists(queue_path(home)), false)
 end)
 
-t.test("a sync that finds Pomb still down keeps every change queued", function()
+testing.test("a sync that finds Pomb still down keeps every change queued", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.REVIEW })
     pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "second" })
     local out, code = pomb_dev(root, home, { "board", "sync" })
-    t.eq(code, 1)
-    t.eq(out, "Pomb is still unreachable, move aaaaaaaa stays queued\nqueued: 2\n")
-    t.eq(#document(queue_path(home)), 2)
+    testing.eq(code, 1)
+    testing.eq(out, "Pomb is still unreachable, move aaaaaaaa stays queued\nqueued: 2\n")
+    testing.eq(#document(queue_path(home)), 2)
 end)
 
-t.test("any pomb command syncs a waiting queue first", function()
+testing.test("any pomb command syncs a waiting queue first", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "waiting" })
     assert(fs.remove(root .. "/down"))
     local out, code = pomb_dev(root, home, { "board", "ls" })
-    t.eq(code, 0, out)
-    t.ok(out:find("synced note aaaaaaaa", 1, true), out)
-    t.ok(out:find("First", 1, true), out)
-    t.eq(fs.exists(queue_path(home)), false)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("synced note aaaaaaaa", 1, true), out)
+    testing.ok(out:find("First", 1, true), out)
+    testing.eq(fs.exists(queue_path(home)), false)
     local log = calls(root)
-    t.ok(log:find("POST [^\n]*/comments\nGET [^\n]*/export%-data\n$"), log)
+    testing.ok(log:find("POST [^\n]*/comments\nGET [^\n]*/export%-data\n$"), log)
 end)
 
-t.test("status syncs a waiting queue and reports what is left", function()
+testing.test("status syncs a waiting queue and reports what is left", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "waiting" })
     local out = pomb_dev(root, home, { "board", "status" })
-    t.eq(
+    testing.eq(
         out,
         "backend: pomb\nboard: dotfiles\nPomb is still unreachable, note aaaaaaaa stays queued\nqueued: 1\n"
     )
@@ -2145,58 +2172,61 @@ local function bad_queue(text)
     return root, home
 end
 
-t.test("sync on a malformed queue is an error that names the line and keeps the file", function()
-    local root, home =
-        bad_queue('[{"sub":"move",\n"args":["aaaaaaaa" "' .. COLUMN.REVIEW .. '"]}]\n')
-    local out, code = pomb_dev(root, home, { "board", "sync" })
-    t.eq(code, 1)
-    t.ok(out:find(queue_path(home) .. ":2: ", 1, true), out)
-    t.ok(out:find("left in place", 1, true), out)
-    t.ok(not out:find("nothing queued", 1, true), out)
-    t.ok(assert(fs.read(queue_path(home))):find('"' .. COLUMN.REVIEW .. '"]}]', 1, true))
-    t.eq(calls(root), "")
-end)
+testing.test(
+    "sync on a malformed queue is an error that names the line and keeps the file",
+    function()
+        local root, home =
+            bad_queue('[{"sub":"move",\n"args":["aaaaaaaa" "' .. COLUMN.REVIEW .. '"]}]\n')
+        local out, code = pomb_dev(root, home, { "board", "sync" })
+        testing.eq(code, 1)
+        testing.ok(out:find(queue_path(home) .. ":2: ", 1, true), out)
+        testing.ok(out:find("left in place", 1, true), out)
+        testing.ok(not out:find("nothing queued", 1, true), out)
+        testing.ok(assert(fs.read(queue_path(home))):find('"' .. COLUMN.REVIEW .. '"]}]', 1, true))
+        testing.eq(calls(root), "")
+    end
+)
 
-t.test("a queue that is not a list of commands is malformed", function()
+testing.test("a queue that is not a list of commands is malformed", function()
     local root, home = bad_queue('{"sub":"move"}\n')
     local out, code = pomb_dev(root, home, { "board", "sync" })
-    t.eq(code, 1)
-    t.ok(out:find(":1: not a list of queued commands", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find(":1: not a list of queued commands", 1, true), out)
     root, home = bad_queue('[{"sub":"move","args":["a"]},"oops"]\n')
     out, code = pomb_dev(root, home, { "board", "sync" })
-    t.eq(code, 1)
-    t.ok(out:find("entry 2 is not a queued command", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("entry 2 is not a queued command", 1, true), out)
 end)
 
-t.test("another command warns about a malformed queue, runs and keeps the file", function()
+testing.test("another command warns about a malformed queue, runs and keeps the file", function()
     local root, home = bad_queue("not json")
     local out, code = pomb_dev(root, home, { "board", "ls" })
-    t.eq(code, 0, out)
-    t.ok(out:find(queue_path(home) .. ":1: ", 1, true), out)
-    t.ok(out:find("First", 1, true), out)
-    t.eq(assert(fs.read(queue_path(home))), "not json")
+    testing.eq(code, 0, out)
+    testing.ok(out:find(queue_path(home) .. ":1: ", 1, true), out)
+    testing.ok(out:find("First", 1, true), out)
+    testing.eq(assert(fs.read(queue_path(home))), "not json")
     out, code = pomb_dev(root, home, { "board", "status" })
-    t.eq(code, 0, out)
-    t.ok(out:find("left in place", 1, true), out)
-    t.eq(assert(fs.read(queue_path(home))), "not json")
+    testing.eq(code, 0, out)
+    testing.ok(out:find("left in place", 1, true), out)
+    testing.eq(assert(fs.read(queue_path(home))), "not json")
 end)
 
-t.test("a write that cannot reach Pomb does not overwrite a malformed queue", function()
+testing.test("a write that cannot reach Pomb does not overwrite a malformed queue", function()
     local root, home = bad_queue("not json")
     assert(fs.write(root .. "/down", ""))
     local out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.REVIEW })
-    t.eq(code, 1, out)
-    t.ok(out:find("could not be queued", 1, true), out)
-    t.eq(assert(fs.read(queue_path(home))), "not json")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("could not be queued", 1, true), out)
+    testing.eq(assert(fs.read(queue_path(home))), "not json")
 end)
 
-t.test("a local board never queues", function()
+testing.test("a local board never queues", function()
     local root, home = local_board()
     dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
-    t.eq(fs.exists(home .. "/state/dev/boards/mine.queue"), false)
+    testing.eq(fs.exists(home .. "/state/dev/boards/mine.queue"), false)
 end)
 
-t.test("a local board stores checks on the card and show lists them", function()
+testing.test("a local board stores checks on the card and show lists them", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -2213,14 +2243,14 @@ t.test("a local board stores checks on the card and show lists them", function()
         "--checks",
         "dev test",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local a = prefix_of(out)
-    t.eq(document(file_of(home)).cards[1].checks, { "dev lint", "dev test" })
+    testing.eq(document(file_of(home)).cards[1].checks, { "dev lint", "dev test" })
     out = dev(root, home, { "board", "show", a })
-    t.ok(out:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), out)
+    testing.ok(out:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true), out)
 end)
 
-t.test("a local board keeps a card with no checks row out of Ready", function()
+testing.test("a local board keeps a card with no checks row out of Ready", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
         "board",
@@ -2237,8 +2267,8 @@ t.test("a local board keeps a card with no checks row out of Ready", function()
     assert(fs.write(file, V1))
     assert(dev(root, home, { "board", "edit", a, "--file", file }))
     local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 1)
-    t.ok(out:find("has no checks row", 1, true), out)
+    testing.eq(code, 1)
+    testing.ok(out:find("has no checks row", 1, true), out)
     out, code = dev(root, home, {
         "board",
         "add",
@@ -2250,20 +2280,20 @@ t.test("a local board keeps a card with no checks row out of Ready", function()
         "--description",
         V1,
     })
-    t.eq(code, 2)
-    t.ok(out:find("--checks", 1, true), out)
+    testing.eq(code, 2)
+    testing.ok(out:find("--checks", 1, true), out)
     out = dev(root, home, { "board", "init" })
-    t.eq(out:find("checks field", 1, true), nil)
+    testing.eq(out:find("checks field", 1, true), nil)
 end)
 
-t.test("wait on a local board answers at once that there is nothing to wait on", function()
+testing.test("wait on a local board answers at once that there is nothing to wait on", function()
     local backend = require("dev.board.localboard").new({ name = "mine" })
     local got, message = backend:wait("1", { "task_added" }, 5)
-    t.eq(got, nil)
-    t.eq(message, "a local board has nothing to wait on")
+    testing.eq(got, nil)
+    testing.eq(message, "a local board has nothing to wait on")
 end)
 
-t.test("a local board with renamed columns works through the project map", function()
+testing.test("a local board with renamed columns works through the project map", function()
     local root, home = local_board(
         '[board]\nbackend = "local"\nname = "mine"\n\n[board.columns]\nbacklog = "Inbox"\nready = "Next"\nprogress = "Doing"\ndone = "Shipped"\n'
     )
@@ -2272,7 +2302,7 @@ t.test("a local board with renamed columns works through the project map", funct
     for _, column in ipairs(doc.columns) do
         names[#names + 1] = column.name
     end
-    t.eq(names, {
+    testing.eq(names, {
         "Icebox",
         "Inbox",
         "Next",
@@ -2283,22 +2313,22 @@ t.test("a local board with renamed columns works through the project map", funct
         "Blocked",
         "Shipped",
     })
-    t.eq(doc.columns[9].is_done, true)
+    testing.eq(doc.columns[9].is_done, true)
     local out = dev(
         root,
         home,
         { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
     )
-    t.ok(out:find(" Inbox\n", 1, true), out)
+    testing.ok(out:find(" Inbox\n", 1, true), out)
     local id = prefix_of(out)
     tick_first(root, home, id)
     out = dev(root, home, { "board", "move", id, COLUMN.DONE })
-    t.eq(out, "moved " .. id .. " to Shipped\n")
-    t.eq(dev(root, home, { "board", "ls" }), "no cards\n")
+    testing.eq(out, "moved " .. id .. " to Shipped\n")
+    testing.eq(dev(root, home, { "board", "ls" }), "no cards\n")
     out = dev(root, home, { "board", "ls", "--column", "shipped" })
-    t.ok(out:find("Shipped", 1, true), out)
+    testing.ok(out:find("Shipped", 1, true), out)
     out = dev(root, home, { "board", "move", id, COLUMN.READY })
-    t.ok(
+    testing.ok(
         out:find(" to Next\n", 1, true)
             or out:find("cannot enter Next", 1, true)
             or out:find("cannot enter Ready", 1, true),
@@ -2306,49 +2336,52 @@ t.test("a local board with renamed columns works through the project map", funct
     )
 end)
 
-t.test("a local board with two finished columns hides both and discards into the first", function()
-    local root, home = local_board()
-    local doc = document(file_of(home))
-    doc.columns[#doc.columns + 1] = { id = "col-archive", name = "Archive", is_done = true }
-    assert(fs.write(file_of(home), json.encode(doc)))
-    local first = prefix_of(
-        dev(
-            root,
-            home,
-            { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
+testing.test(
+    "a local board with two finished columns hides both and discards into the first",
+    function()
+        local root, home = local_board()
+        local doc = document(file_of(home))
+        doc.columns[#doc.columns + 1] = { id = "col-archive", name = "Archive", is_done = true }
+        assert(fs.write(file_of(home), json.encode(doc)))
+        local first = prefix_of(
+            dev(
+                root,
+                home,
+                { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
+            )
         )
-    )
-    local second = prefix_of(
-        dev(
-            root,
-            home,
-            { "board", "add", "Two", "--problem", "x", "--size", "1", "--done-when", "a" }
+        local second = prefix_of(
+            dev(
+                root,
+                home,
+                { "board", "add", "Two", "--problem", "x", "--size", "1", "--done-when", "a" }
+            )
         )
-    )
-    tick_first(root, home, first)
-    t.eq(
-        dev(root, home, { "board", "move", first, COLUMN.DONE }),
-        "moved " .. first .. " to Done\n"
-    )
-    t.eq(
-        dev(root, home, { "board", "move", second, "archive" }),
-        "moved " .. second .. " to Archive\n"
-    )
-    t.eq(dev(root, home, { "board", "ls" }), "no cards\n")
-    local third = prefix_of(
-        dev(
-            root,
-            home,
-            { "board", "add", "Three", "--problem", "x", "--size", "1", "--done-when", "a" }
+        tick_first(root, home, first)
+        testing.eq(
+            dev(root, home, { "board", "move", first, COLUMN.DONE }),
+            "moved " .. first .. " to Done\n"
         )
-    )
-    local out = dev(root, home, { "board", "discard", third })
-    t.eq(out, "discarded " .. third .. "\n")
-    out = dev(root, home, { "board", "ls", "--column", COLUMN.DONE })
-    t.ok(out:find("Three", 1, true), out)
-end)
+        testing.eq(
+            dev(root, home, { "board", "move", second, "archive" }),
+            "moved " .. second .. " to Archive\n"
+        )
+        testing.eq(dev(root, home, { "board", "ls" }), "no cards\n")
+        local third = prefix_of(
+            dev(
+                root,
+                home,
+                { "board", "add", "Three", "--problem", "x", "--size", "1", "--done-when", "a" }
+            )
+        )
+        local out = dev(root, home, { "board", "discard", third })
+        testing.eq(out, "discarded " .. third .. "\n")
+        out = dev(root, home, { "board", "ls", "--column", COLUMN.DONE })
+        testing.ok(out:find("Three", 1, true), out)
+    end
+)
 
-t.test(
+testing.test(
     "a local board stores the sections --problem, --change and --out-of-scope compose",
     function()
         local root, home = local_board()
@@ -2367,162 +2400,174 @@ t.test(
             "--done-when",
             "a",
         })
-        t.eq(code, 0, out)
-        t.eq(
+        testing.eq(code, 0, out)
+        testing.eq(
             document(file_of(home)).cards[1].description,
             "## Problem\nIt breaks.\n\n## Change\n- fix it\n\n## Out of scope\nnothing\n"
         )
     end
 )
 
-t.test(
+testing.test(
     "a local board refuses --description with a section flag and a Backlog add without Problem",
     function()
         local root, home = local_board()
         local out, code =
             dev(root, home, { "board", "add", "Both", "--description", "text", "--problem", "p" })
-        t.eq(code, 2)
-        t.ok(out:find("--description", 1, true), out)
+        testing.eq(code, 2)
+        testing.ok(out:find("--description", 1, true), out)
         out, code = dev(root, home, { "board", "add", "Bare" })
-        t.eq(code, 2)
-        t.ok(out:find("text under ## Problem", 1, true), out)
+        testing.eq(code, 2)
+        testing.ok(out:find("text under ## Problem", 1, true), out)
         out, code = dev(root, home, { "board", "add", "OnlyChange", "--change", "- do" })
-        t.eq(code, 2)
-        t.eq(#document(file_of(home)).cards, 0)
+        testing.eq(code, 2)
+        testing.eq(#document(file_of(home)).cards, 0)
     end
 )
 
-t.test("a free-form Icebox card cannot enter Backlog until edit gives it a Problem", function()
-    local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Idea", "--column", COLUMN.ICEBOX, "--description", "loose" }
+testing.test(
+    "a free-form Icebox card cannot enter Backlog until edit gives it a Problem",
+    function()
+        local root, home = local_board()
+        local a = prefix_of(
+            (
+                dev(
+                    root,
+                    home,
+                    { "board", "add", "Idea", "--column", COLUMN.ICEBOX, "--description", "loose" }
+                )
             )
         )
-    )
-    t.eq(document(file_of(home)).cards[1].description, "loose")
-    local out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
-    t.eq(code, 1)
-    t.ok(out:find("cannot enter Backlog", 1, true), out)
-    t.ok(out:find("## Problem", 1, true), out)
-    local file = root .. "/plan.md"
-    assert(fs.write(file, "## Problem\nwhy\n\n## Change\n\n## Out of scope\n"))
-    out, code = dev(root, home, { "board", "edit", a, "--file", file })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
-    t.eq(code, 1)
-    t.ok(out:find("a size", 1, true) and out:find("Done when outcomes", 1, true), out)
-    out, code = dev(root, home, { "board", "size", a, "1" })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "outcome", a, "It works" })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
-    t.eq(code, 0, out)
-    t.eq(out, "moved " .. a .. " to Backlog\n")
-end)
+        testing.eq(document(file_of(home)).cards[1].description, "loose")
+        local out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
+        testing.eq(code, 1)
+        testing.ok(out:find("cannot enter Backlog", 1, true), out)
+        testing.ok(out:find("## Problem", 1, true), out)
+        local file = root .. "/plan.md"
+        assert(fs.write(file, "## Problem\nwhy\n\n## Change\n\n## Out of scope\n"))
+        out, code = dev(root, home, { "board", "edit", a, "--file", file })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
+        testing.eq(code, 1)
+        testing.ok(out:find("a size", 1, true) and out:find("Done when outcomes", 1, true), out)
+        out, code = dev(root, home, { "board", "size", a, "1" })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "outcome", a, "It works" })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
+        testing.eq(code, 0, out)
+        testing.eq(out, "moved " .. a .. " to Backlog\n")
+    end
+)
 
-t.test("a local board refuses Ready for a card with an empty Change or Out of scope", function()
-    local root, home = local_board()
-    local a = prefix_of((dev(root, home, {
-        "board",
-        "add",
-        "Thin",
-        "--problem",
-        "why",
-        "--size",
-        "1",
-        "--checks",
-        "dev test",
-        "--done-when",
-        "a",
-        "--done-when",
-        "b",
-        "--done-when",
-        "c",
-    })))
-    local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 1)
-    t.ok(out:find("text under ## Change", 1, true), out)
-    t.ok(out:find("text under ## Out of scope", 1, true), out)
-    local file = root .. "/full.md"
-    assert(fs.write(file, "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n"))
-    out, code = dev(root, home, { "board", "edit", a, "--file", file })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
-    t.eq(code, 0, out)
-end)
+testing.test(
+    "a local board refuses Ready for a card with an empty Change or Out of scope",
+    function()
+        local root, home = local_board()
+        local a = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "Thin",
+            "--problem",
+            "why",
+            "--size",
+            "1",
+            "--checks",
+            "dev test",
+            "--done-when",
+            "a",
+            "--done-when",
+            "b",
+            "--done-when",
+            "c",
+        })))
+        local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
+        testing.eq(code, 1)
+        testing.ok(out:find("text under ## Change", 1, true), out)
+        testing.ok(out:find("text under ## Out of scope", 1, true), out)
+        local file = root .. "/full.md"
+        assert(fs.write(file, "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n"))
+        out, code = dev(root, home, { "board", "edit", a, "--file", file })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
+        testing.eq(code, 0, out)
+    end
+)
 
-t.test("order puts the named cards first and keeps the rest below on a local board", function()
-    local root, home = local_board()
-    local ids = {}
-    for _, name in ipairs({ "One", "Two", "Three", "Four" }) do
-        local out, code = dev(
+testing.test(
+    "order puts the named cards first and keeps the rest below on a local board",
+    function()
+        local root, home = local_board()
+        local ids = {}
+        for _, name in ipairs({ "One", "Two", "Three", "Four" }) do
+            local out, code = dev(
+                root,
+                home,
+                { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "a" }
+            )
+            testing.eq(code, 0, out)
+            table.insert(ids, 1, (prefix_of(out)))
+        end
+        local function names(out)
+            local found = {}
+            for name in out:gmatch("(%a+)\n") do
+                found[#found + 1] = name
+            end
+            return found
+        end
+        local out = dev(root, home, { "board", "ls" })
+        testing.eq(names(out), { "One", "Two", "Three", "Four" })
+        local four, three, two, one = ids[1], ids[2], ids[3], ids[4]
+        out = dev(root, home, { "board", "order", three, one })
+        testing.eq(names(out), { "Three", "One", "Two", "Four" })
+        out = dev(root, home, { "board", "ls" })
+        testing.eq(names(out), { "Three", "One", "Two", "Four" })
+        out = dev(root, home, { "board", "order", four })
+        testing.eq(names(out), { "Four", "Three", "One", "Two" })
+        local code
+        out, code = dev(root, home, { "board", "order", one, two, one })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("twice", 1, true), out)
+        out = dev(root, home, { "board", "ls" })
+        testing.eq(names(out), { "Four", "Three", "One", "Two" })
+    end
+)
+
+testing.test(
+    "order refuses cards of two columns before any move and frees a needs:human card",
+    function()
+        local root, home = local_board()
+        local out = dev(
             root,
             home,
-            { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "a" }
+            { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
         )
-        t.eq(code, 0, out)
-        table.insert(ids, 1, (prefix_of(out)))
+        local one = prefix_of(out)
+        out = dev(
+            root,
+            home,
+            { "board", "add", "Two", "--problem", "x", "--size", "1", "--done-when", "a" }
+        )
+        local two = prefix_of(out)
+        dev(root, home, { "board", "move", two, COLUMN.ICEBOX })
+        local before = dev(root, home, { "board", "ls" })
+        local code
+        out, code = dev(root, home, { "board", "order", one, two })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("one column", 1, true), out)
+        testing.eq(dev(root, home, { "board", "ls" }), before)
+        dev(root, home, { "board", "label", two, "needs:human" })
+        out, code = dev(root, home, { "board", "order", two })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", two, COLUMN.ICEBOX })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "move", two, COLUMN.BACKLOG })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("needs:human", 1, true), out)
     end
-    local function names(out)
-        local found = {}
-        for name in out:gmatch("(%a+)\n") do
-            found[#found + 1] = name
-        end
-        return found
-    end
-    local out = dev(root, home, { "board", "ls" })
-    t.eq(names(out), { "One", "Two", "Three", "Four" })
-    local four, three, two, one = ids[1], ids[2], ids[3], ids[4]
-    out = dev(root, home, { "board", "order", three, one })
-    t.eq(names(out), { "Three", "One", "Two", "Four" })
-    out = dev(root, home, { "board", "ls" })
-    t.eq(names(out), { "Three", "One", "Two", "Four" })
-    out = dev(root, home, { "board", "order", four })
-    t.eq(names(out), { "Four", "Three", "One", "Two" })
-    local code
-    out, code = dev(root, home, { "board", "order", one, two, one })
-    t.eq(code, 1, out)
-    t.ok(out:find("twice", 1, true), out)
-    out = dev(root, home, { "board", "ls" })
-    t.eq(names(out), { "Four", "Three", "One", "Two" })
-end)
+)
 
-t.test("order refuses cards of two columns before any move and frees a needs:human card", function()
-    local root, home = local_board()
-    local out = dev(
-        root,
-        home,
-        { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
-    local one = prefix_of(out)
-    out = dev(
-        root,
-        home,
-        { "board", "add", "Two", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
-    local two = prefix_of(out)
-    dev(root, home, { "board", "move", two, COLUMN.ICEBOX })
-    local before = dev(root, home, { "board", "ls" })
-    local code
-    out, code = dev(root, home, { "board", "order", one, two })
-    t.eq(code, 1, out)
-    t.ok(out:find("one column", 1, true), out)
-    t.eq(dev(root, home, { "board", "ls" }), before)
-    dev(root, home, { "board", "label", two, "needs:human" })
-    out, code = dev(root, home, { "board", "order", two })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "move", two, COLUMN.ICEBOX })
-    t.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "move", two, COLUMN.BACKLOG })
-    t.eq(code, 1, out)
-    t.ok(out:find("needs:human", 1, true), out)
-end)
-
-t.test("a move into an empty column leaves ls ordered by column", function()
+testing.test("a move into an empty column leaves ls ordered by column", function()
     local root, home = local_board()
     dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
     local two = prefix_of(
@@ -2536,133 +2581,139 @@ t.test("a move into an empty column leaves ls ordered by column", function()
     )
     dev(root, home, { "board", "move", two, COLUMN.ICEBOX })
     local out = dev(root, home, { "board", "ls" })
-    t.ok(out:find("Two", 1, true) < out:find("One", 1, true), out)
+    testing.ok(out:find("Two", 1, true) < out:find("One", 1, true), out)
 end)
 
-t.test("run starts a lint-clean run card, resumes it and ends it", function()
+testing.test("run starts a lint-clean run card, resumes it and ends it", function()
     local root, home = local_board()
     local agent = { DEV_AGENT = "dotfiles/one" }
     local out, code = dev(root, home, { "board", "run" }, agent)
-    t.eq(code, 1, out)
-    t.ok(out:find("dev board run --orders TEXT", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("dev board run --orders TEXT", 1, true), out)
     out, code = dev(root, home, { "board", "run", "--orders", "Clear the board\nthen stop" }, agent)
-    t.eq(code, 0, out)
-    t.ok(out:find("started ", 1, true), out)
-    t.ok(out:find("run dotfiles/one", 1, true), out)
-    t.ok(out:find("> Clear the board", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("started ", 1, true), out)
+    testing.ok(out:find("run dotfiles/one", 1, true), out)
+    testing.ok(out:find("> Clear the board", 1, true), out)
     out, code = dev(root, home, { "board", "run", "--orders", "again" }, agent)
-    t.eq(code, 1, out)
-    t.ok(out:find("already has the run card", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("already has the run card", 1, true), out)
     out, code = dev(root, home, { "board", "lint" })
-    t.eq(code, 0, out)
-    t.eq(out, "no findings\n")
+    testing.eq(code, 0, out)
+    testing.eq(out, "no findings\n")
     out, code = dev(root, home, { "board", "run" }, agent)
-    t.eq(code, 0, out)
-    t.ok(out:find("held by dotfiles/one:", 1, true), out)
-    t.ok(out:find("no ready cards", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("held by dotfiles/one:", 1, true), out)
+    testing.ok(out:find("no ready cards", 1, true), out)
     out, code = dev(root, home, { "board", "run", "--end" }, agent)
-    t.eq(code, 0, out)
-    t.ok(out:find("ended ", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("ended ", 1, true), out)
     out, code = dev(root, home, { "board", "run" }, agent)
-    t.eq(code, 1, out)
+    testing.eq(code, 1, out)
     out, code = dev(root, home, { "board", "lint" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end)
 
-t.test("run gives each session its own card and next never returns one", function()
+testing.test("run gives each session its own card and next never returns one", function()
     local root, home = local_board()
     local one, two = { DEV_AGENT = "s/one" }, { DEV_AGENT = "s/two" }
-    t.eq(select(2, dev(root, home, { "board", "run", "--orders", "a" }, one)), 0)
-    t.eq(select(2, dev(root, home, { "board", "run", "--orders", "b" }, two)), 0)
+    testing.eq(select(2, dev(root, home, { "board", "run", "--orders", "a" }, one)), 0)
+    testing.eq(select(2, dev(root, home, { "board", "run", "--orders", "b" }, two)), 0)
     local out, code = dev(root, home, { "board", "ls" })
-    t.ok(out:find("run s/one", 1, true), out)
-    t.ok(out:find("run s/two", 1, true), out)
+    testing.ok(out:find("run s/one", 1, true), out)
+    testing.ok(out:find("run s/two", 1, true), out)
     out = dev(root, home, { "board", "run" }, one)
-    t.ok(not out:find("> b", 1, true), out)
+    testing.ok(not out:find("> b", 1, true), out)
     local id = assert(out:match("^(%x+)"), out)
     dev(root, home, { "board", "note", id, "built, tried, learned" }, one)
     out, code = dev(root, home, { "board", "move", id, COLUMN.READY }, one)
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     dev(
         root,
         home,
         { "board", "add", "Plain", "--problem", "x", "--size", "1", "--done-when", "a" }
     )
     out = dev(root, home, { "board", "next" })
-    t.ok(not out:find("run s/", 1, true), out)
+    testing.ok(not out:find("run s/", 1, true), out)
     out, code = dev(root, home, { "board", "run", "--end" }, one)
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out = dev(root, home, { "board", "next" })
-    t.ok(not out:find("run s/", 1, true), out)
+    testing.ok(not out:find("run s/", 1, true), out)
 end)
 
-t.test("run refuses orders over the word limit and a flag mix", function()
+testing.test("run refuses orders over the word limit and a flag mix", function()
     local root, home = local_board()
     local long = string.rep("word ", 300)
     local out, code = dev(root, home, { "board", "run", "--orders", long })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "run", "--orders", "x", "--end" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "run", "--orders", "a", "--orders", "b" })
-    t.eq(code, 2, out)
-    t.ok(out:find("takes one value", 1, true), out)
+    testing.eq(code, 2, out)
+    testing.ok(out:find("takes one value", 1, true), out)
 end)
 
-t.test("run on a private project with no board starts making one", function()
+testing.test("run on a private project with no board starts making one", function()
     local root, home = setup("")
     local out, code = dev(root, home, { "board", "run", "--orders", "x" })
-    t.eq(code, 1, out)
-    t.ok(out:find("private and has no board", 1, true), out)
-    t.ok(out:find("lead_token", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("private and has no board", 1, true), out)
+    testing.ok(out:find("lead_token", 1, true), out)
 end)
 
-t.test("add --id-only prints the full id alone and sends warnings to standard error", function()
-    local root, home = local_board()
-    local out, code, errors = support.dev(root, {
-        "board",
-        "add",
-        "Fresh",
-        "--id-only",
-        "--description",
-        "look in src/a.lua",
-        "--size",
-        "1",
-        "--done-when",
-        "a",
-    }, { env = env_of(home), split = true })
-    t.eq(code, 0, out)
-    t.ok(out:match("^%x+%-%x+%-%x+%-%x+%-%x+\n$"), out)
-    t.eq(errors, "warning: card prose holds a path: src/a.lua\n")
-    local plain = dev(root, home, {
-        "board",
-        "add",
-        "Plain",
-        "--size",
-        "1",
-        "--problem",
-        "why",
-        "--done-when",
-        "a",
-    })
-    t.ok(plain:find("^added %x+ Backlog\n$"), plain)
-end)
+testing.test(
+    "add --id-only prints the full id alone and sends warnings to standard error",
+    function()
+        local root, home = local_board()
+        local out, code, errors = support.dev(root, {
+            "board",
+            "add",
+            "Fresh",
+            "--id-only",
+            "--description",
+            "look in src/a.lua",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        }, { env = env_of(home), split = true })
+        testing.eq(code, 0, out)
+        testing.ok(out:match("^%x+%-%x+%-%x+%-%x+%-%x+\n$"), out)
+        testing.eq(errors, "warning: card prose holds a path: src/a.lua\n")
+        local plain = dev(root, home, {
+            "board",
+            "add",
+            "Plain",
+            "--size",
+            "1",
+            "--problem",
+            "why",
+            "--done-when",
+            "a",
+        })
+        testing.ok(plain:find("^added %x+ Backlog\n$"), plain)
+    end
+)
 
-t.test("a failed add --id-only prints nothing on standard output and exits non-zero", function()
-    local root, home = local_board()
-    local out, code, errors = support.dev(root, {
-        "board",
-        "add",
-        "Bad",
-        "--id-only",
-        "--column",
-        "nowhere",
-    }, { env = env_of(home), split = true })
-    t.ok(code ~= 0, out)
-    t.eq(out, "")
-    t.ok(errors ~= "", errors)
-end)
+testing.test(
+    "a failed add --id-only prints nothing on standard output and exits non-zero",
+    function()
+        local root, home = local_board()
+        local out, code, errors = support.dev(root, {
+            "board",
+            "add",
+            "Bad",
+            "--id-only",
+            "--column",
+            "nowhere",
+        }, { env = env_of(home), split = true })
+        testing.ok(code ~= 0, out)
+        testing.eq(out, "")
+        testing.ok(errors ~= "", errors)
+    end
+)
 
-t.test("add --id-only is refused while Pomb is unreachable and never queued", function()
+testing.test("add --id-only is refused while Pomb is unreachable and never queued", function()
     local root, home = pomb()
     assert(fs.write(root .. "/down", ""))
     local out, code = pomb_dev(root, home, {
@@ -2677,12 +2728,12 @@ t.test("add --id-only is refused while Pomb is unreachable and never queued", fu
         "--done-when",
         "a",
     })
-    t.ok(code ~= 0, out)
-    t.eq(out:find(QUEUED, 1, true), nil)
-    t.eq(fs.exists(queue_path(home)), false)
+    testing.ok(code ~= 0, out)
+    testing.eq(out:find(QUEUED, 1, true), nil)
+    testing.eq(fs.exists(queue_path(home)), false)
 end)
 
-t.test("add takes --id-only as a value when a flag is waiting for one", function()
+testing.test("add takes --id-only as a value when a flag is waiting for one", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -2696,8 +2747,8 @@ t.test("add takes --id-only as a value when a flag is waiting for one", function
         "--done-when",
         "a",
     })
-    t.eq(code, 0, out)
-    t.ok(out:find("^%x+%-%x+%-%x+%-%x+%-%x+\n$"), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^%x+%-%x+%-%x+%-%x+%-%x+\n$"), out)
 end)
 
 local function sized_board()
@@ -2721,123 +2772,123 @@ local function sized_board()
     return root, home, big, small
 end
 
-t.test("next skips a card above the runner's size limit", function()
+testing.test("next skips a card above the runner's size limit", function()
     local root, home, big, small = sized_board()
     local out = dev(root, home, { "board", "next" }, { DEV_MAX_SIZE = "" })
-    t.ok(out:find(big, 1, true), out)
+    testing.ok(out:find(big, 1, true), out)
     out = dev(root, home, { "board", "next", "--max-size", "1" })
-    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
+    testing.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
     out = dev(root, home, { "board", "next" }, { DEV_MAX_SIZE = "2" })
-    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
+    testing.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
     local code
     out, code = dev(root, home, { "board", "next", "--max-size", "9" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
 end)
 
-t.test("take and move into progress refuse a card above the runner's size limit", function()
+testing.test("take and move into progress refuse a card above the runner's size limit", function()
     local root, home, big, small = sized_board()
     local env = { DEV_MAX_SIZE = "2", DEV_AGENT = "r/one" }
     local out, code = dev(root, home, { "board", "take", big }, env)
-    t.eq(code, 1, out)
-    t.ok(out:find("above this runner's limit of 2 Pomodori", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("above this runner's limit of 2 Pomodori", 1, true), out)
     out, code = dev(root, home, { "board", "move", big, COLUMN.PROGRESS }, env)
-    t.eq(code, 1, out)
-    t.ok(out:find("above this runner's limit", 1, true), out)
-    t.eq(card_named(document(file_of(home)), "Big").claim, nil)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("above this runner's limit", 1, true), out)
+    testing.eq(card_named(document(file_of(home)), "Big").claim, nil)
     out, code = dev(root, home, { "board", "take", small }, env)
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end)
 
-t.test("with no size limit set next, take and move change nothing", function()
+testing.test("with no size limit set next, take and move change nothing", function()
     local root, home, big = sized_board()
     local out, code = dev(root, home, { "board", "next" }, { DEV_MAX_SIZE = "" })
-    t.eq(code, 0, out)
-    t.ok(out:find(big, 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find(big, 1, true), out)
     out, code = dev(
         root,
         home,
         { "board", "take", big },
         { DEV_AGENT = "r/one", DEV_MAX_SIZE = "" }
     )
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "note", big, "built it" }, { DEV_AGENT = "r/one" })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(
         root,
         home,
         { "board", "move", big, COLUMN.REVIEW },
         { DEV_AGENT = "r/one", DEV_MAX_SIZE = "" }
     )
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end)
 
-t.test("next refuses an empty --max-size", function()
+testing.test("next refuses an empty --max-size", function()
     local root, home = sized_board()
     local out, code = dev(root, home, { "board", "next", "--max-size", "" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
 end)
 
-t.test("a --max-size flag on take and move wins over DEV_MAX_SIZE", function()
+testing.test("a --max-size flag on take and move wins over DEV_MAX_SIZE", function()
     local root, home, big, small = sized_board()
     local env = { DEV_MAX_SIZE = "3", DEV_AGENT = "r/one" }
     local out, code = dev(root, home, { "board", "take", big, "--max-size", "2" }, env)
-    t.eq(code, 1, out)
-    t.ok(out:find("above this runner's limit of 2 Pomodori", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("above this runner's limit of 2 Pomodori", 1, true), out)
     out, code = dev(root, home, { "board", "move", big, COLUMN.PROGRESS, "--max-size", "1" }, env)
-    t.eq(code, 1, out)
-    t.ok(out:find("above this runner's limit of 1 Pomodori", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("above this runner's limit of 1 Pomodori", 1, true), out)
     env.DEV_MAX_SIZE = "1"
     out, code = dev(root, home, { "board", "take", big, "--max-size", "3" }, env)
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "take", small, "--max-size", "1" }, env)
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end)
 
-t.test("take and move refuse a --max-size that is not 1, 2 or 3", function()
+testing.test("take and move refuse a --max-size that is not 1, 2 or 3", function()
     local root, home, big = sized_board()
     local env = { DEV_MAX_SIZE = "", DEV_AGENT = "r/one" }
     for _, word in ipairs({ "9", "", "x" }) do
         local out, code = dev(root, home, { "board", "take", big, "--max-size", word }, env)
-        t.eq(code, 2, out)
+        testing.eq(code, 2, out)
         out, code =
             dev(root, home, { "board", "move", big, COLUMN.PROGRESS, "--max-size", word }, env)
-        t.eq(code, 2, out)
+        testing.eq(code, 2, out)
     end
 end)
 
-t.test("move refuses a --max-size that is not 1, 2 or 3 into any column", function()
+testing.test("move refuses a --max-size that is not 1, 2 or 3 into any column", function()
     local root, home, big = sized_board()
     local out, code = dev(root, home, { "board", "move", big, COLUMN.BACKLOG, "--max-size", "9" })
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
 end)
 
-t.test("run resumes with a DEV_MAX_SIZE that is not 1, 2 or 3", function()
+testing.test("run resumes with a DEV_MAX_SIZE that is not 1, 2 or 3", function()
     local root, home = sized_board()
     local agent = { DEV_AGENT = "dotfiles/one", DEV_MAX_SIZE = "" }
     dev(root, home, { "board", "run", "--orders", "Clear the board" }, agent)
     agent.DEV_MAX_SIZE = "9"
     local out, code = dev(root, home, { "board", "run" }, agent)
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
 end)
 
-t.test("run prints a next card within DEV_MAX_SIZE", function()
+testing.test("run prints a next card within DEV_MAX_SIZE", function()
     local root, home, big, small = sized_board()
     local agent = { DEV_AGENT = "dotfiles/one", DEV_MAX_SIZE = "" }
     dev(root, home, { "board", "run", "--orders", "Clear the board" }, agent)
     local out = dev(root, home, { "board", "run" }, agent)
-    t.ok(out:find(big, 1, true), out)
+    testing.ok(out:find(big, 1, true), out)
     agent.DEV_MAX_SIZE = "1"
     out = dev(root, home, { "board", "run" }, agent)
-    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
+    testing.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
 end)
 
-t.test("take and move refuse a DEV_MAX_SIZE that is not 1, 2 or 3", function()
+testing.test("take and move refuse a DEV_MAX_SIZE that is not 1, 2 or 3", function()
     local root, home, big = sized_board()
     local env = { DEV_MAX_SIZE = "9", DEV_AGENT = "r/one" }
     local out, code = dev(root, home, { "board", "take", big }, env)
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "move", big, COLUMN.PROGRESS }, env)
-    t.eq(code, 2, out)
+    testing.eq(code, 2, out)
 end)
 
 local function sized_pomb()
@@ -2864,17 +2915,17 @@ local function sized_pomb()
     return root, home, big:sub(1, 8), small:sub(1, 8)
 end
 
-t.test("next --max-size skips a size 3 card on a pomb board", function()
+testing.test("next --max-size skips a size 3 card on a pomb board", function()
     local root, home, big, small = sized_pomb()
     local out = dev(root, home, { "board", "next" }, { ROOT = root, DEV_MAX_SIZE = "" })
-    t.ok(out:find(big, 1, true) and not out:find(small, 1, true), out)
+    testing.ok(out:find(big, 1, true) and not out:find(small, 1, true), out)
     out = pomb_dev(root, home, { "board", "next", "--max-size", "1" })
-    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
+    testing.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
     out = dev(root, home, { "board", "next" }, { ROOT = root, DEV_MAX_SIZE = "1" })
-    t.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
+    testing.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
 end)
 
-t.test("epic_local_move", function()
+testing.test("epic_local_move", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of((dev(root, home, {
@@ -2894,23 +2945,23 @@ t.test("epic_local_move", function()
     dev(root, home, { "board", "epic", epic })
     dev(root, home, { "board", "link", child, "parent", epic })
     local out, code = dev(root, home, { "board", "move", epic, COLUMN.DONE })
-    t.eq(code, 1, out)
-    t.ok(out:find("is an epic and cannot enter Done, a done column", 1, true), out)
-    t.ok(out:find("1 of 1 children are open", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is an epic and cannot enter Done, a done column", 1, true), out)
+    testing.ok(out:find("1 of 1 children are open", 1, true), out)
     out, code = dev(root, home, { "board", "move", epic, COLUMN.REVIEW })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     tick_first(root, home, child)
     dev(root, home, { "board", "move", child, COLUMN.DONE })
     out, code = dev(root, home, { "board", "move", epic, COLUMN.DONE })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     dev(root, home, { "board", "move", child, COLUMN.BACKLOG })
     out, code = dev(root, home, { "board", "move", epic, COLUMN.BACKLOG })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out = dev(root, home, { "board", "ls" })
-    t.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
+    testing.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
 end)
 
-t.test("epic_local_next", function()
+testing.test("epic_local_next", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of((dev(root, home, {
@@ -2931,32 +2982,32 @@ t.test("epic_local_next", function()
     dev(root, home, { "board", "epic", epic })
     dev(root, home, { "board", "link", child, "parent", epic })
     local out = dev(root, home, { "board", "ls" })
-    t.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
+    testing.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
     out = dev(root, home, { "board", "show", epic })
-    t.ok(out:find("\nkind: epic, 1 open\n", 1, true), out)
+    testing.ok(out:find("\nkind: epic, 1 open\n", 1, true), out)
     out = dev(root, home, { "board", "next" })
-    t.ok(out:find(child .. "  Ready", 1, true), out)
+    testing.ok(out:find(child .. "  Ready", 1, true), out)
     out = dev(root, home, { "board", "next", "--column", COLUMN.READY })
-    t.ok(out:find(child, 1, true) and not out:find(epic, 1, true), out)
+    testing.ok(out:find(child, 1, true) and not out:find(epic, 1, true), out)
     out = dev(root, home, { "board", "move", child, COLUMN.DONE })
     out = dev(root, home, { "board", "next" })
-    t.ok(out:find(epic .. "  Ready", 1, true), out)
+    testing.ok(out:find(epic .. "  Ready", 1, true), out)
     out = dev(root, home, { "board", "move", epic, COLUMN.PROGRESS }, { DEV_AGENT = "r/one" })
-    t.ok(out:find("r/one", 1, true), out)
-    t.eq(card_named(document(file_of(home)), "Epic").claim.claimant, "r/one")
+    testing.ok(out:find("r/one", 1, true), out)
+    testing.eq(card_named(document(file_of(home)), "Epic").claim.claimant, "r/one")
 end)
 
-t.test("a local board has no blocked setting", function()
+testing.test("a local board has no blocked setting", function()
     local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
     local out, code = dev(root, home, { "board", "init" })
-    t.eq(code, 0, out)
-    t.eq(out:find("marked Blocked", 1, true), nil)
+    testing.eq(code, 0, out)
+    testing.eq(out:find("marked Blocked", 1, true), nil)
     for _, column in ipairs(document(file_of(home)).columns) do
-        t.eq(column.is_blocked, nil)
+        testing.eq(column.is_blocked, nil)
     end
 end)
 
-t.test("local board keeps the epic kind and refuses a parent that is not an epic", function()
+testing.test("local board keeps the epic kind and refuses a parent that is not an epic", function()
     local root, home = local_board()
     local function add(name, ...)
         return prefix_of((dev(root, home, {
@@ -2974,26 +3025,26 @@ t.test("local board keeps the epic kind and refuses a parent that is not an epic
     end
     local made, plain, child = add("Made", "--epic"), add("Plain"), add("Child")
     local doc = document(file_of(home))
-    t.eq(card_named(doc, "Made").kind, "epic")
-    t.eq(card_named(doc, "Plain").kind, "task")
+    testing.eq(card_named(doc, "Made").kind, "epic")
+    testing.eq(card_named(doc, "Plain").kind, "task")
     local out, code = dev(root, home, { "board", "link", child, "parent", plain })
-    t.eq(code, 1, out)
-    t.ok(out:find("make it one with dev board epic " .. plain, 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("make it one with dev board epic " .. plain, 1, true), out)
     out, code = dev(root, home, { "board", "epic", plain })
-    t.eq(out, "made " .. plain .. " an epic\n")
-    t.eq(code, 0)
-    t.eq(card_named(document(file_of(home)), "Plain").kind, "epic")
+    testing.eq(out, "made " .. plain .. " an epic\n")
+    testing.eq(code, 0)
+    testing.eq(card_named(document(file_of(home)), "Plain").kind, "epic")
     out, code = dev(root, home, { "board", "epic", plain })
-    t.eq(code, 1, out)
-    t.ok(out:find("already an epic", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("already an epic", 1, true), out)
     out, code = dev(root, home, { "board", "link", child, "parent", made })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out = dev(root, home, { "board", "ls" })
-    t.ok(out:find("[epic 1 of 1 open] Made", 1, true), out)
-    t.ok(out:find("[epic] Plain", 1, true), out)
+    testing.ok(out:find("[epic 1 of 1 open] Made", 1, true), out)
+    testing.ok(out:find("[epic] Plain", 1, true), out)
 end)
 
-t.test("add --epic creates an epic on Pomb with kind epic", function()
+testing.test("add --epic creates an epic on Pomb with kind epic", function()
     local root, home = pomb()
     local out, code = pomb_dev(root, home, {
         "board",
@@ -3007,27 +3058,30 @@ t.test("add --epic creates an epic on Pomb with kind epic", function()
         "--done-when",
         "a",
     })
-    t.eq(code, 0, out)
-    t.ok(fs.read(root .. "/bodies"):find('"kind":"epic"', 1, true), fs.read(root .. "/bodies"))
+    testing.eq(code, 0, out)
+    testing.ok(
+        fs.read(root .. "/bodies"):find('"kind":"epic"', 1, true),
+        fs.read(root .. "/bodies")
+    )
 end)
 
-t.test("epic turns a card into an epic on Pomb and prints Pomb's refusal", function()
+testing.test("epic turns a card into an epic on Pomb and prints Pomb's refusal", function()
     local root, home = pomb()
     local out, code = pomb_dev(root, home, { "board", "epic", ID_A:sub(1, 8) })
-    t.eq(code, 0, out)
-    t.eq(out, "made aaaaaaaa an epic\n")
-    t.ok(
+    testing.eq(code, 0, out)
+    testing.eq(out, "made aaaaaaaa an epic\n")
+    testing.ok(
         calls(root):find("PATCH ", 1, true) and calls(root):find("/api/tasks/" .. ID_A, 1, true),
         calls(root)
     )
-    t.eq(fs.read(root .. "/bodies"), '{"kind":"epic"}\n')
+    testing.eq(fs.read(root .. "/bodies"), '{"kind":"epic"}\n')
     assert(fs.write(root .. "/held", ""))
     out, code = pomb_dev(root, home, { "board", "epic", ID_A:sub(1, 8) })
-    t.eq(code, 1, out)
-    t.ok(out:find("409", 1, true) and out:find("the card holds a live claim", 1, true), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("409", 1, true) and out:find("the card holds a live claim", 1, true), out)
 end)
 
-t.test("a childless epic enters Ready with 1 to 3 outcomes like any epic", function()
+testing.test("a childless epic enters Ready with 1 to 3 outcomes like any epic", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -3047,8 +3101,8 @@ t.test("a childless epic enters Ready with 1 to 3 outcomes like any epic", funct
         "--done-when",
         "d",
     })
-    t.eq(code, 2, out)
-    t.ok(out:find("1 to 3 Done when outcomes for an epic, not 4", 1, true), out)
+    testing.eq(code, 2, out)
+    testing.ok(out:find("1 to 3 Done when outcomes for an epic, not 4", 1, true), out)
     out, code = dev(root, home, {
         "board",
         "add",
@@ -3071,18 +3125,18 @@ t.test("a childless epic enters Ready with 1 to 3 outcomes like any epic", funct
         "--checks",
         "dev test",
     })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     local epic = prefix_of(out)
     out, code = dev(root, home, { "board", "move", epic, COLUMN.BACKLOG })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "move", epic, COLUMN.READY })
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "lint" })
-    t.eq(code, 0, out)
-    t.eq(out:find("lacks 3 to 7", 1, true), nil, out)
+    testing.eq(code, 0, out)
+    testing.eq(out:find("lacks 3 to 7", 1, true), nil, out)
 end)
 
-t.test("attach, attachments and detach refuse plainly on a local board", function()
+testing.test("attach, attachments and detach refuse plainly on a local board", function()
     local root, home = local_board()
     local a = prefix_of(
         (
@@ -3101,7 +3155,7 @@ t.test("attach, attachments and detach refuse plainly on a local board", functio
         { "board", "detach", a, "abcd" },
     }) do
         local out, code = dev(root, home, args)
-        t.eq(code, 1, out)
-        t.ok(out:find("a local board holds no attachments", 1, true), out)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("a local board holds no attachments", 1, true), out)
     end
 end)

@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local markdown = require("dev.ui.markdown")
 local text = require("dev.text")
 
@@ -26,7 +26,7 @@ local DOC = table.concat({
     "",
 }, "\n")
 
-t.test("plain rendering drops the markers and wraps prose and cells", function()
+testing.test("plain rendering drops the markers and wraps prose and cells", function()
     local want = table.concat({
         "demo: a topic",
         "",
@@ -48,10 +48,10 @@ t.test("plain rendering drops the markers and wraps prose and cells", function()
         '  dev board add "a fenced line that is never wrapped, however long it is"',
         "",
     }, "\n")
-    t.eq(markdown(DOC, { width = 40, color = false }), want)
+    testing.eq(markdown(DOC, { width = 40, color = false }), want)
 end)
 
-t.test("colour rendering paints headings, bold, code and the table header", function()
+testing.test("colour rendering paints headings, bold, code and the table header", function()
     local want = table.concat({
         "\27[1mdemo:\27[0m \27[1ma\27[0m \27[1mtopic\27[0m",
         "",
@@ -73,28 +73,28 @@ t.test("colour rendering paints headings, bold, code and the table header", func
         '  \27[36mdev board add "a fenced line that is never wrapped, however long it is"\27[0m',
         "",
     }, "\n")
-    t.eq(markdown(DOC, { width = 40, color = true }), want)
+    testing.eq(markdown(DOC, { width = 40, color = true }), want)
 end)
 
-t.test("a fenced line is never wrapped and prose never passes the width", function()
+testing.test("a fenced line is never wrapped and prose never passes the width", function()
     local out = markdown(DOC, { width = 40, color = false })
     for line in out:gmatch("[^\n]+") do
         if not line:find("dev board add", 1, true) then
-            t.ok(text.width(line) <= 40, line)
+            testing.ok(text.width(line) <= 40, line)
         end
     end
 end)
 
-t.test("a table narrower than the width keeps one line per row", function()
+testing.test("a table narrower than the width keeps one line per row", function()
     local out = markdown("| a | b |\n|---|---|\n| 1 | 2 |\n", { width = 80 })
-    t.eq(out, "  a  b\n  1  2\n")
+    testing.eq(out, "  a  b\n  1  2\n")
 end)
 
-t.test("empty text renders to nothing", function()
-    t.eq(markdown("", {}), "")
+testing.test("empty text renders to nothing", function()
+    testing.eq(markdown("", {}), "")
 end)
 
-t.test("code inside bold, an escaped pipe and an empty fence render cleanly", function()
+testing.test("code inside bold, an escaped pipe and an empty fence render cleanly", function()
     local out = markdown(
         "**use `dev help` now**\n\n```\n```\n\n| a | b |\n|---|---|\n| x\\|y | `p|q` |\n",
         {
@@ -102,7 +102,7 @@ t.test("code inside bold, an escaped pipe and an empty fence render cleanly", fu
             color = true,
         }
     )
-    t.eq(
+    testing.eq(
         out,
         "\27[1muse\27[0m \27[36m\27[1mdev\27[0m \27[36m\27[1mhelp\27[0m \27[1mnow\27[0m\n\n"
             .. "  \27[1ma\27[0m    \27[1mb\27[0m\n  x|y  \27[36mp|q\27[0m\n"

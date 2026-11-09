@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
@@ -184,71 +184,71 @@ local function read(box, name)
     return assert(fs.read(box.root .. "/" .. name))
 end
 
-t.test("take refuses at the group limit and names the cards", function()
+testing.test("take refuses at the group limit and names the cards", function()
     local box = sandbox({
         project = POMB,
         detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    t.eq(code, 1, out)
-    t.eq(out, IN_FLIGHT)
-    t.eq(read(box, "calls"):find("/claim", 1, true), nil)
+    testing.eq(code, 1, out)
+    testing.eq(out, IN_FLIGHT)
+    testing.eq(read(box, "calls"):find("/claim", 1, true), nil)
 end)
 
-t.test("take refuses at a column limit with room in its group", function()
+testing.test("take refuses at a column limit with room in its group", function()
     local box = sandbox({
         project = POMB,
         detail = detail({ [NAME.PROGRESS] = 1 }, { groups = GROUP .. '"limit":4,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    t.eq(code, 1, out)
-    t.eq(
+    testing.eq(code, 1, out)
+    testing.eq(
         out,
         "dev: " .. NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
     )
-    t.eq(read(box, "calls"):find("/claim", 1, true), nil)
+    testing.eq(read(box, "calls"):find("/claim", 1, true), nil)
 end)
 
-t.test("a count limit still refuses at its limit", function()
+testing.test("a count limit still refuses at its limit", function()
     local box = sandbox({
         project = POMB,
         detail = detail({ [NAME.PROGRESS] = 1 }, { units = { [NAME.PROGRESS] = COUNT } }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    t.eq(code, 1, out)
-    t.eq(
+    testing.eq(code, 1, out)
+    testing.eq(
         out,
         "dev: " .. NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
     )
 end)
 
-t.test("an hours limit never refuses a take or move", function()
+testing.test("an hours limit never refuses a take or move", function()
     local box = sandbox({
         project = POMB,
         detail = detail({ [NAME.PROGRESS] = 1 }, { units = { [NAME.PROGRESS] = HOURS } }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    t.eq(code, 0, out)
-    t.ok(out:find("took dddddddd", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("took dddddddd", 1, true), out)
     dev(box, { "board", "release", "dddddddd" }, "")
     out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, "")
-    t.eq(code, 0, out)
-    t.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
+    testing.eq(code, 0, out)
+    testing.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
 end)
 
-t.test("a board with no limits is uncapped", function()
+testing.test("a board with no limits is uncapped", function()
     local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    t.eq(code, 0, out)
-    t.ok(out:find("took dddddddd", 1, true), out)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("took dddddddd", 1, true), out)
     dev(box, { "board", "release", "dddddddd" }, "")
 end)
 
-t.test("an epic in the group is not counted", function()
+testing.test("an epic in the group is not counted", function()
     local box = sandbox({
         project = POMB,
         detail = detail({}, { groups = GROUP .. '"limit":3,"count":2}]' }),
@@ -260,69 +260,69 @@ t.test("an epic in the group is not counted", function()
         }),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     dev(box, { "board", "release", "dddddddd" }, "")
 end)
 
-t.test("move refuses a card entering a full group and names the cards", function()
+testing.test("move refuses a card entering a full group and names the cards", function()
     local box = sandbox({
         project = POMB,
         detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
-    t.eq(code, 1, out)
-    t.eq(out, IN_FLIGHT)
-    t.eq(read(box, "calls"):find("/move", 1, true), nil)
+    testing.eq(code, 1, out)
+    testing.eq(out, IN_FLIGHT)
+    testing.eq(read(box, "calls"):find("/move", 1, true), nil)
 end)
 
-t.test("move refuses a card entering a full column", function()
+testing.test("move refuses a card entering a full column", function()
     local box = sandbox({
         project = POMB,
         detail = detail({ [NAME.REVIEW] = 1 }, { groups = GROUP .. '"limit":4,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
-    t.eq(code, 1, out)
-    t.eq(
+    testing.eq(code, 1, out)
+    testing.eq(
         out,
         "dev: " .. NAME.REVIEW .. " holds 1 card (bbbbbbbb), at its limit of 1. Land one first.\n"
     )
-    t.eq(read(box, "calls"):find("/move", 1, true), nil)
+    testing.eq(read(box, "calls"):find("/move", 1, true), nil)
 end)
 
-t.test("a move inside the group is not counted", function()
+testing.test("a move inside the group is not counted", function()
     local box = sandbox({
         project = POMB,
         detail = detail({}, { groups = GROUP .. '"limit":2,"count":3}]' }),
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "bbbbbbbb", COLUMN.VERIFY }, "")
-    t.eq(code, 0, out)
-    t.eq(out, "moved bbbbbbbb to Verify\n")
-    t.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved bbbbbbbb to Verify\n")
+    testing.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
 end)
 
-t.test("a 409 wip_limit_reached becomes the refusal and move releases the claim", function()
+testing.test("a 409 wip_limit_reached becomes the refusal and move releases the claim", function()
     local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
     assert(fs.write(box.root .. "/move_refusal", LIMIT_BODY))
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
-    t.eq(code, 1, out)
-    t.eq(out, "dev: Pomb refused the move: " .. LIMIT_TEXT .. "\n")
+    testing.eq(code, 1, out)
+    testing.eq(out, "dev: Pomb refused the move: " .. LIMIT_TEXT .. "\n")
     local calls = read(box, "calls")
-    t.ok(calls:find("/api/tasks/" .. uuid("d") .. "/claim/release", 1, true), calls)
-    t.eq(calls:find("force", 1, true), nil)
-    t.eq(fs.exists(box.home .. "/state/dev/board/" .. uuid("d")), false)
+    testing.ok(calls:find("/api/tasks/" .. uuid("d") .. "/claim/release", 1, true), calls)
+    testing.eq(calls:find("force", 1, true), nil)
+    testing.eq(fs.exists(box.home .. "/state/dev/board/" .. uuid("d")), false)
 end)
 
-t.test("a local board is uncapped", function()
+testing.test("a local board is uncapped", function()
     local box = sandbox({
         project = '[board]\nbackend = "local"\nname = "mine"\n',
         detail = detail({}),
         export = export({}),
     })
     local out, code = dev(box, { "board", "init" }, "")
-    t.eq(code, 0, out)
+    testing.eq(code, 0, out)
     for index = 1, 6 do
         out, code = dev(box, {
             "board",
@@ -337,16 +337,16 @@ t.test("a local board is uncapped", function()
             "--checks",
             "dev test",
         }, "")
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
         local id = assert(out:match("added (%x+)"), out)
         out, code = dev(box, { "board", "move", id, COLUMN.PROGRESS }, NEW .. "/" .. index)
-        t.eq(code, 0, out)
+        testing.eq(code, 0, out)
     end
 end)
 
 local UNITS = '"limit":4,"limit_unit":"count","count":2}]'
 
-t.test("limits prints each column limit with its unit and each group", function()
+testing.test("limits prints each column limit with its unit and each group", function()
     local box = sandbox({
         project = POMB,
         detail = detail(
@@ -356,8 +356,8 @@ t.test("limits prints each column limit with its unit and each group", function(
         export = export({}),
     })
     local out, code = dev(box, { "board", "limits" }, "")
-    t.eq(code, 0, out)
-    t.eq(
+    testing.eq(code, 0, out)
+    testing.eq(
         out,
         NAME.PROGRESS
             .. ": 2 hours\n"
@@ -370,29 +370,29 @@ t.test("limits prints each column limit with its unit and each group", function(
     )
 end)
 
-t.test("limits exits 1 with no limit group when the board has none", function()
+testing.test("limits exits 1 with no limit group when the board has none", function()
     local box = sandbox({
         project = POMB,
         detail = detail({}, { groups = "[]" }),
         export = export({}),
     })
     local out, code = dev(box, { "board", "limits" }, "")
-    t.eq(code, 1, out)
-    t.eq(out, "no limit group\n")
+    testing.eq(code, 1, out)
+    testing.eq(out, "no limit group\n")
 end)
 
-t.test("limits names a column limit with no group and still exits 1", function()
+testing.test("limits names a column limit with no group and still exits 1", function()
     local box = sandbox({
         project = POMB,
         detail = detail({ [NAME.READY] = 5 }),
         export = export({}),
     })
     local out, code = dev(box, { "board", "limits", "dotfiles" }, "")
-    t.eq(code, 1, out)
-    t.eq(out, NAME.READY .. ": 5 count\nno limit group\n")
+    testing.eq(code, 1, out)
+    testing.eq(out, NAME.READY .. ": 5 count\nno limit group\n")
 end)
 
-t.test("limits names another board and reads its limits", function()
+testing.test("limits names another board and reads its limits", function()
     local box = sandbox({
         project = POMB,
         detail = detail({}),
@@ -400,6 +400,9 @@ t.test("limits names another board and reads its limits", function()
         export = export({}),
     })
     local out, code = dev(box, { "board", "limits", "other" }, "")
-    t.eq(code, 0, out)
-    t.eq(out, NAME.PROGRESS .. ", " .. NAME.REVIEW .. ", " .. NAME.VERIFY .. ": 4 (2 in flight)\n")
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        NAME.PROGRESS .. ", " .. NAME.REVIEW .. ", " .. NAME.VERIFY .. ": 4 (2 in flight)\n"
+    )
 end)

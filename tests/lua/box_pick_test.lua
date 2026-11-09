@@ -1,4 +1,4 @@
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local box = require("dev.cmd.box")
 local devos = require("dev.os")
 local fs = require("dev.fs")
@@ -86,36 +86,36 @@ local VERBS = {
 
 for _, case in ipairs(VERBS) do
     local words = case[1]
-    t.test("dev " .. table.concat(words, " ") .. " picks a box on a terminal", function()
+    testing.test("dev " .. table.concat(words, " ") .. " picks a box on a terminal", function()
         local root = sandbox()
         local pick = case[3]:match("^%S+ (%S+)")
         local _, code = support.dev(root, words, env(root, { FAKE_PICK = pick }))
-        t.eq(code, 0)
-        t.eq(titles(root), {
+        testing.eq(code, 0)
+        testing.eq(titles(root), {
             "picker title="
                 .. case[2]
                 .. " auto="
                 .. tostring(case[2]:find("Stop") == nil and case[2]:find("Delete") == nil),
         })
-        t.eq(read(root, "log"), "box ls --json\nbox " .. case[3] .. "\n")
+        testing.eq(read(root, "log"), "box ls --json\nbox " .. case[3] .. "\n")
         fs.remove(root, { recursive = true })
     end)
 end
 
-t.test("resume lists only stopped boxes and stop only running ones", function()
+testing.test("resume lists only stopped boxes and stop only running ones", function()
     local root = sandbox()
     support.dev(root, { "box", "resume" }, env(root, { FAKE_PICK = "stop-a" }))
     local picks = read(root, "picks")
-    t.ok(picks:find("stop-a", 1, true) and not picks:find("run-a", 1, true), picks)
+    testing.ok(picks:find("stop-a", 1, true) and not picks:find("run-a", 1, true), picks)
     fs.remove(root, { recursive = true })
     root = sandbox()
     support.dev(root, { "box", "stop" }, env(root, { FAKE_PICK = "run-a" }))
     picks = read(root, "picks")
-    t.ok(picks:find("run-a", 1, true) and not picks:find("stop-a", 1, true), picks)
+    testing.ok(picks:find("run-a", 1, true) and not picks:find("stop-a", 1, true), picks)
     fs.remove(root, { recursive = true })
 end)
 
-t.test("a missing name without a terminal is exit 2 with a hint", function()
+testing.test("a missing name without a terminal is exit 2 with a hint", function()
     for _, case in ipairs({
         {
             { "box", "show" },
@@ -132,58 +132,58 @@ t.test("a missing name without a terminal is exit 2 with a hint", function()
     }) do
         local root = sandbox()
         local out, code = support.dev(root, case[1], env(root, { FAKE_TTY = "0" }))
-        t.eq(code, 2)
-        t.eq(out, case[2])
-        t.eq(read(root, "log"), "")
+        testing.eq(code, 2)
+        testing.eq(out, case[2])
+        testing.eq(read(root, "log"), "")
         fs.remove(root, { recursive = true })
     end
 end)
 
-t.test("a verb with no box it can act on says so", function()
+testing.test("a verb with no box it can act on says so", function()
     local root = sandbox()
     assert(fs.write(root .. "/ls.json", '{"ok":true,"boxes":[]}'))
     local out, code = support.dev(root, { "box", "resume" }, env(root))
-    t.eq(code, 1)
-    t.eq(out, "dev box resume: no stopped boxes to resume\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev box resume: no stopped boxes to resume\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("the delete question names what would be lost", function()
+testing.test("the delete question names what would be lost", function()
     local question, consequence = box.delete_prompt("b", false, false)
-    t.eq({ question, consequence }, { "Delete b?", "Its projects are archived first." })
+    testing.eq({ question, consequence }, { "Delete b?", "Its projects are archived first." })
     question, consequence = box.delete_prompt("b", true, false)
-    t.eq(
+    testing.eq(
         { question, consequence },
         { "Delete b without an archive?", "Anything not pushed is lost." }
     )
     question, consequence = box.delete_prompt("b", false, true)
-    t.eq(consequence, "You're attached to it. Its projects are archived first.")
+    testing.eq(consequence, "You're attached to it. Its projects are archived first.")
     question, consequence = box.delete_prompt("b", true, true)
-    t.eq({ question, consequence }, {
+    testing.eq({ question, consequence }, {
         "Delete b without an archive?",
         "You're attached to it. Anything not pushed is lost.",
     })
 end)
 
-t.test("delete prints the final line with the archive", function()
+testing.test("delete prints the final line with the archive", function()
     local root = sandbox()
     local out, code = support.dev(root, { "box", "delete", "run-a", "-y" }, env(root))
-    t.eq(code, 0)
-    t.eq(out, "Deleted run-a · archive /var/x.tar.gz\n")
+    testing.eq(code, 0)
+    testing.eq(out, "Deleted run-a · archive /var/x.tar.gz\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("retag runs ci box retag with the target and prints the move", function()
+testing.test("retag runs ci box retag with the target and prints the move", function()
     local root = sandbox()
     local out, code =
         support.dev(root, { "box", "retag", "run-a", "--target", "linux-dev" }, env(root))
-    t.eq(code, 0)
-    t.eq(out, "retagged run-a to linux-dev\n")
-    t.eq(read(root, "log"), "box retag run-a --target linux-dev --json\n")
+    testing.eq(code, 0)
+    testing.eq(out, "retagged run-a to linux-dev\n")
+    testing.eq(read(root, "log"), "box retag run-a --target linux-dev --json\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("retag prints the box's own error and exits with ci's code", function()
+testing.test("retag prints the box's own error and exits with ci's code", function()
     local root = sandbox()
     assert(fs.write(root .. "/retag.json", FAILED_RETAG))
     local body = '#!/bin/sh\necho "$*" >> "'
@@ -195,22 +195,22 @@ t.test("retag prints the box's own error and exits with ci's code", function()
     assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     local out, code =
         support.dev(root, { "box", "retag", "run-a", "--target", "linux-dev" }, env(root))
-    t.eq(code, 1)
-    t.eq(out, "dev box retag: no instance\n")
+    testing.eq(code, 1)
+    testing.eq(out, "dev box retag: no instance\n")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("retag without a box name or a target is a usage error before ci runs", function()
+testing.test("retag without a box name or a target is a usage error before ci runs", function()
     local root = sandbox()
     local _, code = support.dev(root, { "box", "retag", "--target", "linux-dev" }, env(root))
-    t.eq(code, 2)
+    testing.eq(code, 2)
     _, code = support.dev(root, { "box", "retag", "run-a" }, env(root))
-    t.eq(code, 2)
-    t.eq(read(root, "log"), "")
+    testing.eq(code, 2)
+    testing.eq(read(root, "log"), "")
     fs.remove(root, { recursive = true })
 end)
 
-t.test("connect runs the two create pickers when it makes a box", function()
+testing.test("connect runs the two create pickers when it makes a box", function()
     local root = sandbox()
     local TARGETS =
         [[{"ok":true,"targets":[{"target":"linux-dev","os":"linux","machines":["example-box"],"image":"devbox","min_shape":null,"can_take_box_now":true,"reason":null}]}]]
@@ -224,6 +224,6 @@ t.test("connect runs the two create pickers when it makes a box", function()
     local log = read(root, "log")
     local want = "box create --target linux-dev --shape medium --by human:tester --json -- "
         .. project
-    t.ok(log:find(want, 1, true), log)
+    testing.ok(log:find(want, 1, true), log)
     fs.remove(root, { recursive = true })
 end)

@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 
-local t = require("dev.testing")
+local testing = require("dev.testing")
 local claims = require("dev.board.claims")
 local store = require("dev.board.store")
 local xdg = require("dev.xdg")
@@ -23,29 +23,32 @@ local function with_state(value, body)
     assert(ok, err)
 end
 
-t.test("state-dir-absolute uses an absolute XDG_STATE_HOME as given", function()
+testing.test("state-dir-absolute uses an absolute XDG_STATE_HOME as given", function()
     with_state("/srv/state", function()
-        t.eq(xdg.state_home(), "/srv/state")
+        testing.eq(xdg.state_home(), "/srv/state")
     end)
 end)
 
-t.test("state-dir-relative falls back to the home default for a relative or empty value", function()
-    local home = os.getenv("HOME") or ""
-    for _, value in ipairs({ "state", "" }) do
-        with_state(value, function()
-            t.eq(xdg.state_home(), home .. "/.local/state", value)
-            t.eq(claims.dir(), home .. "/.local/state/dev/board", value)
-            t.eq(store.dir(), home .. "/.local/state/dev/boards", value)
+testing.test(
+    "state-dir-relative falls back to the home default for a relative or empty value",
+    function()
+        local home = os.getenv("HOME") or ""
+        for _, value in ipairs({ "state", "" }) do
+            with_state(value, function()
+                testing.eq(xdg.state_home(), home .. "/.local/state", value)
+                testing.eq(claims.dir(), home .. "/.local/state/dev/board", value)
+                testing.eq(store.dir(), home .. "/.local/state/dev/boards", value)
+            end)
+        end
+        with_state(nil, function()
+            testing.eq(xdg.state_home(), home .. "/.local/state")
         end)
     end
-    with_state(nil, function()
-        t.eq(xdg.state_home(), home .. "/.local/state")
-    end)
-end)
+)
 
-t.test("state-dir-paths-kept leaves the claim and board files where they were", function()
+testing.test("state-dir-paths-kept leaves the claim and board files where they were", function()
     with_state("/srv/state", function()
-        t.eq(claims.dir(), "/srv/state/dev/board")
-        t.eq(store.dir(), "/srv/state/dev/boards")
+        testing.eq(claims.dir(), "/srv/state/dev/board")
+        testing.eq(store.dir(), "/srv/state/dev/boards")
     end)
 end)
