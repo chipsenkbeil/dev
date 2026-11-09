@@ -49,7 +49,7 @@ as the flag, where empty means unset and `0`, `no` and `false` mean `--local`.
 
 ```
 dev --remote test
-dev --remote test -- parse
+dev --remote test -- tests/dev/testverb_test.sh
 dev --remote --detach lint
 ```
 
@@ -58,7 +58,11 @@ directory of any `-C DIR`), then hands the runner the command words
 and the arguments after `--`, untouched, spaces and quotes included. The runner
 inherits the terminal, and its exit code is dev's. Any argument before the `--`
 is a usage error. A checks row for `test` or `lint` therefore reads
-`dev --remote test -- NAME`, and `dev board checks` refuses the bare form.
+`dev --remote test -- PATH`, and `dev board checks` refuses the bare
+form. The test job hands each word after the `--` to `dev test` as one quoted
+word. `dev test PATH` runs only the suites at each path under `tests/`, a path
+that names no suite is a usage error, and the test job skips the real root
+group.
 
 ## The default runner
 

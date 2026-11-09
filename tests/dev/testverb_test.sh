@@ -70,6 +70,28 @@ rc=$?
 assert_eq "no failing suite makes dev test exit 0" "$rc" "0"
 assert_line "the summary has no failure" "$out" "$((2 + extra)) passed, 0 failed, 2 skipped"
 
+out="$(cd "$TMP" && "$DEV" test tests/a/pass_test.sh 2>&1)"
+rc=$?
+assert_eq "a named suite exits 0" "$rc" "0"
+assert_line "a named suite runs only that suite" "$out" "PASS tests/a/pass_test.sh"
+assert_line "a named suite is the only one counted" "$out" "1 passed, 0 failed, 0 skipped"
+
+out="$(cd "$TMP" && "$DEV" test tests/a/pass_test.sh tests/a/runs.bats 2>&1)"
+assert_line "two named suites are both counted" "$out" "2 passed, 0 failed, 0 skipped"
+
+out="$(cd "$TMP" && "$DEV" test tests/a 2>&1)"
+assert_line "a directory runs every suite under it" "$out" "2 passed, 0 failed, 2 skipped"
+
+out="$(cd "$TMP" && "$DEV" test tests/a/missing_test.sh 2>&1)"
+rc=$?
+assert_eq "a path that names no suite exits 2" "$rc" "2"
+assert_line "a path that names no suite is refused" "$out" "dev test: no suite at tests/a/missing_test.sh"
+
+printf 'exit 0\n' >"$TMP/tests/a/sp ace_test.sh"
+out="$(cd "$TMP" && "$DEV" test "tests/a/sp ace_test.sh" 2>&1)"
+assert_line "a path with a space is one word" "$out" "PASS tests/a/sp ace_test.sh"
+rm "$TMP/tests/a/sp ace_test.sh"
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1

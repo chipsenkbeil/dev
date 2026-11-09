@@ -1,5 +1,7 @@
 --[[
 Run every test suite under tests/ and report each by name.
+Each argument is a suite file or a directory under tests/ and narrows the run to the suites at that path.
+A path that names no suite is a usage error.
 A suite is a .bats file, a *_test.sh or test-*.sh script, or a *_test.lua file run with luajit.
 The neomutt scripts run only when neomutt and tmux are both on PATH.
 Suites run in parallel, DEV_TEST_JOBS at a time (the core count by default, 1 for one after another).
@@ -11,7 +13,11 @@ local fs = require("dev.fs")
 local verb = require("dev.verb")
 
 local ctx = ...
-verb.no_args(ctx)
+for _, arg in ipairs(ctx.args) do
+    if arg:sub(1, 1) == "-" then
+        verb.usage_error(ctx, "unknown flag " .. arg)
+    end
+end
 verb.need("bats", "brew install bats-core")
 
 local root = ctx.root
@@ -115,6 +121,30 @@ if devos.which("neomutt") and devos.which("tmux") then
     suites[#suites + 1] = script_suite(parse, { "bash", parse, colors })
 else
     stdout:write("SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)\n")
+end
+
+if #ctx.args > 0 then
+    local chosen = {}
+    for _, arg in ipairs(ctx.args) do
+        local path = arg:gsub("^%./", ""):gsub("/+$", "")
+        local found = false
+        for _, suite in ipairs(suites) do
+            if suite.name == path or suite.name:sub(1, #path + 1) == path .. "/" then
+                chosen[suite] = true
+                found = true
+            end
+        end
+        if not found then
+            verb.usage_error(ctx, "no suite at " .. arg)
+        end
+    end
+    local kept = {}
+    for _, suite in ipairs(suites) do
+        if chosen[suite] then
+            kept[#kept + 1] = suite
+        end
+    end
+    suites = kept
 end
 
 for _, suite in ipairs(suites) do
