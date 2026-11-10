@@ -816,264 +816,386 @@ result and confirms it passes. The planner also confirms that the row matches
 behaviour rather than a name the builder may choose, and checks every rule
 number or section the card names against the file.
 
-A must-not-match row (`rg --files-without-match`) names one file, as with
-several it passes when any one lacks the text. The planner reads the code each
-Change bullet relies on before filing.
+A must-not-match row (`rg --files-without-match`) names one file. With several
+files it passes when any one lacks the text.
 
-Three more card fields are set the same way, each replacing the field's
-whole value under the claim's fence, and queued while Pomb is unreachable. A
-board that lacks the field is refused before any write (exit 1) with
-`the board has no dev.allow field, so define it on the board first`, naming
-the field. `dev board init` defines none of them. `allow CARD WORD...` sets
-`dev.allow`, a multiselect, to the JSON array of `test-edits` and
-`ci-edits` given (duplicates dropped), and `allow CARD none` sends null to clear
-it. Any other word, or `none` with another word, is a usage error (exit 2).
-`tests CARD NAME...` and `files CARD PATH...` set `dev.tests` and
-`dev.files`, multiline text fields, to the names joined one per line (a
-blank name or one holding a line break is exit 2). `show` prints `allow:`,
-`tests:` and `files:` blocks after `checks:` when set. A local board stores the
-same values on the card.
+The planner reads the code each Change bullet relies on before filing.
 
-`show CARD` prints everything a runner needs to take a card: the `ls` line (id
-prefix, column, size, labels and name), then the description, then the comments
-in the `notes` format, except that each comment prints its whole body: the lines
-after the first sit under the body column, so a numbered menu reads whole. The
-outcomes print as `done when:` with one `- [x]` or `- [ ]` line each, after the
-description. A card with no description prints `no description`, and one with no
-comments `no comments`. Use it instead of the Pomb API to read a card, so the
-token stays inside dev. `links` lists its links. A child also prints
-`parent: <id prefix> <name>` under the `ls` line, and an epic
-`children: N of M done`.
+Three more card fields are set the same way. Each replaces the field's
+whole value under the claim's fence and is queued while Pomb is unreachable.
+
+A board that lacks the field is refused before any write (exit 1), naming the
+field. The message reads
+`the board has no dev.allow field, so define it on the board first`.
+`dev board init` defines none of them.
+
+- `allow CARD WORD...`: sets `dev.allow`, a multiselect, to the JSON array
+  of `test-edits` and `ci-edits` given (duplicates dropped). `allow CARD none`
+  sends null to clear it. Any other word, or `none` with another word, is a
+  usage error (exit 2).
+- `tests CARD NAME...`: sets `dev.tests`, a multiline text field, to the
+  names joined one per line. A blank name or one holding a line break is exit 2.
+- `files CARD PATH...`: sets `dev.files`, a multiline text field, the same
+  way.
+
+`show` prints `allow:`, `tests:` and `files:` blocks after `checks:` when set.
+A local board stores the same values on the card.
+
+`show CARD` prints everything a runner needs to take a card:
+
+- the `ls` line (id prefix, column, size, labels and name)
+- the description
+- the outcomes as `done when:`, one `- [x]` or `- [ ]` line each
+- the comments in the `notes` format
+
+Each comment prints its whole body, with the lines after the first under the
+body column, so a numbered menu reads whole. A card with no description prints
+`no description`, and one with no comments `no comments`.
+
+Use it instead of the Pomb API to read a card, so the token stays inside dev.
+`links` lists its links. A child also prints `parent: <id prefix> <name>` under
+the `ls` line, and an epic `children: N of M done`.
 
 `edit CARD` replaces a card's description with the text of `--file PATH`, or of
-standard input when there is no `--file`, and prints `edited <id prefix>`. The
-format v2 description always holds the current plan, so rewrite it after a
+standard input when there is no `--file`. It prints `edited <id prefix>`.
+
+The format v2 description always holds the current plan, so rewrite it after a
 decision. Trailing whitespace is dropped, and empty text is a usage error (exit
-2), to keep an empty pipe from wiping a plan. It sends the claim's fence when
-this machine holds one. It does not touch the title or the comments.
+2), to keep an empty pipe from wiping a plan.
 
-`note CARD --kind K --as ROLE TEXT` tags the comment: `K` is decision, blocked,
-status or done (agent when omitted), and `ROLE` is a free label of at most 80
-characters, such as planner, implementer or reviewer, that lets agents sharing
-one token tell themselves apart. `question` is exit 2 and names `dev board ask`,
-which sends the owner a question in Pomb's structured shape. A note that begins
-with a dash still posts as text. `--edit` changes only the text, so the kind and
-the label stay, and a queued note replays with both.
+It sends the claim's fence when this machine holds one. It does not touch the
+title or the comments.
 
-`notes CARD` lists the card's comments, oldest first: the comment's id prefix,
-who wrote it (the token's name, else the kind of actor), its kind, its role
-label (`-` when it has none), the time in UTC and the first line of the body
-(`show` prints the rest of a multi-line body, `notes` does not).
+`note CARD --kind K --as ROLE TEXT` tags the comment:
+
+- `K`: decision, blocked, status or done (agent when omitted)
+- `ROLE`: a free label of at most 80 characters, such as planner, implementer
+  or reviewer, that lets agents sharing one token tell themselves apart
+
+`question` is exit 2 and names `dev board ask`, which sends the owner a question
+in Pomb's structured shape. A note that begins with a dash still posts as text.
+`--edit` changes only the text, so the kind and the label stay, and a queued
+note replays with both.
+
+`notes CARD` lists the card's comments, oldest first. Each line holds:
+
+- the comment's id prefix
+- who wrote it (the token's name, else the kind of actor)
+- its kind
+- its role label (`-` when it has none)
+- the time in UTC
+- the first line of the body (`show` prints the rest of a multi-line body,
+  `notes` does not)
+
 `note CARD --edit COMMENT TEXT` replaces the text of one of your own comments
 and `note CARD --delete COMMENT` removes it. `COMMENT` is an id prefix of at
-least 8 characters from `notes`. Pomb lets a token change only the comments it
-wrote, so a comment from a person, from another token or from before Pomb 0.5.7
-answers 403, and dev says `that comment is not yours to change` (exit 1). A
-deleted comment is gone for good (Pomb keeps no recycle bin for comments).
+least 8 characters from `notes`.
+
+Pomb lets a token change only the comments it wrote. A comment from a person,
+from another token or from before Pomb 0.5.7 answers 403, and dev says
+`that comment is not yours to change` (exit 1).
+
+A deleted comment is gone for good (Pomb keeps no recycle bin for comments).
 
 `ls` on a colour terminal prints a summary line
-(`12 cards · 3 backlog · 2 ready`), a size legend and a table where the size is
-dots (one yellow, two green, three blue, four red, three dim hollow ones for
-unsized) and the outcomes are a `▰▱` meter with `2/4`. `ls --group` draws one
-block per column instead, with the column's name and card count as its heading.
-`--column`, `--label` and `--size` filter both layouts, a tall list goes through
-your pager, and piped output, `NO_COLOR` and `TERM=dumb` keep the plain aligned
-lines with or without `--group`.
+(`12 cards · 3 backlog · 2 ready`), a size legend and a table. In the table the
+size is dots (one yellow, two green, three blue, four red, three dim hollow ones
+for unsized) and the outcomes are a `▰▱` meter with `2/4`.
 
-`size CARD S` sets a card's colour from the size word `S`: `1` is yellow, `2`
-green, `3` blue, `3+` red and `unsized` white. `add --size S` does the same when
-it makes the card, and `ls --size S` keeps only the cards of that colour, where
-a card with no colour counts as unsized. Any other word is a usage error (exit
-2) that lists the five. The colour is found by its value in the board's palette,
-never by its label, so it works before and after `dev board init` names the
-labels. A board missing the colour fails with
+`ls --group` draws one block per column instead, with the column's name and card
+count as its heading. `--column`, `--label` and `--size` filter both layouts,
+and a tall list goes through your pager.
+
+Piped output, `NO_COLOR` and `TERM=dumb` keep the plain aligned lines with or
+without `--group`.
+
+`size CARD S` sets a card's colour from the size word `S`:
+
+- `1`: yellow
+- `2`: green
+- `3`: blue
+- `3+`: red
+- `unsized`: white
+
+`add --size S` does the same when it makes the card. `ls --size S` keeps only
+the cards of that colour, where a card with no colour counts as unsized.
+
+Any other word is a usage error (exit 2) that lists the five. The colour is
+found by its value in the board's palette, never by its label, so it works
+before and after `dev board init` names the labels.
+
+A board missing the colour fails with
 `board unavailable: the board has no yellow colour`.
 
 `outcome CARD TEXT` appends a Done when outcome to a card that already exists
 (`POST /api/tasks/{id}/subtasks`) and prints `outcome <id prefix> N added`.
-`outcome CARD TEXT` is exit 2 when a word of TEXT is `--tick`, `--untick`,
-`--rename` or `--convert`, or when TEXT is only a number. The message names the
-form meant, such as `outcome CARD --tick N`. A flag inside one quoted sentence
-is plain text. `outcome CARD --rename N TEXT --reason TEXT` rewords the Nth
-(the first `--reason` ends the new text), `--tick N` marks it done and
-`--untick N` clears it (`PATCH /api/tasks/{id}/subtasks/{sub_id}`
-with `name` or `done`), each printing `outcome <id prefix> N reworded`, `ticked`
-or `unticked`. N counts from 1 in the order `show` lists the outcomes, and an N
-past the last outcome is exit 1. A tick names its ticker with `--as NAME` after
-the number (`outcome CARD --tick N --as NAME`), else with DEV_AGENT, and prints
-`ticked by NAME`. On a claimed card the ticker must be a name other than the
-claimant's: no name is exit 2 and the claimant's own name is exit 1, with
-nothing written. The name is self-declared, so dev checks only that it differs
-from the claimant. An unclaimed card needs no name, and a DEV_AGENT that is not
-one word is ignored there. `--untick` takes no name and stays open to anyone.
-`--as` is read only after `--tick`, `--delete` and `--convert`; on the other forms it is
-ordinary text, so `--untick N --as X` is exit 2 for its extra words. A queued
-tick keeps the name it resolved, so a later sync records the same ticker.
+
+It is exit 2 when a word of `TEXT` is `--tick`, `--untick`, `--rename` or
+`--convert`, or when `TEXT` is only a number. The message names the form meant,
+such as `outcome CARD --tick N`. A flag inside one quoted sentence is plain
+text.
+
+The other forms change the Nth outcome:
+
+- `outcome CARD --rename N TEXT --reason TEXT`: rewords it (the first `--reason`
+  ends the new text)
+- `outcome CARD --tick N`: marks it done
+- `outcome CARD --untick N`: clears it
+
+The rename, tick and untick calls are
+`PATCH /api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`. Each prints
+`outcome <id prefix> N reworded`, `ticked` or `unticked`.
+
+`N` counts from 1 in the order `show` lists the outcomes, and an `N` past the
+last outcome is exit 1.
+
+A tick names its ticker with `--as NAME` after the number
+(`outcome CARD --tick N --as NAME`), else with `DEV_AGENT`. It prints
+`ticked by NAME`.
+
+On a claimed card the ticker must be a name other than the claimant's. No name
+is exit 2 and the claimant's own name is exit 1, with nothing written. The name
+is self-declared, so dev checks only that it differs from the claimant.
+
+An unclaimed card needs no name, and a `DEV_AGENT` that is not one word is
+ignored there. `--untick` takes no name and stays open to anyone.
+
+`--as` is read only after `--tick`, `--delete` and `--convert`. On the other
+forms it is ordinary text, so `--untick N --as X` is exit 2 for its extra words.
+A queued tick keeps the name it resolved, so a later sync records the same
+ticker.
+
 `outcome CARD --delete N --reason TEXT [--as NAME]` removes the Nth outcome
 (`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) from a card in Blocked,
-Backlog or Icebox. Outcomes are fixed from Ready on. A card in a column mapped
-to the ready, progress, review, verify or release role, in a finished column, or
-in a column outside the role map is refused with exit 1 naming the column, with
-nothing written or queued. The roles come from `[board.columns]` and `is_done`,
-never from a column name. Only the lead deletes an outcome: a `DEV_AGENT` whose
-role segment is not lead is refused with exit 1 and nothing written, before any
-backend call, and a runner, implementer, planner or reviewer asks the lead with
-the card, the number and the reason. The outcomes after it move up a number, and
-the command writes a decision note holding the deleted text and the reason, then
-prints `outcome <id prefix> N deleted`. A missing number or reason is exit 2.
-`--reason` is the one way to say why an outcome that was never achievable is
-deleted and not reworded. On a Pomb board the DELETE goes out with the lead
-token, `lead_token` in `[board.pomb]`, never the work token, and never
-`DEV_BOARD_TOKEN` or the token file for `DEV_AGENT`, which every other verb
-reads first. Pomb 0.5.78 gives `subtasks.delete` to the lead tier only. A
-missing `lead_token` exits 1 before any request, naming `subtasks.delete` and
-the lead token. A 403 `permission_denied` for `subtasks.delete` exits 1 with a
-message that names `subtasks.delete` and the lead token, and writes no note. A
-local board needs no lead token. A locked card gets 403 `card_locked` for every
-token, and a column entry rule can refuse a delete that leaves the card worse.
-`--delete` prints Pomb's reason for each refusal, writes no note and changes
-nothing. A delete is never queued for a later sync, to keep its number from
-pointing at a different outcome by then. dev never reorders an outcome. The
-claim's fence goes along when this machine holds one, and a local board keeps
-the same outcomes on the card.
+Backlog or Icebox. Outcomes are fixed from Ready on.
 
-The card's claimant and every name in its claim history (the `dev-claim:`
-notes that `review` reads) are refused an outcome add, `--convert`,
-`--delete`, `--rename` and `dev board checks`, with exit 1 and nothing
-written. The builder passes a change back with a note instead, to stop a
-released runner from rewording the card and taking it back. The
-refusal compares the names with `DEV_AGENT` and, after `--delete` and
-`--convert`, with the `--as` name.
-`checks` reads `DEV_AGENT` only. The lead
-(a name with no `/`) and any name that never claimed the card may change
-outcomes and checks, except that only the lead deletes an outcome. A session
-with no `DEV_AGENT` is not checked.
+A card is refused with exit 1 naming the column, with nothing written or queued,
+when it sits in:
+
+- a column mapped to the ready, progress, review, verify or release role
+- a finished column
+- a column outside the role map
+
+The roles come from `[board.columns]` and `is_done`, never from a column name.
+
+Only the lead deletes an outcome. A `DEV_AGENT` whose role segment is not lead
+is refused with exit 1 and nothing written, before any backend call. A runner,
+implementer, planner or reviewer asks the lead with the card, the number and the
+reason.
+
+The outcomes after it move up a number. The command writes a decision note
+holding the deleted text and the reason, then prints
+`outcome <id prefix> N deleted`.
+
+A missing number or reason is exit 2. `--reason` is the one way to say why an
+outcome that was never achievable is deleted and not reworded.
+
+On a Pomb board the DELETE goes out with the lead token, `lead_token` in
+`[board.pomb]`, never with the work token, `DEV_BOARD_TOKEN` or the token file
+for `DEV_AGENT`, which every other verb reads first. Pomb 0.5.78 gives
+`subtasks.delete` to the lead tier only. A local board needs no lead token.
+
+A delete is refused when:
+
+- a missing `lead_token` exits 1 before any request, naming `subtasks.delete`
+  and the lead token
+- a 403 `permission_denied` for `subtasks.delete` exits 1 with a message that
+  names `subtasks.delete` and the lead token
+- a locked card gets 403 `card_locked` for every token
+- a column entry rule can refuse a delete that leaves the card worse
+
+`--delete` prints Pomb's reason for each refusal, writes no note and changes
+nothing.
+
+A delete is never queued for a later sync, to keep its number from pointing at a
+different outcome by then. dev never reorders an outcome.
+
+The claim's fence goes along when this machine holds one, and a local board
+keeps the same outcomes on the card.
+
+The card's claimant and every name in its claim history (the `dev-claim:` notes
+that `review` reads) are refused an outcome add, `--convert`, `--delete`,
+`--rename` and `dev board checks`. The refusal is exit 1 with nothing written.
+The builder passes a change back with a note instead, to stop a released runner
+from rewording the card and taking it back.
+
+The refusal compares the names with `DEV_AGENT` and, after `--delete` and
+`--convert`, with the `--as` name. `checks` reads `DEV_AGENT` only.
+
+The lead (a name with no `/`) and any name that never claimed the card may
+change outcomes and checks, except that only the lead deletes an outcome. A
+session with no `DEV_AGENT` is not checked.
 
 `outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
-appends one outcome per `- [ ]` or `- [x]` item, ticks the ticked ones, and only
-once all of that succeeded rewrites the description without the heading and the
-items, then prints `outcome <id prefix> converted N outcomes`. The ticked items
-are ticks, so on a claimed card with any `- [x]` item it takes the ticker the
-same way as `--tick` (`--as NAME` or DEV_AGENT, never the claimant's name) and
-refuses before it writes anything. A card that already has outcomes, or has no
-checklist, is left as it is with one line saying why (exit 0), so a second run
-changes nothing.
+appends one outcome per `- [ ]` or `- [x]` item and ticks the ticked ones. Only
+once all of that succeeded does it rewrite the description without the heading
+and the items, then print `outcome <id prefix> converted N outcomes`.
+
+The ticked items are ticks. On a claimed card with any `- [x]` item it takes the
+ticker the same way as `--tick` (`--as NAME` or `DEV_AGENT`, never the
+claimant's name) and refuses before it writes anything.
+
+A card that already has outcomes, or has no checklist, is left as it is with one
+line saying why (exit 0), so a second run changes nothing.
 
 `add --label L` gives a new card a label, and may be repeated. `label CARD L`
 (or `+L`) adds a label to a card and `--remove L` removes one, each as many
-times as you like in one call, the additions first. Pomb replaces a card's whole
-label list on a change, so `label` reads the current labels, applies the edits
-and sends the full list, with the claim's fence when this machine holds one.
+times as you like in one call, the additions first.
+
+Pomb replaces a card's whole label list on a change. So `label` reads the
+current labels, applies the edits and sends the full list, with the claim's
+fence when this machine holds one.
+
 Adding a label the card has, or removing one it lacks, changes nothing and sends
 nothing. A label is one word with no spaces and no leading `-`, and anything
-else is a usage error (exit 2). The escalation labels `needs:planner`,
-`needs:lead` and `needs:human` are plain labels to dev. Two agents editing the same card's labels
-at the same moment can lose one edit, because pomb has no add or remove call and
-takes the whole list.
+else is a usage error (exit 2).
 
-`link CARD KIND OTHER` links two cards. `KIND` is `blocked_by`, `blocks`,
-`related` or `parent`. `OTHER` is a card of this board, by id or prefix, or
-`BOARD:PREFIX` for a card on another board of the same Pomb server, which dev
-finds by reading that board, so write the work that spans repos as
-`dev board link 5ff0e014 blocked_by ci:1a2b3c4d`. It prints
-`linked <id prefix> <kind> <other>`. Pomb keeps one link whichever card holds
-it, and asking again for a link it has changes nothing, so a `link` that could
-not reach Pomb is queued with the others. Pomb refuses a card linked to itself
-and a link that would make cards wait on each other.
-`dev board link CHILD parent EPIC` makes the other card the epic of the
-first, and dev refuses an `EPIC` that is not an epic before any request,
-naming `dev board epic EPIC`. A card has one epic and epics nest to any
-depth, so Pomb refuses a second epic and a link that would make a cycle,
-and a local board refuses them too, naming the two cards the link joins.
-Epics count their direct children. A local board stores the links on its own
-cards, links only its own cards, and its `next` skips a card that a card
-outside Done blocks.
+The escalation labels `needs:planner`, `needs:lead` and `needs:human` are plain
+labels to dev. Pomb has no add or remove call and takes the whole list, so two
+agents editing the same card's labels at the same moment can lose one edit.
 
-`links CARD` lists a card's links, one line each: the kind as the card sees it
-(`blocked_by`, `blocks`, `related` or `parent`), the other card's id prefix and
-the name of its board, with `-` for this board. A card with no links prints
-`no links`. It lists both sides of a link: the ones the card holds and the ones
-another card holds on it, which show as `blocks`, `related` or `child`. A link
-to a card on another board shows that board's name, so `blocks  1a2b3c4d  ci`
-reads as a card on `ci` that this one blocks. `unlink CARD KIND OTHER` removes one.
+`link CARD KIND OTHER` links two cards:
+
+- `KIND`: `blocked_by`, `blocks`, `related` or `parent`
+- `OTHER`: a card of this board, by id or prefix, or `BOARD:PREFIX` for a card
+  on another board of the same Pomb server
+
+dev finds the card on another board by reading that board, so write the work
+that spans repos as `dev board link 5ff0e014 blocked_by ci:1a2b3c4d`. It prints
+`linked <id prefix> <kind> <other>`.
+
+Pomb keeps one link whichever card holds it, and asking again for a link it has
+changes nothing. So a `link` that could not reach Pomb is queued with the
+others. Pomb refuses a card linked to itself and a link that would make cards
+wait on each other.
+
+`dev board link CHILD parent EPIC` makes the other card the epic of the first.
+dev refuses an `EPIC` that is not an epic before any request, naming
+`dev board epic EPIC`.
+
+A card has one epic and epics nest to any depth. Pomb refuses a second epic and
+a link that would make a cycle, and a local board refuses them too, naming the
+two cards the link joins. Epics count their direct children.
+
+A local board stores the links on its own cards, links only its own cards, and
+its `next` skips a card that a card outside Done blocks.
+
+`links CARD` lists a card's links, one line each:
+
+- the kind as the card sees it (`blocked_by`, `blocks`, `related` or `parent`)
+- the other card's id prefix
+- the name of its board, with `-` for this board
+
+A card with no links prints `no links`. It lists both sides of a link, the ones
+the card holds and the ones another card holds on it, which show as `blocks`,
+`related` or `child`.
+
+A link to a card on another board shows that board's name, so
+`blocks  1a2b3c4d  ci` reads as a card on `ci` that this one blocks.
 
 `unlink CARD KIND OTHER` removes a link the card holds, named as `links CARD`
 shows it, and prints `unlinked <id prefix> <kind> <other>`. A card with no such
-link exits 1 and lists its links. A `child` line cannot be removed, because
-`child` is not a link kind; remove the other card's `parent` link instead.
+link exits 1 and lists its links.
+
+A `child` line cannot be removed (`child` is not a link kind). Remove the other
+card's `parent` link instead.
 
 Pomb lets a token delete only the links it created. A link another token made,
 or one made before Pomb 0.5.40 (which records no creator), gets a 403
-`permission_denied`, which dev reports as `pomb kept the link: ...` and exits 1
-for, leaving the link in place. Unlike `link`, `unlink` is not queued while Pomb
-is unreachable.
+`permission_denied`. dev reports it as `pomb kept the link: ...` and exits 1,
+leaving the link in place.
 
-`attach CARD FILE...` uploads each file to a Pomb card and prints `attached <id
-prefix> <name>`, or `skipped <name>` when the card already holds a file of that
-name, so a rerun uploads nothing twice. `attachments CARD` lists the card's
-files, one line each with the id prefix, the size in bytes and the name, or
-`no attachments`. `detach CARD ID` removes the attachment whose id starts with
-ID and prints `detached <id prefix> <name>`. dev checks no size and no type:
-Pomb enforces its own limits and dev prints its refusal as Pomb words it. A 503
-`busy` answer is retried after a short nap. A token without `attachments.delete`
-gets the permission message, and agents do not detach. A local board refuses all
-three with `a local board holds no attachments`. None of them is queued while
-Pomb is unreachable.
+Unlike `link`, `unlink` is not queued while Pomb is unreachable.
+
+`attach CARD FILE...` uploads each file to a Pomb card. It prints
+`attached <id prefix> <name>`, or `skipped <name>` when the card already holds a
+file of that name, so a rerun uploads nothing twice.
+
+`attachments CARD` lists the card's files, one line each with the id prefix, the
+size in bytes and the name, or `no attachments`. `detach CARD ID` removes the
+attachment whose id starts with ID and prints `detached <id prefix> <name>`.
+
+dev checks no size and no type. Pomb enforces its own limits and dev prints its
+refusal as Pomb words it. A 503 `busy` answer is retried after a short nap.
+
+A token without `attachments.delete` gets the permission message, and agents do
+not detach. A local board refuses all three with
+`a local board holds no attachments`. None of them is queued while Pomb is
+unreachable.
 
 `stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards that have
-sat in Backlog, Ready, In Progress, Review or Verify for N days or more, 7 by
-default, oldest first. Each line is the id prefix, the column, the
-days in it (`9d`), the size and the name. It counts whole days from the card's
-`column_entered_at`, which Pomb gives every task view, so a card at 6 days is
-fresh and one at 7 is stale. Icebox, Blocked and Done are never stale. Every
-card with the `needs:human` label in Blocked or Icebox, at any age, is listed
-apart under `for the owner (needs:human):` with its column and days in column,
-and never among the stale ones (it waits on the owner, not on an agent). A card
-with that label in any other column but Done is listed apart under `moved by the
-owner, remove needs:human:`, to show that the owner moved it out and an agent
-should take the label off (per the board guide). A card in one of those
-columns, or with that label, that the tasks view did not date gets a line `could
-not date <id> <name>` after a blank line, instead of being skipped. When nothing
-is stale it prints `no stale cards`. A `--days` that is not a whole number of 1
-or more is a usage error (exit 2). Every card labelled `needs:lead` (and not
-`needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
-default) is listed apart under `for a lead (needs:lead):`, with its time as
-`<hours>h`. A card labelled `needs:planner` in Blocked for as long is listed the
-same way under `for a planner (needs:planner):`. Every card that is unsized (white or no colour), in any column but
-Icebox, is also listed at any age, apart, under `unsized outside Icebox:` with
-its id prefix, column and name, so a planner sees what still needs a size. Last,
-under `icebox, untouched for N days:`, it lists the Icebox cards nobody has
-looked at: the card's time in Icebox and its latest comment are both
-`--icebox-days` days old or older (30 by default), counted from the later of the
-two. Cards labelled `needs:human` are left out, and the section is absent when
-no card qualifies. A card it cannot date, or whose comments it cannot read, gets
-a `could not` line after the section. An orchestrator can run it at startup and
-re-plan, escalate or ice each card it lists, and scope the Icebox ones.
+sat in Backlog, Ready, In Progress, Review or Verify for `N` days or more, 7 by
+default, oldest first. Each line is the id prefix, the column, the days in it
+(`9d`), the size and the name.
+
+It counts whole days from the card's `column_entered_at`, which Pomb gives every
+task view, so a card at 6 days is fresh and one at 7 is stale. Icebox, Blocked
+and Done are never stale.
+
+A `--days` that is not a whole number of 1 or more is a usage error (exit 2).
+When nothing is stale it prints `no stale cards`.
+
+These sections follow, each listed apart from the stale cards:
+
+- `for the owner (needs:human):`: every card with the `needs:human` label in
+  Blocked or Icebox, at any age, with its column and days in column. It never
+  appears among the stale ones (it waits on the owner, not on an agent).
+- `moved by the owner, remove needs:human:`: a card with that label in any other
+  column but Done, to show that the owner moved it out and an agent should take
+  the label off (per the board guide).
+- `for a lead (needs:lead):`: every card labelled `needs:lead` (and not
+  `needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
+  default), with its time as `<hours>h`.
+- `for a planner (needs:planner):`: a card labelled `needs:planner` in Blocked
+  for as long, listed the same way.
+- `unsized outside Icebox:`: every card that is unsized (white or no colour), in
+  any column but Icebox, at any age, with its id prefix, column and name, so a
+  planner sees what still needs a size.
+- `icebox, untouched for N days:`: the Icebox cards nobody has looked at. The
+  card's time in Icebox and its latest comment are both `--icebox-days` days old
+  or older (30 by default), counted from the later of the two. Cards labelled
+  `needs:human` are left out, and the section is absent when no card qualifies.
+
+A card in one of the scanned columns, or with the `needs:human` label, that the
+tasks view did not date gets a line `could not date <id> <name>` after a blank
+line, instead of being skipped. A card the Icebox section cannot date, or whose
+comments it cannot read, gets a `could not` line after the section.
+
+An orchestrator can run it at startup and re-plan, escalate or ice each card it
+lists, and scope the Icebox ones.
 
 `lint [--strict]` reports every card that breaks the board's rules. The guards
 in `move`, `add` and `discard` stop a bad write only when it goes through
 `dev board`, and lint also sees the cards written in the Pomb UI, by another
-client or before a guard existed. It makes no write of its own and calls no
-model. Like every board command on a Pomb board, it first replays any queued
-changes. Each finding is one line of id prefix, column and rule, in board
-order. A finding only the owner can fix ends in `(owner)`: any finding on a
+client or before a guard existed.
+
+It makes no write of its own and calls no model. Like every board command on a
+Pomb board, it first replays any queued changes. Each finding is one line of id
+prefix, column and rule, in board order.
+
+A finding only the owner can fix ends in `(owner)`. That is any finding on a
 `needs:human` card, except a missing size and a `needs:human` label outside
-Blocked and Icebox, which an agent fixes. The exit is 1 when any finding is
-left that an agent may fix, and 0 with `no findings` or when every finding is
-the owner's, so a card whose checks run lint can land while the owner has an
-open question. `--strict` exits the same way. The rules:
+Blocked and Icebox, which an agent fixes.
+
+The exit is 1 when any finding is left that an agent may fix, and 0 with
+`no findings` or when every finding is the owner's, so a card whose checks run
+lint can land while the owner has an open question. `--strict` exits the same
+way.
+
+The rules:
 
 - Outside Icebox: a size, the three v2 headings with text under Problem, and a
   Done when outcome. This is `dev.board.unplanned`, the check `move` makes,
-  which keeps a move and lint in agreement. Where a card's sections are checked
-  (outside Icebox and not Done, or every Done card under `--strict`), lint also
-  reports the shapes of `dev.board.shapes`, which `move CARD ready` shares: no
-  text under Change or Out of scope, and no `Change:` or `Out of scope:` line
-  under Problem. A Done card gets the size and outcome checks only, and a Done
-  card labelled `discarded` needs no outcome. An epic, a card with children,
-  needs 1 to 3 outcomes, except a Done epic with every child Done, which may
-  have none and 1 to 3 if it has any, so lint reads the children of every
-  card it checks for outcomes.
+  which keeps a move and lint in agreement.
+- Where a card's sections are checked (outside Icebox and not Done, or every
+  Done card under `--strict`), lint also reports the shapes of
+  `dev.board.shapes`, which `move CARD ready` shares: no text under Change or
+  Out of scope, and no `Change:` or `Out of scope:` line under Problem.
+- A Done card gets the size and outcome checks only, and a Done card labelled
+  `discarded` needs no outcome.
+- An epic, a card with children, needs 1 to 3 outcomes. A Done epic with every
+  child Done may have none, and 1 to 3 if it has any. Lint reads the children of
+  every card it checks for outcomes.
 - With `--strict`, a Done card also needs the three v2 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
@@ -1087,10 +1209,11 @@ open question. `--strict` exits the same way. The rules:
 - A Done card that was not discarded has every outcome ticked.
 
 A card whose outcomes Pomb sent in a shape dev cannot read is reported as
-`outcomes unreadable`, never as having no outcomes. Fixing a finding is the
-agent's job, except on a `needs:human` card, which belongs to the owner apart
-from its size: an agent may set that with `dev board size CARD 1`, `2`, `3` or
-`3+`.
+`outcomes unreadable`, never as having no outcomes.
+
+Fixing a finding is the agent's job, except on a `needs:human` card, which
+belongs to the owner apart from its size. An agent may set that with
+`dev board size CARD 1`, `2`, `3` or `3+`.
 
 A project makes `--strict` its default with a `[board.lint]` table in
 `.dev/config.toml`. The file may be the project file or the user file, as with
