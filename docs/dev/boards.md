@@ -1247,48 +1247,67 @@ backend = "local"
 path = ".dev/board.json"
 ```
 
-`dev board init` lays out the columns and the palette in the file. Two processes
-can write at once: each change takes a lock beside the file, reads it again and
-renames a finished copy into place. `take` sets a claim that lapses after twice
-the card's size and needs no loop, and `release` gives it up. Only a note
-written by dev can be edited or deleted. A local board has nothing to sync, so
-`dev board sync` says so.
+`dev board init` lays out the columns and the palette in the file. A local board
+has nothing to sync, so `dev board sync` says so.
+
+A local board works as follows:
+
+- writes: two processes can write at once. Each change takes a lock beside the
+  file, reads it again and renames a finished copy into place.
+- claims: `take` sets a claim that lapses after twice the card's size and needs
+  no loop. `release` gives it up.
+- notes: only a note written by dev can be edited or deleted.
 
 ## When Pomb is unreachable
 
-On a Pomb board, `add`, `move`, `note`, `size`, `label`, `link`, `edit` and
-`outcome` that cannot reach Pomb, or cannot read the token because `pass` is
-locked, are kept in a queue and print the line below. `check` is never
-queued. A timeout or a gateway error
-may come after Pomb applied the change, so only `move`, `size`, `label`,
-`link`, `edit` and `outcome` with `--tick` or `--untick`, which are safe to
-repeat, are queued for those, whereas `add`, `note`, an `outcome` append,
-`outcome --rename` (a replay would note the new text as the old) and
-`outcome --convert` fail instead of risking a duplicate. A move to Done is never
-queued: its outcome check reads the card from Pomb now, so it is refused and
-can be run again once Pomb answers.
+On a Pomb board, a write that cannot reach Pomb, or cannot read the token
+(`pass` is locked), goes into a queue. The queued commands are `add`, `move`,
+`note`, `size`, `label`, `link`, `edit` and `outcome`. `check` is never queued.
+
+A timeout or a gateway error may come after Pomb applied the change. For those,
+only a command that is safe to repeat is queued:
+
+- queued: `move`, `size`, `label`, `link`, `edit` and `outcome` with `--tick` or
+  `--untick`.
+- failed instead of risking a duplicate: `add`, `note`, an `outcome` append,
+  `outcome --rename` (a replay would note the new text as the old) and
+  `outcome --convert`.
+
+A move to Done is never queued. Its outcome check reads the card from Pomb now,
+so it is refused and can be run again once Pomb answers. A queued write prints:
 
 ```
 queued: Pomb unreachable, will sync
 ```
 
-The queue is `~/.local/state/dev/boards/<name>.queue`, readable by you alone,
-and holds the commands as you typed them and never the token. `dev board sync`
-replays it in order once Pomb answers, and every other `dev board` command on
-the board tries that first when the queue is not empty. Card ids are matched
-when the change is replayed. A change Pomb refuses, for example because the card
-is gone, is reported as `dropped <command> <card>: <reason>` and removed, so it
-is never retried. A change that dev was killed in the middle of replaying stays
-queued and may be sent twice. A replay that finds Pomb still down leaves the
-rest queued, and `sync` then prints how many are left and exits 1.
+The queue is `~/.local/state/dev/boards/<name>.queue`, readable by you alone. It
+holds the commands as you typed them and never the token.
 
-A missing queue file is an empty queue. A queue file that is damaged, for
-example hand-edited into invalid JSON, is never treated as empty and never
-overwritten. `dev board sync` prints
-`dev: <file>:<line>: <reason>; the queue is left in place` and exits 1. Any
-other `dev board` command prints that line on standard error, skips the replay
-and runs as usual. A write that cannot reach Pomb then fails instead of being
-queued. Fix or delete the file to go on.
+`dev board sync` replays the queue in order once Pomb answers. Every other
+`dev board` command on the board tries that first when the queue is not empty.
+Card ids are matched when the change is replayed.
+
+A replay can end in three ways:
+
+- Pomb refuses a change (for example the card is gone): dev reports
+  `dropped <command> <card>: <reason>` and removes it, so it is never retried.
+- dev is killed in the middle of a change: the change stays queued and may be
+  sent twice.
+- Pomb is still down: the rest stay queued, and `sync` prints how many are left
+  and exits 1.
+
+A missing queue file is an empty queue. A damaged queue file, for example
+hand-edited into invalid JSON, is never treated as empty and never overwritten.
+
+`dev board sync` exits 1 and prints:
+
+```
+dev: <file>:<line>: <reason>; the queue is left in place
+```
+
+Any other `dev board` command prints that line on standard error, skips the
+replay and runs as usual. A write that cannot reach Pomb then fails instead of
+being queued. Fix or delete the file to go on.
 
 ## Waiting for the board
 
@@ -1303,94 +1322,102 @@ timeout 86400 dev board wait --for lead
 timeout 86400 dev board wait --for planner
 ```
 
-`--for ready` wakes on a card added to Ready or moved into it and prints `added
-<id prefix> to Ready` or `moved <id prefix> to Ready`. `--for review`, `--for
-verify` and `--for release` do the same for that column, but only for a card
-nobody has claimed. `--for human` wakes on a card the owner moved out of Blocked
-(`moved <id prefix> out of Blocked`, and a move by an agent never wakes it, nor
-does a move made before the wait started) and on a card, in any column but
-Done, whose newest comment is the owner's and newer than the wait's start
-(`the owner commented on <id prefix>`). A comment of an agent never wakes it.
-The first such event opens a settle window of 60 seconds: the wait keeps
-listening until no new event from the owner has come for that long, to catch a
-second reply, then prints one line per card the owner touched, not one per
-comment. The woken agent reads every comment with `dev board show`. `--for
-lead` wakes on a card added, moved or updated that is now in Blocked with the
-`needs:lead` label, no claim and without `needs:human`, and prints `<id
-prefix> is labelled needs:lead in Blocked`. `--for planner` does the same for
-`needs:planner` and prints `<id prefix> is labelled needs:planner in Blocked`.
-Pomb's events carry no labels, so it reads the board for each batch of events.
-With no `--for`, every added card, move, update and comment wakes it. Any
-other `--for` value is a usage error, and a local board is `dev: a local board
-has nothing to wait on` (exit 1). `wait` is never queued.
+Each mode wakes on its own events:
+
+- `--for ready`: a card added to Ready or moved into it. It prints
+  `added <id prefix> to Ready` or `moved <id prefix> to Ready`.
+- `--for review`, `--for verify` and `--for release`: the same for that column,
+  but only for a card nobody has claimed.
+- `--for human`: a card the owner moved out of Blocked, and a card in any column
+  but Done whose newest comment is the owner's and newer than the wait's start.
+  It prints `moved <id prefix> out of Blocked` or
+  `the owner commented on <id prefix>`.
+- `--for lead`: a card added, moved or updated that is now in Blocked with the
+  `needs:lead` label, no claim and without `needs:human`. It prints
+  `<id prefix> is labelled needs:lead in Blocked`.
+- `--for planner`: the same for `needs:planner`. It prints
+  `<id prefix> is labelled needs:planner in Blocked`.
+- no `--for`: every added card, move, update and comment.
+
+A move by an agent never wakes `--for human`, nor does a move made before the
+wait started or a comment of an agent. The first owner event opens a settle
+window of 60 seconds. The wait keeps listening until no new event from the owner
+has come for that long, to catch a second reply, then prints one line per card
+the owner touched, not one per comment.
+
+The woken agent reads every comment with `dev board show`. Pomb's events carry
+no labels, so `wait` reads the board for each batch of events.
+
+Any other `--for` value is a usage error. On a local board `wait` prints
+`dev: a local board has nothing to wait on` and exits 1, and it is never queued.
 
 The command asks Pomb for events after a cursor and holds each request for up to
-50 seconds, repeating on a quiet board until a matching event arrives. It keeps
-the cursor in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`ready`, `human`,
-`lead` or `all`), readable by you alone and saved after every reply, so a change made
-while no wait was running wakes the next one, except that `--for human`
-ignores a move made before it started. With no cursor file the first call
-starts from now. When Pomb has dropped the events after the stored cursor,
-`wait` stores the oldest one it still has, prints
-`events were trimmed, check the board` and exits 0, so look at the board and run
-it again. `--for human` instead keeps waiting on a trim, and exits only when a
-card that sat in Blocked or Icebox when it started has left it.
+50 seconds. On a quiet board it repeats until a matching event arrives.
 
-Pomb being unreachable (no route, a locked `pass`, a gateway error) is retried
-every 30 seconds, up to ten failures in a row, and then `wait` exits 1 with the
-message. Pomb allows 4 open waits per token and every session shares one, so a
-fifth session gets a 429 with the code `too_many_waits`. That is never a
-failure: `wait` prints one line on standard error the first time, then retries
-with a pause that doubles from 30 seconds to 5 minutes, each pause cut by a
-random fraction of up to a quarter to keep sessions from retrying together, and
-keeps waiting until a slot frees. Any other refusal, such as a bad token, exits
-1 at once. Exit 124 from `timeout`, or 143 from the `run_with_timeout` wrapper
-in the background-work rules, means nothing changed. With nothing to do and no
-card in flight, end the session (a session started later under the same
-`DEV_AGENT` picks its open run card up with `dev board run`). Otherwise park
-again.
+The cursor lives in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`<mode>`
+is `ready`, `human`, `lead` or `all`), readable by you alone and saved after
+every reply. A change made while no wait was running wakes the next one, except
+that `--for human` ignores a move made before it started. With no cursor file
+the first call starts from now.
+
+When Pomb has dropped the events after the stored cursor, `wait` stores the
+oldest one it still has, prints `events were trimmed, check the board` and exits
+0. Look at the board and run it again. `--for human` instead keeps waiting on a
+trim, and exits only when a card that sat in Blocked or Icebox when it started
+has left it.
+
+An unreachable Pomb (no route, a locked `pass`, a gateway error) is retried
+every 30 seconds. After ten failures in a row `wait` exits 1 with the message.
+
+Pomb allows 4 open waits per token and every session shares one, so a fifth
+session gets a 429 with the code `too_many_waits`. That is never a failure.
+`wait` prints one line on standard error the first time and keeps waiting until
+a slot frees.
+
+It retries with a pause that doubles from 30 seconds to 5 minutes. Each pause is
+cut by a random fraction of up to a quarter, to keep sessions from retrying
+together. Any other refusal, such as a bad token, exits 1 at once.
+
+Exit 124 from `timeout`, or 143 from the `run_with_timeout` wrapper in the
+background-work rules, means nothing changed. With nothing to do and no card in
+flight, end the session (a session started later under the same `DEV_AGENT`
+picks its open run card up with `dev board run`). Otherwise park again.
 
 ## Claims
 
 `take` claims a card so no other agent picks it up, and starts a loop that keeps
 the claim alive. The claim lasts 900 seconds. The loop renews it every 5 minutes
 with curl, so it costs no model turns and outlives the shell that started it.
-Its claimant is the name from `take --as NAME`, else the `DEV_AGENT` environment
-variable, else `dev@<host>:<session or pid>`. A name is one word of letters,
-digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows it as the holder.
-Agents name themselves `repo/role[/card]`, written `<repo>/<role>[/<card>]`:
-the board name, any role word (usually `lead`, `runner`, `planner`,
-`implementer`, `code-examiner`, `style-examiner`, `recheck-examiner`,
-`verifier`, `land`, `release` or `check`) and an optional card id, as in
-`dotfiles/lead` and `dotfiles/implementer/f5f0e007`. Each part is letters,
-digits, `.`, `_` and `-`. A name of another shape is refused with `an agent
-name is <repo>/<role>[/<card>], got NAME` (exit 2) when `take` or a `move` into
-In Progress would take a new claim, whether it came from `DEV_AGENT` or `--as`.
-Every other verb on a card already claimed under that exact name passes, so a
-card claimed under an older name finishes and lands under it. An unset or empty
-`DEV_AGENT` is accepted.
+
+The claimant is the name from `take --as NAME`, else the `DEV_AGENT`
+environment variable, else `dev@<host>:<session or pid>`. A name is one word of
+letters, digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows it as the
+holder.
+
+Agents name themselves `<repo>/<role>[/<card>]`: the board name, any role word
+and an optional card id, as in `dotfiles/lead` and
+`dotfiles/implementer/f5f0e007`. Each part is letters, digits, `.`, `_` and `-`.
+The usual roles are `lead`, `runner`, `planner`, `implementer`, `code-examiner`,
+`style-examiner`, `recheck-examiner`, `verifier`, `land`, `release` and `check`.
+
+A name of another shape is refused with
+`an agent name is <repo>/<role>[/<card>], got NAME` (exit 2). That happens when
+`take` or a `move` into In Progress would take a new claim, whether the name
+came from `DEV_AGENT` or `--as`. Every other verb on a card already claimed
+under that exact name passes, so a card claimed under an older name finishes and
+lands under it.
+
+An unset or empty `DEV_AGENT` is accepted.
+
 `move CARD progress` takes the claim itself, under the same name and with the
-same keep-alive loop, when nobody holds the card, except a card with children,
-which stays unclaimed. A claim this machine already holds is kept, and one held
-by someone else leaves the move to fail as the backend answers. After a claim
-it takes, `take` prints the card as `show` does, with every comment in full,
-and so does a `move` into In Progress that takes the claim, so the owner's
-comments are read before any work. A `move` that finds the claim already held
-prints only the `moved` line.
+same keep-alive loop, when nobody holds the card. A card with children stays
+unclaimed. A claim this machine already holds is kept, and one held by someone
+else leaves the move to fail as the backend answers.
 
-`move` refuses to take a claimed card out of In Progress to Review, Ready or
-Blocked (exit 1) until its claimant has left a note since claiming it, and the
-refusal says the note holds what was built, tried and learned. dev finds the
-note by who posted it, never by its text or `--as` label. The claim writes a
-`dev-claim: by=NAME` comment.
-
-The claimant's note is any later comment posted by the same Pomb token as the
-latest such record for the claimant, unless its body
-begins with a prefix a dev verb writes (`dev-check:`, `dev-review:`,
-`dev-turn:`, `dev-claim:`) or its kind is decision. A client that posts through
-the claim's token satisfies it with any text. A card with
-no claim record for its claimant is not checked. A move after the note releases
-the claim as before.
+After a claim it takes, `take` prints the card as `show` does, with every
+comment in full, so the owner's comments are read before any work. A `move` into
+In Progress that takes the claim does the same. A `move` that finds the claim
+already held prints only the `moved` line.
 
 ```
 dev board next
@@ -1398,23 +1425,50 @@ dev board take 8af0e001
 dev board move 8af0e001 progress
 ```
 
-The loop stops when you `release` the card, when you `move` it to any column but
-In Progress or Blocked, when Pomb refuses a renewal because the claim is gone,
-and by itself after twice the card's size: 50 minutes for 1 Pomodoro, 100 for 2
-Pomodori and 150 for the rest. A crashed agent therefore loses its claim within
-15 minutes of the loop's end. A network failure does not stop it. A `move` out
-of In Progress to any column but Blocked also releases the claim once the move
-has succeeded, and a refused release prints a warning and leaves the move done.
-A `move` to Blocked keeps the claim and the loop, and `ask` ends them once Pomb
-has parked the card.
+`move` refuses to take a claimed card out of In Progress to Review, Ready or
+Blocked (exit 1) until its claimant has left a note after claiming it. The
+refusal says the note holds what was built, tried and learned. The claim writes
+a `dev-claim: by=NAME` comment.
+
+dev finds the note by who posted it, never by its text or `--as` label. The note
+is any later comment posted by the same Pomb token as the latest such record for
+the claimant. A comment does not count when its body begins with a prefix a dev
+verb writes (`dev-check:`, `dev-review:`, `dev-turn:`, `dev-claim:`) or its kind
+is decision.
+
+A client that posts through the claim's token satisfies the
+check with any text. A card with no claim record for its claimant is not
+checked. A move after the note releases the claim as before.
+
+The loop stops in four cases:
+
+- you `release` the card.
+- you `move` the card to any column but In Progress or Blocked.
+- Pomb refuses a renewal (the claim is gone).
+- twice the card's size has passed: 50 minutes for 1 Pomodoro, 100 for 2
+  Pomodori and 150 for the rest.
+
+A crashed agent therefore loses its claim within 15 minutes of the loop's end. A
+network failure does not stop the loop.
+
+A `move` out of In Progress to any column but Blocked also releases the claim
+once the move has succeeded. A refused release prints a warning and leaves the
+move done.
+
+A `move` to Blocked keeps the owner and the keep-alive loop. `ask` ends them
+once Pomb has parked the card, and so does a move out of Blocked from the
+machine holding the claim. Otherwise the owner lease runs until it lapses, and a
+take from elsewhere is refused with `task owned by NAME until TIME`.
 
 The loop's state is a file named for the card in `$XDG_STATE_HOME/dev/board/`,
 or `~/.local/state/dev/board/`, with the card, the fence and the loop's pid at
-mode 600. It never holds the token. The loop reads the token for each
-renewal, from the Keychain or else `pass`, and hands it to curl on standard
-input to keep it out of every argument list, environment variable, file or
-output. While you hold a card, `move` and `note` send its owner fence, and
-`ls` shows each live owner's holder in a column before the name.
+mode 600. It never holds the token.
+
+The loop reads the token for each renewal, from the Keychain or else `pass`, and
+hands it to curl on standard input to keep it out of every argument list,
+environment variable, file or output. While you hold a card, `move` and `note`
+send its owner fence, and `ls` shows each live owner's holder in a column before
+the name.
 
 ## Reference: the subcommands in detail
 
