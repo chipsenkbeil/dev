@@ -279,3 +279,41 @@ STUB
     [[ "$out" == *"Deleting ci-abc"* ]] || false
     [ "$(tail -n 1 <<<"$out")" = "Deleted ci-abc · no archive" ]
 }
+
+dash_holding_launcher() {
+    command -v dash >/dev/null 2>&1 || skip "dash not installed"
+    mkdir -p "$BATS_TEST_TMPDIR/dashbin"
+    {
+        printf '#!/usr/bin/env bash\n'
+        printf 'if [ "$1" = -c ] && [[ "$2" == trap\\ * ]]; then\n'
+        printf '    needle=%q\n' 'echo $! >"$dir/pid"'
+        printf '    script=${2/"$needle"/". \\"\\$LAUNCH_HOLD\\"; $needle"}\n'
+        printf '    shift 2\n'
+        printf '    exec %q -c "$script" "$@"\n' "$(command -v dash)"
+        printf 'fi\n'
+        printf 'exec %q "$@"\n' "$(command -v dash)"
+    } >"$BATS_TEST_TMPDIR/dashbin/sh"
+    chmod +x "$BATS_TEST_TMPDIR/dashbin/sh"
+    PATH="$BATS_TEST_TMPDIR/dashbin:$PATH"
+}
+
+@test "ctrl-c before the first frame under dash stops the job with 130" {
+    dash_holding_launcher
+    local run inner="$BATS_TEST_TMPDIR/inner-early.sh" mark="$OUT.launched" hold="$BATS_TEST_TMPDIR/hold.sh"
+    {
+        printf ': >"$LAUNCH_MARK"\n'
+        printf 'n=0\n'
+        printf 'while [ -z "$hit" ] && [ "$n" -lt 2000000 ]; do n=$((n+1)); done\n'
+    } >"$hold"
+    {
+        printf 'export LAUNCH_MARK=%q LAUNCH_HOLD=%q\n' "$mark" "$hold"
+        printf 'luajit %q sh -c %q\n' "$SPIN" 'sleep 7.654; echo done'
+        printf 'echo $? >%q\n' "$OUT.status"
+    } >"$inner"
+    for run in 1 2 3 4 5; do
+        rm -f "$OUT.status" "$mark"
+        pty_run '\003' 0 0 "$inner" "$mark" "$OUT.status" >"$OUT.pty"
+        status_is_130
+        process_gone 'sleep 7.654'
+    done
+}

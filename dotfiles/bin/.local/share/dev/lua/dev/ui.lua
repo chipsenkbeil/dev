@@ -367,9 +367,9 @@ local function start_job(argv, dir, streams)
     local launch = {
         "sh",
         "-c",
-        'trap "" INT; set -m; dir=$1; shift; ( trap - INT; "$@" >"$dir/out" '
+        'trap "hit=1" INT; set -m; dir=$1; shift; ( trap - INT; "$@" >"$dir/out" '
             .. streams
-            .. ' </dev/null; echo $? >"$dir/rc" ) >/dev/null 2>&1 & echo $! >"$dir/pid"; echo $!',
+            .. ' </dev/null; echo $? >"$dir/rc" ) >/dev/null 2>&1 & echo $! >"$dir/pid"; echo $!; [ -z "$hit" ] || exit 130',
         "sh",
         dir,
     }
