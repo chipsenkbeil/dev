@@ -6,24 +6,24 @@ Check your work
   test                  Run the project's tests
   build                 Build the project
   run                   Run the project
-  fetch                 Download the crates and advisory database an offline lint and test need
+  fetch                 Download the crates and advisory data for offline lint and test
 
 Share it
   deploy                Deploy the project (needs .dev/deploy.sh)
-  push                  Push the trunk bookmark (jj) or the current branch (git) to the remote of record (gerrit in a gerrit project, else origin), or to the remotes named
+  push                  Push the trunk or current branch to the remote of record
   pull                  Fetch the remote and rebase local work onto it
-  board                 Read and update the board: status, init, ls, boards, columns, next, add, note, show, edit, checks, check, move, order, size, label, link, stale, lint, take, release, wait, sync and token
+  board                 Read and update the project's board
 
 Set up a machine or project
-  sync                  Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
+  sync                  Compare the copied lint files with the dotfiles templates
   init                  Seed a project with lint, CI and remotes
   tools                 Install and check the tools in .dev/tools.tsv
-  guide                 Show this repo's overview, or ask guide a question about its commands and topics
+  guide                 Show the overview or answer a question about dev
   ws                    Make, list and remove workspaces under one central root
 
 Boxes
-  connect               Attach to a box or a connectable machine, picking, resuming or creating a box first
-  box                   List, create, show, stop, resume, extend, delete, retag, connect and tools install to dev boxes through ci box
+  connect               Attach to a box or machine, creating a box if needed
+  box                   Create, show, stop, resume, extend, retag and delete dev boxes
 
 Greeting
   greet                 Say hello.

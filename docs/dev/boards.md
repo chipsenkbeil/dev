@@ -1343,7 +1343,8 @@ never handles the API.
   after the file's name, the other files still upload, and the exit is 1. A 503 `busy` is retried twice after a 2 second nap. A local board
   refuses it.
 - `attachments CARD`: Prints `<id prefix>  <size>  <name>` for each attachment in
-  the order Pomb lists them, else `no attachments`. A local board refuses it.
+  the order Pomb lists them, else `no attachments`. Listing is its own verb so
+  `show` stays one request. A local board refuses it.
 - `detach CARD ID`: Finds the attachment whose id starts with ID in the card's
   list, sends `DELETE /api/tasks/{id}/attachments/{attachment_id}` and prints
   `detached <id prefix> <name>`. An id that matches none or several exits 1. A
@@ -1790,7 +1791,8 @@ never handles the API.
   nothing and refuses with `the landing turn held for <id prefix> ran out or
   was taken by another`, and `turn CARD` takes it again.
 - `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
-  array of the words, each `test-edits` or `ci-edits` with duplicates dropped,
+  array of the words, the guard rails the card lifts, each `test-edits` or
+  `ci-edits` with duplicates dropped,
   and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with
   `{"fields":{"dev.allow":["test-edits","ci-edits"]}}`, with the claim's
   fence when this machine holds one). `allow CARD none` sends `null` to clear

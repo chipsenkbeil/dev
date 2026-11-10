@@ -1,5 +1,5 @@
 dev fetch
-  Download the crates and advisory database an offline lint and test need
+  Download the crates and advisory data for offline lint and test
 
 usage
   dev fetch

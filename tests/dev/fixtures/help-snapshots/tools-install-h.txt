@@ -1,5 +1,5 @@
 dev tools install
-  Install the manifest's tools, only the package rows with --system or only the script and cargo rows with --user
+  Install the manifest's tools, by install scope
 
 usage
   dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]

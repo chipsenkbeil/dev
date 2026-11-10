@@ -1,5 +1,5 @@
 dev guide
-  Show this repo's overview, or ask guide a question about its commands and topics
+  Show the overview or answer a question about dev
 
 usage
   dev guide [question...]

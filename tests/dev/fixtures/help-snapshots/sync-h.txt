@@ -1,5 +1,5 @@
 dev sync
-  Compare copied lint files, the lints block, lib.rs attributes and docs/STYLE.md with the dotfiles templates
+  Compare the copied lint files with the dotfiles templates
 
 usage
   dev sync [flags]
