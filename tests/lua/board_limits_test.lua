@@ -75,9 +75,18 @@ case "$last" in
     fi
     ;;
 */comments) body='[]' ;;
-*/claim/release) body= ;;
-*/claim/heartbeat) body='{"ok":true}' ;;
-*/claim) body='{"fence":7,"claimant":"x"}' ;;
+*/owner/release) body= ;;
+*/owner/renew) body='{"ok":true}' ;;
+*/owner)
+    printf '%s' "$*" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' >"$ROOT/owner_name"
+    body='{"live":true,"fence":7}'
+    ;;
+*/api/tasks/????????-????-????-????-????????????)
+    body='{"ok":true}'
+    if [ -f "$ROOT/owner_name" ]; then
+        body=$(printf '{"owner":{"holder":{"kind":"agent","name":"%s"},"lease_expires_at":null,"live":true,"fence":7}}' "$(cat "$ROOT/owner_name")")
+    fi
+    ;;
 *) body='{"ok":true}' ;;
 esac
 printf '%s\n%s' "$body" "$status"
@@ -193,7 +202,7 @@ testing.test("take refuses at the group limit and names the cards", function()
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
     testing.eq(code, 1, out)
     testing.eq(out, IN_FLIGHT)
-    testing.eq(read(box, "calls"):find("/claim", 1, true), nil)
+    testing.eq(read(box, "calls"):find("/owner", 1, true), nil)
 end)
 
 testing.test("take refuses at a column limit with room in its group", function()
@@ -208,7 +217,7 @@ testing.test("take refuses at a column limit with room in its group", function()
         out,
         "dev: " .. NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
     )
-    testing.eq(read(box, "calls"):find("/claim", 1, true), nil)
+    testing.eq(read(box, "calls"):find("/owner", 1, true), nil)
 end)
 
 testing.test("a count limit still refuses at its limit", function()
@@ -310,7 +319,7 @@ testing.test("a 409 wip_limit_reached becomes the refusal and move releases the 
     testing.eq(code, 1, out)
     testing.eq(out, "dev: Pomb refused the move: " .. LIMIT_TEXT .. "\n")
     local calls = read(box, "calls")
-    testing.ok(calls:find("/api/tasks/" .. uuid("d") .. "/claim/release", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. uuid("d") .. "/owner/release", 1, true), calls)
     testing.eq(calls:find("force", 1, true), nil)
     testing.eq(fs.exists(box.home .. "/state/dev/board/" .. uuid("d")), false)
 end)

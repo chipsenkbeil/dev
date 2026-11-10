@@ -3972,6 +3972,9 @@ case "$last" in
     ;;
 */api/tasks/]] .. ID_A .. [[)
     body=$(cat "$ROOT/task.json")
+    if [ -f "$ROOT/owner_name" ]; then
+        body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true,\"fence\":7},|")
+    fi
     case "$*" in
     *"-X PATCH"*)
         if [ -f "$ROOT/label_fail" ]; then
@@ -4004,11 +4007,11 @@ case "$last" in
         status=400
     fi
     ;;
-*/claim/heartbeat)
-    body='{"ok":true}'
+*/owner/renew)
+    body='{"live":true,"fence":7}'
     if [ -f "$ROOT/hb_status" ]; then status=$(cat "$ROOT/hb_status"); fi
     ;;
-*/claim/release) body= ;;
+*/owner/release) body= ;;
 */comments/dddddddd*)
     body='{"message":"not yours"}'
     status=403
@@ -4030,14 +4033,22 @@ case "$last" in
         ;;
     esac
     ;;
-*/claim) body='{"fence":7,"claimant":"x"}' ;;
+*/owner)
+    if [ -f "$ROOT/owner_held" ]; then
+        body='{"code":"owner_held","message":"task owned by dotfiles/other until 2999-01-01T00:00:00Z"}'
+        status=409
+    else
+        printf '%s' "$*" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' >"$ROOT/owner_name"
+        body='{"holder":{"kind":"agent","name":"x"},"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}'
+    fi
+    ;;
 *) body='{"ok":true}' ;;
 esac
 printf '%s\n%s' "$body" "$status"
 ]]
 
 local function curl_with(root, replacement)
-    executable(root .. "/bin/curl", (CURL:gsub("%*/claim/release%) body= ;;", replacement, 1)))
+    executable(root .. "/bin/curl", (CURL:gsub("%*/owner/release%) body= ;;", replacement, 1)))
 end
 
 local function queue_file(home)
@@ -4561,7 +4572,7 @@ testing.test("the keep-alive loop drops a refused cached token", function()
             .. SHARE
             .. "keepalive.sh "
             .. root
-            .. "/state card 7 3 https://pomb.example Agents/x 0",
+            .. "/state card 7 3 https://pomb.example Agents/x 0 dotfiles/x 900",
         "600"
     )
     testing.ok(
@@ -4583,7 +4594,7 @@ testing.test("the keep-alive loop reads the token under the same lock", function
             .. SHARE
             .. "keepalive.sh "
             .. root
-            .. "/state card 7 1 https://pomb.example Agents/x 0",
+            .. "/state card 7 1 https://pomb.example Agents/x 0 dotfiles/x 900",
         "600"
     )
     testing.ok(read(root, "events"):find("held=1", 1, true), out .. read(root, "events"))
@@ -4686,7 +4697,7 @@ testing.test("a claimed card's tick needs a name other than the claimant's", fun
     local claimed = (
         SUBTASKS_EXPORT:gsub(
             '"position":1,',
-            '"position":1,"claim":{"claimant":"project-run/a","expires_at":"2999-01-01T00:00:00Z"},',
+            '"position":1,"owner":{"holder":{"kind":"agent","name":"project-run/a"},"lease_expires_at":"2999-01-01T00:00:00Z"},',
             1
         )
     )
@@ -4721,7 +4732,7 @@ testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcom
     local claimed = (
         BACKLOG_EXPORT:gsub(
             '"position":1,',
-            '"position":1,"claim":{"claimant":"project-run/a","expires_at":"2999-01-01T00:00:00Z"},',
+            '"position":1,"owner":{"holder":{"kind":"agent","name":"project-run/a"},"lease_expires_at":"2999-01-01T00:00:00Z"},',
             1
         )
     )
@@ -5060,7 +5071,7 @@ testing.test("outcome sends the claim's fence on the subtask call", function()
     local calls = read(root, "calls")
     testing.ok(
         calls:find(
-            'If-Claim-Fence: 7 --data-raw {"done":true} https://pomb.example/api/tasks/'
+            'If-Owner-Fence: 7 --data-raw {"done":true} https://pomb.example/api/tasks/'
                 .. ID_A
                 .. "/subtasks/sub-a",
             1,
@@ -5181,7 +5192,7 @@ testing.test("epic_move_pomb_refusal", function()
         root,
         '*/move) body=\'{"code":"epic_has_open_children","message":"'
             .. text
-            .. "\"}'; status=409 ;;\n*/claim/release) body= ;;"
+            .. "\"}'; status=409 ;;\n*/owner/release) body= ;;"
     )
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
     testing.eq(code, 1, out)
@@ -5593,7 +5604,7 @@ testing.test("label sends the fence of a claim this machine holds", function()
     local _, code = dev(root, home, { "board", "label", "11111111-a", "+x" })
     testing.eq(code, 0)
     local patched = read(root, "calls"):match("%-X PATCH.-/api/tasks/")
-    testing.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -5606,7 +5617,7 @@ testing.test("pomb escalate posts the tier and reason with the fence", function(
     testing.eq(code, 0)
     local calls = read(root, "calls")
     local posted = calls:match("[^\n]*\n[^\n]*/api/tasks/" .. ID_A:gsub("%-", "%%-") .. "/escalate")
-    testing.ok(posted and posted:find("If-Claim-Fence: 7", 1, true), calls)
+    testing.ok(posted and posted:find("If-Owner-Fence: 7", 1, true), calls)
     testing.ok(posted:find('"tier":"lead"', 1, true), calls)
     testing.ok(posted:find('"reason":"pick one"', 1, true), calls)
     testing.ok(not calls:find("-X PATCH", 1, true), calls)
@@ -5629,7 +5640,7 @@ testing.test("checks patches the task's checks field whole, with the claim's fen
         calls
     )
     local patched = calls:match("%-X PATCH.-/api/tasks/")
-    testing.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+    testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -5670,7 +5681,7 @@ testing.test(
             testing.ok(calls:find(body, 1, true), calls)
         end
         local patched = calls:match("%-X PATCH.-/api/tasks/")
-        testing.ok(patched and patched:find("If-Claim-Fence: 7", 1, true), patched)
+        testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
         dev(root, home, { "board", "release", "11111111-a" })
     end
 )
@@ -5942,7 +5953,7 @@ testing.test(
         curl_with(
             root,
             [[*/links/l1) body='{"code":"permission_denied","permission":"links.delete","message":"m","board_id":null}'; status=403 ;;
-*/claim/release) body= ;;]]
+*/owner/release) body= ;;]]
         )
         out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
         testing.eq(code, 1, out)
@@ -5959,7 +5970,7 @@ testing.test(
         curl_with(
             root,
             [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.edit","message":"no write","board_id":"board-9"}'; status=403 ;;
-*/claim/release) body= ;;]]
+*/owner/release) body= ;;]]
         )
         out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
         testing.eq(code, 1, out)
@@ -6189,7 +6200,7 @@ end)
 
 local function heartbeats(root)
     local count = 0
-    for _ in read(root, "calls"):gmatch("/claim/heartbeat") do
+    for _ in read(root, "calls"):gmatch("/owner/renew") do
         count = count + 1
     end
     return count
@@ -6230,22 +6241,31 @@ local function settle(root)
     return before
 end
 
-testing.test("take claims the card and renews the claim while the loop runs", function()
-    local root, home = sandbox()
-    local out, code = dev(root, home, { "board", "take", "11111111-a" })
-    testing.eq(code, 0)
-    testing.ok(out:find("took 11111111, fence 7, renewing every 5m for up to 50m", 1, true), out)
-    local calls = read(root, "calls")
-    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/claim", 1, true), calls)
-    testing.ok(calls:find('"ttl_seconds":900', 1, true), calls)
-    testing.ok(calls:find('"claimant":"dev@', 1, true), calls)
-    testing.ok(wait_until(function()
-        return heartbeats(root) >= 3
-    end))
-    testing.ok(read(root, "calls"):find('{"fence":7}', 1, true))
-    testing.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/heartbeat", 1, true))
-    dev(root, home, { "board", "release", "11111111-a" })
-end)
+testing.test(
+    "take grabs the owner with the agent name and renews the lease while the loop runs",
+    function()
+        local root, home = sandbox()
+        local out, code = dev(root, home, { "board", "take", "11111111-a" })
+        testing.eq(code, 0)
+        testing.ok(
+            out:find("took 11111111, fence 7, renewing every 5m for up to 50m", 1, true),
+            out
+        )
+        local calls = read(root, "calls")
+        testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner", 1, true), calls)
+        testing.ok(calls:find('"ttl_seconds":900', 1, true), calls)
+        testing.ok(calls:find('"name":"dev@', 1, true), calls)
+        testing.ok(wait_until(function()
+            return heartbeats(root) >= 3
+        end))
+        local renewed = read(root, "calls"):match("[^\n]*/owner/renew\n?")
+        testing.ok(renewed:find("/api/tasks/" .. ID_A .. "/owner/renew", 1, true), renewed)
+        testing.ok(renewed:find("If-Owner-Fence: 7", 1, true), renewed)
+        testing.ok(renewed:find('"name":"dev@', 1, true), renewed)
+        testing.ok(renewed:find('"ttl_seconds":900', 1, true), renewed)
+        dev(root, home, { "board", "release", "11111111-a" })
+    end
+)
 
 testing.test("the state file holds the card, the fence and the pid at mode 600", function()
     local root, home = sandbox()
@@ -6261,7 +6281,7 @@ testing.test("the state file holds the card, the fence and the pid at mode 600",
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
-testing.test("release gives the claim up, removes the state and stops the loop", function()
+testing.test("release ends the owner lease and stops the loop", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
@@ -6270,15 +6290,63 @@ testing.test("release gives the claim up, removes the state and stops the loop",
     local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 0)
-    testing.eq(out, "released 11111111\n")
-    testing.ok(
-        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/release", 1, true),
-        read(root, "calls")
-    )
+    testing.eq(out, "released 11111111, fence 7\n")
+    local released = read(root, "calls"):match("[^\n]*/owner/release\n?")
+    testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
+    testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
+    testing.ok(released:find('"name":"dev@', 1, true), released)
     testing.eq(fs.exists(state_file(home)), false)
     testing.ok(loop_gone(pid))
     local after = settle(root)
     testing.eq(heartbeats(root), after)
+end)
+
+testing.test("take loses to another live owner and leaves no loop running", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/owner_held", ""))
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("task owned by dotfiles/other until 2999-01-01T00:00:00Z", 1, true), out)
+    testing.eq(fs.exists(state_file(home)), false)
+    testing.eq(read(root, "calls"):find("/owner/renew", 1, true), nil)
+    testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
+end)
+
+testing.test("take refuses an epic with an open child and grabs nothing", function()
+    local export = EXPORT:gsub(
+        '"name":"First"',
+        '"name":"First","kind":"epic","children_total":3,"children_done":1',
+        1
+    )
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("cannot be taken: 2 of 3 children are open", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner\n", 1, true), nil)
+end)
+
+testing.test("a retake renews its fence and grabs again when Pomb answers stale_fence", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    assert(fs.write(root .. "/hb_status", "409"))
+    local before = #read(root, "calls")
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls"):sub(before)
+    local renewed = calls:find("/api/tasks/" .. ID_A .. "/owner/renew", 1, true)
+    testing.ok(renewed, calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner\n", renewed, true), calls)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+testing.test("a retake against another live owner shows the owner held message", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    assert(fs.write(root .. "/hb_status", "409"))
+    assert(fs.write(root .. "/owner_held", ""))
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("task owned by dotfiles/other until 2999-01-01T00:00:00Z", 1, true), out)
 end)
 
 testing.test("release without a taken claim is a plain error", function()
@@ -6286,7 +6354,7 @@ testing.test("release without a taken claim is a plain error", function()
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 1)
     testing.ok(out:find("no claim was taken", 1, true), out)
-    testing.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
+    testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
 end)
 
 testing.test("move out of progress stops the loop and sends the fence", function()
@@ -6300,9 +6368,9 @@ testing.test("move out of progress stops the loop and sends the fence", function
     testing.eq(code, 0)
     testing.eq(out, "moved 11111111 to Review\n")
     local moved = read(root, "calls"):match("[^\n]*/move\n?")
-    testing.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
+    testing.ok(moved:find("If-Owner-Fence: 7", 1, true), moved)
     testing.ok(
-        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/claim/release", 1, true),
+        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/owner/release", 1, true),
         read(root, "calls")
     )
     testing.eq(fs.exists(state_file(home)), false)
@@ -6315,7 +6383,7 @@ testing.test("move into progress does not release the claim", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
-    testing.eq(read(root, "calls"):find("/claim/release", 1, true), nil)
+    testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -6357,12 +6425,12 @@ testing.test("move into progress posts the claim then the move to In Progress", 
     testing.eq(code, 0, out)
     testing.ok(out:find("^moved 11111111 to " .. PROGRESS_NAME .. "\n"), out)
     local calls = read(root, "calls")
-    local claim = calls:find("/api/tasks/" .. ID_A .. "/claim\n", 1, true)
+    local claim = calls:find("/api/tasks/" .. ID_A .. "/owner\n", 1, true)
     local moved = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
     testing.ok(claim and moved and claim < moved, calls)
     local move_line = calls:match("[^\n]*/move\n?")
     testing.ok(move_line:find('"column_id":"' .. PROGRESS_COLUMN .. '"', 1, true), move_line)
-    testing.ok(move_line:find("If-Claim-Fence: 7", 1, true), move_line)
+    testing.ok(move_line:find("If-Owner-Fence: 7", 1, true), move_line)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -6387,11 +6455,11 @@ testing.test("take names the claimant from --as, then DEV_AGENT, else dev@host",
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", "project-alt/x" })
     testing.eq(code, 0, out)
-    testing.ok(read(root, "calls"):find('"claimant":"project-alt/x"', 1, true), read(root, "calls"))
+    testing.ok(read(root, "calls"):find('"name":"project-alt/x"', 1, true), read(root, "calls"))
     dev(root, home, { "board", "release", "11111111-a" })
     out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "dotfiles/env" })
     testing.eq(code, 0, out)
-    testing.ok(read(root, "calls"):find('"claimant":"dotfiles/env"', 1, true), read(root, "calls"))
+    testing.ok(read(root, "calls"):find('"name":"dotfiles/env"', 1, true), read(root, "calls"))
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -6404,7 +6472,7 @@ testing.test("take refuses a name that is not one word of the allowed characters
     testing.eq(commands.run("take", { "11111111-a", "--as", "" }, fake(sample())).code, 2)
     local _, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "bad name" })
     testing.eq(code, 2)
-    testing.eq(read(root, "calls"):find("/claim", 1, true), nil)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
 end)
 
 testing.test("DEV_AGENT shape accepts repo/role and repo/role/card", function()
@@ -6413,7 +6481,7 @@ testing.test("DEV_AGENT shape accepts repo/role and repo/role/card", function()
         local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
         testing.eq(code, 0, out)
         testing.ok(
-            read(root, "calls"):find('"claimant":"' .. name .. '"', 1, true),
+            read(root, "calls"):find('"name":"' .. name .. '"', 1, true),
             read(root, "calls")
         )
         dev(root, home, { "board", "release", "11111111-a" })
@@ -6435,7 +6503,7 @@ testing.test(
                     out
                 )
             end
-            testing.eq(read(root, "calls"):find("/claim", 1, true), nil)
+            testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
             out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
             testing.eq(code, 2, out)
         end
@@ -6451,7 +6519,7 @@ testing.test("DEV_AGENT shape refuses move into progress of an unclaimed card", 
         { agent = "builder" }
     )
     testing.eq(code, 2, out)
-    testing.eq(read(root, "calls"):find("/claim", 1, true), nil)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
 end)
 
 testing.test("an old-shape claimant still moves and lands its claimed card", function()
@@ -6479,8 +6547,8 @@ testing.test(
         )
         testing.eq(code, 0, out)
         local calls = read(root, "calls")
-        testing.ok(calls:find('"claimant":"r/one"', 1, true), calls)
-        testing.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
+        testing.ok(calls:find('"name":"r/one"', 1, true), calls)
+        testing.ok(calls:find("If-Owner-Fence: 7", 1, true), calls)
         testing.eq(fs.exists(state_file(home)), true)
         dev(root, home, { "board", "release", "11111111-a" })
     end
@@ -6499,15 +6567,15 @@ testing.test("epic_done_children_claim", function()
     )
     testing.eq(code, 0, out)
     local calls = read(root, "calls")
-    testing.ok(calls:find("/claim", 1, true), calls)
-    testing.ok(calls:find("If-Claim-Fence: 7", 1, true), calls)
+    testing.ok(calls:find("/owner", 1, true), calls)
+    testing.ok(calls:find("If-Owner-Fence: 7", 1, true), calls)
     testing.eq(fs.exists(state_file(home)), true)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 local function refusing_moves(root)
     local REFUSED_MOVE =
-        '*/move) body=\'{"message":"no room"}\'; status=409 ;;\n*/claim/release) body= ;;'
+        '*/move) body=\'{"message":"no room"}\'; status=409 ;;\n*/owner/release) body= ;;'
     curl_with(root, REFUSED_MOVE)
 end
 
@@ -6523,16 +6591,18 @@ testing.test("a move into progress that Pomb refuses releases the claim it just 
     testing.eq(code, 1)
     testing.ok(out:find("no room", 1, true), out)
     local calls = read(root, "calls")
-    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/claim\n", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner\n", 1, true), calls)
     local moved = calls:match("[^\n]*/move\n?")
-    testing.ok(moved:find("If-Claim-Fence: 7", 1, true), moved)
-    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/claim/release", 1, true), calls)
-    testing.ok(calls:find('{"fence":7}', 1, true), calls)
+    testing.ok(moved:find("If-Owner-Fence: 7", 1, true), moved)
+    local released = calls:match("[^\n]*/owner/release\n?")
+    testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), calls)
+    testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
     testing.eq(fs.exists(state_file(home)), false)
 end)
 
 testing.test("a move into progress of a card claimed elsewhere takes no claim", function()
-    local live = '"claim":{"claimant":"dev@box:42","expires_at":"2999-01-01T00:00:00Z"}'
+    local live =
+        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
     local export = PLANNED_EXPORT:gsub('"labels":%["docs"%]', '"labels":["docs"],' .. live, 1)
     local root, home = sandbox({ export = export })
     refusing_moves(root)
@@ -6545,7 +6615,7 @@ testing.test("a move into progress of a card claimed elsewhere takes no claim", 
     testing.eq(code, 1)
     testing.ok(out:find("no room", 1, true), out)
     local calls = read(root, "calls")
-    testing.eq(calls:find("/claim", 1, true), nil)
+    testing.eq(calls:find("/owner", 1, true), nil)
     testing.eq(fs.exists(state_file(home)), false)
 end)
 
@@ -6589,7 +6659,7 @@ testing.test(
 testing.test("a release the server refuses after a move warns and the move succeeds", function()
     local root, home = sandbox({ export = PLANNED_DONE_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    curl_with(root, "*/claim/release) body=; status=503 ;;")
+    curl_with(root, "*/owner/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
     testing.eq(code, 0)
     testing.ok(out:find("moved 11111111 to Done", 1, true), out)
@@ -6644,8 +6714,11 @@ testing.test("a second take renews with the stored fence", function()
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(
-        read(root, "calls"):find('"fence":7,"ttl_seconds"', 1, true)
-            or read(root, "calls"):find('"ttl_seconds":900,"fence":7', 1, true),
+        read(root, "calls"):find(
+            "If%-Owner%-Fence: 7 %-%-data%-raw {[^}]*} https://pomb.example/api/tasks/"
+                .. ID_A:gsub("%-", "%%-")
+                .. "/owner/renew\n"
+        ),
         read(root, "calls")
     )
     dev(root, home, { "board", "release", "11111111-a" })
@@ -6685,10 +6758,12 @@ testing.test("the token never reaches argv, the environment, the state or the ou
     testing.ok(read(root, "calls"):find("-K -", 1, true))
 end)
 
-testing.test("ls shows who holds a live claim and ignores an expired one", function()
+testing.test("a lapsed owner lease counts as unowned in ls", function()
     local root, home = sandbox()
-    local live = '"claim":{"claimant":"dev@box:42","expires_at":"2999-01-01T00:00:00Z"}'
-    local dead = '"claim":{"claimant":"dev@old:1","expires_at":"2001-01-01T00:00:00Z"}'
+    local live =
+        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
+    local dead =
+        '"owner":{"holder":{"kind":"agent","name":"dev@old:1"},"lease_expires_at":"2001-01-01T00:00:00Z"}'
     assert(
         fs.write(
             root .. "/export.json",
@@ -6711,6 +6786,52 @@ testing.test("ls shows who holds a live claim and ignores an expired one", funct
     )
 end)
 
+testing.test("next skips live owned cards and takes lapsed ones", function()
+    local function owned(until_stamp)
+        return (
+            TASK:gsub(
+                '"labels":%["docs"%]',
+                '"labels":["docs"],"owner":{"holder":{"kind":"agent","name":"dev@box:42"},'
+                    .. '"lease_expires_at":"'
+                    .. until_stamp
+                    .. '","live":true,"fence":3}',
+                1
+            )
+        )
+    end
+    local root, home = sandbox({ task = owned("2999-01-01T00:00:00Z") })
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "no ready cards\n")
+    root, home = sandbox({ task = owned("2001-01-01T00:00:00Z") })
+    out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^11111111  Ready  1 Pomodoro  docs  First"), out)
+end)
+
+testing.test("a lapsed owner lease counts as unowned in lint", function()
+    local function in_progress(owner)
+        return (
+            EXPORT:gsub(
+                '"column_id":"col%-ready","position":1,"color_id":"yellow%-id","labels":%["docs"%]',
+                '"column_id":"col-progress","position":1,"color_id":"yellow-id","labels":["docs"],'
+                    .. owner,
+                1
+            )
+        )
+    end
+    local live =
+        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
+    local dead =
+        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2001-01-01T00:00:00Z"}'
+    local root, home = sandbox({ export = in_progress(live) })
+    local out = dev(root, home, { "board", "lint" })
+    testing.eq(out:find("in progress with no claimant", 1, true), nil, out)
+    root, home = sandbox({ export = in_progress(dead) })
+    out = dev(root, home, { "board", "lint" })
+    testing.ok(out:find("in progress with no claimant", 1, true), out)
+end)
+
 testing.test("ls adds no holder column while nobody holds a claim", function()
     local cards = sample()
     local result = commands.run("ls", {}, fake(cards))
@@ -6727,7 +6848,7 @@ end)
 testing.test("a release the server refuses keeps the state so it can be retried", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })
-    curl_with(root, "*/claim/release) body=; status=503 ;;")
+    curl_with(root, "*/owner/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 1)
     testing.ok(out:find("pomb answered 503", 1, true), out)
@@ -7878,7 +7999,7 @@ testing.test(
                 .. SHARE
                 .. "keepalive.sh "
                 .. root
-                .. "/state card 7 1 https://pomb.example Agents/x 0",
+                .. "/state card 7 1 https://pomb.example Agents/x 0 dotfiles/x 900",
             "600"
         )
         testing.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))

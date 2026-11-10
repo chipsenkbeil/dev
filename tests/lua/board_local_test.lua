@@ -1527,7 +1527,7 @@ testing.test("take holds a claim with an expiry and no loop, and release gives i
     out = dev(root, home, { "board", "take", a })
     testing.eq(out:find("took " .. a .. ", fence 1, held for 50m\n\n", 1, true), 1, out)
     out = dev(root, home, { "board", "release", a })
-    testing.eq(out, "released " .. a .. "\n")
+    testing.eq(out, "released " .. a .. ", fence 1\n")
     out = dev(root, home, { "board", "next" })
     testing.ok(out:find("Card", 1, true), out)
     out = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })

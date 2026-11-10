@@ -8,6 +8,8 @@ ticks=$4
 url=$5
 entry=$6
 tick=$7
+name=$8
+lease=$9
 here=$(cd "$(dirname "$0")" && pwd)
 
 n=0
@@ -33,8 +35,9 @@ while [ "$n" -lt "$ticks" ]; do
     esac
     out=$(printf 'header = "Authorization: Bearer %s"\n' "$token" |
         curl -sS --connect-timeout 10 --max-time 30 -K - -X POST \
-            -H 'Content-Type: application/json' --data-raw "{\"fence\":$fence}" \
-            -o /dev/null -w '%{http_code}' "$url/api/tasks/$card/claim/heartbeat" 2>/dev/null)
+            -H 'Content-Type: application/json' -H "If-Owner-Fence: $fence" \
+            --data-raw "{\"name\":\"$name\",\"ttl_seconds\":$lease}" \
+            -o /dev/null -w '%{http_code}' "$url/api/tasks/$card/owner/renew" 2>/dev/null)
     token=
     code=${out##*[!0-9]}
     case $code in

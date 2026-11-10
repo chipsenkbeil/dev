@@ -312,7 +312,7 @@ end
 ---@param method string the HTTP method
 ---@param path string the path under the server's URL
 ---@param body table<string, any>? the JSON body
----@param fence integer? the claim fence to send as `If-Claim-Fence`
+---@param fence integer? the owner fence to send as `If-Owner-Fence`
 ---@param seconds integer? the whole request's `--max-time`, 30 when nil
 ---@param file string? a file to send as the `file` part of a multipart body, in place of a JSON
 ---   body
@@ -369,7 +369,7 @@ function Backend:__request(method, path, body, fence, seconds, file)
     end
     if fence then
         argv[#argv + 1] = "-H"
-        argv[#argv + 1] = "If-Claim-Fence: " .. string.format("%d", fence)
+        argv[#argv + 1] = "If-Owner-Fence: " .. string.format("%d", fence)
     end
     if body then
         argv[#argv + 1] = "--data-raw"
@@ -575,15 +575,22 @@ function Backend:__column_name(id)
     return "?"
 end
 
-local function holder(claim)
-    if type(claim) ~= "table" or type(claim.claimant) ~= "string" then
+local function holder(task)
+    local owner = task.owner
+    if type(owner) ~= "table" or type(owner.holder) ~= "table" then
         return nil
     end
-    local expires = present(claim.expires_at)
+    local who = owner.holder
+    local name = who.kind == "agent" and who.name
+        or who.kind == "human" and "member " .. tostring(who.id)
+    if type(name) ~= "string" or owner.live == false then
+        return nil
+    end
+    local expires = present(owner.lease_expires_at)
     if type(expires) == "string" and expires:sub(1, STAMP_CHARS) <= os.date(UTC_STAMP) then
         return nil
     end
-    return claim.claimant
+    return name
 end
 
 local function runs_of(task)
@@ -690,7 +697,7 @@ function Backend:__card(task)
         files = field_names(task, board.FILES_FIELD),
         outcomes = outcomes,
         outcomes_unreadable = not readable,
-        claimant = holder(task.claim),
+        claimant = holder(task),
         id = task.id,
         name = task.name,
         column = self:__column_name(task.column_id),
@@ -1649,29 +1656,57 @@ function Backend:wait(after, kinds, timeout)
     return { cursor = doc.cursor, events = events }
 end
 
-function Backend:claim(id, claimant, ttl, fence)
-    local body = { claimant = claimant, ttl_seconds = ttl, fence = fence }
-    local claim, message = self:__request("POST", "/api/tasks/" .. id .. "/claim", body)
-    if not claim then
+function Backend:claim(id, claimant, ttl, fence, opts)
+    local path = "/api/tasks/" .. id .. "/owner"
+    local owner, message, status
+    local unfinished = board.open_children(opts and opts.epic)
+    if unfinished > 0 then
+        return nil,
+            string.format(
+                "the card is an epic and cannot be taken: %d of %d children are open",
+                unfinished,
+                opts.epic.total
+            )
+    end
+    if fence then
+        owner, message, status =
+            self:__request("POST", path .. "/renew", { name = claimant, ttl_seconds = ttl }, fence)
+        if not owner and status ~= CONFLICT then
+            return nil, message
+        end
+    end
+    if not owner then
+        owner, message = self:__request("POST", path, { name = claimant, ttl_seconds = ttl })
+    end
+    if not owner then
         return nil, message
     end
-    local taken = present(claim.fence)
+    local taken = present(owner.fence)
     if type(taken) ~= "number" then
-        return nil, unavailable("pomb sent a claim with no fence")
+        return nil, unavailable("pomb sent an owner with no fence")
     end
     return taken
 end
 
 function Backend:release(id, fence)
-    local done, message =
-        self:__request("POST", "/api/tasks/" .. id .. "/claim/release", { fence = fence })
+    local task, message = self:__request("GET", "/api/tasks/" .. id)
+    if not task then
+        return nil, message
+    end
+    local name = holder(task)
+    if not name then
+        return true
+    end
+    local done
+    done, message =
+        self:__request("POST", "/api/tasks/" .. id .. "/owner/release", { name = name }, fence)
     if not done then
         return nil, message
     end
     return true
 end
 
-function Backend:keepalive(id, fence, ticks, state)
+function Backend:keepalive(id, fence, ticks, state, name)
     local entry = entry_of(self.__opts.token)
     if not entry then
         return nil, BAD_REF
@@ -1690,6 +1725,8 @@ function Backend:keepalive(id, fence, ticks, state)
         self.__opts.url,
         entry,
         string.format("%d", claims.TICK_SECONDS),
+        name,
+        string.format("%d", claims.TTL_SECONDS),
     }, { unset = CHILD_UNSET, stderr = "null" })
     local pid = tonumber(out:match("%d+"))
     if code ~= 0 or not pid then

@@ -1098,8 +1098,8 @@ or `~/.local/state/dev/board/`, with the card, the fence and the loop's pid at
 mode 600. It never holds the token. The loop reads the token for each
 renewal, from the Keychain or else `pass`, and hands it to curl on standard
 input to keep it out of every argument list, environment variable, file or
-output. While you hold a claim, `move` and `note` send its fence, and `ls` shows each live claim's holder in a column
-before the name.
+output. While you hold a card, `move` and `note` send its owner fence, and
+`ls` shows each live owner's holder in a column before the name.
 
 ## Reference: the subcommands in detail
 
@@ -1843,7 +1843,7 @@ never handles the API.
   converted until its outcomes are fixed by hand. It takes no other word (exit
   2). The words after the card, or after N, are the text, which must not be
   blank (exit 2), and the text gets the prose warnings. All five send the
-  claim's fence as `If-Claim-Fence` when this machine holds one. dev never calls
+  owner fence as `If-Owner-Fence` when this machine holds one. dev never calls
   Pomb's reorder subtasks, which is admin-only. A local board keeps
   the same rows in the card's `outcomes`, refusing a stale fence as the other
   writes do. The three flag forms are queued while Pomb is unreachable and safe
@@ -1883,7 +1883,7 @@ never handles the API.
   and prints `moved <id prefix> to <column>`. A move into In Progress that takes the claim
   adds a blank line and the card as `show CARD` prints it, with the same
   stderr warning when that read fails. When the card has a claim taken by
-  `take`, the move sends its fence as `If-Claim-Fence` and, for any column but
+  `take`, the move sends its fence as `If-Owner-Fence` and, for any column but
   In Progress, stops the keep-alive loop, forgets the claim and, once the move
   has succeeded, releases it on the backend with its fence (a refused release
   prints
@@ -1980,18 +1980,20 @@ never handles the API.
   origin on github.com that `gh repo view` says is private) and stops with
   exit 1 otherwise, to leave a public project's board to the owner.
 - `take CARD [--as NAME] [--max-size N]`: Claims the card
-  (`POST /api/tasks/{id}/claim` with `claimant` NAME, else `DEV_AGENT`, else
+  (`POST /api/tasks/{id}/owner` with `name` NAME, else `DEV_AGENT`, else
   `dev@<host>:<CLAUDE_SESSION_ID or the pid of dev's caller>`; NAME is one word
   of letters, digits and `.`, `-`, `_` and `/` of at most 200 characters, else
-  exit 2, `ttl_seconds` 900, and the stored fence when this machine already
-  holds one, which renews) and starts the keep-alive loop. Prints
+  exit 2, and `ttl_seconds` 900. When this machine already holds a fence, dev
+  renews it through `/owner/renew` first and grabs again when Pomb answers 409)
+  and starts the keep-alive loop. On a Pomb board dev refuses an epic with an
+  open child, as the grab route does not. Prints
   `took <id prefix>, fence N, renewing every 5m for up to Mm` (a local board
   needs no loop and prints `took <id prefix>, fence N, held for Mm`), a blank
   line and the card as `show CARD` prints it. When that read fails,
   `dev: took <id prefix>, but <reason>` goes to stderr and the claim stays. A
-  refused claim (`claim_held`) is `board unavailable: pomb answered 409: ...`,
-  exit 1. The first claim by a name also writes a status note
-  `dev-claim: by=NAME`, so the name outlives the claim, and `review` reads
+  card another agent owns (`owner_held`) is `board unavailable: pomb answered
+  409: task owned by NAME until TIME`, exit 1, and no loop starts. The first claim by a name also writes a
+  status note `dev-claim: by=NAME`, so the name outlives the claim, and `review` reads
   those notes. If that note cannot be written the claim is released and `take`
   exits 1. `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
   With `--max-size N` or, when the flag is absent, `DEV_MAX_SIZE` set to 1, 2
@@ -2025,8 +2027,10 @@ never handles the API.
   never sends `force`, so its own land move into Release fails the same way
   and the card stays put. `next` stays read-only and shows the card anyway.
   The turn hold is 1800 seconds by default and 3600 at most (see `turn`).
-- `release CARD`: Stops the loop, forgets the claim and posts `/claim/release`
-  with the fence. Prints `released <id prefix>`. A card with no claim taken by
+- `release CARD`: Stops the loop, forgets the claim and posts `/owner/release`
+  with the owner's name as `name` and the fence as `If-Owner-Fence`. It reads
+  the card first and skips the post when no owner lease is live. Prints
+  `released <id prefix>, fence N`. A card with no claim taken by
   `take` is exit 1.
 - `sync`: Replays the changes queued while Pomb was unreachable, as below.
 
@@ -2075,22 +2079,24 @@ group, outlives the caller's shell and wakes no model. Every 5 minutes (`sleep`
 with the tick in seconds as its seventh argument) it checks that the state file
 still holds its fence, reads the token through the same `board/passlock.sh` as
 `dev.board.pomb`, Keychain first, refuses a token outside `A-Za-z0-9._~+/=-`,
-and sends `POST /api/tasks/{id}/claim/heartbeat` with
-`{"fence":N}` through `curl -K -`, the token going over a `printf` builtin pipe
-into curl's stdin so it is in no argv, no environment variable, no file and no
+and sends `POST /api/tasks/{id}/owner/renew` with
+`{"name":NAME,"ttl_seconds":900}` and `If-Owner-Fence: N` through
+`curl -K -`, the token going over a `printf` builtin pipe into curl's stdin so it is in no argv, no environment variable, no file and no
 output. The loop ends when the state file is gone or holds another fence
 (`release`, `move` out of In Progress or a newer `take`; `release` and `move`
 also kill its pid after `ps` shows the script in the command, and `release` does
 so only once Pomb has accepted the release, so a failed release can be retried),
-when a heartbeat answers 4xx (the claim is gone), and after twice the card's
+when a renewal answers 4xx (the owner lease is gone), and after twice the card's
 size in 5-minute ticks: 10 for 1 Pomodoro, 20 for 2 Pomodori and 30 for any
 other size, unsized included. A network failure, a 5xx or a failed `pass` read
 (a locked store) keeps it going until the cap, and a move made outside
 `dev board move` does not stop it, and a loop that ends removes its state file,
 so a crashed agent's claim lapses after its 900-second lease. `ls` adds a
-claimant column before the name, only when a listed card has a live claim (`-`
-for the others), from `claim.claimant` of `/export-data` while
-`claim.expires_at` is in the future. Moving a card keeps the loop only into In
+holder column before the name, only when a listed card has a live owner (`-`
+for the others), from `owner.holder` of `/export-data` while
+`owner.lease_expires_at` is in the future or null. A lapsed lease counts as
+unowned in `ls`, `next` and `lint`. `next` reads each card's `owner` and skips
+a live one. Moving a card keeps the loop only into In
 Progress, so `next`, `take`, `move progress` works.
 
 `dev board wait [--for ready|review|verify|release|human|lead]` (Pomb only)

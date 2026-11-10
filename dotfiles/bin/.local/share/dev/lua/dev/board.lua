@@ -7,6 +7,7 @@ local M = {}
 
 ---@class dev.board.ClaimOpts
 ---@field lease boolean? true when the claim lasts the ttl, false for the card-size minutes
+---@field epic {done: integer, total: integer}? the card's children, which a Pomb grab refuses while open
 
 ---@class dev.board.Card
 ---@field id string the card's full id
@@ -18,7 +19,7 @@ local M = {}
 ---   when the card has none
 ---@field labels string[] the card's labels
 ---@field description string? the card's description, nil when it has none
----@field claimant string? who holds a live claim on it
+---@field claimant string? who holds the card while its owner lease is live
 ---@field kind string? `epic` for an epic, `task` otherwise
 ---@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not
 ---   one
@@ -162,13 +163,13 @@ local M = {}
 ---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
 ---   board with none, or nil and a message
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence:
----   integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the claim, renewed when
----   the caller's live fence is given
+---   integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the owner grab, renewed
+---   when the caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the
----   claim given up
+---   owner lease ended
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer,
----   state: string): integer?, string? the pid of a detached loop that renews the claim every tick
----   until the state file loses the fence or the ticks run out
+---   state: string, name: string): integer?, string? the pid of a detached loop that renews the
+---   owner lease every tick until the state file loses the fence or the ticks run out
 
 ---@class dev.board.Link
 ---@field kind string `blocked_by`, `blocks`, `related`, `parent` or `child`, as seen from the card

@@ -1408,7 +1408,8 @@ end
 local function claim_card(backend, card, name)
     local held = claims.read(card.id)
     local who = claimant(name)
-    local fence, message = backend:claim(card.id, who, claims.TTL_SECONDS, held and held.fence)
+    local fence, message =
+        backend:claim(card.id, who, claims.TTL_SECONDS, held and held.fence, { epic = card.epic })
     if not fence then
         return failure(message)
     end
@@ -1433,7 +1434,7 @@ local function claim_card(backend, card, name)
         return failure(message)
     end
     local pid
-    pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id))
+    pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id), who)
     if not pid then
         claims.stop(card.id)
         backend:release(card.id, fence)
@@ -4644,7 +4645,13 @@ function commands.release(backend, args)
         return failure(message)
     end
     claims.stop(card.id)
-    return { output = "released " .. card.id:sub(1, board.MIN_PREFIX) }
+    return {
+        output = string.format(
+            "released %s, fence %d",
+            card.id:sub(1, board.MIN_PREFIX),
+            held.fence
+        ),
+    }
 end
 
 local function run_card_for(cards, name)
