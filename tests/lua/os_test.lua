@@ -341,6 +341,21 @@ testing.test("capture_timed passes hostile words through unchanged", function()
     testing.eq(out, "a b;$(id)'\"`")
 end)
 
+local LEFT_RUNNING_TRIES = 20
+local LEFT_RUNNING_POLL_SECS = "0.1"
+
+local function left_running(pattern)
+    local left = ""
+    for _ = 1, LEFT_RUNNING_TRIES do
+        left = devos.capture({ "pgrep", "-f", pattern }, { stderr = "null" })
+        if left == "" then
+            break
+        end
+        devos.run({ "sleep", LEFT_RUNNING_POLL_SECS })
+    end
+    return left
+end
+
 testing.test("capture_timed stops a command and its children after the limit", function()
     local started = os.time()
     local pid = devos.capture({ "sh", "-c", "echo $$" }):match("%d+")
@@ -357,11 +372,7 @@ testing.test("capture_timed stops a command and its children after the limit", f
     testing.eq(code, 124)
     testing.eq(out, "before\n")
     testing.ok(os.time() - started < 30, "the limit should not take long")
-    local left = devos.capture({
-        "pgrep",
-        "-f",
-        ("^sleep (%d|%d)$"):format(first, second),
-    }, { stderr = "null" })
+    local left = left_running(("^sleep (%d|%d)$"):format(first, second))
     testing.eq(left, "")
 end)
 
@@ -375,15 +386,7 @@ testing.test("capture_timed with reap kills what a finished command left running
     )
     testing.eq(code, 0)
     testing.eq(out, "done\n")
-    local pattern = ("^sleep %d$"):format(unique_secs)
-    local left = ""
-    for _ = 1, 20 do
-        left = devos.capture({ "pgrep", "-f", pattern }, { stderr = "null" })
-        if left == "" then
-            break
-        end
-        devos.run({ "sleep", "0.1" })
-    end
+    local left = left_running(("^sleep %d$"):format(unique_secs))
     testing.eq(left, "")
 end)
 
