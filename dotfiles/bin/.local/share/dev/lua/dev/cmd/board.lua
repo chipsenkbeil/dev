@@ -3360,6 +3360,159 @@ function commands.land(backend, args)
     return result
 end
 
+---@class dev.cmd.board.ShipRun
+---@field argv string[] the command's words
+---@field run string the command as one line
+
+---Read the commands a ship runs: the words after `--`, else the `[board.release]` checks rows.
+---@param backend dev.board.Backend the board
+---@param args string[] the arguments, with a `--` in front of any command
+---@return dev.cmd.board.ShipRun[]? runs the commands, nil on a refusal
+---@return dev.cmd.board.Result? err the refusal
+local function ship_runs(backend, args)
+    local split = index_of(args, "--")
+    if split and split > 1 then
+        return nil, usage("takes no argument before --, only the release command after it")
+    end
+    if split then
+        if #args == 1 then
+            return nil, usage("needs a command after --")
+        end
+        local argv = { unpack(args, 2) }
+        return { { argv = argv, run = table.concat(argv, " ") } }
+    end
+    if #args > 0 then
+        return nil, usage("takes the release command after --, not " .. args[1])
+    end
+    local rows = config.get(backend.root, "board.release.checks")
+    if rows == nil then
+        return nil, usage("needs a release command after --, or checks rows under [board.release]")
+    end
+    if type(rows) ~= "table" or #rows == 0 then
+        return nil, failure("[board.release] checks must be a list of commands")
+    end
+    local runs = {}
+    for i, row in ipairs(rows) do
+        if type(row) ~= "string" then
+            return nil, failure("[board.release] checks row " .. i .. " is not a string")
+        end
+        local argv, why = check.argv(row)
+        if not argv then
+            return nil, failure("[board.release] checks row " .. i .. ": " .. why)
+        end
+        runs[i] = { argv = argv, run = row }
+    end
+    return runs
+end
+
+---Run each command once and stop at the first that fails.
+---@param backend dev.board.Backend the board
+---@param runs dev.cmd.board.ShipRun[] the commands
+---@return dev.cmd.board.Result? err the failure naming the command, nil when every one passed
+local function ship_ran(backend, runs)
+    local remote = require("dev.remote")
+    local rows = {}
+    for i, one in ipairs(runs) do
+        verb.note(string.format("running %d of %d: %s", i, #runs, one.run))
+        rows[i] = check.run({
+            root = backend.root,
+            run = one.run,
+            argv = one.argv,
+            seconds = check.DEFAULT_SECONDS,
+            env = { [remote.VERB_ENV] = remote.VERB.RELEASE },
+        })
+        if rows[i].result ~= check.RESULT.PASS then
+            return failure(
+                string.format(
+                    "the release command failed, so no card moved: %s\n%s",
+                    one.run,
+                    table.concat(check_lines(rows), "\n")
+                )
+            )
+        end
+    end
+end
+
+---Move every Release card with all outcomes ticked to Done, each with a done note.
+---@param backend dev.board.Backend the board
+---@param cards dev.board.Card[] the Release cards
+---@return string[] lines what moved and what stayed
+---@return boolean ok false when a note or a move failed
+local function ship_batch(backend, cards)
+    local commit = land.trunk_head(backend.root)
+    local text = commit and ("Shipped in trunk commit " .. land.short(commit) .. ".")
+        or "Shipped. Trunk could not be read, so the commit is unknown."
+    local moved, kept, ok = {}, {}, true
+    for _, card in ipairs(cards) do
+        local short = card.id:sub(1, board.MIN_PREFIX)
+        if done_refusal(card) then
+            kept[#kept + 1] = "  " .. short .. " " .. card.name
+        else
+            local noted, why = backend:note(card.id, text, nil, { kind = "done" })
+            local result = noted and move_card(backend, { card.id, backend.roles:done_column() })
+            if result and not result.code then
+                moved[#moved + 1] = "  " .. short .. " " .. card.name
+            else
+                ok = false
+                kept[#kept + 1] = "  "
+                    .. short
+                    .. " "
+                    .. card.name
+                    .. " ("
+                    .. (result and result.message or why)
+                    .. ")"
+            end
+        end
+    end
+    local lines = {
+        string.format(
+            "shipped %s%s",
+            count_text(#moved, "card"),
+            commit and (" at trunk commit " .. land.short(commit)) or ""
+        ),
+    }
+    for _, line in ipairs(moved) do
+        lines[#lines + 1] = line
+    end
+    if #kept > 0 then
+        lines[#lines + 1] = "left in " .. backend.roles.release .. ":"
+        for _, line in ipairs(kept) do
+            lines[#lines + 1] = line
+        end
+    end
+    return lines, ok
+end
+
+function commands.ship(backend, args)
+    local runs, err = ship_runs(backend, args)
+    if not runs then
+        return err
+    end
+    if not backend.root then
+        return failure("dev board ship needs the project's root")
+    end
+    local failed = ship_ran(backend, runs)
+    if failed then
+        return failed
+    end
+    local cards, message = backend:cards()
+    if not cards then
+        return failure(message)
+    end
+    local waiting = {}
+    for _, card in ipairs(cards) do
+        if card.column == backend.roles.release then
+            waiting[#waiting + 1] = card
+        end
+    end
+    local lines, ok = ship_batch(backend, waiting)
+    local text = table.concat(lines, "\n")
+    if not ok then
+        return failure(text)
+    end
+    return { output = text }
+end
+
 function commands.turn(backend, args)
     local HOLD_FLAG = "--hold"
     local RELEASE_FLAG = "--release"
@@ -5547,6 +5700,13 @@ for sub in pairs(commands) do
             args, why = description_args(ctx.args)
             if not args then
                 verb.usage_error(ctx, why)
+            end
+        end
+        if sub == "ship" and ctx.dashed then
+            args = { unpack(args, 1, #args - ctx.after) }
+            args[#args + 1] = "--"
+            for i = #ctx.args - ctx.after + 1, #ctx.args do
+                args[#args + 1] = ctx.args[i]
             end
         end
         if sub == "outcome" then

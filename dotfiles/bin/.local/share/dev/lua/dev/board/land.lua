@@ -559,6 +559,15 @@ end
 ---@return string? commit the full commit id, nil when trunk does not hold exactly one commit of the
 ---   change
 function M.trunk_commit(root, change)
+    return M.fetched_commit(root, change .. " & ::trunk()")
+end
+
+---Read the one commit a revset names once the remote of record is fetched.
+---@param root string the project root, a jj project
+---@param revset string the jj revset
+---@return string? commit the full commit id, nil when the fetch or the read failed or the revset
+---   holds more than one commit
+function M.fetched_commit(root, revset)
     local found = forge.resolve(root)
     if not found then
         return nil
@@ -569,13 +578,20 @@ function M.trunk_commit(root, change)
         return nil
     end
     local out, code = devos.capture(
-        jj(root, "log", "-r", change .. " & ::trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
+        jj(root, "log", "-r", revset, "--no-graph", "-T", COMMIT_TEMPLATE),
         { stderr = "null" }
     )
     if code ~= 0 then
         return nil
     end
     return out:match("^(%x+)\n$")
+end
+
+---Read the commit trunk points at once the remote of record is fetched.
+---@param root string the project root, a jj project
+---@return string? commit the full commit id, nil when it could not be read
+function M.trunk_head(root)
+    return M.fetched_commit(root, "trunk()")
 end
 
 ---Land the working-copy change with `jj land`.

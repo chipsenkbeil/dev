@@ -453,6 +453,12 @@ return {
         desc = "Take the landing turn (or land under the one dev board turn holds), one landing at a time across runners (waiting up to SECONDS, 60 by default, then naming the holder), rebase the card's change onto trunk under it, land it with jj land, note the commit, move the card to Release when [board.land] deploys is true and to Done otherwise, and give the turn back, only when the card is in Verify with every outcome ticked and code and style reviews, none of them needs-work, and a passing check run are recorded for the rebased commit; needs DEV_AGENT and a jj project",
     },
     {
+        words = { "board", "ship" },
+        handler = "lua",
+        usage = "dev board ship [-- CMD...]",
+        desc = "Run the release command after -- once, or each [board.release] checks row once when none is given, as plain commands from the project root, then move every Release card whose outcomes are all ticked to Done with a done note naming the trunk commit; cards with an unticked outcome stay in Release and are listed, a failing command moves no card and exits 1, and with neither a command nor rows it refuses",
+    },
+    {
         words = { "board", "turn" },
         handler = "lua",
         flags = "--hold --wait --release",

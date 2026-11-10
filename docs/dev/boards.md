@@ -411,8 +411,10 @@ Every card in every column is fair game for an agent unless it is labelled
   here. Then `dev board land` lands it and moves the card to Release, or to
   Done when `[board.land] deploys` is not true.
 - Release: where `[board.land] deploys` is true, land sends a card to Release,
-  and it waits there to go live. Once it is live, `dev board move CARD done`
-  moves it to Done and refuses while an outcome is unticked.
+  and it waits there to go live. `dev board ship` runs the release command
+  or the `[board.release]` checks rows once and moves every card with all
+  outcomes ticked to Done. `dev board move CARD done` moves one card and
+  refuses while an outcome is unticked.
   A card in Review, Verify or Release with no claim waits for that stage's
   role. A claim means the role is working it.
 - Blocked: waiting on an answer.
@@ -1700,6 +1702,9 @@ never handles the API.
   card to Release, where it waits until it is live. Without it `land` moves the
   card to Done. This repo does not set it.
 
+  `checks` under `[board.release]` lists the commands `dev board ship` runs
+  once when it gets none after `--`, one plain command per row.
+
   The landing turn keeps landings made through `dev board land` to one at a
   time, and a raw `jj land` takes no turn (see the `land` entry above).
 
@@ -1729,6 +1734,19 @@ never handles the API.
   NAME.` and says that the commit named is from before the land and may differ
   from the one on trunk, the success line says the same, and the card still
   moves to Done. It is never queued.
+- `ship [-- CMD...]`: Ships the Release batch. It runs the release command
+  after `--` once, for example `dev board ship -- dev release --batch 12
+  --summary TEXT`, or each row of the `checks` list under `[board.release]`
+  once when no command is given, as plain commands from the project root.
+  With neither it exits 2 and names `[board.release]`. When every command
+  passes, `ship` moves each card in Release whose outcomes are all ticked to
+  Done after writing one `done` note that names the commit trunk points at
+  (`Shipped in trunk commit <12 characters>.`), and lists the cards left in
+  Release with an unticked outcome. When trunk cannot be read, the note says
+  so. When a command fails or times out, `ship` stops at it, moves no card,
+  prints the command and its output tail, and exits 1. A card whose note or
+  move fails stays in Release, is listed, and makes `ship` exit 1. It is
+  never queued.
 - `turn CARD [--hold SECONDS] [--wait SECONDS] [--release]`:
   It refuses outside the card's workspace, as `check` does, but `--release`
   works from anywhere. The turn is short and holding it is optional: a landing

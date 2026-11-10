@@ -9,6 +9,8 @@ local stderr = io.stderr
 ---@field args string[] positional arguments, minus `KEY=value` words unless `positional`
 ---@field vars table<string, string> the `KEY=value` arguments, whose key starts with an uppercase
 ---   letter
+---@field after integer? how many words of `args` follow a `--`, 0 when none was typed
+---@field dashed boolean? whether a `--` was typed, even with nothing after it
 ---@field verbose 0|1|2 the verbosity after the flags and `VERBOSE`
 ---@field interpreter string? the program dev runs under, as the launcher started it
 

@@ -66,6 +66,7 @@ end
 ---@class dev.cli.Parsed
 ---@field args string[] the arguments with the global flags removed
 ---@field after integer how many of them came after a `--`
+---@field dashed boolean whether a `--` was typed, even with nothing after it
 ---@field remote boolean whether `--remote` or `DEV_REMOTE` asks for a remote run
 ---@field detach boolean whether `--detach` was given
 ---@field local_flag boolean whether `--local` was given
@@ -77,6 +78,7 @@ local function parse(argv)
     local parsed = {
         args = {},
         after = 0,
+        dashed = false,
         remote = enabled(os.getenv("DEV_REMOTE") or ""),
         detach = false,
         conflict = false,
@@ -89,6 +91,7 @@ local function parse(argv)
     for i, word in ipairs(argv) do
         if word == "--" then
             parsed.after = #argv - i
+            parsed.dashed = true
             for j = i + 1, #argv do
                 parsed.args[#parsed.args + 1] = argv[j]
             end
@@ -413,7 +416,8 @@ function M.main(argv)
         words = words,
         root = project_root,
         args = rest,
-
+        after = parsed.after,
+        dashed = parsed.dashed,
         vars = {},
         verbose = parsed.level,
         interpreter = INTERPRETER,

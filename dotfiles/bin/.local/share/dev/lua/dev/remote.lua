@@ -143,7 +143,7 @@ M.VERB_ENV = "DEV_CI_VERB"
 M.CARD_ENV = "DEV_CI_CARD"
 
 ---The verbs dev puts in a ci run label when the caller names none.
-M.VERB = { CHECK = "check", REMOTE = "remote" }
+M.VERB = { CHECK = "check", REMOTE = "remote", RELEASE = "release" }
 
 ---Name the ci run dev starts, as `repo/verb` or `repo/verb/card`.
 ---@param root string the project root
