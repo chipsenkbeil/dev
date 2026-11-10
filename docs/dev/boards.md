@@ -418,6 +418,11 @@ Every card in every column is fair game for an agent unless it is labelled
   A card in Review, Verify or Release with no claim waits for that stage's
   role. A claim means the role is working it.
 - Blocked: waiting on an answer.
+  - A card moved to Blocked keeps its owner and keep-alive loop. `dev board
+    ask` ends them, and so does a move out of Blocked from the machine
+    holding the claim. A take from elsewhere is refused with the owner and
+    the lease end, as in `task owned by NAME until TIME`, until the lease
+    lapses.
   - `needs:human` is yours alone, and only a question for you uses `dev board
     ask`. A question between agents is a blocked note holding the numbered
     menu.
