@@ -88,6 +88,19 @@ local function state(home, id)
     end
 end
 
+local function label_owner_hold(home, id)
+    local file = home .. "/state/dev/boards/" .. BOARD .. ".json"
+    local doc = assert(json.decode(assert(fs.read(file), "read failed")), "decode failed")
+    for _, card in ipairs(doc.cards) do
+        if card.id:sub(1, #id) == id then
+            card.labels = card.labels or {}
+            card.labels[#card.labels + 1] = "needs:human"
+            return assert(fs.write(file, assert(json.encode(doc), "encode failed")))
+        end
+    end
+    error("no card " .. id)
+end
+
 local function done_notes(comments)
     local found = {}
     for _, comment in ipairs(comments) do
@@ -169,5 +182,36 @@ if devos.which("jj") then
         testing.eq(code, 2, out)
         testing.ok(out:find("needs a command after --", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    end)
+
+    testing.test("ship writes no note for a refused move", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        label_owner_hold(home, id)
+        for _ = 1, 2 do
+            local out, code = dev(root, home, { "board", "ship" })
+            testing.eq(code, 1, out)
+            testing.ok(out:find("waits on the owner", 1, true), out)
+            testing.ok(out:find("left in Release", 1, true), out)
+            testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+            testing.eq(#done_notes(select(2, state(home, id))), 0)
+        end
+    end)
+
+    testing.test("a ship rerun after a refused move writes one note", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        label_owner_hold(home, id)
+        local out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 1, out)
+        must(dev(root, home, { "board", "label", id, "--remove", "needs:human" }))
+        out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 0, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+        testing.eq(#done_notes(select(2, state(home, id))), 1)
     end)
 end

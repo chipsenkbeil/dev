@@ -3442,16 +3442,29 @@ local function ship_batch(backend, cards)
     local commit = land.trunk_head(backend.root)
     local text = commit and ("Shipped in trunk commit " .. land.short(commit) .. ".")
         or "Shipped. Trunk could not be read, so the commit is unknown."
-    local moved, kept, ok = {}, {}, true
+    local moved, kept, stranded, ok = {}, {}, {}, true
     for _, card in ipairs(cards) do
         local short = card.id:sub(1, board.MIN_PREFIX)
         if done_refusal(card) then
             kept[#kept + 1] = "  " .. short .. " " .. card.name
         else
-            local noted, why = backend:note(card.id, text, nil, { kind = "done" })
-            local result = noted and move_card(backend, { card.id, backend.roles:done_column() })
-            if result and not result.code then
+            local result = move_card(backend, { card.id, backend.roles:done_column() })
+            local moved_ok = result ~= nil and not result.code
+            local noted, why = moved_ok, nil
+            if moved_ok then
+                noted, why = backend:note(card.id, text, nil, { kind = "done" })
+            end
+            if moved_ok and noted then
                 moved[#moved + 1] = "  " .. short .. " " .. card.name
+            elseif moved_ok then
+                ok = false
+                stranded[#stranded + 1] = "  "
+                    .. short
+                    .. " "
+                    .. card.name
+                    .. " ("
+                    .. (why or "the note was not written")
+                    .. ")"
             else
                 ok = false
                 kept[#kept + 1] = "  "
@@ -3477,6 +3490,14 @@ local function ship_batch(backend, cards)
     if #kept > 0 then
         lines[#lines + 1] = "left in " .. backend.roles.release .. ":"
         for _, line in ipairs(kept) do
+            lines[#lines + 1] = line
+        end
+    end
+    if #stranded > 0 then
+        lines[#lines + 1] = "moved to "
+            .. backend.roles:done_column()
+            .. " with no done note, write it by hand:"
+        for _, line in ipairs(stranded) do
             lines[#lines + 1] = line
         end
     end
