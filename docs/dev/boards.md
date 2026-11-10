@@ -435,12 +435,19 @@ cd ~/projects/demo && dev board init --admin --name demo
 ## Columns, cards and sizes
 
 The standard columns are Icebox, Backlog, Ready, In Progress, Review, Verify,
-Release, Blocked and Done. A finished column is any column the backend marks
-done (`is_done` on Pomb, the same flag in a local board's file), and a board may
-have several: `ls` hides all of them, `stale` never lists their cards, and a
-blocker in one no longer blocks. The other roles come from a `[board.columns]`
-table, read with the project file over the user file, and each role defaults to
-its standard name, which `dotfiles/bin/.config/dev/config.toml` ships:
+Release, Blocked and Done.
+
+A finished column is any column the backend marks done (`is_done` on Pomb, the
+same flag in a local board's file). A board may have several, and for all of
+them:
+
+- `ls` hides their cards.
+- `stale` never lists their cards.
+- A blocker in one no longer blocks.
+
+The other roles come from a `[board.columns]` table, read with the project file
+over the user file. Each role defaults to its standard name, which
+`dotfiles/bin/.config/dev/config.toml` ships:
 
 ```toml
 [board.columns]
@@ -454,64 +461,74 @@ release = "Release"
 blocked = "Blocked"
 ```
 
-A project whose board renames a column sets the role to the new name, and may
-add `done = "Shipped"` to name the finished column `discard` moves a card to,
-else `discard` uses the first finished column in board order. A column argument
-is a column's name in any case, a finished column's name or a role word:
-`icebox`, `backlog`, `ready`, `progress`, `review`, `verify`, `release`,
-`blocked` or `done`. `dev board init` lays out the mapped names, with the mapped
-`done` (else Done) marked finished. The rules in this guide say Ready, Blocked
-and the rest for the roles, whatever the board calls them.
+A project whose board renames a column sets the role to the new name. It may
+add `done = "Shipped"` to name the finished column `discard` moves a card to.
+Without it, `discard` uses the first finished column in board order.
+
+A column argument is a column's name in any case, a finished column's name or a
+role word: `icebox`, `backlog`, `ready`, `progress`, `review`, `verify`,
+`release`, `blocked` or `done`.
+
+`dev board init` lays out the mapped names, with the mapped `done` (else Done)
+marked finished. The rules in this guide say Ready, Blocked and the rest for the
+roles, whatever the board calls them.
 
 Every card in every column is fair game for an agent unless it is labelled
 `needs:human`. What each column means, in the order a card travels:
 
-- Icebox: an idea, maybe later. A scoping agent sharpens, sizes and promotes
-  cards to Backlog. A `needs:human` card here is an idea you want to flesh out
-  yourself.
-- Backlog: wanted, not ready to run. A card enters with a size, the card
-  format v2 sections and an outcome. A planner refines the description, the
-  outcomes and the checks, re-sizes it if needed (splitting a red card, which
-  may become an epic over its children) and moves it to Ready.
-- Ready: an agent can run it with no questions: size 1 to 3, v2, 3 to 7 outcomes (1 to 3 for an
-  epic) and a checks row, which `dev board` enforces. The top card is next, and the
-  order within Ready is the priority. A runner takes it by size: yellow by a
-  haiku agent, green and blue by a sonnet agent.
+- Icebox: an idea, maybe later.
+  - A scoping agent sharpens, sizes and promotes cards to Backlog.
+  - A `needs:human` card here is an idea you want to flesh out yourself.
+- Backlog: wanted, not ready to run.
+  - A card enters with a size, the card format v2 sections and an outcome.
+  - A planner refines the description, the outcomes and the checks, and
+    re-sizes the card if needed (splitting a red card, which may become an
+    epic over its children).
+  - The planner then moves it to Ready.
+- Ready: an agent can run it with no questions.
+  - It has size 1 to 3, v2, 3 to 7 outcomes (1 to 3 for an epic) and a checks
+    row, which `dev board` enforces.
+  - The top card is next, and the order within Ready is the priority.
+  - A runner takes it by size: yellow by a haiku agent, green and blue by a
+    sonnet agent.
 - In Progress: an agent holds the card, under its name. Only the claimant works
   it.
-- Review: the change is under review or ci. The claimant dispatches the
-  reviewers, and when every review is clean and the check passes it moves the
-  card to Verify. Still the claimant's.
+- Review: the change is under review or ci.
+  - The claimant dispatches the reviewers.
+  - When every review is clean and the check passes, it moves the card to
+    Verify. The card stays the claimant's.
 - Verify: a verifier ticks the outcomes from the ci logs while the card sits
   here. Then `dev board land` lands it and moves the card to Release, or to
   Done when `[board.land] deploys` is not true.
-- Release: where `[board.land] deploys` is true, land sends a card to Release,
-  and it waits there to go live. `dev board ship` runs the release command
-  or the `[board.release]` checks rows once and moves every card with all
-  outcomes ticked to Done. `dev board move CARD done` moves one card and
-  refuses while an outcome is unticked.
-  A card in Review, Verify or Release with no claim waits for that stage's
-  role. A claim means the role is working it.
+- Release: where `[board.land] deploys` is true, land sends a card to Release
+  and it waits there to go live.
+  - `dev board ship` runs the release command or the `[board.release]` checks
+    rows once and moves every card with all outcomes ticked to Done.
+  - `dev board move CARD done` moves one card and refuses while an outcome is
+    unticked.
+  - A card in Review, Verify or Release with no claim waits for that stage's
+    role. A claim means the role is working it.
 - Blocked: waiting on an answer.
   - A card moved to Blocked keeps its owner and keep-alive loop. `dev board
     ask` ends them, and so does a move out of Blocked from the machine
-    holding the claim. A take from elsewhere is refused with the owner and
-    the lease end, as in `task owned by NAME until TIME`, until the lease
-    lapses.
+    holding the claim.
+  - A take from elsewhere is refused with the owner and the lease end, as in
+    `task owned by NAME until TIME`, until the lease lapses.
   - `needs:human` is yours alone, and only a question for you uses `dev board
     ask`. A question between agents is a blocked note holding the numbered
     menu.
-  - `needs:planner` is for a planner. An implementer or reviewer who doubts a
-    card's plan, an outcome above all, writes why in a blocked note holding
-    the numbered menu of choices, moves the card to Blocked and labels it, and
-    never rewords or deletes the outcome. A planner who did not
-    build the card finds it with `dev board next --column blocked --for
-    planner`, parks on `timeout 86400 dev board wait --for planner`, moves it to
-    Backlog, keeps or rewords the outcome there or asks the lead to delete it,
-    then moves it back to Ready. The agent that writes the outcomes never ticks
-    them, a verifier does. A planner who cannot settle it runs
-    `dev board escalate CARD TEXT`,
-    which becomes `needs:lead`.
+  - `needs:planner` is for a planner. An implementer or reviewer who doubts
+    a card's plan, an outcome above all, writes why in a blocked note holding
+    the numbered menu of choices, moves the card to Blocked and labels it.
+    They never reword or delete the outcome.
+  - A planner who did not build the card finds it with `dev board next
+    --column blocked --for planner` and parks on `timeout 86400 dev board
+    wait --for planner`. The planner moves it to Backlog, keeps or rewords
+    the outcome there or asks the lead to delete it, then moves it back to
+    Ready.
+  - The agent that writes the outcomes never ticks them, a verifier does.
+  - A planner who cannot settle it runs `dev board escalate CARD TEXT`, which
+    becomes `needs:lead`.
   - `needs:lead` is for a higher-tier agent, which answers and moves the card
     out.
   - A lead finds one with `dev board next --column blocked`, takes it before
@@ -519,63 +536,93 @@ Every card in every column is fair game for an agent unless it is labelled
   - A lead that cannot answer asks you with `dev board ask`, which leaves the
     card in Blocked with `needs:human`. The chain is `needs:planner`,
     `needs:lead`, `needs:human`.
-- Done: on main (and live where the project deploys), answered, or
-  dropped with a note.
+- Done: on main (and live where the project deploys), answered, or dropped
+  with a note.
 
 An agent with nothing Ready takes the top of Backlog and then Icebox, planning
-the card first. It reads each card's comments before taking one. A steering
-comment of yours (one that gives direction) is followed. The agent folds it into
-the description and notes the decision. When it lists options, the agent picks
-the one you favour and says why in the decision note. A list with no favoured
-option is a choice only you can make.
+the card first. It reads each card's comments before taking one.
 
-A card is parked only when one of your comments defers it ("not now", "after X")
-and no later comment lifts that deferral, or when a comment holds a choice only
-you can make. A steer does not lift a deferral unless it says so. Parking sends
-the card to Icebox or Blocked with `needs:human`, and the agent leaves it alone.
+A steering comment of yours (one that gives direction) is followed. The agent
+folds it into the description and notes the decision.
+
+When a steering comment lists options, the agent picks the one you favour and
+says why in the decision note. A list with no favoured option is a choice only
+you can make.
+
+A card is parked only in two cases:
+
+- One of your comments defers it ("not now", "after X") and no later comment
+  lifts that deferral. A steer does not lift a deferral unless it says so.
+- A comment holds a choice only you can make.
+
+Parking sends the card to Icebox or Blocked with `needs:human`, and the agent
+leaves it alone.
 
 A plain question of yours is answered in a note, and the agent carries on with
 the card. It parks only if the answer needs a choice only you can make, and
 whether to defer a card is such a choice.
 
 `needs:human` means only a human can answer. No agent answers for you on such a
-card, and another agent relaying your view never counts. Agents never move, edit
-or relabel one, except to set its size, and the label sits only in Blocked or
-Icebox, never Backlog. dev enforces it: `edit` and `rename` refuse a card
-labelled `needs:human`, and `move` refuses one headed for another column (exit
-1). `label CARD needs:human` and `add --label needs:human` refuse a card
-outside Blocked and Icebox, so move it there first and add the label after.
-Only you move it out.
-Setting the size is the third exception: an agent may run `dev board size CARD
+card, and another agent relaying your view never counts.
+
+Agents never move, edit or relabel such a card, except to set its size. The
+label sits only in Blocked or Icebox, never Backlog.
+
+dev enforces this:
+
+- `edit` and `rename` refuse a card labelled `needs:human`.
+- `move` refuses one headed for another column (exit 1).
+- `label CARD needs:human` and `add --label needs:human` refuse a card outside
+  Blocked and Icebox, so move it there first and add the label after.
+
+Only you move the card out.
+
+Setting the size is the third exception. An agent may run `dev board size CARD
 1`, `2`, `3` or `3+` on such a card and change nothing else (until Pomb's
 `fff0e011` ships, Pomb refuses it on a locked card and dev prints the reason).
-A size answers no question, and an agent may change it to another size. An
-agent never sets `unsized` on such a card. You set `unsized` yourself, with
-`dev board size` in Icebox. The other two both end with an agent removing the
-label: an agent that you answered directly in its own session removes the
-label through `dev board answer CARD --choice N --quote TEXT` and carries on, and once you move a card
-out of Blocked or Icebox, the first agent to see it elsewhere removes the
-label and follows that column. `stale` lists such a card under `moved by the
-owner`. Your own comment on the card, or that session answer, counts as the
-answer only when it settles every open choice. A partial answer keeps the label. A `needs:human`
-card whose newest comment is yours counts as answered and waits for your
-move.
+A size answers no question, so an agent may change it to another size.
 
-Pomb 0.5.59 locks a card labelled `needs:human`: it answers 403 `card_locked`
-to a token for a comment (create, and edit or delete of its own), a move, a
-reorder and a size change, and only a label change passes. dev prints that
-reason instead of a generic failure.
+An agent never sets `unsized` on such a card. You set `unsized` yourself, with
+`dev board size` in Icebox.
+
+The other two exceptions both end with an agent removing the label:
+
+- An agent that you answered directly in its own session removes the label
+  through `dev board answer CARD --choice N --quote TEXT` and carries on.
+- Once you move a card out of Blocked or Icebox, the first agent to see it
+  elsewhere removes the label and follows that column. `stale` lists such a
+  card under `moved by the owner`.
+
+Your own comment on the card, or that session answer, counts as the answer only
+when it settles every open choice. A partial answer keeps the label. A
+`needs:human` card whose newest comment is yours counts as answered and waits
+for your move.
+
+Pomb 0.5.59 locks a card labelled `needs:human`. It answers 403 `card_locked`
+to a token for these, and only a label change passes:
+
+- a comment (create, and edit or delete of its own)
+- a move
+- a reorder
+- a size change
+
+dev prints that reason instead of a generic failure.
 
 An agent asks you with `dev board ask CARD --question TEXT --choice
 COLUMN=LABEL... --recommend N --why TEXT`. It sends Pomb's structured question:
-the question, two to ten numbered choices that each name the column the card
-moves to, the recommended choice and why the agent cannot decide. Pomb moves
-the card to the column marked blocked, which `dev board init` sets, adds
-`needs:human` and refuses a part that is missing in its own words, which dev
-prints as they come (exit 1). Pomb refuses `note
---kind question` without that shape, so `ask` is the only way to put a
-question to you. `add --label needs:human` still creates the card and its
-outcomes, then sets the label.
+
+- the question
+- two to ten numbered choices that each name the column the card moves to
+- the recommended choice
+- why the agent cannot decide
+
+Pomb moves the card to the column marked blocked, which `dev board init` sets,
+and adds `needs:human`. It refuses a part that is missing in its own words,
+which dev prints as they come (exit 1).
+
+Pomb refuses `note --kind question` without that shape, so `ask` is the only
+way to put a question to you. `add --label needs:human` still creates the card
+and its outcomes, then sets the label.
 
 Once Pomb accepts the question, `ask` ends the owner lease on the card and
 stops its keep-alive loop, when this machine holds the claim. The card waits in
@@ -583,139 +630,195 @@ Blocked with no lease held by the asking agent, so your answer does not depend
 on that agent's loop.
 
 `dev board answer CARD --choice N --quote TEXT` records your answer through
-Pomb's answer API. The quote must hold your own words and may not be empty:
-dev refuses an empty one before it calls Pomb. Pomb removes `needs:human`,
-moves the card to the destination of choice N and stores the answer as relayed,
-with the token's name and the quote. It refuses a card with no open question.
-You can also answer in the browser.
+Pomb's answer API. The quote must hold your own words and may not be empty. dev
+refuses an empty one before it calls Pomb.
 
-Until Pomb's `fff0e011` ships, `order` and `size` fail on such a card,
-whatever the rule says. `label --remove needs:human` stays allowed in any
-column.
+Pomb removes `needs:human`, moves the card to the destination of choice N and
+stores the answer as relayed, with the token's name and the quote. It refuses a
+card with no open question. You can also answer in the browser.
 
-An epic is a card of kind epic, which `add --epic` creates and `epic CARD` turns
-an existing card into, and a `parent` link needs one. `ls` and
-`next` print `[epic N of M open] ` before its name, and `[epic] ` while it has
-no children, and `show` prints `kind: epic, N open` above the `parent` and
-`children` lines. Once every child is Done it enters Ready and takes a claim
-like any card. While a child is open, `next` never offers it, in any column, on
-Pomb or a local board. It needs 1 to 3 outcomes as its final check to enter
-Ready, where any other card needs 3 to 7, and it is claimed like any card once
-its children are done. `move CARD done` closes it once every child is Done and
-refuses it while a child is open.
+Until Pomb's `fff0e011` ships, `order` and `size` fail on such a card, whatever
+the rule says. `label --remove needs:human` stays allowed in any column.
+
+An epic is a card of kind epic. `add --epic` creates one, `epic CARD` turns an
+existing card into one, and a `parent` link needs one.
+
+- `ls` and `next` print `[epic N of M open] ` before its name, and `[epic] `
+  while it has no children.
+- `show` prints `kind: epic, N open` above the `parent` and `children` lines.
+- While a child is open, `next` never offers the epic, in any column, on Pomb
+  or a local board.
+- It needs 1 to 3 outcomes as its final check to enter Ready, where any other
+  card needs 3 to 7.
+- Once every child is Done it enters Ready and takes a claim like any card.
+- `move CARD done` closes it once every child is Done and refuses it while a
+  child is open.
 
 To push a card later, drag it lower in Ready.
 
 A card is named by its id or by a prefix of at least 8 characters that is unique
-on the board. `ls` prints the id prefix, column, size, labels and name, with
-Done left out unless `--column Done` asks for it. When a listed card has Done
-when outcomes, a column such as `1/3` (ticked over all) follows the labels. The
-size is the card colour's palette label, or `unsized`. `next` prints the top
-Ready card that is unclaimed, not blocked and not labelled `needs:human`, with
-its comment count and how many of those comments are the owner's after the card
-line (`2 comments, 1 the owner's`, or `1 comment` for one), or `no ready cards`.
-A local board has no owner comments, so it always counts 0 as the owner's.
-`next --column backlog`, `icebox`, `review`, `verify` and `release` take the top
-such card of those columns instead, or print `no cards in <column>`.
-`next --column blocked` prints the top unclaimed card labelled `needs:lead`,
-never one that also carries `needs:human`, or `no cards in Blocked`, and with
-`--for planner` the top such card labelled `needs:planner`. Any other
-column is exit 2.
+on the board.
 
-`add` puts a card in Backlog unless `--column` names another column, and writes
+`ls` prints the id prefix, column, size, labels and name, with Done left out
+unless `--column Done` asks for it. When a listed card has Done when outcomes,
+a column such as `1/3` (ticked over all) follows the labels. The size is the
+card colour's palette label, or `unsized`.
+
+`next` prints the top Ready card that is unclaimed, not blocked and not labelled
+`needs:human`. After the card line it prints its comment count and how many of
+those comments are the owner's (`2 comments, 1 the owner's`, or `1 comment` for
+one). With no card it prints `no ready cards`.
+
+A local board has no owner comments, so it always counts 0 as the owner's.
+
+`next --column` changes what it picks:
+
+- `backlog`, `icebox`, `review`, `verify` and `release` take the top such card
+  of that column, or print `no cards in <column>`.
+- `blocked` prints the top unclaimed card labelled `needs:lead`, never one that
+  also carries `needs:human`, or `no cards in Blocked`. With `--for planner` it
+  prints the top such card labelled `needs:planner`.
+- Any other column is exit 2.
+
+`add` puts a card in Backlog unless `--column` names another column. It writes
 the three card format v2 headings into the description (Problem, Change and Out
-of scope), filling Problem from `--description`. A description that already
-holds a heading or the v1 Done when is kept as it is, and an Icebox card gets
-the text as given, with no headings. Each `--done-when TEXT` (repeatable, at
-most 7) is a Done when outcome: `add` creates the card, then appends one Pomb
-subtask per item. If an append fails, `add` exits 1 and names the card and the
-outcome it stopped at, for example
-`11111111 was added to Backlog but outcome 2 of 3 was not: ...`. Nothing is
-rolled back (an agent token cannot delete a card, and deletes
-a subtask only if that token made it) and the failure
-is never queued, so a replay cannot add the card twice. A queued add that never
-reached Pomb replays with all its items. With `--column ready`, Pomb gets the
-card in Backlog first and the move to Ready comes after the subtasks. `note`
-adds a comment, of kind agent unless `--kind` says otherwise. `move` puts the
-card at the top of the column.
+of scope), filling Problem from `--description`.
+
+A description that already holds a heading or the v1 Done when is kept as it
+is. An Icebox card gets the text as given, with no headings.
+
+Each `--done-when TEXT` (repeatable, at most 7) is a Done when outcome. `add`
+creates the card, then appends one Pomb subtask per item. If an append fails,
+`add` exits 1 and names the card and the outcome it stopped at, for example
+`11111111 was added to Backlog but outcome 2 of 3 was not: ...`.
+
+Nothing is rolled back (an agent token cannot delete a card, and deletes a
+subtask only if that token made it). The failure is never queued, so a replay
+cannot add the card twice. A queued add that never reached Pomb replays with all
+its items.
+
+With `--column ready`, Pomb gets the card in Backlog first and the move to Ready
+comes after the subtasks. `note` adds a comment, of kind agent unless `--kind`
+says otherwise. `move` puts the card at the top of the column.
 
 `order CARD...` sets the top of one column in a single call. Every named card
 must sit in the same column. Each goes to position 0, 1, 2 and so on in the
-order named, and the cards not named keep their relative order below. It prints
-the column's cards after the change, one row each as `ls` does. A card that is
-unknown, named twice or in another column than the first fails with exit 1
-before any move, and no card is touched. A move that fails partway leaves the
-cards before it in place. A queued `order` replays like a `move`. Planners keep
-Icebox and Backlog in priority order with it.
+order named, and the cards not named keep their relative order below.
+
+It prints the column's cards after the change, one row each as `ls` does. A
+queued `order` replays like a `move`. Planners keep Icebox and Backlog in
+priority order with it.
+
+These fail with exit 1 before any move, and no card is touched:
+
+- a card that is unknown
+- a card named twice
+- a card in another column than the first
+
+A move that fails partway leaves the cards before it in place.
 
 `add`, `note` and `edit` warn on standard error, and still write, when the prose
 holds a hex id, a hash or a path, which the v2 format keeps in the Change
-section only. One line names each word. A hex id is 7 or more hex characters
-with a digit and a letter. A path holds a `/` and starts with `~/`, `./` or `/`
-or ends in an extension. A URL is exempt. Text under `## Change` is not scanned,
-a note is all prose, an outcome is prose, and `--checks` is never scanned.
+section only. One line names each word.
+
+- A hex id is 7 or more hex characters with a digit and a letter.
+- A path holds a `/` and starts with `~/`, `./` or `/` or ends in an extension.
+- A URL is exempt.
+- Text under `## Change` is not scanned, a note is all prose, an outcome is
+  prose, and `--checks` is never scanned.
 
 Only Icebox holds a card that is unsized or free-form. Every other column takes
 a card with a size of `1`, `2`, `3` or `3+`, all three v2 headings with text
 under Problem, and, for `add` and `move`, at least one Done when outcome (a v1
-`## Done when` item counts). A `move` of a card whose Pomb outcomes dev
-cannot read is not refused for missing outcomes, except into Done and Ready.
-`dev.board.unplanned` is the one check.
-`add` refuses a card without them and names
-what is missing (exit 2), `move` does the same (exit 1), and `discard` refuses
-an unsized card or one without the headings but does not ask for outcomes (exit
-1), so a card reaches Done unsized only by the Icebox `--reason` case below.
-`size CARD unsized` is refused outside Icebox (exit 1), `edit` refuses a text
-that drops a heading outside Icebox (exit 1), and a move into Icebox always
-works. An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7,
-except that an epic with every child Done closes with none.
+`## Done when` item counts).
 
-Sizing is part of planning, so a card also cannot enter Ready as red.
-`move CARD ready` refuses a card that is unsized (white or no colour) or red,
-more than 3 Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit
-1); a red card is split instead. `add --column ready` without `--size 1`, `2` or
-`3` is a usage error (exit 2).
+A `move` of a card whose Pomb outcomes dev cannot read is not refused for
+missing outcomes, except into Done and Ready. `dev.board.unplanned` is the one
+check.
 
-A card also needs card format v2 to enter Ready: all three headings with text
-under each, no `Change:` or `Out of scope:` line under Problem, and 3 to 7 Done
-when outcomes (subtasks). A card with none is still accepted when its
-description has a v1 `## Done when` checklist item, until the boards are
-converted. `move CARD ready` refuses a card without them and names what is
-missing (exit 1), and `add --column ready` does the same for its description and
-`--done-when` items (exit 2). Icebox cards are free-form, so adding to or moving
-into Icebox is never checked. `add` fills the sections from `--problem`,
-`--change` and `--out-of-scope`, and `--description` cannot go with them. A
-repeated `--change` adds a line each, and a repeated `--problem` or
-`--out-of-scope` is refused.
+The refusals for a card that lacks these:
+
+- `add` refuses a card without them and names what is missing (exit 2).
+- `move` does the same (exit 1).
+- `discard` refuses an unsized card or one without the headings but does not ask
+  for outcomes (exit 1), so a card reaches Done unsized only by the Icebox
+  `--reason` case below.
+- `size CARD unsized` is refused outside Icebox (exit 1).
+- `edit` refuses a text that drops a heading outside Icebox (exit 1).
+- A move into Icebox always works.
+
+An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7, except
+that an epic with every child Done closes with none.
+
+Sizing is part of planning, so a card also cannot enter Ready as red. `move CARD
+ready` refuses a card that is unsized (white or no colour) or red, more than 3
+Pomodori, and says to run `dev board size CARD 1`, `2` or `3` (exit 1). A red
+card is split instead.
+
+`add --column ready` without `--size 1`, `2` or `3` is a usage error (exit 2).
+
+A card also needs card format v2 to enter Ready:
+
+- all three headings with text under each
+- no `Change:` or `Out of scope:` line under Problem
+- 3 to 7 Done when outcomes (subtasks)
+
+A card with no outcomes is still accepted when its description has a v1
+`## Done when` checklist item, until the boards are converted.
+
+`move CARD ready` refuses a card without them and names what is missing (exit
+1). `add --column ready` does the same for its description and `--done-when`
+items (exit 2).
+
+Icebox cards are free-form, so adding to or moving into Icebox is never
+checked. `add` fills the sections from `--problem`, `--change` and
+`--out-of-scope`, and `--description` cannot go with them. A repeated `--change`
+adds a line each, and a repeated `--problem` or `--out-of-scope` is refused.
 
 A card needs a checks row to enter Ready too. The checks live in the board's
 `dev.checks` field, a table with a `run` column, and `add --checks CMD`
-(repeatable) writes one row per command. `move CARD ready` refuses a card with
-no row (exit 1), `add --column ready` without `--checks` is a usage error (exit
-2), and on a Pomb board that has no checks field both say so and point to
-`dev board init`, which defines the field once and never touches one that
-exists. `checks CARD CMD...` replaces the rows of a card that is already on the
-board (one row per command, so it also adds a second command) and prints
-`set checks <id prefix>, N rows` (`1 row` for one). With no command it is a
-usage error (exit 2), to keep anyone from clearing the rows by accident. It
-sends the claim's fence when this machine holds one, gives the same refusal as a
-move into Ready on a Pomb board with no checks field, and is queued while Pomb
-is unreachable, since sending the same rows twice changes nothing more. Both
-`checks` and `add --checks` apply the write-time refusal of `dev board check`
-to every row, so a row holding a shell character (a quote, a backslash, `*`,
-`|` and the rest), starting with a dotted run such as `dev.--remote.lint` or
-passing a word to `dev --remote test` or `dev --remote lint` before the double
-dash is a usage error (exit 2) naming the row and nothing is written. A test
-name goes after the double dash, as in `dev --remote test -- NAME`. A
-leading `! ` is allowed. Rows already on a card are not rewritten. `show`
-prints the rows under the description. Icebox is exempt.
+(repeatable) writes one row per command.
+
+- `move CARD ready` refuses a card with no row (exit 1).
+- `add --column ready` without `--checks` is a usage error (exit 2).
+- On a Pomb board that has no checks field, both say so and point to
+  `dev board init`, which defines the field once and never touches one that
+  exists.
+
+`checks CARD CMD...` replaces the rows of a card that is already on the board
+(one row per command, so it also adds a second command). It prints
+`set checks <id prefix>, N rows` (`1 row` for one).
+
+- With no command it is a usage error (exit 2), to keep anyone from clearing
+  the rows by accident.
+- It sends the claim's fence when this machine holds one.
+- It gives the same refusal as a move into Ready on a Pomb board with no checks
+  field.
+- It is queued while Pomb is unreachable (sending the same rows twice changes
+  nothing more).
+
+Both `checks` and `add --checks` apply the write-time refusal of
+`dev board check` to every row. A row is a usage error (exit 2) naming the row,
+and nothing is written, when it:
+
+- holds a shell character (a quote, a backslash, `*`, `|` and the rest)
+- starts with a dotted run such as `dev.--remote.lint`
+- passes a word to `dev --remote test` or `dev --remote lint` before the double
+  dash
+
+A test name goes after the double dash, as in `dev --remote test -- NAME`. A
+leading `! ` is allowed. Rows already on a card are not rewritten.
+
+`show` prints the rows under the description. Icebox is exempt.
 
 A planner also runs each new rg row against a small sample of the intended
-result and confirms it passes, matches behaviour rather than a name the builder
-may choose, and checks every rule number or section the card names against the
-file. A must-not-match row (`rg --files-without-match`) names one file, as with
-several it passes when any one lacks the text, and the planner reads the code
-each Change bullet relies on before filing.
+result and confirms it passes. The planner also confirms that the row matches
+behaviour rather than a name the builder may choose, and checks every rule
+number or section the card names against the file.
+
+A must-not-match row (`rg --files-without-match`) names one file, as with
+several it passes when any one lacks the text. The planner reads the code each
+Change bullet relies on before filing.
 
 Three more card fields are set the same way, each replacing the field's
 whole value under the claim's fence, and queued while Pomb is unreachable. A
