@@ -1482,9 +1482,10 @@ end
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@param column string the column it moves to
+---@param kids {done: integer, total: integer}? the epic's children from its task read
 ---@return dev.cmd.board.Result? err the refusal, nil when the move is allowed
-local function children_refusal(backend, card, column)
-    local unfinished = board.open_children(card.epic)
+local function children_refusal(backend, card, column, kids)
+    local unfinished = board.open_children(kids)
     if unfinished == 0 or card.column == column then
         return nil
     end
@@ -1503,7 +1504,7 @@ local function children_refusal(backend, card, column)
                         row.name,
                         kind,
                         unfinished,
-                        card.epic.total
+                        kids.total
                     )
                 )
             )
@@ -1630,9 +1631,17 @@ local function move_card(backend, args, opts)
             return refused
         end
     end
-    local children = card.epic and card.epic.total or 0
-    local epic = card.epic ~= nil
-    local closing = to_done and board.children_closed(card.epic)
+    local epic = card.epic ~= nil or card.kind == board.Kind.EPIC
+    local kids
+    if epic then
+        local family, why = backend:family(card.id)
+        if not family then
+            return to_done and unqueued(failure(why)) or failure(why)
+        end
+        kids = family.children
+    end
+    local children = kids and kids.total or 0
+    local closing = to_done and board.children_closed(kids)
     if column == roles.ready and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
@@ -1667,7 +1676,7 @@ local function move_card(backend, args, opts)
         end
     end
     if not (opts and opts.drop) then
-        local refused = children_refusal(backend, card, column)
+        local refused = children_refusal(backend, card, column, kids)
         if refused then
             return refused
         end

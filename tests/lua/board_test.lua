@@ -1171,7 +1171,9 @@ testing.test("an epic with no children needs outcomes to close", function()
     local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
-    testing.eq(#backend.calls, 0)
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the refused move was sent")
+    end
 end)
 
 testing.test("an epic with every child Done still needs 3 or fewer outcomes to close", function()
@@ -1191,7 +1193,9 @@ testing.test("an epic with every child Done still needs 3 or fewer outcomes to c
         result.message:find("1 to 3 Done when outcomes for an epic, not 4", 1, true),
         result.message
     )
-    testing.eq(#backend.calls, 0)
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the refused move was sent")
+    end
 end)
 
 testing.test("discard closes an epic whose children are open", function()
@@ -2409,7 +2413,9 @@ testing.test("an epic with no outcomes or more than 3 is refused with the epic r
         if count > 0 then
             testing.ok(result.message:find("not " .. count, 1, true), result.message)
         end
-        testing.eq(#backend.calls, 0)
+        for _, call in ipairs(backend.calls) do
+            testing.ok(call[1] ~= "move", "the refused move was sent")
+        end
     end
 end)
 
@@ -5145,6 +5151,27 @@ testing.test("epic_move_pomb_refusal", function()
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
     testing.eq(code, 1, out)
     testing.ok(out:find(text, 1, true), out)
+end)
+
+testing.test("an epic closes when the task read shows every child Done", function()
+    local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(3) })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
+    testing.eq(code, 0, out)
+    testing.ok(
+        read(root, "calls"):find("/api/tasks/" .. ID_A .. "/move", 1, true),
+        read(root, "calls")
+    )
+end)
+
+testing.test("an epic with an open child in the task read is refused", function()
+    local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is an epic and cannot enter", 1, true), out)
+    testing.ok(out:find("2 of 3 children are open", 1, true), out)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
 end)
 
 testing.test("epic_reopen_out_of_done", function()
