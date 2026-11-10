@@ -1697,6 +1697,9 @@ function Backend:release(id, fence)
     if not name then
         return true
     end
+    if task.owner.holder.kind == "human" then
+        return nil, "The card is held by " .. name .. ". Only that member can release it in Pomb."
+    end
     local done
     done, message =
         self:__request("POST", "/api/tasks/" .. id .. "/owner/release", { name = name }, fence)

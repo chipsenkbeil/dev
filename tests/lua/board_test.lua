@@ -6242,6 +6242,26 @@ testing.test("release without a taken claim is a plain error", function()
     testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
 end)
 
+testing.test("release refuses a card a person owns", function()
+    local root, home = sandbox()
+    dev(root, home, { "board", "take", "11111111-a" })
+    local person = (
+        TASK:gsub(
+            '"labels":%["docs"%]',
+            '"labels":["docs"],"owner":{"holder":{"kind":"human","id":7},'
+                .. '"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}',
+            1
+        )
+    )
+    assert(fs.write(root .. "/task.json", person))
+    local out, code = dev(root, home, { "board", "release", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The card is held by member 7.", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
+    assert(fs.write(root .. "/task.json", TASK))
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
 testing.test("move out of progress stops the loop and sends the fence", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
