@@ -298,22 +298,25 @@ dash_holding_launcher() {
 }
 
 @test "ctrl-c before the first frame under dash stops the job with 130" {
+    local HOLD_SPINS=2000000
     dash_holding_launcher
-    local run inner="$BATS_TEST_TMPDIR/inner-early.sh" mark="$OUT.launched" hold="$BATS_TEST_TMPDIR/hold.sh"
+    local run inner="$BATS_TEST_TMPDIR/inner-early.sh" mark="$OUT.launched" hold="$BATS_TEST_TMPDIR/hold.sh" caught="$OUT.caught"
     {
         printf ': >"$LAUNCH_MARK"\n'
         printf 'n=0\n'
-        printf 'while [ -z "$hit" ] && [ "$n" -lt 2000000 ]; do n=$((n+1)); done\n'
+        printf 'while [ -z "$hit" ] && [ "$n" -lt %s ]; do n=$((n+1)); done\n' "$HOLD_SPINS"
+        printf '[ -z "$hit" ] || : >"$LAUNCH_CAUGHT"\n'
     } >"$hold"
     {
-        printf 'export LAUNCH_MARK=%q LAUNCH_HOLD=%q\n' "$mark" "$hold"
+        printf 'export LAUNCH_MARK=%q LAUNCH_HOLD=%q LAUNCH_CAUGHT=%q\n' "$mark" "$hold" "$caught"
         printf 'luajit %q sh -c %q\n' "$SPIN" 'sleep 7.654; echo done'
         printf 'echo $? >%q\n' "$OUT.status"
     } >"$inner"
     for run in 1 2 3 4 5; do
-        rm -f "$OUT.status" "$mark"
+        rm -f "$OUT.status" "$mark" "$caught"
         pty_run '\003' 0 0 "$inner" "$mark" "$OUT.status" >"$OUT.pty"
         status_is_130
+        [ -e "$caught" ]
         process_gone 'sleep 7.654'
     done
 }
