@@ -6,6 +6,7 @@ local commands = require("dev.cmd.board")
 local devos = require("dev.os")
 local fs = require("dev.fs")
 local localboard = require("dev.board.localboard")
+local pomb = require("dev.board.pomb")
 local store = require("dev.board.store")
 local support = require("support")
 local turn = require("dev.board.turn")
@@ -14,6 +15,7 @@ local LEASE_SECONDS = 3
 local PAST_LEASE_SECONDS = 4
 local PAST_HOLD_SECONDS = 2
 local TURN_HOLD_SECONDS = 600
+local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 local clock
 
@@ -537,4 +539,93 @@ testing.test("turn names the live owner as its holder", function()
     restore()
     testing.eq(turn.holder(backend), nil)
     testing.eq(assert(turn.take(backend, "beta", "bbbb2222")).holder, "beta")
+end)
+
+local function pomb_root()
+    local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    local boards = '[{"id":"board-1","name":"dotfiles","archived":false}]'
+    local detail = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
+        .. '{"id":"col-icebox","name":"'
+        .. support.COLUMN_NAME.ICEBOX
+        .. '"},'
+        .. '{"id":"col-done","name":"'
+        .. support.COLUMN_NAME.DONE
+        .. '","is_done":true}]}'
+    local card = '{"id":"'
+        .. ID_A
+        .. '","name":"landing turn","column_id":"col-icebox","position":1,"labels":[]}'
+    local root = support.sandbox({
+        ["boards.json"] = boards,
+        ["detail.json"] = detail,
+        ["colors.json"] = "[]",
+        ["export.json"] = '{"tasks":[' .. card .. "]}",
+        ["task.json"] = card,
+        ["comments.json"] = "[]",
+    }, {})
+    assert(fs.write(root .. "/bin/curl", support.pomb_curl(ID_A, ID_B, ID_C)))
+    assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    return root
+end
+
+local function on_pomb(root, run)
+    local names = { "PATH", "ROOT", "DEV_BOARD_TOKEN" }
+    local previous = {}
+    for _, name in ipairs(names) do
+        previous[name] = os.getenv(name) or ""
+    end
+    ffi.C.setenv("PATH", root .. "/bin:" .. previous.PATH, 1)
+    ffi.C.setenv("ROOT", root, 1)
+    ffi.C.setenv("DEV_BOARD_TOKEN", "pomb_SECRETtoken0123456789", 1)
+    local ok, err = pcall(function()
+        run(assert(pomb.new({
+            url = "https://pomb.example",
+            token = "pass:secrets/worker/token/pomb",
+            name = "dotfiles",
+        })))
+    end)
+    for _, name in ipairs(names) do
+        ffi.C.setenv(name, previous[name], 1)
+    end
+    assert(ok, err)
+end
+
+local function call_to(root, route)
+    for line in (fs.read(root .. "/calls") or ""):gmatch("[^\n]+") do
+        if line:sub(-#route) == route then
+            return line
+        end
+    end
+    return ""
+end
+
+testing.test("taking the turn on Pomb grabs the owner with the turn lease", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        assert(turn.take(backend, "alpha", "aaaa1111"))
+    end)
+    local owner = call_to(root, "/api/tasks/" .. ID_A .. "/owner")
+    testing.ok(owner:find('"ttl_seconds":900', 1, true), owner)
+    testing.ok(owner:find('"name":"alpha"', 1, true), owner)
+end)
+
+testing.test("renewing the Pomb turn sends its fence as If-Owner-Fence", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        local held = assert(turn.take(backend, "alpha", "aaaa1111"))
+        testing.eq(turn.renew(backend, held), true)
+    end)
+    local renewed = call_to(root, "/api/tasks/" .. ID_A .. "/owner/renew")
+    testing.ok(renewed:find("If-Owner-Fence: 7", 1, true), renewed)
+end)
+
+testing.test("ending the Pomb turn releases its owner with the fence", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        local held = assert(turn.take(backend, "alpha", "aaaa1111"))
+        testing.eq(turn.release(backend, held), true)
+    end)
+    local released = call_to(root, "/api/tasks/" .. ID_A .. "/owner/release")
+    testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
+    testing.ok(released:find('"name":"alpha"', 1, true), released)
 end)

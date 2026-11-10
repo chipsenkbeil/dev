@@ -180,4 +180,128 @@ M.COLUMN_NAME = {
     VERIFY = "Verify",
 }
 
+---Build the fake `curl` script that answers Pomb's routes from the files in `$ROOT`.
+---@param first_id string id of the card the task routes answer for
+---@param second_id string id of the card the second page of the card list holds
+---@param links_id string id of the card the link routes answer for
+---@return string script the shell script
+function M.pomb_curl(first_id, second_id, links_id)
+    return [[#!/bin/sh
+printf 'curl %s\n' "$*" >>"$ROOT/calls"
+cat >"$ROOT/stdin"
+for last; do :; done
+status=${HTTP_STATUS:-200}
+case "$last" in
+*/api/boards) body=$(cat "$ROOT/boards.json") ;;
+*/api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
+*/api/boards/board-2) body=$(cat "$ROOT/general.json") ;;
+*/colors) body=$(cat "$ROOT/colors.json") ;;
+*/fields) body=$(cat "$ROOT/fields.json") ;;
+*/export-data) body=$(cat "$ROOT/export.json") ;;
+*/tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. second_id .. [[","column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
+*/tasks\?limit=500) body='{"items":[{"id":"]] .. first_id .. [[","column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
+*/tasks\?*) body='{"items":[{"id":"]] .. first_id .. [["}],"next_cursor":null}' ;;
+*/attachments)
+    body=$(cat "$ROOT/attachments.json")
+    case "$*" in
+    *"-X POST"*)
+        n=$(cat "$ROOT/post_n" 2>/dev/null || echo 0)
+        n=$((n + 1))
+        echo "$n" >"$ROOT/post_n"
+        if [ "$n" -le "$(cat "$ROOT/busy" 2>/dev/null || echo 0)" ]; then
+            body='{"code":"busy","message":"the server is busy"}'
+            status=503
+        elif [ -f "$ROOT/upload_$n.json" ]; then
+            body=$(cat "$ROOT/upload_$n.json")
+        else
+            body=$(cat "$ROOT/upload.json")
+        fi
+        ;;
+    esac
+    ;;
+*/attachments/*)
+    body=
+    if [ -f "$ROOT/detach_body" ]; then
+        body=$(cat "$ROOT/detach_body")
+        status=403
+    fi
+    ;;
+*/api/tasks/]] .. first_id .. [[)
+    body=$(cat "$ROOT/task.json")
+    if [ -f "$ROOT/owner_name" ]; then
+        body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true,\"fence\":7},|")
+    fi
+    case "$*" in
+    *"-X PATCH"*)
+        if [ -f "$ROOT/label_fail" ]; then
+            body='{"message":"nope"}'
+            status=400
+        fi
+        ;;
+    *"-X DELETE"*)
+        if [ -f "$ROOT/delete_body" ]; then
+            body=$(cat "$ROOT/delete_body")
+            status=403
+        fi
+        ;;
+    esac
+    ;;
+*/api/tasks) body=$(cat "$ROOT/task.json") ;;
+*/api/tasks/dddddddd-dddd-4ddd-8ddd-dddddddddddd)
+    body=$(cat "$ROOT/far.json")
+    if [ -f "$ROOT/far_gone" ]; then status=404; fi
+    ;;
+*/api/tasks/]] .. links_id .. [[/links) body=$(cat "$ROOT/holder_links.json") ;;
+*/links) body=$(cat "$ROOT/links.json") ;;
+*/subtasks)
+    body='{"id":"sub-1","name":"x","done":false}'
+    n=$(cat "$ROOT/sub_n" 2>/dev/null || echo 0)
+    n=$((n + 1))
+    echo "$n" >"$ROOT/sub_n"
+    if [ -f "$ROOT/sub_fail" ] && [ "$n" = "$(cat "$ROOT/sub_fail")" ]; then
+        body='{"message":"nope"}'
+        status=400
+    fi
+    ;;
+*/owner/renew)
+    body='{"live":true,"fence":7}'
+    if [ -f "$ROOT/hb_status" ]; then status=$(cat "$ROOT/hb_status"); fi
+    ;;
+*/owner/release) body= ;;
+*/comments/dddddddd*)
+    body='{"message":"not yours"}'
+    status=403
+    if [ -f "$ROOT/locked" ]; then body='{"code":"card_locked","message":"locked"}'; fi
+    ;;
+*/comments/*) body='{"ok":true}' ;;
+*/comments)
+    body=$(cat "$ROOT/comments.json")
+    case "$*" in
+    *"-X POST"*)
+        if [ -f "$ROOT/locked" ]; then
+            body='{"code":"card_locked","message":"locked"}'
+            status=403
+        fi
+        if [ -f "$ROOT/ask_refusal" ]; then
+            body=$(cat "$ROOT/ask_refusal")
+            status=400
+        fi
+        ;;
+    esac
+    ;;
+*/owner)
+    if [ -f "$ROOT/owner_held" ]; then
+        body='{"code":"owner_held","message":"task owned by dotfiles/other until 2999-01-01T00:00:00Z"}'
+        status=409
+    else
+        printf '%s' "$*" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' >"$ROOT/owner_name"
+        body='{"holder":{"kind":"agent","name":"x"},"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}'
+    fi
+    ;;
+*) body='{"ok":true}' ;;
+esac
+printf '%s\n%s' "$body" "$status"
+]]
+end
+
 return M
