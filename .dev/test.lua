@@ -188,12 +188,14 @@ devos.run({ "sh", "-c", GUARD, "sh", tostring(devos.getpid()), scratch })
 
 local LAUNCH = [[
 set -m
+trap '' INT
 out=$1
 status=$2
 dir=$3
 pidfile=$4
 shift 4
 (
+    trap - INT
     ( cd -- "$dir" && "$@" ) >"$out" 2>&1 </dev/null
     echo "$?" >"$status.tmp"
     mv "$status.tmp" "$status"
@@ -206,12 +208,15 @@ local function start(index, suite)
     local base = scratch .. "/" .. index
     suite.out, suite.status, suite.tmp = base .. ".out", base .. ".status", base .. ".t"
     assert(fs.mkdir(suite.tmp))
-    local argv = { "sh", "-c", LAUNCH, "sh", suite.out, suite.status, root, base .. ".pid" }
+    suite.pidfile = base .. ".pid"
+    local argv = { "sh", "-c", LAUNCH, "sh", suite.out, suite.status, root, suite.pidfile }
     for _, word in ipairs(suite.argv) do
         argv[#argv + 1] = word
     end
+    suite.launching = true
     local pid = devos.capture(argv, { env = { TMPDIR = suite.tmp } })
     suite.pid = pid:match("%d+")
+    suite.launching = false
     suite.started = true
 end
 
@@ -232,12 +237,33 @@ local function finished(suite, check_alive)
     return status_of(suite) or 1
 end
 
-local function stop_all()
+local STOP = [=[
+for pidfile in "$1"/*.pid; do
+    [ -f "$pidfile" ] && [ ! -e "${pidfile%.pid}.status" ] &&
+        kill -TERM -- "-$(cat "$pidfile")" 2>/dev/null
+done
+exit 0
+]=]
+
+local LAUNCH_GRACE_POLLS = 50
+
+local function await_launches()
     for _, suite in ipairs(suites) do
-        if suite.pid and not suite.code then
-            devos.run({ "kill", "--", "-" .. suite.pid }, { stderr = "null" })
+        local polls = 0
+        while
+            suite.launching
+            and polls < LAUNCH_GRACE_POLLS
+            and not (fs.read(suite.pidfile) or ""):find("%d")
+        do
+            devos.nap(POLL_SECS)
+            polls = polls + 1
         end
     end
+end
+
+local function stop_all()
+    await_launches()
+    devos.run({ "sh", "-c", STOP, "sh", scratch }, { stderr = "null" })
 end
 
 local function report(suite, code)

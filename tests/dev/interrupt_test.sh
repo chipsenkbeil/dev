@@ -14,6 +14,25 @@ if ! command -v bats >/dev/null 2>&1; then
 fi
 
 fails=0
+ALIVE_WAIT_POLLS=50
+LAUNCH_WAIT_POLLS=150
+
+count_alive() {
+    local alive=0 pid waited
+    while IFS= read -r pid; do
+        waited=0
+        while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$ALIVE_WAIT_POLLS" ]; do
+            sleep 0.2
+            waited=$((waited + 1))
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            alive=$((alive + 1))
+            printf 'survived %s\n' "$(ps -o pid=,pgid=,args= -p "$pid")" >&2
+            kill -KILL "$pid" 2>/dev/null
+        fi
+    done <"$1"
+    printf '%s\n' "$alive"
+}
 
 assert_eq() {
     if [ "$2" = "$3" ]; then
@@ -77,19 +96,47 @@ while [ -d "$scratch" ] && [ "$waited" -lt 100 ]; do
 done
 assert_eq "the scratch directory is removed" "$([ -d "$scratch" ] && echo present || echo gone)" "gone"
 
-alive=0
-while IFS= read -r pid; do
-    waited=0
-    while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 50 ]; do
-        sleep 0.2
-        waited=$((waited + 1))
-    done
-    if kill -0 "$pid" 2>/dev/null; then
-        alive=$((alive + 1))
-        kill -KILL "$pid" 2>/dev/null
-    fi
-done <"$PIDS"
-assert_eq "no suite process is left running" "$alive" "0"
+assert_eq "no suite process is left running" "$(count_alive "$PIDS")" "0"
+
+mkdir -p "$TMP/shim" "$TMP/b/tests/a" "$TMP/b/.dev/lua/dotfiles"
+cp "$REPO/.dev/test.lua" "$TMP/b/.dev/"
+cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/b/.dev/lua/dotfiles/"
+cp "$TMP/tests/a/slow1_test.sh" "$TMP/b/tests/a/"
+REAL_SH="$(command -v sh)"
+cat >"$TMP/shim/sh" <<'SHIM'
+#!/usr/bin/env bash
+if [[ "$2" == *'pidfile=$4'* ]]; then
+    trap : INT
+    pidwrite='echo "$!" >"$pidfile"'
+    script="${2/"$pidwrite"/"kill -INT 0; sleep 1; $pidwrite"}"
+    out="$("$REAL_SH" -c "$script" "${@:3}")"
+    printf '%s\n' "$out"
+else
+    exec "$REAL_SH" "$@"
+fi
+SHIM
+chmod +x "$TMP/shim/sh"
+
+export REAL_SH PIDS="$TMP/run/pids2" TMPDIRS="$TMP/run/tmpdirs2"
+: >"$PIDS"
+: >"$TMPDIRS"
+
+set -m
+(cd "$TMP/b" && PATH="$TMP/shim:$PATH" exec "$DEV" test) >"$TMP/run/out2" 2>&1 &
+devpid=$!
+set +m
+
+waited=0
+while [ "$(wc -l <"$PIDS")" -lt 2 ] && [ "$waited" -lt "$LAUNCH_WAIT_POLLS" ]; do
+    sleep 0.2
+    waited=$((waited + 1))
+done
+assert_eq "the suite and its sleep started" "$(wc -l <"$PIDS" | tr -d ' ')" "2"
+wait "$devpid"
+assert_eq "dev test exits 130 on an INT that lands while a suite is still being launched" "$?" "130"
+scratch2="$(dirname "$(head -n 1 "$TMPDIRS")")"
+assert_eq "the scratch directory is removed after the late INT" "$([ -d "$scratch2" ] && echo present || echo gone)" "gone"
+assert_eq "a suite launched at the moment of INT is stopped" "$(count_alive "$PIDS")" "0"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
