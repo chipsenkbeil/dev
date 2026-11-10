@@ -497,6 +497,11 @@ prints as they come (exit 1). Pomb refuses `note
 question to you. `add --label needs:human` still creates the card and its
 outcomes, then sets the label.
 
+Once Pomb accepts the question, `ask` ends the owner lease on the card and
+stops its keep-alive loop, when this machine holds the claim. The card waits in
+Blocked with no lease held by the asking agent, so your answer does not depend
+on that agent's loop.
+
 `dev board answer CARD --choice N --quote TEXT` records your answer through
 Pomb's answer API. The quote must hold your own words and may not be empty:
 dev refuses an empty one before it calls Pomb. Pomb removes `needs:human`,
@@ -1086,12 +1091,14 @@ dev board move 8af0e001 progress
 ```
 
 The loop stops when you `release` the card, when you `move` it to any column but
-In Progress, when Pomb refuses a renewal because the claim is gone, and by
-itself after twice the card's size: 50 minutes for 1 Pomodoro, 100 for 2
+In Progress or Blocked, when Pomb refuses a renewal because the claim is gone,
+and by itself after twice the card's size: 50 minutes for 1 Pomodoro, 100 for 2
 Pomodori and 150 for the rest. A crashed agent therefore loses its claim within
 15 minutes of the loop's end. A network failure does not stop it. A `move` out
-of In Progress also releases the claim once the move has succeeded, and a
-refused release prints a warning and leaves the move done.
+of In Progress to any column but Blocked also releases the claim once the move
+has succeeded, and a refused release prints a warning and leaves the move done.
+A `move` to Blocked keeps the claim and the loop, and `ask` ends them once Pomb
+has parked the card.
 
 The loop's state is a file named for the card in `$XDG_STATE_HOME/dev/board/`,
 or `~/.local/state/dev/board/`, with the card, the fence and the loop's pid at
@@ -1889,9 +1896,9 @@ never handles the API.
   adds a blank line and the card as `show CARD` prints it, with the same
   stderr warning when that read fails. When the card has a claim taken by
   `take`, the move sends its fence as `If-Owner-Fence` and, for any column but
-  In Progress, stops the keep-alive loop, forgets the claim and, once the move
-  has succeeded, releases it on the backend with its fence (a refused release
-  prints
+  In Progress or Blocked, stops the keep-alive loop, forgets the claim and, once
+  the move has succeeded, releases it on the backend with its fence (a refused
+  release prints
   `dev: moved, but the claim was not released: <reason>` on stderr and the move
   still succeeds). A move into Ready of a card that is white, has no colour or
   is red (more than 3 Pomodori) is refused before the backend is called:

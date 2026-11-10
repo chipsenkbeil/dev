@@ -1752,7 +1752,7 @@ local function move_card(backend, args, opts)
         end
         return to_done and unqueued(failure(message)) or failure(message)
     end
-    if held and column ~= roles.progress then
+    if held and column ~= roles.progress and column ~= roles.blocked then
         claims.stop(card.id)
         local released, why = backend:release(card.id, held.fence)
         if not released then
@@ -2058,6 +2058,13 @@ function commands.ask(backend, args)
     local ok, message = backend:ask(card.id, question, held and held.fence)
     if not ok then
         return failure(message)
+    end
+    if held then
+        claims.stop(card.id)
+        local released, why = backend:release(card.id, held.fence)
+        if not released then
+            verb.note("dev: asked, but the claim was not released: " .. why)
+        end
     end
     return { output = "asked " .. card.id:sub(1, board.MIN_PREFIX) }
 end

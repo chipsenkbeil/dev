@@ -6619,6 +6619,108 @@ testing.test("a move into progress of a card claimed elsewhere takes no claim", 
     testing.eq(fs.exists(state_file(home)), false)
 end)
 
+testing.test("move into progress grabs the owner and leaving it ends the lease", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { agent = "r/one" }
+    )
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner\n", 1, true), calls)
+    local grabbed = calls:match("[^\n]*/owner\n")
+    testing.ok(grabbed:find('"name":"r/one"', 1, true), grabbed)
+    testing.ok(wait_until(function()
+        return heartbeats(root) >= 2
+    end))
+    local pid = loop_pid(home)
+    out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW }, {
+        agent = "r/one",
+    })
+    testing.eq(code, 0, out)
+    local released = read(root, "calls"):match("[^\n]*/owner/release\n?")
+    testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
+    testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
+    testing.eq(fs.exists(state_file(home)), false)
+    testing.ok(loop_gone(pid))
+end)
+
+testing.test("a refused move into progress frees the owner", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    refusing_moves(root)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { agent = "r/one" }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("no room", 1, true), out)
+    local calls = read(root, "calls")
+    local grab = calls:find("/api/tasks/" .. ID_A .. "/owner\n", 1, true)
+    local refused = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
+    local freed = calls:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true)
+    testing.ok(grab and refused and freed and grab < refused and refused < freed, calls)
+    local released = calls:match("[^\n]*/owner/release\n?")
+    testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
+    testing.eq(fs.exists(state_file(home)), false)
+    local stopped = heartbeats(root)
+    devos.run({ "sleep", "0.6" })
+    testing.eq(heartbeats(root), stopped)
+end)
+
+testing.test("ask ends the owner lease and a plain move to blocked keeps it", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    dev(root, home, { "board", "take", "11111111-a" })
+    testing.ok(wait_until(function()
+        return heartbeats(root) >= 1
+    end))
+    local pid = loop_pid(home)
+    local out, code = dev(root, home, {
+        "board",
+        "ask",
+        "11111111-a",
+        "--question",
+        "Which way?",
+        "--choice",
+        "Ready=Ship it",
+        "--choice",
+        "Icebox=Park it",
+        "--recommend",
+        "1",
+        "--why",
+        "Only he can choose",
+    })
+    testing.eq(code, 0, out)
+    testing.eq(out, "asked 11111111\n")
+    local calls = read(root, "calls")
+    local asked = calls:find('"kind":"question"', 1, true)
+    local freed = calls:find("/owner/release", 1, true)
+    testing.ok(asked and freed and asked < freed, calls)
+    local released = calls:match("[^\n]*/owner/release\n?")
+    testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
+    testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
+    testing.eq(fs.exists(state_file(home)), false)
+    testing.ok(loop_gone(pid))
+
+    local kept_root, kept_home = sandbox({ export = PLANNED_EXPORT })
+    dev(kept_root, kept_home, { "board", "take", "11111111-a" })
+    testing.ok(wait_until(function()
+        return heartbeats(kept_root) >= 1
+    end))
+    local before = heartbeats(kept_root)
+    out, code = dev(kept_root, kept_home, { "board", "move", "11111111-a", support.COLUMN.BLOCKED })
+    testing.eq(code, 0, out)
+    testing.eq(read(kept_root, "calls"):find("/owner/release", 1, true), nil)
+    testing.eq(fs.exists(state_file(kept_home)), true)
+    testing.ok(wait_until(function()
+        return heartbeats(kept_root) > before
+    end))
+    dev(kept_root, kept_home, { "board", "release", "11111111-a" })
+end)
+
 testing.test("move to ready takes an epic like any card", function()
     local description =
         "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a"
