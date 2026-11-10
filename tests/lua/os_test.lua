@@ -366,14 +366,24 @@ testing.test("capture_timed stops a command and its children after the limit", f
 end)
 
 testing.test("capture_timed with reap kills what a finished command left running", function()
+    local pid = devos.capture({ "sh", "-c", "echo $$" }):match("%d+")
+    local unique_secs = 1000000 + 4 * tonumber(pid)
     local out, code = devos.capture_timed(
-        { "sh", "-c", "sleep 3781 & echo done" },
+        { "sh", "-c", ("sleep %d & echo done"):format(unique_secs) },
         10,
         { merge = true, reap = true }
     )
     testing.eq(code, 0)
     testing.eq(out, "done\n")
-    local left = devos.capture({ "pgrep", "-f", "sleep 378[1]" }, { stderr = "null" })
+    local pattern = ("^sleep %d$"):format(unique_secs)
+    local left = ""
+    for _ = 1, 20 do
+        left = devos.capture({ "pgrep", "-f", pattern }, { stderr = "null" })
+        if left == "" then
+            break
+        end
+        devos.run({ "sleep", "0.1" })
+    end
     testing.eq(left, "")
 end)
 
