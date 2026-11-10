@@ -1912,228 +1912,354 @@ the lead.
 - The change is not queued while Pomb is unreachable.
 - Emptying the bin and deleting from it stay with the owner.
 
-### The other subcommands
+### stale
 
-- `stale [--days N] [--icebox-days N] [--lead-hours N]`: Lists the cards that
-  have sat in Backlog, Ready, In Progress, Review or Verify for N days or more
-  (7 by default), oldest first, one line each: id prefix, column,
-  `<days>d`, size and name, aligned. Days are whole days from the card's
-  `column_entered_at` (Pomb's task view, RFC 3339, read with
-  `dev.cmd.box.parse_time`) to now, so 6 days is fresh and 7 is stale. Icebox,
-  Blocked and Done are never stale. Every card carrying the `needs:human` label
-  in Blocked or Icebox, at any age, is listed apart, after a blank line and the
-  heading `for the owner (needs:human):` (same columns; the name ends
-  `(answered, waiting for your move)` when the newest comment is the owner's),
-  never among the stale ones. Every other card but Done and not listed above
-  whose newest comment is the owner's is listed apart under the heading `newest
-  comment is the owner's:` (same columns), whatever its label and age. Every
-  `needs:human` card in any other column but Done is listed apart after them
-  under the heading `moved by the owner, remove needs:human:` (same columns, no
-  answer note). Every card outside Icebox that is white or has no colour is
-  listed apart too, at any age, after a blank line and the heading `unsized
-  outside Icebox:`, one line each with id prefix, column and name, in board
-  order; sizing happens in planning, so a card that waits unsized is a planner's
-  to size. A card in those columns or with that label that the tasks view did
-  not date (missing from the pages, or no `column_entered_at`) gets one line
-  `could not date <id> <name>` after a blank line. `no stale cards` when the
-  first list is empty. Last comes the Icebox section: every Icebox card without
-  `needs:human` whose column time and latest comment (`backend:comments`) are
-  both `--icebox-days` days old or more (30 by default) is listed after a blank
-  line and the heading `icebox, untouched for N days:`, oldest first, with the
-  same columns as the first list, the days counted from the later of the two
-  times. A card with no comment counts by its column time. A card the tasks view
-  did not date, or whose comments could not be read, gets a `could not date` or
-  `could not read the comments of` line after the section, and the section is
-  absent when no card qualifies. Always exit 0 unless the board cannot be read
-  (1); a `--days` or `--icebox-days` that is not a whole number of 1 or more is
+`dev board stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards
+that have sat too long.
+
+The first list:
+
+- It covers Backlog, Ready, In Progress, Review and Verify, for N days or more
+  (7 by default), oldest first.
+- Each line holds the id prefix, column, `<days>d`, size and name, aligned.
+- Days are whole days from the card's `column_entered_at` (Pomb's task view,
+  RFC 3339, read with `dev.cmd.box.parse_time`) to now, so 6 days is fresh and
+  7 is stale.
+- Icebox, Blocked and Done are never stale.
+- It prints `no stale cards` when the first list is empty.
+
+The sections after it, each after a blank line and its heading, with the same
+columns as the first list unless noted:
+
+- `for the owner (needs:human):` lists every card carrying `needs:human` in
+  Blocked or Icebox, at any age, and never among the stale ones. The name ends
+  `(answered, waiting for your move)` when the newest comment is the owner's.
+- `for a lead (needs:lead):` lists every card labelled `needs:lead` (and not
+  `needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
+  default), with its time as `<hours>h`.
+- `for a planner (needs:planner):` lists a card labelled `needs:planner` in
+  Blocked for as long, the same way.
+- `moved by the owner, remove needs:human:` lists every `needs:human` card in
+  any other column but Done, with no answer note.
+- `newest comment is the owner's:` lists every other card but Done and not
+  listed above whose newest comment is the owner's, whatever its label and age.
+- `unsized outside Icebox:` lists every card outside Icebox that is white or
+  has no colour, at any age, one line each with id prefix, column and name, in
+  board order. Sizing happens in planning, so a card that waits unsized is a
+  planner's to size.
+- `icebox, untouched for N days:` comes last. It lists, oldest first, every
+  Icebox card without `needs:human` whose column time and latest comment
+  (`backend:comments`) are both `--icebox-days` days old or more (30 by
+  default).
+  - The days count from the later of the two times.
+  - A card with no comment counts by its column time.
+  - The section is absent when no card qualifies.
+
+Cards it cannot date:
+
+- A card in those columns or with that label that the tasks view did not date
+  (missing from the pages, or no `column_entered_at`) gets one line
+  `could not date <id> <name>` after a blank line.
+- An Icebox card the tasks view did not date, or whose comments could not be
+  read, gets a `could not date` or `could not read the comments of` line after
+  the Icebox section.
+
+Exit codes:
+
+- It exits 0 unless the board cannot be read (1).
+- A `--days` or `--icebox-days` that is not a whole number of 1 or more is
   exit 2.
-- `lint [--strict]`: Reads every card (`backend:cards`) and prints one line per
-  broken rule: id prefix, column and rule, aligned, in board order. A finding
-  on a `needs:human` card ends in `(owner)`, unless it is `lacks a size` or
-  `needs:human outside ...`, which `dev.board.lint.card` reports as agent
-  findings (its third return value holds the indexes of the owner's). It exits
-  1 only when a finding without the mark is left. A clean board prints
-  `no findings` and exits 0. A flag other than
-  `--strict` is exit 2. `--strict` is also on when `board.lint.strict` is
-  `true` in the config (`config.get`, project over user file), and a
-  non-boolean value is exit 1. The rules live in `dev.board.lint`, which calls
-  `dev.board.unplanned` for the size, the v2 sections and the outcomes. A Done
-  card passes `sections = false` unless strict, and a `discarded` one passes no
-  outcome check, which is what `discard`'s guard does. It adds, outside Icebox
-  and Done, `over 400 words (N)`, `no checks row` in Ready, In Progress and In
-  Review for a card with no children, and `red card in Ready`. Anywhere it
-  adds `needs:human outside Blocked and Icebox`. In Blocked it adds `blocked with no question or blocked
-  note and no blocker`, reading `backend:comments` for a `question` or
-  `blocked` kind and then `backend:links` for `blocked_by`. In In Progress it
-  adds `in progress with no claimant`, and in Done `N of M outcomes unticked` unless discarded, and `N of M children
-  open` when the card has an open child. Every card asked for outcomes reads
-  `backend:family` for its child count, which sets the 1 to 3 an epic needs, or
-  none once every child is Done. A
-  card with `outcomes_unreadable` gets `outcomes unreadable` and no outcome
-  rule. A read that fails is exit 1 with the message. It writes nothing
-  itself, but the dispatcher replays the queue first, as for every Pomb
-  command.
-- `notes CARD`: Lists the card's comments (`GET /api/tasks/{id}/comments`),
-  oldest first, one line each: comment id prefix (8 characters), the token's
-  name (else the actor kind), the comment's kind (`-` for none), its role label
-  (`-` for none, and Pomb's default `api-token` counts as none), the time to the
-  minute in UTC and the first line of the body, aligned. `no comments` when
-  there are none.
-- `show CARD`: Prints the card as `ls` does (id prefix, column, size, labels,
-  name), a blank line, its description (`no description` when empty), a blank
-  line and its comments as `notes` lists them with every line of each body
-  in full, the later lines indented under the first, so an agent reads a whole
-  card without the API or the token. The description comes from the same
-  `/export-data` read `ls` makes, and `GET /api/tasks/{id}/comments` gives the
-  comments. After the description it prints `done when:` and one
-  `- [x] <outcome>` or `- [ ] <outcome>` line per outcome (Pomb's `subtasks` in
-  the `/export-data` task row), then a blank line, when the card has any. A
-  card with outcomes prints a v1 `## Done when` checklist in its description
-  only through those lines, never twice, and a card with none prints no
-  `done when:` block and keeps its description as it is. After that it prints
-  `checks:` and one `- <command>` line per checks row, then a blank line, when
-  the card has any, and the same for `allow:`, `tests:` and `files:` with one
-  `- <word or name>` line each (the `dev.allow`, `dev.tests` and
-  `dev.files` fields). Links are listed by `links`. On a child it also
-  prints `parent: <id prefix> <name>` under the `ls` line, and on an epic
-  `kind: epic, N open` above it and `children: N of M done`, from `GET /api/tasks/{id}` (`parent`,
-  `children_done`, `children_total`) on Pomb and from the `parent` links of the
-  cards on a local board (done meaning in a done column). `show CARD --board B`
-  prints the card on the Pomb board named `B` from any repo, looked up as
-  `add --board` looks it up, and a local board refuses it (exit 1).
-- `edit CARD [--file PATH]`: Replaces the card's description with the text of
-  `--file PATH`, else of standard input (a terminal with no `--file` is exit 2),
-  with trailing whitespace removed, and prints `edited <id prefix>`
-  (`PATCH /api/tasks/{id}` with `description`, the same field `add` sends, with
-  the claim's fence when this machine holds one). Empty text, an unreadable
-  file, a missing card argument or an extra word is exit 2, and an unknown card
-  is exit 1. The input is read before the board is asked, so a queued `edit`
-  holds the card and the new text as typed (`dev.cmd.board` `description_args`)
-  and replays without the file or the pipe; sending a whole new description
-  twice changes nothing more, so `edit` is queued like `size` and `label`,
-  timeouts and 502, 503 and 504 included. A local board sets the card's
-  `description` under the same fence rule. Titles and comments are not editable
-  here. A card labelled `needs:human` is refused (exit 1).
-- `rename CARD TEXT`: Sets the card's title to TEXT (`PATCH /api/tasks/{id}`
-  with `name`, with the claim's fence when this machine holds one) and prints
-  `renamed <id prefix>`. The words after the card are the title, which must not
-  be blank, must be at most 100 characters with no quote, backslash or control
-  character, and may not hold a word starting with `-` (each exit 2). A card
-  labelled `needs:human` is refused like `edit`, and a title change is queued
-  while Pomb is unreachable, like `edit`. A local board sets the card's `name`.
-- `checks CARD CMD...`: Replaces the card's checks rows with one row per command
-  and prints `set checks <id prefix>, N rows`, or `1 row` for one
-  (`PATCH /api/tasks/{id}` with
-  `{"fields":{"dev.checks":[{"run":CMD},...]}}`, which Pomb merges by key
-  so the sent rows replace the field's whole value, with the claim's fence when
-  this machine holds one). A local board sets the card's `checks` under the same
-  fence rule. A name in the card's claim history is refused with exit 1 and
-  nothing written. A row that `dev board check` would refuse is exit 2 with the
-  row named, as in `add --checks`. No command, a blank command, a missing card
-  or an unknown
-  option word is exit 2 (so nobody clears the rows by accident, and no
-  subcommand clears them), and an unknown card is exit 1. A Pomb board with no
-  checks field is refused before any write with the message
-  `the board has no checks field, so run dev board init to add it`, as a move
-  into Ready gives (exit 1). Sending the same rows twice changes nothing more,
-  so `checks` is queued while Pomb is unreachable like `edit`, timeouts and 502,
-  503 and 504 included. The `on` runner names are not set.
-- `check CARD [--expect-fail] [--timeout SECONDS]`: Runs every checks row of the
-  card and records the result as one comment on the card.
-  In a jj project `check`, `turn` (not `--release`) and `land` first refuse,
-  and do nothing else, unless the working copy's workspace is named for the
-  card's id prefix, the name `dev ws new CARD` gives. The refusal names the
-  workspace it found. A git project is not checked, and no flag or
-  environment variable turns the rule off. A row runs as a
-  plain command, split on whitespace and started without a shell, so a row
-  that holds any of `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`,
-  `?`, `!` or a line break, or starts with a dotted run such as
-  `dev.--remote.lint`, or passes a word to `dev --remote test` or
-  `dev --remote lint` before the double dash, is refused before anything runs
-  (exit 1). One `!` is allowed, as the first word: a row
-  `! rg -n PATTERN FILE` runs the rest as the command and passes only when it
-  exits 1 (a search that found nothing).
-  Exit 0 fails the row as a match found, and any other exit fails it as an
-  error, so rg's exit 2 never passes. Under a set
-  `DEV_AGENT`, dev refuses a local run of a verb that has a ci job, so a row
-  reads `dev --remote lint` (not `dev lint`). Each row may run for `--timeout`
-  seconds (7200 by default, at most 86400, anything else is exit 2), counted
-  from the row's start to its end, so the wait in the ci queue and a job that
-  ci restarts count too. The default covers a remote test of about five minutes
-  that waits behind a long queue. A row that outlasts it is killed and recorded
-  as `timeout`, as is a row that exits 124 or is killed from outside. A card
-  with no rows is exit 1.
 
-  The result belongs to one commit. In a jj project the working copy is itself
-  a commit, so a changed file is normal and the commit is `@` after jj
-  snapshots the files, recorded with its change id. In a git project the tree
-  must match `HEAD`, and a dirty one is refused (exit 1) with the count of
-  changed paths. A conflicted jj working copy is refused too. dev names the
-  commit before the first row and again after the last, and a result whose
-  two commits differ was run on a tree that moved, so it is not recorded
+### lint
+
+`dev board lint [--strict]` reads every card (`backend:cards`) and prints one
+line per broken rule.
+
+- Each line holds the id prefix, column and rule, aligned, in board order.
+- A finding on a `needs:human` card ends in `(owner)`, unless it is
+  `lacks a size` or `needs:human outside ...`, which `dev.board.lint.card`
+  reports as agent findings (its third return value holds the indexes of the
+  owner's).
+- It exits 1 only when a finding without the mark is left.
+- A clean board prints `no findings` and exits 0.
+- A flag other than `--strict` is exit 2.
+- `--strict` is also on when `board.lint.strict` is `true` in the config
+  (`config.get`, project over user file). A non-boolean value is exit 1.
+- A read that fails is exit 1 with the message.
+- It writes nothing itself, but the dispatcher replays the queue first, as for
+  every Pomb command.
+
+The rules live in `dev.board.lint`, which calls `dev.board.unplanned` for the
+size, the v2 sections and the outcomes. It adds these:
+
+- Outside Icebox and Done: `over 400 words (N)`.
+- In Ready, In Progress and In Review, for a card with no children:
+  `no checks row`.
+- In Ready: `red card in Ready`.
+- Anywhere: `needs:human outside Blocked and Icebox`.
+- In Blocked: `blocked with no question or blocked note and no blocker`. It
+  reads `backend:comments` for a `question` or `blocked` kind and then
+  `backend:links` for `blocked_by`.
+- In In Progress: `in progress with no claimant`, unless the card carries the
+  run label.
+- In Done: `N of M outcomes unticked` unless discarded, and `N of M children
+  open` when the card has an open child.
+
+How it reads outcomes:
+
+- A Done card passes `sections = false` unless strict.
+- A `discarded` card passes no outcome check, which is what `discard`'s guard
+  does.
+- Every card asked for outcomes reads `backend:family` for its child count,
+  which sets the 1 to 3 an epic needs, or none once every child is Done.
+- A card with `outcomes_unreadable` gets `outcomes unreadable` and no outcome
+  rule.
+
+### notes
+
+`dev board notes CARD` lists the card's comments (`GET
+/api/tasks/{id}/comments`), oldest first.
+
+- Each line holds, aligned, the comment id prefix (8 characters), the token's
+  name (else the actor kind), the comment's kind (`-` for none), its role label
+  (`-` for none, and Pomb's default `api-token` counts as none), the time to
+  the minute in UTC and the first line of the body.
+- It prints `no comments` when there are none.
+
+### show
+
+`dev board show CARD [--board B]` prints a whole card, so an agent reads it
+without the API or the token.
+
+The layout, top to bottom:
+
+- The card as `ls` does (id prefix, column, size, labels, name).
+- On a child, `parent: <id prefix> <name>` under the `ls` line. On an epic,
+  `kind: epic, N open` above it and `children: N of M done`.
+- A blank line and the description (`no description` when empty), from the same
+  `/export-data` read `ls` makes.
+- `done when:` and one `- [x] <outcome>` or `- [ ] <outcome>` line per outcome
+  (Pomb's `subtasks` in the `/export-data` task row), then a blank line, when
+  the card has any.
+- `checks:` and one `- <command>` line per checks row, then a blank line, when
+  the card has any.
+- The same for `allow:`, `tests:` and `files:` with one `- <word or name>` line
+  each (the `dev.allow`, `dev.tests` and `dev.files` fields).
+- A blank line and the comments as `notes` lists them, from
+  `GET /api/tasks/{id}/comments`, with every line of each body in full and the
+  later lines indented under the first.
+
+Its facts:
+
+- A card with outcomes prints a v1 `## Done when` checklist in its description
+  only through the `done when:` lines, never twice. A card with none prints no
+  `done when:` block and keeps its description as it is.
+- Links are listed by `links`.
+- The parent and children lines come from `GET /api/tasks/{id}` (`parent`,
+  `children_done`, `children_total`) on Pomb and from the `parent` links of the
+  cards on a local board (done meaning in a done column).
+- `--board B` prints the card on the Pomb board named `B` from any repo, looked
+  up as `add --board` looks it up. A local board refuses it (exit 1).
+
+### edit
+
+`dev board edit CARD [--file PATH]` replaces the card's description and prints
+`edited <id prefix>`.
+
+- The text comes from `--file PATH`, else from standard input (a terminal with
+  no `--file` is exit 2), with trailing whitespace removed.
+- It sends `PATCH /api/tasks/{id}` with `description`, the same field `add`
+  sends, with the claim's fence when this machine holds one.
+- A local board sets the card's `description` under the same fence rule.
+- Empty text, an unreadable file, a missing card argument or an extra word is
+  exit 2. An unknown card is exit 1.
+- A card labelled `needs:human` is refused (exit 1).
+- Titles and comments are not editable here.
+
+While Pomb is unreachable:
+
+- `edit` is queued like `size` and `label`, timeouts and 502, 503 and 504
+  included, as sending a whole new description twice changes nothing more.
+- The input is read before the board is asked, so a queued `edit` holds the
+  card and the new text as typed (`dev.cmd.board` `description_args`) and
+  replays without the file or the pipe.
+
+### rename
+
+`dev board rename CARD TEXT` sets the card's title to TEXT and prints
+`renamed <id prefix>`.
+
+- It sends `PATCH /api/tasks/{id}` with `name`, with the claim's fence when
+  this machine holds one. A local board sets the card's `name`.
+- The words after the card are the title. It must not be blank, must be at most
+  100 characters with no quote, backslash or control character, and may not
+  hold a word starting with `-` (each exit 2).
+- A card labelled `needs:human` is refused like `edit`.
+- A title change is queued while Pomb is unreachable, like `edit`.
+
+### checks
+
+`dev board checks CARD CMD...` replaces the card's checks rows with one row per
+command and prints `set checks <id prefix>, N rows`, or `1 row` for one.
+
+- It sends `PATCH /api/tasks/{id}` with
+  `{"fields":{"dev.checks":[{"run":CMD},...]}}`, with the claim's fence
+  when this machine holds one. Pomb merges by key, so the sent rows replace the
+  field's whole value.
+- A local board sets the card's `checks` under the same fence rule.
+- A name in the card's claim history is refused with exit 1 and nothing
+  written.
+- A row that `dev board check` would refuse is exit 2 with the row named, as in
+  `add --checks`.
+- No command, a blank command, a missing card or an unknown option word is exit
+  2, so nobody clears the rows by accident and no subcommand clears them.
+- An unknown card is exit 1.
+- A Pomb board with no checks field is refused before any write (exit 1) with
+  `the board has no checks field, so run dev board init to add it`, as a move
+  into Ready gives.
+- Sending the same rows twice changes nothing more, so `checks` is queued while
+  Pomb is unreachable like `edit`, timeouts and 502, 503 and 504 included.
+- The `on` runner names are not set.
+
+### check
+
+`dev board check CARD [--expect-fail] [--timeout SECONDS]` runs every checks
+row of the card and records the result as one comment on the card.
+
+The workspace rule:
+
+- In a jj project `check`, `turn` (not `--release`) and `land` first refuse,
+  and do nothing else, unless the working copy's workspace is named for the
+  card's id prefix, the name `dev ws new CARD` gives.
+- The refusal names the workspace it found.
+- A git project is not checked, and no flag or environment variable turns the
+  rule off.
+
+How a row runs:
+
+- A row runs as a plain command, split on whitespace and started without a
+  shell.
+- A row is refused before anything runs (exit 1) when it holds any of
+  `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`, `?`, `!` or a line
+  break, or starts with a dotted run such as `dev.--remote.lint`, or passes a
+  word to `dev --remote test` or `dev --remote lint` before the double dash.
+- One `!` is allowed, as the first word. A row `! rg -n PATTERN FILE` runs the
+  rest as the command and passes only when it exits 1 (a search that found
+  nothing). Exit 0 fails the row as a match found, and any other exit fails it
+  as an error, so rg's exit 2 never passes.
+- Under a set `DEV_AGENT`, dev refuses a local run of a verb that has a ci job,
+  so a row reads `dev --remote lint` (not `dev lint`).
+- Each row may run for `--timeout` seconds (7200 by default, at most 86400,
+  anything else is exit 2), counted from the row's start to its end. The wait
+  in the ci queue and a job that ci restarts count too.
+- The default covers a remote test of about five minutes that waits behind a
+  long queue.
+- A row that outlasts it is killed and recorded as `timeout`, as is a row that
+  exits 124 or is killed from outside.
+- A card with no rows is exit 1.
+
+The result belongs to one commit:
+
+- In a jj project the working copy is itself a commit, so a changed file is
+  normal. The commit is `@` after jj snapshots the files, recorded with its
+  change id.
+- In a git project the tree must match `HEAD`, and a dirty one is refused
+  (exit 1) with the count of changed paths.
+- A conflicted jj working copy is refused too.
+- dev names the commit before the first row and again after the last. A result
+  whose two commits differ was run on a tree that moved, so it is not recorded
   (exit 1).
 
-  The comment has the kind `status` and begins with a reserved first line,
-  then one line per row: its place, its result, the ci run id it printed and
-  its command. The run id is the one from the `run <id>` line of `ci run
-  --follow`, so `ci logs <id>` reads the row's log, and `-` when
-  the row printed none:
+The comment has the kind `status` and begins with a reserved first line, then
+one line per row: its place, its result, the ci run id it printed and its
+command.
 
-  ```
-  dev-check: commit=<full commit id> change=<change id, - in git> mode=run
-  1 pass 8cb600 dev --remote lint
-  2 fail - dev --remote test
-  ```
+- The run id is the one from the `run <id>` line of `ci run --follow`, so
+  `ci logs <id>` reads the row's log. It is `-` when the row printed none.
 
-  A row ends as `pass`, `fail` (any non-zero exit) or `timeout`. The command
-  prints the same lines (the last 12 lines of a row that did not pass follow
-  it, indented) and `recorded on <id prefix> at commit <12 characters>: N of M
-  rows passed`. It exits 0 when every row passed and 1 otherwise.
-  `--expect-fail` is for filing a card: it records `mode=expect-fail`, exits 0
+```
+dev-check: commit=<full commit id> change=<change id, - in git> mode=run
+1 pass 8cb600 dev --remote lint
+2 fail - dev --remote test
+```
+
+The result and the exit code:
+
+- A row ends as `pass`, `fail` (any non-zero exit) or `timeout`.
+- The command prints the same lines (the last 12 lines of a row that did not
+  pass follow it, indented) and `recorded on <id prefix> at commit <12
+  characters>: N of M rows passed`.
+- It exits 0 when every row passed and 1 otherwise.
+- `--expect-fail` is for filing a card. It records `mode=expect-fail`, exits 0
   when every row failed, and reports a row that passed as one that proves
   nothing (exit 1, still recorded).
 
-  If the comment cannot be written (Pomb unreachable, a timeout, a refused
-  fence), the command exits 1 with `the result was NOT recorded` and the row
-  lines. It never prints `recorded` then, and it is never queued (a replay
-  would rerun the rows). A timeout or gateway error may come
-  after Pomb stored the comment, so read `notes` before repeating a long run.
-  `note` refuses any text that begins with `dev-check:` (any case, after
-  leading space), and `note --edit` and `--delete` refuse a comment that holds
-  or would hold it (exit 1).
-- `review CARD --kind code|style|recheck --by NAME --rev REV --verdict clean|minor|needs-work`:
-  Records that NAME reviewed the commit REV with that verdict, as one `status`
-  comment on the card that begins with a reserved first line and has no other:
+When the comment cannot be written:
 
-  ```
-  dev-review: kind=code by=<NAME> commit=<full commit id> change=<change id, - in git> verdict=<clean|minor|needs-work>
-  ```
+- If Pomb is unreachable, a timeout occurs or a fence is refused, the command
+  exits 1 with `the result was NOT recorded` and the row lines. It never prints
+  `recorded` then, and it is never queued, as a replay would rerun the rows.
+- A timeout or gateway error may come after Pomb stored the comment, so read
+  `notes` before repeating a long run.
+- `note` refuses any text that begins with `dev-check:` (any case, after
+  leading space). `note --edit` and `--delete` refuse a comment that holds or
+  would hold it (exit 1).
 
-  All four flags are required (a missing one, an unknown kind or an unknown
-  verdict is exit 2, and the message lists the kinds or the verdicts). A record
-  written before verdicts has no `verdict=` and is read as it was.
-  REV is a jj revset in a jj project and a git revision in a git one, and it must name exactly one commit, so a revset of
-  many commits, a word that starts with `-` and a name that resolves to nothing
-  are refused (exit 1). NAME is an agent name as `take --as` takes, and the
-  card's claimant is refused for every kind (exit 1) whether NAME is the
-  claimant or the caller is, which is the caller's `DEV_AGENT` or, with that
-  unset, the default name a claim without a name is held under (a
-  `dev@host:session` name that `take` gives), to keep a claimant from
-  reviewing its own change under either name. So is every name that took the
-  card before, read from its `dev-claim:` notes, so a claim that lapsed does
-  not free its holder to review. The message names the claimant and says a
-  reviewer other than it must record the review. An unclaimed card takes any
-  NAME. The reviewer records its own review with its final verdict, `clean` for
-  CLEAN, `minor` for MINOR ISSUES and `needs-work` for NEEDS WORK, so it is the
-  recorder the board allowance for `review` covers. After a needs-work record
-  the reviewer notes the findings and leaves the card where it is. It prints
-  `recorded KIND review by NAME on <id prefix> at commit <12 characters>`. Like
-  `check`, it is never queued: if the comment cannot be written the command
-  exits 1 with `the review was NOT recorded`, and a timeout or gateway error may
-  come after Pomb stored it, so read `notes` before repeating. `note` refuses
-  `dev-review:` and `dev-turn:` as it does `dev-check:`, and `note --edit`
-  and `--delete` refuse a comment that holds it. `review` does not judge the
-  verdict: `land` does.
+### review
+
+`dev board review CARD --kind code|style|recheck --by NAME --rev REV --verdict
+clean|minor|needs-work` records that NAME reviewed the commit REV with that
+verdict.
+
+The record is one `status` comment on the card that begins with a reserved
+first line and has no other:
+
+```
+dev-review: kind=code by=<NAME> commit=<full commit id> change=<change id, - in git> verdict=<clean|minor|needs-work>
+```
+
+The flags:
+
+- All four are required. A missing one, an unknown kind or an unknown verdict
+  is exit 2, and the message lists the kinds or the verdicts.
+- A record written before verdicts has no `verdict=` and is read as it was.
+- REV is a jj revset in a jj project and a git revision in a git one. It must
+  name exactly one commit, so a revset of many commits, a word that starts with
+  `-` and a name that resolves to nothing are refused (exit 1).
+- NAME is an agent name as `take --as` takes.
+
+Who may record:
+
+- The card's claimant is refused for every kind (exit 1), whether NAME is the
+  claimant or the caller is. The caller is its `DEV_AGENT` or, with that unset,
+  the default name a claim without a name is held under (a `dev@host:session`
+  name that `take` gives). This keeps a claimant from reviewing its own change
+  under either name.
+- So is every name that took the card before, read from its `dev-claim:` notes,
+  so a claim that lapsed does not free its holder to review.
+- The message names the claimant and says a reviewer other than it must record
+  the review.
+- An unclaimed card takes any NAME.
+- The reviewer records its own review with its final verdict: `clean` for
+  CLEAN, `minor` for MINOR ISSUES and `needs-work` for NEEDS WORK. It is the
+  recorder the board allowance for `review` covers.
+- After a needs-work record the reviewer notes the findings and leaves the card
+  where it is.
+
+The result:
+
+- It prints `recorded KIND review by NAME on <id prefix> at commit <12
+  characters>`.
+- Like `check`, it is never queued. If the comment cannot be written the
+  command exits 1 with `the review was NOT recorded`.
+- A timeout or gateway error may come after Pomb stored it, so read `notes`
+  before repeating.
+- `note` refuses `dev-review:` and `dev-turn:` as it does `dev-check:`, and
+  `note --edit` and `--delete` refuse a comment that holds it.
+- `review` does not judge the verdict. `land` does.
+
+### The other subcommands
+
 - `land CARD [--wait SECONDS]`: Takes the landing turn and lands the change.
   It refuses outside the card's workspace, as `check` does. It rebases the
   working-copy change onto trunk, lands it with
