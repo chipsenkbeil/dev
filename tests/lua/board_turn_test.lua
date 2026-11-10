@@ -13,6 +13,7 @@ local turn = require("dev.board.turn")
 local LEASE_SECONDS = 3
 local PAST_LEASE_SECONDS = 4
 local PAST_HOLD_SECONDS = 2
+local TURN_HOLD_SECONDS = 600
 
 local clock
 
@@ -488,4 +489,52 @@ testing.test("turn covers rebase and land only", function()
     testing.eq(next_landing.hold, false)
     assert(turn.release(backend, next_landing))
     testing.eq(turn.holder(backend), nil)
+end)
+
+testing.test("turn take grabs the owner with the turn lease", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(first.lease, LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
+    restore()
+    testing.eq(turn.holder(backend), nil)
+    local RENEWED_AT_SECONDS = 500
+    local held =
+        assert(turn.take(backend, "beta", "bbbb2222", { hold = true, seconds = TURN_HOLD_SECONDS }))
+    testing.eq(held.lease, TURN_HOLD_SECONDS)
+    advance(RENEWED_AT_SECONDS)
+    testing.eq(turn.renew(backend, held), true)
+    advance(TURN_HOLD_SECONDS - RENEWED_AT_SECONDS)
+    testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+end)
+
+testing.test("turn release ends the owner lease", function()
+    local backend = backend_at(board_home())
+    local first = assert(
+        turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = TURN_HOLD_SECONDS })
+    )
+    testing.eq(first.lease, TURN_HOLD_SECONDS)
+    testing.eq(turn.renew(backend, first), true)
+    testing.eq(turn.release(backend, first), true)
+    testing.eq(turn.holder(backend), nil)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.eq(second.holder, "beta")
+    testing.eq(turn.release(backend, first), nil)
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+end)
+
+testing.test("turn names the live owner as its holder", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local refused, message = turn.take(backend, "beta", "bbbb2222")
+    testing.eq(refused, nil)
+    testing.ok(message:find("the landing turn is held by alpha since 20", 1, true), message)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    advance(PAST_LEASE_SECONDS)
+    restore()
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(assert(turn.take(backend, "beta", "bbbb2222")).holder, "beta")
 end)

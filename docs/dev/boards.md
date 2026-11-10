@@ -1627,9 +1627,14 @@ never handles the API.
     refused and not rebased.
 
   The landing turn keeps one landing at a time across runners, to keep
-  trunk from moving under a landing. It is the claim on a card named
+  trunk from moving under a landing. It is the owner of a card named
   `landing turn`, which `land` creates in the Icebox when the board has none,
-  to keep the holder on the board and not in one session.
+  to keep the holder on the board and not in one session. On a Pomb board the
+  turn grabs that owner with `POST /api/tasks/{id}/owner` and the turn's lease
+  as `ttl_seconds`, renews it through `/owner/renew` with `If-Owner-Fence`, and
+  gives it back through `/owner/release`. The holder is the card's live owner,
+  so a lapsed owner lease leaves the turn free. A local board keeps the same
+  owner as a claim in its file.
 
   A card in the wrong column, with an open outcome or claimed by another
   agent is refused before the turn is asked for. `land` then asks for the
