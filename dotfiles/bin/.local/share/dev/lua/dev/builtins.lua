@@ -455,8 +455,8 @@ return {
     {
         words = { "board", "ship" },
         handler = "lua",
-        usage = "dev board ship [-- CMD...]",
-        desc = "Run the release command after -- once, or each [board.release] checks row once when none is given, as plain commands from the project root, then move every Release card whose outcomes are all ticked to Done with a done note naming the trunk commit; cards with an unticked outcome stay in Release and are listed, a failing command moves no card and exits 1, and with neither a command nor rows it refuses",
+        usage = "dev board ship [--rev REV] [-- CMD...]",
+        desc = "Run the release command after -- once, or each [board.release] checks row once when none is given, as plain commands from the project root, then move every Release card whose outcomes are all ticked and whose landed commit, read from its newest land note, is an ancestor of REV (trunk by default) to Done with a done note naming REV. Cards with an unticked outcome, no readable landed commit or a commit outside REV stay in Release and are listed with the reason. A failing command moves no card and exits 1, and with neither a command nor rows it refuses",
     },
     {
         words = { "board", "turn" },

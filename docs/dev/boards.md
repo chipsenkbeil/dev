@@ -1734,19 +1734,24 @@ never handles the API.
   NAME.` and says that the commit named is from before the land and may differ
   from the one on trunk, the success line says the same, and the card still
   moves to Done. It is never queued.
-- `ship [-- CMD...]`: Ships the Release batch. It runs the release command
-  after `--` once, for example `dev board ship -- dev release --batch 12
+- `ship [--rev REV] [-- CMD...]`: Ships the Release batch. It runs the
+  release command after `--` once, for example `dev board ship -- dev release --batch 12
   --summary TEXT`, or each row of the `checks` list under `[board.release]`
   once when no command is given, as plain commands from the project root.
   With neither it exits 2 and names `[board.release]`. When every command
-  passes, `ship` moves each card in Release whose outcomes are all ticked to
-  Done after writing one `done` note that names the commit trunk points at
-  (`Shipped in trunk commit <12 characters>.`), and lists the cards left in
-  Release with an unticked outcome. When trunk cannot be read, the note says
-  so. When a command fails or times out, `ship` stops at it, moves no card,
-  prints the command and its output tail, and exits 1. A card whose note or
-  move fails stays in Release, is listed, and makes `ship` exit 1. It is
-  never queued.
+  passes, `ship` moves each card in Release to Done when all its outcomes
+  are ticked and its landed commit is an ancestor of REV, and writes a `done`
+  note that names REV and its commit (`Shipped in trunk, commit <12
+  characters>.`). REV is a jj revset that names one commit and defaults to
+  trunk. The landed commit comes from the card's newest land note, in either
+  form: `Landed commit <commit> (change <id>) on trunk` from `dev board land`,
+  or `landed <commit> on <remote>/main` from the land verb Pomb ships. `ship`
+  lists each card left in Release with its reason: an outcome is not ticked,
+  the card has no readable landed commit, or its landed commit is not in
+  REV. When REV cannot be read, `ship` runs nothing and moves no card. When a
+  command fails or times out, `ship` stops at it, moves no card, prints the
+  command and its output tail, and exits 1. A card whose note or move fails
+  stays in Release, is listed, and makes `ship` exit 1. It is never queued.
 - `turn CARD [--hold SECONDS] [--wait SECONDS] [--release]`:
   It refuses outside the card's workspace, as `check` does, but `--release`
   works from anywhere. The turn is short and holding it is optional: a landing

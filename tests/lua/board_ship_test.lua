@@ -54,7 +54,28 @@ local function dev(root, home, args)
     })
 end
 
-local function release_card(root, home, name, outcomes)
+local function trunk_commit(root)
+    return jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+end
+
+local function land_note(root, home, id, commit)
+    must(dev(root, home, {
+        "board",
+        "note",
+        id,
+        "Landed commit " .. commit .. " (change abc) on trunk, run by x.",
+    }))
+end
+
+local function push_commit(root, name)
+    assert(fs.write(root .. "/" .. name .. ".txt", name .. "\n"), "write failed")
+    jj(root, "commit", "-m", name)
+    jj(root, "bookmark", "set", "master", "-r", "@-")
+    jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
+    return trunk_commit(root)
+end
+
+local function release_card(root, home, name, outcomes, landed)
     local argv = { "board", "add", name, "--problem", "x", "--size", "1" }
     for _, outcome in ipairs(outcomes) do
         argv[#argv + 1] = "--done-when"
@@ -63,6 +84,9 @@ local function release_card(root, home, name, outcomes)
     local out = dev(root, home, argv)
     local id = assert(out:match("added (%x+)"), out)
     must(dev(root, home, { "board", "move", id, support.COLUMN.RELEASE }))
+    if landed ~= false then
+        land_note(root, home, id, landed or trunk_commit(root))
+    end
     return id
 end
 
@@ -121,7 +145,7 @@ if devos.which("jj") then
         tick(root, home, first)
         tick(root, home, second)
         tick(root, home, open)
-        local trunk = jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+        local trunk = trunk_commit(root)
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 0, out)
         for _, id in ipairs({ first, second }) do
@@ -213,5 +237,105 @@ if devos.which("jj") then
         testing.eq(code, 0, out)
         testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
         testing.eq(#done_notes(select(2, state(home, id))), 1)
+    end)
+
+    testing.test("ship leaves a card landed after the rev in release", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local early = release_card(root, home, "Early", { "It works" })
+        local pinned = trunk_commit(root)
+        local late = release_card(root, home, "Late", { "It works" }, push_commit(root, "later"))
+        tick(root, home, early)
+        tick(root, home, late)
+        local out, code = dev(root, home, { "board", "ship", "--rev", pinned })
+        testing.eq(code, 0, out)
+        testing.eq((state(home, early)), support.COLUMN_NAME.DONE)
+        local notes = done_notes(select(2, state(home, early)))
+        testing.eq(#notes, 1)
+        testing.ok(notes[1]:find(pinned:sub(1, 12), 1, true), notes[1])
+        testing.eq((state(home, late)), support.COLUMN_NAME.RELEASE)
+        testing.ok(out:find("left in Release", 1, true), out)
+        testing.ok(out:find(late:sub(1, 4), 1, true), out)
+        testing.ok(out:find("is not in", 1, true), out)
+        testing.eq(#done_notes(select(2, state(home, late))), 0)
+    end)
+
+    testing.test("ship reads a pomb land note and moves the card", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "Pomb", { "It works" }, false)
+        must(
+            dev(
+                root,
+                home,
+                { "board", "note", id, "landed " .. trunk_commit(root) .. " on origin/main" }
+            )
+        )
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 0, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("ship reads the newest land note", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local pinned = trunk_commit(root)
+        local id = release_card(root, home, "Twice", { "It works" }, push_commit(root, "later"))
+        land_note(root, home, id, pinned)
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship", "--rev", pinned })
+        testing.eq(code, 0, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("ship leaves a card with no landed commit in release and says why", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "Bare", { "It works" }, false)
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 0, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+        testing.ok(out:find("no landed commit", 1, true), out)
+    end)
+
+    testing.test("ship names an unticked outcome as the reason", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "Open", { "It works" })
+        local out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("outcome is not ticked", 1, true), out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    end)
+
+    testing.test("ship takes --rev with a command", function()
+        local root, home = project()
+        must(dev(root, home, { "board", "init" }))
+        local pinned = trunk_commit(root)
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship", "--rev", pinned, "--", "true" })
+        testing.eq(code, 0, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("ship with --rev and a bare -- refuses", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local out, code = dev(root, home, { "board", "ship", "--rev", "master@origin", "--" })
+        testing.eq(code, 2, out)
+        testing.ok(out:find("needs a command after --", 1, true), out)
+    end)
+
+    testing.test("ship with an unreadable rev moves no card", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship", "--rev", "nosuchrev" })
+        testing.eq(code, 1, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
     end)
 end

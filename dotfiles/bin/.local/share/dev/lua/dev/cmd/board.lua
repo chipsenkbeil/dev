@@ -3433,20 +3433,87 @@ local function ship_ran(backend, runs)
     end
 end
 
----Move every Release card with all outcomes ticked to Done, each with a done note.
+local Ship = { DEFAULT_REV = "trunk()" }
+
+---Split `--rev REV` off the words before `--`.
+---@param args string[] the ship arguments
+---@return string? rev the revision, the default when no flag was given, nil on a refusal
+---@return string[]|dev.cmd.board.Result rest the other arguments, or the refusal
+function Ship.rev(args)
+    local flag = "--rev"
+    local split = index_of(args, "--") or (#args + 1)
+    local rev, rest = Ship.DEFAULT_REV, {}
+    local i = 1
+    while i <= #args do
+        if i < split and args[i] == flag then
+            if i + 1 >= split then
+                return nil, usage(flag .. " needs a value")
+            end
+            rev = args[i + 1]
+            i = i + 2
+        else
+            rest[#rest + 1] = args[i]
+            i = i + 1
+        end
+    end
+    return rev, rest
+end
+
+---Read the commit a card's newest land note names.
+---@param comments {body: string}[] the card's comments, oldest first
+---@return string? commit the commit id, nil when the newest land note names none or there is none
+function Ship.landed(comments)
+    local patterns = { "^Landed commit (%x+) ", "^landed (%x+) on [^%s/]+/main" }
+    for i = #comments, 1, -1 do
+        local body = comments[i].body
+        for _, pattern in ipairs(patterns) do
+            local commit = body:match(pattern)
+            if commit then
+                return commit
+            end
+        end
+        if body:match("^Landed change ") then
+            return nil
+        end
+    end
+end
+
+---Say why a Release card cannot ship at a revision.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the Release card
+---@param commit string the commit the ship covers
+---@param name string what to call that revision
+---@return string? reason why it stays, nil when it may move
+function Ship.reason(backend, card, commit, name)
+    if done_refusal(card) then
+        return "an outcome is not ticked"
+    end
+    local comments = backend:comments(card.id)
+    local landed = comments and Ship.landed(comments)
+    if not landed then
+        return "no landed commit in its notes"
+    end
+    if not land.holds(backend.root, landed, commit) then
+        return "landed commit " .. land.short(landed) .. " is not in " .. name
+    end
+end
+
+---Move every Release card the shipped revision holds to Done, each with a done note.
 ---@param backend dev.board.Backend the board
 ---@param cards dev.board.Card[] the Release cards
+---@param rev string the revset the ship covers
+---@param commit string the full commit the revset names
 ---@return string[] lines what moved and what stayed
 ---@return boolean ok false when a note or a move failed
-local function ship_batch(backend, cards)
-    local commit = land.trunk_head(backend.root)
-    local text = commit and ("Shipped in trunk commit " .. land.short(commit) .. ".")
-        or "Shipped. Trunk could not be read, so the commit is unknown."
+local function ship_batch(backend, cards, rev, commit)
+    local name = rev == Ship.DEFAULT_REV and "trunk" or rev
+    local text = string.format("Shipped in %s, commit %s.", name, land.short(commit))
     local moved, kept, stranded, ok = {}, {}, {}, true
     for _, card in ipairs(cards) do
         local short = card.id:sub(1, board.MIN_PREFIX)
-        if done_refusal(card) then
-            kept[#kept + 1] = "  " .. short .. " " .. card.name
+        local reason = Ship.reason(backend, card, commit, name)
+        if reason then
+            kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. reason .. ")"
         else
             local result = move_card(backend, { card.id, backend.roles:done_column() })
             local moved_ok = result ~= nil and not result.code
@@ -3479,9 +3546,10 @@ local function ship_batch(backend, cards)
     end
     local lines = {
         string.format(
-            "shipped %s%s",
+            "shipped %s at %s commit %s",
             count_text(#moved, "card"),
-            commit and (" at trunk commit " .. land.short(commit)) or ""
+            name,
+            land.short(commit)
         ),
     }
     for _, line in ipairs(moved) do
@@ -3505,12 +3573,20 @@ local function ship_batch(backend, cards)
 end
 
 function commands.ship(backend, args)
-    local runs, err = ship_runs(backend, args)
+    local rev, rest = Ship.rev(args)
+    if not rev then
+        return rest
+    end
+    local runs, err = ship_runs(backend, rest)
     if not runs then
         return err
     end
     if not backend.root then
         return failure("dev board ship needs the project's root")
+    end
+    local commit = land.fetched_commit(backend.root, rev)
+    if not commit then
+        return failure("Revision " .. rev .. " does not name one commit. No card moved.")
     end
     local failed = ship_ran(backend, runs)
     if failed then
@@ -3526,7 +3602,7 @@ function commands.ship(backend, args)
             waiting[#waiting + 1] = card
         end
     end
-    local lines, ok = ship_batch(backend, waiting)
+    local lines, ok = ship_batch(backend, waiting, rev, commit)
     local text = table.concat(lines, "\n")
     if not ok then
         return failure(text)

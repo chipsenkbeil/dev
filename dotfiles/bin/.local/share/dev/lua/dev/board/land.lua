@@ -587,11 +587,22 @@ function M.fetched_commit(root, revset)
     return out:match("^(%x+)\n$")
 end
 
----Read the commit trunk points at once the remote of record is fetched.
+---Say whether a commit is an ancestor of a revision, or the revision itself.
 ---@param root string the project root, a jj project
----@return string? commit the full commit id, nil when it could not be read
-function M.trunk_head(root)
-    return M.fetched_commit(root, "trunk()")
+---@param commit string the commit id, full or shortened
+---@param rev string the jj revset naming one revision
+---@return boolean held true when the revision holds the commit
+function M.holds(root, commit, rev)
+    local out = jj_out(
+        root,
+        "log",
+        "-r",
+        commit .. " & ::(" .. rev .. ")",
+        "--no-graph",
+        "-T",
+        COMMIT_TEMPLATE
+    )
+    return out ~= nil and out:match("^%x+\n") ~= nil
 end
 
 ---Land the working-copy change with `jj land`.
