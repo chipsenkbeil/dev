@@ -53,13 +53,14 @@ dev board wait --for ready
 
 A project's `.dev/standalone/` is reserved for shell that must run where dev
 cannot, such as a production server. Line 2 of each script there reads
-`# standalone: runs on <where>, where dev is absent`, and `dev lint` warns on
-any other `.sh` under `.dev` except a hidden `.dev/__*.sh` helper.
+`# standalone: runs on <where>, where dev is absent`. `dev lint` warns on any
+other `.sh` under `.dev`, except a hidden `.dev/__*.sh` helper.
 
 `dev board land` refuses a commit that adds a file under `.dev/standalone/`
-unless the card carries the `standalone-ok` label, and the refusal names the
-file. Only the owner adds that label, so `dev board label` refuses to add it
-when `DEV_AGENT` is set, while removing it stays allowed. An agent that needs a
+unless the card carries the `standalone-ok` label. The refusal names the file.
+
+Only the owner adds that label. `dev board label` refuses to add it when
+`DEV_AGENT` is set, while removing it stays allowed. An agent that needs a
 standalone script files a `needs:human` card instead.
 
 ## Opting in
@@ -72,14 +73,16 @@ backend = "pomb"
 name = "dotfiles"
 ```
 
-`backend` is `pomb` or `local`, and `name` defaults to the project directory's
-name. `dev board status` prints the backend and the board, or
-`no board for this project` with exit 1, and every other subcommand says the
-same and exits 1 without a `[board]` section. The `local` backend keeps the
-board in a file (see Local boards below).
+`backend` is `pomb` or `local`, and `name` defaults to the project
+directory's name. The `local` backend keeps the board in a file (see Local
+boards below).
 
-The server and the token live once in the user file `~/.config/dev/config.toml`,
-never in a project file:
+`dev board status` prints the backend and the board. Without a `[board]`
+section it prints `no board for this project` and exits 1, and every other
+subcommand says the same and exits 1.
+
+The server and the token live once in the user file
+`~/.config/dev/config.toml`, never in a project file:
 
 ```toml
 [board.pomb]
@@ -94,153 +97,208 @@ the token to another server.
 ## The token
 
 `token` names a `pass` entry. dev runs `pass show` under a 10 second timeout
-with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`, so a locked
-store fails at once with `board unavailable: pass is locked or has no entry ...`
-instead of waiting on a prompt. `board/passlock.sh` runs it under one lock, the
-directory `/tmp/dev-pass-<uid>.lock`, so
-concurrent dev calls and keep-alive ticks queue instead of crowding the
-hardware key. It waits up to 2 minutes for the lock and then fails like a timeout.
-A lock whose owner pid is gone, or that is older than 30 seconds, is taken
-over. A dev process reads each entry once, while the keep-alive loop reads it
-on every tick.
+with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`. A locked
+store fails at once with `board unavailable: pass is locked or has no entry
+...` instead of waiting on a prompt.
+
+`board/passlock.sh` runs `pass` under one lock, the directory
+`/tmp/dev-pass-<uid>.lock`. Concurrent dev calls and keep-alive ticks queue
+instead of crowding the hardware key.
+
+- wait: up to 2 minutes for the lock, then it fails like a timeout.
+- takeover: a lock whose owner pid is gone, or that is older than 30
+  seconds, is taken over.
+- reads: a dev process reads each entry once, while the keep-alive loop reads
+  it on every tick.
 
 On a machine with `/usr/bin/security` (macOS), the Keychain answers before
 `pass`. `board/keychain.sh` keeps the token as a generic password named
-`dev-pomb-token:<entry>`, one item per `pass` entry. `passlock.sh` reads it
-first, with no lock and no hardware key. On a miss it reads `pass` under the lock
-and stores the token.
+`dev-pomb-token:<entry>`, one item per `pass` entry.
+
+`passlock.sh` reads the Keychain first, with no lock and no hardware key. On a
+miss it reads `pass` under the lock and stores the token.
 
 The item is created through `security -i`, which takes the command on
 standard input to keep the token out of every argument list. It is created
 with `-T /usr/bin/security` to make reading it raise no prompt.
 
-Every Keychain call runs under a 3 second timeout, and any failure, a locked
+Every Keychain call runs under a 3 second timeout. Any failure, a locked
 keychain included, falls through to `pass`. A machine without `security`
 reads `pass` alone.
 
 When Pomb answers 401 to a token from the Keychain, dev deletes the item,
 reads `pass` once and repeats the request once, to replace a rotated token.
-A delete that fails ends the retry, and the 401 is reported.
-The keep-alive loop does the same on a tick.
+A delete that fails ends the retry, and the 401 is reported. The keep-alive
+loop does the same on a tick.
 
 `DEV_BOARD_TOKEN` carries a role token a lead issued. When it is set and not
-empty, dev board sends it in place of the `pass` entry and reads neither `pass`
-nor the Keychain, and the keep-alive loop does the same on a tick. When it is
-unset or empty, dev reads the token file for the current `DEV_AGENT`, then
-`pass` as above. A 401 under either is refused, with no retry and no fallback
-to the `pass` token. The refusal says `the issued token in DEV_BOARD_TOKEN was
-refused by pomb` for the variable and `the role token file for DEV_AGENT was
-refused by pomb` for the file. An expired file is refused the same way, with
-`mint it again`.
+empty, dev board sends it in place of the `pass` entry and reads neither
+`pass` nor the Keychain. The keep-alive loop does the same on a tick.
+
+When `DEV_BOARD_TOKEN` is unset or empty, dev reads the token file for the
+current `DEV_AGENT`, then `pass` as above.
+
+A 401 under either role token is refused, with no retry and no fallback to
+the `pass` token. The refusal says:
+
+- `the issued token in DEV_BOARD_TOKEN was refused by pomb` for the variable.
+- `the role token file for DEV_AGENT was refused by pomb` for the file.
+
+An expired file is refused the same way, with `mint it again`.
 
 ### Role tokens: token-mint
 
 `dev board token mint --role ROLE --as NAME` gives a runner a role token when
-a lead starts it by hand. It reads the role's id by name from
-`GET /api/v1/agent-roles`, posts `{name, role_id}` to
-`/api/v1/auth/tokens/children` with the lead token (`lead_token`), and prints
-the role, the `agent-N` label and the expiry, never the token. Pomb sets the
-expiry: one hour by default, at most eight, and never past the lead's own.
+a lead starts it by hand. It prints the role, the `agent-N` label and the
+expiry, never the token. Pomb sets the expiry: one hour by default, at most
+eight, and never past the lead's own.
+
+The verb makes two calls:
+
+- `GET /api/v1/agent-roles` reads the role's id by name.
+- `POST /api/v1/auth/tokens/children` with `{name, role_id}` and the lead
+  token (`lead_token`) issues the token.
 
 The token goes to a file named by a SHA-256 hash of NAME, mode 0600, in a
 directory of mode 0700. The directory is `$XDG_RUNTIME_DIR/dev/tokens` when
 that variable is an absolute path, else `dev/tokens` under the state
-directory. The file holds the token on its first line and the expiry in Unix
-seconds on its second. Every mint deletes the expired files it finds there.
+directory.
+
+The file holds the token on its first line and the expiry in Unix seconds on
+its second. Every mint deletes the expired files it finds there.
 
 The lead then starts the runner with `DEV_AGENT=NAME` and no token in its
-environment or prompt. Because NAME is the claimant name, it follows
-`repo/role[/card]`. The verb runs only for a lead, and so does
-`delete`: both read one helper, which counts a `DEV_AGENT` as the lead when its
-role segment (the second) is `lead`, as in `dotfiles/lead`, or when it
-holds no slash. Any other role is refused.
+environment or prompt. NAME is the claimant name, so it follows
+`repo/role[/card]`.
+
+The verb runs only for a lead, and so does `delete`. Both read one helper,
+which counts a `DEV_AGENT` as the lead when its role segment (the second) is
+`lead`, as in `dotfiles/lead`, or when it holds no slash. Any other role is
+refused.
 
 Pomb refuses a name that a live token holds with a 409, and a name frees once
 its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`
-in plain words. Minting again for a running runner is described under
-token-remint, and `token revoke` ends a token early. A retry of a card reuses its
-name, so it revokes the earlier live token first or waits for it to expire.
+in plain words.
 
-The token goes to curl on standard input as a config line. It is in no argument
-list, no file and no output, `-v` and `-vv` included, and in no environment
-variable but `DEV_BOARD_TOKEN` itself.
+Minting again for a running runner is described under token-remint, and
+`token revoke` ends a token early. A retry of a card reuses its name, so it
+revokes the earlier live token first or waits for it to expire.
+
+The token goes to curl on standard input as a config line. It is in no
+argument list, no file and no output, `-v` and `-vv` included, and in no
+environment variable but `DEV_BOARD_TOKEN` itself.
 
 ### Minting again when a token expires: token-remint
 
 A role token lives at most eight hours, and Pomb answers 401 `token_expired`
-once it ends. The runner holds no `tokens.issue`, so the lead mints again with
-the same command, `dev board token mint --role ROLE --as NAME`. Pomb deletes
-the account's expired issued tokens when it issues a child, so an expired
-token's name is free at once and the new token reuses NAME with no suffix. The
-file of NAME is replaced with the new token. Only a live or suspended token of
-that name, matched without regard to case, gets a 409 `name_taken`, which the
-verb refuses by naming NAME and leaves the file as it was.
+once it ends. The runner holds no `tokens.issue`, so the lead mints again
+with the same command, `dev board token mint --role ROLE --as NAME`.
 
-A request that was refused with `token_expired` for the token it read from that
-file reads the file once more. When the file holds another token, it retries
-the request once with it. When the file still holds the same token, it fails
-with the expired message and makes no second try. A token from
-`DEV_BOARD_TOKEN` or from `pass` is never retried this way, and an expired one
-fails with the expired message as before. A runner cannot mint for itself, and
-dispatch's own re-mint is a separate matter.
+Pomb deletes the account's expired issued tokens when it issues a child. An
+expired token's name is free at once, and the new token reuses NAME with no
+suffix. The file of NAME is replaced with the new token.
+
+Only a live or suspended token of that name, matched without regard to case,
+gets a 409 `name_taken`. The verb refuses by naming NAME and leaves the file
+as it was.
+
+A request refused with `token_expired` for the token it read from that file
+reads the file once more:
+
+- another token: it retries the request once with it.
+- the same token: it fails with the expired message and makes no second try.
+
+A token from `DEV_BOARD_TOKEN` or from `pass` is never retried this way, and
+an expired one fails with the expired message as before. A runner cannot mint
+for itself, and dispatch's own re-mint is a separate matter.
 
 ### Ending a role token: token-revoke
 
 `dev board token revoke --as NAME` ends the token that `token mint` issued as
-NAME, once its run is over. It reads the lead token's own child tokens from
-`GET /api/v1/auth/tokens/children`, finds the one named NAME, and revokes it
-with `DELETE /api/v1/auth/tokens/children/{id}`. Pomb lists and revokes only
-the children the calling token issued, so a token the lead did not issue is
-out of reach. The lead is refused as `mint` and `delete` are, by the one lead
-helper.
+NAME, once its run is over. The lead is refused as `mint` and `delete` are, by
+the one lead helper.
 
-Pomb answers 200 once the token is revoked, and dev then deletes the file named
-by the hash of NAME and prints `revoked the role token of NAME`. A NAME that no
-live child holds, or a token Pomb answers 404 for because it is already gone,
-leaves nothing to revoke: dev exits 0, prints `nothing was left to revoke for
-NAME` and deletes a stale file for NAME. When Pomb refuses the revoke, dev
-prints the reason, exits 1 and keeps the file.
+The verb makes two calls:
+
+- `GET /api/v1/auth/tokens/children` reads the lead token's own child tokens
+  and finds the one named NAME.
+- `DELETE /api/v1/auth/tokens/children/{id}` revokes it.
+
+Pomb lists and revokes only the children the calling token issued, so a token
+the lead did not issue is out of reach.
+
+Pomb answers 200 once the token is revoked. dev then deletes the file named
+by the hash of NAME and prints `revoked the role token of NAME`.
+
+A NAME that no live child holds, or a token that Pomb answers 404 for
+(already gone), leaves nothing to revoke. dev exits 0, prints `nothing was
+left to revoke for NAME` and deletes a stale file for NAME.
+
+When Pomb refuses the revoke, dev prints the reason, exits 1 and keeps the
+file.
 
 ## Which token each tool holds
 
 Pomb groups permissions into four presets, each holding the one before it:
 `read`, `work`, `lead` and `admin`. A token holds a preset or a custom
-permission set, on all boards or on an assigned few. Each tool holds the
-smallest preset that covers its calls, on the boards it works.
+permission set, on all boards or on an assigned few.
 
-| Tool | Token | Calls it needs | Deletes it holds |
-|------|-------|----------------|------------------|
-| lead session | `lead_token`, `lead` | Everything `work` does, plus `boards.create`, `columns.create`, `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and `tasks.bin`, for `init`, for the `dev board delete` verb, and `subtasks.delete` for `outcome --delete` | `tasks.bin`: a card goes to the bin for 30 days. `subtasks.delete`: any outcome |
-| subagent and runner | `token`, `work` | Every read, `tasks.create` (add), `tasks.edit` (edit, labels, fields, restore), `tasks.move`, `tasks.claim` (claim, heartbeat, release), `subtasks.edit`, `subtasks.check`, `comments.write`, `links.write` | Its own comments and links. No card delete and no outcome delete: Pomb answers 403 `permission_denied` for `subtasks.delete`, and only the lead does either, with the lead token, and never an outcome from Ready on, where outcomes are fixed |
-| runner | `work` on its board | Read the board, create and move cards, set fields and labels, comment, link, claim, heartbeat and release | None. Its `init` needs `lead`, which the lead runs |
-| Aide agent | `work`, assigned boards only | The subagent's calls, notes written with `--as aide` | None. It never holds `lead` |
+Each tool holds the smallest preset that covers its calls, on the boards it
+works.
+
+- lead session: `lead_token`, preset `lead`.
+  - calls: everything `work` does, plus `boards.create`, `columns.create`,
+    `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and
+    `tasks.bin` (for `init` and the `dev board delete` verb), and
+    `subtasks.delete` for `outcome --delete`.
+  - deletes: `tasks.bin` sends a card to the bin for 30 days, and
+    `subtasks.delete` removes any outcome.
+- subagent and runner: `token`, preset `work`.
+  - calls: every read, `tasks.create` (add), `tasks.edit` (edit, labels,
+    fields, restore), `tasks.move`, `tasks.claim` (claim, heartbeat,
+    release), `subtasks.edit`, `subtasks.check`, `comments.write` and
+    `links.write`.
+  - deletes: its own comments and links. It deletes no card and no outcome.
+    Pomb answers 403 `permission_denied` for `subtasks.delete`, and only the
+    lead deletes either, with the lead token. Nobody deletes an outcome from
+    Ready on, where outcomes are fixed.
+- runner: preset `work` on its board.
+  - calls: read the board, create and move cards, set fields and labels,
+    comment, link, claim, heartbeat and release.
+  - deletes: none. Its `init` needs `lead`, which the lead runs.
+- Aide agent: preset `work`, assigned boards only.
+  - calls: the subagent's calls, with notes written with `--as aide`.
+  - deletes: none. It never holds `lead`.
 
 Every delete an agent holds is of its own work, except that only the lead
-deletes an outcome, so a mistaken comment or
-link never waits for the owner. Deleting from the bin, emptying it, and every
-board, column or account delete stay with the owner, who holds `admin`.
+deletes an outcome. A mistaken comment or link never waits for the owner.
 
-A card delete is token policy, not something dev enforces on its own. Only the
-lead decides and does one, and Pomb refuses a `work` token with a 403 naming
-`tasks.bin`. A restore from the bin needs only `tasks.edit`.
+Deleting from the bin, emptying it, and every board, column or account delete
+stay with the owner, who holds `admin`.
+
+A card delete is token policy, not something dev enforces on its own. Only
+the lead decides and does one, and Pomb refuses a `work` token with a 403
+naming `tasks.bin`. A restore from the bin needs only `tasks.edit`.
 
 The calls come from `board/pomb.lua`, a runner's Pomb contract notes and
-Pomb's permission catalog. For the deletes, the table follows the Pomb 0.5.60
-report: a `work` token deletes its own comments, links and outcomes, which the
-older passages and the contract still call admin-only, though dev lets only the
-lead delete an outcome. Those are tracked in
-two cards, one for this file and one for the contract.
+Pomb's permission catalog.
+
+For the deletes, the list above follows the Pomb 0.5.60 report. A `work` token
+deletes its own comments, links and outcomes, which the older passages and
+the contract still call admin-only, though dev lets only the lead delete an
+outcome. Two cards track that, one for this file and one for the contract.
 
 The review found no preset to change. The outcome delete is a Pomb right with
 no dev call yet, and dev needs no token change for it.
 
 ## Laying out the board
 
-`dev board init` brings the project's board to the standard, whether the board
-is new or old. It adds what is missing, fixes what is wrong and never deletes
-anything, so running it twice is the same as running it once. It prints one line
-per change, and `board X already follows the standard, nothing to change` when
-there is none.
+`dev board init` brings the project's board to the standard, whether the
+board is new or old. It adds what is missing, fixes what is wrong and never
+deletes anything, so running it twice is the same as running it once.
+
+It prints one line per change, and `board X already follows the standard,
+nothing to change` when there is none.
 
 ```
 dev board init
@@ -250,95 +308,112 @@ dev board init --admin
 
 What it lays out:
 
-- The columns Icebox, Backlog, Ready, In Progress, Review, Verify, Release,
-  Blocked and Done, in that order, with Done counting as done. A missing board
-  is made from Pomb's `agent project` template, and the missing columns are
-  added and moved into place. A column named In Review is renamed to Review
-  with its cards kept, through `PATCH /api/columns/{id}`, so no card is left in
-  a column that no longer exists. A rerun changes nothing. A column it does
-  not know stays, comes after Done and is reported as
-  `kept column "X", which is not part of the standard board`. It renames
-  no column but In Review.
-- The agent roles: the planner, implementer, reviewer, verifier, release and lead
-  roles, granted to the board. `init` posts `{"boards":[board id]}` to Pomb's
-  `/api/v1/agent-roles/standard` right after the columns and prints
-  `created agent roles` with the names the reply lists, or `agent roles unchanged`
-  on a rerun, which is not counted as a change. A role that exists keeps its
-  template. The endpoint needs `settings.write` and a board the token holds. A
-  `permission_denied` is shown with the missing permission, and an
-  `exceeds_grant` as `the token does not hold board X`, with nothing created. A
-  local board has no roles, so it says nothing.
-- Role refusals: a refusal reads the token's `role_name` from
-  `GET /api/v1/auth/whoami`, once, and only then. A `permission_denied` 403 and
-  an `exceeds_grant` 403 name the refused permission or action and the role, as
-  `this token (role implementer) lacks the tasks.edit permission`. A token
-  with no role gets the plain text with no role named. A 401 with the code
-  `token_expired`, matched on the code and never the message, prints `the role
-  token expired; mint it again from its issuer`.
-- The palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`,
-  red `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps
+- columns: Icebox, Backlog, Ready, In Progress, Review, Verify, Release,
+  Blocked and Done, in that order, with Done counting as done.
+  - A missing board is made from Pomb's `agent project` template, and the
+    missing columns are added and moved into place.
+  - A column named In Review is renamed to Review with its cards kept,
+    through `PATCH /api/columns/{id}`, so no card is left in a column that no
+    longer exists. It renames no column but In Review.
+  - A rerun changes nothing.
+  - A column it does not know stays, comes after Done and is reported as
+    `kept column "X", which is not part of the standard board`.
+- agent roles: the planner, implementer, reviewer, verifier, release and lead
+  roles, granted to the board.
+  - `init` posts `{"boards":[board id]}` to Pomb's
+    `/api/v1/agent-roles/standard` right after the columns.
+  - It prints `created agent roles` with the names the reply lists, or
+    `agent roles unchanged` on a rerun, which is not counted as a change.
+  - A role that exists keeps its template.
+  - The endpoint needs `settings.write` and a board the token holds. A
+    `permission_denied` is shown with the missing permission, and an
+    `exceeds_grant` as `the token does not hold board X`, with nothing
+    created.
+  - A local board has no roles, so it says nothing.
+- role refusals: a refusal reads the token's `role_name` from
+  `GET /api/v1/auth/whoami`, once, and only then.
+  - A `permission_denied` 403 and an `exceeds_grant` 403 name the refused
+    permission or action and the role, as `this token (role implementer)
+    lacks the tasks.edit permission`.
+  - A token with no role gets the plain text with no role named.
+  - A 401 with the code `token_expired`, matched on the code and never the
+    message, prints `the role token expired; mint it again from its issuer`.
+- palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`, red
+  `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps
   its colour in every column, so the colour is the only record of its size.
-- Which colours are on. White, yellow, green, blue and red are enabled and every
-  other colour (orange, purple, magenta, cyan, brown) is disabled, one line per
-  change such as `disabled orange`. Nothing is deleted. A card that already
-  wears a disabled colour keeps it and is reported on every run, one line each.
-  Pomb lets only an admin token change this, so with the lead token a 403 prints
-  `left the colours enabled as they are...`, and the rest of the run still
-  happens. Run `dev board init --admin` to switch the colours.
-- Size words off card names. A trailing `(yellow)`, `(green)`, `(blue)`, `(red)`
-  or `(red, split)` comes off the name. If the card is still white, has no
-  colour, or has the colour that was the default when the run began (Pomb gave
-  that to every card nobody coloured), the card takes the colour the word names.
-  A card with any other colour keeps it.
-- The limit group: when `GET /api/boards/{id}` lists no `limit_groups`, `init`
+- colours that are on: white, yellow, green, blue and red are enabled.
+  - Every other colour (orange, purple, magenta, cyan, brown) is disabled,
+    one line per change such as `disabled orange`. Nothing is deleted.
+  - A card that already wears a disabled colour keeps it and is reported on
+    every run, one line each.
+  - Pomb lets only an admin token change this. With the lead token a 403
+    prints `left the colours enabled as they are...`, and the rest of the run
+    still happens. Run `dev board init --admin` to switch the colours.
+- size words off card names: a trailing `(yellow)`, `(green)`, `(blue)`,
+  `(red)` or `(red, split)` comes off the name.
+  - If the card is still white, has no colour, or has the colour that was the
+    default when the run began (Pomb gave that to every card nobody
+    coloured), the card takes the colour the word names.
+  - A card with any other colour keeps it.
+- limit group: when `GET /api/boards/{id}` lists no `limit_groups`, `init`
   posts `{"column_ids":[In Progress, Review, Verify ids],"limit":4}` to
-  `/api/boards/{id}/limit-groups` and prints `created limit group In Progress,
-  Review and Verify at 4`. A board that has any group is left alone and says
-  nothing, and a local board gets none and stays uncapped. A 403 is shown with
-  the `--admin` hint like the other changes. `dev board limits` shows the
-  result.
-- Labels need nothing: `needs:planner`, `needs:lead` and `needs:human` are
-  plain strings on a card, and Pomb makes them when a card first carries one.
+  `/api/boards/{id}/limit-groups`.
+  - It prints `created limit group In Progress, Review and Verify at 4`.
+  - A board that has any group is left alone and says nothing.
+  - A local board gets none and stays uncapped.
+  - A 403 is shown with the `--admin` hint like the other changes.
+  - `dev board limits` shows the result.
+- labels: they need nothing. `needs:planner`, `needs:lead` and `needs:human`
+  are plain strings on a card, and Pomb makes them when a card first carries
+  one.
 
-The board's name comes from `[board]`. In a project with no `[board]` section,
-`--name N` names the board and `init` appends the section to `.dev/config.toml`
-once the board is in order. `--name` with a different name than the section's is
-a usage error.
+The board's name comes from `[board]`. In a project with no `[board]`
+section, `--name N` names the board and `init` appends the section to
+`.dev/config.toml` once the board is in order. `--name` with a different name
+than the section's is a usage error.
 
 ### Tokens
 
-By default `init` uses the lead token, `lead_token` in `[board.pomb]`, read the
-same way as `token`. Pomb lets the lead token name colours, set the default
-colour and reorder columns only on boards that token created. On any other board
-Pomb answers 403 and `init` says to run it with `--admin`.
+By default `init` uses the lead token, `lead_token` in `[board.pomb]`, read
+the same way as `token`. Pomb lets the lead token name colours, set the
+default colour and reorder columns only on boards that token created.
 
-Pomb is moving to fine-grained tokens, and dev reads both servers. Today a
-refusal is `insufficient_scope` and `whoami` returns a `scope`. After the change
-a refusal is `permission_denied` with the `permission` and a `board_id`, and
-`whoami` returns `permissions` and `boards` (`all`, or a list of ids and names).
+On any other board Pomb answers 403 and `init` says to run it with `--admin`.
+
+Pomb is moving to fine-grained tokens, and dev reads both servers:
+
+- today: a refusal is `insufficient_scope` and `whoami` returns a `scope`.
+- after the change: a refusal is `permission_denied` with the `permission`
+  and a `board_id`, and `whoami` returns `permissions` and `boards` (`all`,
+  or a list of ids and names).
+
 dev prints two messages for the new refusal:
 
-- `board_id` null: the token lacks the permission on every board, so use a token
-  that has it. `init` adds the `--admin` hint to this one.
+- `board_id` null: the token lacks the permission on every board, so use a
+  token that has it. `init` adds the `--admin` hint to this one.
 - `board_id` set: the token has the permission but is not assigned to that
-  board, so add the board to the token. No `--admin` hint, since a new sign-in
-  does not change the assignment.
+  board, so add the board to the token. There is no `--admin` hint, as a new
+  sign-in does not change the assignment.
 
-A board missing from `GET /api/boards` on a token assigned only some boards is
-reported as
-`pomb lists no board named X for this token, which is assigned only to ...`. On
-a token that sees every board it stays `pomb has no board named X`.
-`init --admin` accepts the sign-in when `whoami` says `scope` is `admin`, or
-when `permissions` holds every permission the catalog
-(`GET /api/v1/auth/permissions`) lists for the `admin` preset and `boards` is
-`all`.
+A board missing from `GET /api/boards` on a token assigned only some boards
+is reported as `pomb lists no board named X for this token, which is assigned
+only to ...`. On a token that sees every board it stays `pomb has no board
+named X`.
 
-`--admin` signs in through Pomb's device flow. dev prints a code and a link, you
-open the link in your browser, check that it asks for `admin`, approve it and
-pick an expiry, and dev carries on. The token it receives is held in memory for
-that run. It is never written to a file, put in an argument or an environment
-variable, or printed. If you approve a lower scope than `admin`, `init` stops
-before changing anything.
+`init --admin` accepts the sign-in in either case:
+
+- `whoami` says `scope` is `admin`.
+- `permissions` holds every permission the catalog
+  (`GET /api/v1/auth/permissions`) lists for the `admin` preset, and `boards`
+  is `all`.
+
+`--admin` signs in through Pomb's device flow. dev prints a code and a link,
+you open the link in your browser, check that it asks for `admin`, approve it
+and pick an expiry, and dev carries on.
+
+The token it receives is held in memory for that run. It is never written to
+a file, put in an argument or an environment variable, or printed. If you
+approve a lower scope than `admin`, `init` stops before changing anything.
 
 ```
 approve the admin sign-in at https://pomb.example.com/device
