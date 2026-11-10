@@ -1700,7 +1700,9 @@ never handles the API.
 
   `deploys = true` under the same `[board.land]` table makes `land` move the
   card to Release, where it waits until it is live. Without it `land` moves the
-  card to Done. This repo does not set it.
+  card to Done. This repo sets it. The lead runs `dev board ship` from a
+  workspace at trunk, and rolls the checkout only onto the revision that ship
+  passed.
 
   `checks` under `[board.release]` lists the commands `dev board ship` runs
   once when it gets none after `--`, one plain command per row.
