@@ -1632,6 +1632,7 @@ local function move_card(backend, args, opts)
     end
     local children = card.epic and card.epic.total or 0
     local epic = card.epic ~= nil
+    local closing = to_done and board.children_closed(card.epic)
     if column == roles.ready and unready(card.color) then
         local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
             or "has no size"
@@ -1649,6 +1650,7 @@ local function move_card(backend, args, opts)
             description = card.description,
             outcomes = #card.outcomes,
             need_outcomes = not (opts and opts.drop) and not card.outcomes_unreadable,
+            closing = closing,
             children = children,
             epic = epic,
         }

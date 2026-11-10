@@ -519,10 +519,10 @@ an existing card into, and a `parent` link needs one. `ls` and
 no children, and `show` prints `kind: epic, N open` above the `parent` and
 `children` lines. Once every child is Done it enters Ready and takes a claim
 like any card. While a child is open, `next` never offers it, in any column, on
-Pomb or a local board. It needs 1 to 3 outcomes as its final check, where any
-other card needs 3 to 7, and it is claimed like any card once its children are
-done. `move CARD done` closes it once every child is Done and refuses it while a
-child is open.
+Pomb or a local board. It needs 1 to 3 outcomes as its final check to enter
+Ready, where any other card needs 3 to 7, and it is claimed like any card once
+its children are done. `move CARD done` closes it once every child is Done and
+refuses it while a child is open.
 
 To push a card later, drag it lower in Ready.
 
@@ -587,7 +587,8 @@ an unsized card or one without the headings but does not ask for outcomes (exit
 1), so a card reaches Done unsized only by the Icebox `--reason` case below.
 `size CARD unsized` is refused outside Icebox (exit 1), `edit` refuses a text
 that drops a heading outside Icebox (exit 1), and a move into Icebox always
-works. An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7.
+works. An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7,
+except that an epic with every child Done closes with none.
 
 Sizing is part of planning, so a card also cannot enter Ready as red.
 `move CARD ready` refuses a card that is unsized (white or no colour) or red,
@@ -887,8 +888,9 @@ open question. `--strict` exits the same way. The rules:
   text under Change or Out of scope, and no `Change:` or `Out of scope:` line
   under Problem. A Done card gets the size and outcome checks only, and a Done
   card labelled `discarded` needs no outcome. An epic, a card with children,
-  needs 1 to 3 outcomes, so lint reads the children of every card it checks for
-  outcomes.
+  needs 1 to 3 outcomes, except a Done epic with every child Done, which may
+  have none and 1 to 3 if it has any, so lint reads the children of every
+  card it checks for outcomes.
 - With `--strict`, a Done card also needs the three v2 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
@@ -1425,7 +1427,8 @@ never handles the API.
   `blocked` kind and then `backend:links` for `blocked_by`. In In Progress it
   adds `in progress with no claimant`, and in Done `N of M outcomes unticked` unless discarded, and `N of M children
   open` when the card has an open child. Every card asked for outcomes reads
-  `backend:family` for its child count, which sets the 1 to 3 an epic needs. A
+  `backend:family` for its child count, which sets the 1 to 3 an epic needs, or
+  none once every child is Done. A
   card with `outcomes_unreadable` gets `outcomes unreadable` and no outcome
   rule. A read that fails is exit 1 with the message. It writes nothing
   itself, but the dispatcher replays the queue first, as for every Pomb

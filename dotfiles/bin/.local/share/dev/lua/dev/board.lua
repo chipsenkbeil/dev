@@ -913,6 +913,7 @@ end
 ---@field description string? the card's description
 ---@field outcomes integer how many outcomes it has
 ---@field need_outcomes boolean whether it needs one
+---@field closing boolean? whether an epic with every child Done is closing
 ---@field children integer how many children it has, 0 for a card that is no epic
 ---@field epic boolean? whether it is an epic even with no children
 ---@field sections boolean? whether the v2 sections are checked, true when nil
@@ -930,7 +931,8 @@ end
 
 ---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v2 section with text under
 ---Problem, and, when asked, at least one Done when outcome. A v1 `## Done when` checklist item
----counts as an outcome. An epic, a card with children, needs 1 to 3 outcomes as its final check.
+---counts as an outcome. An epic, a card with children, needs 1 to 3 outcomes as its final
+---check, unless it is closing with every child Done.
 ---@param card dev.board.Unplanned the card's size, description and outcome facts
 ---@return string[] missing the problems, empty when the card may sit outside Icebox
 function M.unplanned(card)
@@ -945,7 +947,7 @@ function M.unplanned(card)
         end
     end
     if card.need_outcomes then
-        if card.outcomes == 0 and checklist_items(description) == 0 then
+        if card.outcomes == 0 and checklist_items(description) == 0 and not card.closing then
             missing[#missing + 1] = "Done when outcomes"
         elseif (card.children > 0 or card.epic) and card.outcomes > M.MAX_EPIC_OUTCOMES then
             missing[#missing + 1] = epic_outcomes(card.outcomes)
@@ -962,6 +964,13 @@ function M.open_children(children)
         return 0
     end
     return children.total - children.done
+end
+
+---Check whether an epic has children and every one of them is Done.
+---@param children {done: integer, total: integer}? the epic's children, nil when it has none
+---@return boolean closed true when it has children and none is open
+function M.children_closed(children)
+    return children ~= nil and children.total > 0 and M.open_children(children) == 0
 end
 
 ---The mark an epic carries before its name in a listing.

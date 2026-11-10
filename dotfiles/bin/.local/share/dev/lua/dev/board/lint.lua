@@ -105,13 +105,14 @@ function M.card(card, opts)
         return kids, kids_why
     end
     if column ~= roles.icebox then
-        local child_total, child_epic = 0, false
+        local child_total, child_epic, child_closing = 0, false, false
         if need_outcomes then
             local found, why = children()
             if not found then
                 return nil, why
             end
             child_total, child_epic = found.total, found.epic == true
+            child_closing = card.done and board.children_closed(found)
         end
         local sectioned = open or opts.strict == true
         local missing = board.unplanned({
@@ -119,6 +120,7 @@ function M.card(card, opts)
             description = card.description,
             outcomes = #card.outcomes,
             need_outcomes = need_outcomes,
+            closing = child_closing,
             children = child_total,
             epic = child_epic,
             sections = sectioned,

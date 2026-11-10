@@ -1131,6 +1131,69 @@ testing.test("epic_move_refused", function()
     testing.eq(commands.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
 end)
 
+testing.test("an epic with every child Done closes without outcomes", function()
+    local card = planned()
+    card.epic = { done = 3, total = 3 }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    testing.eq(result.output, "moved cccccccc to Done")
+    testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
+end)
+
+testing.test("an epic with no outcomes and an open child is refused", function()
+    local card = planned()
+    card.column = support.COLUMN_NAME.READY
+    card.epic = { done = 1, total = 3 }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
+    card.outcomes = { { id = "s1", name = "a", done = true } }
+    result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open"
+    )
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the refused move was sent")
+    end
+end)
+
+testing.test("an epic with no children needs outcomes to close", function()
+    local card = planned()
+    card.column = support.COLUMN_NAME.READY
+    card.epic = { done = 0, total = 0 }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("an epic with every child Done still needs 3 or fewer outcomes to close", function()
+    local card = planned()
+    card.epic = { done = 3, total = 3 }
+    card.outcomes = {
+        { id = "s1", name = "a", done = true },
+        { id = "s2", name = "b", done = true },
+        { id = "s3", name = "c", done = true },
+        { id = "s4", name = "d", done = true },
+    }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = commands.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("1 to 3 Done when outcomes for an epic, not 4", 1, true),
+        result.message
+    )
+    testing.eq(#backend.calls, 0)
+end)
+
 testing.test("discard closes an epic whose children are open", function()
     local backend = fake({ planned() })
     backend.kin = { children = { done = 0, total = 2 } }
