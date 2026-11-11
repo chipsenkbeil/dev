@@ -95,7 +95,7 @@ function M.run(path, ctx)
     if not ok then
         local text = tostring(result)
         if text:find("interrupted!", 1, true) then
-            return dev_os.SIGNAL_EXIT_BASE + 2
+            return dev_os.interrupt_code()
         end
         if text:sub(1, #ctx.name + 1) == ctx.name .. ":" then
             text = text:sub(#ctx.name + 2):gsub("^%d+: ", "")

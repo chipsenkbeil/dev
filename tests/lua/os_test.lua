@@ -3,6 +3,48 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
+local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
+local LAUNCHER = REPO .. "/dotfiles/bin/.local/bin/dev"
+local WAIT_TICKS = 100
+local VERB_WAIT_TICKS = 300
+local VERB_POLL_SECS = 0.1
+local CLEANUP_VERB = "-- Register a cleanup.\n"
+    .. [[
+local dev_os = require("dev.os")
+local dir = os.getenv("CLEANUP_DIR")
+dev_os.on_exit(function()
+    local file = assert(io.open(dir .. "/ran", "a"))
+    file:write("cleanup\n")
+    file:close()
+end)
+]]
+local WAIT_VERB = CLEANUP_VERB
+    .. string.format(
+        [[
+assert(io.open(dir .. "/ready", "w")):close()
+for _ = 1, %d do
+    dev_os.nap(%s)
+end
+return 0
+]],
+        VERB_WAIT_TICKS,
+        VERB_POLL_SECS
+    )
+local SIGNAL_SCRIPT = [[
+cd "$1" || exit 97
+luajit "$3" term >"$1/out" 2>&1 &
+pid=$!
+i=0
+while [ ! -e "$1/ready" ] && [ "$i" -lt "$4" ]; do sleep 0.1; i=$((i + 1)); done
+if [ ! -e "$1/ready" ]; then kill -KILL "$pid"; wait "$pid"; exit 99; fi
+kill -"$2" "$pid"
+i=0
+while kill -0 "$pid" 2>/dev/null && [ "$i" -lt "$4" ]; do sleep 0.1; i=$((i + 1)); done
+if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; wait "$pid"; exit 98; fi
+wait "$pid"
+]]
+
 testing.test("quote wraps in single quotes and escapes embedded ones", function()
     testing.eq(dev_os.quote("it's"), [['it'\''s']])
     testing.eq(dev_os.quote(""), "''")
@@ -554,4 +596,101 @@ testing.test("capture_timed with no seconds sets no limit and runs to completion
     testing.eq(out, "done\n")
     testing.eq(code, 0)
     testing.ok(os.time() - started >= 2, "the command should have been waited for")
+end)
+
+local function cleanup_project(source)
+    local root = support.sandbox({ [".dev/term.lua"] = source }, {})
+    assert(dev_os.run({ "chmod", "755", root .. "/.dev/term.lua" }) == 0, "chmod failed")
+    return root
+end
+
+local function child_env(root)
+    return { CLEANUP_DIR = root, DEV_SELF = LAUNCHER }
+end
+
+local function ran(root)
+    return fs.read(root .. "/ran")
+end
+
+local function kill_child(root, signal)
+    local code = dev_os.run({
+        "sh",
+        "-c",
+        SIGNAL_SCRIPT,
+        "sh",
+        root,
+        signal,
+        MAIN,
+        tostring(WAIT_TICKS),
+    }, { env = child_env(root) })
+    return code
+end
+
+testing.test("a verb killed by SIGTERM runs its cleanup once and exits 143", function()
+    local root = cleanup_project(WAIT_VERB)
+    testing.eq(kill_child(root, "TERM"), 143)
+    testing.eq(ran(root), "cleanup\n")
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a verb interrupted by SIGINT runs its cleanup once and exits 130", function()
+    local root = cleanup_project(WAIT_VERB)
+    testing.eq(kill_child(root, "INT"), 130)
+    testing.eq(ran(root), "cleanup\n")
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a Lua error runs the cleanup once", function()
+    local root = cleanup_project(CLEANUP_VERB .. 'error("boom")\n')
+    local _, code = dev_os.capture({ "luajit", MAIN, "term" }, {
+        cwd = root,
+        stderr = "stdout",
+        env = child_env(root),
+    })
+    testing.eq(code, 1)
+    testing.eq(ran(root), "cleanup\n")
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a normal exit runs the cleanup once", function()
+    local root = cleanup_project(CLEANUP_VERB .. "return 4\n")
+    local out, code = dev_os.capture({ "luajit", MAIN, "term" }, {
+        cwd = root,
+        stderr = "stdout",
+        env = child_env(root),
+    })
+    testing.eq(code, 4)
+    testing.eq(out, "")
+    testing.eq(ran(root), "cleanup\n")
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("cleanups run newest first and one that raises does not stop the rest", function()
+    local root = cleanup_project("-- Register cleanups.\n" .. [=[
+local dev_os = require("dev.os")
+local dir = os.getenv("CLEANUP_DIR")
+local function note(text)
+    local file = assert(io.open(dir .. "/ran", "a"))
+    file:write(text, "\n")
+    file:close()
+end
+dev_os.on_exit(function()
+    note("first")
+end)
+dev_os.on_exit(function()
+    error("bad")
+end)
+dev_os.on_exit(function()
+    note("third")
+end)
+return 0
+]=])
+    local _, code = dev_os.capture({ "luajit", MAIN, "term" }, {
+        cwd = root,
+        stderr = "null",
+        env = child_env(root),
+    })
+    testing.eq(code, 0)
+    testing.eq(ran(root), "third\nfirst\n")
+    fs.remove(root, { recursive = true })
 end)

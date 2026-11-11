@@ -231,7 +231,8 @@ local function run_script(row, ctx, rest)
     end
     package.path = ctx.root .. "/.dev/lua/?.lua;" .. package.path
     dev_os.defaults.show = ctx.verbose >= 1
-    os.exit(verb.run(row.script, ctx))
+    local code = verb.run(row.script, ctx)
+    os.exit(code)
 end
 
 local function builtin_handler(row)
@@ -456,7 +457,8 @@ function M.main(argv)
     if handler then
         refuse_untaken(ctx, reg)
         prepare(ctx)
-        os.exit(handler(ctx, reg))
+        local code = handler(ctx, reg)
+        os.exit(code)
     end
     help.usage_error(ctx, reg, "unknown verb " .. name)
 end
@@ -474,11 +476,12 @@ function M.guard(fn, ...)
         end
         return message
     end, ...)
+    dev_os.run_cleanups()
     if ok then
         return nil
     end
     if err == INTERRUPTED then
-        return INTERRUPTED
+        return dev_os.interrupt_code()
     end
     error(err, 0)
 end

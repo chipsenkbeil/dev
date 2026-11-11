@@ -74,6 +74,10 @@ local EINTR = 4
 local READ_CHUNK_BYTES = 65536
 
 local SIGPIPE = 13
+local SIGINT = 2
+local SIGTERM = 15
+local SIG_DFL = 0
+local SIG_IGN = 1
 local WAIT_SIGNAL_MASK = 0x7f
 local WAIT_EXIT_SHIFT = 256
 local TIMEOUT_EXIT = 124
@@ -331,6 +335,69 @@ function M.capture(argv, opts)
         error("capture lost the exit status of " .. command)
     end
     return text:sub(1, split - 1), tonumber(text:sub(split + 1))
+end
+
+local cleanups = {}
+local term_installed = false
+local exit_wrapped = false
+
+local function address(handler)
+    return tonumber(ffi.cast("intptr_t", handler))
+end
+
+---Make SIGTERM raise the same interrupt error as SIGINT.
+function M.catch_term()
+    local handler = ffi.C.signal(SIGINT, ffi.cast("void (*)(int)", SIG_DFL))
+    ffi.C.signal(SIGINT, handler)
+    if address(handler) > SIG_IGN then
+        ffi.C.signal(SIGTERM, handler)
+        term_installed = true
+    end
+end
+
+---Name the exit status of an interrupt error that was just caught.
+---@return integer code 128 plus SIGTERM when `catch_term` caught SIGTERM, 128 plus SIGINT otherwise
+function M.interrupt_code()
+    if term_installed then
+        local current = ffi.C.signal(SIGTERM, ffi.cast("void (*)(int)", SIG_DFL))
+        if address(current) == SIG_DFL then
+            return M.SIGNAL_EXIT_BASE + SIGTERM
+        end
+        ffi.C.signal(SIGTERM, current)
+    end
+    return M.SIGNAL_EXIT_BASE + SIGINT
+end
+
+---Run every registered cleanup once, newest first.
+---
+---A cleanup that raises is reported on standard error and the rest still run.
+function M.run_cleanups()
+    while #cleanups > 0 do
+        local cleanup = table.remove(cleanups)
+        local ok, err = pcall(cleanup)
+        if not ok then
+            local stderr = io.stderr
+            stderr:write("A cleanup failed: ", tostring(err), ".\n")
+        end
+    end
+end
+
+---Register `fn` to run when the process exits, however it ends.
+---
+---That covers a return, an error and a kill by SIGTERM or SIGINT.
+---
+---`os.exit` runs the cleanups first from the first registration on.
+---@param fn fun() cleanup to run
+function M.on_exit(fn)
+    cleanups[#cleanups + 1] = fn
+    if not exit_wrapped then
+        exit_wrapped = true
+        local real_exit = os.exit
+        rawset(os, "exit", function(code, close)
+            M.run_cleanups()
+            real_exit(code, close)
+        end)
+    end
 end
 
 ---Call `fn` while a write to a closed pipe fails with an error instead of killing the process.
