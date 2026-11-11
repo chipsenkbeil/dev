@@ -85,8 +85,9 @@ Everything after the first `--` reaches the script untouched, so flags meant
 for another tool go there. `dev test -- <args>` runs the test suites with
 `<args>`.
 
-Built-in verbs check their own flags. With `--remote`, any argument before the
-`--` is refused, as the `remote` topic describes.
+Built-in verbs check their own flags. With `--remote`, arguments typed with no
+`--` reach the job, and arguments on both sides of a `--` are refused, as the
+`remote` topic describes.
 
 The refusal exits 2 with this message:
 
@@ -220,7 +221,7 @@ badly, fails the command with ci's error (exit code kept) and the hint
 `rerun, or pass --local to run it here`. A ci deploy never moves every run
 onto the laptop.
 
-The default passes every argument to the job, before the `--` or after it.
+Both the default and an explicit `--remote` pass every argument to the job.
 
 Local is automatic only for these cases.
 
@@ -248,7 +249,9 @@ dev: --local and --remote cannot be used together
 
 `--remote` (or `DEV_REMOTE=1`) runs the command somewhere else. Dev strips
 `--remote` and `--detach`, hands the runner the command words and the
-arguments after `--` untouched, and returns the runner's exit code.
+arguments untouched, and returns the runner's exit code. Arguments given with no
+`--` reach the job as well, and arguments on both sides of a `--` are a usage
+error.
 
 The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
 `.dev/__remote.lua` is a chunk returning `function(run) -> integer`, with
@@ -261,8 +264,8 @@ then runs `ci -C <root> run --local --follow --job <job> -- <args>` on
 example-box, with `--detach` in place of `--follow`, and never falls back to a
 local run.
 
-An argument before the `--` is a usage error, and so is `--detach` without
-`--remote`.
+Arguments on both sides of the `--` are a usage error, and so is `--detach`
+without `--remote`.
 
 `bootstrap` is not on the refusal list below. This repo's
 `.dev/__remote.lua` sends `bootstrap` and `soak` to the job of the same name
@@ -368,7 +371,7 @@ dev: --remote needs luajit. Install it with brew install luajit, pacman -S luaji
 - Parses the global flags and applies the root check.
 - Resolves the verb through `dev.registry`.
 - Refuses a flag the verb's `# flags:` line does not declare. With `--remote`
-  it does not, and the remote check refuses every argument before a `--`.
+  it does not, and the remote check refuses arguments on both sides of a `--`.
 - Runs a `.lua` verb in process (`chunk(ctx)`, with `.dev/lua` added to
   `package.path` unless root), or execs a `.sh` verb.
 - Runs `--remote` through `dev.remote`.

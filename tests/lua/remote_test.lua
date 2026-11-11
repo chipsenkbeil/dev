@@ -148,13 +148,29 @@ testing.test("ci's exit code is dev's", function()
     testing.eq(code, 7)
 end)
 
-testing.test("an argument before -- is a usage error", function()
+testing.test("remote hands arguments given without -- to the job", function()
     local root, base = setup()
-    local out, code, log = dev(root, base, { "--remote", "test", "--extra" })
-    testing.eq(code, 2)
-    testing.eq(out, "dev test: --remote passes arguments to the job only after --, got --extra\n")
-    testing.eq(log, "")
+    local _, code, log = dev(root, base, { "--remote", "test", "name", "other" })
+    testing.eq(code, 0)
+    testing.eq(
+        log,
+        "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [name] [other]\n"
+    )
 end)
+
+testing.test(
+    "remote refuses arguments on both sides of -- and prints the working command",
+    function()
+        local root, base = setup()
+        local out, code, log = dev(root, base, { "--remote", "test", "a", "--", "b" })
+        testing.eq(code, 2)
+        testing.eq(
+            out,
+            "dev test: --remote takes arguments on one side of -- only, run dev --remote test -- a b\n"
+        )
+        testing.eq(log, "")
+    end
+)
 
 testing.test("a verb with no job exits 1 and runs nothing", function()
     local root, base = setup()

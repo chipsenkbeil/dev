@@ -29,7 +29,7 @@ local AGENT_HINT = "an agent runs it on ci, so fix ci and rerun"
 
 ---@class dev.remote.Run
 ---@field words string[] the command words, a noun and its subcommand as two
----@field args string[] the arguments after `--`, untouched
+---@field args string[] the arguments for the job, untouched
 ---@field detach boolean whether `--detach` was given
 ---@field root string absolute path of the project root
 ---@field verbose integer 0, or 1 or 2 for `-v` or `-vv`
@@ -264,8 +264,8 @@ end
 ---Run a command somewhere else and return its exit code.
 ---
 ---The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
----machine-local verb is refused whatever the runner. Arguments before a `--`
----are a usage error, since only the arguments after it reach the job.
+---machine-local verb is refused whatever the runner. Without a `--` every
+---argument reaches the job. Arguments on both sides of a `--` are a usage error.
 ---@param ctx dev.Ctx the command's context, whose `args` are every argument after the command words
 ---@param words string[] the command words
 ---@param args string[] the arguments after `--`
@@ -275,15 +275,18 @@ function M.run(ctx, words, args, detach)
     if M.machine_local(words) then
         verb.usage_error(ctx, "runs on this machine only, so --remote does not apply")
     end
-    if #ctx.args > #args then
+    if ctx.dashed and #ctx.args > #args then
         verb.usage_error(
             ctx,
-            "--remote passes arguments to the job only after --, got " .. ctx.args[1]
+            "--remote takes arguments on one side of -- only, run dev --remote "
+                .. table.concat(words, " ")
+                .. " -- "
+                .. table.concat(ctx.args, " ")
         )
     end
     local run = {
         words = words,
-        args = args,
+        args = ctx.dashed and args or ctx.args,
         detach = detach,
         root = ctx.root,
         verbose = ctx.verbose,

@@ -20,10 +20,13 @@ error (exit 2).
 
 dev strips `--remote` and `--detach`. The launcher has already entered the
 directory of any `-C DIR`. dev then hands the runner the command words and the
-arguments after `--`, untouched, spaces and quotes included.
+arguments, untouched, spaces and quotes included. With no `--` every argument
+after the command words goes to the job, so `dev --remote test NAME` and
+`dev --remote test -- NAME` are the same run. Arguments on both sides of a `--`
+are a usage error (exit 2), and the message prints the one command that works,
+with every argument after the `--`.
 
-The runner inherits the terminal, and its exit code is dev's. Any argument
-before the `--` is a usage error.
+The runner inherits the terminal, and its exit code is dev's.
 
 These runs show the shapes:
 
@@ -59,8 +62,8 @@ A project with no `.ci/*.lua` pipeline file has no job, and ci is not asked. A
 command the listing does not name runs here with no message, so `dev board ls`
 is the same under either default.
 
-Unlike an explicit `--remote`, the default passes every argument to the job,
-before the `--` or after it. A verb with no job is not an error.
+The default passes every argument to the job, as an explicit `--remote` does.
+A verb with no job is not an error.
 
 ### Verbs that stay local
 
@@ -181,7 +184,7 @@ end
 `run` has these fields:
 
 - `run.words`: the command words (`{"test"}`, or `{"box", "ls"}`)
-- `run.args`: the arguments after `--`
+- `run.args`: the arguments for the job
 - `run.detach`: whether `--detach` was given
 - `run.root`: the project root as an absolute path
 - `run.verbose`: the level of `-v` (0, 1 or 2)
