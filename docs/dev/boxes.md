@@ -265,19 +265,111 @@ exit code. Progress lines ci writes to stderr reach the terminal.
 `dev.json` and needs `ci` on PATH, else it dies saying so. Every box is named
 by ci, and dev takes the host only from the box's `tailnet_name`.
 
-| Subcommand | Does |
-|---|---|
-| `ls [--all] [--json]` | The room, then one row per box. The room is a hub line `Boxes  <bar> 2 of 3 running · 1 more can start` from `cap.running` and `cap.running_max`, then each entry of `machines`: its name, a `Boxes` line with its `running` count (ci gives no per-machine cap yet, `max_boxes` is null) and a `Memory` line `24 of 32 GiB used · 8 GiB free`, where used is `memory_limits_gib`, free is `new_box_room_gib` and the bar's total is the two added. A machine with `reachable: false` shows `unreachable` in dim instead. Bars come from `dev.ui.bar`, so they appear on a terminal only and piped output has the words alone with no color codes. The table has NAME (a `●` or `○` mark and the name, bold), TARGET (`<target> @ <machine>`), STATE, ACTIVITY, WHO, SHAPE, PROJECTS and TIME LEFT. ACTIVITY is `attached` when any `tmux_sessions` entry is attached, else `idle <shortest idle_seconds>`, `-` for `[]` and for a box that is not running, `?` for null. WHO is `you` for `human:<USER, else LOGNAME>`, `agent` for any `agent:` value, the name for another `human:`, else `created_by` as it is. `no boxes` follows the room when there are none. Time left is `3h12m left` or `kept` for a running box, `deleted in 6d` for a stopped one, and `-` for other states. `--json` prints ci's document byte for byte and draws nothing. |
-| `targets [--json]` | Reads `ci fleet targets --box --json` (the targets document, then the shapes document for the room, one per line, never the text), and prints one block per machine: the machine name, its room (`8 GiB free · 2 more boxes`, from `machines[].new_box_room_gib` and the hub cap, `unreachable` for a machine ci could not ask), then a table with TARGET, OS (`Linux`, `Windows`, `macOS`), IMAGE, MIN SHAPE (`min_shape`, else the shape with the least memory) and NOW (`✓ fits` when `can_take_box_now`, else `reason` dim). `--json` prints ci's targets document (the first line) unchanged, without the shapes document. |
-| `create [--target T] [--shape S] [--arch ARCH] [--by LABEL] [--ttl HOURS or --keep] [PROJECT...]` | On a terminal (standard input and output are both terminals) with no `--target`, asks which target to run (`What should the <project> box run?`, rows `<target>  <OS> · <image>  from <min shape>  @ <machines>`, the machines' room in the note, a target whose smallest shape fits only after a wait can be picked and shows `waits for room · <reason>` as its note, and a target whose smallest shape can never fit, or whose machine ci could not ask, is greyed with ci's `reason`), then, with no `--shape`, which shape from the shapes document of `ci fleet targets --box --target T --json` (`Pick a shape for T on <machine>`, rows `<name>  <cpu> CPU  <memory_gib> GiB  <notes>`; greyed with the reason for `below_min` (`below T's minimum`) or `fits: never`, and a machine ci could not ask counts as never. A `fits: wait` row can be picked and says `waits for room`. A `warning` shows beside a pickable row, and the cursor starts on `default: true`). When no target, or no shape, can be picked, it names the running boxes on the machines to stop and exits 1; cancelling a picker exits 1 and creates nothing. `--target` skips both pickers and takes ci's default shape, `--shape` alone skips only the second, and with no terminal there are no pickers and ci applies its defaults (a shape below the minimum is refused by ci alone). It then prints `Created <name> · <target> @ <machine> · <shape> · <time left> · dev connect <name>` (`kept` for a box with no expiry, the state while it has none yet). Projects are positional. Inside a project with none given, it passes the project root's basename. `--arch` is passed to ci only when given (`x86_64` or `aarch64`). It always passes `--by`, `human:$USER` (else `human:$LOGNAME`) unless given. `--ttl` with `--keep` is a usage error before ci runs. |
-| `show [BOX] [--json]` | With `--json` ci's document unchanged, else the box as `key: value` lines, with `tmux_sessions` as `name (attached)` or `name (idle 5m)` items, `none` for `[]` and `unknown` for null, on a running box only. Projects reach ci after `--`, and a default project whose name starts with `-` is skipped with a warning. |
-| `stop [BOX]` | `stopped <name>, deleted in Nd unless resumed`, with N the days to the box's `delete_after`, rounded up. |
-| `resume [BOX] [--ttl HOURS or --keep]` | Keeps the box's lifetime unless a flag changes it. Prints `resumed <name> (<target>, <shape>, <projects>), <time left>, host <tailnet_name>`, the line `create` used to print. |
-| `extend [BOX] (--ttl HOURS or --keep)` | One of the two is required. |
-| `retag BOX --target T` | Moves the box to target T through `ci box retag BOX --target T --json` and prints `retagged BOX to T`. Both the box name and `--target` are required, and a missing one is a usage error before ci runs. When ci cannot retag the box, its reason prints on standard error, as for the other box verbs, and dev exits with ci's code. |
-| `tools install [BOX] [PROJECT...]` | Reinstalls a running box's tools through `ci box install-tools BOX --json`, with the projects after `--`, and prints `<project>: tools installed` or `<project>: no .dev/tools.tsv, nothing installed` per project, `no projects` when ci installed none. A box that is not running exits with ci's 6, and a ci error prints as dev box tools install: <message>. |
-| `delete [BOX] [-y] [--no-archive]` | Asks on `/dev/tty`, with the consequence wrapped to the terminal width on lines above the question: `Its projects are archived first.` then `Delete <box>? [y/N]`, or with `--no-archive` `Anything not pushed is lost.` then `Delete <box> without an archive? [y/N]`, and passes `--no-archive` to ci; when a tmux session of the box is attached (read from `ci box ls --json`), the consequence starts with `You're attached to it.`. With no terminal and no `-y` it is a usage error. Prints `Deleted <name> · archive <path>`, or `Deleted <name> · no archive` when ci wrote none, and dev prints no archive-days number of its own. |
-| `connect [BOX] [--ssh]` | Same as `dev connect`, below. |
+- `ls [--all] [--json]`: prints the room, then one row per box.
+  - The room starts with a hub line
+    `Boxes  <bar> 2 of 3 running · 1 more can start`, from `cap.running` and
+    `cap.running_max`. Then come the entries of `machines`, each with its name,
+    a `Boxes` line with its `running` count and a `Memory` line
+    `24 of 32 GiB used · 8 GiB free`. ci gives no per-machine cap yet
+    (`max_boxes` is null).
+  - On the `Memory` line, used is `memory_limits_gib`, free is
+    `new_box_room_gib` and the bar's total is the two added. A machine with
+    `reachable: false` shows `unreachable` in dim instead.
+  - Bars come from `dev.ui.bar`, so they appear on a terminal only. Piped
+    output has the words alone with no color codes.
+  - The table has NAME (a `●` or `○` mark and the name, bold), TARGET
+    (`<target> @ <machine>`), STATE, ACTIVITY, WHO, SHAPE, PROJECTS and
+    TIME LEFT.
+  - ACTIVITY is `attached` when any `tmux_sessions` entry is attached, else
+    `idle <shortest idle_seconds>`. It is `-` for `[]` and for a box that is
+    not running, and `?` for null.
+  - WHO is `you` for `human:<USER, else LOGNAME>`, `agent` for any `agent:`
+    value, the name for another `human:`, else `created_by` as it is.
+  - Time left is `3h12m left` or `kept` for a running box, `deleted in 6d` for
+    a stopped one, and `-` for other states.
+  - `no boxes` follows the room when there are none.
+  - `--json` prints ci's document byte for byte and draws nothing.
+- `targets [--json]`: reads `ci fleet targets --box --json`, then prints one
+  block per machine.
+  - It reads the targets document, then the shapes document for the room, one
+    per line, never the text.
+  - Each block holds the machine name and its room (`8 GiB free · 2 more
+    boxes`, from `machines[].new_box_room_gib` and the hub cap, `unreachable`
+    for a machine ci could not ask). A table follows with TARGET, OS (`Linux`,
+    `Windows`, `macOS`), IMAGE, MIN SHAPE and NOW.
+  - MIN SHAPE is `min_shape`, else the shape with the least memory. NOW is
+    `✓ fits` when `can_take_box_now`, else `reason` dim.
+  - `--json` prints ci's targets document (the first line) unchanged, without
+    the shapes document.
+- `create [--target T] [--shape S] [--arch ARCH] [--by LABEL] [--ttl HOURS or
+  --keep] [PROJECT...]`: creates a box and prints its line.
+  - On a terminal (standard input and output are both terminals) with no
+    `--target`, it asks which target to run (`What should the <project> box
+    run?`). Rows are `<target>  <OS> · <image>  from <min shape>  @ <machines>`
+    with the machines' room in the note.
+  - A target whose smallest shape fits only after a wait can be picked and
+    shows `waits for room · <reason>` as its note. A target whose smallest
+    shape can never fit, or whose machine ci could not ask, is greyed with
+    ci's `reason`.
+  - With no `--shape`, it then asks which shape, from the shapes document of
+    `ci fleet targets --box --target T --json` (`Pick a shape for T on
+    <machine>`). Rows are `<name>  <cpu> CPU  <memory_gib> GiB  <notes>`, and
+    the cursor starts on `default: true`. A `warning` shows beside a
+    pickable row.
+  - A shape row is greyed with the reason for `below_min` (`below T's
+    minimum`) or `fits: never`. A machine ci could not ask counts as never.
+    A `fits: wait` row can be picked and says `waits for room`.
+  - When no target, or no shape, can be picked, it names the running boxes on
+    the machines to stop and exits 1. Cancelling a picker exits 1 and creates
+    nothing.
+  - `--target` skips both pickers and takes ci's default shape, and `--shape`
+    alone skips only the second. With no terminal there are no pickers and ci
+    applies its defaults (a shape below the minimum is refused by ci alone).
+  - It then prints `Created <name> · <target> @ <machine> · <shape> ·
+    <time left> · dev connect <name>`. The time left is `kept` for a box with
+    no expiry, and the state while it has none yet.
+  - Projects are positional. Inside a project with none given, it passes the
+    project root's basename.
+  - `--arch` is passed to ci only when given (`x86_64` or `aarch64`). It
+    always passes `--by`, `human:$USER` (else `human:$LOGNAME`) unless given.
+  - `--ttl` with `--keep` is a usage error before ci runs.
+- `show [BOX] [--json]`: with `--json` prints ci's document unchanged, else
+  the box as `key: value` lines.
+  - `tmux_sessions` shows as `name (attached)` or `name (idle 5m)` items,
+    `none` for `[]` and `unknown` for null, on a running box only.
+  - Projects reach ci after `--`. A default project whose name starts with `-`
+    is skipped with a warning.
+- `stop [BOX]`: prints `stopped <name>, deleted in Nd unless resumed`, with N
+  the days to the box's `delete_after`, rounded up.
+- `resume [BOX] [--ttl HOURS or --keep]`: keeps the box's lifetime unless a
+  flag changes it. It prints `resumed <name> (<target>, <shape>, <projects>),
+  <time left>, host <tailnet_name>`, the line `create` used to print.
+- `extend [BOX] (--ttl HOURS or --keep)`: one of the two is required.
+- `retag BOX --target T`: moves the box to target T through
+  `ci box retag BOX --target T --json` and prints `retagged BOX to T`.
+  - Both the box name and `--target` are required, and a missing one is a
+    usage error before ci runs.
+  - When ci cannot retag the box, its reason prints on standard error, as for
+    the other box verbs, and dev exits with ci's code.
+- `tools install [BOX] [PROJECT...]`: reinstalls a running box's tools through
+  `ci box install-tools BOX --json`, with the projects after `--`.
+  - It prints `<project>: tools installed` or
+    `<project>: no .dev/tools.tsv, nothing installed` per project, and
+    `no projects` when ci installed none.
+  - A box that is not running exits with ci's 6, and a ci error prints as
+    dev box tools install: <message>.
+- `delete [BOX] [-y] [--no-archive]`: asks on `/dev/tty`, with the consequence
+  wrapped to the terminal width on lines above the question.
+  - The consequence is `Its projects are archived first.` then
+    `Delete <box>? [y/N]`. With `--no-archive` it is `Anything not pushed is
+    lost.` then `Delete <box> without an archive? [y/N]`, and `--no-archive`
+    goes to ci.
+  - When a tmux session of the box is attached (read from `ci box ls --json`),
+    the consequence starts with `You're attached to it.`.
+  - With no terminal and no `-y` it is a usage error.
+  - It prints `Deleted <name> · archive <path>`, or `Deleted <name> · no
+    archive` when ci wrote none. dev prints no archive-days number of its own.
+- `connect [BOX] [--ssh]`: same as `dev connect`, below.
 
 ### Picking a box
 

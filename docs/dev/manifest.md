@@ -33,11 +33,13 @@ so `--group` on it is an unknown group.
 
 ## Scopes
 
-| Flag | Rows it installs | User |
-|---|---|---|
-| none | every row, as on a laptop or in an image build | a user, root is a usage error |
-| `--system` | the official package manager: bare packages, `cask:` and `tap:` | root on Linux, refused otherwise |
-| `--user` | `script:`, `cargo:`, `release:` and `flatpak:`, which write into the running user's home | not root, refused at uid 0 |
+- none: installs every row, as on a laptop or in an image build. It runs as a
+  user, and root is a usage error.
+- `--system`: installs the official package manager rows (bare packages,
+  `cask:` and `tap:`). It runs as root on Linux and is refused otherwise.
+- `--user`: installs `script:`, `cargo:`, `release:` and `flatpak:` rows, which
+  write into the running user's home. It runs as a non-root user and is
+  refused at uid 0.
 
 `--system` and `--user` together are a usage error.
 
