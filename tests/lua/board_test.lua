@@ -1817,6 +1817,56 @@ testing.test("show prints the card line, its description and its comments", func
     testing.eq(cmd_board.run("show", { "deadbeef" }, backend).code, 1)
 end)
 
+testing.test("show lists an open ask's choices and marks the recommended one", function()
+    local backend = fake(sample())
+    backend.listed = {
+        {
+            id = COMMENT_1,
+            who = "worker",
+            at = "2026-10-27T09:30:12Z",
+            body = "Which way?",
+            kind = "question",
+            question = {
+                text = "Which way?",
+                recommended = 2,
+                choices = {
+                    { label = "left", column = support.COLUMN_NAME.READY },
+                    { label = "right", column = support.COLUMN_NAME.BACKLOG },
+                },
+            },
+        },
+        {
+            id = COMMENT_2,
+            who = "worker",
+            at = "2026-10-27T10:00:00Z",
+            body = "Done?",
+            kind = "question",
+            question = {
+                answer = "1",
+                choices = { { label = "yes", column = support.COLUMN_NAME.DONE } },
+            },
+        },
+    }
+    local result = cmd_board.run("show", { "11111111-a" }, backend)
+    local lines = {}
+    for line in result.output:gmatch("[^\n]+") do
+        lines[#lines + 1] = line:match("^%s*(.-)$")
+    end
+    local want = {
+        "1. left (" .. support.COLUMN_NAME.READY .. ")",
+        "2. right (" .. support.COLUMN_NAME.BACKLOG .. ") [recommended]",
+    }
+    local at = 0
+    for index, line in ipairs(lines) do
+        if line == want[1] then
+            at = index
+        end
+    end
+    testing.ok(at > 0, result.output)
+    testing.eq({ lines[at], lines[at + 1] }, want)
+    testing.ok(not result.output:find("1. yes", 1, true), result.output)
+end)
+
 testing.test("note --edit and --delete resolve the comment by prefix", function()
     local backend = with_comments()
     local result =
@@ -5866,6 +5916,26 @@ testing.test("answer records the choice through Pomb", function()
     )
     testing.ok(calls:find('"choice":2', 1, true), calls)
     testing.ok(calls:find('"quote":"go with two"', 1, true), calls)
+end)
+
+testing.test("show on Pomb names each open choice's column and marks the recommended", function()
+    local root, home = owner_card_sandbox()
+    assert(fs.write(root .. "/comments.json", QUESTION_COMMENT:format("null")))
+    local out, code = dev(root, home, { "board", "show", "11111111-a" })
+    testing.eq(code, 0)
+    testing.ok(
+        out:find("1. Ship it (" .. support.COLUMN_NAME.READY .. ") [recommended]", 1, true),
+        out
+    )
+    testing.ok(out:find("2. Park it (" .. support.COLUMN_NAME.ICEBOX .. ")", 1, true), out)
+    assert(
+        fs.write(
+            root .. "/comments.json",
+            QUESTION_COMMENT:format('{"choice":1,"answered_by":"o","answered_at":"x"}')
+        )
+    )
+    out = dev(root, home, { "board", "show", "11111111-a" })
+    testing.ok(not out:find("Ship it", 1, true), out)
 end)
 
 testing.test(

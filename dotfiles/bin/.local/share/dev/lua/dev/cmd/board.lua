@@ -1243,6 +1243,16 @@ local function comment_lines(list, opts)
             for j = 2, #lines do
                 rests[i][#rests[i] + 1] = lines[j]
             end
+            local question = comment.question
+            if question and question.choices and not question.answer then
+                for index, choice in ipairs(question.choices) do
+                    rests[i][#rests[i] + 1] = index
+                        .. ". "
+                        .. choice.label
+                        .. (choice.column and " (" .. choice.column .. ")" or "")
+                        .. (question.recommended == index and " [recommended]" or "")
+                end
+            end
         end
     end
     local indent = string.rep(" ", body_column(rows))

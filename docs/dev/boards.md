@@ -2070,6 +2070,9 @@ The layout, top to bottom:
 - A blank line and the comments as `notes` lists them, from
   `GET /api/tasks/{id}/comments`, with every line of each body in full and the
   later lines indented under the first.
+  Under an open question it lists each choice as `N. LABEL (COLUMN)` and ends
+  the recommended one with `[recommended]`. An answered question lists none, and
+  a local board holds no questions to list.
 
 Its facts:
 

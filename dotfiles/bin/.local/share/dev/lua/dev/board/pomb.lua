@@ -1086,10 +1086,36 @@ function Backend:comments(id)
             body = present(comment.body) or "",
             kind = present(comment.kind),
             author = author ~= DEFAULT_AUTHOR and author or nil,
-            question = type(present(comment.question)) == "table" and comment.question or nil,
+            question = self:__question(comment.question),
         }
     end
     return found
+end
+
+---Copy a comment's question with its answer, recommendation and choice columns resolved.
+---@param question table<string, any>? raw question from the comment
+---@return table<string, any>? question nil when the comment holds no question
+---@private
+function Backend:__question(question)
+    if type(present(question)) ~= "table" then
+        return nil
+    end
+    local named = {}
+    for key, value in pairs(question) do
+        named[key] = value
+    end
+    named.answer = present(question.answer)
+    named.recommended = present(question.recommended)
+    if type(question.choices) == "table" then
+        named.choices = {}
+        for index, choice in ipairs(question.choices) do
+            named.choices[index] = {
+                label = choice.label,
+                column = present(choice.column_id) and self:__column_name(choice.column_id) or nil,
+            }
+        end
+    end
+    return named
 end
 
 local function refused_comment(message, status, doc)
