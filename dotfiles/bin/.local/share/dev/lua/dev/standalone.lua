@@ -48,12 +48,10 @@ end
 local function header_problem(root, path)
     local where = second_line(root, path):match(HEADER)
     if not where then
-        return "WARNING: "
-            .. path
-            .. ": line 2 must read: # standalone: runs on <where>, where dev is absent"
+        return path .. ": line 2 must read: # standalone: runs on <where>, where dev is absent"
     end
     if not allowed(where) then
-        return "WARNING: " .. path .. ": where must be one of: " .. table.concat(M.WHERE, ", ")
+        return path .. ": where must be one of: " .. table.concat(M.WHERE, ", ")
     end
     return nil
 end
@@ -65,8 +63,7 @@ function M.problems(root)
     local lines = {}
     for _, path in ipairs(found(root, { "-name", "*.sh" })) do
         if path:sub(1, #DIR) ~= DIR and not path:match("^%.dev/__[^/]+$") then
-            lines[#lines + 1] = "WARNING: "
-                .. path
+            lines[#lines + 1] = path
                 .. ": shell outside "
                 .. FOLDER
                 .. ", port it to Lua (dev help porting)"

@@ -98,6 +98,21 @@ assert_contains "rust run passes args after --" "$(log)" "cargo run -- a b"
 run_dev "$rust" build >/dev/null
 assert_contains "rust build is release" "$(log)" "cargo build --release"
 
+cp "$STUBS/cargo" "$TMP/cargo.ok"
+
+# shellcheck disable=SC2016  # $* expands in the generated stub
+printf '#!/usr/bin/env bash\ncase "$*" in *--version) exit 1 ;; esac\nexit 0\n' >"$STUBS/cargo"
+touch "$rust/deny.toml"
+out="$(run_dev "$rust" lint 2>&1)"
+assert_eq "a missing nightly rustfmt ends the rust lint with 1" "$?" "1"
+assert_contains "a missing nightly rustfmt gets a sentence" "$out" "Tool nightly rustfmt not found. Install with: rustup toolchain install nightly --component rustfmt."
+out="$(run_dev "$rust" test 2>&1)"
+assert_contains "a missing cargo-nextest gets a sentence" "$out" "Tool cargo-nextest not found. Install with: cargo install cargo-nextest --locked."
+out="$(run_dev "$rust" fetch 2>&1)"
+assert_contains "a missing cargo-deny gets a sentence" "$out" "Tool cargo-deny not found. Install with: cargo install cargo-deny --locked."
+rm "$rust/deny.toml"
+cp "$TMP/cargo.ok" "$STUBS/cargo"
+
 love="$(project love)"
 touch "$love/main.lua" "$love/conf.lua"
 printf 'test:\n\ttrue\n' >"$love/Makefile"
@@ -358,7 +373,7 @@ if ! PATH=/usr/bin:/bin command -v cargo >/dev/null 2>&1; then
     rm "$rust/.dev/lint.sh"
     out="$(cd "$rust" && env PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" lint 2>&1)"
     assert_eq "missing cargo exits 1" "$?" "1"
-    assert_contains "missing cargo prints one WARNING" "$out" "WARNING: cargo not found. Install with:"
+    assert_contains "missing cargo prints one install hint" "$out" "Tool cargo not found. Install with:"
 fi
 
 # sync --check

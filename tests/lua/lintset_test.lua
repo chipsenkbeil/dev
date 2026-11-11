@@ -129,9 +129,6 @@ testing.test("standalone writes each problem line to standard error", function()
     local out = dev_os.capture({ "luajit", "-e", snippet }, { stderr = errors })
     testing.eq(out, "> standalone shell\n")
     local reason = "shell outside .dev/standalone, port it to Lua (dev help porting)\n"
-    testing.eq(
-        assert(fs.read(errors)),
-        "WARNING: .dev/x.sh: " .. reason .. "WARNING: .dev/y.sh: " .. reason
-    )
+    testing.eq(assert(fs.read(errors)), ".dev/x.sh: " .. reason .. ".dev/y.sh: " .. reason)
     fs.remove(root, { recursive = true })
 end)

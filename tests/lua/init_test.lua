@@ -161,7 +161,7 @@ testing.test("init leaves the Gerrit step to the owner when ls-projects fails", 
     testing.ok(not out:find("Left for you:.*create%-project"), out)
     out, code = support.dev(root, { "init", "--type", "lua", "--name", "zz" })
     testing.eq(code, 0)
-    testing.ok(out:find("warning: gerrit ls-projects failed: denied", 1, true), out)
+    testing.ok(out:find("Gerrit ls-projects failed.\ndenied\n", 1, true), out)
     testing.ok(out:find("create the Gerrit project and remote: ssh -p 29418", 1, true), out)
     fs.remove(root, { recursive = true })
 end)

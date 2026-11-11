@@ -752,7 +752,7 @@ end
 function M.prose_warnings(prose)
     local warnings, seen, in_change = {}, {}, false
     local function warn(kind, word)
-        local line = "card prose holds " .. kind .. ": " .. word
+        local line = "Card prose holds " .. kind .. ": " .. word .. "."
         if not seen[line] then
             seen[line] = true
             warnings[#warnings + 1] = line

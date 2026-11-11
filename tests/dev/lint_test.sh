@@ -161,6 +161,8 @@ else
     out="$(style_lint "$rust" "$full_path")"
     assert_eq "the rust set passes a clean project" "$?" "0"
     assert_not_contains "the rust set warns about no tool when all are present" "$out" "WARNING"
+    out="$(style_lint "$TMP" "$bare_path")"
+    assert_contains "dotfiles lint names a missing stylua in a sentence" "$out" "Tool stylua not found. Skipping it. Install with: brew install stylua."
 
     calls="$TMP/cargo-calls"
     : >"$calls"

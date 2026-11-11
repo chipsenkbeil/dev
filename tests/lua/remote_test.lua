@@ -283,7 +283,7 @@ testing.test("without ci on PATH the default fails with the --local hint", funct
     testing.eq(out, "dev: ci is not on PATH, rerun, or pass --local to run it here\n")
     out, code = dev(root, base, { "test", "--remote" }, env)
     testing.eq(code, 1)
-    testing.ok(out:find("ci not found", 1, true), out)
+    testing.ok(out:find("The ci client is not found", 1, true), out)
     out, code = dev(root, base, { "hello", "--local" }, { PATH = env.PATH })
     testing.eq(out, "hi\n")
     testing.eq(code, 0)

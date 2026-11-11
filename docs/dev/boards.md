@@ -3173,11 +3173,11 @@ On a local board:
 ### Prose warnings
 
 `add`, `note` and `edit` warn when card prose holds a hex id, a hash or a path.
-The warning goes to standard error with the prefix `warning: `, and the write
-still happens (exit 0, output unchanged).
+The warning goes to standard error with no prefix, and the write still
+happens (exit 0, output unchanged).
 
-- messages: `card prose holds a hex id or hash: <word>` and
-  `card prose holds a path: <word>`, one line per distinct word.
+- messages: `Card prose holds a hex id or hash: <word>.` and
+  `Card prose holds a path: <word>.`, one line per distinct word.
 - scanned: the `--description` of `add`, a new or `--edit`ed `note` text and
   the text `edit` writes. A `--done-when` outcome counts as prose. Fenced code
   counts as prose.

@@ -2679,7 +2679,7 @@ testing.test(
         }, { env = env_of(home), split = true })
         testing.eq(code, 0, out)
         testing.ok(out:match("^%x+%-%x+%-%x+%-%x+%-%x+\n$"), out)
-        testing.eq(errors, "warning: card prose holds a path: src/a.lua\n")
+        testing.eq(errors, "Card prose holds a path: src/a.lua.\n")
         local plain = dev(root, home, {
             "board",
             "add",

@@ -2535,7 +2535,7 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
         { "X", "--problem", "x", "--size", "1", "--done-when", "see src/a.lua" },
         backend
     )
-    testing.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
 end)
 
 testing.test("show lists the outcomes with their ticks, and ls adds a done column", function()
@@ -3164,7 +3164,7 @@ testing.test("outcome warns about a path in the text and still writes", function
     local card = colored("green")
     local backend = fake({ card })
     local result = cmd_board.run("outcome", { "cccccccc", "see src/a.lua" }, backend)
-    testing.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
     testing.eq(#backend.calls, 1)
 end)
 
@@ -6150,7 +6150,7 @@ end)
 
 testing.test("prose warnings reach standard error and the write still happens", function()
     local root, home = sandbox()
-    local warning = "warning: card prose holds a path: src/a.lua\n"
+    local warning = "Card prose holds a path: src/a.lua.\n"
     local cases = {
         {
             args = {
@@ -7317,22 +7317,22 @@ testing.test(
     "prose_warnings names each hex id, hash and path outside the Change section",
     function()
         testing.eq(board.prose_warnings("fixed in 2af0e003 and 0ef0e008."), {
-            "card prose holds a hex id or hash: 2af0e003",
-            "card prose holds a hex id or hash: 0ef0e008",
+            "Card prose holds a hex id or hash: 2af0e003.",
+            "Card prose holds a hex id or hash: 0ef0e008.",
         })
         testing.eq(
             board.prose_warnings("see `dotfiles/bin/dev.lua`, ~/notes and ./run, /etc/hosts"),
             {
-                "card prose holds a path: dotfiles/bin/dev.lua",
-                "card prose holds a path: ~/notes",
-                "card prose holds a path: ./run",
-                "card prose holds a path: /etc/hosts",
+                "Card prose holds a path: dotfiles/bin/dev.lua.",
+                "Card prose holds a path: ~/notes.",
+                "Card prose holds a path: ./run.",
+                "Card prose holds a path: /etc/hosts.",
             }
         )
         testing.eq(
             board.prose_warnings("## Problem\nsee a/b.lua\n\n## Change\n- a/b.lua 2af0e003\n"),
             {
-                "card prose holds a path: a/b.lua",
+                "Card prose holds a path: a/b.lua.",
             }
         )
         testing.eq(
@@ -7340,7 +7340,7 @@ testing.test(
                 "## Done when\n- [ ] x\n## Change\nsrc/a.lua\n## Out of scope\nsrc/a.lua"
             ),
             {
-                "card prose holds a path: src/a.lua",
+                "Card prose holds a path: src/a.lua.",
             }
         )
     end
@@ -7349,9 +7349,9 @@ testing.test(
 testing.test("prose_warnings leaves a lone slash command alone", function()
     testing.eq(board.prose_warnings("type /exit or /quit to leave"), {})
     testing.eq(board.prose_warnings("see /etc/hosts, ~/x and /a.lua"), {
-        "card prose holds a path: /etc/hosts",
-        "card prose holds a path: ~/x",
-        "card prose holds a path: /a.lua",
+        "Card prose holds a path: /etc/hosts.",
+        "Card prose holds a path: ~/x.",
+        "Card prose holds a path: /a.lua.",
     })
 end)
 
@@ -7361,7 +7361,7 @@ testing.test("prose_warnings leaves clean prose, plain words, numbers and URLs a
         {}
     )
     testing.eq(board.prose_warnings("https://example.com/a/b.html deadbeef12 is read"), {
-        "card prose holds a hex id or hash: deadbeef12",
+        "Card prose holds a hex id or hash: deadbeef12.",
     })
     testing.eq(board.prose_warnings(nil), {})
     testing.eq(board.prose_warnings(""), {})
@@ -7381,7 +7381,7 @@ testing.test("add, note and edit report prose warnings and still write", functio
         { "X", "--description", "in src/a.lua", "--size", "1", "--done-when", "a" },
         backend
     )
-    testing.eq(result.warnings, { "card prose holds a path: src/a.lua" })
+    testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
     result = cmd_board.run("add", { "X", "--description", V1, "--size", "1" }, backend)
     testing.eq(result.warnings, {})
     result = cmd_board.run(
@@ -7389,7 +7389,7 @@ testing.test("add, note and edit report prose warnings and still write", functio
         { "cccccccc", "## Change\n- a/b.lua\n## Problem\nx/y.sh\n## Out of scope\nn" },
         backend
     )
-    testing.eq(result.warnings, { "card prose holds a path: x/y.sh" })
+    testing.eq(result.warnings, { "Card prose holds a path: x/y.sh." })
 end)
 
 testing.test("split_checklist takes the Done when items and leaves the rest", function()

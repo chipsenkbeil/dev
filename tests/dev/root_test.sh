@@ -259,7 +259,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     printf 'name binary pacman\n${SECRET} ${SECRET} x\n' >"$leak/.dev/tools.tsv"
     out="$(SECRET=leakvalue-9 dev "$leak" tools check 2>&1)"
     assert_not_contains "root's environment does not reach the manifest" "$out" "leakvalue-9"
-    assert_contains "the manifest variable is undefined for the package driver" "$out" "undefined variable"
+    assert_contains "the manifest variable is undefined for the package driver" "$out" "is undefined"
 
     evil="$TMP/evil"
     mkdir -p "$evil/dotfiles/bin/.local/share/dev"

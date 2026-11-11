@@ -42,7 +42,9 @@ local function report(file, numbers, message)
 end
 
 local function missing(tool)
-    verb.note("WARNING: " .. tool .. " not found, skipping. Install with: brew install " .. tool)
+    verb.note(
+        "Tool " .. tool .. " not found. Skipping it. Install with: brew install " .. tool .. "."
+    )
 end
 
 local have_shfmt = dev_os.which("shfmt") ~= nil

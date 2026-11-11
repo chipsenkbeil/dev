@@ -143,7 +143,7 @@ local function resolve(rows, name, row)
         value = rows.defaults[name]
     end
     if value == nil then
-        return nil, "manifest: error: undefined variable ${" .. name .. "} (row: " .. row .. ")"
+        return nil, "Variable ${" .. name .. "} is undefined in row " .. row .. "."
     end
     return value
 end

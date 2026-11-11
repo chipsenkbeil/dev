@@ -336,7 +336,8 @@ local function init_gerrit(run)
     verb.show(run.ctx, list)
     local out, code = dev_os.capture(list, { stderr = "stdout" })
     if code ~= 0 then
-        verb.note("warning: gerrit ls-projects failed: " .. trimmed(out))
+        verb.note("Gerrit ls-projects failed.")
+        verb.note(trimmed(out))
         leave(
             run,
             "create the Gerrit project and remote: "

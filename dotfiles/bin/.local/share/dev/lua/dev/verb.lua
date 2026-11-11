@@ -70,12 +70,12 @@ function M.show(ctx, argv)
     end
 end
 
----Exit 1 with one WARNING line when `binary` is not on PATH.
+---Exit 1 with one line when `binary` is not on PATH.
 ---@param binary string the command the verb needs
 ---@param install string how to install it, as the warning shows
 function M.need(binary, install)
     if not dev_os.which(binary) then
-        M.note("WARNING: " .. binary .. " not found. Install with: " .. install)
+        M.note("Tool " .. binary .. " not found. Install with: " .. install .. ".")
         os.exit(1)
     end
 end

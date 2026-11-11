@@ -106,13 +106,7 @@ local function load_rows(opts, manager)
     local rows = text and manifest.parse(text)
     local column = rows and manifest.column(rows, manager)
     if not column then
-        stderr:write(
-            'error: manager column "',
-            manager,
-            '" not found in ',
-            opts.manifest,
-            " header\n"
-        )
+        stderr:write('Manager column "', manager, '" not found in ', opts.manifest, " header.\n")
         return nil
     end
     return rows, column
@@ -141,7 +135,7 @@ local function load_driver(name)
     if kinds.DRIVERS[name] then
         return require("dev.pkg." .. name)
     end
-    stderr:write("error: no driver ", name, "\n")
+    stderr:write("No driver named ", name, ".\n")
 end
 
 local function check_script_row(opts, name, package)
@@ -207,7 +201,7 @@ end
 function M.check(opts)
     local manager = detect_manager()
     if not manager then
-        stderr:write("error: no supported package manager detected on this OS\n")
+        stderr:write("No supported package manager is detected on this OS.\n")
         return 1
     end
     local driver = system
@@ -313,7 +307,7 @@ end
 function M.install(opts)
     local manager = detect_manager()
     if not manager then
-        stderr:write("error: no supported package manager detected on this OS\n")
+        stderr:write("No supported package manager is detected on this OS.\n")
         return 1
     end
     local all_rows, column = load_rows(opts, manager)

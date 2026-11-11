@@ -6068,7 +6068,7 @@ for sub in pairs(commands) do
             return result.code or FAILURE
         end
         for _, line in ipairs(result.warnings or {}) do
-            stderr_line("warning: " .. line)
+            stderr_line(line)
         end
         if result.page then
             ui.page(result.output .. "\n")

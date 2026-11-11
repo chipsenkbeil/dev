@@ -49,7 +49,7 @@ testing.test("guide says how to install guide when it is missing", function()
         { env = { PATH = root .. "/bin:/usr/bin:/bin" } }
     )
     testing.eq(code, 1)
-    testing.eq(out, "WARNING: guide not found. Install with: dev install guide\n")
+    testing.eq(out, "Tool guide not found. Install with: dev install guide.\n")
     fs.remove(root, { recursive = true })
 end)
 

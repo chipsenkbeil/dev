@@ -112,7 +112,7 @@ testing.test(
         local selected, err =
             select_with_env("name binary brew\nnope-row x ${NOPE}\nfine y ripgrep\n", 3, {})
         testing.eq(selected, nil)
-        testing.eq(err, "manifest: error: undefined variable ${NOPE} (row: nope-row)")
+        testing.eq(err, "Variable ${NOPE} is undefined in row nope-row.")
     end
 )
 

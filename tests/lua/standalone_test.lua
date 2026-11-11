@@ -15,8 +15,8 @@ end
 testing.test("standalone warns on a .sh outside .dev/standalone", function()
     local root = project({ [".dev/x.sh"] = "#!/bin/sh\n", [".dev/n/y.sh"] = "#!/bin/sh\n" })
     testing.eq(standalone.problems(root), {
-        "WARNING: .dev/n/y.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
-        "WARNING: .dev/x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+        ".dev/n/y.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+        ".dev/x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
     })
     fs.remove(root, { recursive = true })
 end)
@@ -30,7 +30,7 @@ end)
 testing.test("standalone warns on a nested __ shell under .dev", function()
     local root = project({ [".dev/verbs/__x.sh"] = "#!/bin/sh\n" })
     testing.eq(standalone.problems(root), {
-        "WARNING: .dev/verbs/__x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+        ".dev/verbs/__x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
     })
     fs.remove(root, { recursive = true })
 end)
@@ -42,8 +42,8 @@ testing.test("warn passes each problem line to the function it is given", functi
         lines[#lines + 1] = line
     end)
     testing.eq(lines, {
-        "WARNING: .dev/n/y.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
-        "WARNING: .dev/x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+        ".dev/n/y.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+        ".dev/x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
     })
     fs.remove(root, { recursive = true })
 end)
@@ -51,7 +51,7 @@ end)
 testing.test("standalone warns on a bad line 2", function()
     local root = project({ [".dev/standalone/x.sh"] = "#!/bin/sh\n# runs somewhere\n" })
     testing.eq(standalone.problems(root), {
-        "WARNING: .dev/standalone/x.sh: line 2 must read: # standalone: runs on <where>, where dev is absent",
+        ".dev/standalone/x.sh: line 2 must read: # standalone: runs on <where>, where dev is absent",
     })
     fs.remove(root, { recursive = true })
 end)
@@ -61,7 +61,7 @@ testing.test("standalone warns on an unknown where", function()
         [".dev/standalone/x.sh"] = "#!/bin/sh\n# standalone: runs on my laptop, where dev is absent\n",
     })
     testing.eq(standalone.problems(root), {
-        "WARNING: .dev/standalone/x.sh: where must be one of: production server, test sandbox, GitHub Actions",
+        ".dev/standalone/x.sh: where must be one of: production server, test sandbox, GitHub Actions",
     })
     fs.remove(root, { recursive = true })
 end)
