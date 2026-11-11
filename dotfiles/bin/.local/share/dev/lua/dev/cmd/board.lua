@@ -3398,6 +3398,14 @@ local function land_held(opts)
         refused.landed = true
         return refused
     end
+    local left = backend:card(card.id)
+    if left and left.claimant then
+        claims.stop(card.id)
+        local released, stuck = backend:release(card.id, held and held.fence)
+        if not released then
+            verb.note("dev: landed, but the claim was not released: " .. stuck)
+        end
+    end
     return {
         output = string.format(
             "landed %s at commit %s%s and moved it to %s",

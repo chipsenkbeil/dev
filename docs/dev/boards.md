@@ -2295,6 +2295,7 @@ In order, it:
 - writes a `done` note
 - moves the card to Release when `[board.land] deploys` is true and to Done
   otherwise
+- ends any claim still on the card, and a landed card carries no owner
 - gives the turn back and cleans up
 
 The command:

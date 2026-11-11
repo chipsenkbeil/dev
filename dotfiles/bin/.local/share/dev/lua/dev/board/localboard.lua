@@ -973,9 +973,8 @@ function Backend:release(id, fence)
         if not card then
             return nil, "the board has no card " .. id
         end
-        if not card.claim or card.claim.fence ~= fence then
-            return nil,
-                "the claim on " .. id .. " is not held with fence " .. string.format("%d", fence)
+        if not card.claim or (fence and card.claim.fence ~= fence) then
+            return nil, "the claim on " .. id .. " is not held with fence " .. tostring(fence)
         end
         card.claim = nil
         return true

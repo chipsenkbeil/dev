@@ -326,6 +326,14 @@ local function comments(home, id)
     return board_card(doc, id).comments or {}
 end
 
+local function claim_of(home, id)
+    local doc = assert(
+        json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
+        "decode failed"
+    )
+    return board_card(doc, id).claim
+end
+
 local function landed_calls(log)
     return fs.read(log) or ""
 end
@@ -2091,6 +2099,37 @@ if has_jj then
         testing.eq(turn_holder(home), nil)
         _, code = dev(root, home, log, { "board", "turn", id, "--release" })
         testing.eq(code, 1)
+    end)
+
+    testing.test("land leaves no owner on the landed card", function()
+        for _, deploys in ipairs({ "", "\n[board.land]\ndeploys = true\n" }) do
+            local root, home, log = jj_project(deploys)
+            local id = new_card(root, home, log)
+            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+            approve(root, home, log, id)
+            local backend, restore = board_at(home)
+            for _, card in ipairs(assert(backend:cards())) do
+                if card.id:sub(1, #id) == id then
+                    assert(backend:claim(card.id, "dotfiles/lander", 3600, nil, { lease = true }))
+                end
+            end
+            restore()
+            testing.ok(claim_of(home, id), "the card must be claimed before the land")
+            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            testing.eq(code, 0, out)
+            testing.eq(claim_of(home, id), nil)
+        end
+    end)
+
+    testing.test("land refused before the move keeps its hold", function()
+        local root, home, log = jj_project()
+        local id = in_verify(root, home, log)
+        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        must(dev(root, home, log, { "board", "turn", id }))
+        local out, code = dev(root, home, log, { "board", "land", id })
+        testing.eq(code, 1, out)
+        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
+        testing.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
     end)
 
     testing.test("a landing refused before the turn is read says the hold is kept", function()
