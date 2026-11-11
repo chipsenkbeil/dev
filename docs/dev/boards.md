@@ -2443,6 +2443,13 @@ The settings:
   checkout only onto the revision that ship passed.
 - `checks` under `[board.release]` lists the commands `dev board ship` runs once
   when it gets none after `--`, one plain command per row.
+- `recheck` under `[board.land]` lists the commands `land` reruns itself, one
+  plain command per row. When the carried check's commit does not sit directly
+  on the trunk `land` rebased onto, `land` runs each row on the landing commit
+  under the landing turn, in order. A row that fails refuses the land with the
+  row, its run id and the end of its output, and nothing is pushed. A check on
+  the current trunk or an empty list lands as before. This repo sets it to
+  `dev --remote lint`.
 - In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
   exits 1 and names `dev board land`.
 - `dev board land` sets `DEV_BOARD_LAND=1` for the `jj land` it runs, and

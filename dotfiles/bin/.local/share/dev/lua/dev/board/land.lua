@@ -2,6 +2,7 @@ local check = require("dev.board.check")
 local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
+local dev_remote = require("dev.remote")
 local review = require("dev.board.review")
 local templates = require("dev.templates")
 local vcs = require("dev.vcs")
@@ -421,7 +422,7 @@ local function carry_problem(root, state, commit)
     end
     local base = jj_out(root, "log", "-r", commit .. "-", "--no-graph", "-T", COMMIT_TEMPLATE)
     if base == nil then
-        return string.format("jj could not read the parent of the checked commit %s", label), true
+        return string.format("jj could not read the parent of the checked commit %s.", label), true
     end
     local ancestor = count_lines(base) == 1
         and jj_out(root, "log", "-r", commit .. "- & ::@-", "--no-graph", "-T", COMMIT_TEMPLATE)
@@ -586,6 +587,75 @@ function M.carry(opts)
         newest_problem = newest_problem or problem
     end
     return nil, newest_problem
+end
+
+---@class dev.board.land.RecheckOpts
+---@field root string the project root, a jj project
+---@field commit string the checked commit the landing commit carries from
+---@field card string the short id of the card that lands
+---@field rows any the `[board.land] recheck` value
+---@field note fun(text: string) says which row is about to run
+
+---Rerun the configured recheck rows on the landing commit when its carry crosses trunk commits.
+---
+---The carry crosses trunk commits when the checked commit's parent is not the landing commit's
+---parent. A row fails the landing when it does not pass, and the first failure stops the run.
+---@param opts dev.board.land.RecheckOpts the project, the carried commit and the configured rows
+---@return string? problem the refusal naming the failing row and its run id, nil when none ran or
+---   every row passed
+function M.recheck_problem(opts)
+    local rows = opts.rows
+    if rows == nil or (type(rows) == "table" and #rows == 0) then
+        return nil
+    end
+    if type(rows) ~= "table" then
+        return "[board.land] recheck must be a list of commands."
+    end
+    local argvs = {}
+    for i, row in ipairs(rows) do
+        if type(row) ~= "string" then
+            return "[board.land] recheck row " .. i .. " is not a string."
+        end
+        local argv, why = check.argv(row)
+        if not argv then
+            return "[board.land] recheck row " .. i .. ": " .. why .. "."
+        end
+        argvs[i] = argv
+    end
+    local direct =
+        jj_out(opts.root, "log", "-r", opts.commit .. "- & @-", "--no-graph", "-T", COMMIT_TEMPLATE)
+    if direct == nil then
+        return string.format(
+            "jj could not read the parent of the checked commit %s.",
+            M.short(opts.commit)
+        )
+    end
+    if direct ~= "" then
+        return nil
+    end
+    local ran = {}
+    for i, argv in ipairs(argvs) do
+        opts.note(string.format("Rechecking %d of %d: %s.", i, #argvs, rows[i]))
+        ran[i] = check.run({
+            root = opts.root,
+            run = rows[i],
+            argv = argv,
+            seconds = check.DEFAULT_SECONDS,
+            env = {
+                [dev_remote.VERB_ENV] = dev_remote.VERB.CHECK,
+                [dev_remote.CARD_ENV] = opts.card,
+            },
+        })
+        if ran[i].result ~= check.RESULT.PASS then
+            return string.format(
+                "Trunk moved since the check at %s. "
+                    .. "The recheck row failed and nothing was pushed: %s\n%s",
+                M.short(opts.commit),
+                check.line(i, ran[i]),
+                ran[i].tail
+            )
+        end
+    end
 end
 
 ---Read the commit that holds a change on trunk, which `jj land` may have rewritten.

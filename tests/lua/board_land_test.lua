@@ -1314,6 +1314,43 @@ if has_jj then
         testing.eq(fs.read(reads), "fetch\nfetch\nfetch\n")
     end)
 
+    local function recheck_project(row)
+        return jj_project('\n[board.land]\nrecheck = ["' .. row .. '"]\n')
+    end
+
+    testing.test("land reruns the recheck rows when the carry crosses trunk commits", function()
+        local marker = support.tempdir() .. "/rechecked"
+        local root, home, log, bare = recheck_project("touch " .. marker)
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        testing.eq(code, 0, out)
+        testing.ok(fs.is_file(marker), "the recheck row never ran")
+    end)
+
+    testing.test("a failed recheck row refuses the land and leaves trunk alone", function()
+        local root, home, log, bare = recheck_project("false")
+        local id = review_ready(root, home, log, bare)
+        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(root)
+        local out, code = dev(root, home, log, { "board", "land", id })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("recheck row failed and nothing was pushed", 1, true), out)
+        testing.ok(out:find("fail - false", 1, true), out)
+        testing.eq(fs.read(log), nil)
+        testing.eq(column_of(home), board.DEFAULT_NAMES.verify)
+    end)
+
+    testing.test("land skips the recheck when the check sits on the current trunk", function()
+        local marker = support.tempdir() .. "/rechecked"
+        local root, home, log, bare = recheck_project("touch " .. marker)
+        local id = review_ready(root, home, log, bare)
+        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        testing.eq(code, 0, out)
+        testing.ok(not fs.is_file(marker), "the recheck row ran")
+    end)
+
     testing.test("land stays put when the push after a carry is rejected", function()
         local root, home, log, bare = jj_project()
         local id = review_ready(root, home, log, bare)

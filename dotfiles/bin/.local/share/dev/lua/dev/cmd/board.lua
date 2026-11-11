@@ -3314,6 +3314,17 @@ local function land_held(opts)
             short .. " cannot land:\n  - " .. table.concat(problems, "\n  - ") .. rebase_note
         )
     end
+    local unchecked = carried
+        and land.recheck_problem({
+            root = backend.root,
+            commit = carried,
+            card = short,
+            rows = config.get(backend.root, "board.land.recheck"),
+            note = verb.note,
+        })
+    if unchecked then
+        return failure(short .. " cannot land:\n  - " .. unchecked .. rebase_note)
+    end
     local renewed
     renewed, message = turn.renew(backend, hold)
     if not renewed then
