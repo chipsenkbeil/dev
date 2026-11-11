@@ -1,16 +1,16 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-devos.defaults.env = {
+dev_os.defaults.env = {
     GIT_CONFIG_GLOBAL = "/dev/null",
     GIT_CONFIG_NOSYSTEM = "1",
     JJ_CONFIG = "/dev/null",
 }
 
 local function git(root, ...)
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@t", ... },
         {
             stderr = "stdout",
@@ -105,14 +105,14 @@ local function jj_tag_push(message)
     git(remote, "init", "-q", "--bare")
     local root = assert(fs.realpath(support.tempdir()))
     local function jj(...)
-        local out, code = devos.capture({ "jj", "--no-pager", "-R", root, ... }, {
+        local out, code = dev_os.capture({ "jj", "--no-pager", "-R", root, ... }, {
             stderr = "stdout",
             env = { JJ_CONFIG = "/dev/null" },
         })
         assert(code == 0, out)
         return (out:gsub("\n$", ""))
     end
-    local made = devos.run({ "jj", "git", "init", root }, {
+    local made = dev_os.run({ "jj", "git", "init", root }, {
         stdout = "null",
         stderr = "null",
         env = { JJ_CONFIG = "/dev/null" },
@@ -121,13 +121,13 @@ local function jj_tag_push(message)
     jj("git", "remote", "add", "origin", remote)
     jj("--config", "user.name=t", "--config", "user.email=t@t", "commit", "-m", message)
     local sha = jj("log", "--no-graph", "-r", "@-", "-T", "commit_id")
-    local _, tagged = devos.capture({ "git", "--git-dir=" .. jj("git", "root"), "tag", "v1", sha })
+    local _, tagged = dev_os.capture({ "git", "--git-dir=" .. jj("git", "root"), "tag", "v1", sha })
     testing.eq(tagged, 0)
     local out, code = support.dev(root, { "push", "--tag", "v1" })
     return out, code, remote, root, sha
 end
 
-if devos.which("jj") then
+if dev_os.which("jj") then
     testing.test("push.tag.works.in.a.jj.repo", function()
         local out, code, remote, root, sha = jj_tag_push("one")
         testing.eq(code, 0, out)

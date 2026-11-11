@@ -1,5 +1,5 @@
 local config = require("dev.config")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local verb = require("dev.verb")
@@ -77,7 +77,7 @@ function M.has_default_job(root, words, hint)
     if not found then
         return false
     end
-    if not devos.which("ci") then
+    if not dev_os.which("ci") then
         stderr:write("dev: ci is not on PATH, ", hint, "\n")
         os.exit(1)
     end
@@ -106,7 +106,7 @@ function M.has_job(root, job, pipeline, hint)
         list[#list + 1] = pipeline
     end
     list[#list + 1] = "--json"
-    local out, code = devos.capture(list, { stderr = errfile })
+    local out, code = dev_os.capture(list, { stderr = errfile })
     local detail = errfile and fs.read(errfile) or ""
     if errfile then
         fs.remove(errfile)
@@ -194,7 +194,7 @@ function M.ci_runner(run, opts)
     if not job:find(JOB_NAME) then
         verb.die("dev: --remote needs a job name, not " .. table.concat(run.words, " "))
     end
-    if not devos.which("ci") then
+    if not dev_os.which("ci") then
         stderr:write("WARNING: ci not found. Install with: dev install from the ci repo\n")
         return 1
     end
@@ -223,9 +223,9 @@ function M.ci_runner(run, opts)
         DEV_AGENT = os.getenv("DEV_AGENT"),
         DEV_CI_VERB = os.getenv(M.VERB_ENV),
         DEV_CI_CARD = os.getenv(M.CARD_ENV),
-    }, devos.isatty(0))
+    }, dev_os.isatty(0))
     local env = name and { DEV_AGENT = name } or nil
-    local code = devos.run(argv, { env = env })
+    local code = dev_os.run(argv, { env = env })
     if code == nil then
         verb.die("dev: cannot run ci")
     end

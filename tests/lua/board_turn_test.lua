@@ -2,8 +2,8 @@ local ffi = require("ffi")
 
 local testing = require("dev.testing")
 local board = require("dev.board")
-local commands = require("dev.cmd.board")
-local devos = require("dev.os")
+local cmd_board = require("dev.cmd.board")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
@@ -403,17 +403,17 @@ testing.test("a waiter whose card moves to Done leaves the queue within one retr
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     local naps = 0
     local result
-    local nap = devos.nap
-    devos.nap = function(seconds)
+    local nap = dev_os.nap
+    dev_os.nap = function(seconds)
         naps = naps + 1
         assert(naps == 1, "the waiter kept polling after its card was done")
         advance(seconds)
         assert(backend:move(id, board.DEFAULT_NAMES.done))
     end
     local ok, err = pcall(as_agent, "beta", function()
-        result = commands.run("turn", { short, "--wait", "600" }, backend)
+        result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
     end)
-    devos.nap = nap
+    dev_os.nap = nap
     assert(ok, err)
     testing.eq(naps, 1)
     testing.eq(result.code, 1)
@@ -426,17 +426,17 @@ testing.test("a waiter whose card is done is not handed a turn that frees meanwh
     local backend = backend_at(board_home())
     local id, short = landing_card(backend)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
-    local nap = devos.nap
-    devos.nap = function(seconds)
+    local nap = dev_os.nap
+    dev_os.nap = function(seconds)
         advance(seconds)
         turn.release(backend, first)
         assert(backend:move(id, board.DEFAULT_NAMES.done))
     end
     local result
     local ok, err = pcall(as_agent, "beta", function()
-        result = commands.run("turn", { short, "--wait", "600" }, backend)
+        result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
     end)
-    devos.nap = nap
+    dev_os.nap = nap
     assert(ok, err)
     testing.eq(result.code, 1)
     testing.ok(result.message:find(short .. " is done", 1, true), result.message)
@@ -450,7 +450,7 @@ testing.test("release drops the queued ask of a caller that holds no turn", func
     assert(turn.ask(backend, { name = "beta", card = short, seconds = 600 }))
     local result
     as_agent("beta", function()
-        result = commands.run("turn", { short, "--release" }, backend)
+        result = cmd_board.run("turn", { short, "--release" }, backend)
     end)
     testing.eq(result.code, 1)
     turn.release(backend, first)
@@ -474,7 +474,7 @@ testing.test("a turn hold over 3600 is refused", function()
     testing.eq(turn.MAX_HOLD_SECONDS, 3600)
     local result
     as_agent("alpha", function()
-        result = commands.run("turn", { short, "--hold", "3601" }, backend)
+        result = cmd_board.run("turn", { short, "--hold", "3601" }, backend)
     end)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("up to 3600", 1, true), result.message)
@@ -564,7 +564,7 @@ local function pomb_root()
         ["comments.json"] = "[]",
     }, {})
     assert(fs.write(root .. "/bin/curl", support.pomb_curl(ID_A, ID_B, ID_C)))
-    assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
     return root
 end
 

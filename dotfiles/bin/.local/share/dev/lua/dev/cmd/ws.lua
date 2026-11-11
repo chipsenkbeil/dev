@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
 local vcs = require("dev.vcs")
@@ -54,7 +54,7 @@ local function fetch_trunk(ctx)
         found.remote
     )
     verb.show(ctx, argv)
-    local out, code = devos.capture(argv, { stderr = "stdout" })
+    local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
         return string.format(
             "dev ws new: the fetch from %s failed: %s",
@@ -116,7 +116,7 @@ M.handlers["ws new"] = function(ctx)
         end
     else
         verb.show(ctx, argv)
-        local code = devos.run(argv) or 1
+        local code = dev_os.run(argv) or 1
         if code ~= 0 then
             return code
         end
@@ -149,7 +149,7 @@ function M.__clean(backend, path)
     else
         argv = vcs.with(vcs.base(path, backend), "status", "--porcelain")
     end
-    local out, code = devos.capture(argv, { stderr = "null" })
+    local out, code = dev_os.capture(argv, { stderr = "null" })
     if code ~= 0 then
         return false, "cannot read the state of " .. path
     end
@@ -235,7 +235,7 @@ function M.remove(root, name, opts)
         if opts.show then
             opts.show(argv)
         end
-        local code = devos.run(argv) or 1
+        local code = dev_os.run(argv) or 1
         if code ~= 0 then
             return false, argv[1] .. " exited " .. code, code
         end

@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local commands = require("dev.cmd.board")
+local cmd_board = require("dev.cmd.board")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -86,7 +86,7 @@ testing.test("lint reports one line per rule a card breaks and exits 1", functio
         card(12, "Backlog", { labels = { "discarded" }, outcomes = {} }),
     }
     cards[3].outcomes = {}
-    local result = commands.run("lint", {}, backend(cards))
+    local result = cmd_board.run("lint", {}, backend(cards))
     testing.eq(result.code, 1)
     testing.eq(findings(result.output), {
         "00000001 Backlog lacks a size",
@@ -119,14 +119,14 @@ testing.test(
             card(4, "Backlog", { description = scope_in_problem, outcomes = outcomes(0) }),
             card(5, "Done", { description = empty_change }),
         }
-        local result = commands.run("lint", {}, backend(cards))
+        local result = cmd_board.run("lint", {}, backend(cards))
         testing.eq(result.code, 1)
         testing.eq(findings(result.output), {
             "00000001 Backlog lacks text under ## Change",
             "00000002 Ready lacks a Problem free of Change: and Out of scope: lines",
             "00000004 Backlog lacks a Problem free of Change: and Out of scope: lines",
         })
-        result = commands.run("lint", { "--strict" }, backend({ cards[5] }))
+        result = cmd_board.run("lint", { "--strict" }, backend({ cards[5] }))
         testing.eq(findings(result.output), { "00000005 Done lacks text under ## Change" })
     end
 )
@@ -164,7 +164,7 @@ testing.test("lint holds an epic to 1 to 3 outcomes and to its children", functi
         end
         return { children = total and total > 0 and { done = total, total = total } or nil }
     end
-    local result = commands.run("lint", {}, fake)
+    local result = cmd_board.run("lint", {}, fake)
     testing.eq(findings(result.output), {
         "00000001 Backlog lacks Done when outcomes",
         "00000002 Done lacks Done when outcomes",
@@ -182,7 +182,7 @@ testing.test("lint lets a Done epic with every child Done close without outcomes
     function fake:family(id)
         return { children = { done = 2, total = held.children[id] } }
     end
-    local result = commands.run("lint", {}, fake)
+    local result = cmd_board.run("lint", {}, fake)
     testing.eq(result.output, "no findings")
 end)
 
@@ -192,7 +192,7 @@ testing.test("lint gives an epic no claimant exemption", function()
         card(2, "In Progress", { claimant = false, outcomes = outcomes(3) }),
     }
     local fake = backend(cards, { children = { [cards[1].id] = 2 } })
-    testing.eq(findings(commands.run("lint", {}, fake).output), {
+    testing.eq(findings(cmd_board.run("lint", {}, fake).output), {
         "00000001 In Progress in progress with no claimant",
         "00000002 In Progress in progress with no claimant",
     })
@@ -205,7 +205,7 @@ testing.test("lint asks a card without children for a checks row and an epic for
     }
     local fake = backend(cards, { children = { [cards[1].id] = 2 } })
     testing.eq(
-        findings(commands.run("lint", {}, fake).output),
+        findings(cmd_board.run("lint", {}, fake).output),
         { "00000002 In Progress no checks row" }
     )
 end)
@@ -216,7 +216,7 @@ testing.test("lint flags a Done card with outcomes and an open child", function(
         return { children = { done = 1, total = 2 } }
     end
     testing.eq(
-        findings(commands.run("lint", {}, fake).output),
+        findings(cmd_board.run("lint", {}, fake).output),
         { "00000001 Done 1 of 2 children open" }
     )
 end)
@@ -226,7 +226,7 @@ testing.test("lint fails when the children of a card cannot be read", function()
     function fake:family()
         return nil, "pomb is down"
     end
-    local result = commands.run("lint", {}, fake)
+    local result = cmd_board.run("lint", {}, fake)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("pomb is down", 1, true), result.message)
 end)
@@ -248,7 +248,7 @@ testing.test("lint passes a clean board with exit 0 and no code", function()
         links = { [cards[6].id] = { { kind = "blocked_by", id = cards[8].id } } },
         children = { [cards[7].id] = 2 },
     }
-    local result = commands.run("lint", {}, backend(cards, held))
+    local result = cmd_board.run("lint", {}, backend(cards, held))
     testing.eq(result.output, "no findings")
     testing.eq(result.code, nil)
     testing.eq(result.message, nil)
@@ -262,12 +262,12 @@ testing.test("lint reads comments only for a Blocked card and writes nothing", f
         card(4, "In Progress"),
     }
     local fake = backend(cards, { children = {} })
-    commands.run("lint", {}, fake)
+    cmd_board.run("lint", {}, fake)
     testing.eq(fake.calls, { "family", "family", "comments", "links", "family", "family" })
 end)
 
 testing.test("lint refuses an argument", function()
-    testing.eq(commands.run("lint", { "extra" }, backend({})).code, 2)
+    testing.eq(cmd_board.run("lint", { "extra" }, backend({})).code, 2)
 end)
 
 testing.test("lint fails when a card's comments cannot be read", function()
@@ -275,7 +275,7 @@ testing.test("lint fails when a card's comments cannot be read", function()
     function fake:comments()
         return nil, "pomb is down"
     end
-    local result = commands.run("lint", {}, fake)
+    local result = cmd_board.run("lint", {}, fake)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("pomb is down", 1, true), result.message)
 end)
@@ -370,8 +370,8 @@ testing.test(
             card(2, "Done", { description = false, labels = { "discarded" }, outcomes = {} }),
             card(3, "Icebox", { description = false }),
         }
-        testing.eq(commands.run("lint", {}, backend(cards)).output, "no findings")
-        local result = commands.run("lint", { "--strict" }, backend(cards))
+        testing.eq(cmd_board.run("lint", {}, backend(cards)).output, "no findings")
+        local result = cmd_board.run("lint", { "--strict" }, backend(cards))
         testing.eq(result.code, 1)
         testing.eq(findings(result.output), {
             "00000001 Done lacks ## Problem",
@@ -393,13 +393,13 @@ testing.test(
             card(3, "Backlog"),
         }
         local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
-        local result = commands.run("lint", {}, backend(cards, held))
+        local result = cmd_board.run("lint", {}, backend(cards, held))
         testing.eq(result.code, nil)
         testing.eq(findings(result.output), {
             "00000001 Blocked lacks ## Change (owner)",
             "00000001 Blocked lacks ## Out of scope (owner)",
         })
-        result = commands.run("lint", { "--strict" }, backend(cards, held))
+        result = cmd_board.run("lint", { "--strict" }, backend(cards, held))
         testing.eq(result.code, nil)
     end
 )
@@ -410,10 +410,10 @@ testing.test(
         local sizeless = card(1, "Blocked", { labels = { "needs:human" }, color = false })
         local misplaced = card(2, "Ready", { labels = { "needs:human" } })
         local held = { comments = { [sizeless.id] = { { kind = "question", body = "which?" } } } }
-        local result = commands.run("lint", {}, backend({ sizeless }, held))
+        local result = cmd_board.run("lint", {}, backend({ sizeless }, held))
         testing.eq(result.code, 1)
         testing.eq(findings(result.output), { "00000001 Blocked lacks a size" })
-        result = commands.run("lint", {}, backend({ misplaced }))
+        result = cmd_board.run("lint", {}, backend({ misplaced }))
         testing.eq(result.code, 1)
         testing.eq(
             findings(result.output),
@@ -428,7 +428,7 @@ testing.test("lint exits 1 when an owner finding sits beside an agent finding", 
         card(2, "Ready", { checks = {} }),
     }
     local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
-    local result = commands.run("lint", {}, backend(cards, held))
+    local result = cmd_board.run("lint", {}, backend(cards, held))
     testing.eq(result.code, 1)
     testing.eq(findings(result.output), {
         "00000001 Blocked lacks ## Change (owner)",

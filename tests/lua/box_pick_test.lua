@@ -1,10 +1,10 @@
 local testing = require("dev.testing")
 local box = require("dev.cmd.box")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 
 local LISTING = [[{"ok":true,"boxes":[
 {"name":"run-a","state":"running","target":"linux-dev","machine":"example-box","shape":"medium","projects":[]},
@@ -43,7 +43,7 @@ cat "%s/$2.json"
 [ "$1" != fleet ] || cat "%s/shapes.json"
 ]]):format(root, root, root)
     assert(fs.write(root .. "/bin/ci", body))
-    assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     return root
 end
 
@@ -192,7 +192,7 @@ testing.test("retag prints the box's own error and exits with ci's code", functi
         .. root
         .. '/$2.json"\nexit 1\n'
     assert(fs.write(root .. "/bin/ci", body))
-    assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     local out, code =
         support.dev(root, { "box", "retag", "run-a", "--target", "linux-dev" }, env(root))
     testing.eq(code, 1)

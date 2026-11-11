@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local lib = require("dev.pkg.lib")
@@ -75,7 +75,7 @@ local function build_as_root(row, build)
     if not prepare_build_user(user, build.opts) then
         return false
     end
-    devos.run({ "chown", "-R", user, build.tmp })
+    dev_os.run({ "chown", "-R", user, build.tmp })
     local clone = { "sudo", "-u", user, "git", "clone", "--depth", "1", url, dir }
     if lib.run(clone, build.opts) ~= 0 then
         stderr:write("  ! ", row.name, ": could not clone ", url, "\n")
@@ -120,7 +120,7 @@ local function install_from_aur(row, opts)
     end
     local build = { opts = opts, tmp = tmp }
     local built
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         built = build_as_root(row, build)
     else
         built = build_as_user(row, build)
@@ -130,7 +130,7 @@ local function install_from_aur(row, opts)
 end
 
 local function aur_plan(row)
-    local as_root = devos.getuid() == 0 and ", as " .. build_user() or ""
+    local as_root = dev_os.getuid() == 0 and ", as " .. build_user() or ""
     return {
         lib.privileged_line(BUILD_PREREQUISITES),
         "git clone --depth 1 " .. aur_url(row) .. " <tmp>",

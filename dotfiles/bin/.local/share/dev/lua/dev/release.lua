@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 local stdout, stderr = io.stdout, io.stderr
@@ -33,7 +33,7 @@ end
 function Session:need(...)
     for i = 1, select("#", ...) do
         local name = select(i, ...)
-        if not devos.which(name) then
+        if not dev_os.which(name) then
             self:die(name .. " required")
         end
     end
@@ -57,15 +57,15 @@ end
 ---@param cwd string? the directory to run it in
 function Session:step(argv, cwd)
     if self.dry_run then
-        local line = devos.command(argv)
+        local line = dev_os.command(argv)
         stdout:write(
             "  + (dry-run): ",
-            cwd and ("cd " .. devos.quote(cwd) .. " && " .. line) or line,
+            cwd and ("cd " .. dev_os.quote(cwd) .. " && " .. line) or line,
             "\n"
         )
         return
     end
-    local code = devos.run(argv, { cwd = cwd })
+    local code = dev_os.run(argv, { cwd = cwd })
     if code ~= 0 then
         self:die(argv[1] .. " failed (exit " .. tostring(code) .. ")")
     end
@@ -76,12 +76,12 @@ end
 ---@return string os `linux` or `darwin`
 ---@return string arch the asset's architecture name
 function Session:platform(arches)
-    local system = devos.capture({ "uname", "-s" }):gsub("%s+$", "")
+    local system = dev_os.capture({ "uname", "-s" }):gsub("%s+$", "")
     local os_name = OS_NAMES[system]
     if not os_name then
         self:die("unsupported OS " .. system .. "; use brew on macOS or the AUR on Arch")
     end
-    local machine = devos.capture({ "uname", "-m" }):gsub("%s+$", "")
+    local machine = dev_os.capture({ "uname", "-m" }):gsub("%s+$", "")
     local arch = ARCH_NAMES[machine]
     if not arch then
         self:die("unsupported architecture " .. machine)
@@ -97,7 +97,7 @@ function Session:resolve(repo)
     local tag = self.version
     if tag == "" then
         local url = "https://api.github.com/repos/" .. repo .. "/releases/latest"
-        local body = devos.capture({ "curl", "-fsSL", "--max-time", LATEST_SECS, url })
+        local body = dev_os.capture({ "curl", "-fsSL", "--max-time", LATEST_SECS, url })
         tag = body:match(TAG) or ""
         if tag == "" then
             self:die("could not determine the latest release tag")
@@ -114,7 +114,7 @@ function Session:is_at(bin, version)
     if not fs.is_exec(bin) then
         return false
     end
-    local out = devos.capture({ bin, "--version" }, { stderr = "null" })
+    local out = dev_os.capture({ bin, "--version" }, { stderr = "null" })
     return out:gsub("%s+$", "") == version
 end
 

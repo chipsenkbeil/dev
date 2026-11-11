@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 ---@class dev.project
@@ -19,7 +19,7 @@ local stderr = io.stderr
 local SHARE = debug.getinfo(1, "S").source:match("^@(.*)/lua/dev/[^/]*$") or "."
 
 local function physical_cwd()
-    local out, code = devos.capture({ "pwd", "-P" }, { stderr = "null" })
+    local out, code = dev_os.capture({ "pwd", "-P" }, { stderr = "null" })
     local path = out:gsub("\n$", "")
     if code ~= 0 or path == "" then
         local pwd = os.getenv("PWD")
@@ -46,10 +46,10 @@ local function ancestor_with(markers, cwd, test)
 end
 
 local function vcs_root(argv)
-    if not devos.which(argv[1]) then
+    if not dev_os.which(argv[1]) then
         return nil
     end
-    local out, code = devos.capture(argv, { stderr = "null" })
+    local out, code = dev_os.capture(argv, { stderr = "null" })
     if code == 0 then
         return (out:gsub("\n$", ""))
     end
@@ -98,7 +98,7 @@ M.share = SHARE
 ---@return string root absolute path of the clone
 function M.dotfiles_root()
     local env = os.getenv("DOTFILES")
-    if env and env ~= "" and devos.getuid() ~= 0 then
+    if env and env ~= "" and dev_os.getuid() ~= 0 then
         return env
     end
     local root = SHARE:match("^(.*)/dotfiles/bin/%.local/share/dev$")
@@ -123,7 +123,7 @@ end
 ---@return string root absolute path of the project
 function M.root()
     local cwd = physical_cwd()
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         return ancestor_with({ ".jj", ".git", ".dev" }, cwd, fs.exists) or cwd
     end
     return deeper_root(
@@ -134,7 +134,7 @@ function M.root()
 end
 
 local function has_lua_file(root)
-    local out = devos.capture({
+    local out = dev_os.capture({
         "find",
         "-H",
         root,

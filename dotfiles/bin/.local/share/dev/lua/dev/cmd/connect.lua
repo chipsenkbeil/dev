@@ -1,5 +1,5 @@
 local box = require("dev.cmd.box")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local picker = require("dev.ui.picker")
@@ -85,9 +85,9 @@ end
 ---@param argv string[] the command and its arguments
 ---@return integer code the exit code of a command that could not start
 local function exec(argv)
-    local _, message = devos.exec(argv)
+    local _, message = dev_os.exec(argv)
     verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
-    return devos.EXEC_FAILED
+    return dev_os.EXEC_FAILED
 end
 
 ---Name the ssh host that ci's config reaches a connectable by.
@@ -141,7 +141,7 @@ local function attach(found, opts)
     end
     local session = tostring((first and present(first.name)) or name):gsub("[^A-Za-z0-9_-]", "_")
     local over_ssh = opts.ssh
-    if not over_ssh and not devos.which("et") then
+    if not over_ssh and not dev_os.which("et") then
         say("et not found, using ssh")
         over_ssh = true
     end
@@ -245,9 +245,9 @@ local function capture_ci(argv)
     local errfile, reason = fs.mktemp({ prefix = "dev-connect" })
     if not errfile then
         verb.note("dev connect: " .. reason)
-        return devos.capture(argv)
+        return dev_os.capture(argv)
     end
-    local ok, out, code = pcall(devos.capture, argv, { stderr = errfile })
+    local ok, out, code = pcall(dev_os.capture, argv, { stderr = errfile })
     local detail = fs.read(errfile) or ""
     fs.remove(errfile)
     if not ok then

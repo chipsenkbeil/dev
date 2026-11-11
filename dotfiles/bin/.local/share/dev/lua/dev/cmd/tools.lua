@@ -1,5 +1,5 @@
 local builtins = require("dev.builtins")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
 local project = require("dev.project")
@@ -48,9 +48,9 @@ local function fail(message)
 end
 
 local function exec(argv, opts)
-    local _, message = devos.exec(argv, opts)
+    local _, message = dev_os.exec(argv, opts)
     verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
-    return devos.EXEC_FAILED
+    return dev_os.EXEC_FAILED
 end
 
 local function root_env(ctx)
@@ -85,7 +85,7 @@ local function run_driver(ctx, sub, manifest, args)
     if not fs.is_file(pkg) then
         return fail("no " .. pkg .. " (set DOTFILES to the dotfiles repo)")
     end
-    local is_root = devos.getuid() == 0
+    local is_root = dev_os.getuid() == 0
     local luajit = interpreter(ctx, is_root)
     if not is_root then
         local argv = { luajit, pkg, sub, "--manifest", manifest, unpack(args) }
@@ -109,9 +109,9 @@ local function run_driver(ctx, sub, manifest, args)
     for _, word in ipairs(driver) do
         argv[#argv + 1] = word
     end
-    local code = devos.run(argv, { cwd = ctx.root })
+    local code = dev_os.run(argv, { cwd = ctx.root })
     fs.remove(copy)
-    return code or devos.EXEC_FAILED
+    return code or dev_os.EXEC_FAILED
 end
 
 local function manifest_path(ctx)
@@ -162,11 +162,11 @@ M.handlers["tools install"] = function(ctx, reg)
     if not manifest then
         return 0
     end
-    local is_root = devos.getuid() == 0
+    local is_root = dev_os.getuid() == 0
     if not parsed.scope and is_root then
         usage_error(ctx, reg, "as root, pass --system")
     end
-    if parsed.scope == Scope.SYSTEM and not is_root and devos.name() ~= "Darwin" then
+    if parsed.scope == Scope.SYSTEM and not is_root and dev_os.name() ~= "Darwin" then
         return fail("tools install --system installs packages and needs root, run it as root")
     end
     if parsed.scope == Scope.USER and is_root then

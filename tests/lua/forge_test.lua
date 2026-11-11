@@ -1,20 +1,20 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
 local support = require("support")
 local vcs = require("dev.vcs")
 
-local has_jj = devos.which("jj") ~= nil
+local has_jj = dev_os.which("jj") ~= nil
 
-devos.defaults.env =
+dev_os.defaults.env =
     { GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1", JJ_CONFIG = "/dev/null" }
 
 local function ok(argv, opts)
     opts = opts or {}
     opts.stdout = "null"
     opts.stderr = "null"
-    assert(devos.run(argv, opts) == 0, table.concat(argv, " "))
+    assert(dev_os.run(argv, opts) == 0, table.concat(argv, " "))
 end
 
 local function git(root, ...)
@@ -122,7 +122,7 @@ if has_jj then
         for _, remote in ipairs(remotes) do
             ok({ "jj", "--no-pager", "-R", root, "git", "remote", "add", remote[1], remote[2] })
         end
-        local store = devos.capture({ "jj", "--no-pager", "-R", root, "git", "root" })
+        local store = dev_os.capture({ "jj", "--no-pager", "-R", root, "git", "root" })
         for _, pair in ipairs(config or {}) do
             ok({ "git", "--git-dir=" .. store:gsub("\n$", ""), "config", pair[1], pair[2] })
         end

@@ -1,11 +1,11 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local manifest = require("dev.pkg.manifest")
 local release = require("dev.pkg.release")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local PINS = REPO .. "/.dev/releases.tsv"
 local PKG = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
 local COLUMN = "darwin-x86_64"
@@ -75,9 +75,9 @@ testing.test("the Darwin x86_64 dry run prints the release steps for the lint pi
     assert(fs.mkdir(dir .. "/stubs"))
     assert(fs.mkdir(dir .. "/home"))
     assert(fs.write(dir .. "/stubs/uname", UNAME))
-    assert(devos.run({ "chmod", "755", dir .. "/stubs/uname" }) == 0, "chmod failed")
-    local luajit = devos.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
-    local out, code = devos.capture({
+    assert(dev_os.run({ "chmod", "755", dir .. "/stubs/uname" }) == 0, "chmod failed")
+    local luajit = dev_os.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
+    local out, code = dev_os.capture({
         luajit,
         PKG,
         "install",

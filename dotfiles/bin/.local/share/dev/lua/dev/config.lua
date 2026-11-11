@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local toml = require("dev.toml")
 local verb = require("dev.verb")
@@ -39,7 +39,7 @@ local function lookup(tree, parts)
 end
 
 local function find(root, key, opts)
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         return nil
     end
     local home = os.getenv("HOME")
@@ -102,7 +102,7 @@ end
 ---@return any? value the value, or nil when the user file does not set it
 function M.user(key)
     local home = os.getenv("HOME")
-    if devos.getuid() == 0 or not home or home == "" then
+    if dev_os.getuid() == 0 or not home or home == "" then
         return nil
     end
     local tree, err = read(home .. "/.config/dev/config.toml")

@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local kinds = require("dev.pkg.kinds")
 
 local stdout, stderr = io.stdout, io.stderr
@@ -119,7 +119,7 @@ function M.run(argv, opts)
         run_opts.stderr = "stdout"
         from = log_size(opts.log_file)
     end
-    local code = devos.run(argv, run_opts)
+    local code = dev_os.run(argv, run_opts)
     pending_failure = nil
     if logged and code ~= 0 then
         pending_failure = { path = opts.log_file, from = from }
@@ -143,21 +143,21 @@ function M.on_path(binary)
     if binary == NO_PROBE_BINARY then
         return nil
     end
-    return devos.which(binary)
+    return dev_os.which(binary)
 end
 
 ---Say whether a command exits 0 with its output thrown away.
 ---@param argv string[] the command and its arguments
 ---@return boolean ok whether it exits 0
 function M.succeeds(argv)
-    return devos.run(argv, { stdin = "null", stdout = "null", stderr = "null" }) == 0
+    return dev_os.run(argv, { stdin = "null", stdout = "null", stderr = "null" }) == 0
 end
 
 ---Prefix a command with sudo unless this process is root.
 ---@param argv string[] the command and its arguments
 ---@return string[] argv the command, behind sudo for a user
 function M.privileged(argv)
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         return argv
     end
     return { "sudo", unpack(argv) }
@@ -176,7 +176,7 @@ end
 ---@param argv string[] the command without sudo
 ---@return string line the words joined by spaces
 function M.privileged_line(argv)
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         return " " .. M.line(argv)
     end
     return M.line(M.privileged(argv))

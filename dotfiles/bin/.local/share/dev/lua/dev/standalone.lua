@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 ---@class dev.standalone
@@ -37,7 +37,7 @@ local function found(root, args)
     for _, arg in ipairs(args) do
         argv[#argv + 1] = arg
     end
-    local text = devos.capture(argv, { cwd = root, stderr = "null" })
+    local text = dev_os.capture(argv, { cwd = root, stderr = "null" })
     local paths = {}
     for path in text:gmatch("[^\n]+") do
         paths[#paths + 1] = path

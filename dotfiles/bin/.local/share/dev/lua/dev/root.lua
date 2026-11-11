@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 local MAX_BYTES = 262144
@@ -76,7 +76,7 @@ local function line_too_long(text)
 end
 
 local function read_manifest(fd, manifest)
-    local stat = devos.fstat(fd)
+    local stat = dev_os.fstat(fd)
     if not stat then
         return nil, "cannot open " .. manifest
     end
@@ -89,7 +89,7 @@ local function read_manifest(fd, manifest)
     if stat.size > MAX_BYTES then
         return nil, refuse(manifest, ": larger than 256 KiB")
     end
-    local text = devos.read_fd(fd, MAX_BYTES + 1)
+    local text = dev_os.read_fd(fd, MAX_BYTES + 1)
     if not text then
         return nil, "cannot open " .. manifest
     end
@@ -117,16 +117,16 @@ function M.manifest_copy(root, manifest)
     if refusal then
         return nil, refusal
     end
-    local fd = devos.open_nofollow(manifest)
+    local fd = dev_os.open_nofollow(manifest)
     if not fd then
         return nil, "cannot open " .. manifest
     end
     local text, message = read_manifest(fd, manifest)
-    devos.close(fd)
+    dev_os.close(fd)
     if not text then
         return nil, message
     end
-    local out, code = devos.capture({ "mktemp", TEMP_TEMPLATE })
+    local out, code = dev_os.capture({ "mktemp", TEMP_TEMPLATE })
     local copy = out:gsub("\n$", "")
     if code ~= 0 or copy == "" then
         return nil, "cannot make a temp file"

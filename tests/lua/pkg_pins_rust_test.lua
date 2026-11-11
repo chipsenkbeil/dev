@@ -1,11 +1,11 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local manifest = require("dev.pkg.manifest")
 local release = require("dev.pkg.release")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local PINS = REPO .. "/.dev/releases.tsv"
 local PKG = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
 local MODULES = REPO .. "/dotfiles/bin/.local/share/dev/lua"
@@ -91,12 +91,12 @@ end
 
 local function write_executable(path, text)
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function sha256(file)
-    local out = devos.capture(
-        devos.which("shasum") and { "shasum", "-a", "256", file } or { "sha256sum", file }
+    local out = dev_os.capture(
+        dev_os.which("shasum") and { "shasum", "-a", "256", file } or { "sha256sum", file }
     )
     return out:match("^(%x+)")
 end
@@ -108,7 +108,7 @@ local function sandbox(sum)
     end
     write_executable(dir .. "/stubs/curl", FAKE_CURL)
     for _, name in ipairs(SYSTEM_TOOLS) do
-        local real = devos.which(name)
+        local real = dev_os.which(name)
         if real then
             assert(fs.symlink(real, dir .. "/pathbin/" .. name))
         end
@@ -140,11 +140,11 @@ local function run(dir, args, extra)
     for key, value in pairs(extra or {}) do
         env[key] = value
     end
-    local argv = { assert(devos.which("luajit")), SCRIPT }
+    local argv = { assert(dev_os.which("luajit")), SCRIPT }
     for _, arg in ipairs(args or {}) do
         argv[#argv + 1] = arg
     end
-    return devos.capture(argv, { stderr = "stdout", env = env })
+    return dev_os.capture(argv, { stderr = "stdout", env = env })
 end
 
 testing.test("every rust row has a route or a drop on Intel macOS", function()
@@ -170,8 +170,8 @@ testing.test("the Darwin x86_64 dry run prints the rust steps in manifest order"
     assert(fs.mkdir(dir .. "/stubs"))
     assert(fs.mkdir(dir .. "/home"))
     write_executable(dir .. "/stubs/uname", UNAME)
-    local out, code = devos.capture({
-        assert(devos.which("luajit")),
+    local out, code = dev_os.capture({
+        assert(dev_os.which("luajit")),
         PKG,
         "install",
         "--dry-run",
@@ -318,13 +318,13 @@ local function rust_group_sandbox()
     write_executable(dir .. "/stubs/curl", FAKE_CURL)
     write_executable(dir .. "/stubs/uname", UNAME)
     for _, name in ipairs(SYSTEM_TOOLS) do
-        local real = devos.which(name)
+        local real = dev_os.which(name)
         if real then
             assert(fs.symlink(real, dir .. "/pathbin/" .. name))
         end
     end
     for _, name in ipairs({ "tar", "gzip", "unzip" }) do
-        local real = devos.which(name)
+        local real = dev_os.which(name)
         if real then
             assert(fs.symlink(real, dir .. "/pathbin/" .. name))
         end
@@ -350,7 +350,7 @@ local function rust_group_sandbox()
         )
         local archive = dir .. "/assets/" .. name .. ".tar.gz"
         assert(
-            devos.run({ "tar", "-czf", archive, "-C", dir .. "/stage/" .. name, name }) == 0,
+            dev_os.run({ "tar", "-czf", archive, "-C", dir .. "/stage/" .. name, name }) == 0,
             "tar failed"
         )
         pins[#pins + 1] = table.concat({
@@ -382,8 +382,8 @@ local function install_rust_group(dir, extra)
             unset[#unset + 1] = key
         end
     end
-    return devos.capture({
-        assert(devos.which("luajit")),
+    return dev_os.capture({
+        assert(dev_os.which("luajit")),
         PKG,
         "install",
         "--group",
@@ -416,7 +416,7 @@ end
 testing.test(
     "the rust group installs in one run on an Intel Mac with no cargo or user bin on PATH",
     function()
-        if devos.getuid() == 0 then
+        if dev_os.getuid() == 0 then
             return
         end
         local dir = rust_group_sandbox()
@@ -428,7 +428,7 @@ testing.test(
 )
 
 testing.test("the rust group honours CARGO_HOME and DEV_TOOLS_BIN when they are set", function()
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         return
     end
     local dir = rust_group_sandbox()

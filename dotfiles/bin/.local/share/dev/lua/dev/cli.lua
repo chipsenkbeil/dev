@@ -11,7 +11,7 @@ local sync = require("dev.cmd.sync")
 local tools = require("dev.cmd.tools")
 local types = require("dev.cmd.types")
 local ws = require("dev.cmd.ws")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
 local project = require("dev.project")
@@ -23,7 +23,7 @@ local verb = require("dev.verb")
 local stderr = io.stderr
 local INTERPRETER = arg and arg[-1]
 local MAX_LEVEL = 2
-local INTERRUPTED = devos.SIGNAL_EXIT_BASE + 2
+local INTERRUPTED = dev_os.SIGNAL_EXIT_BASE + 2
 local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
 local SHARE = project.share
 local VCS_HANDLERS = { push = push.run, pull = pull.run, sync = sync.run }
@@ -121,7 +121,7 @@ local function parse(argv)
 end
 
 local function remote_default(project_root, words)
-    if devos.getuid() == 0 or remote.machine_local(words) then
+    if dev_os.getuid() == 0 or remote.machine_local(words) then
         return false
     end
     local setting = config.prefer_user(project_root, "remote.default")
@@ -159,39 +159,39 @@ local function refuse_agent_local(project_root, words)
 end
 
 local function root_gate(args)
-    if devos.getuid() ~= 0 then
+    if dev_os.getuid() ~= 0 then
         return
     end
     if not root.allowed(args) then
         stderr:write(ROOT_REFUSAL)
         os.exit(2)
     end
-    if devos.name() ~= "Linux" then
+    if dev_os.name() ~= "Linux" then
         stderr:write("dev: as root, dev runs only on Linux\n")
         os.exit(2)
     end
 end
 
 local function exec_or_exit(argv, opts)
-    devos.defaults.show = false
-    local _, message = devos.exec(argv, opts)
+    dev_os.defaults.show = false
+    local _, message = dev_os.exec(argv, opts)
     stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
-    os.exit(devos.EXEC_FAILED)
+    os.exit(dev_os.EXEC_FAILED)
 end
 
 local function apply_level(level)
     if level >= MAX_LEVEL then
         local trace = SHARE .. "/xtrace.bash"
         if fs.is_file(trace) then
-            devos.defaults.env.BASH_ENV = trace
-            devos.defaults.env.PS4 = project.PS4
+            dev_os.defaults.env.BASH_ENV = trace
+            dev_os.defaults.env.PS4 = project.PS4
         else
             stderr:write("dev: trace file ", trace, " is missing, showing commands only\n")
             level = 1
         end
     end
     if level >= 1 then
-        devos.defaults.env.VERBOSE = tostring(level)
+        dev_os.defaults.env.VERBOSE = tostring(level)
     end
     return level
 end
@@ -212,7 +212,7 @@ end
 local function prepare(ctx)
     ctx.verbose = apply_level(ctx.verbose)
     if ctx.verbose == 0 then
-        devos.defaults.unset = { "VERBOSE" }
+        dev_os.defaults.unset = { "VERBOSE" }
     end
 end
 
@@ -230,7 +230,7 @@ local function run_script(row, ctx, rest)
         exec_or_exit(argv)
     end
     package.path = ctx.root .. "/.dev/lua/?.lua;" .. package.path
-    devos.defaults.show = ctx.verbose >= 1
+    dev_os.defaults.show = ctx.verbose >= 1
     os.exit(verb.run(row.script, ctx))
 end
 
@@ -374,7 +374,7 @@ function M.main(argv)
         os.exit(2)
     end
     root_gate(parsed.args)
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         run_as_root(parsed)
     end
     local on_remote_host = remote.is_remote_host()

@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
@@ -36,7 +36,7 @@ printf '%s\n%s' "$body" "$status"
 
 local function executable(path, body)
     assert(fs.write(path, body))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function sandbox(who)

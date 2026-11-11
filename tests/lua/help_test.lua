@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
 
@@ -15,7 +15,7 @@ local function project(files)
         assert(fs.mkdir(fs.dirname(path), { parents = true }))
         assert(fs.write(path, source))
         if name:find("%.sh$") then
-            assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+            assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
         end
     end
     return root
@@ -28,7 +28,7 @@ local function dev(root, args, env)
     end
     env = env or {}
     env.DEV_SELF = SELF
-    return devos.capture(argv, { cwd = root, stderr = "stdout", env = env })
+    return dev_os.capture(argv, { cwd = root, stderr = "stdout", env = env })
 end
 
 testing.test("help prints no escape under NO_COLOR or into a pipe", function()
@@ -43,7 +43,7 @@ end)
 
 testing.test("dev help | head -1 ends without a traceback", function()
     local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n" })
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "sh", "-c", 'luajit "$1" help | head -1', "sh", MAIN },
         { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF } }
     )

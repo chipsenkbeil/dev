@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
 local registry = require("dev.registry")
@@ -9,7 +9,7 @@ local function scripted(dir, rel, text, mode)
     local path = fs.join(dir, rel)
     assert(fs.mkdir(fs.dirname(path), { parents = true }))
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", mode or "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", mode or "755", path }) == 0, "chmod failed")
     return path
 end
 
@@ -236,7 +236,7 @@ local function root_from(dir, opts)
         support.absolute_path(),
         opts.uid0 and "require('dev.os').getuid = function() return 0 end; " or ""
     )
-    return devos.capture({ "luajit", "-e", script }, { cwd = dir, env = opts.env })
+    return dev_os.capture({ "luajit", "-e", script }, { cwd = dir, env = opts.env })
 end
 
 testing.test("root finds the nearest .dev from a subdirectory", function()
@@ -285,7 +285,7 @@ testing.test("local verbs come in the order the shell glob gives", function()
         scripted(root, ".dev/" .. name .. ".sh", "#!/usr/bin/env bash\n# " .. name .. ".\n")
     end
     local want = {}
-    local out = devos.capture({ "bash", "-c", "printf '%s\\n' *.sh" }, { cwd = root .. "/.dev" })
+    local out = dev_os.capture({ "bash", "-c", "printf '%s\\n' *.sh" }, { cwd = root .. "/.dev" })
     for name in out:gmatch("([^\n]+)%.sh\n") do
         want[#want + 1] = name
     end
@@ -295,30 +295,30 @@ testing.test("local verbs come in the order the shell glob gives", function()
 end)
 
 local function git_repo(root)
-    return devos.run({ "git", "init", "-q", root }, { stdout = "null" }) == 0
+    return dev_os.run({ "git", "init", "-q", root }, { stdout = "null" }) == 0
 end
 
 testing.test("root asks git for the toplevel when no jj answers", function()
-    if not devos.which("git") then
+    if not dev_os.which("git") then
         print("skip - git is not installed")
         return
     end
     local root = support.tempdir()
     assert(git_repo(root), "git init failed")
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
-    local env = { PATH = "/usr/bin:/bin:" .. fs.dirname(devos.which("git")) }
+    local env = { PATH = "/usr/bin:/bin:" .. fs.dirname(dev_os.which("git")) }
     testing.eq(root_from(root .. "/sub/deep", { env = env }), assert(fs.realpath(root)) .. "\n")
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("root asks jj for the workspace root first", function()
-    if not (devos.which("jj") and devos.which("git")) then
+    if not (dev_os.which("jj") and dev_os.which("git")) then
         print("skip - jj or git is not installed")
         return
     end
     local root = support.tempdir()
     assert(
-        devos.run({ "jj", "git", "init", root }, { stdout = "null", stderr = "null" }) == 0,
+        dev_os.run({ "jj", "git", "init", root }, { stdout = "null", stderr = "null" }) == 0,
         "jj init failed"
     )
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
@@ -327,11 +327,11 @@ testing.test("root asks jj for the workspace root first", function()
 end)
 
 local function quiet(argv, dir)
-    return devos.run(argv, { cwd = dir, stdout = "null", stderr = "null" }) == 0
+    return dev_os.run(argv, { cwd = dir, stdout = "null", stderr = "null" }) == 0
 end
 
 local function have_vcs()
-    if devos.which("jj") and devos.which("git") then
+    if dev_os.which("jj") and dev_os.which("git") then
         return true
     end
     print("skip - jj or git is not installed")

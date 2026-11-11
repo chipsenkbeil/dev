@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
@@ -26,7 +26,7 @@ local NO_GIT = "#!/bin/sh\nexit 1\n"
 
 local function stub(root, name, body)
     assert(fs.write(root .. "/bin/" .. name, body))
-    assert(devos.run({ "chmod", "755", root .. "/bin/" .. name }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. name }) == 0, "chmod failed")
 end
 
 local function setup(kind)

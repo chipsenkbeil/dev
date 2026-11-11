@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
@@ -33,7 +33,7 @@ end)
 
 testing.test("stat reports uid, size and kind", function()
     local dir = scratch()
-    testing.eq(fs.stat(dir).uid, tonumber((devos.capture({ "id", "-u" }))))
+    testing.eq(fs.stat(dir).uid, tonumber((dev_os.capture({ "id", "-u" }))))
     testing.eq(fs.stat(dir).kind, "dir")
     assert(fs.write(dir .. "/f", "hello"))
     local st = fs.stat(dir .. "/f")
@@ -63,7 +63,7 @@ testing.test("predicates tell files, directories, links and executables apart", 
     testing.ok(fs.exists(dir .. "/f") and not fs.exists(dir .. "/broken"), "exists follows links")
     testing.ok(fs.is_link(dir .. "/broken"), "a broken link is still a link")
     testing.ok(not fs.is_exec(dir .. "/f"), "a new file is not executable")
-    devos.run({ "chmod", "+x", dir .. "/f" })
+    dev_os.run({ "chmod", "+x", dir .. "/f" })
     testing.ok(fs.is_exec(dir .. "/f"), "chmod +x makes it executable")
     testing.ok(fs.is_dir(dir) and not fs.is_file(dir), "a directory is not a file")
     fs.remove(dir, { recursive = true })
@@ -109,7 +109,7 @@ testing.test("a relative path that starts with a dash works everywhere", functio
         .. "assert(fs.write('-x', 'abc')); assert(fs.mkdir('-d')); assert(fs.write('-d/in', ''))"
         .. "; io.write(tostring(fs.exists('-x')), tostring(fs.is_file('-x')), tostring(fs.is_dir('-d')), "
         .. "fs.stat('-x').size, table.concat(fs.list('-d'), ','))"
-    local out = devos.capture({ "luajit", "-e", snippet }, { cwd = dir })
+    local out = dev_os.capture({ "luajit", "-e", snippet }, { cwd = dir })
     testing.eq(out, "truetruetrue3in")
     fs.remove(dir, { recursive = true })
 end)
@@ -130,12 +130,12 @@ testing.test("stat takes the GNU branch when stat --version succeeds", function(
             '#!/bin/sh\n[ "$1" = --version ] && exit 0\nprintf "7 81a4 5\\n"\n'
         )
     )
-    devos.run({ "chmod", "+x", dir .. "/stat" })
+    dev_os.run({ "chmod", "+x", dir .. "/stat" })
     local path = support.absolute_path()
     local snippet = ("package.path = %q; local st = require('dev.fs').stat('/anything'); "):format(
         path
     ) .. "io.write(st.uid, ' ', st.mode, ' ', st.size, ' ', st.kind)"
-    local out = devos.capture(
+    local out = dev_os.capture(
         { "luajit", "-e", snippet },
         { env = { PATH = dir .. ":" .. os.getenv("PATH") } }
     )

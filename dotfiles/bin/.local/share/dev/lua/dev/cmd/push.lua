@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
 local text = require("dev.text")
@@ -48,12 +48,12 @@ local function resolve(root, tags_only)
         end
     else
         local branch, code =
-            devos.capture({ "git", "-C", root, "symbolic-ref", "--short", "-q", "HEAD" })
+            dev_os.capture({ "git", "-C", root, "symbolic-ref", "--short", "-q", "HEAD" })
         if code ~= 0 and not tags_only then
             return nil, "HEAD is detached in " .. root .. ", check out a branch to push"
         end
         plan.ref = text.trim(branch)
-        plan.sha = text.trim(devos.capture({ "git", "-C", root, "rev-parse", "HEAD" }))
+        plan.sha = text.trim(dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }))
         plan.guard, err = guard_path()
         if not plan.guard then
             return nil, err
@@ -100,7 +100,7 @@ local function store_dir(root, plan)
     if plan.backend ~= vcs.JJ then
         return nil
     end
-    local dir = devos.capture(vcs.with(vcs.base(root, plan.backend), "git", "root"))
+    local dir = dev_os.capture(vcs.with(vcs.base(root, plan.backend), "git", "root"))
     return text.trim(dir)
 end
 
@@ -120,7 +120,7 @@ end
 local function check_tags(git, tags, remotes)
     local shas = {}
     for _, tag in ipairs(tags) do
-        local sha, code = devos.capture(
+        local sha, code = dev_os.capture(
             vcs.with(git, "rev-parse", "-q", "--verify", "refs/tags/" .. tag .. "^{commit}"),
             { stderr = "null" }
         )
@@ -134,7 +134,7 @@ local function check_tags(git, tags, remotes)
         todo[remote] = {}
         for _, tag in ipairs(tags) do
             local ref = "refs/tags/" .. tag
-            local out, code = devos.capture(
+            local out, code = dev_os.capture(
                 vcs.with(git, "ls-remote", remote, ref, ref .. "^{}"),
                 { stderr = "stdout" }
             )
@@ -190,7 +190,7 @@ local function push_tags(ctx, plan, tags, remotes)
                 argv[#argv + 1] = "refs/tags/" .. tag .. ":refs/tags/" .. tag
             end
             verb.show(ctx, argv)
-            local out, code = devos.capture(argv, { cwd = ctx.root, stderr = "stdout" })
+            local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
             local shown = table.concat(todo[remote], " ")
             if code == 0 then
                 io.write(remote, ": pushed tags ", shown, "\n")
@@ -282,7 +282,7 @@ function M.run(ctx)
     for _, remote in ipairs(remotes) do
         local argv = argv_for(ctx.root, plan, remote)
         verb.show(ctx, argv)
-        local out, code = devos.capture(argv, { cwd = ctx.root, stderr = "stdout" })
+        local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
         if code == 0 then
             io.write(remote, ": pushed ", plan.ref, "\n")
         else

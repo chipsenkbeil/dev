@@ -3,8 +3,8 @@ local ffi = require("ffi")
 local testing = require("dev.testing")
 local board = require("dev.board")
 local check = require("dev.board.check")
-local commands = require("dev.cmd.board")
-local devos = require("dev.os")
+local cmd_board = require("dev.cmd.board")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local land = require("dev.board.land")
@@ -15,7 +15,7 @@ local turn = require("dev.board.turn")
 local vcs = require("dev.vcs")
 local ws = require("dev.cmd.ws")
 
-local has_jj = devos.which("jj") ~= nil
+local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 local LAND_STUB = [[#!/bin/sh
 for word in "$@"; do
@@ -285,7 +285,7 @@ local function dev(root, home, log, args, extra)
         DEV_AGENT = "dotfiles/lander",
         LAND_LOG = log,
         LAND_MSG = "stub land",
-        REAL_JJ = devos.which("jj"),
+        REAL_JJ = dev_os.which("jj"),
     }
     for name, value in pairs(extra or {}) do
         env[name] = value
@@ -349,7 +349,7 @@ local function new_card(root, home, log)
     must(dev(root, home, log, { "board", "checks", id, "true" }))
     if fs.is_dir(root .. "/.jj") then
         local rename = { "jj", "-R", root, "workspace", "rename", id }
-        must(devos.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
+        must(dev_os.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
     end
     return id
 end
@@ -388,7 +388,7 @@ end
 
 testing.test("land refuses a git project and a caller with no name", function()
     local root, home, log = setup()
-    must(devos.run({ "git", "init", "-q", root }, { stdout = "null" }))
+    must(dev_os.run({ "git", "init", "-q", root }, { stdout = "null" }))
     local id = new_card(root, home, log)
     refused(root, home, log, id, { "needs a jj project" })
     local out, code = dev(root, home, log, { "board", "land", id }, { DEV_AGENT = "" })
@@ -415,7 +415,7 @@ local function fake_backend(root, card)
     local backend = { root = root, column_map = {}, notes = {} }
     if root and fs.is_dir(root .. "/.jj") then
         local rename = { "jj", "-R", root, "workspace", "rename", CARD_PREFIX }
-        must(devos.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
+        must(dev_os.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
     end
     card = card or {}
     local view = {
@@ -451,7 +451,7 @@ end
 local function land_as_lander(backend)
     local previous = os.getenv("DEV_AGENT") or ""
     ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
-    local ok, result = pcall(commands.run, "land", { CARD_PREFIX }, backend)
+    local ok, result = pcall(cmd_board.run, "land", { CARD_PREFIX }, backend)
     ffi.C.setenv("DEV_AGENT", previous, 1)
     assert(ok, result)
     return result
@@ -480,7 +480,7 @@ end)
 if has_jj then
     local function jj(root, ...)
         local argv = { "jj", "--no-pager", "--color", "never", "-R", root, ... }
-        local out, code = devos.capture(argv, { stderr = "null", env = IDENT })
+        local out, code = dev_os.capture(argv, { stderr = "null", env = IDENT })
         assert(code == 0, out)
         return out
     end
@@ -488,19 +488,19 @@ if has_jj then
     local function git(dir, ...)
         local argv =
             { "git", "-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
-        must(devos.run(argv, { stdout = "null", stderr = "null" }))
+        must(dev_os.run(argv, { stdout = "null", stderr = "null" }))
     end
 
     local function jj_project(extra)
         local root, home, log = setup(extra)
         assert(fs.write(root .. "/bin/jj", LAND_STUB), "write failed")
-        must(devos.run({ "chmod", "755", root .. "/bin/jj" }))
+        must(dev_os.run({ "chmod", "755", root .. "/bin/jj" }))
         local bare = support.tempdir()
         must(
-            devos.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" })
+            dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" })
         )
         must(
-            devos.run(
+            dev_os.run(
                 { "jj", "git", "init", root },
                 { stdout = "null", stderr = "null", env = IDENT }
             )
@@ -990,7 +990,7 @@ if has_jj then
         approve(root, home, log, id)
         local other = support.tempdir() .. "/clone"
         must(
-            devos.run(
+            dev_os.run(
                 { "git", "clone", "-q", "--branch", "master", bare, other },
                 { stdout = "null", stderr = "null" }
             )
@@ -1043,7 +1043,7 @@ if has_jj then
         approve(root, home, log, id)
         local other = support.tempdir() .. "/clone"
         must(
-            devos.run(
+            dev_os.run(
                 { "git", "clone", "-q", "--branch", "master", bare, other },
                 { stdout = "null", stderr = "null" }
             )
@@ -1091,7 +1091,7 @@ if has_jj then
     local function trunk_moves(root, bare, files)
         local other = support.tempdir() .. "/clone"
         must(
-            devos.run(
+            dev_os.run(
                 { "git", "clone", "-q", "--branch", "master", bare, other },
                 { stdout = "null", stderr = "null" }
             )
@@ -1151,7 +1151,7 @@ if has_jj then
         jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
         jj(root, "describe", "-m", "feat: move")
         assert(fs.mkdir(root .. "/.dev/standalone", { parents = true }), "mkdir failed")
-        must(devos.run({ "mv", root .. "/x.sh", root .. "/.dev/standalone/x.sh" }))
+        must(dev_os.run({ "mv", root .. "/x.sh", root .. "/.dev/standalone/x.sh" }))
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
         approve(root, home, log, id)
@@ -1786,7 +1786,7 @@ if has_jj then
         approve(root, home, log, id)
         local other = support.tempdir() .. "/clone"
         must(
-            devos.run(
+            dev_os.run(
                 { "git", "clone", "-q", "--branch", "master", bare, other },
                 { stdout = "null", stderr = "null" }
             )
@@ -1945,7 +1945,7 @@ if has_jj then
         local id = in_verify(root, home, log)
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
-        devos.nap(PAST_HOLD_SECONDS)
+        dev_os.nap(PAST_HOLD_SECONDS)
         local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
         testing.eq(code, 1, out)
         testing.ok(out:find("ran out or was taken by another", 1, true), out)
@@ -1958,7 +1958,7 @@ if has_jj then
         local id = in_verify(root, home, log)
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
-        devos.nap(PAST_HOLD_SECONDS)
+        dev_os.nap(PAST_HOLD_SECONDS)
         must(dev(root, home, log, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
         local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
         testing.eq(code, 1, out)
@@ -2012,7 +2012,7 @@ if has_jj then
             local id = in_verify(root, home, log)
             approve(root, home, log, id)
             must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
-            devos.nap(PAST_HOLD_SECONDS)
+            dev_os.nap(PAST_HOLD_SECONDS)
             local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
             testing.eq(code, 0, out)
             testing.ok(out:find("was already gone", 1, true), out)
@@ -2046,18 +2046,18 @@ if has_jj then
         local held = hold_turn(home, "other", "cccc3333")
         local backend, restore = board_at(home)
         backend.root = root
-        local nap = devos.nap
-        devos.nap = function()
-            devos.nap = nap
+        local nap = dev_os.nap
+        dev_os.nap = function()
+            dev_os.nap = nap
             release_turn(home, held)
             must(dev(root, home, log, { "board", "turn", id, "--hold", "60" }))
             must(dev(root, home, log, { "board", "move", id, "blocked" }))
         end
         local previous = os.getenv("DEV_AGENT") or ""
         ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
-        local ok, result = pcall(commands.run, "land", { id, "--wait", "30" }, backend)
+        local ok, result = pcall(cmd_board.run, "land", { id, "--wait", "30" }, backend)
         ffi.C.setenv("DEV_AGENT", previous, 1)
-        devos.nap = nap
+        dev_os.nap = nap
         restore()
         assert(ok, result)
         testing.eq(result.code, 1)
@@ -2116,12 +2116,12 @@ if has_jj then
                 JJ_EMAIL = "t@example.com",
                 DEV_AGENT = "dotfiles/lander",
                 LAND_LOG = log,
-                REAL_JJ = devos.which("jj"),
+                REAL_JJ = dev_os.which("jj"),
             },
         })
         local deadline = os.time() + CHECK_WAIT_SECONDS
         while not fs.exists(started) and os.time() < deadline do
-            devos.nap(0.1)
+            dev_os.nap(0.1)
         end
         testing.ok(fs.exists(started), "the other card's check must be running")
         local landed, code = dev(root, home, log, { "board", "land", landing, "--wait", "0" }, {
@@ -2294,7 +2294,7 @@ testing.test("land removes the worktree and branch in a git project", function()
     local function git(...)
         local argv =
             { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
-        must(devos.run(argv, { stdout = "null", stderr = "null" }))
+        must(dev_os.run(argv, { stdout = "null", stderr = "null" }))
     end
     git("init", "-q", "-b", "master")
     git("commit", "-q", "--allow-empty", "-m", "base")
@@ -2312,7 +2312,7 @@ testing.test("land removes the worktree and branch in a git project", function()
     testing.eq(vcs.delete_branch(root, vcs.GIT, "card"), true)
     testing.eq(vcs.delete_branch(root, vcs.GIT, "card"), false)
     git("worktree", "add", "-q", "-b", "card", path)
-    local lines = commands.clean_up(path, "card")
+    local lines = cmd_board.clean_up(path, "card")
     testing.ok(lines:find("removed " .. path, 1, true), lines)
     testing.ok(lines:find("Deleted branch card", 1, true), lines)
     testing.eq(fs.exists(path), false)

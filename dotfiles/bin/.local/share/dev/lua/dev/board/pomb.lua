@@ -2,7 +2,7 @@ local board = require("dev.board")
 local board_limits = require("dev.board.limits")
 local box = require("dev.cmd.box")
 local claims = require("dev.board.claims")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local json = require("dev.json")
 local project = require("dev.project")
 local tokenfile = require("dev.board.tokenfile")
@@ -252,7 +252,7 @@ function M.token(ref)
     if tokens[entry] then
         return tokens[entry]
     end
-    local out, code = devos.capture({ "bash", project.share .. PASSLOCK_SCRIPT, entry }, {
+    local out, code = dev_os.capture({ "bash", project.share .. PASSLOCK_SCRIPT, entry }, {
         unset = CHILD_UNSET,
         stdin = "null",
         stderr = "null",
@@ -279,7 +279,7 @@ local function forget(ref)
     if not entry or not from_keychain[entry] then
         return false
     end
-    local _, code = devos.capture({ "bash", project.share .. KEYCHAIN_SCRIPT, "drop", entry }, {
+    local _, code = dev_os.capture({ "bash", project.share .. KEYCHAIN_SCRIPT, "drop", entry }, {
         unset = CHILD_UNSET,
         stdin = "null",
         stderr = "null",
@@ -376,7 +376,7 @@ function Backend:__request(method, path, body, fence, seconds, file)
         argv[#argv + 1] = assert(json.encode(body))
     end
     argv[#argv + 1] = self.__opts.url .. path
-    local out, code = devos.capture_input(
+    local out, code = dev_os.capture_input(
         argv,
         'header = "Authorization: Bearer ' .. self.__secret .. '"\n',
         { unset = CHILD_UNSET, stderr = "null" }
@@ -1283,7 +1283,7 @@ function Backend:__patient(method, path, file)
         if doc or not busy or tries == busy_tries then
             break
         end
-        devos.nap(busy_nap_seconds)
+        dev_os.nap(busy_nap_seconds)
     end
     return doc, message, status, answer
 end
@@ -1714,7 +1714,7 @@ function Backend:keepalive(id, fence, ticks, state, name)
     if not entry then
         return nil, BAD_REF
     end
-    local out, code = devos.capture({
+    local out, code = dev_os.capture({
         "sh",
         "-c",
         'set -m; nohup "$@" </dev/null >/dev/null 2>&1 & echo $!',

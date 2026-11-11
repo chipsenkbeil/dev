@@ -1,5 +1,5 @@
 local check = require("dev.board.check")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
 local review = require("dev.board.review")
@@ -26,7 +26,7 @@ local function jj(root, ...)
 end
 
 local function jj_out(root, ...)
-    local out, code = devos.capture(jj(root, ...), { stderr = "null" })
+    local out, code = dev_os.capture(jj(root, ...), { stderr = "null" })
     if code ~= 0 then
         return nil
     end
@@ -70,7 +70,7 @@ function M.workspace_problem(root, short)
         return nil
     end
     local out, code =
-        devos.capture(jj(root, "workspace", "list", "-T", WORKSPACE_TEMPLATE), { stderr = "null" })
+        dev_os.capture(jj(root, "workspace", "list", "-T", WORKSPACE_TEMPLATE), { stderr = "null" })
     if code ~= 0 then
         return "jj could not read the workspace of " .. root
     end
@@ -100,7 +100,7 @@ function M.state(root)
     if not state then
         return nil, message
     end
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         jj(root, "log", "-r", "@", "--no-graph", "-T", SHAPE_TEMPLATE),
         { stderr = "null" }
     )
@@ -272,10 +272,10 @@ end
 
 local function parent_on_trunk(root)
     local parents =
-        devos.capture(jj(root, "log", "-r", "@-", "--no-graph", "-T", COMMIT_TEMPLATE), {
+        dev_os.capture(jj(root, "log", "-r", "@-", "--no-graph", "-T", COMMIT_TEMPLATE), {
             stderr = "null",
         })
-    local on_trunk = devos.capture(
+    local on_trunk = dev_os.capture(
         jj(root, "log", "-r", "@- & trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
         { stderr = "null" }
     )
@@ -291,7 +291,7 @@ function M.trunk_problem(root)
         return "trunk cannot be compared: " .. why
     end
     local out, code =
-        devos.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "stdout" })
+        dev_os.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "stdout" })
     if code ~= 0 then
         return string.format(
             "trunk cannot be compared, the fetch from %s failed: %s",
@@ -314,7 +314,7 @@ function M.rebase(root)
         return nil, "trunk cannot be compared: " .. why
     end
     local out, code =
-        devos.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "stdout" })
+        dev_os.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "stdout" })
     if code ~= 0 then
         return nil,
             string.format(
@@ -326,14 +326,15 @@ function M.rebase(root)
     if parent_on_trunk(root) then
         return false
     end
-    local stacked = devos.capture(
+    local stacked = dev_os.capture(
         jj(root, "log", "-r", "::@- ~ ::trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
         { stderr = "null" }
     )
     if stacked ~= "" then
         return nil, "the change sits on an unlanded parent, so land the parent first"
     end
-    out, code = devos.capture(jj(root, "rebase", "-r", "@", "-d", "trunk()"), { stderr = "stdout" })
+    out, code =
+        dev_os.capture(jj(root, "rebase", "-r", "@", "-d", "trunk()"), { stderr = "stdout" })
     if code ~= 0 then
         return nil, "the rebase onto trunk failed: " .. out
     end
@@ -573,11 +574,11 @@ function M.fetched_commit(root, revset)
         return nil
     end
     local _, fetched =
-        devos.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "null" })
+        dev_os.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "null" })
     if fetched ~= 0 then
         return nil
     end
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         jj(root, "log", "-r", revset, "--no-graph", "-T", COMMIT_TEMPLATE),
         { stderr = "null" }
     )
@@ -610,7 +611,7 @@ end
 ---@return boolean ok true when jj land exited 0
 ---@return string output what jj land printed
 function M.run(root)
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         vcs.with(vcs.base(root, vcs.JJ), "land", "--yes", "-r", "@"),
         { stderr = "stdout", cwd = root, env = { DEV_BOARD_LAND = "1" } }
     )

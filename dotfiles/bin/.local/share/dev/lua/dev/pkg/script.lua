@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local lib = require("dev.pkg.lib")
 
@@ -62,7 +62,7 @@ function M.probe(package, opts)
     local exec = runner(cell, opts)
     local argv = command(exec, cell.source, cell)
     argv[#argv + 1] = "--check"
-    return devos.run(argv, {
+    return dev_os.run(argv, {
         env = script_env(cell, opts, { force = false }),
         stdin = "null",
         stdout = "null",
@@ -87,7 +87,7 @@ local function install_remote(row, opts, cell)
                 .. tail(cell),
         })
     end
-    if not devos.which("curl") then
+    if not dev_os.which("curl") then
         stderr:write("  ! ", row.name, ": curl is required to fetch ", cell.source, "\n")
         return 1
     end

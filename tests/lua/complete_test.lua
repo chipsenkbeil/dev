@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
 local GLOBAL_TAIL = "-v\n--verbose\n-vv\n--remote\n--local\n--detach\n-C\n"
@@ -15,7 +15,7 @@ local function project(files)
         assert(fs.mkdir(fs.dirname(path), { parents = true }))
         assert(fs.write(path, source))
         if name:find("%.sh$") then
-            assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+            assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
         end
     end
     return root
@@ -26,7 +26,7 @@ local function dev(root, args)
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
-    return devos.capture(argv, { cwd = root, stderr = "null", env = { DEV_SELF = SELF } })
+    return dev_os.capture(argv, { cwd = root, stderr = "null", env = { DEV_SELF = SELF } })
 end
 
 testing.test("__verbs lists a .lua project verb as local with its description", function()
@@ -63,7 +63,7 @@ testing.test(
 
 testing.test("__topics check reports a .lua flags line with -h and exits 1", function()
     local root = project({ ["a.lua"] = "--[[\nA.\nflags: -h\n]]\nreturn 0\n" })
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "luajit", MAIN, "__topics", "check" },
         { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF } }
     )
@@ -78,7 +78,7 @@ testing.test("__topics check checks the built-in topics in the dotfiles clone it
     local root = project({ ["a.lua"] = "--[[\nA.\n]]\nreturn 0\n" })
     assert(fs.mkdir(root .. "/docs/dev", { parents = true }))
     assert(fs.write(root .. "/docs/dev/bad.md", "# bad: A topic\n\n`dev nope`\n"))
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "luajit", MAIN, "__topics", "check" },
         { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF, DOTFILES = fs.realpath(root) } }
     )
@@ -94,7 +94,7 @@ testing.test(
         local other = support.tempdir()
         assert(fs.mkdir(other .. "/docs/dev", { parents = true }))
         assert(fs.write(other .. "/docs/dev/bad.md", "# bad: A topic\n\n`dev nope`\n"))
-        local out, code = devos.capture({ "luajit", MAIN, "__topics", "check" }, {
+        local out, code = dev_os.capture({ "luajit", MAIN, "__topics", "check" }, {
             cwd = root,
             stderr = "stdout",
             env = { DEV_SELF = SELF, DOTFILES = fs.realpath(other) },

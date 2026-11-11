@@ -1,6 +1,6 @@
 local testing = require("dev.testing")
 local board = require("dev.board")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local init = require("dev.board.init")
 local support = require("support")
@@ -537,7 +537,7 @@ printf '%s\n%s' "$body" "$status"
 
 local function executable(path, body)
     assert(fs.write(path, body))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function sandbox(opts)
@@ -573,7 +573,7 @@ local function sandbox(opts)
         assert(fs.write(root .. "/" .. name, body))
     end
     executable(root .. "/bin/curl", CURL)
-    executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. devos.which("sleep") .. " 0.1\n")
+    executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. dev_os.which("sleep") .. " 0.1\n")
     executable(
         root .. "/bin/pass",
         '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\necho "' .. TOKEN .. '"\n'
@@ -664,7 +664,7 @@ testing.test(
         testing.eq(read(root, "bodies"):find(ADMIN_TOKEN, 1, true), nil)
         testing.eq(fs.list(tmp), {})
         testing.eq(fs.list(home .. "/state") == nil or #fs.list(home .. "/state") == 0, true)
-        local found = devos.capture({ "grep", "-rl", ADMIN_TOKEN, home, tmp })
+        local found = dev_os.capture({ "grep", "-rl", ADMIN_TOKEN, home, tmp })
         testing.eq(found, "")
     end
 )

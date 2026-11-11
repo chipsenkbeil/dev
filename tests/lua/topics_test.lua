@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local registry = require("dev.registry")
 local support = require("support")
@@ -12,7 +12,7 @@ local function project(files)
         assert(fs.mkdir(fs.dirname(path), { parents = true }))
         assert(fs.write(path, source))
         if name:find("%.sh$") then
-            assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+            assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
         end
     end
     return root

@@ -1,11 +1,11 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local release = require("dev.pkg.release")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MODULES = REPO .. "/dotfiles/bin/.local/share/dev/lua"
 local ZIP_FIXTURE = REPO .. "/tests/lua/fixtures/release/tool.zip"
 local TOOL_TEXT = "#!/bin/sh\necho tool-ok\n"
@@ -28,12 +28,12 @@ local FAKE_CURL = '#!/bin/sh\necho "$*" >>"$FAKE_LOG"\n'
 
 local function write_executable(path, text)
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function sha256(file)
-    local out = devos.capture(
-        devos.which("shasum") and { "shasum", "-a", "256", file } or { "sha256sum", file }
+    local out = dev_os.capture(
+        dev_os.which("shasum") and { "shasum", "-a", "256", file } or { "sha256sum", file }
     )
     return out:match("^(%x+)")
 end
@@ -60,9 +60,9 @@ local function asset(dir, name)
     if name:find("%.tar%.gz$") or name:find("%.tar%.xz$") then
         local flag = name:find("gz$") and "-czf" or "-cJf"
         local src = build_tool(dir, name)
-        assert(devos.run({ "tar", flag, file, "-C", src, "bin" }) == 0, "tar failed")
+        assert(dev_os.run({ "tar", flag, file, "-C", src, "bin" }) == 0, "tar failed")
     elseif name:find("%.zip$") then
-        assert(devos.run({ "cp", ZIP_FIXTURE, file }) == 0, "cp failed")
+        assert(dev_os.run({ "cp", ZIP_FIXTURE, file }) == 0, "cp failed")
     else
         write_executable(file, TOOL_TEXT)
     end
@@ -108,7 +108,7 @@ local function drive(dir, fn, spec)
         fn,
     }
     local path = dir .. "/stubs:" .. dir .. "/pathbin:" .. os.getenv("PATH")
-    return devos.capture(argv, {
+    return dev_os.capture(argv, {
         stderr = "stdout",
         env = env(dir, path),
     })
@@ -206,7 +206,7 @@ testing.test("the dry run prints every step and changes nothing", function()
     pins(dir, { row })
     local out, code = drive(dir, "install", { dry_run = true })
     testing.eq(code, 0)
-    local checksum = devos.which("shasum") and "shasum -a 256" or "sha256sum"
+    local checksum = dev_os.which("shasum") and "shasum -a 256" or "sha256sum"
     testing.eq(
         out,
         "  + tool (dry-run):\n"
@@ -296,7 +296,7 @@ testing.test("a symlink that leaves the archive is refused", function()
     assert(fs.mkdir(src .. "/bin", { parents = true }))
     assert(fs.symlink("/etc/hosts", src .. "/bin/tool"))
     local file = dir .. "/assets/tool-1.2.3.tar.gz"
-    assert(devos.run({ "tar", "-czf", file, "-C", src, "bin" }) == 0, "tar failed")
+    assert(dev_os.run({ "tar", "-czf", file, "-C", src, "bin" }) == 0, "tar failed")
     pins(
         dir,
         { { "tool", "1.2.3", sha256(file), URL_BASE .. "tool-${version}.tar.gz", "bin/tool" } }
@@ -378,7 +378,7 @@ testing.test("install and check read the pins file beside the manifest", functio
     )
     local function main(...)
         local path = dir .. "/stubs:" .. os.getenv("PATH")
-        return devos.capture({ "luajit", dir .. "/main.lua", MODULES, dir .. "/tools.tsv", ... }, {
+        return dev_os.capture({ "luajit", dir .. "/main.lua", MODULES, dir .. "/tools.tsv", ... }, {
             stderr = "stdout",
             env = env(dir, path),
         })

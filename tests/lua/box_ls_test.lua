@@ -1,6 +1,6 @@
 local testing = require("dev.testing")
 local box = require("dev.cmd.box")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -17,7 +17,7 @@ local function sandbox(listing, shown)
         .. root
         .. '/ls.json"; fi\n'
     assert(fs.write(root .. "/bin/ci", body))
-    assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     return root
 end
 

@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 ---@alias dev.vcs.Backend "jj"|"git"
@@ -41,7 +41,7 @@ end
 ---@return string? err why there is no usable backend
 function M.require(root)
     local backend, err = M.backend(root)
-    if backend == M.JJ and not devos.which("jj") then
+    if backend == M.JJ and not dev_os.which("jj") then
         return nil, "jj not found, install with: brew install jj"
     end
     return backend, err
@@ -81,7 +81,7 @@ end
 function M.remotes(root, backend)
     local base = M.base(root, backend, { quiet = true })
     local argv = backend == M.JJ and M.with(base, "git", "remote", "list") or M.with(base, "remote")
-    local out, code = devos.capture(argv)
+    local out, code = dev_os.capture(argv)
     if code ~= 0 then
         return {}
     end
@@ -104,7 +104,7 @@ function M.branches(root, backend)
     else
         argv = M.with(base, "for-each-ref", "--format=%(refname:short)", "refs/heads")
     end
-    local out, code = devos.capture(argv)
+    local out, code = dev_os.capture(argv)
     if code ~= 0 then
         return {}
     end
@@ -133,7 +133,7 @@ function M.delete_branch(root, backend, name)
     else
         argv = M.with(base, "branch", "-D", name)
     end
-    local out, code = devos.capture(argv, { stderr = "stdout" })
+    local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
         return nil, (out:gsub("\n$", ""))
     end
@@ -164,12 +164,12 @@ end
 function M.config(root, backend, key)
     local argv
     if backend == M.JJ then
-        local dir = devos.capture(M.with(M.base(root, backend), "git", "root"))
+        local dir = dev_os.capture(M.with(M.base(root, backend), "git", "root"))
         argv = { "git", "--git-dir=" .. dir:gsub("\n$", ""), "config", "--get", key }
     else
         argv = { "git", "-C", root, "config", "--get", key }
     end
-    local out, code = devos.capture(argv, { stderr = "null" })
+    local out, code = dev_os.capture(argv, { stderr = "null" })
     if code ~= 0 then
         return ""
     end

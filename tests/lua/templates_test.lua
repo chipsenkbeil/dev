@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local templates = require("dev.templates")
 local project = require("dev.project")
@@ -139,7 +139,7 @@ testing.test("the lua manifest adds love.yml for love2d only", function()
 end)
 
 testing.test("lib_crates and app_crates split the member crates by publish = false", function()
-    if not devos.which("yq") then
+    if not dev_os.which("yq") then
         print("skip - yq is not installed")
         return
     end
@@ -329,7 +329,7 @@ testing.test("skip_pending holds every missing Rust verb while lint.sh and fmt.s
 end)
 
 testing.test("a Rust project on bash verbs without test.sh passes sync --check", function()
-    if not devos.which("yq") then
+    if not dev_os.which("yq") then
         print("skip - yq is not installed")
         return
     end
@@ -353,7 +353,7 @@ testing.test("a Rust project on bash verbs without test.sh passes sync --check",
 end)
 
 testing.test("a Rust project synced from scratch passes sync --check", function()
-    if not devos.which("yq") then
+    if not dev_os.which("yq") then
         print("skip - yq is not installed")
         return
     end

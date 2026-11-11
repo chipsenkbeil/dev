@@ -1,12 +1,12 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local manifest = require("dev.pkg.manifest")
 local lib = require("dev.pkg.lib")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local VARS = assert(fs.read(REPO .. "/tests/pkg/fixtures/vars.tsv"))
 
 local function cell_of(selected, name)
@@ -41,7 +41,7 @@ local function select_with_env(text, column, env)
             unset[#unset + 1] = name
         end
     end
-    local out = devos.capture(
+    local out = dev_os.capture(
         { "luajit", dir .. "/probe.lua", text, tostring(column) },
         { env = env, unset = unset }
     )
@@ -277,8 +277,8 @@ testing.test(
             .. 'assert(lib.run({ "true" }, opts) == 0)\n'
             .. "lib.flush_failure()\n"
         assert(fs.write(dir .. "/probe.lua", probe))
-        local luajit = devos.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
-        local out, code = devos.capture(
+        local luajit = dev_os.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
+        local out, code = dev_os.capture(
             { luajit, dir .. "/probe.lua", dir .. "/log" },
             { stderr = "stdout" }
         )

@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -14,7 +14,7 @@ end
 
 local function jj(root, ...)
     local argv = { "jj", "--no-pager", "--color", "never", "-R", root, ... }
-    local out, code = devos.capture(argv, { stderr = "null", env = IDENT })
+    local out, code = dev_os.capture(argv, { stderr = "null", env = IDENT })
     assert(code == 0, out)
     return out
 end
@@ -30,9 +30,9 @@ local function project(extra)
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
     assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
     local bare = support.tempdir()
-    must(devos.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" }))
+    must(dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" }))
     must(
-        devos.run({ "jj", "git", "init", root }, { stdout = "null", stderr = "null", env = IDENT })
+        dev_os.run({ "jj", "git", "init", root }, { stdout = "null", stderr = "null", env = IDENT })
     )
     jj(root, "git", "remote", "add", "origin", bare)
     assert(fs.write(root .. "/seed.txt", "seed\n"), "write failed")
@@ -135,7 +135,7 @@ local function done_notes(comments)
     return found
 end
 
-if devos.which("jj") then
+if dev_os.which("jj") then
     testing.test("ship moves every release card with ticked outcomes to Done", function()
         local root, home = project('\n[board.release]\nchecks = ["true"]\n')
         must(dev(root, home, { "board", "init" }))

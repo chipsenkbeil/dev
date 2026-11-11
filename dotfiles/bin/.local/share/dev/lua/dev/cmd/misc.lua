@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
 local project = require("dev.project")
@@ -8,9 +8,9 @@ local verb = require("dev.verb")
 local M = {}
 
 local function exec(argv, opts)
-    local _, message = devos.exec(argv, opts)
+    local _, message = dev_os.exec(argv, opts)
     verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
-    return devos.EXEC_FAILED
+    return dev_os.EXEC_FAILED
 end
 
 ---Say the project has no deploy of its own.

@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 ---@class support
@@ -7,7 +7,7 @@ local M = {}
 ---Rewrite the relative entries of `package.path` against the current directory.
 ---@return string path a search path that works from any directory
 function M.absolute_path()
-    local cwd = devos.capture({ "pwd" }):gsub("\n$", "")
+    local cwd = dev_os.capture({ "pwd" }):gsub("\n$", "")
     return ((";" .. package.path):gsub(";%./", ";" .. cwd .. "/"):sub(2))
 end
 
@@ -25,7 +25,7 @@ function M.drain(file)
     return file:read("*a")
 end
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
 local STUB = '#!/bin/sh\necho "$(basename "$0") $* cwd=$PWD"\nexit "${STUB_CODE:-0}"\n'
@@ -46,7 +46,7 @@ function M.sandbox(files, tools)
     end
     for _, tool in ipairs(tools or { "make", "npm", "cargo", "ast-grep" }) do
         assert(fs.write(root .. "/bin/" .. tool, STUB))
-        assert(devos.run({ "chmod", "755", root .. "/bin/" .. tool }) == 0, "chmod failed")
+        assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. tool }) == 0, "chmod failed")
     end
     return root
 end
@@ -88,9 +88,9 @@ function M.dev(root, args, opts)
     end
     local out, code
     if opts.input then
-        out, code = devos.capture_input(argv, opts.input, run)
+        out, code = dev_os.capture_input(argv, opts.input, run)
     else
-        out, code = devos.capture(argv, run)
+        out, code = dev_os.capture(argv, run)
     end
     if errors then
         local text = fs.read(errors) or ""
@@ -113,7 +113,7 @@ function M.dev_async(root, args, opts)
     local argv, run = invocation(root, args, opts or {})
     local dir = M.tempdir()
     local out, status = dir .. "/out", dir .. "/status"
-    local line = devos.command(argv)
+    local line = dev_os.command(argv)
         .. " >"
         .. out
         .. " 2>&1; echo $? >"
@@ -123,7 +123,7 @@ function M.dev_async(root, args, opts)
         .. ".tmp "
         .. status
     assert(
-        devos.run({ "sh", "-c", "(" .. line .. ") &" }, { cwd = run.cwd, env = run.env }) == 0,
+        dev_os.run({ "sh", "-c", "(" .. line .. ") &" }, { cwd = run.cwd, env = run.env }) == 0,
         "start failed"
     )
     local function finished()
@@ -134,7 +134,7 @@ function M.dev_async(root, args, opts)
         wait = function()
             local waited = 0
             while not finished() and waited < ASYNC_WAIT_SECONDS * 10 do
-                devos.nap(0.1)
+                dev_os.nap(0.1)
                 waited = waited + 1
             end
             return fs.read(out) or "", tonumber((fs.read(status) or ""):match("%d+"))

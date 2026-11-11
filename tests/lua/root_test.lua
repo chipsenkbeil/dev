@@ -1,12 +1,12 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local root = require("dev.root")
 local devproject = require("dev.project")
 local support = require("support")
 local tools = require("dev.cmd.tools")
 
-local MAIN = devos.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/main.lua"
+local MAIN = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/main.lua"
 local MAX = 262144
 
 local function line_of(length)
@@ -14,7 +14,7 @@ local function line_of(length)
 end
 
 local function trusting(fn)
-    local stat, fstat = fs.stat, devos.fstat
+    local stat, fstat = fs.stat, dev_os.fstat
     fs.stat = function(path)
         local real = stat(path)
         if real then
@@ -22,7 +22,7 @@ local function trusting(fn)
         end
         return real
     end
-    devos.fstat = function(fd)
+    dev_os.fstat = function(fd)
         local real = fstat(fd)
         if real then
             real.uid = 0
@@ -30,7 +30,7 @@ local function trusting(fn)
         return real
     end
     local ok, err = pcall(fn)
-    fs.stat, devos.fstat = stat, fstat
+    fs.stat, dev_os.fstat = stat, fstat
     if not ok then
         error(err, 0)
     end
@@ -39,7 +39,7 @@ end
 local function project(base, name, manifest)
     local dir = base .. "/" .. name
     assert(fs.mkdir(dir .. "/.dev", { parents = true }))
-    assert(devos.run({ "chmod", "755", dir, dir .. "/.dev" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", dir, dir .. "/.dev" }) == 0, "chmod failed")
     if manifest then
         assert(fs.write(dir .. "/.dev/tools.tsv", manifest))
     end
@@ -55,7 +55,7 @@ local function copy_of(dir, manifest)
 end
 
 local function temp_count()
-    local out = devos.capture({ "sh", "-c", "ls /tmp | grep -c '^dev-tools[.]' || true" })
+    local out = dev_os.capture({ "sh", "-c", "ls /tmp | grep -c '^dev-tools[.]' || true" })
     return tonumber(out)
 end
 
@@ -134,7 +134,7 @@ end)
 testing.test("a group-writable .dev is refused and names the directory", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p", "x\n")
-    assert(devos.run({ "chmod", "g+w", dir .. "/.dev" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "g+w", dir .. "/.dev" }) == 0, "chmod failed")
     local none, message = copy_of(dir, manifest)
     testing.eq(none, nil)
     testing.eq(
@@ -149,7 +149,7 @@ testing.test("a group-writable .dev is refused and names the directory", functio
 end)
 
 testing.test("a user-owned chain is refused", function()
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         return
     end
     local base = assert(fs.realpath(support.tempdir()))
@@ -191,8 +191,8 @@ end)
 testing.test("a FIFO manifest is refused without blocking", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p")
-    assert(devos.run({ "mkfifo", manifest }) == 0, "mkfifo failed")
-    assert(devos.run({ "chmod", "600", manifest }) == 0, "chmod failed")
+    assert(dev_os.run({ "mkfifo", manifest }) == 0, "mkfifo failed")
+    assert(dev_os.run({ "chmod", "600", manifest }) == 0, "chmod failed")
     local none, message = copy_of(dir, manifest)
     testing.eq(none, nil)
     testing.eq(message, "refusing " .. manifest .. " as root, it is not a regular file")
@@ -203,7 +203,7 @@ testing.test("a directory manifest is refused as not a regular file", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p")
     assert(fs.mkdir(manifest))
-    assert(devos.run({ "chmod", "755", manifest }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", manifest }) == 0, "chmod failed")
     local none, message = copy_of(dir, manifest)
     testing.eq(none, nil)
     testing.eq(message, "refusing " .. manifest .. " as root, it is not a regular file")
@@ -232,12 +232,12 @@ end
 
 local function run_as_root(dir, handler, opts)
     opts = opts or {}
-    local getuid, run = devos.getuid, devos.run
+    local getuid, run = dev_os.getuid, dev_os.run
     local seen
-    devos.getuid = function()
+    dev_os.getuid = function()
         return 0
     end
-    devos.run = function(argv, run_opts)
+    dev_os.run = function(argv, run_opts)
         if not is_wrapper(argv) then
             return run(argv, run_opts)
         end
@@ -257,7 +257,7 @@ local function run_as_root(dir, handler, opts)
             })
         end)
     end)
-    devos.getuid, devos.run = getuid, run
+    dev_os.getuid, dev_os.run = getuid, run
     if not ok then
         error(err, 0)
     end
@@ -319,10 +319,10 @@ end)
 testing.test("at -vv the driver gets exactly the trace file and the fixed PS4", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir = project(base, "p", "name binary pacman\n")
-    devos.defaults.env.BASH_ENV = "/tmp/evil-bash-env"
-    devos.defaults.env.PS4 = "evil-ps4"
+    dev_os.defaults.env.BASH_ENV = "/tmp/evil-bash-env"
+    dev_os.defaults.env.PS4 = "evil-ps4"
     local _, seen = run_as_root(dir, "tools check", { verbose = 2 })
-    devos.defaults.env = {}
+    dev_os.defaults.env = {}
     local driver = driver_of(seen.argv)
     testing.eq({ unpack(driver, 1, 5) }, FIXED_ENV)
     testing.eq(driver[6], "VERBOSE=2")
@@ -384,15 +384,15 @@ end)
 testing.test("a failing fstat is a refusal, not a traceback", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p", "x\n")
-    local fstat = devos.fstat
-    devos.fstat = function()
+    local fstat = dev_os.fstat
+    dev_os.fstat = function()
         return nil, "no fstat"
     end
     local none, message
     local ok, err = pcall(function()
         none, message = copy_of(dir, manifest)
     end)
-    devos.fstat = fstat
+    dev_os.fstat = fstat
     assert(ok, err)
     testing.eq(none, nil)
     testing.eq(message, "cannot open " .. manifest)
@@ -402,7 +402,7 @@ end)
 testing.test("a refused manifest never reaches the driver and leaves no copy", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir = project(base, "p", "x\n")
-    assert(devos.run({ "chmod", "g+w", dir .. "/.dev" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "g+w", dir .. "/.dev" }) == 0, "chmod failed")
     local before = temp_count()
     local code, seen = run_as_root(dir, "tools check")
     testing.eq(code, 1)
@@ -415,7 +415,7 @@ testing.test("a removed working directory exits 1 at once and names it", functio
     local base = assert(fs.realpath(support.tempdir()))
     local dir = base .. "/gone"
     assert(fs.mkdir(dir))
-    local out, code = devos.capture_timed({
+    local out, code = dev_os.capture_timed({
         "sh",
         "-c",
         'cd "$1" && rmdir "$1" && exec luajit "$2" help',

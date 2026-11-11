@@ -1,5 +1,5 @@
 local pomb = require("dev.board.pomb")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
 local json = require("dev.json")
@@ -91,7 +91,7 @@ end
 
 local function run_or_exit(run, argv, opts)
     verb.show(run.ctx, argv)
-    local code = devos.run(argv, opts)
+    local code = dev_os.run(argv, opts)
     if code ~= 0 then
         os.exit(code or 1)
     end
@@ -145,7 +145,7 @@ local function init_vcs(run)
             end
             created(run, ".git (git init)")
         end
-        if devos.which("jj") then
+        if dev_os.which("jj") then
             run.hint = "jj git remote add"
             if not run.dry then
                 run_or_exit(
@@ -204,10 +204,10 @@ local function init_workspace_lints(run, dir)
         if not ok then
             die(write_err)
         end
-        if devos.which("cargo-sort") then
+        if dev_os.which("cargo-sort") then
             local argv = { "cargo", "sort", "--workspace" }
             verb.show(run.ctx, argv)
-            devos.run(argv, { cwd = run.root, stdout = "null", stderr = "null" })
+            dev_os.run(argv, { cwd = run.root, stdout = "null", stderr = "null" })
         end
     end
     created(run, "[workspace.lints] block in Cargo.toml")
@@ -325,7 +325,7 @@ local function init_gerrit(run)
     end
     local list = vcs.with(GERRIT, "ls-projects")
     verb.show(run.ctx, list)
-    local out, code = devos.capture(list, { stderr = "stdout" })
+    local out, code = dev_os.capture(list, { stderr = "stdout" })
     if code ~= 0 then
         verb.note("warning: gerrit ls-projects failed: " .. trimmed(out))
         leave(
@@ -350,7 +350,7 @@ local function init_gerrit(run)
     else
         local create = vcs.with(GERRIT, "create-project", name)
         verb.show(run.ctx, create)
-        if devos.run(create) == 0 then
+        if dev_os.run(create) == 0 then
             created(run, "gerrit project " .. name)
         else
             leave(run, "create the Gerrit project: " .. GERRIT_HOST .. " create-project " .. name)
@@ -389,14 +389,14 @@ local function init_board_hint(run)
     if not url or url == "" then
         url = BOARD_URL
     end
-    if not (devos.which("pass") and devos.which("curl")) then
+    if not (dev_os.which("pass") and dev_os.which("curl")) then
         return
     end
     local token = pomb.token(BOARD_TOKEN)
     if not token then
         return
     end
-    local out, code = devos.capture_input(
+    local out, code = dev_os.capture_input(
         {
             "curl",
             "-fsS",

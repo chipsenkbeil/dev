@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MODULES = REPO .. "/dotfiles/bin/.local/share/dev/lua"
 
 local DRIVE = 'package.path = arg[1] .. "/?.lua"\n'
@@ -35,7 +35,7 @@ local function drive(dir, spec)
         spec.interpreter or "luajit",
         spec.fn or "install",
     }
-    return devos.capture(argv, { stderr = "stdout", env = spec.env })
+    return dev_os.capture(argv, { stderr = "stdout", env = spec.env })
 end
 
 local function script_row(dir, source, args, extra)
@@ -48,7 +48,7 @@ end
 
 local function write_executable(path, text)
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 testing.test("a script argument that looks like a command substitution is one argv word", function()
@@ -182,7 +182,7 @@ testing.test(
             dir .. "/99-aurbuild",
             seen,
         }
-        testing.eq(devos.run(guarded(dir, build)), 0)
+        testing.eq(dev_os.run(guarded(dir, build)), 0)
         testing.eq(fs.read(seen), LINE .. "\n-r--r-----\n")
         testing.ok(not fs.exists(dir .. "/99-aurbuild"), "the drop-in must be removed")
         fs.remove(dir, { recursive = true })
@@ -193,7 +193,7 @@ testing.test(
     "the sudoers drop-in is gone and the build's status is kept after a failed build",
     function()
         local dir = sandbox()
-        testing.eq(devos.run(guarded(dir, { "sh", "-c", "exit 7" })), 7)
+        testing.eq(dev_os.run(guarded(dir, { "sh", "-c", "exit 7" })), 7)
         testing.ok(not fs.exists(dir .. "/99-aurbuild"), "the drop-in must be removed")
         fs.remove(dir, { recursive = true })
     end
@@ -210,12 +210,12 @@ testing.test(
             .. "kill -TERM $wrapper_pid\nwait $wrapper_pid\n"
         assert(fs.write(dir .. "/driver.sh", driver))
         local argv = { "bash", dir .. "/driver.sh", unpack(guarded(dir, build)) }
-        local code = devos.run(argv, { env = { PIDFILE = pid } })
+        local code = dev_os.run(argv, { env = { PIDFILE = pid } })
         testing.eq(code, 143)
         testing.ok(not fs.exists(dir .. "/99-aurbuild"), "the drop-in must be removed")
         local child = assert(fs.read(pid)):gsub("%s+", "")
         testing.ok(
-            devos.run({ "sh", "-c", 'kill -0 "$1" 2>/dev/null', "sh", child }) ~= 0,
+            dev_os.run({ "sh", "-c", 'kill -0 "$1" 2>/dev/null', "sh", child }) ~= 0,
             "the build must stop"
         )
         fs.remove(dir, { recursive = true })
@@ -227,7 +227,7 @@ testing.test("the sudoers path and line reach the wrapper as arguments, not scri
     local hostile = dir .. "/x'; touch " .. dir .. "/PWNED; '"
     local pacman = require("dev.pkg.pacman")
     local argv = pacman.guarded_build(hostile, "$(touch " .. dir .. "/PWNED2)", { "true" })
-    testing.eq(devos.run(argv, { stderr = "null" }), 1)
+    testing.eq(dev_os.run(argv, { stderr = "null" }), 1)
     testing.ok(
         not fs.exists(dir .. "/PWNED") and not fs.exists(dir .. "/PWNED2"),
         "nothing may run"

@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
@@ -24,7 +24,7 @@ local function get(root, home, key)
         root,
         key
     )
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "luajit", "-e", script },
         { stderr = "stdout", env = { HOME = home } }
     )

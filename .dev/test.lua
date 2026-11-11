@@ -8,7 +8,7 @@ Suites run in parallel, DEV_TEST_JOBS at a time (the core count by default, 1 fo
 The suites that drive a terminal or compare help snapshots run one at a time.
 ]]
 local checks = require("dotfiles.checks")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local verb = require("dev.verb")
 
@@ -75,8 +75,8 @@ local function job_count()
         end
         return jobs
     end
-    local probe = devos.name() == "Darwin" and { "sysctl", "-n", "hw.ncpu" } or { "nproc" }
-    local out, code = devos.capture(probe, { stderr = "null" })
+    local probe = dev_os.name() == "Darwin" and { "sysctl", "-n", "hw.ncpu" } or { "nproc" }
+    local out, code = dev_os.capture(probe, { stderr = "null" })
     local cores = code == 0 and tonumber(out:match("%d+")) or 1
     return math.max(cores, 1)
 end
@@ -103,7 +103,7 @@ for _, file in ipairs(checks.find(root, { "tests" }, scripts)) do
     suites[#suites + 1] = script_suite(file, { "bash", file })
 end
 
-if devos.which("luajit") then
+if dev_os.which("luajit") then
     for _, file in ipairs(checks.find(root, { "tests" }, { "-name", "*_test.lua" })) do
         suites[#suites + 1] = script_suite(file, { "luajit", "tests/lua/run.lua", file })
     end
@@ -111,7 +111,7 @@ else
     stdout:write("SKIP tests/lua (needs luajit)\n")
 end
 
-if devos.which("neomutt") and devos.which("tmux") then
+if dev_os.which("neomutt") and dev_os.which("tmux") then
     for _, name in ipairs({ "filter-bytes", "pager-passthrough" }) do
         local file = "tests/neomutt/" .. name .. ".sh"
         suites[#suites + 1] = script_suite(file, { "bash", file })
@@ -157,7 +157,7 @@ local function scratch_dir()
     if #base > MAX_TMP_BASE_CHARS or base:sub(1, 1) ~= "/" then
         base = "/tmp"
     end
-    local out, code = devos.capture({ "mktemp", "-d", base .. "/dt.XXXXXX" })
+    local out, code = dev_os.capture({ "mktemp", "-d", base .. "/dt.XXXXXX" })
     assert(code == 0, "dev test cannot make a scratch directory under " .. base)
     return (out:gsub("\n$", ""))
 end
@@ -184,7 +184,7 @@ scratch=$2
     fi
 ) </dev/null >/dev/null 2>&1 &
 ]=]
-devos.run({ "sh", "-c", GUARD, "sh", tostring(devos.getpid()), scratch })
+dev_os.run({ "sh", "-c", GUARD, "sh", tostring(dev_os.getpid()), scratch })
 
 local LAUNCH = [[
 set -m
@@ -214,7 +214,7 @@ local function start(index, suite)
         argv[#argv + 1] = word
     end
     suite.launching = true
-    local pid = devos.capture(argv, { env = { TMPDIR = suite.tmp } })
+    local pid = dev_os.capture(argv, { env = { TMPDIR = suite.tmp } })
     suite.pid = pid:match("%d+")
     suite.launching = false
     suite.started = true
@@ -230,7 +230,7 @@ local function finished(suite, check_alive)
     if code or not check_alive or not suite.pid then
         return code
     end
-    local alive = devos.run({ "kill", "-0", suite.pid }, { stderr = "null" }) == 0
+    local alive = dev_os.run({ "kill", "-0", suite.pid }, { stderr = "null" }) == 0
     if alive then
         return nil
     end
@@ -255,7 +255,7 @@ local function await_launches()
             and polls < LAUNCH_GRACE_POLLS
             and not (fs.read(suite.pidfile) or ""):find("%d")
         do
-            devos.nap(POLL_SECS)
+            dev_os.nap(POLL_SECS)
             polls = polls + 1
         end
     end
@@ -263,7 +263,7 @@ end
 
 local function stop_all()
     await_launches()
-    devos.run({ "sh", "-c", STOP, "sh", scratch }, { stderr = "null" })
+    dev_os.run({ "sh", "-c", STOP, "sh", scratch }, { stderr = "null" })
 end
 
 local function report(suite, code)
@@ -310,7 +310,7 @@ local function run_all()
             stdout:flush()
         end
         if done < total then
-            devos.nap(POLL_SECS)
+            dev_os.nap(POLL_SECS)
         end
     end
 end
@@ -319,17 +319,17 @@ local ok, err = pcall(run_all)
 if not ok then
     stop_all()
 end
-devos.run({ "rm", "-rf", "--", scratch })
+dev_os.run({ "rm", "-rf", "--", scratch })
 if not ok then
     if tostring(err):find("interrupted!", 1, true) then
-        os.exit(devos.SIGNAL_EXIT_BASE + SIGINT)
+        os.exit(dev_os.SIGNAL_EXIT_BASE + SIGINT)
     end
     error(err, 0)
 end
 
 stdout:write(string.format("\n%d passed, %d failed, %d skipped\n", passed, failed, skipped))
 stdout:flush()
-if devos.getuid() ~= 0 or devos.name() ~= "Linux" then
+if dev_os.getuid() ~= 0 or dev_os.name() ~= "Linux" then
     verb.note(
         "dev: the real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh "
             .. "were skipped, run dev --remote test for them"

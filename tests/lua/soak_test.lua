@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local ON_CI = { CI = "true" }
 
 local function project(bats_body)
@@ -14,7 +14,7 @@ local function project(bats_body)
         ["bin/bats"] = "#!/bin/sh\n" .. bats_body .. "\n",
     }, {})
     for _, tool in ipairs({ "nproc", "bats" }) do
-        assert(devos.run({ "chmod", "755", root .. "/bin/" .. tool }) == 0, "chmod failed")
+        assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. tool }) == 0, "chmod failed")
     end
     return root
 end

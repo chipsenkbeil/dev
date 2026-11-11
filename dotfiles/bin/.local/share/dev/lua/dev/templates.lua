@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
 
@@ -151,7 +151,7 @@ function M.manifest(dir, kind)
         out[#out + 1] = { dest = ".dev/" .. name, src = dir .. "/" .. name }
     end
     out[#out + 1] = { dest = LIB_DEST, src = dir .. "/../lintset.lua" }
-    local found = devos.capture(
+    local found = dev_os.capture(
         { "find", "rules", "rule-test", "-type", "f" },
         { cwd = dir .. "/ast-grep", stderr = "null" }
     )
@@ -415,7 +415,7 @@ local function expand(base, segments, index, rel, out)
 end
 
 local function members(root, cargo)
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "yq", "-p", "toml", "-oy", ".workspace.members[]", cargo },
         { stderr = "null" }
     )
@@ -449,7 +449,7 @@ local function crate_dirs(root)
     if not fs.is_file(cargo) then
         return {}
     end
-    local name = devos.capture(
+    local name = dev_os.capture(
         { "yq", "-p", "toml", "-oy", ".package.name", cargo },
         { stderr = "null" }
     )

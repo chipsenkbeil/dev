@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
@@ -28,7 +28,7 @@ cat "%s/$2.json"
 [ "$1" != fleet ] || cat "%s/shapes.json"
 ]]):format(root, root, root)
     assert(fs.write(root .. "/bin/ci", body))
-    assert(devos.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
     return root
 end
 

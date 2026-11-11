@@ -1,13 +1,13 @@
 local testing = require("dev.testing")
 local board = require("dev.board")
 local check = require("dev.board.check")
-local commands = require("dev.cmd.board")
-local devos = require("dev.os")
+local cmd_board = require("dev.cmd.board")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
 
-local has_jj = devos.which("jj") ~= nil
+local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
 local function setup()
@@ -59,12 +59,12 @@ local function git_root()
     local function git(...)
         local argv =
             { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
-        must(devos.run(argv, { stdout = "null" }))
+        must(dev_os.run(argv, { stdout = "null" }))
     end
-    must(devos.run({ "git", "init", "-q", root }, { stdout = "null" }))
+    must(dev_os.run({ "git", "init", "-q", root }, { stdout = "null" }))
     git("add", "-A")
     git("commit", "-q", "-m", "base")
-    local head = devos.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
+    local head = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
     return root, home, head
 end
 
@@ -340,7 +340,7 @@ testing.test("a result that cannot be written is never reported as recorded", fu
     function backend:note()
         return nil, "curl exit 28"
     end
-    local result = commands.run("check", { "11111111" }, backend)
+    local result = cmd_board.run("check", { "11111111" }, backend)
     testing.eq(result.output, nil)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("was NOT recorded", 1, true), result.message)
@@ -352,7 +352,7 @@ end)
 if has_jj then
     local function jj(root, ...)
         local argv = { "jj", "--no-pager", "--color", "never", "-R", root, ... }
-        local out, code = devos.capture(argv, { stderr = "null", env = IDENT })
+        local out, code = dev_os.capture(argv, { stderr = "null", env = IDENT })
         assert(code == 0, out)
         return out
     end
@@ -360,7 +360,7 @@ if has_jj then
     local function workspace()
         local root, home = setup()
         local init = { stdout = "null", stderr = "null", env = IDENT }
-        must(devos.run({ "jj", "git", "init", root }, init))
+        must(dev_os.run({ "jj", "git", "init", root }, init))
         jj(root, "commit", "-m", "base")
         local ws = assert(fs.realpath(support.tempdir())) .. "/ws"
         jj(root, "workspace", "add", "--name", "w2", "-r", "@-", ws)

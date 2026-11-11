@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local project = require("dev.project")
@@ -52,7 +52,7 @@ local function shell_word(word)
     if word:find("^[%w_@%%+=:,./-]+$") then
         return word
     end
-    return devos.quote(word)
+    return dev_os.quote(word)
 end
 
 local function has_make_target(root, target)
@@ -247,7 +247,7 @@ local function unsupported(verb_name, kind)
 end
 
 local function probe_fails(step)
-    local code = devos.run(step.probe.argv, { stdout = "null", stderr = "null" })
+    local code = dev_os.run(step.probe.argv, { stdout = "null", stderr = "null" })
     if code == 0 then
         return false
     end
@@ -279,7 +279,7 @@ function M.run(ctx, verb_name)
             return 1
         end
         verb.show(ctx, step.argv)
-        local code = devos.run(step.argv, { cwd = step.cwd }) or 1
+        local code = dev_os.run(step.argv, { cwd = step.cwd }) or 1
         if code ~= 0 then
             return code
         end

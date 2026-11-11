@@ -8,7 +8,7 @@ loops. The cases are the pkg_script TERM test, the confirm and spin ctrl-c tests
 interrupt tests. A case that fails keeps its output in the report, and a case that ran no test
 fails. The verb exits 1 when any run failed. N is 50 by default.
 ]]
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local remote = require("dev.remote")
 local verb = require("dev.verb")
 
@@ -94,7 +94,7 @@ local function run_case(case, number, runs)
         tostring(CASE_TIMEOUT_SECS),
         unpack(case.argv),
     }
-    local output, code = devos.capture(argv, { cwd = ctx.root, stderr = "stdout" })
+    local output, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
     local load_line = output:match("load: [^\n]*\n?$") or "load: not recorded"
     local ran = count_ran(output)
     local passed = code == 0 and ran > 0

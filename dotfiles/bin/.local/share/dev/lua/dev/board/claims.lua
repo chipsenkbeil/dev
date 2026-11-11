@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local xdg = require("dev.xdg")
 
@@ -76,10 +76,10 @@ function M.write(state)
     end
     local path = M.path(state.card)
     local pending = path .. ".new"
-    if devos.run({ "chmod", "700", dir }) ~= 0 then
+    if dev_os.run({ "chmod", "700", dir }) ~= 0 then
         return nil, "cannot protect " .. dir
     end
-    local made = devos.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending })
+    local made = dev_os.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending })
     if made ~= 0 then
         return nil, "cannot write " .. path
     end
@@ -89,14 +89,14 @@ function M.write(state)
     if not ok then
         return nil, message
     end
-    if devos.run({ "mv", "-f", pending, path }) ~= 0 then
+    if dev_os.run({ "mv", "-f", pending, path }) ~= 0 then
         return nil, "cannot write " .. path
     end
     return true
 end
 
 local function alive(pid)
-    local out = devos.capture({ "ps", "-p", tostring(pid), "-o", "command=" }, { stderr = "null" })
+    local out = dev_os.capture({ "ps", "-p", tostring(pid), "-o", "command=" }, { stderr = "null" })
     return out:find(LOOP_MARK, 1, true) ~= nil
 end
 
@@ -110,7 +110,7 @@ function M.stop(card)
     end
     fs.remove(M.path(card))
     if state.pid and state.pid > 0 and alive(state.pid) then
-        devos.run({ "kill", tostring(state.pid) }, { stderr = "null" })
+        dev_os.run({ "kill", tostring(state.pid) }, { stderr = "null" })
     end
     return state
 end

@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local ffi = require("ffi")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -73,7 +73,7 @@ local function prepare(dir, private)
     if not ok then
         return nil, message
     end
-    if private and devos.run({ "chmod", "700", dir }) ~= 0 then
+    if private and dev_os.run({ "chmod", "700", dir }) ~= 0 then
         return nil, "cannot protect " .. dir
     end
     return true

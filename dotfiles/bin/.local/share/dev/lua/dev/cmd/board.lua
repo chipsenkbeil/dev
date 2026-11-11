@@ -4,7 +4,7 @@ local check = require("dev.board.check")
 local claims = require("dev.board.claims")
 local config = require("dev.config")
 local device = require("dev.board.device")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local init = require("dev.board.init")
 local json = require("dev.json")
@@ -522,10 +522,10 @@ local function claimant(name)
     if name then
         return name
     end
-    local host = devos.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", "")
+    local host = dev_os.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", "")
     local session = os.getenv("CLAUDE_SESSION_ID")
     if not session or session == "" then
-        session = devos.capture({ "sh", "-c", "echo $PPID" }):gsub("%s+$", "")
+        session = dev_os.capture({ "sh", "-c", "echo $PPID" }):gsub("%s+$", "")
     end
     return ("dev@" .. host .. ":" .. session:gsub("[^%w._-]", "_")):sub(1, CLAIMANT_CHARS)
 end
@@ -3099,7 +3099,7 @@ local function await_turn(opts)
             turn.leave(opts.backend, opts.name, opts.short)
             return nil, message
         end
-        devos.nap(math.min(poll:pace(place), left))
+        dev_os.nap(math.min(poll:pace(place), left))
     end
 end
 
@@ -3130,7 +3130,7 @@ function M.clean_up(root, short)
             "--path-format=absolute",
             "--git-common-dir"
         )
-        local out, code = devos.capture(argv, { stderr = "null" })
+        local out, code = dev_os.capture(argv, { stderr = "null" })
         if code == 0 then
             main = out:gsub("\n$", ""):gsub("/%.git$", "")
         end
@@ -5031,7 +5031,7 @@ local function write_section(root, name)
 end
 
 local function host()
-    return (devos.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", ""))
+    return (dev_os.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", ""))
 end
 
 local function init_local(ctx, flags, admin)
@@ -5151,7 +5151,7 @@ local function description_args(args)
         if not text then
             return nil, "cannot read " .. flags["--file"] .. ": " .. tostring(message)
         end
-    elseif devos.isatty(0) then
+    elseif dev_os.isatty(0) then
         return nil, "needs the description from --file PATH or standard input"
     else
         text = io.read("*a")
@@ -5573,7 +5573,7 @@ function M.wait(backend, args, opts)
     if legacy then
         return legacy
     end
-    local nap = opts.nap or devos.nap
+    local nap = opts.nap or dev_os.nap
     local random = opts.random or turn.entropy
     local notice = opts.notice or stderr_line
     local limited = 0
@@ -5778,7 +5778,7 @@ local function private_project(root)
     if not origin:find("github.com", 1, true) then
         return false
     end
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "gh", "repo", "view", "--json", "isPrivate", "-q", ".isPrivate" },
         { cwd = root, stderr = "null" }
     )

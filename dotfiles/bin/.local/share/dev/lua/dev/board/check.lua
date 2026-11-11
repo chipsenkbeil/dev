@@ -1,5 +1,5 @@
 local board = require("dev.board")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local vcs = require("dev.vcs")
 
 ---@class dev.board.check
@@ -152,7 +152,7 @@ end
 
 local function jj_state(root)
     local base = vcs.base(root, vcs.JJ, { quiet = true })
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         vcs.with(base, "log", "-r", "@", "--no-graph", "-T", JJ_TEMPLATE),
         { stderr = "null" }
     )
@@ -169,7 +169,8 @@ end
 
 local function git_state(root)
     local base = vcs.base(root, vcs.GIT)
-    local status, code = devos.capture(vcs.with(base, "status", "--porcelain"), { stderr = "null" })
+    local status, code =
+        dev_os.capture(vcs.with(base, "status", "--porcelain"), { stderr = "null" })
     if code ~= 0 then
         return nil, "git could not read the status of " .. root
     end
@@ -185,7 +186,7 @@ local function git_state(root)
             )
     end
     local head
-    head, code = devos.capture(vcs.with(base, "rev-parse", "HEAD"), { stderr = "null" })
+    head, code = dev_os.capture(vcs.with(base, "rev-parse", "HEAD"), { stderr = "null" })
     head = head:match("^(%x+)\n?$")
     if code ~= 0 or not head then
         return nil, "git has no commit at HEAD in " .. root
@@ -230,7 +231,7 @@ end
 ---@param opts dev.board.check.RunOpts the row and where it runs
 ---@return dev.board.check.Row row how it ended
 function M.run(opts)
-    local output, code = devos.capture_timed(
+    local output, code = dev_os.capture_timed(
         opts.argv,
         opts.seconds,
         { cwd = opts.root, merge = true, env = opts.env }

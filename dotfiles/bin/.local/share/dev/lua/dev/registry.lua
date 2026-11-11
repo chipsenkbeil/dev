@@ -1,5 +1,5 @@
 local builtins = require("dev.builtins")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local header = require("dev.header")
 
@@ -58,7 +58,7 @@ local function glob_names(dir)
     for _, name in ipairs(fs.list(dir) or {}) do
         present[name] = true
     end
-    local out = devos.capture(
+    local out = dev_os.capture(
         { "bash", "-c", [=[printf '%s\0' *]=] },
         { cwd = dir, stderr = "null" }
     )

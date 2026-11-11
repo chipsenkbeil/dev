@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local lib = require("dev.pkg.lib")
 local manifest = require("dev.pkg.manifest")
@@ -117,9 +117,9 @@ local function target_name(row)
 end
 
 local function checksum_command(file)
-    if devos.which("shasum") then
+    if dev_os.which("shasum") then
         return { "shasum", "-a", "256", file }
-    elseif devos.which("sha256sum") then
+    elseif dev_os.which("sha256sum") then
         return { "sha256sum", file }
     end
 end
@@ -129,7 +129,7 @@ local function sha256_of(file)
     if not argv then
         return nil, "neither shasum nor sha256sum is on PATH"
     end
-    local out, code = devos.capture(argv, { stdin = "null", stderr = "null" })
+    local out, code = dev_os.capture(argv, { stdin = "null", stderr = "null" })
     local sum = code == 0 and out:match("^(%x+)")
     if not sum or #sum ~= SHA256_LENGTH then
         return nil, "could not read the sha256 of " .. file
@@ -274,7 +274,7 @@ local function download_and_install(row, pin, dest, opts)
     end
     local work = { download = fs.join(dir, "download"), extract = fs.join(dir, "extract") }
     local code = steps({ row = row, pin = pin, dest = dest, work = work }, opts)
-    devos.run({ "chmod", "-R", "u+rwX", "--", dir }, { stdout = "null", stderr = "null" })
+    dev_os.run({ "chmod", "-R", "u+rwX", "--", dir }, { stdout = "null", stderr = "null" })
     fs.remove(dir, { recursive = true })
     return code
 end

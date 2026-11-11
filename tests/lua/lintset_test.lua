@@ -1,10 +1,10 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
 local STYLE = "dotfiles/claude/.claude/skills/style/lint"
-local here = devos.capture({ "pwd" }):gsub("\n$", "")
+local here = dev_os.capture({ "pwd" }):gsub("\n$", "")
 package.path = here .. "/" .. STYLE .. "/?.lua;" .. package.path
 
 local lintset = require("lintset")
@@ -75,7 +75,7 @@ testing.test("periods finds a lone one-liner ending in a period and fix drops on
 end)
 
 testing.test("files honours lint-ignore and the hidden switch in a git work tree", function()
-    if not devos.which("git") then
+    if not dev_os.which("git") then
         print("skip - git is not installed")
         return
     end
@@ -84,7 +84,7 @@ testing.test("files honours lint-ignore and the hidden switch in a git work tree
     assert(fs.mkdir(root .. "/src", { parents = true }), "mkdir src failed")
     assert(fs.write(root .. "/.dev/evidence/old.rs", ""), "fixture setup failed")
     assert(fs.write(root .. "/src/new.rs", ""), "fixture setup failed")
-    assert(devos.run({ "git", "-C", root, "init", "-q" }) == 0, "git init failed")
+    assert(dev_os.run({ "git", "-C", root, "init", "-q" }) == 0, "git init failed")
     local lint = lint_for(root)
     local files = lint:files({ "*.rs" })
     table.sort(files)
@@ -126,7 +126,7 @@ testing.test("standalone writes each problem line to standard error", function()
     local code = "require('lintset').new({ root = %q, verbose = 0 }):standalone()"
     local snippet = ("package.path = %q; " .. code):format(package.path, root)
     local errors = root .. "/stderr.txt"
-    local out = devos.capture({ "luajit", "-e", snippet }, { stderr = errors })
+    local out = dev_os.capture({ "luajit", "-e", snippet }, { stderr = errors })
     testing.eq(out, "> standalone shell\n")
     local reason = "shell outside .dev/standalone, port it to Lua (dev help porting)\n"
     testing.eq(

@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local stderr = io.stderr
 
@@ -67,7 +67,7 @@ end
 ---@param binary string the command the verb needs
 ---@param install string how to install it, as the warning shows
 function M.need(binary, install)
-    if not devos.which(binary) then
+    if not dev_os.which(binary) then
         M.note("WARNING: " .. binary .. " not found. Install with: " .. install)
         os.exit(1)
     end
@@ -95,7 +95,7 @@ function M.run(path, ctx)
     if not ok then
         local text = tostring(result)
         if text:find("interrupted!", 1, true) then
-            return devos.SIGNAL_EXIT_BASE + 2
+            return dev_os.SIGNAL_EXIT_BASE + 2
         end
         if text:sub(1, #ctx.name + 1) == ctx.name .. ":" then
             text = text:sub(#ctx.name + 2):gsub("^%d+: ", "")

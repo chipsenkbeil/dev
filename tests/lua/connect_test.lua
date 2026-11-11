@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 
 local LISTING =
     [[{"ok":true,"boxes":[{"name":"b1","state":"running","target":"linux-dev","machine":"example-box","shape":"medium","projects":[],"tailnet_name":"b1"}]}]]
@@ -13,7 +13,7 @@ local CONNECTABLES =
 
 local function executable(path, body)
     assert(fs.write(path, body))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function sandbox()

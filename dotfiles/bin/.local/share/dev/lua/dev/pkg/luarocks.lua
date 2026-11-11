@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local lib = require("dev.pkg.lib")
 
 local stdout = io.stdout
@@ -7,7 +7,7 @@ local stdout = io.stdout
 local M = {}
 
 local function installed_rock(package)
-    local out, code = devos.capture({ "luarocks", "list", package }, { stderr = "null" })
+    local out, code = dev_os.capture({ "luarocks", "list", package }, { stderr = "null" })
     if code ~= 0 then
         return false
     end

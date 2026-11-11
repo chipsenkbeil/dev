@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 
@@ -57,7 +57,7 @@ local function post(url, body_arg)
         argv[#argv + 1] = word
     end
     argv[#argv + 1] = url
-    local out, code = devos.capture(argv, { unset = CHILD_UNSET, stderr = "null" })
+    local out, code = dev_os.capture(argv, { unset = CHILD_UNSET, stderr = "null" })
     if code ~= 0 then
         return nil, "cannot reach " .. url .. " (curl exit " .. tostring(code) .. ")"
     end
@@ -71,7 +71,7 @@ local function post(url, body_arg)
 end
 
 local function wait(seconds)
-    devos.run({ "sleep", string.format("%d", seconds) })
+    dev_os.run({ "sleep", string.format("%d", seconds) })
 end
 
 local function code_of(doc, status)

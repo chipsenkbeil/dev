@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local manifest = require("dev.pkg.manifest")
@@ -75,13 +75,13 @@ local function refusal(row, parsed)
 end
 
 local function detect_manager()
-    local kernel = devos.capture({ "uname" }):gsub("\n+$", "")
+    local kernel = dev_os.capture({ "uname" }):gsub("\n+$", "")
     if kernel == "Darwin" then
-        local machine = devos.capture({ "uname", "-m" }):gsub("\n+$", "")
+        local machine = dev_os.capture({ "uname", "-m" }):gsub("\n+$", "")
         return machine == "x86_64" and kinds.Manager.DARWIN_X86_64 or kinds.Manager.BREW
     elseif kernel == "Linux" then
         for _, candidate in ipairs(kinds.LINUX_MANAGERS) do
-            if devos.which(candidate.binary) then
+            if dev_os.which(candidate.binary) then
                 return candidate.manager
             end
         end
@@ -148,7 +148,7 @@ local function check_script_row(opts, name, package)
     if package:find("^https?://") then
         stdout:write("[?] ", name, "\t(remote script, no probe)\n")
         return true
-    elseif devos.getuid() == 0 then
+    elseif dev_os.getuid() == 0 then
         stdout:write("[?] ", name, "\t(script row, never run as root)\n")
         return true
     elseif script.probe(package, driver_opts(opts)) then
@@ -477,8 +477,8 @@ function M.main(argv, defaults)
         stdout:write(USAGE)
         return 0
     end
-    if (sub == "check" or sub == "install") and devos.getuid() ~= 0 then
-        devos.append_path(tool_dirs())
+    if (sub == "check" or sub == "install") and dev_os.getuid() ~= 0 then
+        dev_os.append_path(tool_dirs())
     end
     if sub == "check" then
         return parse_check(args, opts) and M.check(opts) or 2

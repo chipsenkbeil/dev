@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local kinds = require("dev.pkg.kinds")
 local lib = require("dev.pkg.lib")
 
@@ -23,7 +23,7 @@ local function ensure_copr_plugin()
     if lib.succeeds({ "dnf", "copr", "--help" }) then
         return true
     end
-    return devos.run(lib.privileged({ "dnf", "install", "-y", "dnf-plugins-core" })) == 0
+    return dev_os.run(lib.privileged({ "dnf", "install", "-y", "dnf-plugins-core" })) == 0
 end
 
 local function plan(row, step)

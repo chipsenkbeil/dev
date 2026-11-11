@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local kinds = require("dev.pkg.kinds")
@@ -14,7 +14,7 @@ local QUARANTINE = "com.apple.quarantine"
 local M = {}
 
 local function cask_app(cask)
-    local out, code = devos.capture({ "brew", "info", "--json=v2", "--cask", cask }, {
+    local out, code = dev_os.capture({ "brew", "info", "--json=v2", "--cask", cask }, {
         stdin = "null",
         stderr = "null",
     })
@@ -57,7 +57,7 @@ local function clear_quarantine(cask)
         and not lib.succeeds({ "spctl", "--assess", "--type", "execute", path })
     then
         stdout:write("  ~ clearing quarantine on ", app, "\n")
-        devos.run({ "xattr", "-cr", path })
+        dev_os.run({ "xattr", "-cr", path })
     end
 end
 

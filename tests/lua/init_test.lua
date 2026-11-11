@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local pipelines = require("dev.pipelines")
 local support = require("support")
@@ -9,7 +9,7 @@ local Kind = require("dev.project").Kind
 local function project()
     local root = support.sandbox({ ["a.lua"] = "print(1)\n" }, {})
     assert(fs.write(root .. "/bin/pass", "#!/bin/sh\nexit 1\n"))
-    assert(devos.run({ "chmod", "755", root .. "/bin/pass" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/pass" }) == 0, "chmod failed")
     return root
 end
 
@@ -43,7 +43,7 @@ testing.test("init --dry-run writes nothing and plans the files", function()
 end)
 
 testing.test("a second init skips every file the first one created", function()
-    if not devos.which("git") then
+    if not dev_os.which("git") then
         print("skip - git is not installed")
         return
     end
@@ -128,11 +128,11 @@ end)
 
 local function stub(root, name, text)
     assert(fs.write(root .. "/bin/" .. name, text))
-    assert(devos.run({ "chmod", "755", root .. "/bin/" .. name }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. name }) == 0, "chmod failed")
 end
 
 testing.test("init creates the Gerrit project and its remote when the server lacks it", function()
-    if not devos.which("git") then
+    if not dev_os.which("git") then
         print("skip - git is not installed")
         return
     end
@@ -222,7 +222,7 @@ testing.test("init treats an empty --type and --name as unset", function()
 end)
 
 testing.test("init leaves a project on bash verbs without Lua verbs", function()
-    if not devos.which("git") then
+    if not dev_os.which("git") then
         print("skip - git is not installed")
         return
     end

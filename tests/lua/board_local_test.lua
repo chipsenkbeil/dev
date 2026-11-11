@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -9,7 +9,7 @@ local COLUMN = support.COLUMN
 local TOKEN = "pomb_SECRETtoken0123456789"
 local ID_A = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb"
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
@@ -1641,9 +1641,9 @@ testing.test("six processes writing at once lose no card", function()
     local root, home = local_board()
     local script = string.format(
         'for i in 1 2 3 4 5 6; do luajit %s board add "card $i" --problem x --size 1 --done-when a & done; wait',
-        devos.quote(MAIN)
+        dev_os.quote(MAIN)
     )
-    local out, code = devos.capture({ "sh", "-c", script }, {
+    local out, code = dev_os.capture({ "sh", "-c", script }, {
         cwd = root,
         stderr = "stdout",
         env = {
@@ -1734,14 +1734,14 @@ local function pomb(opts)
         assert(fs.write(root .. "/" .. name, body))
     end
     assert(fs.write(root .. "/bin/curl", CURL))
-    assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
     assert(
         fs.write(
             root .. "/bin/pass",
             "#!/bin/sh\n" .. (opts.locked and "exit 1\n" or ('echo "' .. TOKEN .. '"\n'))
         )
     )
-    assert(devos.run({ "chmod", "755", root .. "/bin/pass" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/pass" }) == 0, "chmod failed")
     return root, home
 end
 
@@ -1822,13 +1822,13 @@ testing.test("a queued discard replays its move without the outcome check", func
                 .. CURL:gsub("^#!/bin/sh\n", "")
         )
     )
-    assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
     local out, code =
         pomb_dev(root, home, { "board", "discard", ID_A:sub(1, 8), "--reason", "Dropped" })
     testing.eq(code, 0, out)
     testing.eq(out, QUEUED)
     assert(fs.write(root .. "/bin/curl", CURL))
-    assert(devos.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
     out, code = pomb_dev(root, home, { "board", "sync" })
     testing.eq(code, 0, out)
     testing.ok(out:find("synced discard_move aaaaaaaa", 1, true), out)

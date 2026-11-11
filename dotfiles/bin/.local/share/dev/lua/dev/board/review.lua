@@ -1,5 +1,5 @@
 local board = require("dev.board")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local vcs = require("dev.vcs")
 
 ---@class dev.board.review
@@ -29,7 +29,7 @@ local NO_CHANGE = "-"
 
 local function jj_rev(root, rev)
     local base = vcs.base(root, vcs.JJ, { quiet = true })
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         vcs.with(base, "log", "-r", rev, "--no-graph", "-T", JJ_TEMPLATE),
         { stderr = "null" }
     )
@@ -42,7 +42,7 @@ end
 
 local function git_rev(root, rev)
     local base = vcs.base(root, vcs.GIT)
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         vcs.with(base, "rev-parse", "--verify", "--quiet", rev .. "^{commit}"),
         { stderr = "null" }
     )

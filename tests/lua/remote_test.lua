@@ -1,11 +1,11 @@
 local ffi = require("ffi")
 
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
 local STUB = [[#!/usr/bin/env bash
@@ -50,7 +50,7 @@ esac
 local function write_exec(path, text)
     assert(fs.mkdir(fs.dirname(path), { parents = true }))
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function setup(files)
@@ -102,7 +102,7 @@ local function dev(root, base, args, env)
         argv[#argv + 1] = word
     end
     fs.remove(base .. "/log")
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         argv,
         { cwd = root, stderr = "stdout", stdin = "null", env = dev_env(base, env) }
     )
@@ -257,7 +257,10 @@ end)
 testing.test("without ci on PATH the default fails with the --local hint", function()
     local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
     assert(fs.mkdir(base .. "/lj"))
-    assert(devos.run({ "ln", "-s", devos.which("luajit"), base .. "/lj/luajit" }) == 0, "ln failed")
+    assert(
+        dev_os.run({ "ln", "-s", dev_os.which("luajit"), base .. "/lj/luajit" }) == 0,
+        "ln failed"
+    )
     local env = { PATH = base .. "/lj:/usr/bin:/bin" }
     local out, code = dev(root, base, { "hello" }, env)
     testing.eq(code, 1)
@@ -297,7 +300,7 @@ testing.test(
 
 testing.test("a project with no pipeline file runs here without calling ci", function()
     local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
-    assert(devos.run({ "rm", "-rf", root .. "/.ci" }) == 0, "rm failed")
+    assert(dev_os.run({ "rm", "-rf", root .. "/.ci" }) == 0, "rm failed")
     local out, code = dev(root, base, { "hello" }, { CI_STUB_JOBS = "fail" })
     testing.eq(out, "hi\n")
     testing.eq(code, 0)
@@ -360,10 +363,10 @@ testing.test(
 
 testing.test("an unreadable __remote.lua ends with one line and exit 1", function()
     local root, base = setup({ ["__remote.lua"] = "return function() return 0 end\n" })
-    assert(devos.run({ "chmod", "000", root .. "/.dev/__remote.lua" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "000", root .. "/.dev/__remote.lua" }) == 0, "chmod failed")
     local out, code = dev(root, base, { "--remote", "test" })
-    devos.run({ "chmod", "644", root .. "/.dev/__remote.lua" })
-    if devos.capture({ "id", "-u" }) == "0" then
+    dev_os.run({ "chmod", "644", root .. "/.dev/__remote.lua" })
+    if dev_os.capture({ "id", "-u" }) == "0" then
         return
     end
     testing.eq(code, 1)
@@ -595,12 +598,12 @@ end)
 
 testing.test("--remote ci run label is unset when run from a real terminal", function()
     local root, base = setup()
-    if devos.name() ~= "Linux" then
+    if dev_os.name() ~= "Linux" then
         error("the terminal run needs util-linux script, so it runs on Linux only")
     end
     local argv = { "luajit", MAIN, "--remote", "test" }
-    local _, code = devos.capture(
-        { "script", "-qec", devos.command(argv), "/dev/null" },
+    local _, code = dev_os.capture(
+        { "script", "-qec", dev_os.command(argv), "/dev/null" },
         { cwd = root, stderr = "stdout", env = dev_env(base) }
     )
     testing.eq(code, 0)

@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local term = require("dev.term")
@@ -298,7 +298,7 @@ end
 
 ---Refuse unless `ci` is on PATH.
 function M.need_ci()
-    if not devos.which("ci") then
+    if not dev_os.which("ci") then
         verb.die(MISSING_CI)
     end
 end
@@ -453,7 +453,7 @@ function M.call(sub, args, opts)
     if opts and opts.label then
         code, raw = ui.spin(ui.context(), opts.label, argv, { capture = true })
     else
-        raw, code = devos.capture(argv)
+        raw, code = dev_os.capture(argv)
     end
     local out = raw:gsub("\n+$", "")
     local doc = json.decode(out)
@@ -485,7 +485,7 @@ function M.fleet(sub, opts)
         argv[#argv + 1] = target
     end
     argv[#argv + 1] = "--json"
-    local raw, code = devos.capture(argv)
+    local raw, code = dev_os.capture(argv)
     local docs, texts = {}, {}
     for line in raw:gmatch("[^\n]+") do
         texts[#texts + 1] = line
@@ -1593,7 +1593,7 @@ M.handlers["box delete"] = function(ctx)
         end
         M.need_ci()
         if not boxes then
-            local raw, code = devos.capture({ "ci", "box", "ls", "--json" })
+            local raw, code = dev_os.capture({ "ci", "box", "ls", "--json" })
             local doc = code == 0 and json.decode(raw) or nil
             boxes = type(doc) == "table" and doc.boxes or {}
         end

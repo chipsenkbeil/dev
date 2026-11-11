@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 ---@class dev.testenv
@@ -36,14 +36,14 @@ function M.fake(root, name, spec)
     local path = bin .. "/" .. name
     local script = table.concat({
         "#!/bin/sh",
-        "printf '%s\\n' \"$*\" >> " .. devos.quote(path .. ".log"),
-        "printf '%s' " .. devos.quote(fields.out),
-        "printf '%s' " .. devos.quote(fields.err) .. " >&2",
+        "printf '%s\\n' \"$*\" >> " .. dev_os.quote(path .. ".log"),
+        "printf '%s' " .. dev_os.quote(fields.out),
+        "printf '%s' " .. dev_os.quote(fields.err) .. " >&2",
         "exit " .. tostring(fields.code),
         "",
     }, "\n")
     assert(fs.write(path, script))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 ---List the argument lines a fake command logged.
@@ -88,7 +88,7 @@ function M.verb(root, words, opts)
         env[name] = value
     end
     local errfile = assert(fs.mktemp({ prefix = "stderr" }))
-    local out, code = devos.capture(argv, { cwd = root, env = env, stderr = errfile })
+    local out, code = dev_os.capture(argv, { cwd = root, env = env, stderr = errfile })
     local err = fs.read(errfile) or ""
     fs.remove(errfile)
     return out, code, err

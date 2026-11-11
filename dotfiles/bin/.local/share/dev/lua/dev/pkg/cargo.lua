@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local lib = require("dev.pkg.lib")
 
@@ -8,7 +8,7 @@ local stdout = io.stdout
 local M = {}
 
 local function installed_crate(package)
-    local out, code = devos.capture({ "cargo", "install", "--list" }, { stderr = "null" })
+    local out, code = dev_os.capture({ "cargo", "install", "--list" }, { stderr = "null" })
     if code ~= 0 then
         return false
     end
@@ -22,7 +22,7 @@ local function installed_crate(package)
 end
 
 local function find_binstall()
-    if devos.which("cargo-binstall") then
+    if dev_os.which("cargo-binstall") then
         return "cargo-binstall"
     end
     local home = os.getenv("HOME")
@@ -46,7 +46,7 @@ local function command(row, opts)
 end
 
 local function ensure_toolchain(opts)
-    if devos.which("rustup") and not lib.succeeds({ "rustup", "show", "active-toolchain" }) then
+    if dev_os.which("rustup") and not lib.succeeds({ "rustup", "show", "active-toolchain" }) then
         stdout:write("  + rustup has no default toolchain, installing stable\n")
         return lib.run({ "rustup", "default", "stable" }, opts) == 0
     end

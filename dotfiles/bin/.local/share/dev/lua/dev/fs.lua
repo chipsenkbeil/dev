@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 
 ---@class dev.fs.Stat
 ---@field uid integer owner user id
@@ -8,12 +8,12 @@ local devos = require("dev.os")
 
 ---@class dev.fs
 ---@field Kind table<string, dev.os.Kind> the kinds a `Stat` names, by constant
-local M = { Kind = devos.Kind }
+local M = { Kind = dev_os.Kind }
 
 local gnu_stat
 
 local function try(argv)
-    local out, code = devos.capture(argv, { stderr = "stdout" })
+    local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code == 0 then
         return true
     end
@@ -28,7 +28,7 @@ local function anchor(path)
 end
 
 local function test(flag, path)
-    return devos.run({ "test", flag, anchor(path) }) == 0
+    return dev_os.run({ "test", flag, anchor(path) }) == 0
 end
 
 ---Check that `path` exists, following links.
@@ -123,7 +123,7 @@ end
 ---@return string[]? names sorted names without the directory, or nil on failure
 ---@return string? message why it failed
 function M.list(dir)
-    local out, code = devos.capture(
+    local out, code = dev_os.capture(
         { "find", "-H", anchor(dir), "-mindepth", "1", "-maxdepth", "1", "-print0" },
         { stderr = "null" }
     )
@@ -140,7 +140,7 @@ end
 
 local function is_gnu_stat()
     if gnu_stat == nil then
-        gnu_stat = devos.run({ "stat", "--version" }, { stdout = "null", stderr = "null" }) == 0
+        gnu_stat = dev_os.run({ "stat", "--version" }, { stdout = "null", stderr = "null" }) == 0
     end
     return gnu_stat
 end
@@ -155,7 +155,7 @@ function M.stat(path)
     else
         argv = { "stat", "-f", "%u %p %z", anchor(path) }
     end
-    local out, code = devos.capture(argv, { stderr = "null" })
+    local out, code = dev_os.capture(argv, { stderr = "null" })
     if code ~= 0 then
         return nil
     end
@@ -168,7 +168,7 @@ function M.stat(path)
         uid = tonumber(uid),
         mode = raw,
         size = tonumber(size),
-        kind = devos.kind_of(raw),
+        kind = dev_os.kind_of(raw),
     }
 end
 
@@ -177,7 +177,7 @@ end
 ---@return string? real the resolved path, or nil on failure
 ---@return string? message why it failed
 function M.realpath(path)
-    local out, code = devos.capture({ "realpath", "--", path }, { stderr = "null" })
+    local out, code = dev_os.capture({ "realpath", "--", path }, { stderr = "null" })
     if code ~= 0 then
         return nil, "cannot resolve " .. path
     end
@@ -189,7 +189,7 @@ end
 ---@return string? target the link's text, or nil when `path` is not a link
 ---@return string? message why it failed
 function M.readlink(path)
-    local out, code = devos.capture({ "readlink", "--", path }, { stderr = "null" })
+    local out, code = dev_os.capture({ "readlink", "--", path }, { stderr = "null" })
     if code ~= 0 then
         return nil, path .. " is not a link"
     end
@@ -206,7 +206,7 @@ function M.mktemp(opts)
     local base = (os.getenv("TMPDIR") or "/tmp"):gsub("/+$", "")
     local template = base .. "/" .. (opts.prefix or "dev") .. ".XXXXXX"
     local out, code =
-        devos.capture(opts.dir and { "mktemp", "-d", template } or { "mktemp", template })
+        dev_os.capture(opts.dir and { "mktemp", "-d", template } or { "mktemp", template })
     if code ~= 0 then
         return nil, "cannot make a temporary path under " .. base
     end

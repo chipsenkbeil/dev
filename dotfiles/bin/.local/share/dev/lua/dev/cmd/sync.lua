@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
 local templates = require("dev.templates")
@@ -46,7 +46,7 @@ local function has_marker(text)
 end
 
 local function show_diff(from, to)
-    devos.run({ "diff", "-u", from, to })
+    dev_os.run({ "diff", "-u", from, to })
 end
 
 local function stage(tmp, dest, text)

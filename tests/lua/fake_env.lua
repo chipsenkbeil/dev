@@ -1,25 +1,25 @@
 local here = debug.getinfo(1, "S").source:match("^@(.*)/tests/lua/[^/]*$") or "."
 package.path = here .. "/dotfiles/bin/.local/share/dev/lua/?.lua;" .. package.path
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 
 local uid = os.getenv("FAKE_UID")
 if uid then
-    devos.getuid = function()
+    dev_os.getuid = function()
         return tonumber(uid)
     end
 end
 
 local name = os.getenv("FAKE_OS")
 if name then
-    devos.name = function()
+    dev_os.name = function()
         return name
     end
 end
 
 local hidden = os.getenv("FAKE_HIDE")
 if hidden then
-    local which = devos.which
-    devos.which = function(tool)
+    local which = dev_os.which
+    dev_os.which = function(tool)
         if (" " .. hidden .. " "):find(" " .. tool .. " ", 1, true) then
             return nil
         end

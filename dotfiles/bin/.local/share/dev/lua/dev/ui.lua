@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local term = require("dev.term")
 local text = require("dev.text")
@@ -67,7 +67,7 @@ local DEFAULT_PAGER = "less -R"
 local POLL_INTERVAL_SECS = 0.1
 local POLL_DONE, POLL_RUNNING, POLL_GONE = 0, 1, 2
 local SIGINT = 2
-local INTERRUPTED = devos.SIGNAL_EXIT_BASE + SIGINT
+local INTERRUPTED = dev_os.SIGNAL_EXIT_BASE + SIGINT
 local stderr = io.stderr
 
 ---@class dev.ui.Context
@@ -96,7 +96,7 @@ Context.__index = Context
 function M.context(opts)
     opts = opts or {}
     local getenv = opts.getenv or os.getenv
-    local isatty = opts.isatty or devos.isatty
+    local isatty = opts.isatty or dev_os.isatty
     local size = opts.size or term.size
     local function color_for(fd)
         local no_color = getenv("NO_COLOR")
@@ -349,7 +349,7 @@ local function read_all(path)
 end
 
 local function capture_or_interrupted(argv)
-    local ok, result, code = pcall(devos.capture, argv)
+    local ok, result, code = pcall(dev_os.capture, argv)
     if not ok then
         local reason = tostring(result)
         if
@@ -402,12 +402,12 @@ local function launched_pid(dir, wait)
             return pid
         end
         polls = polls + 1
-        devos.run({ "sleep", tostring(PID_POLL_SECS) })
+        dev_os.run({ "sleep", tostring(PID_POLL_SECS) })
     end
 end
 
 local function stop_job(pid)
-    devos.run({ "sh", "-c", STOP, "sh", tostring(pid) })
+    dev_os.run({ "sh", "-c", STOP, "sh", tostring(pid) })
 end
 
 local function finished_code(rc_path)
@@ -446,7 +446,7 @@ local function watch(job)
         )
         stderr:flush()
         local state = poll(job.rc_path, job.pid)
-        if state > devos.SIGNAL_EXIT_BASE then
+        if state > dev_os.SIGNAL_EXIT_BASE then
             return INTERRUPTED
         end
         if state == POLL_DONE or state == POLL_GONE then
@@ -463,7 +463,7 @@ local function make_workdir(ctx)
     if base == "" then
         base = "/tmp"
     end
-    local dir, made = devos.capture({ "mktemp", "-d", base .. "/dev-spin.XXXXXX" })
+    local dir, made = dev_os.capture({ "mktemp", "-d", base .. "/dev-spin.XXXXXX" })
     dir = dir:gsub("\n$", "")
     if made ~= 0 or dir == "" then
         error("spin could not create a temp directory", 0)
@@ -500,12 +500,12 @@ end
 ---@return string? output standard output of the command, only with `opts.capture`
 function M.spin(ctx, label, argv, opts)
     local capture = opts ~= nil and opts.capture == true
-    if not (ctx.interactive and devos.isatty(2) and ctx.getenv("TERM") ~= "dumb") then
+    if not (ctx.interactive and dev_os.isatty(2) and ctx.getenv("TERM") ~= "dumb") then
         if capture then
-            local out, code = devos.capture(argv)
+            local out, code = dev_os.capture(argv)
             return code, out
         end
-        return devos.run(argv)
+        return dev_os.run(argv)
     end
     local err = ctx:stderr()
     local dir, pid
@@ -532,7 +532,7 @@ function M.spin(ctx, label, argv, opts)
         if pid and stopping then
             stop_job(pid)
         end
-        devos.run({ "rm", "-rf", "--", dir })
+        dev_os.run({ "rm", "-rf", "--", dir })
     end
     if not ok then
         if tostring(code):find("interrupted!", 1, true) then
@@ -572,7 +572,7 @@ function M.should_page(content, opts)
     end
     local interactive = opts.interactive
     if interactive == nil then
-        interactive = devos.isatty(1)
+        interactive = dev_os.isatty(1)
     end
     if not interactive then
         return false
@@ -608,7 +608,7 @@ function M.page(content, opts)
     local shown = false
     if path then
         if fs.write(path, content) then
-            shown = devos.run({ "sh", "-c", "(" .. pager .. '\n) <"$0"', path }) == 0
+            shown = dev_os.run({ "sh", "-c", "(" .. pager .. '\n) <"$0"', path }) == 0
         end
         fs.remove(path)
     end

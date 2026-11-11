@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local xdg = require("dev.xdg")
 
@@ -28,9 +28,9 @@ function M.dir()
 end
 
 local function checksum_command()
-    if devos.which("shasum") then
+    if dev_os.which("shasum") then
         return { "shasum", "-a", "256" }
-    elseif devos.which("sha256sum") then
+    elseif dev_os.which("sha256sum") then
         return { "sha256sum" }
     end
 end
@@ -44,7 +44,7 @@ function M.path(name)
     if not argv then
         return nil, "neither shasum nor sha256sum is on PATH"
     end
-    local out, code = devos.capture_input(argv, name, { stderr = "null" })
+    local out, code = dev_os.capture_input(argv, name, { stderr = "null" })
     local sum = code == 0 and out:match("^(%x+)")
     if not sum or #sum ~= HASH_LENGTH then
         return nil, "could not hash the agent name"
@@ -72,13 +72,13 @@ function M.write(name, token, expires)
     end
     local dir = M.dir()
     if
-        devos.run({ "sh", "-c", 'umask 077 && mkdir -p -- "$1" && chmod 700 -- "$1"', "sh", dir })
+        dev_os.run({ "sh", "-c", 'umask 077 && mkdir -p -- "$1" && chmod 700 -- "$1"', "sh", dir })
         ~= 0
     then
         return nil, "cannot make " .. dir
     end
     local pending = path .. ".new"
-    if devos.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending }) ~= 0 then
+    if dev_os.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending }) ~= 0 then
         return nil, "cannot write " .. path
     end
     local ok
@@ -87,7 +87,7 @@ function M.write(name, token, expires)
         fs.remove(pending)
         return nil, message
     end
-    if devos.run({ "mv", "-f", pending, path }) ~= 0 then
+    if dev_os.run({ "mv", "-f", pending, path }) ~= 0 then
         fs.remove(pending)
         return nil, "cannot write " .. path
     end

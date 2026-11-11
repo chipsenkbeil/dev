@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local release = require("dev.release")
 local pins = require("dev.pkg.release")
@@ -28,7 +28,7 @@ end
 
 local function installed(spec, dir)
     local path = fs.join(dir, "bin", spec.binary)
-    return fs.is_exec(path) and path or devos.which(spec.binary)
+    return fs.is_exec(path) and path or dev_os.which(spec.binary)
 end
 
 local function install(spec, session)
@@ -86,7 +86,7 @@ end
 function M.main(spec, args)
     if args[1] == "--check" then
         local dir = prefix()
-        return (dir and installed(spec, dir) or devos.which(spec.binary)) and 0 or 1
+        return (dir and installed(spec, dir) or dev_os.which(spec.binary)) and 0 or 1
     end
     return release.main(spec.tool, args, function(session)
         return install(spec, session)

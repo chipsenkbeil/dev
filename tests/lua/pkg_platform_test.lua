@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local PKG = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
 local SHA = string.rep("a", 64)
 
@@ -21,7 +21,7 @@ local MANIFEST = table.concat({
 
 local function executable(path, text)
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function sandbox(manifest)
@@ -46,7 +46,7 @@ local function run(dir, kernel, arch, args)
     local argv = { "luajit", PKG, unpack(args) }
     argv[#argv + 1] = "--manifest"
     argv[#argv + 1] = dir .. "/tools.tsv"
-    return devos.capture(argv, {
+    return dev_os.capture(argv, {
         stderr = "stdout",
         env = {
             PATH = dir .. "/stubs:" .. os.getenv("PATH"),
@@ -125,16 +125,16 @@ testing.test("Linux with only apt-get reads the apt column", function()
         "dropped dropped-zzz - pacman-drop base",
         "",
     }, "\n"))
-    assert(devos.run({ "rm", dir .. "/stubs/pacman", dir .. "/stubs/brew" }) == 0, "rm failed")
+    assert(dev_os.run({ "rm", dir .. "/stubs/pacman", dir .. "/stubs/brew" }) == 0, "rm failed")
     executable(
         dir .. "/stubs/dpkg-query",
         '#!/bin/sh\ncase "$4" in apt-present) echo "install ok installed" ;; *) exit 1 ;; esac\n'
     )
     executable(dir .. "/stubs/apt-get", "#!/bin/sh\nexit 0\n")
     assert(fs.mkdir(dir .. "/sys"))
-    assert(devos.run({ "ln", "-s", "/bin/sh", dir .. "/sys/sh" }) == 0, "ln failed")
-    local luajit = devos.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
-    local out, code = devos.capture({
+    assert(dev_os.run({ "ln", "-s", "/bin/sh", dir .. "/sys/sh" }) == 0, "ln failed")
+    local luajit = dev_os.capture({ "sh", "-c", "command -v luajit" }):gsub("\n$", "")
+    local out, code = dev_os.capture({
         luajit,
         PKG,
         "install",

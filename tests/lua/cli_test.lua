@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local FIXTURES = REPO .. "/tests/lua/fixtures/verbs/"
 
@@ -16,7 +16,7 @@ local function project(files)
         local text = source:sub(1, 1) == "@" and assert(fs.read(FIXTURES .. source:sub(2)))
             or source
         assert(fs.write(path, text))
-        assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+        assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
     end
     return root
 end
@@ -30,7 +30,7 @@ local function dev(root, args, env)
     for key, value in pairs(env or {}) do
         merged[key] = value
     end
-    return devos.capture(argv, { cwd = root, stderr = "stdout", env = merged })
+    return dev_os.capture(argv, { cwd = root, stderr = "stdout", env = merged })
 end
 
 testing.test("-vvv gives level 2 and a bare -v after -- stays an argument", function()
@@ -185,11 +185,11 @@ testing.test("a .lua verb's exit code is taken modulo 256 like a shell's", funct
 end)
 
 testing.test("a .lua verb that cannot be read is an error", function()
-    if devos.getuid() == 0 then
+    if dev_os.getuid() == 0 then
         return
     end
     local root = project({ ["locked.lua"] = "return 0\n" })
-    assert(devos.run({ "chmod", "000", root .. "/.dev/locked.lua" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "000", root .. "/.dev/locked.lua" }) == 0, "chmod failed")
     local out, code = dev(root, { "locked" })
     testing.eq(code, 1)
     testing.ok(out:find("dev locked: cannot read ", 1, true), out)
@@ -335,7 +335,7 @@ end)
 
 testing.test("root-tests and bootstrap-arch are unknown verbs", function()
     for _, name in ipairs({ "root-tests", "bootstrap-arch" }) do
-        local out, code = devos.capture(
+        local out, code = dev_os.capture(
             { REPO .. "/dotfiles/bin/.local/bin/dev", name },
             { cwd = REPO, stderr = "stdout" }
         )
@@ -387,7 +387,7 @@ testing.test(
         end
         assert(fs.mkdir(deep, { parents = true }))
         assert(fs.write(lua_dir .. "/below_the_cap.lua", "return {}\n"))
-        local out, code = devos.capture_timed({ "luajit", MAIN, "help" }, bound_secs, {
+        local out, code = dev_os.capture_timed({ "luajit", MAIN, "help" }, bound_secs, {
             cwd = deep,
             merge = true,
             env = { CI = "", DEV_REMOTE = "0" },

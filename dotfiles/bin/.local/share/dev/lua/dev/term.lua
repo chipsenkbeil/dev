@@ -1,5 +1,5 @@
 local ffi = require("ffi")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 
 local TCSANOW = 0
 local O_RDWR = 2
@@ -94,14 +94,14 @@ local Key = M.Key
 local function get_attr(fd)
     local attr = ffi.new("struct termios[1]")
     if ffi.C.tcgetattr(fd, attr) ~= 0 then
-        error("tcgetattr failed on fd " .. fd .. ": " .. devos.strerror(), 3)
+        error("tcgetattr failed on fd " .. fd .. ": " .. dev_os.strerror(), 3)
     end
     return attr
 end
 
 local function set_attr(fd, attr)
     if ffi.C.tcsetattr(fd, TCSANOW, attr) ~= 0 then
-        error("tcsetattr failed on fd " .. fd .. ": " .. devos.strerror(), 3)
+        error("tcsetattr failed on fd " .. fd .. ": " .. dev_os.strerror(), 3)
     end
 end
 
@@ -130,7 +130,7 @@ end
 ---@param fd integer terminal file descriptor
 ---@return fun() restore puts the terminal back as it was
 function M.raw(fd)
-    if not devos.isatty(fd) then
+    if not dev_os.isatty(fd) then
         error("fd " .. fd .. " is not a terminal", 2)
     end
     local saved = get_attr(fd)
@@ -158,7 +158,7 @@ end
 function M.open_tty()
     local fd = ffi.C.open(M.TTY_PATH, bit.bor(O_RDWR, O_CLOEXEC))
     if fd < 0 then
-        return nil, devos.strerror()
+        return nil, dev_os.strerror()
     end
     return fd
 end
@@ -174,7 +174,7 @@ end
 ---@return integer cols column count, or 80 when the size is unknown
 function M.size()
     local out, code =
-        devos.capture({ "sh", "-c", "{ stty size <" .. M.TTY_PATH .. "; } 2>/dev/null" })
+        dev_os.capture({ "sh", "-c", "{ stty size <" .. M.TTY_PATH .. "; } 2>/dev/null" })
     if code == 0 then
         local rows, cols = out:match("^(%d+)%s+(%d+)")
         rows, cols = tonumber(rows), tonumber(cols)

@@ -1,11 +1,11 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
 local function executable(path, text)
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function lines(text)
@@ -41,7 +41,7 @@ testing.test(
 
 testing.test("guide says how to install guide when it is missing", function()
     local root = support.sandbox({}, {})
-    local luajit = assert(devos.which("luajit"), "luajit is needed")
+    local luajit = assert(dev_os.which("luajit"), "luajit is needed")
     assert(fs.symlink(luajit, root .. "/bin/luajit"))
     local out, code = support.dev(
         root,

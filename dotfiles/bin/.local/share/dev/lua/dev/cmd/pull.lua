@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local text = require("dev.text")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
@@ -13,7 +13,7 @@ local function resolve(root)
     end
     local base = vcs.base(root, backend)
     if backend == vcs.JJ then
-        local has_sync = devos.run(
+        local has_sync = dev_os.run(
             vcs.with(base, "config", "get", "aliases.sync"),
             { stdout = "null", stderr = "null" }
         ) == 0
@@ -25,11 +25,11 @@ local function resolve(root)
             vcs.with(base, "rebase", "-o", "trunk()", "--skip-emptied"),
         }
     end
-    local branch, code = devos.capture(vcs.with(base, "symbolic-ref", "--short", "-q", "HEAD"))
+    local branch, code = dev_os.capture(vcs.with(base, "symbolic-ref", "--short", "-q", "HEAD"))
     if code ~= 0 then
         return nil, "HEAD is detached in " .. root .. ", check out a branch to pull"
     end
-    local dirty = devos.capture(vcs.with(base, "status", "--porcelain", "--untracked-files=no"))
+    local dirty = dev_os.capture(vcs.with(base, "status", "--porcelain", "--untracked-files=no"))
     if dirty ~= "" then
         return nil, root .. " has uncommitted changes, commit or stash them before pulling"
     end
@@ -64,7 +64,7 @@ function M.run(ctx)
     end
     for _, argv in ipairs(steps) do
         verb.show(ctx, argv)
-        local code = devos.run(argv) or 1
+        local code = dev_os.run(argv) or 1
         if code ~= 0 then
             return code
         end

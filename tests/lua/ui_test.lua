@@ -1,5 +1,5 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local text = require("dev.text")
 local ui = require("dev.ui")
@@ -162,7 +162,7 @@ end)
 local function fake_pager(body)
     local dir = assert(fs.mktemp({ dir = true }))
     assert(fs.write(dir .. "/fakepager", "#!/bin/sh\n" .. body))
-    assert(devos.run({ "chmod", "755", dir .. "/fakepager" }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", dir .. "/fakepager" }) == 0, "chmod failed")
     return dir
 end
 
@@ -171,9 +171,10 @@ testing.test("page sends a tall text to the pager command on PATH", function()
     local record = dir .. "/record"
     local content = lines_of(50)
     local paged = ui.page(content, {
-        pager = "PATH=" .. devos.quote(dir) .. ':"$PATH"; export PATH; fakepager ' .. devos.quote(
-            record
-        ),
+        pager = "PATH="
+            .. dev_os.quote(dir)
+            .. ':"$PATH"; export PATH; fakepager '
+            .. dev_os.quote(record),
         interactive = true,
         rows = 24,
     })
@@ -182,7 +183,7 @@ testing.test("page sends a tall text to the pager command on PATH", function()
     fs.remove(dir, { recursive = true })
 end)
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 
 local function page_output(rows, opts)
     local code = string.format(
@@ -195,13 +196,13 @@ local function page_output(rows, opts)
         opts.pager,
         opts.fallback and string.format("%q", opts.fallback) or "nil"
     )
-    return devos.capture({ "luajit", "-e", code }, { stderr = "stdout" })
+    return dev_os.capture({ "luajit", "-e", code }, { stderr = "stdout" })
 end
 
 testing.test("page prints a short text without starting the pager", function()
     local dir = fake_pager('cat >"$1"\n')
     local record = dir .. "/record"
-    local out = page_output(3, { pager = dir .. "/fakepager " .. devos.quote(record) })
+    local out = page_output(3, { pager = dir .. "/fakepager " .. dev_os.quote(record) })
     testing.eq(out, lines_of(3) .. "false")
     testing.eq(fs.exists(record), false)
     fs.remove(dir, { recursive = true })

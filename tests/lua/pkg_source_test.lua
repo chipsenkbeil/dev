@@ -1,9 +1,9 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MODULES = REPO .. "/dotfiles/bin/.local/share/dev/lua"
 local VERSION = "9.9.9"
 local URL_BASE = "https://example.test/dl/"
@@ -83,12 +83,12 @@ local TOOLS = {
 
 local function write_executable(path, text)
     assert(fs.write(path, text))
-    assert(devos.run({ "chmod", "755", path }) == 0, "chmod failed")
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
 local function sha256(file)
-    local out = devos.capture(
-        devos.which("shasum") and { "shasum", "-a", "256", file } or { "sha256sum", file }
+    local out = dev_os.capture(
+        dev_os.which("shasum") and { "shasum", "-a", "256", file } or { "sha256sum", file }
     )
     return out:match("^(%x+)")
 end
@@ -102,7 +102,7 @@ local function sandbox(tool)
     write_executable(dir .. "/stubs/make", FAKE_MAKE)
     write_executable(dir .. "/stubs/perl", "#!/bin/sh\nexit 0\n")
     for _, name in ipairs(SYSTEM_TOOLS) do
-        local real = devos.which(name)
+        local real = dev_os.which(name)
         if real then
             assert(fs.symlink(real, dir .. "/pathbin/" .. name))
         end
@@ -112,7 +112,7 @@ local function sandbox(tool)
     write_executable(src .. "/" .. tool.file, tool.text)
     local archive = dir .. "/assets/" .. tool.asset
     assert(
-        devos.run({ "tar", "-czf", archive, "-C", dir .. "/build", tool.root }) == 0,
+        dev_os.run({ "tar", "-czf", archive, "-C", dir .. "/build", tool.root }) == 0,
         "tar failed"
     )
     return dir, archive
@@ -144,11 +144,11 @@ local function run(dir, tool, args, extra)
         env[key] = value
     end
     local argv =
-        { assert(devos.which("luajit")), REPO .. "/scripts/install-" .. tool.name .. ".lua" }
+        { assert(dev_os.which("luajit")), REPO .. "/scripts/install-" .. tool.name .. ".lua" }
     for _, arg in ipairs(args or {}) do
         argv[#argv + 1] = arg
     end
-    return devos.capture(argv, { stderr = "stdout", env = env })
+    return dev_os.capture(argv, { stderr = "stdout", env = env })
 end
 
 local function cleanup(dir)
@@ -177,7 +177,7 @@ for _, tool in ipairs(TOOLS) do
 
     testing.test(tool.name .. " stops on a wrong sha256 before it extracts", function()
         local dir = sandbox(tool)
-        local real_tar = devos.which("tar")
+        local real_tar = dev_os.which("tar")
         write_executable(
             dir .. "/stubs/tar",
             '#!/bin/sh\necho tar >>"$FAKE_LOG.tar"\nexec ' .. real_tar .. ' "$@"\n'

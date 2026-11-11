@@ -6,7 +6,7 @@ and the rule tests of the Lua and Rust lint sets run once.
 Exit non-zero when any of them reports a finding.
 ]]
 local checks = require("dotfiles.checks")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local verb = require("dev.verb")
 
@@ -29,7 +29,7 @@ local RULE_TEST_SETS = { "lua", "rust" }
 local function run_checked(argv, opts)
     opts = opts or {}
     opts.cwd = root
-    if devos.run(argv, opts) ~= 0 then
+    if dev_os.run(argv, opts) ~= 0 then
         failed = true
     end
 end
@@ -45,7 +45,7 @@ local function missing(tool)
     verb.note("WARNING: " .. tool .. " not found, skipping. Install with: brew install " .. tool)
 end
 
-local have_shfmt = devos.which("shfmt") ~= nil
+local have_shfmt = dev_os.which("shfmt") ~= nil
 
 local function lint_shell(file)
     stdout:write("> Linting ", file, "\n")
@@ -59,7 +59,7 @@ local function lint_shell(file)
         run_checked({ "shellcheck", "-x", "-P", "SCRIPTDIR", "-s", "sh", file })
     end
     if have_shfmt then
-        local code = devos.run(
+        local code = dev_os.run(
             { "shfmt", "-i", "4", "-d", file },
             { cwd = root, stdout = "null", stderr = "null" }
         )
@@ -78,7 +78,7 @@ local function lint_lua(files)
     local style = fs.join(root, checks.lint_dir)
     for _, row in ipairs(LUA_TOOLS) do
         local tool, prefix = row[1], { row[1] }
-        if devos.which(tool) then
+        if dev_os.which(tool) then
             stdout:write("> Linting lua with ", tool, "\n")
             for _, word in ipairs(row[2]) do
                 prefix[#prefix + 1] = (word:gsub("^STYLE", style))
@@ -141,7 +141,7 @@ end
 stdout:write("> standalone shell\n")
 require("dev.standalone").warn(root, verb.note)
 
-if devos.which("ast-grep") then
+if dev_os.which("ast-grep") then
     local sets = fs.join(root, checks.lint_dir, "..")
     for _, set in ipairs(RULE_TEST_SETS) do
         stdout:write("> Testing ", set, " ast-grep rules\n")

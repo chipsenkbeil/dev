@@ -1,10 +1,10 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local manifest = require("dev.pkg.manifest")
 local release = require("dev.pkg.release")
 
-local REPO = devos.capture({ "pwd" }):gsub("\n$", "")
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local PINS = REPO .. "/.dev/releases.tsv"
 local SHA256_HEX_DIGITS = 64
 local COLUMN = "darwin-x86_64"

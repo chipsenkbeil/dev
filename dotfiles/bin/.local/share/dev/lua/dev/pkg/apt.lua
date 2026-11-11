@@ -1,4 +1,4 @@
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local kinds = require("dev.pkg.kinds")
 local lib = require("dev.pkg.lib")
 
@@ -13,7 +13,7 @@ local refreshed = false
 local M = {}
 
 local function installed(package)
-    local out = devos.capture(
+    local out = dev_os.capture(
         { "dpkg-query", "-W", "-f=${Status}", "--", package },
         { stdin = "null", stderr = "null" }
     )

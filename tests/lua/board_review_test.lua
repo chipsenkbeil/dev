@@ -1,10 +1,10 @@
 local testing = require("dev.testing")
-local devos = require("dev.os")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
 
-local has_jj = devos.which("jj") ~= nil
+local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
 local function setup()
@@ -48,12 +48,12 @@ local function git_root()
     local function git(...)
         local argv =
             { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
-        must(devos.run(argv, { stdout = "null" }))
+        must(dev_os.run(argv, { stdout = "null" }))
     end
-    must(devos.run({ "git", "init", "-q", root }, { stdout = "null" }))
+    must(dev_os.run({ "git", "init", "-q", root }, { stdout = "null" }))
     git("add", "-A")
     git("commit", "-q", "-m", "base")
-    local head = devos.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
+    local head = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
     return root, home, head
 end
 
@@ -411,7 +411,7 @@ end)
 if has_jj then
     local function jj(root, ...)
         local argv = { "jj", "--no-pager", "--color", "never", "-R", root, ... }
-        local out, code = devos.capture(argv, { stderr = "null", env = IDENT })
+        local out, code = dev_os.capture(argv, { stderr = "null", env = IDENT })
         assert(code == 0, out)
         return out
     end
@@ -421,7 +421,7 @@ if has_jj then
         function()
             local root, home = setup()
             must(
-                devos.run(
+                dev_os.run(
                     { "jj", "git", "init", root },
                     { stdout = "null", stderr = "null", env = IDENT }
                 )
