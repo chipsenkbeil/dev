@@ -52,6 +52,17 @@ for word in "$@"; do
         if [ -n "$FETCH_LOG" ]; then
             echo fetch >>"$FETCH_LOG"
         fi
+        if [ -n "$FETCH_REFUSALS" ]; then
+            count=$(cat "$FETCH_COUNT" 2>/dev/null || echo 0)
+            if [ "$count" -lt "$FETCH_REFUSALS" ]; then
+                echo $((count + 1)) >"$FETCH_COUNT"
+                echo "agent refused operation"
+                exit 1
+            fi
+        fi
+        if [ -n "$FETCH_HANG" ]; then
+            exec sleep 30
+        fi
         if [ -n "$FETCH_FAIL" ] && [ -s "$LAND_LOG" ]; then
             echo "fetch refused"
             exit 1
@@ -1718,6 +1729,47 @@ if has_jj then
         approve(root, home, log, id)
         jj(root, "git", "remote", "set-url", "origin", root .. "/missing-remote")
         refused(root, home, log, id, { "trunk cannot be compared", "the fetch from origin failed" })
+    end)
+
+    testing.test("land retries a refused ssh signature once", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        local count = support.tempdir() .. "/count.log"
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = "keep", FETCH_REFUSALS = "1", FETCH_COUNT = count }
+        )
+        testing.eq(code, 0, out)
+        testing.eq(fs.read(count), "1\n")
+        testing.ok(out:find("landed " .. id, 1, true), out)
+    end)
+
+    testing.test("land names the hardware key after a second refusal", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        local count = support.tempdir() .. "/count.log"
+        refused(
+            root,
+            home,
+            log,
+            id,
+            { "the fetch from origin failed", "Touch the hardware key", "run land again." },
+            { FETCH_REFUSALS = "5", FETCH_COUNT = count }
+        )
+        testing.eq(fs.read(count), "2\n")
+    end)
+
+    testing.test("land ends a hung fetch at a timeout", function()
+        local root, home, log, bare = jj_project()
+        local id = review_ready(root, home, log, bare)
+        refused(root, home, log, id, {
+            "the fetch from origin failed",
+            "The fetch ran past 1 seconds",
+            "touch it and run land again.",
+        }, { FETCH_HANG = "1", DEV_LAND_FETCH_SECONDS = "1" })
     end)
 
     testing.test("land refuses when the card's comments cannot be read", function()

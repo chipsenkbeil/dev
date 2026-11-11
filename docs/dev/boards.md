@@ -2328,6 +2328,10 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
 - The commit's parent is the current trunk, compared after
   `jj git fetch --remote <remote of record>`, with the remote taken from the
   forge settings (see `forge`). A failed fetch refuses.
+  Each fetch stops after 120 seconds, or after `DEV_LAND_FETCH_SECONDS`
+  when that is set, and one fetch that fails with `agent refused operation`
+  is retried once. A second refusal or a timeout refuses with a message that
+  tells the person to touch the hardware key and run `land` again.
 
 `land` rebases the change onto trunk itself while it holds the turn, so the
 last condition holds unless the rebase failed. The conditions on the reviews and

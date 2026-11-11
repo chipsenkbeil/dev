@@ -13,6 +13,10 @@ local SHAPE_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ if(description == "
 local COMMIT_TEMPLATE = 'commit_id ++ "\\n"'
 local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local COMMIT_CHARS = 12
+local FETCH_SECONDS = 120
+local FETCH_ATTEMPTS = 2
+local FETCH_TIMEOUT_CODE = 124
+local KEY_REFUSAL = "agent refused operation"
 
 ---Shorten a commit id for a message.
 ---@param commit string the full commit id
@@ -270,6 +274,38 @@ function M.checks_problem(comments, state, rows)
     end
 end
 
+---Fetch a remote, retrying once when the ssh agent refuses the signature.
+---
+---A fetch that runs past the limit returns code 124. After a timeout or a second refusal the
+---output is led by what the owner must do.
+---@param root string the project root, a jj project
+---@param remote string the remote to fetch
+---@return string output what the fetch wrote
+---@return integer code the exit status of the last attempt
+local function fetch(root, remote)
+    local argv = jj(root, "git", "fetch", "--remote", remote)
+    local seconds = tonumber(os.getenv("DEV_LAND_FETCH_SECONDS")) or FETCH_SECONDS
+    local out, code, refused
+    for _ = 1, FETCH_ATTEMPTS do
+        out, code = dev_os.capture_timed(argv, seconds, { merge = true })
+        refused = out:find(KEY_REFUSAL, 1, true) ~= nil
+        if code == 0 or not refused then
+            break
+        end
+    end
+    if code == FETCH_TIMEOUT_CODE then
+        local hint = "The fetch ran past %d seconds. The hardware key may be waiting for a touch, "
+            .. "so touch it and run land again.\n%s"
+        return string.format(hint, seconds, out), code
+    end
+    if code ~= 0 and refused then
+        local hint = "The ssh agent refused the signature twice. "
+            .. "Touch the hardware key and run land again.\n"
+        return hint .. out, code
+    end
+    return out, code
+end
+
 local function parent_on_trunk(root)
     local parents =
         dev_os.capture(jj(root, "log", "-r", "@-", "--no-graph", "-T", COMMIT_TEMPLATE), {
@@ -290,8 +326,7 @@ function M.trunk_problem(root)
     if not found then
         return "trunk cannot be compared: " .. why
     end
-    local out, code =
-        dev_os.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "stdout" })
+    local out, code = fetch(root, found.remote)
     if code ~= 0 then
         return string.format(
             "trunk cannot be compared, the fetch from %s failed: %s",
@@ -313,8 +348,7 @@ function M.rebase(root)
     if not found then
         return nil, "trunk cannot be compared: " .. why
     end
-    local out, code =
-        dev_os.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "stdout" })
+    local out, code = fetch(root, found.remote)
     if code ~= 0 then
         return nil,
             string.format(
@@ -573,8 +607,7 @@ function M.fetched_commit(root, revset)
     if not found then
         return nil
     end
-    local _, fetched =
-        dev_os.capture(jj(root, "git", "fetch", "--remote", found.remote), { stderr = "null" })
+    local _, fetched = fetch(root, found.remote)
     if fetched ~= 0 then
         return nil
     end
