@@ -499,7 +499,7 @@ if command -v jj >/dev/null 2>&1; then
         assert_contains "love2d init creates $f" "$out" "created: $f"
         assert_eq "love2d init writes $f" "$([ -f "$game/$f" ] && echo yes)" "yes"
     done
-    assert_not_contains "love2d init writes no pending README" "$out" ".dev/README.md"
+    assert_contains "love2d init seeds .dev/README.md" "$out" "created: .dev/README.md"
     assert_eq "love2d init writes the lint verb" "$([ -f "$game/.dev/lint.lua" ] && echo yes)" "yes"
     assert_eq "love2d init writes the shared lint library" "$([ -f "$game/.dev/lua/lintset.lua" ] && echo yes)" "yes"
     assert_eq "love2d init writes no shell verb" "$(find "$game/.dev" -name '*.sh' | wc -l | tr -d ' ')" "0"

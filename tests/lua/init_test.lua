@@ -236,3 +236,35 @@ testing.test("init leaves a project on bash verbs without Lua verbs", function()
     testing.ok(not fs.exists(root .. "/.dev/lua/lintset.lua"), out)
     fs.remove(root, { recursive = true })
 end)
+
+testing.test("init seeds .dev/README.md from the template", function()
+    if not dev_os.which("git") then
+        print("skip - git is not installed")
+        return
+    end
+    for _, kind in ipairs({ Kind.LUA, Kind.GODOT }) do
+        local root = project()
+        local out, code = support.dev(root, { "init", "--type", kind, "--no-gerrit" })
+        testing.eq(code, 0)
+        testing.ok(out:find("created: .dev/README.md", 1, true), out)
+        testing.eq(fs.read(root .. "/.dev/README.md"), fs.read(templates.readme_template()))
+        fs.remove(root, { recursive = true })
+    end
+end)
+
+testing.test("a second init keeps an edited .dev/README.md", function()
+    if not dev_os.which("git") then
+        print("skip - git is not installed")
+        return
+    end
+    local root = project()
+    local _, first = support.dev(root, { "init", "--type", "lua", "--no-gerrit" })
+    testing.eq(first, 0)
+    local edited = "# my own readme\n"
+    assert(fs.write(root .. "/.dev/README.md", edited))
+    local out, code = support.dev(root, { "init", "--type", "lua", "--no-gerrit" })
+    testing.eq(code, 0)
+    testing.ok(out:find("skipped: .dev/README.md exists", 1, true), out)
+    testing.eq(fs.read(root .. "/.dev/README.md"), edited)
+    fs.remove(root, { recursive = true })
+end)

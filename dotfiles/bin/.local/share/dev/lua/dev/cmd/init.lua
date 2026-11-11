@@ -285,6 +285,15 @@ local function init_style(run)
     end
 end
 
+local function init_readme(run)
+    local template = templates.readme_template()
+    if fs.is_file(template) then
+        put_text(run, ".dev/README.md", fs.read(template) or "")
+    else
+        skipped(run, ".dev/README.md: no template at " .. template)
+    end
+end
+
 local function init_ci(run)
     put_text(run, ".ci/jobs.lua", pipelines.jobs(run.kind == Kind.RUST))
 end
@@ -450,7 +459,7 @@ local function summarize(run)
     end
 end
 
----Seed a project with lint files, a style guide, a CI pipeline and remotes.
+---Seed a project with lint files, a style guide, a README, a CI pipeline and remotes.
 ---
 ---It takes `--type`, `--name`, `--dry-run` and `--no-gerrit`. Anything already in the
 ---project is skipped, and a dry run prints `would create:` lines and writes nothing.
@@ -485,6 +494,7 @@ function M.run(ctx, reg)
     init_vcs(run)
     init_lints(run)
     init_style(run)
+    init_readme(run)
     init_ci(run)
     init_remotes(run)
     init_board_hint(run)

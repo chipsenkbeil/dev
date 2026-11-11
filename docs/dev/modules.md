@@ -19,11 +19,15 @@ The luajit modules of `dev`, one per item.
 - `dev.cmd.init`: `init` with `--type`, `--name`, `--dry-run` and
   `--no-gerrit`. It prints the `would create:`, `created:` and `skipped:`
   lines and the summary, then the Gerrit project and remote, the Pomb board
-  hint and its note that Pomb refused the token.
+  hint and its note that Pomb refused the token. It seeds `.dev/README.md`
+  from the template for every project type and skips a file that exists.
 - `dev.cmd.sync`: the lint-template `sync` with `--check`, `--yes` and `-y`.
   It prints the `missing:` and `differs:` lines, `up to date` and the diffs,
   asks for confirmation through `dev.ui`, and ends with `synced` or `aborted`.
-  `--check` and `--yes` together are a usage error.
+  `--check` and `--yes` together are a usage error. It also rewrites the
+  head of `.dev/README.md` above `## Commands in this repo` for every project
+  type, in the same diff and confirm flow, and leaves a file with no marker
+  line alone.
 
 ### Board
 
@@ -83,7 +87,10 @@ card's bookmark.
   project's Lua verbs unwritten while any of its bash verbs exists, the
   rendering that keeps the project's text below the `lint.lua` and `deny.toml`
   markers, the `[workspace.lints]` block, the library-register attribute and
-  the guide part of `docs/STYLE.md`. `sync` and `init` both call it, and
+  the guide part of `docs/STYLE.md`. It also holds `render_readme`, which
+  keeps the project's text from the `## Commands in this repo` line of
+  `.dev/README.md` and takes everything above it from the template that
+  `readme_template` names. `sync` and `init` both call it, and
   `dev.pipelines` reads the `.ci/jobs.lua` texts `init` writes from
   `dotfiles/bin/.local/share/dev/init/`.
 - `dev.toml`: a small TOML reader. It takes tables and dotted tables, basic

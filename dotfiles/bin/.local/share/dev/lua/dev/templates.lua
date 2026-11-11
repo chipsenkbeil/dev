@@ -15,6 +15,9 @@ local LIB_DEST = ".dev/lua/lintset.lua"
 ---The marker line that ends the guide part of a project's `docs/STYLE.md`.
 M.STYLE_MARKER = "## This project"
 
+---The marker line that starts the project's own part of `.dev/README.md`.
+M.README_MARKER = "## Commands in this repo"
+
 ---The lint sets' directory below the dotfiles clone.
 M.BASE = BASE
 
@@ -575,6 +578,21 @@ function M.style_guide(kind)
     end
 end
 
+---Find the offset of the first line that is exactly the marker.
+---@param text string the file's text
+---@param marker string the marker line
+---@return integer? from where that line starts, nil when no line is the marker
+local function marker_offset(text, marker)
+    local from = 1
+    while from <= #text do
+        local stop = text:find("\n", from, true) or #text + 1
+        if text:sub(from, stop - 1) == marker then
+            return from
+        end
+        from = stop + 1
+    end
+end
+
 ---Join a guide and the project's own section of `docs/STYLE.md`.
 ---@param root string the project root
 ---@param guide string the guide's path
@@ -589,15 +607,39 @@ function M.render_style(root, guide)
     if not own then
         return nil, own_err
     end
-    local from = 1
-    while from <= #own do
-        local stop = own:find("\n", from, true) or #own + 1
-        if own:sub(from, stop - 1) == M.STYLE_MARKER then
-            return head .. "\n" .. own:sub(from)
-        end
-        from = stop + 1
+    local from = marker_offset(own, M.STYLE_MARKER)
+    if from then
+        return head .. "\n" .. own:sub(from)
     end
     return head .. "\n"
+end
+
+---Name the path of the `.dev/README.md` template.
+---@return string path the template's path below the dotfiles clone
+function M.readme_template()
+    return project.dotfiles_root() .. "/dotfiles/bin/.local/share/dev/init/README.md"
+end
+
+---Join the template above its marker and the project's own section of `.dev/README.md`.
+---@param root string the project root
+---@param template string the template's path
+---@return string? text the template's head, then the project's text from the marker to the end
+---@return string? message why a file could not be read
+function M.render_readme(root, template)
+    local text, err = read(template)
+    if not text then
+        return nil, err
+    end
+    local own, own_err = read(root .. "/.dev/README.md")
+    if not own then
+        return nil, own_err
+    end
+    local from = marker_offset(own, M.README_MARKER)
+    local top = marker_offset(text, M.README_MARKER)
+    if from and top then
+        return text:sub(1, top - 1) .. own:sub(from)
+    end
+    return text
 end
 
 return M

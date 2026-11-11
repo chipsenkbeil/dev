@@ -368,3 +368,40 @@ testing.test("a Rust project synced from scratch passes sync --check", function(
     testing.eq(out, "up to date\n")
     fs.remove(root, { recursive = true })
 end)
+
+local README_MARKER = templates.README_MARKER
+
+local function readme_fixture(own)
+    local root = support.sandbox({}, {})
+    local template = root .. "/template.md"
+    local text = "# Dev\n\nthe template head\n\n" .. README_MARKER .. "\n\nReplace this.\n"
+    assert(fs.write(template, text))
+    if own then
+        assert(fs.write(root .. "/.dev/README.md", own))
+    end
+    return root, template
+end
+
+testing.test("render_readme keeps the project section byte for byte", function()
+    local section = README_MARKER
+        .. "\n\n`dev go  ` runs\ttabs\r\n\n\n  indented\n\n\nno final newline"
+    local root, template = readme_fixture("# old head\n\nstale\n\n" .. section)
+    local text = assert(templates.render_readme(root, template))
+    testing.eq(text, "# Dev\n\nthe template head\n\n" .. section)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("render_readme gives a file with no marker the template whole", function()
+    local root, template = readme_fixture("# my own notes\n")
+    local text = assert(templates.render_readme(root, template))
+    testing.eq(text, assert(fs.read(template)))
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("render_readme reports a README it cannot read", function()
+    local root, template = readme_fixture(nil)
+    local text, err = templates.render_readme(root, template)
+    testing.eq(text, nil)
+    testing.ok(err:find("cannot read", 1, true), err)
+    fs.remove(root, { recursive = true })
+end)
