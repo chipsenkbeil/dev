@@ -2642,208 +2642,448 @@ Writes and queueing:
 
 ### The other subcommands
 
-- `ship [--rev REV] [-- CMD...]`: Ships the Release batch. It runs the
-  release command after `--` once, for example `dev board ship -- dev release --batch 12
-  --summary TEXT`, or each row of the `checks` list under `[board.release]`
-  once when no command is given, as plain commands from the project root.
-  With neither it exits 2 and names `[board.release]`. When every command
-  passes, `ship` moves each card in Release to Done when all its outcomes
-  are ticked and its landed commit is an ancestor of REV, and writes a `done`
-  note that names REV and its commit (`Shipped in trunk, commit <12
-  characters>.`). REV is a jj revset that names one commit and defaults to
-  trunk. The landed commit comes from the card's newest land note, in either
-  form: `Landed commit <commit> (change <id>) on trunk` from `dev board land`,
-  or `landed <commit> on <remote>/main` from the land verb Pomb ships. `ship`
-  lists each card left in Release with its reason: an outcome is not ticked,
-  the card has no readable landed commit, or its landed commit is not in
-  REV. When REV cannot be read, `ship` runs nothing and moves no card. When a
-  command fails or times out, `ship` stops at it, moves no card, prints the
-  command and its output tail, and exits 1. A card whose note or move fails
-  stays in Release, is listed, and makes `ship` exit 1. It is never queued.
-- `size CARD S`: Sets the card's colour: `1` yellow, `2` green, `3` blue, `3+`
-  red, `unsized` white (`PATCH /api/tasks/{id}` with `color_id`, sending the
-  claim's fence when this machine holds one) and prints `sized <id prefix> <S>`.
-  The colour id comes from the palette (`/colors`) by its `value`, never its
-  label. Any other size word is exit 2 naming the five. A board without the
-  colour is `board unavailable: the board has no <colour> colour` (exit 1).
-- `note CARD [--board B] [--kind K] [--as ROLE] TEXT`: Adds a comment and prints
-  `noted <id prefix>`. The words after the card, minus the options, are
-  joined with spaces, and any other word, one starting with `-` included, is
-  text. `--kind` is `decision`, `blocked`, `status` or `done` in any case, sent
-  lowercase as the comment's `kind` (anything else is exit 2, `question`
-  included, which names `dev board ask`, and no `--kind` posts kind `agent`).
-  `--as ROLE` is free text, trimmed, sent as the comment's `author` label (Pomb
-  allows 80 characters, and an empty, over-long or control-character value is
-  exit 2, and none leaves Pomb's default). A local board stores both on the
-  comment. `show` and `notes` print them, a queued note keeps both options in
-  its arguments, and `--edit` replaces only the body, so the kind and the label
-  stay. `--board B`, right after `CARD`, comments on the card on the Pomb board
-  named `B` from any repo, looked up as `add --board` looks it up, and a local
-  board refuses it (exit 1). It takes no `--edit` or `--delete` (exit 2).
-- `note CARD --edit COMMENT TEXT`, `note CARD --delete COMMENT`: Replaces the
-  body of one of the agent's own comments
-  (`PATCH /api/tasks/{id}/comments/{comment_id}`) or deletes it (`DELETE`), and
-  prints `edited` or `deleted` with the card's and the comment's id prefixes.
-  `COMMENT` is an id prefix from `notes`, 8 hex characters or more, unique on
-  the card, else exit 1. Pomb lets a work or provision token change only a
-  comment that same token wrote, and answers 403 for any other and for one
-  written before Pomb 0.5.7, which dev prints as
-  `that comment is not yours to change` (exit 1). A missing text, a missing
-  comment or an extra word is exit 2.
-- `move CARD COLUMN [--max-size N]`: Moves the card to the top of the column
-  and prints `moved <id prefix> to <column>`. A move into In Progress that takes the claim
-  adds a blank line and the card as `show CARD` prints it, with the same
-  stderr warning when that read fails. When the card has a claim taken by
-  `take`, the move sends its fence as `If-Owner-Fence` and, for any column but
-  In Progress or Blocked, stops the keep-alive loop, forgets the claim and, once
-  the move has succeeded, releases it on the backend with its fence (a refused
-  release prints
-  `dev: moved, but the claim was not released: <reason>` on stderr and the move
-  still succeeds). A move into Ready of a card that is white, has no colour or
-  is red (more than 3 Pomodori) is refused before the backend is called:
+### ship
+
+`ship [--rev REV] [-- CMD...]` ships the Release batch. It runs the
+release commands, then moves each shipped card from Release to Done.
+
+The commands:
+
+- The command after `--` runs once, for example
+  `ship -- dev release --batch 12 --summary TEXT`.
+- With no command, each row of the `checks` list under `[board.release]` runs
+  once.
+- Every command is a plain command run from the project root.
+- With neither, `ship` exits 2 and names `[board.release]`.
+
+The revision:
+
+- REV is a jj revset that names one commit, and it defaults to trunk.
+- When REV cannot be read, `ship` runs nothing and moves no card.
+
+The move:
+
+- It happens only when every command passes.
+- A card moves to Done when all its outcomes are ticked and its landed commit
+  is an ancestor of REV.
+- Each moved card gets a `done` note that names REV and its commit
+  (`Shipped in trunk, commit <12 characters>.`).
+- The landed commit comes from the card's newest land note, in either form:
+  `Landed commit <commit> (change <id>) on trunk` from `dev board land`, or
+  `landed <commit> on <remote>/main` from the land verb Pomb ships.
+
+The cards left in Release:
+
+- `ship` lists each one with its reason: an outcome is not ticked, the card has
+  no readable landed commit, or its landed commit is not in REV.
+- A card whose move fails stays in Release, is listed, and makes `ship` exit
+  1.
+- A card whose move succeeds but whose note fails stays in Done with no `done`
+  note. `ship` lists it under `moved to Done with no done note, write it by
+  hand:` and exits 1.
+- Neither write is queued.
+
+A failing command:
+
+- When a command fails or times out, `ship` stops at it and moves no card.
+- It prints the command and its output tail, and exits 1.
+
+### size
+
+`dev board size CARD S` sets the card's colour and prints
+`sized <id prefix> <S>`.
+
+The sizes:
+
+- `1` is yellow, `2` is green, `3` is blue, `3+` is red and `unsized` is white.
+- Any other size word is exit 2 naming the five.
+- `unsized` on a card outside Icebox is exit 1 with
+  `<id prefix> is outside Icebox and keeps a size; move it to Icebox first`.
+
+The write:
+
+- It is `PATCH /api/tasks/{id}` with `color_id`, sending the claim's fence when
+  this machine holds one.
+- The colour id comes from the palette (`/colors`) by its `value`, never its
+  label.
+- A board without the colour is `board unavailable: the board has no <colour>
+  colour` (exit 1).
+
+### note
+
+`dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT` adds a comment
+and prints `noted <id prefix>`.
+
+The text:
+
+- The words after the card, minus the options, are joined with spaces.
+- Any other word is text, one starting with `-` included.
+
+The options:
+
+- `--kind` is `decision`, `blocked`, `status` or `done` in any case, sent
+  lowercase as the comment's `kind`. With no `--kind` the comment has kind
+  `agent`.
+- Any other kind is exit 2. `question` is refused too, and the message names
+  `dev board ask`.
+- `--as ROLE` is free text, trimmed, sent as the comment's `author` label. With
+  no `--as`, Pomb's default stays.
+- An empty, over-long or control-character `--as` is exit 2. Pomb allows 80
+  characters.
+- `--board B`, right after `CARD`, comments on the card on the Pomb board named
+  `B` from any repo, looked up as `add --board` looks it up.
+- A local board refuses `--board` (exit 1), and it takes no `--edit` or
+  `--delete` (exit 2).
+
+Where it shows:
+
+- A local board stores the kind and the label on the comment.
+- `show` and `notes` print them.
+- A queued note keeps both options in its arguments.
+- `--edit` replaces only the body, so the kind and the label stay.
+
+### note --edit and note --delete
+
+`dev board note CARD --edit COMMENT TEXT` replaces the body of one of the
+agent's own comments. `dev board note CARD --delete COMMENT` deletes it. Each
+prints `edited` or `deleted` with the card's and the comment's id prefixes.
+
+The calls:
+
+- The edit is `PATCH /api/tasks/{id}/comments/{comment_id}` and the delete is
+  `DELETE` on the same path.
+- `COMMENT` is an id prefix from `notes`, 8 hex characters or more and unique
+  on the card, else exit 1.
+- A missing text, a missing comment or an extra word is exit 2.
+
+Whose comment:
+
+- Pomb lets a work or provision token change only a comment that same token
+  wrote.
+- It answers 403 for any other comment and for one written before Pomb 0.5.7.
+- dev prints that as `that comment is not yours to change` (exit 1).
+
+### move
+
+`dev board move CARD COLUMN [--max-size N]` moves the card to the top of the
+column and prints `moved <id prefix> to <column>`.
+
+The output:
+
+- A move into In Progress that takes the claim adds a blank line and the card
+  as `show CARD` prints it.
+- When that read fails, the same stderr warning as `take` appears.
+
+The claim:
+
+- When the card has a claim taken by `take`, the move sends its fence as
+  `If-Owner-Fence`.
+- For any column but In Progress or Blocked, the move also stops the keep-alive
+  loop and forgets the claim. Once the move has succeeded, it releases the
+  claim on the backend with its fence.
+- A refused release prints `dev: moved, but the claim was not released:
+  <reason>` on stderr, and the move still succeeds.
+- A move into In Progress of a card nobody holds, on a machine with no claim on
+  it, takes the claim first as `take` does, with `DEV_AGENT` as the name. An
+  epic is included.
+- A name that is not `repo/role[/card]` is exit 2.
+- The move releases that claim again when it fails.
+
+The refusals run in this order:
+
+- When the column is Review, Verify, Release or not a column at all, the stage
+  check runs before the card is read. A board that still has an In Review
+  column and lacks a stage column fails with
+  `the board has an In Review column and no <name> column, so run dev board init to move the board to the stage columns`
+  (exit 1).
+- After the card is read, `move` refuses a card labelled `needs:human` that
+  moves to a different column.
+- The Ready, planning, Done and epic rules follow, each described below.
+- A card leaving In Progress for Review, Ready or Blocked with a claimant and
+  no note from that claimant after the claim is refused with
+  `<id prefix> has no note from its claimant NAME since the claim, so it cannot leave In Progress; note what you built, tried and learned first: dev board note <id prefix> TEXT`
+  (exit 1).
+- None of these refusals is queued.
+
+A move into Ready:
+
+- A card that is white, has no colour or is red (more than 3 Pomodori) is
+  refused before the backend is called, on both backends, so a card is sized in
+  planning and red never reaches Ready.
+- The refusal reads
   `<id prefix> has no size and cannot enter Ready; size it with dev board size CARD 1, 2 or 3`,
   or for red
   `<id prefix> is red, more than 3 Pomodori, so split it and cannot enter Ready; ...`
-  (exit 1), on both backends, so a card is sized in planning and red never
-  reaches Ready. A move into any other column but Icebox or Ready of a card
-  with no size, a description that lacks a v2 heading or text under Problem, or
-  no outcome is refused before the backend is called:
-  `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it with dev board size, edit and outcome`
-  (exit 1, on both backends, `dev.board.unplanned`). A `discard` is refused the
-  same way for a missing size or heading, with no outcome needed, except an
-  unplanned Icebox card given a `--reason`. A move into
-  Ready of a card whose description lacks one of the three v2 headings or text under one,
-  or that has neither 3 to 7 outcomes (subtasks) nor, as the v1 fallback while
-  boards are converted, a `- [ ]` or `- [x]` item under `## Done when`, is
-  refused the same way, before the backend is called:
+  (exit 1).
+- A card whose description lacks one of the three v2 headings or text under
+  one, or that has neither 3 to 7 outcomes (subtasks) nor a v1 checklist item,
+  is refused the same way, before the backend is called.
+- The v1 fallback is a `- [ ]` or `- [x]` item under `## Done when`, and it
+  holds while boards are converted.
+- The refusal reads
   `<id prefix> is not in card format v2 and cannot enter Ready; it lacks <what>; add outcomes with dev board outcome and fix the description with dev board edit, where a v1 Done when checklist also counts`
   (exit 1, on both backends, size checked first).
-  `dev.board.missing(description, outcomes)` lists what is missing. A move into
-  Ready of a card with no checks row is refused after those, before the backend
-  is called:
+- `dev.board.missing(description, outcomes)` lists what is missing.
+- A card with no checks row is refused after those, before the backend is
+  called.
+- That refusal reads
   `<id prefix> has no checks row and cannot enter Ready; give it one with dev board checks CARD CMD`,
   or on a Pomb board with no checks field
   `the board has no checks field, so run dev board init to add it` (exit 1, on
-  both backends, which `checks_field` tells apart; a local board always has it).
-  A card with children is an epic (`kind` epic or `children_total` on Pomb,
-  `parent` links on a local board) and enters Ready under the same checks as any
-  card. `move` refuses any card
-  labelled `needs:human` first, whatever the column. A move into any other
-  column, Icebox included, is never checked for the Ready rules. A move into In
-  Progress of a card nobody holds and that this machine holds no claim on takes
-  the claim first, as `take` does with `DEV_AGENT` as the name (a name that
-  is not `repo/role[/card]` is exit 2), an epic included, and releases it again when the move fails.
-  A move into Done (`move CARD done`) is refused once the card is read, before
-  the move is sent, while the card has an unticked outcome:
+  both backends, which `checks_field` tells apart).
+- A local board always has the checks field.
+- A card with children is an epic (`kind` epic or `children_total` on Pomb,
+  `parent` links on a local board). It enters Ready under the same checks as
+  any card.
+- A move into any other column, Icebox included, is never checked for the Ready
+  rules.
+
+A move into any column but Icebox or Ready:
+
+- A card with no size, a description that lacks a v2 heading or text under
+  Problem, or no outcome is refused before the backend is called.
+- The refusal reads
+  `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it with dev board size, edit and outcome`
+  (exit 1, on both backends, `dev.board.unplanned`).
+- A `discard` is refused the same way for a missing size or heading, with no
+  outcome needed, except an unplanned Icebox card given a `--reason`.
+
+A move into Done (`move CARD done`):
+
+- It is refused once the card is read, before the move is sent, while the card
+  has an unticked outcome.
+- The refusal reads
   `<id prefix> cannot move to Done: N of M outcomes are unticked (1. text, 2. text); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it`
   (exit 1, on both backends, each open outcome numbered as `show` numbers it).
-  Outcomes that Pomb sent in a form dev cannot read (`subtasks` that is not a
-  list, or an entry without a string name) refuse the move the same way:
+- Outcomes that Pomb sent in a form dev cannot read refuse the move the same
+  way. That is a `subtasks` that is not a list, or an entry without a string
+  name.
+- That refusal reads
   `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked`.
-  A card with no outcomes, or with all of them ticked, moves as before.
-  An epic with an open child is refused a move into a column whose settings
-  make it WIP-limited or done, never one picked by its name:
+- A card with no outcomes, or with all of them ticked, moves as before.
+- A move to Done that Pomb could not answer for is not queued.
+
+An epic with an open child:
+
+- It is refused a move into a column whose settings make it WIP-limited or
+  done, never one picked by its name.
+- The refusal reads
   `<id prefix> is an epic and cannot enter COLUMN, a done column: N of M children are open`
-  (or `a WIP-limited column`; exit 1, on both backends). `Backend:columns`
-  reports each column's `is_done` and `wip_limit`, and a local column has no
-  limit, so only `is_done` applies there. The refusal reads the epic's counts
-  from the card, so a plain card costs no extra request. When the counts are
-  stale and Pomb refuses the move itself (`epic_has_open_children`, a `409`),
-  dev prints Pomb's own text. Pomb reopens an epic that moves out of a done
-  column, and a local epic is open again as soon as its column is not done,
-  because a local board stores no closed flag. `discard` skips the rule, and
-  none of these refusals is queued, nor is a move to Done that Pomb could not
-  answer for.
-  `add` cannot create a card with children and `discard` asks for no outcomes,
+  (or `a WIP-limited column`, exit 1, on both backends).
+- `Backend:columns` reports each column's `is_done` and `wip_limit`. A local
+  column has no limit, so only `is_done` applies there.
+- The refusal reads the epic's counts from the card, so a plain card costs no
+  extra request.
+- When the counts are stale and Pomb refuses the move itself
+  (`epic_has_open_children`, a `409`), dev prints Pomb's own text.
+- Pomb reopens an epic that moves out of a done column. A local epic is open
+  again as soon as its column is not done, and a local board stores no closed
+  flag.
+- `discard` skips the rule.
+- `add` cannot create a card with children and `discard` asks for no outcomes,
   so neither reads them.
-- `discard CARD [--reason TEXT]`: Drops a card in three steps, in order: with
-  `--reason`, a decision note with TEXT (`note --kind decision`), then the label
-  `discarded` (`label`), then the move to Done (`discard_move`, the move without
-  the outcome check), printing
-  `discarded <id prefix>`. A card labelled `needs:human` is refused before any
-  step, as `move` refuses it, so nothing is posted. A card lookup that Pomb
-  cannot answer is not queued, since the steps need the card's id. Each step is
-  the command of the same name, so its checks and its claim handling apply,
-  except the move, which skips the outcome check (a dropped card is not done).
-  When Pomb cannot take a step the steps left are queued, in order, under those
-  names, so a reason is never posted twice. A blank `--reason` is exit 2. The
-  card is kept, never deleted. An unplanned Icebox card closes when it has a
-  `--reason`, since the planning check is skipped there. An unplanned card in
-  any other column is refused (exit 1), and so is an Icebox card with no
-  reason.
-- `run [--orders TEXT | --end]`: Keeps a session's run on the board as one card
-  labelled `run`, named `run <session>`, where the session is `DEV_AGENT` else
-  `dev@<host>:<session>`. `--orders TEXT` adds the card in In Progress,
-  size 3, claimed under the session name, with the orders quoted line by line in
-  its Change, three outcomes and a `dev board lint` checks row, and prints
-  `started <id prefix>` then the card as `show` does; orders over 250 words,
-  counting each line's quote mark, are exit 2, and a session that already has an open run card is exit 1. With no
-  flag it prints the session's open run card (claiming it again when the claim
-  lapsed), the cards the session holds and the top of `next`, and with no open
-  run card it is exit 1 with `start one with dev board run --orders TEXT`.
-  `--end` closes the card the way `discard` does, with the note `the run
-  ended`, and prints `ended <id prefix>`. Two sessions have two cards, and
-  `next` never returns a run card, and `lint` does not ask a run card for a
-  claimant, since the claim lapses after 150 minutes. Without `DEV_AGENT` or
-  `CLAUDE_SESSION_ID` the session has no stable name, so `run` is exit 2. In a
-  project with no `[board]` section, `run --orders` makes the board as
-  `init --name <directory>` does when the project is private (no origin, or an
-  origin on github.com that `gh repo view` says is private) and stops with
-  exit 1 otherwise, to leave a public project's board to the owner.
-- `take CARD [--as NAME] [--max-size N]`: Claims the card
-  (`POST /api/tasks/{id}/owner` with `name` NAME, else `DEV_AGENT`, else
-  `dev@<host>:<CLAUDE_SESSION_ID or the pid of dev's caller>`; NAME is one word
-  of letters, digits and `.`, `-`, `_` and `/` of at most 200 characters, else
-  exit 2, and `ttl_seconds` 900. When this machine already holds a fence, dev
-  renews it through `/owner/renew` first and grabs again when Pomb answers 409)
-  and starts the keep-alive loop. On a Pomb board dev refuses an epic with an
-  open child, as the grab route does not. Prints
-  `took <id prefix>, fence N, renewing every 5m for up to Mm` (a local board
-  needs no loop and prints `took <id prefix>, fence N, held for Mm`), a blank
-  line and the card as `show CARD` prints it. When that read fails,
-  `dev: took <id prefix>, but <reason>` goes to stderr and the claim stays. A
-  card another agent owns (`owner_held`) is `board unavailable: pomb answered
-  409: task owned by NAME until TIME`, exit 1, and no loop starts. The first claim by a name also writes a
-  status note `dev-claim: by=NAME`, so the name outlives the claim, and `review` reads
-  those notes. If that note cannot be written the claim is released and `take`
-  exits 1. `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
-  With `--max-size N` or, when the flag is absent, `DEV_MAX_SIZE` set to 1, 2
-  or 3 (else exit 2), `take` and `move CARD progress` refuse a card bigger
-  than that many Pomodori with `<id prefix> is <size>, above this runner's limit of N Pomodori
-  (DEV_MAX_SIZE)` (exit 1). `run` takes its own run card and is not held
-  to the limit, and the `next:` line of `run` skips a card above it.
-  `take`, `move CARD COLUMN` and `move CARD progress` also refuse a card
-  when a limit Pomb holds forbids it, to land what passed before it starts a
-  new card. dev reads both kinds of limit from Pomb with a fresh
-  `GET /api/boards/ID`: a column's own `wip_limit` and the `limit_groups`
-  that span adjacent columns, such as In Progress, Review and Verify. A
-  column limit refuses when the target holds that many other cards and the
-  card is not in it, and the refusal reads `COLUMN holds N cards (ID, ID), at
-  its limit of L. Land one first.` A column whose `limit_unit` is `hours` is
-  skipped, and Pomb enforces that limit itself. A missing `limit_unit` counts
-  as `count`. A group limit refuses when the target is in the group, the card's
-  column is outside it and the group's columns hold that many other cards,
-  whoever claimed them. The refusal reads `N cards are
-  in flight in In Progress, Review and Verify (ID, ID, ID), at the limit of
-  L. Land one first.` (exit 1). Cards in other columns do not count, and
-  neither do epics or the card being moved. A board with no limits set in
-  Pomb is uncapped, and so is a local board. A move to Done is not checked here.
-  A card already in In Progress, or whose claim this machine holds, is not
-  checked for In Progress, and a take of a card another name holds gets the
-  claim refusal. Cards already in flight are never moved. The count and the
-  claim are two steps, and under parallel commands the limit is advisory and
-  can be overrun. Pomb enforces its limits too: a move it refuses with 409
-  `wip_limit_reached` prints `Pomb refused the move: MESSAGE` (exit 1), a
-  `move CARD progress` that had just taken the claim gives it back, and dev
-  never sends `force`, so its own land move into Release fails the same way
-  and the card stays put. `next` stays read-only and shows the card anyway.
-  The turn hold is 1800 seconds by default and 3600 at most (see `turn`).
-- `release CARD`: Stops the loop, forgets the claim and posts `/owner/release`
-  with the owner's name as `name` and the fence as `If-Owner-Fence`. It reads
-  the card first and skips the post when no owner lease is live. Prints
-  `released <id prefix>, fence N`. A card with no claim taken by
-  `take` is exit 1.
-- `sync`: Replays the changes queued while Pomb was unreachable, as below.
+
+### discard
+
+`dev board discard CARD [--reason TEXT]` drops a card and prints
+`discarded <id prefix>`. The card is kept, never deleted.
+
+The steps, in order:
+
+1. With `--reason`, a decision note with TEXT (`note --kind decision`).
+2. The label `discarded` (`label`).
+3. The move to Done (`discard_move`, the move without the outcome check).
+
+The rules:
+
+- Each step is the command of the same name, so its checks and its claim
+  handling apply. The move skips the outcome check, and a dropped card is not
+  done.
+- A card labelled `needs:human` is refused before any step, as `move` refuses
+  it, so nothing is posted.
+- A blank `--reason` is exit 2.
+- A card lookup that Pomb cannot answer is not queued, and the steps need the
+  card's id.
+- When Pomb cannot take a step, the steps left are queued in order under those
+  names, so a reason is never posted twice.
+
+The planning check:
+
+- An unplanned Icebox card closes when it has a `--reason`, and the planning
+  check is skipped there.
+- An unplanned card in any other column is refused (exit 1).
+- An Icebox card with no reason is refused too.
+
+### run
+
+`dev board run [--orders TEXT | --end]` keeps a session's run on the board as
+one card labelled `run`, named `run <session>`. The session is `DEV_AGENT`, else
+`dev@<host>:<session>`.
+
+The session name:
+
+- Without `DEV_AGENT` or `CLAUDE_SESSION_ID` the session has no stable name, so
+  `run` is exit 2.
+- Two sessions have two cards.
+
+With `--orders TEXT`:
+
+- It adds the card in In Progress, size 3, claimed under the session name.
+- The card holds the orders quoted line by line in its Change, three outcomes
+  and a `dev board lint` checks row.
+- It prints `started <id prefix>`, then the card as `show` does.
+- Orders over 250 words, counting each line's quote mark, are exit 2.
+- A session that already has an open run card is exit 1.
+- In a project with no `[board]` section, it makes the board as
+  `init --name <directory>` does when the project is private. That means no
+  origin, or an origin on github.com that `gh repo view` says is private.
+- Otherwise it stops with exit 1, to leave a public project's board to the
+  owner.
+
+With no flag:
+
+- It prints the session's open run card (claiming it again when the claim
+  lapsed), the cards the session holds and the top of `next`.
+- With no open run card it is exit 1 with
+  `start one with dev board run --orders TEXT`.
+
+With `--end`:
+
+- It closes the card the way `discard` does, with the note `the run ended`.
+- It prints `ended <id prefix>`.
+
+Elsewhere:
+
+- `next` never returns a run card.
+- `lint` does not ask a run card for a claimant, and the claim lapses after
+  150 minutes.
+
+### take
+
+`dev board take CARD [--as NAME] [--max-size N]` claims the card and starts the
+keep-alive loop.
+
+The claim:
+
+- It is `POST /api/tasks/{id}/owner` with `name` NAME, else `DEV_AGENT`, else
+  `dev@<host>:<CLAUDE_SESSION_ID or the pid of dev's caller>`, and
+  `ttl_seconds` 900.
+- NAME is one word of letters, digits and `.`, `-`, `_` and `/`, at most 200
+  characters, else exit 2.
+- When this machine already holds a fence, dev renews it through
+  `/owner/renew` first and grabs again when Pomb answers 409.
+- On a Pomb board dev refuses an epic with an open child, which the grab route
+  does not.
+
+The output:
+
+- A Pomb board prints `took <id prefix>, fence N, renewing every 5m for up to
+  Mm`.
+- A local board needs no loop and prints `took <id prefix>, fence N, held for
+  Mm`.
+- A blank line and the card as `show CARD` prints it follow.
+- When that read fails, `dev: took <id prefix>, but <reason>` goes to stderr
+  and the claim stays.
+
+A card another agent owns:
+
+- It is `owner_held`, printed as `board unavailable: pomb answered 409: task
+  owned by NAME until TIME` (exit 1).
+- No loop starts.
+
+The claim note:
+
+- The first claim by a name also writes a status note `dev-claim: by=NAME`, so
+  the name outlives the claim. `review` reads those notes.
+- If that note cannot be written, the claim is released and `take` exits 1.
+- `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
+
+The size limit:
+
+- `--max-size N`, or when the flag is absent `DEV_MAX_SIZE`, is 1, 2 or 3,
+  else exit 2.
+- With it set, `take` and `move CARD progress` refuse a card bigger than that
+  many Pomodori with
+  `<id prefix> is <size>, above this runner's limit of N Pomodori (DEV_MAX_SIZE)`
+  (exit 1).
+- `run` takes its own run card and is not held to the limit.
+- The `next:` line of `run` skips a card above it.
+
+The limits Pomb holds:
+
+- `take`, `move CARD COLUMN` and `move CARD progress` also refuse a card when a
+  limit Pomb holds forbids it, to land what passed before a new card starts.
+- dev reads both kinds of limit from Pomb with a fresh `GET /api/boards/ID`.
+  They are a column's own `wip_limit` and the `limit_groups` that span adjacent
+  columns, such as In Progress, Review and Verify.
+- A board with no limits set in Pomb is uncapped, and so is a local board.
+- A move to Done is not checked here.
+- A card already in In Progress, or whose claim this machine holds, is not
+  checked for In Progress.
+- A take of a card another name holds gets the claim refusal.
+- Cards already in flight are never moved.
+
+A column limit:
+
+- It refuses when the target holds that many other cards and the card is not in
+  it.
+- The refusal reads `COLUMN holds N cards (ID, ID), at its limit of L. Land one
+  first.`
+- A column whose `limit_unit` is `hours` is skipped, and Pomb enforces that
+  limit itself.
+- A missing `limit_unit` counts as `count`.
+
+A group limit:
+
+- It refuses when the target is in the group, the card's column is outside it
+  and the group's columns hold that many other cards, whoever claimed them.
+- The refusal reads `N cards are in flight in In Progress, Review and Verify
+  (ID, ID, ID), at the limit of L. Land one first.` (exit 1).
+- Cards in other columns do not count, and neither do epics or the card being
+  moved.
+
+Pomb's own limits:
+
+- The count and the claim are two steps, so under parallel commands the limit
+  is advisory and can be overrun.
+- Pomb enforces its limits too. A move it refuses with 409 `wip_limit_reached`
+  prints `Pomb refused the move: MESSAGE` (exit 1).
+- A `move CARD progress` that had just taken the claim gives it back.
+- dev never sends `force`, so its own land move into Release fails the same way
+  and the card stays put.
+- `next` stays read-only and shows the card anyway.
+- The turn hold is 1800 seconds by default and 3600 at most (see `turn`).
+
+### release
+
+`dev board release CARD` gives up the card's claim and prints
+`released <id prefix>, fence N`.
+
+The steps:
+
+- A card with no claim taken by `take` is exit 1.
+- It reads the card first and skips the post when no owner lease is live.
+- It posts `/owner/release` with the owner's name as `name` and the fence as
+  `If-Owner-Fence`.
+- Only once the release succeeds does it stop the loop and forget the claim.
+  When the backend refuses, the loop keeps running and the claim stays.
+
+### sync
+
+`dev board sync` replays the changes queued while Pomb was unreachable, as
+described under the queue below. It is the one subcommand outside the board's
+own commands.
+
+On a Pomb board:
+
+- It prints `synced <sub> <first argument>` per change.
+- It prints `dropped <sub> <first argument>: <reason>` for one Pomb refused.
+- It ends with `synced`, or `nothing queued` for an empty or missing queue.
+- When Pomb is still unreachable, it prints `queued: N` and exits 1.
+
+On a local board:
+
+- It prints `dev: a local board has nothing to sync` (exit 1).
 
 `add` (its `--description`), `note` (a new or `--edit`ed text) and `edit` write
 a warning to standard error, prefixed `warning: `, and still write (exit 0,
@@ -2958,13 +3198,6 @@ with a random fraction, until a reply comes (a reply starts the pause over). A
 `wait` is not in the queue rules, and a reply with no matching event loops
 again. `tests/lua/board_test.lua` covers it with a fake backend and stub
 `nap`, `random` and `notice` options.
-
-`dev board sync` is the one subcommand outside the board's own commands. On a
-Pomb board it replays the queue below and prints `synced <sub> <first argument>`
-per change, `dropped <sub> <first argument>: <reason>` for one Pomb refused, and
-`synced` at the end (`nothing queued` for an empty or missing queue); it exits 1
-and prints `queued: N` when Pomb is still unreachable, and on a local board it
-is `dev: a local board has nothing to sync` (exit 1).
 
 The `local` backend is `dev.board.localboard`, one JSON file with `name`,
 `columns`, `colors` and `cards` (each card with its `column_id`, `color_id`,
