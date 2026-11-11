@@ -256,6 +256,9 @@ else
     printf 'pub fn run() {\n    // First line\n    // second line\n    flush();\n\n    // 1. First case\n    // 2. Second case\n    // 3. Third case\n    flush();\n}\n\n/// A doc\n/// that runs\n/// long enough\npub fn other() {}\n' >"$rust/src/runs.rs"
     out="$(style_lint "$rust" "$full_path")"
     assert_not_contains "two // lines, a numbered list and a doc comment run pass" "$out" "src/runs.rs"
+    printf 'pub fn run() {\n    // First line\n    // second line\n    //\n    // third line\n    flush();\n}\n' >"$rust/src/runs.rs"
+    out="$(style_lint "$rust" "$full_path")"
+    assert_not_contains "a bare // line ends a run" "$out" "src/runs.rs"
     rm "$rust/src/runs.rs"
 
     printf 'pub struct Name;\n\nimpl Name {\n    pub fn get_value(&self) -> u8 {\n        0\n    }\n\n    pub(crate) async fn get_other(&self) {}\n}\n' >"$rust/src/getter.rs"
@@ -375,6 +378,9 @@ else
     printf 'local a = 1\n\n-- One\n-- Two\nlocal b = 2\n\n--- Doc one\n--- Doc two\n--- Doc three\nlocal c = 3\n' >"$lua/src/runs.lua"
     out="$(style_lint "$lua" "$full_path")"
     assert_not_contains "two lua comment lines and a doc comment run pass" "$out" "src/runs.lua"
+    printf 'local a = 1\n\n-- One\n-- Two\n--\n-- Three\nlocal b = 2\n' >"$lua/src/runs.lua"
+    out="$(style_lint "$lua" "$full_path")"
+    assert_not_contains "a bare lua comment line ends a run" "$out" "src/runs.lua"
     rm "$lua/src/runs.lua"
 
     printf '#!/usr/bin/env bash\ncase b in\na)\n    echo a\n    ;;\n# The b arm\nb)\n    echo b\n    ;;\nesac\n' >"$lua/arms.sh"
