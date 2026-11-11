@@ -10,6 +10,7 @@ local json = require("dev.json")
 local land = require("dev.board.land")
 local localboard = require("dev.board.localboard")
 local review = require("dev.board.review")
+local store = require("dev.board.store")
 local support = require("support")
 local turn = require("dev.board.turn")
 local vcs = require("dev.vcs")
@@ -1073,13 +1074,32 @@ if has_jj then
         must(dev(root, home, log, { "board", "move", id, "verify" }))
         approve(root, home, log, id)
         local held = hold_turn(home, "other", "cccc3333")
-        local PAST_DEADLINE_SECONDS = 4
-        local started = os.time()
-        local out, code = dev(root, home, log, { "board", "land", id, "--wait", "1" })
-        local elapsed = os.time() - started
-        testing.eq(code, 1, out)
-        testing.ok(out:find("held by other since", 1, true), out)
-        testing.ok(elapsed < PAST_DEADLINE_SECONDS, "the wait slept past its deadline: " .. elapsed)
+        local backend, restore = board_at(home)
+        backend.root = root
+        local nap, now = dev_os.nap, store.now
+        local clock = now()
+        local naps = {}
+        store.now = function()
+            return clock
+        end
+        dev_os.nap = function(secs)
+            naps[#naps + 1] = secs
+            clock = clock + math.ceil(secs)
+        end
+        local previous = os.getenv("DEV_AGENT") or ""
+        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
+        local ok, result = pcall(cmd_board.run, "land", { id, "--wait", "1" }, backend)
+        ffi.C.setenv("DEV_AGENT", previous, 1)
+        dev_os.nap = nap
+        store.now = now
+        restore()
+        assert(ok, result)
+        testing.eq(result.code, 1, result.message)
+        testing.ok(result.message:find("held by other since", 1, true), result.message)
+        testing.ok(#naps > 0, "the wait never slept")
+        for _, secs in ipairs(naps) do
+            testing.ok(secs <= 1, "the wait slept past its deadline: " .. secs)
+        end
         testing.eq(assert(turn_holder(home)).name, "other")
         release_turn(home, held)
     end)
