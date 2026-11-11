@@ -1,7 +1,10 @@
 # nouns: How nouns and the scripts in .dev/ become verbs
 
-`dev <verb>` runs `.dev/<verb>.sh` at the repo root when it is executable.
-That script replaces a built-in of the same name, and `dev help -a` marks it
+`dev <verb>` runs `.dev/<verb>.lua` or `.dev/<verb>.sh` at the repo root. A
+`.sh` script must be executable, a `.lua` script needs no exec bit, and the
+`.lua` file wins when both exist.
+
+A script replaces a built-in of the same name, and `dev help -a` marks it
 `(override)`. A script that matches no built-in is a local verb.
 
 ```
@@ -11,13 +14,15 @@ dev help lint
 
 ## Nouns
 
-`dev <noun> <sub>` runs `.dev/<noun>/<sub>.sh`. A directory of executable
-scripts is a noun, unless a flat `.dev/<noun>.sh` takes the whole name. A
-built-in noun (`dev tools`) keeps its subcommands: a project script never
+`dev <noun> <sub>` runs `.dev/<noun>/<sub>.sh` (or `.lua`). A directory of
+executable scripts is a noun, unless a flat `.dev/<noun>.sh` takes the whole
+name.
+
+A built-in noun (`dev tools`) keeps its subcommands. A project script never
 replaces them, but it can add new ones. A noun with no subcommand, or an
 unknown one, exits 2 and lists the subcommands.
 
-Nouns nest to any depth: `.dev/<noun>/<sub>/<sub2>.sh` runs as
+Nouns nest to any depth. `.dev/<noun>/<sub>/<sub2>.sh` runs as
 `dev <noun> <sub> <sub2>`, and a directory of scripts inside a noun is a noun
 too, with its own `DESCRIPTION`, listing and exit 2. `dev help`,
 `dev __subs` and `dev __flags` take one word per level.
@@ -33,9 +38,11 @@ The first line of `.dev/<noun>/DESCRIPTION` describes the noun. Without it,
 
 `.dev/lua`, `.dev/topics` and `.dev/standalone` are never nouns, and dev lists
 and runs nothing inside them. `standalone` holds shell that must run where dev
-cannot. Line 2 of each script there reads
-`# standalone: runs on <where>, where dev is absent`, and `dev help porting`
-has the list of places.
+cannot.
+
+Line 2 of each script there reads
+`# standalone: runs on <where>, where dev is absent`. `dev help porting` has
+the list of places.
 
 ## Header lines
 
@@ -50,14 +57,17 @@ dev reads the comment block under the shebang of each script.
   takes the group of its first subcommand script that has the line.
 - `# hidden` keeps a flat verb out of `dev help`, and `dev help -a` still
   lists it.
+- `# local` and `# positional` change how a verb is called. `dev help flags`
+  describes both.
 
-Scripts named `__*.sh` never appear in any listing.
+Project scripts named `__*.sh` or `__*.lua` never appear in any listing.
 
 ## Project topics
 
 A `.md` file in `.dev/topics/` is a topic, shown by `dev help <topic>`. Its
-first line is `# <name>: <summary>`, where the name is the file name. Run
-`dev __topics check` to check the format, the names and every quoted `dev`
+first line is `# <name>: <summary>`, where the name is the file name.
+
+Run `dev __topics check` to check the format, the names and every quoted `dev`
 line.
 
 dev refuses to run any project script as root.
