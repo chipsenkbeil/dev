@@ -7,7 +7,7 @@ set -o pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
 DEV="$REPO/dotfiles/bin/.local/bin/dev"
-unset DOTFILES VERBOSE CI LOGNAME
+unset DOTFILES VERBOSE CI LOGNAME DEV_AGENT
 export DEV_REMOTE=0
 export USER=tester
 
@@ -217,32 +217,26 @@ assert_not_contains "a succeeding document is not echoed" "$out" "default_shape"
 
 reset
 fx create "$(doc "$(mkbox myproject-k3x running '["myproject"]' "$NEW_OFF" null)")"
-out="$(inproj box create)"
+out="$(DEV_AGENT=dotfiles/runner/x inproj box create)"
 assert_eq "create prints the summary" "$out" "Created myproject-k3x · $TARGET @ example-box · medium · $NEW_LEFT · dev connect myproject-k3x"
-assert_eq "create inside a project defaults --project to its basename" "$(calls)" "ci box create --by human:tester --json -- myproject"
+assert_eq "create inside a project defaults --project to its basename" "$(calls)" "ci box create --by dotfiles/runner/x --json -- myproject"
 reset
 fx create "$(doc "$KEPT")"
 out="$(inproj box create --target windows-vm-dev --shape large --by agent:s1 --keep a b)"
 assert_eq "create with explicit projects skips the default" "$(calls)" "ci box create --target windows-vm-dev --shape large --by agent:s1 --keep --json -- a b"
 assert_contains "create shows kept and no projects" "$out" "Created scratch-a1b · $TARGET @ example-box · medium · kept · dev connect scratch-a1b"
 reset
-box box create >/dev/null 2>&1
-assert_eq "create outside a project passes no project" "$(calls)" "ci box create --by human:tester --json"
+DEV_AGENT=dotfiles/runner/x box box create >/dev/null 2>&1
+assert_eq "create outside a project passes no project" "$(calls)" "ci box create --by dotfiles/runner/x --json"
 reset
-box box create --ttl 6 >/dev/null 2>&1
-assert_eq "create passes --ttl" "$(calls)" "ci box create --by human:tester --ttl 6 --json"
+DEV_AGENT=dotfiles/runner/x box box create --ttl 6 >/dev/null 2>&1
+assert_eq "create passes --ttl" "$(calls)" "ci box create --by dotfiles/runner/x --ttl 6 --json"
 reset
-(
-    unset USER
-    LOGNAME=lg box box create >/dev/null 2>&1
-)
-assert_eq "create falls back to LOGNAME for --by" "$(calls)" "ci box create --by human:lg --json"
+DEV_AGENT=dotfiles/runner/x box box create --by agent:s2 >/dev/null 2>&1
+assert_eq "create passes --by over DEV_AGENT" "$(calls)" "ci box create --by agent:s2 --json"
 reset
-out="$(
-    unset USER
-    box box create 2>&1
-)"
-assert_eq "create with no USER or LOGNAME fails" "$?" "1"
+out="$(box box create 2>&1 </dev/null)"
+assert_eq "create with no DEV_AGENT or terminal fails" "$?" "1"
 assert_eq "ci is not called without an identity" "$(calls)" ""
 reset
 out="$(box box create --ttl 3 --keep 2>&1)"
@@ -290,8 +284,8 @@ reset
 DASH="$TMP/-dash"
 mkdir -p "$DASH/.git"
 fx create "$(doc "$KEPT")"
-out="$(cd "$DASH" && PATH="$STUBS:$BASE_PATH" "$DEV" box create 2>&1)"
-assert_eq "create skips a default project that starts with a dash" "$(calls)" "ci box create --by human:tester --json"
+out="$(cd "$DASH" && DEV_AGENT=dotfiles/runner/x PATH="$STUBS:$BASE_PATH" "$DEV" box create 2>&1)"
+assert_eq "create skips a default project that starts with a dash" "$(calls)" "ci box create --by dotfiles/runner/x --json"
 assert_contains "the skipped default is warned about" "$out" "not using -dash as the default project"
 reset
 NOHOST="$(jq -c '.tailnet_name = null | .state = "creating" | .expires_at = null' <<<"$RUNNING")"
@@ -300,7 +294,7 @@ out="$(box box show myproject-k3x)"
 assert_contains "show prints - for a null tailnet_name" "$out" "tailnet_name: -"
 reset
 fx create "$(doc "$NOHOST")"
-out="$(box box create)"
+out="$(DEV_AGENT=dotfiles/runner/x box box create)"
 assert_eq "create prints the state while the box has no expiry yet" "$out" "Created myproject-k3x · $TARGET @ example-box · medium · creating · dev connect myproject-k3x"
 reset
 fx resume "$(doc "$NOHOST")"
@@ -429,7 +423,7 @@ fi
 
 reset
 fx create '{"ok":false,"error":{"code":"over_cap","message":"Box cap is full (3 of 3 running): a, b, c. Stop one with ci box stop NAME"}}' 4
-out="$(box box create 2>&1)"
+out="$(DEV_AGENT=dotfiles/runner/x box box create 2>&1)"
 assert_eq "over_cap exits with ci's code" "$?" "4"
 assert_eq "over_cap prints the message" "$out" "dev box create: Box cap is full (3 of 3 running): a, b, c. Stop one with ci box stop NAME"
 reset
@@ -465,7 +459,7 @@ assert_contains "an error document with no message is printed as it is" "$out" '
 reset
 fx create "$(doc "$RUNNING")"
 echo "ci: cloning myproject" >"$FX/create.err"
-out="$(box box create 2>&1 >/dev/null)"
+out="$(DEV_AGENT=dotfiles/runner/x box box create 2>&1 >/dev/null)"
 assert_eq "ci's progress lines reach stderr" "$out" "ci: cloning myproject"
 out="$(cd "$NOPROJ" && PATH="$BASE_PATH" "$DEV" box ls 2>&1)"
 assert_eq "a missing ci is an error" "$?" "1"

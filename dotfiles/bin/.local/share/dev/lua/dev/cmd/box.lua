@@ -564,18 +564,24 @@ end
 
 ---Work out who asks for a box.
 ---@param by string? the `--by` label, if given
----@return string by the label, `human:` and the user otherwise
+---@return string by the label, else `DEV_AGENT`, else `human:` and the user at a terminal
 local function requester(by)
     if by then
         return by
     end
-    local user, logname = os.getenv("USER"), os.getenv("LOGNAME")
-    if user and user ~= "" then
-        return "human:" .. user
-    elseif logname and logname ~= "" then
-        return "human:" .. logname
+    local agent = os.getenv("DEV_AGENT")
+    if agent and agent ~= "" then
+        return agent
     end
-    verb.die("dev: dev box create: neither USER nor LOGNAME is set, pass --by LABEL")
+    if dev_os.isatty(0) then
+        local user, logname = os.getenv("USER"), os.getenv("LOGNAME")
+        if user and user ~= "" then
+            return "human:" .. user
+        elseif logname and logname ~= "" then
+            return "human:" .. logname
+        end
+    end
+    verb.die("Cannot tell who asks. Set DEV_AGENT or pass --by LABEL.")
     return ""
 end
 

@@ -70,9 +70,9 @@ as it is. Without it ci gets no `--arch` flag and picks `x86_64`.
 The lifetime is 4 hours unless you pass `--ttl HOURS` or `--keep`. `--ttl`
 takes a whole number of hours, and `--ttl` with `--keep` exits 2.
 
-`--by` defaults to `human:$USER`, else `human:$LOGNAME`, and dev always passes
-it. With neither variable set and no `--by`, dev exits with a message to pass
-`--by LABEL`.
+`--by` defaults to `$DEV_AGENT`, else `human:$USER` (or `human:$LOGNAME`) when
+stdin is a terminal, and dev always passes it. With none of those, dev exits
+with a message naming `DEV_AGENT` and calls no ci.
 
 The last line is:
 
@@ -331,7 +331,8 @@ by ci, and dev takes the host only from the box's `tailnet_name`.
   - Projects are positional. Inside a project with none given, it passes the
     project root's basename.
   - `--arch` is passed to ci only when given (`x86_64` or `aarch64`). It
-    always passes `--by`, `human:$USER` (else `human:$LOGNAME`) unless given.
+    always passes `--by`: the given label, else `$DEV_AGENT`, else `human:$USER`
+    (or `human:$LOGNAME`) at a terminal, else it refuses naming `DEV_AGENT`.
   - `--ttl` with `--keep` is a usage error before ci runs.
 - `show [BOX] [--json]`: with `--json` prints ci's document unchanged, else
   the box as `key: value` lines.

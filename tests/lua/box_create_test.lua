@@ -51,6 +51,7 @@ local function env(root, extra)
         NO_COLOR = "1",
         LUA_INIT = "@" .. REPO .. "/tests/lua/fake_env.lua",
         FAKE_TTY = "1",
+        DEV_AGENT = "",
         PICK_LOG = root .. "/picks",
     }
     for name, value in pairs(extra or {}) do
@@ -170,13 +171,56 @@ end)
 
 testing.test("without a terminal there are no pickers and ci applies its defaults", function()
     local root = sandbox({ create = CREATED })
-    local out, code = support.dev(root, { "box", "create", "proj" }, env(root, { FAKE_TTY = "0" }))
+    local out, code = support.dev(
+        root,
+        { "box", "create", "proj" },
+        env(root, { FAKE_TTY = "0", DEV_AGENT = "dotfiles/runner/x" })
+    )
     testing.eq(code, 0)
     testing.eq(
         out,
         "Created proj-x1 · linux-dev @ example-box · medium · kept · dev connect proj-x1\n"
     )
-    testing.eq(lines_of(root .. "/log"), { "box create --by human:tester --json -- proj" })
+    testing.eq(lines_of(root .. "/log"), { "box create --by dotfiles/runner/x --json -- proj" })
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("create labels the box with DEV_AGENT when --by is missing", function()
+    local root = sandbox({ create = CREATED })
+    local _, code = support.dev(
+        root,
+        { "box", "create", "--target", "linux-dev", "proj" },
+        env(root, { DEV_AGENT = "dotfiles/runner/x" })
+    )
+    testing.eq(code, 0)
+    testing.eq(
+        lines_of(root .. "/log"),
+        { "box create --target linux-dev --by dotfiles/runner/x --json -- proj" }
+    )
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("--by wins over DEV_AGENT", function()
+    local root = sandbox({ create = CREATED })
+    local _, code = support.dev(
+        root,
+        { "box", "create", "--target", "linux-dev", "--by", "agent:y", "proj" },
+        env(root, { DEV_AGENT = "dotfiles/runner/x" })
+    )
+    testing.eq(code, 0)
+    testing.eq(
+        lines_of(root .. "/log"),
+        { "box create --target linux-dev --by agent:y --json -- proj" }
+    )
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("create without a terminal or DEV_AGENT refuses and names DEV_AGENT", function()
+    local root = sandbox({ create = CREATED })
+    local out, code = support.dev(root, { "box", "create", "proj" }, env(root, { FAKE_TTY = "0" }))
+    testing.eq(code, 1)
+    testing.eq(out:find("DEV_AGENT", 1, true) ~= nil, true)
+    testing.eq(lines_of(root .. "/log"), {})
     fs.remove(root, { recursive = true })
 end)
 

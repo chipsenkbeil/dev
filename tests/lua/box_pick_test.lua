@@ -50,6 +50,7 @@ end
 local function env(root, extra)
     local set = {
         USER = "tester",
+        DEV_AGENT = "",
         NO_COLOR = "1",
         LUA_INIT = "@" .. REPO .. "/tests/lua/fake_env.lua",
         FAKE_TTY = "1",

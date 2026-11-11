@@ -82,4 +82,11 @@ if tty then
     require("dev.cmd.box").interactive = function()
         return tty == "1"
     end
+    local real_isatty = dev_os.isatty
+    dev_os.isatty = function(fd)
+        if fd == 0 then
+            return tty == "1"
+        end
+        return real_isatty(fd)
+    end
 end
