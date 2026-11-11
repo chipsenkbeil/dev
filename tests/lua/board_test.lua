@@ -8466,3 +8466,90 @@ testing.test("add --top --id-only prints the id alone", function()
     testing.eq(status, 0, pomb_out)
     testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
 end)
+
+local function crowded(rooms)
+    local mover = planned()
+    mover.outcomes = { { id = "s1", name = "a", done = false } }
+    local held = {
+        id = ID_A,
+        name = "Held",
+        column = support.COLUMN_NAME.REVIEW,
+        size = "1 Pomodoro",
+        color = "yellow",
+        description = V2,
+        labels = {},
+        checks = {},
+        outcomes = {},
+    }
+    local backend = fake({ mover, held })
+    local tries = 0
+    function backend:limits()
+        tries = tries + 1
+        local at = tries <= rooms and 1 or 2
+        return { columns = { [support.COLUMN_NAME.REVIEW] = at }, units = {}, groups = {} }
+    end
+    return backend
+end
+
+local function ticking(naps)
+    local clock = 0
+    return {
+        nap = function(seconds)
+            naps[#naps + 1] = seconds
+            clock = clock + seconds
+        end,
+        now = function()
+            return clock
+        end,
+    }
+end
+
+testing.test("move names the full column with its count and limit", function()
+    local backend = crowded(1)
+    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+    testing.eq(result.code, 3)
+    testing.eq(
+        result.message,
+        support.COLUMN_NAME.REVIEW
+            .. " holds 1 card ("
+            .. ID_A:sub(1, board.MIN_PREFIX)
+            .. "), at its limit of 1. Land one first."
+    )
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the refused move was sent")
+    end
+    backend = crowded(0)
+    function backend:move()
+        return nil, "no room", "full"
+    end
+    result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+    testing.eq(result.code, 3)
+    testing.eq(result.message, "Pomb refused the move: no room")
+end)
+
+testing.test("move wait retries a full column until room frees", function()
+    local backend = crowded(2)
+    local naps = {}
+    local args = { "cccccccc", support.COLUMN.REVIEW, "--wait", "60" }
+    local result = cmd_board.move(backend, args, ticking(naps))
+    testing.eq(result.code, nil)
+    testing.eq(result.output, "moved cccccccc to " .. support.COLUMN_NAME.REVIEW)
+    testing.eq(naps, { 15, 15 })
+    local moves = 0
+    for _, call in ipairs(backend.calls) do
+        moves = moves + (call[1] == "move" and 1 or 0)
+    end
+    testing.eq(moves, 1)
+end)
+
+testing.test("move wait gives up at its timeout with the full status", function()
+    local backend = crowded(100)
+    local naps = {}
+    local args = { "cccccccc", support.COLUMN.REVIEW, "--wait", "40" }
+    local result = cmd_board.move(backend, args, ticking(naps))
+    testing.eq(result.code, 3)
+    testing.eq(naps, { 15, 15, 10 })
+    args[4] = "soon"
+    result = cmd_board.move(backend, args)
+    testing.eq(result.code, 2)
+end)

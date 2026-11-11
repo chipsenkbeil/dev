@@ -486,8 +486,8 @@ return {
     {
         words = { "board", "move" },
         handler = "lua",
-        flags = "--max-size",
-        usage = "dev board move CARD COLUMN [--max-size N]",
+        flags = "--max-size --wait",
+        usage = "dev board move CARD COLUMN [--max-size N] [--wait SECONDS]",
         desc = "Move a card to the top of a column",
     },
     {

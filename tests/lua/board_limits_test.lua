@@ -280,7 +280,7 @@ testing.test("move refuses a card entering a full group and names the cards", fu
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(out, IN_FLIGHT)
     testing.eq(read(box, "calls"):find("/move", 1, true), nil)
 end)
@@ -292,7 +292,7 @@ testing.test("move refuses a card entering a full column", function()
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(
         out,
         "dev: " .. NAME.REVIEW .. " holds 1 card (bbbbbbbb), at its limit of 1. Land one first.\n"
@@ -316,7 +316,7 @@ testing.test("a 409 wip_limit_reached becomes the refusal and move releases the 
     local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
     assert(fs.write(box.root .. "/move_refusal", LIMIT_BODY))
     local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(out, "dev: Pomb refused the move: " .. LIMIT_TEXT .. "\n")
     local calls = read(box, "calls")
     testing.ok(calls:find("/api/tasks/" .. uuid("d") .. "/owner/release", 1, true), calls)

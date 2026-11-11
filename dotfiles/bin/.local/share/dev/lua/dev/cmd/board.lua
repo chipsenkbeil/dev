@@ -25,7 +25,12 @@ local verb = require("dev.verb")
 local NO_BOARD = "dev: no board for this project"
 local USAGE = 2
 local FAILURE = 1
-local runner = { FLAG = "--max-size", limits = require("dev.board.limits") }
+local runner = {
+    FLAG = "--max-size",
+    FULL = 3,
+    POLL_SECONDS = 15,
+    limits = require("dev.board.limits"),
+}
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
 local CLAIMANT_CHARS = 200
@@ -163,6 +168,10 @@ end
 
 local function failure(message)
     return { message = message, code = FAILURE }
+end
+
+function runner.full(message)
+    return { message = message, code = runner.FULL }
 end
 
 local function parse(args, takes, many)
@@ -1647,8 +1656,9 @@ end
 ---@param args string[] the card and the column
 ---@param opts {drop: boolean?}? `drop` skips the outcome check, and the planning check from Icebox
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
-local function move_card(backend, args, opts)
-    local flags, words = parse(args, { [runner.FLAG] = true })
+---@private
+function runner.__move_once(backend, args, opts)
+    local flags, words = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
     if not flags then
         return words
     end
@@ -1785,13 +1795,13 @@ local function move_card(backend, args, opts)
             end
             refused = runner.__limited(backend, card, column)
             if refused then
-                return refused
+                return runner.full(refused.message)
             end
         end
     elseif card.column ~= column and not to_done then
         local refused = runner.__limited(backend, card, column)
         if refused then
-            return refused
+            return runner.full(refused.message)
         end
     end
     local missing_note = unnoted(backend, card, column)
@@ -1816,14 +1826,14 @@ local function move_card(backend, args, opts)
         started = true
         held = { fence = fence }
     end
-    local ok, message, full = backend:move(card.id, column, { fence = held and held.fence })
+    local ok, message, at_limit = backend:move(card.id, column, { fence = held and held.fence })
     if not ok then
         if started then
             claims.stop(card.id)
             backend:release(card.id, held.fence)
         end
-        if full then
-            return failure(runner.limits.REFUSED .. message)
+        if at_limit then
+            return runner.full(runner.limits.REFUSED .. message)
         end
         return to_done and unqueued(failure(message)) or failure(message)
     end
@@ -1842,8 +1852,50 @@ local function move_card(backend, args, opts)
     return result
 end
 
+---@class dev.cmd.board.MoveOpts
+---@field drop boolean? skips the outcome check, and the planning check from Icebox
+---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
+---@field now (fun(): integer)? the clock in seconds since the epoch, `os.time` when nil
+
+---Move a card, and with `--wait SECONDS` try again while its column is full.
+---@param backend dev.board.Backend the board
+---@param args string[] the card, the column and the flags
+---@param opts dev.cmd.board.MoveOpts? the options of `runner.__move_once` and the clock
+---@return dev.cmd.board.Result result the result of the last try
+local function move_card(backend, args, opts)
+    local flags = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
+    local wait = 0
+    if flags and flags[WAIT_FLAG] then
+        wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
+        if not wait or wait > MAX_WAIT_SECONDS then
+            return usage(WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS)
+        end
+    end
+    local nap = opts and opts.nap or dev_os.nap
+    local clock = opts and opts.now or os.time
+    local deadline = clock() + wait
+    while true do
+        local result = runner.__move_once(backend, args, opts)
+        local left = deadline - clock()
+        if result.code ~= runner.FULL or left <= 0 then
+            return result
+        end
+        nap(math.min(runner.POLL_SECONDS, left))
+    end
+end
+
 function commands.move(backend, args)
     return move_card(backend, args)
+end
+
+---Move a card, retrying a full column until room frees when `--wait` is given.
+---@param backend dev.board.Backend the board
+---@param args string[] the arguments after `move`
+---@param opts dev.cmd.board.MoveOpts? how to sleep and tell time
+---@return dev.cmd.board.Result result the result of the last try
+function M.move(backend, args, opts)
+    backend.roles = backend.roles or board.roles(backend.column_map, backend:done_columns() or {})
+    return move_card(backend, args, opts)
 end
 
 function commands.order(backend, args)
@@ -5956,7 +6008,8 @@ for sub in pairs(commands) do
             if result.code == USAGE then
                 verb.usage_error(ctx, result.message)
             end
-            verb.die("dev: " .. result.message)
+            verb.note("dev: " .. result.message)
+            return result.code or FAILURE
         end
         for _, line in ipairs(result.warnings or {}) do
             stderr_line("warning: " .. line)

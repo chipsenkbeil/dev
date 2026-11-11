@@ -2788,8 +2788,20 @@ Whose comment:
 
 ### move
 
-`dev board move CARD COLUMN [--max-size N]` moves the card to the top of the
-column and prints `moved <id prefix> to <column>`.
+`dev board move CARD COLUMN [--max-size N] [--wait SECONDS]` moves the card to
+the top of the column and prints `moved <id prefix> to <column>`.
+
+A full column:
+
+- A move refused for a limit, by dev's own check or by Pomb's 409
+  `wip_limit_reached`, exits 3 and prints the refusal that names the column,
+  its cards and its limit (see the limits below).
+- `--wait` is a whole number of seconds up to 86400 and is off by default. With
+  it, the move tries again every 15 seconds until room frees, and gives up at
+  the bound with exit 3 and the last refusal. A usage error is exit 2.
+- `dev board wait` has no event for a column freeing, so the wait polls the
+  move. Each try repeats every check, and a try that takes the claim gives it
+  back when Pomb refuses.
 
 The output:
 
@@ -3075,7 +3087,8 @@ A group limit:
 - It refuses when the target is in the group, the card's column is outside it
   and the group's columns hold that many other cards, whoever claimed them.
 - The refusal reads `N cards are in flight in In Progress, Review and Verify
-  (ID, ID, ID), at the limit of L. Land one first.` (exit 1).
+  (ID, ID, ID), at the limit of L. Land one first.` (exit 1 for `take`, 3 for
+  `move`).
 - Cards in other columns do not count, and neither do epics or the card being
   moved.
 
@@ -3084,7 +3097,7 @@ Pomb's own limits:
 - The count and the claim are two steps, so under parallel commands the limit
   is advisory and can be overrun.
 - Pomb enforces its limits too. A move it refuses with 409 `wip_limit_reached`
-  prints `Pomb refused the move: MESSAGE` (exit 1).
+  prints `Pomb refused the move: MESSAGE` (exit 3).
 - A `move CARD progress` that had just taken the claim gives it back.
 - dev never sends `force`, so its own land move into Release fails the same way
   and the card stays put.
