@@ -2258,166 +2258,390 @@ The result:
   `note --edit` and `--delete` refuse a comment that holds it.
 - `review` does not judge the verdict. `land` does.
 
-### The other subcommands
+### land
 
-- `land CARD [--wait SECONDS]`: Takes the landing turn and lands the change.
-  It refuses outside the card's workspace, as `check` does. It rebases the
-  working-copy change onto trunk, lands it with
-  `jj land --yes -r @` run in the project root, writes a `done` note, moves
-  the card to Release when `[board.land] deploys` is true and to Done
-  otherwise, and gives the turn back. It needs `DEV_AGENT` (usage error, exit
-  2, without it) and a jj project: in plain git it refuses and says so. It
-  refuses, exit 1, and lands nothing until every condition holds, and the
-  message lists each one that fails. A refusal can leave the change rebased
-  onto trunk:
-  - the card is in the verify column and no other agent claims it. `move`
-    releases the claim, so `land` refuses a card claimed by another agent and
-    lets any agent with `DEV_AGENT` set land an unclaimed one.
-  - every outcome is ticked (the same count `move CARD done` refuses on). The
-    verifier ticks after the checks pass and before `land`.
-  - the working-copy commit is non-empty, has a description and has no
-    conflicts.
-  - a `code` and a `style` review of the working-copy change are recorded. A
-    review of an earlier commit of the change counts when `jj interdiff`
-    between that commit and the landing one is empty, so
-    a clean rebase keeps its reviews and only the check reruns. Any other
-    earlier commit counts only with a `recheck` recorded at the landing commit.
-  - no `code`, `style` or `recheck` review at the landing commit, or at an
-    earlier commit of the change with the same empty interdiff, has `needs-work`
-    as its latest verdict. The refusal names the kind and the reviewer, and a
-    later `clean` or `minor` review of that kind at the commit lifts it. A record
-    with no verdict never refuses.
-  - the newest `dev-check:` record with `mode=run` at the landing commit has a
-    `pass` for every checks row, in the card's row order. A `mode=expect-fail`
-    record never counts, even when it does not parse. When the newest
-    `dev-check:` record at the commit does not parse and its mode is not
-    `expect-fail`, as with one written before rows carried run ids, `land`
-    refuses it as unreadable and says to run `dev board check` again, not
-    that no record exists.
-  - the commit's parent is the current trunk, compared after
-    `jj git fetch --remote <remote of record>`, with the remote taken from the
-    forge settings (see `forge`). A failed fetch refuses. `land` rebases the
-    change onto trunk itself while it holds the turn, so this holds unless the
-    rebase failed. The conditions on the reviews and the check are then judged
-    at the rebased commit. A change that sits on an unlanded parent is
-    refused and not rebased.
+`dev board land CARD [--wait SECONDS]` takes the landing turn and lands the
+card's change on trunk.
 
-  The landing turn keeps one landing at a time across runners, to keep
-  trunk from moving under a landing. It is the owner of a card named
-  `landing turn`, which `land` creates in the Icebox when the board has none,
-  to keep the holder on the board and not in one session. On a Pomb board the
-  turn grabs that owner with `POST /api/tasks/{id}/owner` and the turn's lease
-  as `ttl_seconds`, renews it through `/owner/renew` with `If-Owner-Fence`, and
-  gives it back through `/owner/release`. The holder is the card's live owner,
-  so a lapsed owner lease leaves the turn free. A local board keeps the same
-  owner as a claim in its file.
+In order, it:
 
-  A card in the wrong column, with an open outcome or claimed by another
-  agent is refused before the turn is asked for. `land` then asks for the
-  turn for up to `--wait` seconds (60 by default, up to 86400, a whole number)
-  and, when it stays taken, refuses with
-  `the landing turn is held by NAME since STAMP`.
+- takes the landing turn and rebases the working-copy change onto trunk
+- lands the change with `jj land --yes -r @`, run in the project root
+- writes a `done` note
+- moves the card to Release when `[board.land] deploys` is true and to Done
+  otherwise
+- gives the turn back and cleans up
 
-  After its first look, a waiting poll reads only the turn card and its
-  comments. It reads the card list again only when the turn card cannot be read
-  or has ended, or when it wins the claim.
+The command:
 
-  It sleeps 5 seconds, then 1.5 times longer after each poll that sees the same
-  place in line and holder, up to 30 seconds. A change in either starts over at
-  5 seconds. Each sleep is shortened by up to 20% at random.
+- It refuses outside the card's workspace, as `check` does.
+- It needs `DEV_AGENT` (usage error, exit 2, without it).
+- It needs a jj project. In plain git it refuses and says so.
+- `--wait` is a whole number of seconds up to 86400 (60 by default), otherwise
+  exit 2.
+- It is never queued.
 
-  Each poll also reads the waiting card. A waiter whose card has moved to
-  Done writes its `left` note and stops with `<id prefix> is done, so there is
-  nothing to wait for`.
+The conditions:
 
-  Cards wait in the order they asked. A card with a wait writes a
-  `dev-turn: ask` note with the time its wait ends before it asks for the
-  turn, and only the first live ask in line may take it. A later asker is
-  told whom the turn is next for. An ask ends when its card takes the turn,
-  writes a `dev-turn: left` note when its wait runs out, or passes its end
-  time, to keep a waiter that died from holding the line. Only the claim's
-  fence releases the turn, and a waiter that gives up releases nothing.
+`land` lands nothing and exits 1 until every condition holds, and the message
+lists each one that fails. A refusal can leave the change rebased onto trunk.
 
-  The holder writes a `dev-turn:` note on the turn card with its name, the
-  card it lands and the time it took the turn. The lease is 900 seconds and
-  `land` renews it before the `jj land`. When a holder dies, the lease ends
-  and the next asker takes the turn. A holder that comes back after that
-  gets `the landing turn was lost` or `the landing turn ran out`, writes
-  nothing and lands nothing, and has to ask again.
+- The card is in the verify column and no other agent claims it. `move`
+  releases the claim, so `land` refuses a card claimed by another agent and
+  lets any agent with `DEV_AGENT` set land an unclaimed one.
+- Every outcome is ticked (the same count `move CARD done` refuses on). The
+  verifier ticks after the checks pass and before `land`.
+- The working-copy commit is non-empty, has a description and has no conflicts.
+- The commit adds no file under `.dev/standalone/` unless the card carries the
+  `standalone-ok` label.
+- The commit does not change both a lint-set template file and a dev module
+  that the template requires. The refusal says to land the dev change first,
+  have infra rebake the ci images, then land the template change.
+- A `code` and a `style` review of the working-copy change are recorded. A
+  review of an earlier commit of the change counts when `jj interdiff` between
+  that commit and the landing one is empty, so a clean rebase keeps its reviews
+  and only the check reruns. Any other earlier commit counts only with a
+  `recheck` recorded at the landing commit.
+- No `code`, `style` or `recheck` review at the landing commit (or at an
+  earlier commit of the change with the same empty interdiff) has `needs-work`
+  as its latest verdict. The refusal names the kind and the reviewer, and a
+  later `clean` or `minor` review of that kind at the commit lifts it. A record
+  with no verdict never refuses.
+- The newest `dev-check:` record with `mode=run` at the landing commit has a
+  `pass` for every checks row, in the card's row order. A `mode=expect-fail`
+  record never counts, even when it does not parse.
+- The commit's parent is the current trunk, compared after
+  `jj git fetch --remote <remote of record>`, with the remote taken from the
+  forge settings (see `forge`). A failed fetch refuses.
 
-  `land` gives the turn back on every exit, a refusal included (a hold from
-  `turn` stays through a refusal). A local
-  board keeps the lease for its length and ignores the card-size lease that
-  `take` uses.
+`land` rebases the change onto trunk itself while it holds the turn, so the
+last condition holds unless the rebase failed. The conditions on the reviews and
+the check are then judged at the rebased commit. A change that sits on an
+unlanded parent is refused and not rebased.
 
-  After the move, `land` cleans up. It deletes the bookmark named for the
-  card, then runs the removal behind `dev ws rm` on the card's workspace,
-  which is the one it runs in, so a shell left inside it sees dev exit 1 with
-  the deleted working directory message and the output says to run the next
-  command from another folder. A git project removes the worktree first and
-  then deletes the branch, because git refuses to delete a checked-out
-  branch. A workspace outside the central root, or one with changes not in a
-  commit, stays, and the output names it and why. Cleanup never changes the
-  exit code or the card's column.
+When the newest `dev-check:` record at the commit does not parse and its mode is
+not `expect-fail` (as with one written before rows carried run ids), `land`
+refuses it as unreadable and says to run `dev board check` again, not that no
+record exists.
 
-  One case keeps a check and reviews across a rebase. When the landing commit
-  lacks the reviews and has no `dev-check:` record of its own (one that does
-  not parse is its own, and `land` refuses one not marked `expect-fail` as
-  unreadable), `land` looks for the commits of the same change id with a
-  passing run and their code and style reviews (a recheck counts as above).
-  It tries them newest first and carries the records of the first one for
-  which all of these hold:
+The landing turn:
 
+- It keeps one landing at a time across runners, so trunk does not move under a
+  landing.
+- It is the owner of a card named `landing turn`, which `land` creates in the
+  Icebox when the board has none. That keeps the holder on the board and not in
+  one session.
+- On a Pomb board the turn grabs that owner with `POST /api/tasks/{id}/owner`
+  and the turn's lease as `ttl_seconds`, renews it through `/owner/renew` with
+  `If-Owner-Fence`, and gives it back through `/owner/release`.
+- The holder is the card's live owner, so a lapsed owner lease leaves the turn
+  free. A local board keeps the same owner as a claim in its file.
+- A local board keeps the lease for its length and ignores the card-size lease
+  that `take` uses.
+- The holder writes a `dev-turn:` note on the turn card with its name, the card
+  it lands and the time it took the turn.
+- The lease is 900 seconds, and `land` renews it before the `jj land`.
+- When a holder dies, the lease ends and the next asker takes the turn. A holder
+  that comes back after that gets `the landing turn was lost` or
+  `the landing turn ran out`, writes nothing, lands nothing and has to ask
+  again.
+- `land` gives the turn back on every exit, a refusal included. A hold from
+  `turn` stays through a refusal.
+- A raw `jj land` takes no turn, so the turn keeps only the landings made
+  through `dev board land` to one at a time.
+
+Asking for the turn:
+
+- A card in the wrong column, with an open outcome or claimed by another agent
+  is refused before the turn is asked for.
+- `land` then asks for the turn for up to `--wait` seconds and, when it stays
+  taken, refuses with `the landing turn is held by NAME since STAMP`.
+- Cards wait in the order they asked. A card with a wait writes a
+  `dev-turn: ask` note with the time its wait ends, plus 10 seconds, before it
+  asks for the turn. Only the first live ask in line may take it.
+- A later asker is told whom the turn is next for.
+- An ask ends when its card takes the turn, writes a `dev-turn: left` note when
+  its wait runs out, or passes its end time. The end time keeps a waiter that
+  died from holding the line.
+- Only the claim's fence releases the turn, and a waiter that gives up releases
+  nothing.
+
+Polling while it waits:
+
+- A poll sleeps 5 seconds at first, then 1.5 times longer after each poll that
+  sees the same place in line and holder, up to 30 seconds.
+- A change in either starts over at 5 seconds.
+- Each sleep is shortened by up to 20% at random.
+- Each poll reads the turn card, its comments and the waiting card. A `land`
+  poll also reads the card list, to find a hold of its own.
+- A waiter whose card has moved to Done writes its `left` note and stops with
+  `<id prefix> is done, so there is nothing to wait for`.
+
+Carrying a check and reviews across a rebase:
+
+`land` carries them when the landing commit lacks the reviews and has no
+`dev-check:` record of its own. A record that does not parse is its own, and
+`land` refuses one not marked `expect-fail` as unreadable.
+
+- It looks for the commits of the same change id with a passing run and their
+  code and style reviews (a recheck counts as above).
+- It tries them newest first and carries the records of the first one for which
+  all of these hold:
   - the commit's parent is the current trunk
   - the checked commit sat on one ancestor of that trunk
   - `jj interdiff` between the checked commit and the landing one is empty
   - the rebase left no conflict
-
-  A trunk commit that touched the same files does not stop the carry. The
+- A trunk commit that touched the same files does not stop the carry. The
   release run tests the whole batch and catches a clash the rebase cannot see.
-
-  The carry is tried whenever reviews are lacking, even when another refusal
+- The carry is tried whenever reviews are lacking, even when another refusal
   stands (an unticked outcome, the wrong column), to list in the refusal only
   what still blocks the landing.
+- A different change id, a non-empty interdiff or a review never recorded at the
+  checked commit keeps the plain refusals, and any jj read that fails refuses
+  too.
+- When no commit carries, the refusal gives the reason for the newest one,
+  unless a jj read fails first, which refuses at once and names that read.
+- The done note then adds that the check and reviews were carried over from the
+  checked commit.
 
-  `deploys = true` under the same `[board.land]` table makes `land` move the
-  card to Release, where it waits until it is live. Without it `land` moves the
-  card to Done. This repo sets it. The lead runs `dev board ship` from a
-  workspace at trunk, and rolls the checkout only onto the revision that ship
-  passed.
+The settings:
 
-  `checks` under `[board.release]` lists the commands `dev board ship` runs
-  once when it gets none after `--`, one plain command per row.
+- `deploys = true` under `[board.land]` makes `land` move the card to Release,
+  where it waits until it is live. Without it `land` moves the card to Done.
+  This repo sets it.
+- The done note then ends with `It waits in Release for the deploy.`
+- The lead runs `dev board ship` from a workspace at trunk, and rolls the
+  checkout only onto the revision that ship passed.
+- `checks` under `[board.release]` lists the commands `dev board ship` runs once
+  when it gets none after `--`, one plain command per row.
+- In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
+  exits 1 and names `dev board land`.
+- `dev board land` sets `DEV_BOARD_LAND=1` for the `jj land` it runs, and
+  `jj land --no-card` lands a change that has no card.
+- `jj land --undo` and `jj land --dry-run` pass the guard. Neither one lands a
+  change, and neither needs a card.
 
-  The landing turn keeps landings made through `dev board land` to one at a
-  time, and a raw `jj land` takes no turn (see the `land` entry above).
+The result:
 
-  In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
-  exits 1 and names `dev board land`. `dev board land` sets `DEV_BOARD_LAND=1`
-  for the `jj land` it runs, and `jj land --no-card` lands a change that has no
-  card. `jj land --undo` and `jj land --dry-run` pass the guard. Neither one
-  lands a change, and neither needs a card.
-
-  A different change id, a non-empty interdiff or a review never recorded at
-  the checked commit keeps the plain refusals, and any jj read that fails
-  refuses too. The done note then adds that the check and reviews were carried
-  over from the checked commit. When no commit carries, the refusal gives the
-  reason for the newest one, unless a jj read fails first, which refuses at
-  once and names that read.
-
-  A failed `jj land` leaves the card where it is, exits 1 and prints jj's
-  output. A landing whose done note or move then fails exits 1 and says what to
-  finish by hand. `jj land` can rewrite the commit through the forge, so after
-  it succeeds `land` fetches the remote of record and reads the commit that
-  holds the change on trunk by its change id; the `dev-check:` and `dev-review:` records keep the commit from
-  before the land. The done note reads
+- A failed `jj land` leaves the card where it is, exits 1 and prints jj's
+  output.
+- A landing whose done note or move then fails exits 1 and says what to finish
+  by hand.
+- `jj land` can rewrite the commit through the forge, so after it succeeds
+  `land` fetches the remote of record and reads the commit that holds the change
+  on trunk by its change id. The `dev-check:` and `dev-review:` records keep the
+  commit from before the land.
+- The done note reads
   `Landed commit <12 characters> (change <id>) on trunk, run by NAME.` and
-  success prints `landed <id prefix> at commit <12 characters> and moved it to
-  Done`, both naming the commit on trunk. If the fetch or the read fails after
-  the land (which does not undo it), the note reads `Landed change <id>, run by
-  NAME.` and says that the commit named is from before the land and may differ
-  from the one on trunk, the success line says the same, and the card still
-  moves to Done. It is never queued.
+  success prints
+  `landed <id prefix> at commit <12 characters> and moved it to Done`
+  (or Release). Both name the commit on trunk.
+- If the fetch or the read fails after the land (which does not undo it), the
+  note reads `Landed change <id>, run by NAME.` and says that the commit named
+  is from before the land and may differ from the one on trunk.
+- The success line says the same, and the card still moves.
+
+Cleanup:
+
+After the move, `land` deletes the bookmark named for the card, then runs the
+removal behind `dev ws rm` on the card's workspace, which is the one it runs in.
+Cleanup never changes the exit code or the card's column.
+
+- A shell left inside the workspace sees dev exit 1 with the deleted working
+  directory message, and the output says to run the next command from another
+  folder.
+- A git project removes the worktree first and then deletes the branch (git
+  refuses to delete a checked-out branch).
+- A workspace outside the central root, or one with changes not in a commit,
+  stays. The output names it and why.
+
+### turn
+
+`dev board turn CARD [--hold SECONDS] [--wait SECONDS] [--release]` takes the
+landing turn for CARD early and keeps it, so `land` lands under it and no other
+landing moves trunk meanwhile.
+
+The turn is short and holding it is optional. A landing takes it only around
+the rebase and the push, so a runner holds none across the reviews or a check,
+and two cards whose checks ran in parallel land one after the other.
+
+The command:
+
+- It refuses outside the card's workspace, as `check` does, but `--release`
+  works from anywhere.
+- It needs `DEV_AGENT` (exit 2 without it).
+- It takes the turn as `land` does, but fails fast. It asks once unless
+  `--wait` gives seconds to keep asking (a whole number up to 86400), and when
+  the turn stays taken it refuses with
+  `the landing turn is held by NAME since STAMP`.
+- A card in Done is refused, except to give a hold back.
+
+The hold:
+
+- A hold is longer than a landing's 900 second lease. `--hold` sets its lease,
+  1800 seconds by default and 3600 at most (a whole number, exit 2 otherwise),
+  so a long wait fits.
+- `check` does not renew the lease while it runs.
+- The hold is recorded in the `dev-turn:` note with the fence and the lease, so
+  a later command finds it from the board alone, on any machine under the same
+  `DEV_AGENT`.
+- Success prints `holding the landing turn for <id prefix> for N seconds` and
+  the next steps: rebase, run `dev board land CARD` to land under the hold, and
+  run `dev board turn CARD` again to renew it or add `--release` to give it
+  back.
+- A hold that lapsed frees the turn to the next asker, so taking it again starts
+  a new window.
+
+Renewing:
+
+- Running `turn CARD` again as the holder renews the lease for `--hold` more
+  seconds and prints
+  `renewed the landing turn held for <id prefix> for N more seconds`.
+- The hold may be kept without a break for 3600 seconds in all. After that,
+  `turn` and `land` refuse, give the turn back and leave the holder to ask
+  again.
+
+Giving it back:
+
+- `--release` gives the hold back, writes a `left` note and prints
+  `gave back the landing turn held for <id prefix>`.
+- When the caller holds none for the card, it still writes the `left` note,
+  which drops a queued ask and creates the `landing turn` card when the board
+  has none, and refuses.
+- A hold that ran out is cleared and reported as already gone.
+
+Landing under a hold:
+
+- `land CARD` finds a hold taken by the caller for that card and lands under it
+  without asking again.
+- It renews the lease before `jj land` and gives the turn back once the card
+  has landed.
+- A refusal leaves the hold in place, with a line that says so, so the runner
+  fixes the cause and lands again.
+- When the hold ran out or another card took the turn, `land` writes nothing,
+  lands nothing and refuses with
+  `the landing turn held for <id prefix> ran out or was taken by another`, and
+  `turn CARD` takes it again.
+
+### allow
+
+`dev board allow CARD WORD...` replaces the card's `dev.allow` field with
+the JSON array of the words and prints `set allow <id prefix>, <words>`.
+
+- Each word is `test-edits` or `ci-edits`, with duplicates dropped. They are the
+  guard rails the card lifts.
+- It sends `PATCH /api/tasks/{id}` with
+  `{"fields":{"dev.allow":["test-edits","ci-edits"]}}`, with the claim's
+  fence when this machine holds one.
+- `allow CARD none` sends `null` to clear the field and prints
+  `cleared allow <id prefix>`.
+- No word, any other word, or `none` beside another word is exit 2. An unknown
+  card is exit 1.
+- A Pomb board without the field is refused before any write with
+  `the board has no dev.allow field, so define it on the board first`
+  (exit 1).
+- Sending the same value twice changes nothing more, so it is queued while Pomb
+  is unreachable like `checks`.
+- A local board keeps the words in the card's `allow`.
+
+### tests
+
+`dev board tests CARD NAME...` replaces the card's `dev.tests` field with
+the names joined by line breaks and prints `set tests <id prefix>, N names`
+(`1 name` for one).
+
+- It sends `PATCH /api/tasks/{id}` with `{"fields":{"dev.tests":"a\nb"}}`,
+  with the claim's fence when this machine holds one. The field is multiline
+  text, and a runner reads one name per line.
+- No name, a blank name or a name with a line break is exit 2. An unknown card
+  is exit 1.
+- A board without the field is refused before any write, naming it (exit 1).
+- It is queued while Pomb is unreachable like `checks`.
+- A local board keeps the text in the card's `tests`.
+
+### files
+
+`dev board files CARD PATH...` is the same as `tests`, for the `dev.files`
+field. It prints `set files <id prefix>, N names` (`1 name` for one).
+
+### outcome
+
+`dev board outcome CARD TEXT` appends a Done when outcome to an existing card.
+The other forms change one by its number N.
+
+N counts from 1 in the order `show` prints the outcomes, which come from the
+subtasks `/export-data` carries (`id`, `name`, `done`). An N that is not a whole
+number of 1 or more is exit 2, and one past the last outcome is exit 1 naming
+how many the card has.
+
+The other forms:
+
+```
+dev board outcome CARD --rename N TEXT --reason TEXT
+dev board outcome CARD --tick N
+dev board outcome CARD --untick N
+dev board outcome CARD --delete N --reason TEXT
+dev board outcome CARD --convert
+```
+
+The forms:
+
+- The append sends `POST /api/tasks/{id}/subtasks` with `name` and prints
+  `outcome <id prefix> N added`, with N the new outcome's place.
+- `--rename` rewords the Nth and posts one decision note with the old text, the
+  new text and the reason. A missing or empty `--reason` is exit 2 and writes
+  nothing.
+- `--tick` and `--untick` set it done or clear it (`PATCH` on
+  `/api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`).
+- The output is `outcome <id prefix> N reworded`, `ticked by NAME` or
+  `unticked`.
+- `--delete` removes the Nth outcome, and only the lead runs it. Its rules are
+  under `outcome CARD --delete` in Columns, cards and sizes.
+- `--convert` moves a v1 `## Done when` checklist into outcomes. It takes no
+  other word (exit 2).
+
+The text:
+
+- The words after the card, or after N, are the text. It must not be blank
+  (exit 2).
+- The text gets the prose warnings.
+
+Ticking:
+
+- A tick on a claimed card needs `--as NAME` (or `DEV_AGENT`) for someone other
+  than the claimant.
+- The reviewer or verifier ticks, and a card moves to Done only once every
+  outcome is ticked (see `move`).
+
+Converting:
+
+- `--convert` appends one outcome per `- [ ]` or `- [x]` item in order, ticks
+  the ticked ones, and only after every append and tick succeeded rewrites the
+  description (`edit`) without that heading and those items. It prints
+  `outcome <id prefix> converted N outcomes`.
+- A card that already has outcomes prints
+  `outcome <id prefix> left alone: it already has outcomes`.
+- A card with no checklist prints
+  `outcome <id prefix> left alone: it has no Done when checklist`.
+- Both are exit 0 with nothing changed, so a second run changes nothing.
+- A failure part way leaves the appended outcomes and the old description. The
+  card then counts as converted until its outcomes are fixed by hand.
+
+Writes and queueing:
+
+- Every form sends the owner fence as `If-Owner-Fence` when this machine holds
+  one.
+- dev never calls Pomb's reorder subtasks, which is admin-only.
+- A local board keeps the same rows in the card's `outcomes`, refusing a stale
+  fence as the other writes do.
+- The append, `--rename`, `--tick` and `--untick` are queued while Pomb is
+  unreachable. A timeout or gateway error queues only `--tick` and `--untick`,
+  which are safe to apply twice.
+- `--convert` and `--delete` are never queued. The append and `--convert` are
+  not safe to apply twice (N is read from the live card at replay time).
+
+### The other subcommands
+
 - `ship [--rev REV] [-- CMD...]`: Ships the Release batch. It runs the
   release command after `--` once, for example `dev board ship -- dev release --batch 12
   --summary TEXT`, or each row of the `checks` list under `[board.release]`
@@ -2436,100 +2660,6 @@ The result:
   command fails or times out, `ship` stops at it, moves no card, prints the
   command and its output tail, and exits 1. A card whose note or move fails
   stays in Release, is listed, and makes `ship` exit 1. It is never queued.
-- `turn CARD [--hold SECONDS] [--wait SECONDS] [--release]`:
-  It refuses outside the card's workspace, as `check` does, but `--release`
-  works from anywhere. The turn is short and holding it is optional: a landing
-  takes it only around the rebase and the push, so a runner holds none across
-  the reviews or a check, and two cards whose checks ran in parallel land one
-  after the other. `turn` takes the landing turn for CARD early and keeps it,
-  so `land` lands under it and no other landing moves trunk meanwhile. It needs
-  `DEV_AGENT` (exit 2 without it) and takes the turn as `land` does, but fails
-  fast: it asks once unless `--wait` gives seconds to keep asking, and, when the
-  turn stays taken, refuses with `the landing turn is held by NAME since STAMP`.
-  A hold is longer than a landing's 900 second lease: `--hold` sets its lease,
-  1800 seconds by default and 3600 at most (a whole number, exit 2 otherwise),
-  so a long wait fits. `check` does not renew the lease while
-  it runs. Running `turn CARD` again as the holder renews the lease for
-  `--hold` more seconds, until the hold has been kept without a break for 3600
-  seconds in all, after which `turn` and `land` refuse, give the turn back and
-  leave the holder to ask again. The hold is recorded in the `dev-turn:` note
-  with the fence and the lease, so a later command finds it from the board
-  alone, on any machine under the same `DEV_AGENT`. Success prints
-  `holding the landing turn for <id prefix> for N seconds`.
-  A hold that lapsed frees the turn to the next asker, so taking it again
-  starts a new window. `--release` gives the hold back and writes a `left`
-  note. When the caller holds none for the card it still writes the `left`
-  note, which drops a queued ask and creates the `landing turn` card when the
-  board has none, and refuses. A hold that ran out is cleared
-  and reported as already gone. A card in Done is refused, except to give a
-  hold back.
-
-  `land CARD` finds a hold taken by the caller for that card and lands under
-  it without asking again. It renews the lease before `jj land` and gives the
-  turn back once the card has landed. A refusal leaves the hold in place, with
-  a line that says so, so the runner fixes the cause and lands again. When the
-  hold ran out or another card took the turn, `land` writes nothing, lands
-  nothing and refuses with `the landing turn held for <id prefix> ran out or
-  was taken by another`, and `turn CARD` takes it again.
-- `allow CARD WORD...`: Replaces the card's `dev.allow` field with the JSON
-  array of the words, the guard rails the card lifts, each `test-edits` or
-  `ci-edits` with duplicates dropped,
-  and prints `set allow <id prefix>, <words>` (`PATCH /api/tasks/{id}` with
-  `{"fields":{"dev.allow":["test-edits","ci-edits"]}}`, with the claim's
-  fence when this machine holds one). `allow CARD none` sends `null` to clear
-  the field and prints `cleared allow <id prefix>`. No word, any other word, or
-  `none` beside another word is exit 2, an unknown card is exit 1, and a Pomb
-  board without the field is refused before any write with
-  `the board has no dev.allow field, so define it on the board first` (exit
-  1). Sending the same value twice changes nothing more, so it is queued while
-  Pomb is unreachable like `checks`. A local board keeps the words in the card's
-  `allow`.
-- `tests CARD NAME...`: Replaces the card's `dev.tests` field with the
-  names joined by line breaks and prints `set tests <id prefix>, N names`
-  (`1 name` for one) (`PATCH /api/tasks/{id}` with
-  `{"fields":{"dev.tests":"a\nb"}}`, the multiline text a runner reads one
-  name per line, with the claim's fence when this machine holds one). No name, a
-  blank name or a name with a line break is exit 2, an unknown card is exit 1,
-  and a board without the field is refused before any write, naming it (exit 1).
-  It is queued while Pomb is unreachable like `checks`. A local board keeps the
-  text in the card's `tests`.
-- `files CARD PATH...`: The same as `tests`, for the `dev.files` field:
-  prints `set files <id prefix>, N names` (`1 name` for one).
-- `outcome CARD TEXT`, `outcome CARD --rename N TEXT --reason TEXT`,
-  `outcome CARD --tick N`, `outcome CARD --untick N`,
-  `outcome CARD --convert`: Appends a Done when outcome to an existing card
-  (`POST /api/tasks/{id}/subtasks` with `name`) and
-  prints `outcome <id prefix> N added`, with N the new outcome's place.
-  `--rename N TEXT --reason TEXT` rewords the Nth and posts one decision note
-  with the old text, the new text and the reason. A missing or empty `--reason`
-  is exit 2 and writes nothing. `--tick N` and `--untick N` set it done
-  or clear it (`PATCH /api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`),
-  printing `outcome <id prefix> N reworded`, `ticked by NAME` or `unticked`. A
-  tick on a claimed card needs `--as NAME` (or DEV_AGENT) for someone other than
-  the claimant. The reviewer or verifier ticks, and a card moves to Done only
-  once every outcome is ticked (see `move`). N counts from 1 in the order
-  `show` prints the outcomes, which come from the subtasks `/export-data`
-  carries (`id`, `name`, `done`), and an N
-  that is not a whole number of 1 or more is exit 2, one past the last outcome
-  exit 1 naming how many the card has. `--convert` moves a v1 `## Done when`
-  checklist into outcomes: it appends one outcome per `- [ ]` or `- [x]` item in
-  order, ticks the ticked ones, and only after every append and tick succeeded
-  rewrites the description (`edit`) without that heading and those items,
-  printing `outcome <id prefix> converted N outcomes`. A card that already has
-  outcomes prints `outcome <id prefix> left alone: it already has outcomes` and
-  one with no checklist
-  `outcome <id prefix> left alone: it has no Done when checklist` (exit 0,
-  nothing changed), so a second run changes nothing; a failure part way leaves
-  the appended outcomes and the old description, and the card then counts as
-  converted until its outcomes are fixed by hand. It takes no other word (exit
-  2). The words after the card, or after N, are the text, which must not be
-  blank (exit 2), and the text gets the prose warnings. All five send the
-  owner fence as `If-Owner-Fence` when this machine holds one. dev never calls
-  Pomb's reorder subtasks, which is admin-only. A local board keeps
-  the same rows in the card's `outcomes`, refusing a stale fence as the other
-  writes do. The three flag forms are queued while Pomb is unreachable and safe
-  to apply twice, and the append and `--convert` are not (N is read from the
-  live card at replay time).
 - `size CARD S`: Sets the card's colour: `1` yellow, `2` green, `3` blue, `3+`
   red, `unsized` white (`PATCH /api/tasks/{id}` with `color_id`, sending the
   claim's fence when this machine holds one) and prints `sized <id prefix> <S>`.
