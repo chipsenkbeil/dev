@@ -2652,7 +2652,13 @@ The commands:
 - With no command, each row of the `checks` list under `[board.release]` runs
   once.
 - Every command is a plain command run from the project root.
-- With neither, `ship` exits 2 and names `[board.release]`.
+- With no command and no `checks` key under `[board.release]`, `ship` exits 2
+  and names `[board.release]`.
+- With no command and a `checks` key that is malformed, `ship` exits 1 and
+  runs nothing. A malformed key is one of:
+  - an empty list
+  - a value that is not a list
+  - a row that is not a string, or that is not a plain command
 
 The revision:
 
@@ -3075,6 +3081,9 @@ The steps:
 
 - A card with no claim taken by `take` is exit 1.
 - It reads the card first and skips the post when no owner lease is live.
+- When a person holds the card, it is exit 1 and prints
+  `The card is held by NAME. Only that member can release it in Pomb.`
+  Nothing is posted, and the claim stays.
 - It posts `/owner/release` with the owner's name as `name` and the fence as
   `If-Owner-Fence`.
 - Only once the release succeeds does it stop the loop and forget the claim.
