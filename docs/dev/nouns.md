@@ -60,6 +60,11 @@ dev reads the comment block under the shebang of each script.
 - `# local` and `# positional` change how a verb is called. `dev help flags`
   describes both.
 
+A Lua verb (`.lua`) takes the same lines in one leading `--[[ ... ]]` block,
+with no `# ` prefix. The `group:` line comes first and the description on the
+line after it, as `.dev/antinote/diff.lua` has it. The bare `hidden`, `local`
+and `positional` lines and the `flags:` line sit in the same block.
+
 Project scripts named `__*.sh` or `__*.lua` never appear in any listing.
 
 ## Project topics
