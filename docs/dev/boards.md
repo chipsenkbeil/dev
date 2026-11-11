@@ -500,8 +500,17 @@ Every card in every column is fair game for an agent unless it is labelled
 - Verify: a verifier ticks the outcomes from the ci logs while the card sits
   here. Then `dev board land` lands it and moves the card to Release, or to
   Done when `[board.land] deploys` is not true.
+  - dev board land merges a card once Verify passes.
+    A card's change stays unmerged until land merges it.
+    `jj land --no-card` is a second merge path, and a forge merge bypasses both.
+    The WIP limit group counts only In Progress, Review and Verify.
 - Release: where `[board.land] deploys` is true, land sends a card to Release
   and it waits there to go live.
+  - A deploying repo merges many cards, then cuts and tests one release
+    after about 10 cards land, or when a peer needs a change.
+    Release drains at least once a day.
+    Leave Release without a limit. A Pomb limit on a column refuses moves
+    into it.
   - `dev board ship` runs the release command or the `[board.release]` checks
     rows once and moves every card with all outcomes ticked to Done.
   - `dev board move CARD done` moves one card and refuses while an outcome is
@@ -2298,6 +2307,13 @@ In order, it:
 - ends any claim still on the card, and a landed card carries no owner
 - gives the turn back and cleans up
 
+dev board land merges a card once Verify passes.
+A card's change stays unmerged until land merges it.
+`jj land --no-card` is a second merge path, and a forge merge bypasses both.
+
+After the move, dev board land removes the card's workspace and bookmark.
+A workspace or bookmark it cannot remove is kept, and the output says why.
+
 The command:
 
 - It refuses outside the card's workspace, as `check` does.
@@ -2487,8 +2503,6 @@ Cleanup never changes the exit code or the card's column.
 - A shell left inside the workspace sees dev exit 1 with the deleted working
   directory message, and the output says to run the next command from another
   folder.
-- A git project removes the worktree first and then deletes the branch (git
-  refuses to delete a checked-out branch).
 - A workspace outside the central root, or one with changes not in a commit,
   stays. The output names it and why.
 
