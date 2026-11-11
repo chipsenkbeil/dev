@@ -252,7 +252,8 @@ else
 
     printf 'pub fn run() {\n    // First line\n    // second line\n    // third line\n    flush();\n}\n' >"$rust/src/runs.rs"
     out="$(style_lint "$rust" "$full_path")"
-    assert_contains "three consecutive // lines fail" "$out" "src/runs.rs:2: 3 consecutive comment lines"
+    assert_contains "comment runs warns and passes: the warning line" "$out" "src/runs.rs:2: 3 consecutive comment lines"
+    assert_not_contains "comment runs warns and passes: no failure recorded" "$(printf %s "$out" | rg "^FAILED:")" "comment runs"
     printf 'pub fn run() {\n    // First line\n    // second line\n    flush();\n\n    // 1. First case\n    // 2. Second case\n    // 3. Third case\n    flush();\n}\n\n/// A doc\n/// that runs\n/// long enough\npub fn other() {}\n' >"$rust/src/runs.rs"
     out="$(style_lint "$rust" "$full_path")"
     assert_not_contains "two // lines, a numbered list and a doc comment run pass" "$out" "src/runs.rs"
@@ -374,7 +375,8 @@ else
 
     printf 'local a = 1\n-- One\n-- Two\n-- Three\nlocal b = 2\n' >"$lua/src/runs.lua"
     out="$(style_lint "$lua" "$full_path")"
-    assert_contains "three consecutive lua comment lines fail" "$out" "src/runs.lua:2: 3 consecutive comment lines"
+    assert_contains "comment runs warns and passes: the lua warning line" "$out" "src/runs.lua:2: 3 consecutive comment lines"
+    assert_not_contains "comment runs warns and passes: no lua failure recorded" "$(printf %s "$out" | rg "^FAILED:")" "comment runs"
     printf 'local a = 1\n\n-- One\n-- Two\nlocal b = 2\n\n--- Doc one\n--- Doc two\n--- Doc three\nlocal c = 3\n' >"$lua/src/runs.lua"
     out="$(style_lint "$lua" "$full_path")"
     assert_not_contains "two lua comment lines and a doc comment run pass" "$out" "src/runs.lua"
