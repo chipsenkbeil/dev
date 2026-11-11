@@ -184,8 +184,29 @@ local function under(path, base)
     return path:sub(1, #base + 1) == base .. "/"
 end
 
+local function forgotten(root, name)
+    local argv = vcs.with(
+        vcs.base(root, vcs.JJ, { quiet = true }),
+        "workspace",
+        "list",
+        "-T",
+        'name ++ "\\n"'
+    )
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        return false
+    end
+    for line in out:gmatch("[^\n]+") do
+        if line == name then
+            return false
+        end
+    end
+    return true
+end
+
 ---@class dev.cmd.ws.RemoveOpts
 ---@field inside boolean? false when unset, skips only the refusal of the workspace dev runs in
+---@field forgotten boolean? false when unset, removes a jj folder jj no longer lists and refuses any other
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
 
 ---Remove a workspace of the project at `root` and its folder.
@@ -205,7 +226,8 @@ function M.remove(root, name, opts)
     local real = fs.realpath(path)
     local real_base = fs.realpath(base)
     local real_root = fs.realpath(root)
-    if not fs.is_dir(path) then
+    local stray = fs.is_file(path)
+    if not fs.is_dir(path) and not stray then
         if opts.inside and real_base and real_root and not under(real_root, real_base) then
             return false, root .. " is outside " .. base
         end
@@ -220,13 +242,26 @@ function M.remove(root, name, opts)
     if real == real_root and not opts.inside then
         return false, path .. " is the workspace dev runs in"
     end
-    local backend = vcs.backend(path)
-    local clean, why = M.__clean(backend, path)
-    if not clean then
-        return false, why
+    local backend = not stray and vcs.backend(path) or nil
+    local gone = backend == vcs.JJ and forgotten(root, name)
+    if gone and not opts.forgotten then
+        return false,
+            path
+                .. " is a jj folder jj no longer tracks. Run dev ws rm "
+                .. name
+                .. " --forgotten to discard it."
+    end
+    if opts.forgotten and not gone then
+        return false, path .. " is not a jj folder jj no longer lists. --forgotten does not apply."
+    end
+    if not gone then
+        local clean, why = M.__clean(backend, path)
+        if not clean then
+            return false, why
+        end
     end
     local argv
-    if backend == vcs.JJ then
+    if backend == vcs.JJ and not gone then
         argv = vcs.with(vcs.base(root, vcs.JJ), "workspace", "forget", name)
     elseif backend == vcs.GIT then
         argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "remove", path)
@@ -252,12 +287,23 @@ end
 ---Only a folder directly under ROOT/<repo> is removed, never a link and never
 ---the workspace the command runs in. A jj workspace is forgotten, a git
 ---worktree is removed, and a folder with changes not in a commit is refused
----and left in place.
+---and left in place. A jj folder whose workspace jj no longer lists is refused
+---unless `--forgotten` is given, which deletes it. A plain file directly under
+---ROOT/<repo> is deleted.
 ---@param ctx dev.Ctx the verb's context
 ---@return integer code the exit code
 M.handlers["ws rm"] = function(ctx)
+    local discard = false
+    for i, arg in ipairs(ctx.args) do
+        if arg == "--forgotten" then
+            discard = true
+            table.remove(ctx.args, i)
+            break
+        end
+    end
     local name = parse(ctx)
     local ok, message, code = M.remove(ctx.root, name, {
+        forgotten = discard,
         show = function(argv)
             verb.show(ctx, argv)
         end,

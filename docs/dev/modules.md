@@ -75,6 +75,15 @@ workspace dev runs in, and a folder whose jj `@` is not empty or whose
 It then runs `jj workspace forget NAME` or `git worktree remove PATH` and
 deletes the folder. A plain folder is only deleted.
 
+A jj folder whose name `jj workspace list` no longer shows is refused by
+default. jj has no working-copy commit to read there, and the message says jj
+no longer tracks it and that `dev ws rm NAME --forgotten` discards it.
+`--forgotten` skips the clean check and the forget and deletes the folder under
+the same guards. It is refused for a folder jj still lists.
+
+A plain file directly under ROOT/<repo> is deleted under the same guards, and
+`ws rm` prints `removed PATH`.
+
 `vcs.delete_branch(root, backend, name)` runs `jj bookmark delete` or
 `git branch -D` when `vcs.branches` lists the name. `land` calls it for the
 card's bookmark.

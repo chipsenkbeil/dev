@@ -183,6 +183,7 @@ local RM_JJ_STUB = [[#!/bin/sh
 if [ "$1" = "--no-pager" ]; then shift; fi
 case "$*" in
     root) pwd; exit 0 ;;
+    *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
     *" log "*) printf '%s' "$DIRTY"; exit "${LOG_CODE:-0}" ;;
 esac
 echo "jj $*" >> "$LOG"
@@ -210,6 +211,7 @@ local function rm_setup(kind)
         assert(fs.write(path .. "/.git", "gitdir: elsewhere\n"))
     end
     env.env.DIRTY = ""
+    env.env.WORKSPACES = "default\nfeat"
     return root, path, env, log
 end
 
@@ -244,6 +246,75 @@ testing.test("rm forgets a jj workspace and deletes its folder", function()
     testing.eq(out, "removed " .. path .. "\n")
     testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget feat\n")
     testing.eq(fs.exists(path), false)
+end)
+
+testing.test("ws rm refuses a forgotten folder without --forgotten", function()
+    local root, path, env, log = rm_setup("jj")
+    env.env.WORKSPACES = "default"
+    env.env.LOG_CODE = "1"
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "dev ws rm: "
+            .. path
+            .. " is a jj folder jj no longer tracks. Run dev ws rm feat --forgotten to discard it.\n"
+    )
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("ws rm --forgotten removes a forgotten folder", function()
+    local root, path, env, log = rm_setup("jj")
+    env.env.WORKSPACES = "default"
+    env.env.LOG_CODE = "1"
+    local out, code = support.dev(root, { "ws", "rm", "feat", "--forgotten" }, env)
+    testing.eq(code, 0)
+    testing.eq(out, "removed " .. path .. "\n")
+    testing.eq(fs.exists(log), false)
+    testing.eq(fs.exists(path), false)
+end)
+
+local NOT_FORGOTTEN = " is not a jj folder jj no longer lists. --forgotten does not apply.\n"
+
+testing.test("ws rm --forgotten refuses a folder jj still lists", function()
+    local root, path, env, log = rm_setup("jj")
+    local out, code = support.dev(root, { "ws", "rm", "--forgotten", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, "dev ws rm: " .. path .. NOT_FORGOTTEN)
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("ws rm --forgotten refuses a git worktree", function()
+    local root, path, env, log = rm_setup("git")
+    local out, code = support.dev(root, { "ws", "rm", "feat", "--forgotten" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, "dev ws rm: " .. path .. NOT_FORGOTTEN)
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("ws rm removes a stray file", function()
+    local root, path, env, log = rm_setup("jj")
+    local stray = fs.dirname(path) .. "/check.log"
+    assert(fs.write(stray, "x"))
+    local out, code = support.dev(root, { "ws", "rm", "check.log" }, env)
+    testing.eq(code, 0)
+    testing.eq(out, "removed " .. stray .. "\n")
+    testing.eq(fs.exists(stray), false)
+    testing.eq(fs.exists(log), false)
+    testing.eq(fs.is_dir(path), true)
+end)
+
+testing.test("ws rm still refuses a folder with uncommitted changes", function()
+    local root, path, env, log = rm_setup("jj")
+    env.env.DIRTY = "changes"
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, "dev ws rm: " .. path .. " holds changes not in a commit\n")
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(fs.exists(log), false)
 end)
 
 testing.test("rm removes a git worktree and its folder", function()
