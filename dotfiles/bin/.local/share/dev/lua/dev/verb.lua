@@ -1,6 +1,7 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local stderr = io.stderr
+local stdout = io.stdout
 
 ---@class dev.Ctx
 ---@field name string the command as typed, a noun and its subcommand joined by a space
@@ -39,6 +40,12 @@ function M.no_args(ctx)
         ctx,
         "unknown argument " .. arg .. ", " .. ctx.name .. " takes only KEY=value arguments"
     )
+end
+
+---Write `msg` and a newline to standard output.
+---@param msg string the whole message
+function M.say(msg)
+    stdout:write(msg, "\n")
 end
 
 ---Write `msg` and a newline to standard error.

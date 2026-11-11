@@ -11,3 +11,13 @@ testing.test("note writes the message and a newline to standard error", function
     testing.eq(code, 0)
     testing.eq(out, "dev sync: nothing to pull\n")
 end)
+
+testing.test("say writes the message and a newline to standard output", function()
+    local script = string.format(
+        "package.path = %q; require('dev.verb').say('dev sync: nothing to pull')",
+        support.absolute_path()
+    )
+    local out, code = dev_os.capture({ "luajit", "-e", script })
+    testing.eq(code, 0)
+    testing.eq(out, "dev sync: nothing to pull\n")
+end)
