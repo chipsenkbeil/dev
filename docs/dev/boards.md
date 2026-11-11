@@ -1,4 +1,4 @@
-# boards: Read and update a project's board with dev board, and every subcommand in detail
+# boards: Read and update a project's board, with every dev board subcommand
 
 `dev board` reads and updates the project's kanban board, so an agent never
 handles the board's API. It is machine-local: `--remote` and root refuse it.
@@ -248,8 +248,8 @@ works.
 
 - lead session: `lead_token`, preset `lead`.
   - calls: everything `work` does, plus `boards.create`, `columns.create`,
-    `columns.edit`, `columns.reorder`, `fields.create`, `colors.edit` and
-    `tasks.bin` (for `init` and the `dev board delete` verb), and
+    `columns.edit`, `columns.reorder`, `fields.create` and `colors.edit` (for
+    `init`), `tasks.bin` (for the `dev board delete` verb), and
     `subtasks.delete` for `outcome --delete`.
   - deletes: `tasks.bin` sends a card to the bin for 30 days, and
     `subtasks.delete` removes any outcome.
@@ -2640,8 +2640,6 @@ Writes and queueing:
 - `--convert` and `--delete` are never queued. The append and `--convert` are
   not safe to apply twice (N is read from the live card at replay time).
 
-### The other subcommands
-
 ### ship
 
 `ship [--rev REV] [-- CMD...]` ships the Release batch. It runs the
@@ -2794,14 +2792,17 @@ The refusals run in this order:
 - When the column is Review, Verify, Release or not a column at all, the stage
   check runs before the card is read. A board that still has an In Review
   column and lacks a stage column fails with
-  `the board has an In Review column and no <name> column, so run dev board init to move the board to the stage columns`
+  `the board has an In Review column and no <name> column, so run dev board init
+  to move the board to the stage columns`
   (exit 1).
 - After the card is read, `move` refuses a card labelled `needs:human` that
   moves to a different column.
 - The Ready, planning, Done and epic rules follow, each described below.
 - A card leaving In Progress for Review, Ready or Blocked with a claimant and
   no note from that claimant after the claim is refused with
-  `<id prefix> has no note from its claimant NAME since the claim, so it cannot leave In Progress; note what you built, tried and learned first: dev board note <id prefix> TEXT`
+  `<id prefix> has no note from its claimant NAME since the claim, so it cannot
+  leave In Progress; note what you built, tried and learned first: dev board
+  note <id prefix> TEXT`
   (exit 1).
 - None of these refusals is queued.
 
@@ -2811,9 +2812,11 @@ A move into Ready:
   refused before the backend is called, on both backends, so a card is sized in
   planning and red never reaches Ready.
 - The refusal reads
-  `<id prefix> has no size and cannot enter Ready; size it with dev board size CARD 1, 2 or 3`,
+  `<id prefix> has no size and cannot enter Ready; size it with dev board size
+  CARD 1, 2 or 3`,
   or for red
-  `<id prefix> is red, more than 3 Pomodori, so split it and cannot enter Ready; ...`
+  `<id prefix> is red, more than 3 Pomodori, so split it and cannot enter Ready;
+  ...`
   (exit 1).
 - A card whose description lacks one of the three v2 headings or text under
   one, or that has neither 3 to 7 outcomes (subtasks) nor a v1 checklist item,
@@ -2821,13 +2824,16 @@ A move into Ready:
 - The v1 fallback is a `- [ ]` or `- [x]` item under `## Done when`, and it
   holds while boards are converted.
 - The refusal reads
-  `<id prefix> is not in card format v2 and cannot enter Ready; it lacks <what>; add outcomes with dev board outcome and fix the description with dev board edit, where a v1 Done when checklist also counts`
+  `<id prefix> is not in card format v2 and cannot enter Ready; it lacks <what>;
+  add outcomes with dev board outcome and fix the description with dev board
+  edit, where a v1 Done when checklist also counts`
   (exit 1, on both backends, size checked first).
 - `dev.board.missing(description, outcomes)` lists what is missing.
 - A card with no checks row is refused after those, before the backend is
   called.
 - That refusal reads
-  `<id prefix> has no checks row and cannot enter Ready; give it one with dev board checks CARD CMD`,
+  `<id prefix> has no checks row and cannot enter Ready; give it one with dev
+  board checks CARD CMD`,
   or on a Pomb board with no checks field
   `the board has no checks field, so run dev board init to add it` (exit 1, on
   both backends, which `checks_field` tells apart).
@@ -2843,7 +2849,8 @@ A move into any column but Icebox or Ready:
 - A card with no size, a description that lacks a v2 heading or text under
   Problem, or no outcome is refused before the backend is called.
 - The refusal reads
-  `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it with dev board size, edit and outcome`
+  `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it
+  with dev board size, edit and outcome`
   (exit 1, on both backends, `dev.board.unplanned`).
 - A `discard` is refused the same way for a missing size or heading, with no
   outcome needed, except an unplanned Icebox card given a `--reason`.
@@ -2853,13 +2860,16 @@ A move into Done (`move CARD done`):
 - It is refused once the card is read, before the move is sent, while the card
   has an unticked outcome.
 - The refusal reads
-  `<id prefix> cannot move to Done: N of M outcomes are unticked (1. text, 2. text); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it`
+  `<id prefix> cannot move to Done: N of M outcomes are unticked (1. text, 2.
+  text); the reviewer ticks them with dev board outcome CARD --tick N --as NAME,
+  or dev board discard CARD drops it`
   (exit 1, on both backends, each open outcome numbered as `show` numbers it).
 - Outcomes that Pomb sent in a form dev cannot read refuse the move the same
   way. That is a `subtasks` that is not a list, or an entry without a string
   name.
 - That refusal reads
-  `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked`.
+  `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so
+  they cannot be checked`.
 - A card with no outcomes, or with all of them ticked, moves as before.
 - A move to Done that Pomb could not answer for is not queued.
 
@@ -2868,7 +2878,8 @@ An epic with an open child:
 - It is refused a move into a column whose settings make it WIP-limited or
   done, never one picked by its name.
 - The refusal reads
-  `<id prefix> is an epic and cannot enter COLUMN, a done column: N of M children are open`
+  `<id prefix> is an epic and cannot enter COLUMN, a done column: N of M
+  children are open`
   (or `a WIP-limited column`, exit 1, on both backends).
 - `Backend:columns` reports each column's `is_done` and `wip_limit`. A local
   column has no limit, so only `is_done` applies there.
@@ -3004,7 +3015,8 @@ The size limit:
   else exit 2.
 - With it set, `take` and `move CARD progress` refuse a card bigger than that
   many Pomodori with
-  `<id prefix> is <size>, above this runner's limit of N Pomodori (DEV_MAX_SIZE)`
+  `<id prefix> is <size>, above this runner's limit of N Pomodori
+  (DEV_MAX_SIZE)`
   (exit 1).
 - `run` takes its own run card and is not held to the limit.
 - The `next:` line of `run` skips a card above it.
@@ -3085,312 +3097,515 @@ On a local board:
 
 - It prints `dev: a local board has nothing to sync` (exit 1).
 
-`add` (its `--description`), `note` (a new or `--edit`ed text) and `edit` write
-a warning to standard error, prefixed `warning: `, and still write (exit 0,
-output unchanged), when prose holds a hex id, a hash or a path:
-`card prose holds a hex id or hash: <word>` or
-`card prose holds a path: <word>`, one line per distinct word. Text under a
-`## Change` heading is left out, so a note, which has no headings, is all prose,
-and the name, `--checks` and `dev board checks` arguments are never scanned. A
-`--done-when` outcome is scanned as prose. A hex id is a run of 7 or more hex
-characters with at least one digit and one letter (so `decade` and `1234567`
-pass), found in any alphanumeric run of a word. A path is a word, trimmed of
-surrounding quotes, backticks, brackets and trailing punctuation, that holds a
-`/` and either starts with `~/`, `./` or `/` or ends in a dot and a letter-led
-extension (`and/or` and `2026/10/28` pass). A URL (`scheme://...`) is exempt.
-Fenced code counts as prose. It is `dev.board.prose_warnings`, and a queued
-replay prints none.
+### Prose warnings
 
-The board comes from the `[board]` section of `<root>/.dev/config.toml`:
-`backend` is `pomb` or `local`, and `name` defaults to the project directory's
-name. With no `[board]` section every subcommand prints
-`dev: no board for this project` and exits 1, which is how an agent branches.
+`add`, `note` and `edit` warn when card prose holds a hex id, a hash or a path.
+The warning goes to standard error with the prefix `warning: `, and the write
+still happens (exit 0, output unchanged).
+
+- messages: `card prose holds a hex id or hash: <word>` and
+  `card prose holds a path: <word>`, one line per distinct word.
+- scanned: the `--description` of `add`, a new or `--edit`ed `note` text and
+  the text `edit` writes. A `--done-when` outcome counts as prose. Fenced code
+  counts as prose.
+- not scanned: text under a `## Change` heading, and the name, `--checks`
+  and `dev board checks` arguments. A note has no headings, so all of it is
+  prose.
+- hex id: a run of 7 or more hex characters with at least one digit and one
+  letter (`decade` and `1234567` pass), found in any alphanumeric run of a
+  word.
+- path: a word, trimmed of surrounding quotes, backticks, brackets and
+  trailing punctuation, that holds a `/` and either starts with `~/`, `./` or
+  `/` or ends in a dot and a letter-led extension (`and/or` and `2026/10/28`
+  pass). A URL (`scheme://...`) is exempt.
+
+`dev.board.prose_warnings` implements the scan. A queued replay prints none.
+
+### The board section
+
+The board comes from the `[board]` section of `<root>/.dev/config.toml`.
+
+- `backend`: `pomb` or `local`. A `local` backend keeps the board in a file
+  (see the local backend below). Any other backend is exit 1.
+- `name`: defaults to the project directory's name.
+- no `[board]` section: every subcommand prints
+  `dev: no board for this project` and exits 1, which is how an agent
+  branches.
+
 Every subcommand, `edit` and `show` alike, prints
 `dev: no board for this project` from a directory outside the project (the
-root is found from the current directory). A refusal from a checkout's root or
-any directory below it means that checkout's `.dev/config.toml` has no
+root is found from the current directory). A refusal from a checkout's root
+or any directory below it means that checkout's `.dev/config.toml` has no
 `[board]` section. A refusal from elsewhere means the shell was not in the
 project, or that project has no `[board]` section.
-A `local` backend keeps the board in a file (below). Any other backend is
-exit 1.
+
 The Pomb server and the token reference come from `[board.pomb]` (`url`,
 `token = "pass:<entry>"` and `lead_token = "pass:<entry>"`) in the user file
-`~/.config/dev/config.toml` alone, read with `config.user`, so a project file
+`~/.config/dev/config.toml` alone, read with `config.user`. A project file
 cannot name another server for the token to go to.
-`dotfiles/bin/.config/dev/config.toml` ships that file, and this repo's own
+
+`dotfiles/bin/.config/dev/config.toml` ships that file. This repo's own
 `.dev/config.toml` holds `[board] backend = "pomb"` and `name = "dotfiles"`.
 
-`take` writes `<state home>/dev/board/<card id>` (`$XDG_STATE_HOME` when
-absolute, else `~/.local/state`) with `card=`, `fence=` and `pid=` lines at mode
-600 in a mode 700 directory (written to a `.new` file and renamed, so the loop
-never sees a half file), and never the token. The loop is `board/keepalive.sh`
-in dev's share directory, started by `dev.board.pomb` through
-`sh -c 'set -m; nohup bash <script> ... & echo $!'`, so it has its own process
-group, outlives the caller's shell and wakes no model. Every 5 minutes (`sleep`
-with the tick in seconds as its seventh argument) it checks that the state file
-still holds its fence, reads the token through the same `board/passlock.sh` as
-`dev.board.pomb`, Keychain first, refuses a token outside `A-Za-z0-9._~+/=-`,
-and sends `POST /api/tasks/{id}/owner/renew` with
-`{"name":NAME,"ttl_seconds":900}` and `If-Owner-Fence: N` through
-`curl -K -`, the token going over a `printf` builtin pipe into curl's stdin so it is in no argv, no environment variable, no file and no
-output. The loop ends when the state file is gone or holds another fence
-(`release`, `move` out of In Progress or a newer `take`; `release` and `move`
-also kill its pid after `ps` shows the script in the command, and `release` does
-so only once Pomb has accepted the release, so a failed release can be retried),
-when a renewal answers 4xx (the owner lease is gone), and after twice the card's
-size in 5-minute ticks: 10 for 1 Pomodoro, 20 for 2 Pomodori and 30 for any
-other size, unsized included. A network failure, a 5xx or a failed `pass` read
-(a locked store) keeps it going until the cap, and a move made outside
-`dev board move` does not stop it, and a loop that ends removes its state file,
-so a crashed agent's claim lapses after its 900-second lease. `ls` adds a
-holder column before the name, only when a listed card has a live owner (`-`
-for the others), from `owner.holder` of `/export-data` while
-`owner.lease_expires_at` is in the future or null. A lapsed lease counts as
-unowned in `ls`, `next` and `lint`. `next` reads each card's `owner` and skips
-a live one. Moving a card keeps the loop only into In
-Progress, so `next`, `take`, `move progress` works.
+### The keep-alive loop
 
-`dev board wait [--for ready|review|verify|release|human|lead]` (Pomb only)
-loops on `Backend:wait` until an event matches and prints one line per matching
-event in the reply, then exits 0, so a background run under `timeout` wakes the
-session. `--for ready` sends kinds `task_added,task_moved` and matches a card
-whose column is Ready after the event (`added <id prefix> to Ready`, `moved <id
-prefix> to Ready`), `--for human` sends `task_moved,comment_added` and matches a
-move whose `from_column` is Blocked, whose `actor` is `human` (Pomb's
-`actor_kind` of `user`) and whose `at` (Pomb's `at` as epoch seconds, both
-kept on each event by `Backend:wait`) is later than the wait's start, printed
-as `moved <id prefix> out of Blocked`, or a comment event whose card is not
-Done and whose newest comment is the owner's and newer than the time the wait
-started, which it reads with `Backend:cards` and `Backend:comments` (`the
-owner commented on <id prefix>`). The first match opens a settle window of 60
-seconds (`Owner.SETTLE_SECONDS`): each further call to `Backend:wait` passes
-the time left of the window as its timeout, a match restarts the window, and
-an empty reply or an elapsed window ends it with one line per card. `--for
-lead` sends `task_added,task_moved,task_updated` and, for each reply with
-events, reads `Backend:cards` and matches an event whose card is in Blocked
-with `needs:lead` (`--for planner`, which sends the same kinds,
-`needs:planner`) and no `needs:human` (`<id prefix> is labelled needs:lead in
-Blocked`, once per card per reply), and with no `--for` all four kinds match
-(`added <id> to <column>`, `moved <id> to <column>`, `updated <id>`,
-`commented on <id>`). An unknown `--for`, a card argument or another flag is
-exit 2, and a local board is `dev: a local board has nothing to wait on` (exit
-1). The cursor is `<state
-home>/dev/boards/<name>.<ready|review|verify|release|human|lead|planner|all>.cursor`,
-one per `--for` mode so a filtered wait never consumes another mode's events
-(the name with every character outside `A-Za-z0-9._-` turned into `_`) at mode
-600, written after every reply, and with no file the first call asks without a
-cursor and starts from the cursor Pomb answers. An expired cursor (410) stores
-the backend's oldest cursor and prints `events were trimmed, check the board`
-(exit 0). `--for human` stores it and rereads the cards instead
-(`Owner.sitting` at the start, `Owner.departed` on a trim) and prints `moved
-<id prefix> out of <column>` for each card that sat in Blocked or Icebox and
-has left it, or keeps waiting when none has. A failure `pomb.unreachable`
-counts (idempotent rules) is retried after a 30 second nap, and the tenth in a
-row exits 1 with its message (an endless silent retry would hide a dead Pomb
-from the session). A 429 whose body has the code `too_many_waits` (4 open
-waits per token, and every session shares the token) makes `Backend:wait`
-return a fourth value, `true`, and is never a failure: `wait` prints `dev:
-pomb holds too many open waits for this token, waiting for one to end` on
-standard error once per call, resets the failure count, and retries with a
-pause of 30, 60, 120, 240 and then 300 seconds, each cut by up to a quarter
-with a random fraction, until a reply comes (a reply starts the pause over). A
-429 with another code is a plain refusal. Any other refusal exits 1 at once.
+`take` starts a loop that renews the card's owner lease.
+
+State file:
+
+- path: `<state home>/dev/board/<card id>` (`$XDG_STATE_HOME` when absolute,
+  else `~/.local/state`), with `card=`, `fence=` and `pid=` lines.
+- mode: 600 in a mode 700 directory. It never holds the token.
+- write: to a `.new` file, then renamed, so the loop never sees a half file.
+
+Start:
+
+- the loop is `board/keepalive.sh` in dev's share directory.
+- `dev.board.pomb` starts it through
+  `sh -c 'set -m; nohup bash <script> ... & echo $!'`. It has its own process
+  group, outlives the caller's shell and wakes no model.
+
+Every 5 minutes (`sleep` with the tick in seconds as its seventh argument)
+the loop does these in order:
+
+1. It checks that the state file still holds its fence.
+2. It reads the token through the same `board/passlock.sh` as
+   `dev.board.pomb`, Keychain first. A token that cannot be read, or has a
+   character outside `A-Za-z0-9._~+/=-`, skips that renewal and counts as a
+   tick.
+3. It sends `POST /api/tasks/{id}/owner/renew` with
+   `{"name":NAME,"ttl_seconds":900}` and `If-Owner-Fence: N` through
+   `curl -K -`. The token goes over a `printf` builtin pipe into curl's stdin,
+   so it is in no argv, no environment variable, no file and no output.
+
+The loop ends when:
+
+- the state file is gone or holds another fence (`release`, `move` out of In
+  Progress or a newer `take`). `release` and `move` also kill its pid after
+  `ps` shows the script in the command. `release` does so only once Pomb has
+  accepted the release, so a failed release can be retried.
+- a renewal answers 4xx (the owner lease is gone). The exception is a 401 for
+  a token read from the Keychain: the loop drops that Keychain entry through
+  `board/keychain.sh` once, and ends on a second 401 before any renewal
+  succeeds.
+- twice the card's size in 5-minute ticks have passed: 10 for 1 Pomodoro, 20
+  for 2 Pomodori and 30 for any other size, unsized included.
+
+A network failure, a 5xx or a failed `pass` read (a locked store) keeps the
+loop going until the cap. A move made outside `dev board move` does not stop
+it.
+
+A loop that ends removes its state file when the file still holds its fence.
+A crashed agent's claim lapses after its 900-second lease.
+
+Readers of the lease:
+
+- `ls` adds a holder column before the name, only when a listed card has a
+  live owner (`-` for the others). It reads `owner.holder` of `/export-data`
+  while `owner.lease_expires_at` is in the future or null.
+- a lapsed lease counts as unowned in `ls`, `next` and `lint`.
+- `next` reads each card's `owner` and skips a live one.
+- moving a card keeps the loop only into In Progress, so `next`, `take`,
+  `move progress` works.
+
+### wait
+
+`dev board wait [--for ready|review|verify|release|human|lead|planner]` (Pomb
+only) loops on `Backend:wait` until an event matches. It prints one line per
+matching event in the reply, then exits 0, so a background run under `timeout`
+wakes the session.
+
+The `--for` modes:
+
+- `ready`: sends the kinds `task_added,task_moved` and matches a card whose
+  column is Ready after the event, printed as `added <id prefix> to Ready` or
+  `moved <id prefix> to Ready`.
+- `review`, `verify` and `release`: send the same kinds and print the same
+  lines for their own column, and match only a card with no claimant.
+- `human`: sends `task_moved,comment_added` and matches two things. The first
+  is a move whose `from_column` is Blocked, whose `actor` is `human` (Pomb's
+  `actor_kind` of `user`) and whose `at` is later than the wait's start. Pomb's
+  `at` is epoch seconds, and `Backend:wait` keeps both on each event. It
+  prints `moved <id prefix> out of Blocked`. The second is a comment event
+  whose card is not Done and whose newest comment is the owner's and newer than
+  the wait's start, which `wait` reads with `Backend:cards` and
+  `Backend:comments`. It prints `the owner commented on <id prefix>`.
+- `lead` and `planner`: send `task_added,task_moved,task_updated`. For each
+  reply with events they read `Backend:cards` and match an event whose card is
+  in Blocked with no claimant, no `needs:human` and the label `needs:lead`
+  (`needs:planner` for `--for planner`). The line is
+  `<id prefix> is labelled needs:lead in Blocked`, once per card per reply.
+- no `--for`: all four kinds match, printed as `added <id> to <column>`,
+  `moved <id> to <column>` (`another board` when the column is unknown),
+  `updated <id>` and `commented on <id>`.
+
+The `human` mode settles before it answers. The first match opens a window of
+60 seconds (`Owner.SETTLE_SECONDS`). Each further call to `Backend:wait` passes
+the time left of the window as its timeout, and a match restarts the window.
+An empty reply or an elapsed window ends it with one line per card.
+
+An unknown `--for`, a card argument or another flag is exit 2. A local board
+prints `dev: a local board has nothing to wait on` (exit 1).
+
+The cursor:
+
+- path: `<state home>/dev/boards/<name>.<mode>.cursor` at mode 600, where
+  `<mode>` is `ready`, `review`, `verify`, `release`, `human`, `lead`,
+  `planner` or `all`. The name has every character outside `A-Za-z0-9._-`
+  turned into `_`.
+- one file per `--for` mode, so a filtered wait never consumes another mode's
+  events.
+- written after every reply. With no file, the first call asks without a
+  cursor and starts from the cursor Pomb answers.
+- an expired cursor (410) stores the backend's oldest cursor and prints
+  `events were trimmed, check the board` (exit 0).
+- `--for human` stores the oldest cursor and rereads the cards instead
+  (`Owner.sitting` at the start, `Owner.departed` on a trim). It prints
+  `moved <id prefix> out of <column>` for each card that sat in Blocked or
+  Icebox and has left it, or keeps waiting when none has.
+
+Failures:
+
+- a failure that `pomb.unreachable` counts (idempotent rules) is retried
+  after a 30 second nap. The tenth in a row exits 1 with its message (an
+  endless silent retry would hide a dead Pomb from the session).
+- a 429 whose body has the code `too_many_waits` (4 open waits per token, and
+  every session shares the token) is never a failure. `Backend:wait` returns a
+  fourth value, `true`. `wait` prints
+  `dev: pomb holds too many open waits for this token, waiting for one to end`
+  on standard error once per call, resets the failure count and retries with a
+  pause of 30, 60, 120, 240 and then 300 seconds, each cut by up to a quarter
+  with a random fraction. A reply starts the pause over.
+- a 429 with another code is a plain refusal. Any other refusal exits 1 at
+  once.
+
 `wait` is not in the queue rules, and a reply with no matching event loops
 again. `tests/lua/board_test.lua` covers it with a fake backend and stub
 `nap`, `random` and `notice` options.
 
-The `local` backend is `dev.board.localboard`, one JSON file with `name`,
-`columns`, `colors` and `cards` (each card with its `column_id`, `color_id`,
-`labels`, `links`, `comments`, `entered_at`, and a `claim` of `claimant`,
-`fence` and `expires_at` while one is held), written one card per line so a
-tracked file diffs well. The file is `<state home>/dev/boards/<name>.json`
-(`$XDG_STATE_HOME` when absolute, else `~/.local/state`) at mode 600 in a mode
-700 directory, with the name restricted to letters, digits, dots, dashes and
-underscores (else `dev: a local board's name must be letters, digits...`, exit
-1), or `<root>/<path>` at the default mode when
-`[board] path = ".dev/board.json"` is set. The path must be relative, start with
-a letter, digit, dot or underscore and hold no `..` or `//` (else exit 1), and
-`path` with the `pomb` backend is exit 1. Every change runs in
-`dev.board.store`: take an exclusive `flock` on `<file>.lock` (for a tracked
-path, a lock file named for the path under `<state home>/dev/boards/locks/`, so
-the project tree gets none), read the file again, change it, write a temporary
-file beside it and `rename` it over, so two processes never lose each other's
-write and a reader never sees half a file. `take` on a local board sets the
-claim's expiry to twice the card's size from now (50, 100 or 150 minutes),
-starts no loop, writes the state file with `pid=0` and prints
-`took <id prefix>, fence N, held for Nm`; a live claim by another claimant or
-with another fence refuses the claim, a write that sends a fence while another
-fence holds the claim is refused, and a lapsed claim blocks nothing. Comments
-are of actor `agent`, and `note --edit` and `--delete` refuse any other
-(`that comment is not yours to change`). New cards go to the bottom of their
-column, `move` to the top, `next` is the top unclaimed Ready card, and `stale`
-counts days from the card's `entered_at`.
+### The local backend
 
-The Pomb offline queue is `dev.board.queue`,
-`<state home>/dev/boards/<name>.queue` (the name with every character outside
-`A-Za-z0-9._-` turned into `_`) at mode 600, a JSON list of `{sub, args, at}`
-with the command as typed and no token. When `add`, `move`, `note` (not `--edit`
-or `--delete`), `size`, `label`, `link`, `edit`, `rename` or `outcome` on a Pomb
-board fails because Pomb could not be asked (`dev.board.pomb.unreachable`:
-`pass` timed out or is locked, or curl could not resolve or connect, exit 5, 6
-or 7; for `move`, `size`, `label`, `link`, `edit`, `rename` and `outcome` with
-`--tick` or `--untick`, which are safe to apply twice, also a curl
-timeout, a 502, 503 or 504, or an answer that is not JSON, since those may
-follow an applied change and `add` or `note` would then be doubled, so an
-`outcome` append, `--rename` or `--convert` is never queued for those), the
-command appends itself to the queue, prints
-`queued: Pomb unreachable, will sync` and exits 0.
-Usage errors, refusals and every read are not queued. Every other `dev board`
-command on a Pomb board, `status` included, first replays a non-empty queue (its
-`synced` and `dropped` lines go to standard error), so a card prefix is resolved
-against the live board at replay time. Replays run in order under the queue's
-lock, each leaving the file as soon as it is dealt with, so a process killed
-mid-replay leaves that change queued and delivery is at least once. One that
-Pomb refuses is reported and dropped, never retried, and one that finds Pomb
-unreachable again stops the replay and stays queued with those behind it.
-`status` prints `queued: N` last while changes are waiting. A missing queue file
-is an empty queue. A file that is not valid JSON, is not a list or holds an
-entry without a string `sub` and a list `args` is malformed: `queue.count` and
-`queue.list` answer `<path>:<line>: <reason>` (the line from the parse error's
-offset, or `<path>: entry N is not a queued command`), `dev board sync` prints
-`dev: <that>; the queue is left in place` and exits 1, and every other Pomb
-command (`status` included) prints the same line on standard error, replays
-nothing, runs normally and leaves the file untouched, so a read is never blocked
-by a bad queue. A write that would have been queued then fails with
-`could not be queued` (`push` refuses a malformed file), and nothing overwrites
-it. `tests/lua/board_local_test.lua` covers the local backend on a temporary
-state directory, a tracked path, six processes writing at once and the queue.
+The `local` backend is `dev.board.localboard`, one JSON file written one card
+per line, so a tracked file diffs well.
 
-A column argument is matched against Icebox, Backlog, Ready, In Progress, In
-Review, Blocked and Done in any case, plus the short forms `progress` and
-`review`, else exit 2 naming the columns. A card is its full id or a prefix of
-at least 8 hex characters that is unique on the board; a shorter, unknown or
-ambiguous one exits 1. The size is the palette label of the card's colour, or
-`unsized`. A flag a subcommand does not take, a missing argument and a bad
-column are usage errors (exit 2).
+The file holds:
+
+- `name`, `columns`, `colors` and `cards`.
+- per card: `column_id`, `color_id`, `labels`, `links`, `comments` and
+  `entered_at`, and a `claim` of `claimant`, `fence` and `expires_at` while one
+  is held.
+
+Where it lives:
+
+- default: `<state home>/dev/boards/<name>.json` (`$XDG_STATE_HOME` when
+  absolute, else `~/.local/state`) at mode 600 in a mode 700 directory. The
+  name is restricted to letters, digits, dots, dashes and underscores (else
+  `dev: a local board's name must be letters, digits...`, exit 1).
+- tracked: `<root>/<path>` at the default mode when
+  `[board] path = ".dev/board.json"` is set. The path must be relative, start
+  with a letter, digit, dot or underscore and hold no `..` or `//` (else exit
+  1). `path` with the `pomb` backend is exit 1.
+
+Every change runs in `dev.board.store`:
+
+1. Take an exclusive `flock` on `<file>.lock`. A tracked path gets a lock file
+   named for the path under `<state home>/dev/boards/locks/`, so the project
+   tree gets none.
+2. Read the file again and change it.
+3. Write a temporary file beside it and `rename` it over.
+
+Two processes never lose each other's write, and a reader never sees half a
+file.
+
+Behavior:
+
+- `take` sets the claim's expiry to twice the card's size from now (50, 100
+  or 150 minutes), starts no loop, writes the state file with `pid=0` and
+  prints `took <id prefix>, fence N, held for Nm`.
+- a live claim by another claimant or with another fence refuses the claim. A
+  write that sends a fence while another fence holds the claim is refused. A
+  lapsed claim blocks nothing.
+- comments are of actor `agent`. `note --edit` and `--delete` refuse any other
+  (`that comment is not yours to change`).
+- new cards go to the bottom of their column and `move` puts a card at the
+  top.
+- `next` is the top unclaimed Ready card.
+- `stale` counts days from the card's `entered_at`.
+
+### The offline queue
+
+`dev.board.queue` keeps the Pomb offline queue in
+`<state home>/dev/boards/<name>.queue`, at mode 600. The name has every
+character outside `A-Za-z0-9._-` turned into `_`. The file is a JSON list of
+`{sub, args, at}` with the command as typed and no token.
+
+Queued commands:
+
+- `add`, `move`, `note` (not `--edit` or `--delete`), `size`, `label`,
+  `link`, `edit`, `rename` and `outcome` on a Pomb board queue themselves when
+  Pomb could not be asked. That is `dev.board.pomb.unreachable`: `pass` timed
+  out or is locked, or curl could not resolve or connect (exit 5, 6 or 7).
+- `move`, `size`, `label`, `link`, `edit`, `rename` and `outcome` with
+  `--tick` or `--untick` are safe to apply twice. For them a curl timeout, a
+  502, 503 or 504, or an answer that is not JSON also queues.
+- a curl timeout, a 502, 503 or 504, or an answer that is not JSON may follow
+  a change that was applied. `add` and `note` would then be doubled, so they
+  are not queued on it, and neither is an `outcome` append, `--rename` or
+  `--convert`.
+
+A queued command appends itself to the queue, prints
+`queued: Pomb unreachable, will sync` and exits 0. Usage errors, refusals and
+every read are not queued.
+
+Replay:
+
+- every other `dev board` command on a Pomb board, `status` included, first
+  replays a non-empty queue. Its `synced` and `dropped` lines go to standard
+  error.
+- a card prefix is resolved against the live board at replay time.
+- replays run in order under the queue's lock, each leaving the file as soon
+  as it is dealt with. A process killed mid-replay leaves that change queued,
+  so delivery is at least once.
+- a change Pomb refuses is reported and dropped, never retried.
+- a change that finds Pomb unreachable again stops the replay and stays queued
+  with those behind it.
+- `status` prints `queued: N` last while changes are waiting.
+
+A missing queue file is an empty queue. A file that is not valid JSON, is not
+a list or holds an entry without a string `sub` and a list `args` is
+malformed:
+
+- `queue.count` and `queue.list` answer `<path>:<line>: <reason>` (the line
+  from the parse error's offset, or `<path>: entry N is not a queued command`).
+- `dev board sync` prints `dev: <that>; the queue is left in place` and exits
+  1.
+- every other Pomb command (`status` included) prints the same line on
+  standard error, replays nothing, runs normally and leaves the file
+  untouched, so a bad queue never blocks a read.
+- a write that would have been queued fails with `could not be queued`
+  (`push` refuses a malformed file), and nothing overwrites the file.
+
+`tests/lua/board_local_test.lua` covers the local backend on a temporary state
+directory, a tracked path, six processes writing at once and the queue.
+
+### Arguments
+
+- column: matched against Icebox, Backlog, Ready, In Progress, In Review,
+  Blocked and Done in any case, plus the short forms `progress` and `review`.
+  Anything else is exit 2 naming the columns.
+- card: its full id or a prefix of at least 8 hex characters that is unique on
+  the board. A shorter, unknown or ambiguous one exits 1.
+- size: the palette label of the card's colour, or `unsized`.
+- a flag a subcommand does not take, a missing argument and a bad column are
+  usage errors (exit 2).
+
+### The Pomb requests
 
 `dev.board.pomb` finds the board by name (`GET /api/boards`), then its columns
 (`GET /api/boards/{id}`) and palette (`/colors`), matching columns by name.
-`stale` pages through `/tasks?limit=500` (following `next_cursor` with
-`&cursor=`) for `column_entered_at` and takes the rest from `/export-data`; `ls`
-reads `/export-data` because only it carries each card's colour; `next` asks
-`/tasks?limit=1&ready=true&claimed=false&column_id=<Ready>` and reads the card
-for its colour; `add`, `note` and `move` are `POST /api/tasks`,
-`/api/tasks/{id}/comments` (kind `agent`) and `/api/tasks/{id}/move` (position
-0). `wait(after, kinds, timeout)` is `GET /api/boards/{id}/events/wait` (timeout
-50 seconds by default, curl `--max-time` the timeout plus 10, every other
-request 30), answering `{cursor, events}` with each event's column ids turned
-into names (nil for a null or unknown id, as a null `column_id` on the source
-board of a cross-board move); a 410 `cursor_expired` returns nil, the message
-and the body's `oldest_cursor`, and a local board's `wait` is
-`nil, "a local board has nothing to wait on"`. A curl failure is
-`board unavailable: cannot reach <url> (curl exit N)`, and an HTTP error is
-`board unavailable: pomb answered <status>: <message>`.
 
-`init` is deterministic and idempotent, and it never deletes a column, a colour
-or a card, and never renames a column. It takes the board's name from `[board]`,
-or from `--name N` when the project has no `[board]` section (without either it
-exits 1, and with a section a `--name` that differs is a usage error), and after
-the run it appends `[board]` with `backend = "pomb"` and that name to
-`.dev/config.toml`, creating `.dev` itself when the project has none (never a
-directory above the root), a line `wrote [board] to .dev/config.toml`. A
-`[board]` section with no `backend` is exit 1. On a `local` board `init` lays
-out the same columns and palette in the board's file (making the file when it is
-missing, from the five colours with their plain names), takes no `--admin`
-(usage error), and refuses a `--name` that differs from the section's. It runs
-through `dev.board.init` over the `dev.board.Layout` seam that `dev.board.pomb`
-implements, and does, in this order: create a missing board with `POST
-/api/boards`, using the template named `agent project` when `GET /api/templates`
-lists it and no template otherwise; rename an In Review column to Review with
-`PATCH /api/columns/{id}` (`{"name": "Review"}`) when no Review column exists,
-add each missing column with `POST /api/columns` (Done with `is_done`), then
-re-read the board, mark an existing Done column done with `PATCH
-/api/columns/{id}` when it is not, mark the Blocked column with `PATCH
-/api/columns/{id}` and `{"is_blocked": true}` when it is not (a Pomb whose
-column views carry no `is_blocked` key stops init at that step with a message
-that it cannot mark a Blocked column yet and that `dev board ask` needs it,
-sending no write for the mark. A local board has no such setting, so it marks
-nothing and says nothing), and reorder with `POST
-/api/columns/{id}/move` (`{"position": N}`, 0 first) so the nine standard
-columns come first in the order Icebox, Backlog, Ready, In Progress, Review,
-Verify, Release, Blocked, Done and any other column follows, kept and reported
-as `kept column "X", which is not part of the standard board` on every run; then
-define the checks field when the board lacks it (`GET /api/boards/{id}/fields`
-lists the keys, and `POST /api/boards/{id}/fields` sends `dev.checks`:
-label `Checks`, kind `table`, `required` true, columns `run` (text, required)
-and `on` (multiselect, optional, with the one option `local`, since Pomb refuses
-a multiselect without options and runner names are set elsewhere), copied from
-the dev board's definition, one line `added the checks field
-dev.checks`, never a change to an existing field, and nothing on a local
-board); then name the palette through `PATCH /api/boards/{id}/colors/{color_id}`
-(the colours are found by `value`): yellow `1 Pomodoro`, green `2 Pomodori`,
-blue `3 Pomodori`, red `>3 Pomodori` and white `Unsized`, each with a legend
-description; then, with the palette named, strip a trailing `(yellow)`,
-`(green)`, `(blue)`, `(red)` or `(red, split)` from every card name with `PATCH
-/api/tasks/{id}`, setting the colour from the word in the same call when the
-card's colour is white, unset or the colour that was the default when the run
-began (so a card Pomb painted with the old yellow default gets its real colour),
-and leaving the colour of any other card alone, and repeating that for a name
-with several size words; then enable exactly white, yellow, green, blue and red
-and disable every other colour (orange, purple, magenta, cyan, brown and any
-other value) with `PATCH /api/boards/{id}/colors/{color_id}` and `{"enabled":
-bool}`, enabling first, one line per colour (`enabled white`, `disabled
-orange`), never deleting a colour, and reporting each card that wears a disabled
-colour in one line (`card <id prefix> wears the disabled colour orange, left as
-it is`, on every run, the card's colour untouched); Pomb keeps `enabled`
-admin-only, so a 403 on it prints one line (`left the colours enabled as they
-are, since this token may not change them; run dev board init --admin`) and the
-run carries on instead of exiting 1; last, make white the default, so a run that
-stops early can be repeated and still know the old default. A name that is only
-a size word is kept and reported. Labels are plain strings on cards in Pomb, so
-`needs:lead` and `needs:human` need no creation. Each change prints one line
-(`created board X from the agent project template`, `added column X`, `moved
-column X to position N`, `marked Done as the column of finished cards`, `marked
-Blocked as the column of cards waiting on an answer`, `named yellow
-"1 Pomodoro"`, `made white the default colour`, `renamed card <id prefix>
-to "..." and coloured it blue`), and the last line is `board X already follows
-the standard, nothing to change` or `board X: N changes`. A failure prints `dev:
-<message>` with exit 1 after the lines of the changes already made, and a `403`
-adds `; this token may not change this board, run dev board init --admin`. Pomb
-0.5.5 lets the lead token name colours, set the default and reorder columns only
-on boards it created after 0.5.5, so the default token is the lead token
-(`[board.pomb] lead_token = "pass:<entry>"` in the user file, read like `token`,
-else exit 1 saying to set it or pass `--admin`), and `--admin` uses Pomb's
-device sign-in instead (`dev.board.device`): `POST /api/v1/auth/device` with
-`client_name` `dev-board-init@<host>` and `scopes` `["admin"]`, a printed
-`approve the admin sign-in at <verification_url>` and `code: <user_code>`, then
-`POST /api/v1/auth/device/token` every `interval_seconds` (5 more after
-`slow_down`), ending on `access_denied`, `device_code_expired`, `invalid_grant`,
-`quota_exceeded` or an unapproved sign-in after `expires_in_seconds`, each with
-`dev: <reason>` and exit 1. The token comes back once, is held in the process's
-memory for that run and goes to curl only as the `-K -` header line; the
-`device_code` goes to curl as `--data-binary @<file>` in a mode-600 `mktemp`
-file under `$TMPDIR` that is removed when the poll ends, so neither is in argv,
-the environment, a file that outlives the run or the output, `-v` and `-vv`
-included. The approver may grant a lower scope, so `GET /api/v1/auth/whoami`
-must say `admin` or the run stops before any change: on a server that returns
-`scope` it must be `admin`, and on one that returns `permissions` and `boards`
-the token must hold every permission `GET /api/v1/auth/permissions` lists with
-`admin` in its `presets` and `boards` must be `all` (`Backend:admin`). A 403
-with `code` `permission_denied` is `pomb answered 403: this token lacks the
-<permission> permission on every board; use a token that has it` when `board_id`
-is null (the `--admin` hint applies) and `this token has the <permission>
-permission but is not assigned to board <id>; add the board to the token` when
-it is set (no hint). A board absent from `/api/boards` is `pomb lists no board
-named X for this token, which is assigned only to ...` when `whoami` returns a
-`boards` list, else `pomb has no board named X`. `tests/lua/board_init_test.lua`
-runs the algorithm against a stateful fake layout and the command against
-a fake `curl`.
+Reads:
 
-On a miss in the Keychain, the token is read by `timeout 10 pass show <entry>`
-through `board/passlock.sh`, with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"` and no stdin, so a
-locked store fails at once with
-`board unavailable: pass is locked or has no entry <entry>` (a timeout says
-`pass timed out`). A token with any character outside `A-Za-z0-9._~+/=-` is
-refused without being shown. The token reaches curl only as the config line
-`header = "Authorization: Bearer ..."` on standard input (`curl -K -`, through
-`dev.os.capture_input`): it is in no argument list, no environment variable, no
-file and no message, and `BASH_ENV`, `ENV`, `PS4` and `VERBOSE` are unset for
-`pass` and curl so `-vv` never traces them. The response is read from a
-temporary file `capture_input` removes.
+- `stale` pages through `/tasks?limit=500`, following `next_cursor` with
+  `&cursor=`, for `column_entered_at`. It takes the rest from `/export-data`.
+- `ls` reads `/export-data`, which alone carries each card's colour.
+- `next` asks `/tasks?limit=1&ready=true&claimed=false&column_id=<Ready>` and
+  reads the card for its colour.
 
+Writes:
+
+- `add`: `POST /api/tasks`.
+- `note`: `POST /api/tasks/{id}/comments` (kind `agent`).
+- `move`: `POST /api/tasks/{id}/move` (position 0).
+
+`wait(after, kinds, timeout)` is `GET /api/boards/{id}/events/wait`:
+
+- timeout: 50 seconds by default. Curl's `--max-time` is the timeout plus 10,
+  and every other request gets 30.
+- reply: `{cursor, events}`, with each event's column ids turned into names
+  (nil for a null or unknown id, such as a null `column_id` on the source board
+  of a cross-board move).
+- a 410 `cursor_expired` returns nil, the message and the body's
+  `oldest_cursor`.
+- a local board's `wait` is `nil, "a local board has nothing to wait on"`.
+
+A curl failure is `board unavailable: cannot reach <url> (curl exit N)`. An
+HTTP error is `board unavailable: pomb answered <status>: <message>`.
+
+### How init runs
+
+`init` is deterministic and idempotent. It never deletes a column, a colour or
+a card, and never renames a column.
+
+The name and the config:
+
+- the board's name comes from `[board]`, or from `--name N` when the project
+  has no `[board]` section. Without either it exits 1. With a section, a
+  `--name` that differs is a usage error.
+- after the run it appends `[board]` with `backend = "pomb"` and that name to
+  `.dev/config.toml`, creating `.dev` itself when the project has none (never a
+  directory above the root). The line is `wrote [board] to .dev/config.toml`.
+- a `[board]` section with no `backend` is exit 1.
+- on a `local` board, `init` lays out the same columns and palette in the
+  board's file. It makes the file when it is missing, from the five colours
+  with their plain names. It takes no `--admin` (usage error) and refuses a
+  `--name` that differs from the section's.
+
+`init` runs through `dev.board.init` over the `dev.board.Layout` seam that
+`dev.board.pomb` implements. It does these in order:
+
+1. Create a missing board with `POST /api/boards`, using the template named
+   `agent project` when `GET /api/templates` lists it and no template
+   otherwise.
+2. Fix the columns. Rename an In Review column to Review with
+   `PATCH /api/columns/{id}` (`{"name": "Review"}`) when no Review column
+   exists, and add each missing column with `POST /api/columns` (Done with
+   `is_done`). Then re-read the board and mark an existing Done column done
+   with `PATCH /api/columns/{id}` when it is not. Mark the Blocked column with
+   `PATCH /api/columns/{id}` and `{"is_blocked": true}` when it is not. Last,
+   reorder with `POST /api/columns/{id}/move` (`{"position": N}`, 0 first), so
+   the nine standard columns come first in the order Icebox, Backlog, Ready,
+   In Progress, Review, Verify, Release, Blocked, Done and any other column
+   follows, kept and reported on every run as
+   `kept column "X", which is not part of the standard board`.
+3. Grant the agent roles.
+4. Define the checks field when the board lacks it.
+5. Name the palette through `PATCH /api/boards/{id}/colors/{color_id}`. The
+   colours are found by `value`: yellow `1 Pomodoro`, green `2 Pomodori`, blue
+   `3 Pomodori`, red `>3 Pomodori` and white `Unsized`, each with a legend
+   description.
+6. Strip size words from card names, with the palette named.
+7. Enable and disable colours.
+8. Make white the default, so a run that stops early can be repeated and
+   still know the old default.
+9. Create the limit group.
+10. Report each card that wears a disabled colour.
+
+Details by step:
+
+- Blocked mark: a Pomb whose column views carry no `is_blocked` key stops
+  `init` at that step with a message that it cannot mark a Blocked column yet
+  and that `dev board ask` needs it. It sends no write for the mark. A local
+  board has no such setting, so it marks nothing and says nothing.
+- agent roles: `POST /api/v1/agent-roles/standard` with
+  `{"boards":[board id]}`. A local board has no roles and says nothing.
+- limit group: posts the In Progress, Review and Verify column ids with a limit
+  of 4 to `/api/boards/{id}/limit-groups`, only when the board has no group. A
+  local board gets none.
+- checks field: `GET /api/boards/{id}/fields` lists the keys, and
+  `POST /api/boards/{id}/fields` sends `dev.checks` with the label
+  `Checks`, the kind `table` and `required` true. Its columns are `run` (text,
+  required) and `on` (multiselect, optional, with the one option `local`).
+  Pomb refuses a multiselect without options, and runner names are set
+  elsewhere. The definition is copied from the dev board. The line is
+  `added the checks field dev.checks`. An existing field never changes,
+  and a local board gets nothing.
+- size words: strip a trailing `(yellow)`, `(green)`, `(blue)`, `(red)` or
+  `(red, split)` from every card name with `PATCH /api/tasks/{id}`. The same
+  call sets the colour from the word when the card's colour is white, unset or
+  the colour that was the default when the run began, so a card Pomb painted
+  with the old yellow default gets its real colour. Any other card keeps its
+  colour. A name with several size words is stripped again until none is left.
+  A name that is only a size word is kept and reported.
+- colours: enable exactly white, yellow, green, blue and red, and disable every
+  other colour (orange, purple, magenta, cyan, brown and any other value) with
+  `PATCH /api/boards/{id}/colors/{color_id}` and `{"enabled": bool}`, enabling
+  first. It prints one line per colour (`enabled white`, `disabled orange`)
+  and never deletes a colour.
+- worn colours: each card that wears a disabled colour is one line,
+  `card <id prefix> wears the disabled colour orange, left as it is`, on every
+  run, with the card's colour untouched.
+- admin-only colours: Pomb keeps `enabled` admin-only. A 403 on it prints one
+  line, `left the colours enabled as they are, since this token may not change
+  them`, then a semicolon and `run dev board init --admin`. The run carries on
+  instead of exiting 1.
+
+Labels are plain strings on cards in Pomb, so `needs:lead` and `needs:human`
+need no creation.
+
+Each change prints one line:
+
+- `created board X from the agent project template`
+- `added column X` and `moved column X to position N`
+- `marked Done as the column of finished cards`
+- `marked Blocked as the column of cards waiting on an answer`
+- `named yellow "1 Pomodoro"` and `made white the default colour`
+- `renamed card <id prefix> to "..." and coloured it blue`
+- `created agent roles` with the names the reply lists, or
+  `agent roles unchanged` (not counted as a change)
+- `created limit group In Progress, Review and Verify at 4`
+
+The last line is `board X already follows the standard, nothing to change` or
+`board X: N changes`. A failure prints `dev: <message>` with exit 1 after the
+lines of the changes already made. A `403` adds
+`; this token may not change this board, run dev board init --admin`.
+
+`tests/lua/board_init_test.lua` runs the algorithm against a stateful fake
+layout and the command against a fake `curl`.
+
+### Tokens for init
+
+Pomb 0.5.5 lets the lead token name colours, set the default and reorder
+columns only on boards it created after 0.5.5. The default token is therefore
+the lead token: `[board.pomb] lead_token = "pass:<entry>"` in the user file,
+read like `token`, else exit 1 saying to set it or pass `--admin`.
+
+`--admin` uses Pomb's device sign-in instead (`dev.board.device`):
+
+1. `POST /api/v1/auth/device` with `client_name` `dev-board-init@<host>` and
+   `scopes` `["admin"]`.
+2. It prints `approve the admin sign-in at <verification_url>` and
+   `code: <user_code>`.
+3. `POST /api/v1/auth/device/token` every `interval_seconds` (5 more after
+   `slow_down`).
+4. The poll ends on `access_denied`, `device_code_expired`, `invalid_grant`,
+   `quota_exceeded` or an unapproved sign-in after `expires_in_seconds`. Each
+   prints `dev: <reason>` and exits 1.
+
+The token comes back once, is held in the process's memory for that run and
+goes to curl only as the `-K -` header line. The `device_code` goes to curl as
+`--data-binary @<file>` in a mode-600 `mktemp` file under `$TMPDIR`, removed
+when the poll ends. Neither is in argv, the environment, a file that outlives
+the run or the output, `-v` and `-vv` included.
+
+The approver may grant a lower scope, so `GET /api/v1/auth/whoami` must say
+`admin` or the run stops before any change (`Backend:admin`):
+
+- a server that returns `scope`: it must be `admin`.
+- a server that returns `permissions` and `boards`: the token must hold every
+  permission `GET /api/v1/auth/permissions` lists with `admin` in its
+  `presets`, and `boards` must be `all`.
+
+A 403 with `code` `permission_denied` reads as follows. Each message is two
+clauses joined by a semicolon or a plain `but`:
+
+- `board_id` null: `pomb answered 403: this token lacks the <permission>
+  permission on every board`, a semicolon and `use a token that has it`. The
+  `--admin` hint applies.
+- `board_id` set: `this token has the <permission> permission but is not
+  assigned to board <id>`, a semicolon and `add the board to the token`. No
+  hint applies.
+
+A board absent from `/api/boards` reads
+`pomb lists no board named X for this token, which is assigned only to ...`
+when `whoami` returns a `boards` list, else `pomb has no board named X`.
+
+### Reading the token
+
+On a miss in the Keychain, `board/passlock.sh` reads the token with
+`timeout 10 pass show <entry>`.
+
+- environment: `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`.
+- stdin: none, so a locked store fails at once with
+  `board unavailable: pass is locked or has no entry <entry>`. A timeout says
+  `pass timed out`.
+- a token with any character outside `A-Za-z0-9._~+/=-` is refused without
+  being shown.
+
+The token reaches curl only as the config line `header = "Authorization:
+Bearer ..."` on standard input (`curl -K -`, through `dev.os.capture_input`).
+It is in no argument list, no environment variable, no file and no message.
+`BASH_ENV`, `ENV`, `PS4` and `VERBOSE` are unset for `pass` and curl, so `-vv`
+never traces them.
+
+The response is read from a temporary file that `capture_input` removes.
