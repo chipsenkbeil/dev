@@ -4485,8 +4485,29 @@ function commands.stale(backend, args, now)
     now = now or os.time()
     local roles = backend.roles
     local found, owner, moved, undated, unsized, commented = {}, {}, {}, {}, {}, {}
-    local lead, planner = {}, {}
+    local lead, planner, nobody = {}, {}, {}
     for _, card in ipairs(cards) do
+        if
+            card.column == roles.blocked
+            and not card.done
+            and not index_of(card.labels, board.NEEDS_HUMAN)
+            and not index_of(card.labels, board.NEEDS_LEAD)
+            and not index_of(card.labels, board.NEEDS_PLANNER)
+        then
+            local at = entered[card.id] and box.parse_time(entered[card.id])
+            if not at then
+                undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name
+            else
+                nobody[#nobody + 1] = {
+                    id = card.id,
+                    column = card.column,
+                    size = card.size,
+                    name = card.name,
+                    days = math.floor((now - at) / box.SECONDS_PER_DAY),
+                    at = at,
+                }
+            end
+        end
         local asks = index_of(card.labels, board.NEEDS_LEAD) and lead
             or index_of(card.labels, board.NEEDS_PLANNER) and planner
         if
@@ -4583,6 +4604,7 @@ function commands.stale(backend, args, now)
     table.sort(moved, oldest)
     table.sort(lead, oldest)
     table.sort(planner, oldest)
+    table.sort(nobody, oldest)
     local listed = {}
     for _, list in ipairs({ found, moved }) do
         for _, item in ipairs(list) do
@@ -4617,6 +4639,11 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "for a planner (" .. board.NEEDS_PLANNER .. "):"
         append(lines, stale_rows(planner))
+    end
+    if #nobody > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "asks nobody, add a needs label:"
+        append(lines, stale_rows(nobody))
     end
     if #moved > 0 then
         lines[#lines + 1] = ""

@@ -3525,7 +3525,8 @@ testing.test("stale covers Backlog, Ready, In Progress, Review and Verify only",
     local cards, times = aged(columns, { 5, 40, 40, 40, 40, 40, 40, 40, 40 })
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     local lines = {}
-    for line in result.output:gmatch("[^\n]+") do
+    local first = result.output:match("^(.-)\n\n") or result.output
+    for line in first:gmatch("[^\n]+") do
         lines[#lines + 1] = line:match("^%d+%s+(%a+[ %a]-)%s%s")
     end
     testing.eq(lines, {
@@ -3634,7 +3635,8 @@ testing.test("stale lists an unlabelled open card whose newest comment is the ow
     local output = cmd_board.run("stale", {}, backend, NOW).output
     testing.eq(
         output,
-        "00000005  Ready  10d  unsized  Card 5\n\nnewest comment is the owner's:\n"
+        "00000005  Ready  10d  unsized  Card 5\n\nasks nobody, add a needs label:\n"
+            .. "00000003  Blocked  3d  unsized  Card 3\n\nnewest comment is the owner's:\n"
             .. "00000003  Blocked  3d  unsized  Card 3\n"
             .. "00000001  Ready    1d  unsized  Card 1"
     )
@@ -3727,7 +3729,8 @@ testing.test("stale lists a Blocked needs:lead card past an hour, oldest first",
         result.output,
         "no stale cards\n\nfor the owner (needs:human):\n00000003  Blocked  0d  unsized  Card 3\n\n"
             .. "for a lead (needs:lead):\n00000005  Blocked  7h  unsized  Card 5\n"
-            .. "00000001  Blocked  3h  unsized  Card 1"
+            .. "00000001  Blocked  3h  unsized  Card 1\n\n"
+            .. "asks nobody, add a needs label:\n00000006  Blocked  0d  unsized  Card 6"
     )
 end)
 
@@ -3815,6 +3818,32 @@ testing.test("stale lists a Blocked needs:planner card apart from the lead ones"
     testing.ok(not result.output:find("Card 4", 1, true), result.output)
     result = cmd_board.run("stale", { "--lead-hours", "6" }, fake(cards, times), NOW)
     testing.ok(not result.output:find("for a planner", 1, true), result.output)
+end)
+
+testing.test("stale lists a Blocked card that asks nobody", function()
+    local cards, times = aged({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.READY,
+    }, { 2, 5, 1 }, { {}, {}, {} })
+    local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+    testing.eq(
+        result.output,
+        "no stale cards\n\nasks nobody, add a needs label:\n"
+            .. "00000002  Blocked  5d  unsized  Card 2\n"
+            .. "00000001  Blocked  2d  unsized  Card 1"
+    )
+end)
+
+testing.test("stale leaves a labelled Blocked card off the asks nobody list", function()
+    local labels = { { "needs:human" }, { "needs:lead" }, { "needs:planner" } }
+    local cards, times = aged({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+    }, { 2, 2, 2 }, labels)
+    local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+    testing.ok(not result.output:find("asks nobody", 1, true), result.output)
 end)
 
 testing.test("next --column blocked --for planner asks for a needs:planner card", function()

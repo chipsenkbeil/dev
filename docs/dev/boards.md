@@ -1148,6 +1148,10 @@ These sections follow, each listed apart from the stale cards:
   default), with its time as `<hours>h`.
 - `for a planner (needs:planner):`: a card labelled `needs:planner` in Blocked
   for as long, listed the same way.
+- `asks nobody, add a needs label:`: every card in Blocked with none of
+  `needs:human`, `needs:lead` and `needs:planner`, at any age, with its days in
+  column. Nobody is asked to answer it, so a lead or the owner never sees it
+  until someone labels it.
 - `unsized outside Icebox:`: every card that is unsized (white or no colour), in
   any column but Icebox, at any age, with its id prefix, column and name, so a
   planner sees what still needs a size.
@@ -1954,6 +1958,9 @@ columns as the first list unless noted:
   default), with its time as `<hours>h`.
 - `for a planner (needs:planner):` lists a card labelled `needs:planner` in
   Blocked for as long, the same way.
+- `asks nobody, add a needs label:` lists every Blocked card with none of
+  `needs:human`, `needs:lead` and `needs:planner`, at any age, with the same
+  columns as the first list.
 - `moved by the owner, remove needs:human:` lists every `needs:human` card in
   any other column but Done, with no answer note.
 - `newest comment is the owner's:` lists every other card but Done and not
