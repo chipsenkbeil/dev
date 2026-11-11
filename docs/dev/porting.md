@@ -1,9 +1,13 @@
 # porting: Port a .dev bash verb to Lua
 
+## Overview
+
 A project verb is a script in `.dev/`. It can be bash (`.dev/<verb>.sh`) or Lua
-(`.dev/<verb>.lua`), and dev runs both the same way from the user's side: the
-same `dev help` listing, the same `-h`, the same flag check. A Lua verb runs
-inside the dev process, so it gets dev's modules and skips a process spawn.
+(`.dev/<verb>.lua`).
+
+dev runs both the same way from the user's side: the same `dev help` listing,
+the same `-h`, the same flag check. A Lua verb runs inside the dev process, so
+it gets dev's modules and skips a process spawn.
 
 ## Which script runs
 
@@ -11,8 +15,8 @@ When `.dev/<verb>.lua` and `.dev/<verb>.sh` both exist, the `.lua` file wins.
 A `.lua` verb needs no exec bit and a `.sh` verb does. The rule is the same for
 `.dev/<noun>/<sub>.lua`.
 
-A `.sh` verb is a separate process and cannot call Lua: dev's modules are not
-on its path. Port the whole verb, or leave it in bash.
+A `.sh` verb is a separate process and cannot call Lua. dev's modules are not
+on its path, so port the whole verb or leave it in bash.
 
 ## The verb contract
 
@@ -26,13 +30,21 @@ context. Read it with `local ctx = ...`.
   unless the header has a `positional` line
 - `ctx.vars`: the `KEY=value` arguments whose key starts with an uppercase
   letter, by key, and empty when the header has a `positional` line
+- `ctx.after`: how many of `ctx.args` follow a `--`, 0 when none was typed
+- `ctx.dashed`: whether a `--` was typed, even with nothing after it
 - `ctx.verbose`: 0, 1 or 2, after `-v`, `-vv` and `VERBOSE`
 - `ctx.interpreter`: the luajit dev runs under, as the launcher started it
 
-The chunk returns the exit code as an integer, and nothing means 0. Dev takes
-the code modulo 256. Any other return value, a Lua error or a syntax error ends
-the run with `dev <name>: <message>` and exit 1, with no traceback. To stop
-early with another code, return it, or call `os.exit`.
+### The exit code
+
+The chunk returns the exit code as an integer, and nothing means 0. dev takes
+the code modulo 256.
+
+Any other return value, a Lua error or a syntax error ends the run with
+`dev <name>: <message>` and exit 1, with no traceback. To stop early with
+another code, return it, or call `os.exit`.
+
+### The verb helpers
 
 `require("dev.verb")` holds the helpers a verb needs:
 
@@ -50,8 +62,10 @@ early with another code, return it, or call `os.exit`.
 
 A Lua verb keeps the header lines of a shell script in one leading block
 comment. The block starts with `--[[` alone on the first line and ends with
-`]]` alone on its own line. The first line inside it that is not a `group:`,
-`hidden`, `local`, `positional` or `flags:` line is the description.
+`]]` alone on its own line.
+
+The first line inside it that is not a `group:`, `hidden`, `local`,
+`positional` or `flags:` line is the description. The other lines are:
 
 - `group: <name>`: the heading `dev help` lists the verb under
 - `hidden`: keep the verb out of `dev help`, so only `dev help -a` lists it
@@ -70,28 +84,30 @@ functions in its doc comments.
 
 - `dev.os`: run and capture commands (`run`, `capture`, `capture_input`,
   `capture_timed`), `which`, `exec`, `getuid`, `isatty`, `quote`
-- `dev.fs`: `exists`, `is_dir`, `is_file`, `is_exec`, `read`, `write`, `mkdir`,
-  `remove`, `list`, `stat`, `realpath`, `mktemp`, `symlink`, `join`, `dirname`,
-  `basename`
+- `dev.fs`: `exists`, `is_dir`, `is_file`, `is_link`, `is_exec`, `read`,
+  `write`, `mkdir`, `remove`, `list`, `stat`, `realpath`, `readlink`, `mktemp`,
+  `symlink`, `join`, `dirname`, `basename`
 - `dev.json`: `decode` and `encode`
 - `dev.toml`: `parse`
 - `dev.config`: `get(root, "a.b")` reads `~/.config/dev/config.toml` and then
-  `<root>/.dev/config.toml` over it, and `user("a.b")` reads the user file
-  alone
-- `dev.text`: `width`, `fit`, `trim`, `contains`
+  `<root>/.dev/config.toml` over it, `prefer_user(root, "a.b")` lets the user
+  file win, and `user("a.b")` reads the user file alone
+- `dev.text`: `width`, `fit`, `words`, `wrap`, `trim`, `contains`
 - `dev.term`: raw mode that is always restored, key decoding and `size`
 - `dev.ui`: `context`, colors through `paint` and `mark`, `table`, `bar`,
   `confirm` and `spin`
 - `dev.ui.picker`: the list picker, `run(ctx, items, opts)`
-- `dev.project`: `root`, `dotfiles_root` and `detect_type`
+- `dev.project`: `root`, `dotfiles_root`, `share` and `detect_type`
 - `dev.testing`, `dev.testrun` and `dev.testenv`: the test registry, the
-  runner and the helpers, see "Testing a verb"
+  runner and the helpers (see "Testing a verb")
 
 ## Your own modules
 
 A directory `.dev/lua/` is on `package.path` as `.dev/lua/?.lua` while a Lua
-verb runs, so `.dev/lua/myproj/checks.lua` loads with
-`require("myproj.checks")`. dev never lists `lua` or `topics` as a noun.
+verb runs. `.dev/lua/myproj/checks.lua` therefore loads with
+`require("myproj.checks")`.
+
+dev never lists `lua` or `topics` as a noun.
 
 ## Headless rules
 
@@ -112,41 +128,51 @@ A verb runs under CI, in a box and from agents, where no terminal is attached.
 
 Some scripts run where dev does not exist: a production server, a test sandbox
 or GitHub Actions. They stay shell and live in `.dev/standalone/`, a folder dev
-never lists or runs. Line 2 of each script reads
-`# standalone: runs on <where>, where dev is absent`, and `<where>` is one of
-`production server`, `test sandbox` or `GitHub Actions`. The list is
-`M.WHERE` in `dev/standalone.lua`, and widening it is a dotfiles change.
+never lists or runs.
+
+Line 2 of each script reads `# standalone: runs on <where>, where dev is
+absent`, and `<where>` is one of `production server`, `test sandbox` or
+`GitHub Actions`. The list is `M.WHERE` in `dev/standalone.lua`, and widening it
+is a dotfiles change.
 
 `dev lint` warns on a `.sh` file anywhere else under `.dev` and on a
 standalone script with a bad line 2. It warns and exits 0 today while some
-projects still have shell verbs to port. The one exemption is a hidden helper
-named `.dev/__*.sh`. AGENTS.md sanctions that path for a raw script a verb
-needs, so the lint does not warn on it.
+projects still have shell verbs to port.
+
+The one exemption is a hidden helper named `.dev/__*.sh`. AGENTS.md sanctions
+that path for a raw script a verb needs, so the lint does not warn on it.
 
 Adding a file under `.dev/standalone/` is a deliberate choice. `dev board land`
 refuses the commit unless the card carries the `standalone-ok` label, and only
-the owner adds it: `dev board label` refuses it for an agent. An agent files a
-`needs:human` card instead. The check is
-`dev.standalone.land_problem(added, labels)`.
+the owner adds it. `dev board label` refuses it for an agent, and an agent
+files a `needs:human` card instead.
+
+The check is `dev.standalone.land_problem(added, labels)`.
 
 ## Running somewhere else
 
 `dev --remote <verb>` runs the verb's job from the project's pipeline through
 `ci`. A project replaces that with `.dev/__remote.lua`, a chunk that returns
-`function(run)`. `dev help remote` has the fields of `run`, the refusals and
-the `dev.remote` helper a runner can reuse.
+`function(run)`.
+
+`dev help remote` has the fields of `run`, the refusals and the `dev.remote`
+helper a runner can reuse.
 
 ## Testing a verb
 
 A project's Lua verb tests live in `.dev/tests/NAME_test.lua`. Each file
 requires `dev.testing` and registers cases with `t.test(name, fn)`, then
-asserts with `t.eq`, `t.ok` and `t.raises`. The project's `.dev/test.lua` ends
-with `return require("dev.testrun").run(ctx.root)`, so `dev --remote test` runs
-these files on ci. Cargo and the project's other suites never see them. `run`
-loads the files in sorted order with `.dev/lua` on `package.path`, prints
-`ok - NAME` or `not ok - NAME` with the error, and returns 1 when a case fails
-or a file fails to load. A project with no `.dev/tests` prints
-`SKIP .dev/tests (none)` and returns 0.
+asserts with `t.eq`, `t.ok` and `t.raises`.
+
+The project's `.dev/test.lua` ends with
+`return require("dev.testrun").run(ctx.root)`, so `dev --remote test` runs
+these files on ci. Cargo and the project's other suites never see them.
+
+`run` loads the files in sorted order with `.dev/lua` on `package.path`. It
+prints `ok - NAME` or `not ok - NAME` with the error, and returns 1 when a case
+fails or a file fails to load.
+
+A project with no `.dev/tests` prints `SKIP .dev/tests (none)` and returns 0.
 
 `dev.testenv` helps a test drive a verb:
 
@@ -199,30 +225,47 @@ end
 ## The lint set verbs
 
 `dev init` and `dev sync` write the Rust and Lua lint sets as Lua verbs:
-`.dev/lint.lua`, `.dev/fmt.lua` and, for Rust, `.dev/test.lua`, with the code
-they share in `.dev/lua/lintset.lua` (`require("lintset")`). They write no `.sh`
-file. The templates live in the style skill's `lint/` folder.
+`.dev/lint.lua`, `.dev/fmt.lua` and, for Rust, `.dev/test.lua`. The code they
+share is in `.dev/lua/lintset.lua` (`require("lintset")`).
+
+They write no `.sh` file. The templates live in the style skill's `lint/`
+folder.
+
+### Project checks
 
 A project keeps its own checks in `.dev/lint.lua` below the
 `-- --- project-specific checks below ---` line. Put them above the final
-`return lint:finish()` line, which `dev sync` keeps at the end. Inside the
-chunk `lint` is the run (`lint:check(name, argv)`, `lint:fail(name, message)`,
-`lint:have(binary, install, name)`, `lint:files(globs)`, `lint:grep(pattern,
-files)`), `ctx` is the verb context and `lint.root` the project root.
+`return lint:finish()` line, which `dev sync` keeps at the end.
+
+Inside the chunk, `lint` is the run:
+
+- `lint:check(name, argv)`
+- `lint:fail(name, message)`
+- `lint:have(binary, install, name)`
+- `lint:files(globs)`
+- `lint:grep(pattern, files)`
+
+`ctx` is the verb context and `lint.root` the project root.
+
+### A project still on bash
 
 A project still on bash is not forced over. While any of `.dev/lint.sh`,
 `.dev/fmt.sh` or `.dev/test.sh` exists, `dev sync` writes no Lua verb the
-project lacks, not even one whose bash file is absent, and prints one
-`pending:` line naming the bash files. A Lua verb the project already ported
-stays synced. A check-only `dev sync` exits 0 for it. To port the verbs:
+project lacks, not even one whose bash file is absent. It prints one `pending:`
+line naming the bash files.
 
-1. Run `dev sync` with its yes flag after moving the bash verb out of the way, or copy the
-   template from the style skill's `lint/<set>/` folder to `.dev/`, plus
-   `lint/lintset.lua` to `.dev/lua/lintset.lua`.
+A Lua verb the project already ported stays synced. A check-only `dev sync`
+exits 0 for it.
+
+To port the verbs:
+
+1. Run `dev sync` with its yes flag after moving the bash verb out of the way,
+   or copy the template from the style skill's `lint/<set>/` folder to `.dev/`,
+   plus `lint/lintset.lua` to `.dev/lua/lintset.lua`.
 2. Move the checks below the bash marker into Lua below the Lua marker.
 3. Delete `.dev/lint.sh`, `.dev/fmt.sh`, `.dev/test.sh` and `.dev/lint-lib.sh`,
    and point the project's ci jobs at `dev lint` and `dev test`.
 
 A leftover `.sh` file keeps the `pending:` line until it is deleted. Once the
-Lua verb exists, dev runs the `.lua` verb as the section above says. `dev init`
+Lua verb exists, dev runs the `.lua` verb (see "Which script runs"). `dev init`
 follows the same rule and prints `skipped: .dev/lint.sh exists, left on bash`.

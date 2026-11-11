@@ -1,51 +1,31 @@
-# remote: Run a command somewhere else, by default or with --remote, and how to change where
+# remote: Run a command somewhere else, by default or with --remote
 
-A command that has a ci job runs remote by default, so a forgotten flag never
-spikes the laptop. `dev test` and `dev --remote test` are the same, and
-`dev test --local` runs here, unless `DEV_AGENT` is set (see Agents below).
-Both flags work anywhere before a `--`, and together they are a usage error
-(exit 2).
+## Overview
 
-The default is `[remote] default = "remote"` or `"local"` in
-`~/.config/dev/config.toml` or the project's `.dev/config.toml`. The user file
-wins over the project file, so a host chooses its own default, and with neither
-set the default is remote. Any other value exits 1. With `"local"`, only
-`--remote` and `DEV_REMOTE` go to ci.
+A command that has a ci job runs remote by default. A forgotten flag never
+spikes the laptop.
 
-The default applies only to a command whose job `ci run --list --json`
-lists, and never to a machine-local verb (below) or as root, which reads no
-config.
-A project with no `.ci/*.lua` pipeline file has no job and ci is not asked, and
-a command the listing does not name runs here with no message, so
-`dev board ls` is the same under either default.
+`dev test` and `dev --remote test` are the same, and `dev test --local` runs
+here. A set `DEV_AGENT` refuses a local run of a verb that has a ci job (see
+"Agents").
 
-Unlike an explicit `--remote`, the default passes every argument to the job,
-before the `--` or after it, and a verb with no job is not an error.
+`--remote` runs the command on a remote runner instead of this machine. It
+works for every verb.
 
-A verb script whose header has a `# local` line is never sent to ci by the
-default, for a script that prepares something and then drives ci itself beside
-a job of the same name. `--remote` still sends it, and `dev help <verb>` says
-the verb runs here under the default.
+`DEV_REMOTE=1` in the environment is the same as the flag. Empty means unset,
+and `0`, `no` and `false` mean `--local`.
 
-When ci cannot be asked, the default fails instead of running here, to keep a
-ci deploy from moving every run onto the laptop. A missing `ci` on PATH, or a
-`ci run --list` that exits non-zero, fails with ci's error and exit code and
-the hint `rerun, or pass --local to run it here`. Local is automatic only for
-`CI=true`, the box marker, `--local`, `default = "local"` and `DEV_REMOTE=0`.
+`--remote` and `--local` work anywhere before a `--`. Together they are a usage
+error (exit 2).
 
-Inside a ci job (`CI=true`) or a dev box (the file `/etc/ci-box`, which ci
-writes at box creation, see "Dev boxes" in ci's README), dev always runs here,
-`--remote` included, as it is already the remote. A box made before ci writes
-the file has no marker, so pass `--local` there.
+dev strips `--remote` and `--detach`. The launcher has already entered the
+directory of any `-C DIR`. dev then hands the runner the command words and the
+arguments after `--`, untouched, spaces and quotes included.
 
-An agent command policy denies a raw test or lint run on a machine without
-the marker or `CI=true`, and the denial names only `dev --remote test` or
-`dev --remote lint`.
+The runner inherits the terminal, and its exit code is dev's. Any argument
+before the `--` is a usage error.
 
-`--remote` runs the command on a remote runner instead of this machine. It works
-anywhere before a `--`, for every verb: `dev test --remote` and
-`dev --remote test` are the same. `DEV_REMOTE=1` in the environment is the same
-as the flag, where empty means unset and `0`, `no` and `false` mean `--local`.
+These runs show the shapes:
 
 ```
 dev --remote test
@@ -53,70 +33,142 @@ dev --remote test -- tests/dev/testverb_test.sh
 dev --remote --detach lint
 ```
 
-dev strips `--remote` and `--detach` (the launcher has already entered the
-directory of any `-C DIR`), then hands the runner the command words
-and the arguments after `--`, untouched, spaces and quotes included. The runner
-inherits the terminal, and its exit code is dev's. Any argument before the `--`
-is a usage error. A checks row for `test` or `lint` therefore reads
-`dev --remote test -- PATH`, and `dev board checks` refuses the bare
-form. The test job hands each word after the `--` to `dev test` as one quoted
-word. `dev test PATH` runs only the suites at each path under `tests/`, a path
-that names no suite is a usage error, and the test job skips the real root
-group.
+### Test and lint rows
+
+A checks row for `test` or `lint` reads `dev --remote test -- PATH`, and
+`dev board checks` refuses the bare form.
+
+The test job hands each word after the `--` to `dev test` as one quoted word.
+`dev test PATH` runs only the suites at each path under `tests/`, and a path
+that names no suite is a usage error. The test job skips the real root group.
+
+## The remote default
+
+The default is `[remote] default = "remote"` or `"local"`. It lives in
+`~/.config/dev/config.toml` or the project's `.dev/config.toml`.
+
+The user file wins over the project file, so a host chooses its own default.
+With neither set the default is remote, and any other value exits 1. With
+`"local"`, only `--remote` and `DEV_REMOTE` go to ci.
+
+The default applies only to a command whose job `ci run --list --json` lists.
+It never applies to a machine-local verb (see "What it refuses") or as root,
+which reads no config.
+
+A project with no `.ci/*.lua` pipeline file has no job, and ci is not asked. A
+command the listing does not name runs here with no message, so `dev board ls`
+is the same under either default.
+
+Unlike an explicit `--remote`, the default passes every argument to the job,
+before the `--` or after it. A verb with no job is not an error.
+
+### Verbs that stay local
+
+A verb script whose header has a `# local` line is never sent to ci by the
+default. It suits a script that prepares something and then drives ci itself,
+beside a job of the same name.
+
+`--remote` still sends it. `dev help <verb>` says the verb runs here under the
+default.
+
+### When ci cannot be asked
+
+The default fails instead of running here, to keep a ci deploy from moving
+every run onto the laptop. A missing `ci` on PATH, or a `ci run --list` that
+exits non-zero, fails with ci's error and exit code and the hint
+`rerun, or pass --local to run it here`.
+
+Local is automatic only for `CI=true`, the box marker, `--local`,
+`default = "local"` and `DEV_REMOTE=0`.
+
+### Inside a job or a box
+
+Inside a ci job (`CI=true`) or a dev box, dev always runs here, `--remote`
+included. It is already the remote.
+
+A dev box is marked by the file `/etc/ci-box`, which ci writes at box creation
+(see "Dev boxes" in ci's README). `DEV_BOX_MARKER` names another marker path.
+A box made before ci writes the file has no marker, so pass `--local` there.
+
+An agent command policy denies a raw test or lint run on a machine without
+the marker or `CI=true`. The denial names only `dev --remote test` or
+`dev --remote lint`.
 
 ## The default runner
 
 With no override, the runner is `ci`. A verb runs the job of the same name from
-the project's default pipeline (`.ci/jobs.lua`), and `dev <noun> <sub>` runs the
-job `<noun>.<sub>` (`<noun>.<sub>.<sub2>` one level deeper, a dot between
-every word):
+the project's default pipeline (`.ci/jobs.lua`).
 
-```
-ci -C <root> run --local --follow --job <job> -- <args>
-```
+`dev <noun> <sub>` runs the job `<noun>.<sub>`, and one level deeper it is
+`<noun>.<sub>.<sub2>`, with a dot between every word.
 
 dev checks `ci run --list --json` first. A verb with no such job exits 1 with
 `no job named <job> in the project's default pipeline (.ci/jobs.lua), add one to
 run it with --remote`, and nothing runs. It never falls back to a local run.
 
+A missing `ci` on PATH prints a warning with the install hint and exits 1.
+
+The command it runs is:
+
+```
+ci -C <root> run --local --follow --job <job> -- <args>
+```
+
 ## Agents
 
 An agent sets `DEV_AGENT` to its name, `repo/role[/card]` as `dev board` takes
-it (`dev help boards`), such as `dotfiles/implementer/f5f0e007`. Under it, a run that would
-happen here for a verb with a default ci job is refused, whatever chose the
-laptop (`--local`, `DEV_REMOTE=0`, or `[remote] default = "local"`). The
-refusal exits 2, prints a line that names the verb and `--remote`, and runs
-nothing. The default remote run and `--remote` still go to ci. The refusal does
-not apply to a `# local` verb, to a machine-local verb, or inside a ci job or dev
-box (`CI=true` or the box marker), and an unset or empty `DEV_AGENT` changes
-nothing. When ci
-cannot be asked, the refusal fails with ci's error and the hint
+it (`dev help boards`), such as `dotfiles/implementer/f5f0e007`.
+
+### The local refusal
+
+Under `DEV_AGENT`, a run that would happen here for a verb with a default ci
+job is refused. It makes no difference what chose the laptop (`--local`,
+`DEV_REMOTE=0` or `[remote] default = "local"`).
+
+The refusal exits 2, prints a line that names the verb and `--remote`, and
+runs nothing. The default remote run and `--remote` still go to ci.
+
+The refusal does not apply to a `# local` verb, to a machine-local verb, or
+inside a ci job or dev box (`CI=true` or the box marker). An unset or empty
+`DEV_AGENT` changes nothing.
+
+When ci cannot be asked, the refusal fails with ci's error and the hint
 `an agent runs it on ci, so fix ci and rerun`.
 
+### The run label
+
 A run dev starts on ci carries a `DEV_AGENT` label, which `ci ps -o run,by`
-shows in the BY column, except a terminal run with no `DEV_CI_VERB` (below).
+shows in the BY column. The one exception is a terminal run with no
+`DEV_CI_VERB`.
+
 A caller's non-empty `DEV_AGENT` is kept. Otherwise the label is
-`<repo>/<verb>`, or `<repo>/<verb>/<card>` when `DEV_CI_CARD` is set, where the
-verb is `DEV_CI_VERB` and defaults to `remote`, and the repo is `[board] name` or
-the project directory name. `dev board check` sets both variables, so with
-`DEV_AGENT` unset its runs read `<repo>/check/<card>`. `dev board land` requires `DEV_AGENT`, so a run under
-land keeps the caller's label and never reads `<repo>/land/<card>`. A
-repo's own release verb exports `DEV_CI_VERB=release` and `DEV_CI_CARD` before it
-calls `dev --remote`.
+`<repo>/<verb>`, or `<repo>/<verb>/<card>` when `DEV_CI_CARD` is set.
+
+The verb is `DEV_CI_VERB` and defaults to `remote`. The repo is `[board] name`
+or the project directory name.
+
+`dev board check` sets both variables, so with `DEV_AGENT` unset its runs read
+`<repo>/check/<card>`. `dev board land` requires `DEV_AGENT`, so a run under
+land keeps the caller's label and never reads `<repo>/land/<card>`.
+
+A repo's own release verb exports `DEV_CI_VERB=release` and `DEV_CI_CARD`
+before it calls `dev --remote`.
 
 A `dev --remote` run from a terminal with no `DEV_CI_VERB`, and with `stdin`
-attached to that terminal, carries no label at all, and ci shows the person
-who started it. The same run with `stdin` off a terminal stays `<repo>/remote`.
+attached to that terminal, carries no label at all. ci shows the person who
+started it. The same run with `stdin` off a terminal stays `<repo>/remote`.
 
 ## --detach
 
-`--detach` needs `--remote` (alone it is a usage error). The ci runner then
-passes `--detach` in place of `--follow`: ci prints the run id and returns. Read
-the run later with `ci ps <run> -w`, `ci logs <run>` or `ci ps <run>`.
+`--detach` needs `--remote`, and alone it is a usage error. The ci runner then
+passes `--detach` in place of `--follow`, and ci prints the run id and returns.
+
+Read the run later with `ci ps <run> -w`, `ci logs <run>` or `ci ps <run>`.
 
 ## Replacing the runner
 
-A project replaces the runner with `.dev/__remote.lua`, a hidden helper. It is a chunk that returns a function:
+A project replaces the runner with `.dev/__remote.lua`, a hidden helper. It is
+a chunk that returns a function:
 
 ```lua
 return function(run)
@@ -124,25 +176,40 @@ return function(run)
 end
 ```
 
-`run.words` holds the command words (`{"test"}`, or `{"box", "ls"}`),
-`run.args` the arguments after `--`, `run.detach` whether `--detach` was given,
-`run.root` the project root as an absolute path, and `run.verbose` the level of
-`-v` (0, 1 or 2). The returned integer is
-dev's exit code, and nothing means 0. A Lua error is printed as `dev: <message>`
-with exit 1.
+### The run table
+
+`run` has these fields:
+
+- `run.words`: the command words (`{"test"}`, or `{"box", "ls"}`)
+- `run.args`: the arguments after `--`
+- `run.detach`: whether `--detach` was given
+- `run.root`: the project root as an absolute path
+- `run.verbose`: the level of `-v` (0, 1 or 2)
+
+The returned integer is dev's exit code modulo 256, and nothing means 0. Any
+other return value ends the run with `dev: <path> returned <value>, not an exit
+code` and exit 1. A Lua error is printed as `dev: <message>` with exit 1.
+
+### Reusing the default runner
 
 A runner can reuse the default one with
 `require("dev.remote").ci_runner(run, opts)`. `opts.verbosity` is the `-v`
-level and `opts.pipeline` names a pipeline under `.ci/`, so the job runs from
-`.ci/<pipeline>.lua` instead of the default pipeline. This repo's
-`.dev/__remote.lua` sends `bootstrap` to `.ci/bootstrap.lua` (`dev --remote
-bootstrap`, the Arch bootstrap proof), `soak` to `.ci/soak.lua` (`dev --remote
-soak`, the signal tests in a loop under CPU load) and everything else to the
-default pipeline.
+level. `opts.pipeline` names a pipeline under `.ci/`, so the job runs from
+`.ci/<pipeline>.lua` instead of the default pipeline.
+
+This repo's `.dev/__remote.lua` sends two verbs to their own pipelines and
+everything else to the default one:
+
+- `bootstrap` goes to `.ci/bootstrap.lua` (`dev --remote bootstrap`, the Arch
+  bootstrap proof)
+- `soak` goes to `.ci/soak.lua` (`dev --remote soak`, the signal tests in a
+  loop under CPU load)
 
 ## What it refuses
 
 Verbs that act on this machine exit 2 with `dev <verb>: runs on this machine
-only, so --remote does not apply`, whatever the runner: install, uninstall,
-restow, sync, setup, fmt, fetch, help, init, push, pull, guide, connect, and
-every subcommand of tools, box, pi and antinote.
+only, so --remote does not apply`, whatever the runner.
+
+- install, uninstall, restow, sync, setup, fmt, fetch, help, init, push, pull,
+  guide and connect
+- every subcommand of tools, box, board, ws, pi and antinote
