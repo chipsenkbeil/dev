@@ -1599,9 +1599,10 @@ this project's board, from a fresh `GET /api/boards/{id}`.
 ### add
 
 `dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD]
-[--id-only] [--column C] [--description TEXT] [--problem TEXT]
-[--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]...
-[--checks CMD]... [--done-when TEXT]...` creates the card.
+[--id-only] [--top | --before CARD | --after CARD] [--column C]
+[--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT]
+[--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...` creates the
+card.
 
 - The card goes in Backlog by default.
 - It prints `added <id prefix> <column>`.
@@ -1628,6 +1629,20 @@ Where the card goes:
   this repo's column names.
 - A board Pomb does not list is refused (exit 1) before anything is added.
 - A local board refuses `--board`.
+
+Placement:
+
+- `--top` puts the new card first in its column. `--before CARD` and
+  `--after CARD` put it directly above or below `CARD`. Without one, the card
+  lands at the bottom.
+- `add` moves the card to that position after it is created, with the call
+  `order` makes.
+- More than one of the three is a usage error (exit 2), and so is a `CARD` in
+  another column than the new card's. The message names both columns. An
+  unknown `CARD` is refused (exit 1). Both are checked before the card is
+  created.
+- If the move then fails, `add` exits 1 naming the card, which was added but
+  not placed. The refusal is not queued for a later sync.
 
 Links:
 

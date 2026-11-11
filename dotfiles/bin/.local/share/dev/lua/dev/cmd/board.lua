@@ -824,6 +824,9 @@ function commands.add(backend, args)
         ["--board"] = true,
         ["--blocked-by"] = true,
         ["--from"] = true,
+        ["--before"] = true,
+        ["--after"] = true,
+        ["--top"] = SWITCH,
         [ID_ONLY_FLAG] = SWITCH,
         ["--epic"] = SWITCH,
     }, {
@@ -997,6 +1000,52 @@ function commands.add(backend, args)
         end
         origin = found
     end
+    local position
+    local anchor_word = flags["--before"] or flags["--after"]
+    if flags["--top"] or anchor_word then
+        if
+            (flags["--top"] and 1 or 0)
+                + (flags["--before"] and 1 or 0)
+                + (flags["--after"] and 1 or 0)
+            > 1
+        then
+            return usage("Give only one of --top, --before and --after. Each places the card once.")
+        end
+        position = 0
+        if anchor_word then
+            local cards, why = backend:cards()
+            if not cards then
+                return failure(why)
+            end
+            local anchor
+            anchor, why = board.resolve(cards, anchor_word)
+            if not anchor then
+                return failure(why)
+            end
+            if anchor.column ~= column then
+                return usage(
+                    "Card "
+                        .. anchor.id:sub(1, board.MIN_PREFIX)
+                        .. " is in "
+                        .. anchor.column
+                        .. ". The new card goes to "
+                        .. column
+                        .. "."
+                )
+            end
+            for _, other in ipairs(cards) do
+                if other.column == column then
+                    position = position + 1
+                end
+                if other.id == anchor.id then
+                    break
+                end
+            end
+            if flags["--before"] then
+                position = position - 1
+            end
+        end
+    end
     local card, message = backend:add(table.concat(words, " "), column, {
         description = description,
         color = color,
@@ -1039,6 +1088,21 @@ function commands.add(backend, args)
                     .. " but its related link to "
                     .. origin.id:sub(1, board.MIN_PREFIX)
                     .. " was not: "
+                    .. why,
+                code = 1,
+                unqueued = true,
+            }
+        end
+    end
+    if position then
+        local ok, why = backend:move(card.id, card.column, { position = position })
+        if not ok then
+            return {
+                message = "Card "
+                    .. card_prefix
+                    .. " was added to "
+                    .. card.column
+                    .. " but not placed. "
                     .. why,
                 code = 1,
                 unqueued = true,

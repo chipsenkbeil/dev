@@ -8337,3 +8337,132 @@ testing.test(
         testing.ok(out:find("holds no attachment with the id ffff", 1, true), out)
     end
 )
+
+local PLAIN_ADD = { "--problem", "x", "--size", "1", "--done-when", "a" }
+
+local function add_args(name, extra)
+    local args = { "board", "add", name }
+    for _, word in ipairs(PLAIN_ADD) do
+        args[#args + 1] = word
+    end
+    for _, word in ipairs(extra or {}) do
+        args[#args + 1] = word
+    end
+    return args
+end
+
+local function local_cards()
+    local root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "mine"\n' })
+    local out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+    local ids = {}
+    for _, name in ipairs({ "One", "Two", "Three" }) do
+        ids[name] = dev(root, home, add_args(name, { "--id-only" })):gsub("%s+$", "")
+    end
+    return root, home, ids
+end
+
+local function backlog_names(root, home)
+    local names = {}
+    for line in
+        dev(root, home, { "board", "ls", "--column", support.COLUMN.BACKLOG }):gmatch("[^\n]+")
+    do
+        names[#names + 1] = line:match("(%S+)$")
+    end
+    return names
+end
+
+local function pomb_placed(extra)
+    local root, home = sandbox()
+    local args = {
+        "board",
+        "add",
+        "New",
+        "--column",
+        support.COLUMN.READY,
+        "--size",
+        "1",
+        "--description",
+        V2,
+        "--checks",
+        "dev test",
+        "--done-when",
+        "a",
+        "--done-when",
+        "b",
+        "--done-when",
+        "c",
+    }
+    for _, word in ipairs(extra) do
+        args[#args + 1] = word
+    end
+    local out, code = dev(root, home, args)
+    return out, code, read(root, "calls")
+end
+
+testing.test("add --top places the card first", function()
+    local root, home = local_cards()
+    local out, code = dev(root, home, add_args("Top", { "--top" }))
+    testing.eq(code, 0, out)
+    testing.eq(backlog_names(root, home), { "Top", "One", "Two", "Three" })
+    local _, status, calls = pomb_placed({ "--top" })
+    testing.eq(status, 0)
+    testing.ok(calls:find('"position":0', 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
+end)
+
+testing.test("add --before places the card directly above CARD", function()
+    local root, home, ids = local_cards()
+    local out, code = dev(root, home, add_args("Mid", { "--before", ids.Three }))
+    testing.eq(code, 0, out)
+    testing.eq(backlog_names(root, home), { "One", "Two", "Mid", "Three" })
+    local _, status, calls = pomb_placed({ "--before", "11111111-b" })
+    testing.eq(status, 0)
+    testing.ok(calls:find('"position":1', 1, true), calls)
+end)
+
+testing.test("add --after places the card directly below CARD", function()
+    local root, home, ids = local_cards()
+    local out, code = dev(root, home, add_args("Mid", { "--after", ids.One }))
+    testing.eq(code, 0, out)
+    testing.eq(backlog_names(root, home), { "One", "Mid", "Two", "Three" })
+    local _, status, calls = pomb_placed({ "--after", "11111111-a" })
+    testing.eq(status, 0)
+    testing.ok(calls:find('"position":1', 1, true), calls)
+end)
+
+testing.test("add refuses two placement flags and a CARD in another column", function()
+    local root, home, ids = local_cards()
+    local out, code = dev(root, home, add_args("Bad", { "--top", "--before", ids.One }))
+    testing.eq(code, 2, out)
+    out, code = dev(root, home, add_args("Bad", { "--before", ids.One, "--after", ids.Two }))
+    testing.eq(code, 2, out)
+    out, code =
+        dev(root, home, add_args("Bad", { "--column", support.COLUMN.ICEBOX, "--after", ids.One }))
+    testing.eq(code, 2, out)
+    testing.ok(
+        out:find(support.COLUMN_NAME.BACKLOG, 1, true)
+            and out:find(support.COLUMN_NAME.ICEBOX, 1, true),
+        out
+    )
+    testing.eq(backlog_names(root, home), { "One", "Two", "Three" })
+    out, code = dev(root, home, add_args("Bad", { "--after", "zzzzzzzz" }))
+    testing.eq(code, 1, out)
+    testing.eq(backlog_names(root, home), { "One", "Two", "Three" })
+    local pomb_out, status, calls = pomb_placed({ "--top", "--after", "11111111-a" })
+    testing.eq(status, 2, pomb_out)
+    testing.eq(calls:find("-X POST", 1, true), nil)
+    pomb_out, status, calls = pomb_placed({ "--after", "cccccccc" })
+    testing.eq(status, 2, pomb_out)
+    testing.eq(calls:find("-X POST", 1, true), nil)
+end)
+
+testing.test("add --top --id-only prints the id alone", function()
+    local root, home = local_cards()
+    local out, code = dev(root, home, add_args("Top", { "--top", "--id-only" }))
+    testing.eq(code, 0, out)
+    testing.ok(out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), out)
+    local pomb_out, status = pomb_placed({ "--top", "--id-only" })
+    testing.eq(status, 0, pomb_out)
+    testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
+end)

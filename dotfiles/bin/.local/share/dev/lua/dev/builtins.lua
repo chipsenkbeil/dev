@@ -286,8 +286,8 @@ return {
     {
         words = { "board", "add" },
         handler = "lua",
-        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when --board --blocked-by --from --epic --id-only",
-        usage = "dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD] [--epic] [--id-only] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
+        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when --board --blocked-by --from --epic --id-only --top --before --after",
+        usage = "dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD] [--epic] [--id-only] [--top | --before CARD | --after CARD] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
         desc = "Add a card to the board",
     },
     {
