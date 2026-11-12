@@ -325,20 +325,17 @@ local function board_card(doc, id)
     end
 end
 
+local function board_doc(home)
+    local text = assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")
+    return assert(json.decode(text), "decode failed")
+end
+
 local function comments(home, id)
-    local doc = assert(
-        json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
-        "decode failed"
-    )
-    return board_card(doc, id).comments or {}
+    return board_card(board_doc(home), id).comments or {}
 end
 
 local function claim_of(home, id)
-    local doc = assert(
-        json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
-        "decode failed"
-    )
-    return board_card(doc, id).claim
+    return board_card(board_doc(home), id).claim
 end
 
 local function landed_calls(log)
@@ -346,10 +343,7 @@ local function landed_calls(log)
 end
 
 local function column_of(home, id)
-    local doc = assert(
-        json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")),
-        "decode failed"
-    )
+    local doc = board_doc(home)
     local card = board_card(doc, id)
     for _, column in ipairs(doc.columns) do
         if column.id == card.column_id then
@@ -2275,21 +2269,16 @@ if has_jj then
         assert(fs.write(path .. "/work.txt", "two\n"), "write failed")
         jj(path, "describe", "-m", "feat: work")
         jj(path, "bookmark", "create", id, "-r", "@")
-        must(
-            dev(
-                at_root(project, path),
-                { "board", "move", id, support.COLUMN.VERIFY },
-                { DEV_WS_ROOT = base }
-            )
-        )
-        approve(at_root(project, path), id)
-        return project, id, path, base
+        local inside = at_root(project, path)
+        must(dev(inside, { "board", "move", id, support.COLUMN.VERIFY }, { DEV_WS_ROOT = base }))
+        approve(inside, id)
+        return project, id, path, base, inside
     end
 
     testing.test("land removes the workspace and bookmark in a jj project", function()
-        local project, id, path, base = central_project()
+        local project, id, path, base, inside = central_project()
         local out, code = dev(
-            at_root(project, path),
+            inside,
             { "board", "land", id },
             { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
@@ -2306,8 +2295,8 @@ if has_jj then
     end)
 
     testing.test("land keeps a workspace with uncommitted changes", function()
-        local project, id, path, base = central_project()
-        local out, code = dev(at_root(project, path), { "board", "land", id }, {
+        local project, id, path, base, inside = central_project()
+        local out, code = dev(inside, { "board", "land", id }, {
             LAND_TRUNK = LAND_TRUNK_KEEP,
             LAND_NEW = "1",
             LAND_STRAY = "stray.txt",
@@ -2325,9 +2314,9 @@ if has_jj then
     end)
 
     testing.test("land removes the workspace it runs in", function()
-        local project, id, path, base = central_project()
+        local project, id, path, base, inside = central_project()
         local out, code = dev(
-            at_root(project, path),
+            inside,
             { "board", "land", id },
             { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
