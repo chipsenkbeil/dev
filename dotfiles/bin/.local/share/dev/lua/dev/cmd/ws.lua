@@ -8,6 +8,14 @@ local verb = require("dev.verb")
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `ws` subcommands
 local M = { handlers = {} }
 
+local function sentence(text)
+    text = text:gsub("^%l", string.upper)
+    if not text:find("%.$") then
+        text = text .. "."
+    end
+    return text
+end
+
 local function workspace_root()
     local env = os.getenv("DEV_WS_ROOT")
     if env and env ~= "" then
@@ -44,7 +52,7 @@ local function fetch_trunk(ctx)
     end
     local found, why = forge.resolve(ctx.root)
     if not found then
-        return "dev ws new: trunk cannot be compared: " .. why
+        return sentence("trunk cannot be compared: " .. why)
     end
     local argv = vcs.with(
         vcs.base(ctx.root, vcs.JJ, { quiet = true }),
@@ -56,10 +64,8 @@ local function fetch_trunk(ctx)
     verb.show(ctx, argv)
     local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
-        return string.format(
-            "dev ws new: the fetch from %s failed: %s",
-            found.remote,
-            (out:gsub("\n$", ""))
+        return sentence(
+            string.format("the fetch from %s failed: %s", found.remote, (out:gsub("\n$", "")))
         )
     end
     return nil
@@ -100,12 +106,12 @@ M.handlers["ws new"] = function(ctx)
         marked = marked or fs.exists(ctx.root .. "/" .. marker)
     end
     if not marked then
-        verb.die("dev ws new: " .. ctx.root .. " is not inside a project")
+        verb.die(ctx.root .. " is not inside a project.")
     end
     local base = workspace_root()
     local path = fs.join(base, repo_name(base, ctx.root), name)
     if fs.exists(path) then
-        verb.die("dev ws new: " .. path .. " already exists")
+        verb.die(path .. " already exists.")
     end
     local failure = fetch_trunk(ctx)
     if failure then
@@ -113,13 +119,13 @@ M.handlers["ws new"] = function(ctx)
     end
     local made, why = fs.mkdir(fs.dirname(path), { parents = true })
     if not made then
-        verb.die("dev ws new: " .. why)
+        verb.die(sentence(why))
     end
     local argv = plan(ctx.root, name, path)
     if argv == nil then
         made, why = fs.mkdir(path)
         if not made then
-            verb.die("dev ws new: " .. why)
+            verb.die(sentence(why))
         end
     else
         verb.show(ctx, argv)
@@ -319,7 +325,7 @@ M.handlers["ws rm"] = function(ctx)
         if code then
             return code
         end
-        verb.die("dev ws rm: " .. message)
+        verb.die(sentence(message))
     end
     print(message)
     return 0
