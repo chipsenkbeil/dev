@@ -2477,12 +2477,15 @@ Rotating the turn card:
   live asks onto it again in their order, with their end times. An ask that ran
   out or was answered is not carried.
 - A move to Done adds a history event, so Pomb refuses it with `limit reached`
-  on a card already past the byte limit. Rotation then moves the card to the
-  bin, which Pomb does not refuse. Any other move failure leaves the card.
+  on a card already past the byte limit. Rotation never bins the card, to leave
+  the loss of a card that Pomb purges after 30 days to the owner.
+  `take` and `ask` answer `The landing turn card ID is full and Pomb refuses to
+  move it. Rename it so dev makes a fresh one.` and the card stays. Once the
+  owner renames it, the next call makes a fresh card.
 - Rotation re-reads the card first and leaves it when another agent has taken
   it meanwhile.
-- When neither works, `take` and `ask` answer `The full landing turn card could
-  not be retired.` and the card stays.
+- Any other move failure answers `The full landing turn card could not be
+  retired.` and the card stays.
 - `land` asks once before it polls, and every poll runs `take`, so a card that
   fills while a waiter waits rotates on the next poll.
 

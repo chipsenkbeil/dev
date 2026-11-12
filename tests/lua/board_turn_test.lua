@@ -454,22 +454,20 @@ testing.test("a card past the byte limit rotates", function()
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     turn.release(backend, first)
     fill(backend, first.card)
-    local move = backend.move
     backend.move = function()
         return nil, "limit reached: at most 1048576 bytes in one task", true
     end
-    backend.bin = function(self, id)
-        return move(self, id, self.roles:done_column())
+    local binned = false
+    backend.bin = function()
+        binned = true
+        return true
     end
-    local second = assert(turn.take(backend, "beta", "bbbb2222"))
-    testing.ok(second.card ~= first.card, "the stuck card was reused")
-    testing.eq(open_turn_card(backend).id, second.card)
-    backend.bin = nil
-    fill(backend, second.card)
-    turn.release(backend, second)
-    local refused, message = turn.take(backend, "gamma", "cccc3333")
+    local refused, message = turn.take(backend, "beta", "bbbb2222")
     testing.eq(refused, nil)
-    testing.ok(message:find("could not be retired", 1, true), message)
+    testing.ok(message:find(first.card:sub(1, 8), 1, true), message)
+    testing.ok(message:find("Rename it", 1, true), message)
+    testing.eq(binned, false)
+    testing.eq(open_turn_card(backend).id, first.card)
 end)
 
 local function as_agent(name, run)

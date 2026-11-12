@@ -245,8 +245,13 @@ local function rotate(backend, card, comments)
         return card
     end
     local moved, message = backend:move(card.id, backend.roles:done_column())
-    if not moved and backend.bin and (message or ""):find("limit reached", 1, true) then
-        moved, message = backend:bin(card.id)
+    if not moved and (message or ""):find("limit reached", 1, true) then
+        return nil,
+            string.format(
+                "The landing turn card %s is full and Pomb refuses to move it. "
+                    .. "Rename it so dev makes a fresh one.",
+                card.id:sub(1, 8)
+            )
     end
     if not moved then
         return nil, "The full landing turn card could not be retired. " .. (message or "")
