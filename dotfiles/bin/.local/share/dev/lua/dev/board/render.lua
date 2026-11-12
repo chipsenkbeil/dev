@@ -226,4 +226,6 @@ function M.ls(screen, cards, opts)
     return lines
 end
 
+M.count_text = count_text
+
 return M
