@@ -333,7 +333,7 @@ local function delete_refusal(action)
                 .. (action or "deletes a card")
                 .. ", and DEV_AGENT "
                 .. name
-                .. " is not a lead name, whose role segment is lead; ask the lead"
+                .. " is not a lead name, whose role segment is lead. Ask the lead"
                 .. (action and "" or ", with the card and the reason")
                 .. "."
         )
