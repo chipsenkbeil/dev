@@ -18,6 +18,7 @@ local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "confl
 local SHOWN_LINES = 12
 local NO_CHANGE = "-"
 local NO_RUN = "-"
+local REASON_INDENT = "  "
 local TIMEOUT_EXIT = 124
 
 ---How a checks row ended.
@@ -36,6 +37,7 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field result string one of `RESULT`, where a timeout also covers a row killed from outside
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
+---@field reason string? the last line a failed row printed when it printed no run id
 
 local GLOBAL_FLAGS = {
     ["--remote"] = true,
@@ -211,6 +213,16 @@ function M.state(root)
     return git_state(root)
 end
 
+local function last_line(output)
+    local last
+    for line in output:gmatch("[^\n]+") do
+        if line:match("%S") then
+            last = line
+        end
+    end
+    return last and last:match("^%s*(.-)%s*$")
+end
+
 local function tail_of(output)
     local lines = {}
     for line in output:gmatch("[^\n]+") do
@@ -251,9 +263,15 @@ function M.run(opts)
     if code == TIMEOUT_EXIT then
         result = M.RESULT.TIMEOUT
     end
+    local run_id = M.run_id(output)
+    local reason
+    if result == M.RESULT.FAIL and not run_id and not negated then
+        reason = last_line(output)
+    end
     return {
         run = opts.run,
-        run_id = M.run_id(output) or NO_RUN,
+        run_id = run_id or NO_RUN,
+        reason = reason,
         result = result,
         code = code,
         tail = note and (note .. "\n" .. tail_of(output)) or tail_of(output),
@@ -316,15 +334,24 @@ function M.record(state, rows, expect_fail)
     }
     for i, row in ipairs(rows) do
         lines[#lines + 1] = M.line(i, row)
+        if row.reason then
+            lines[#lines + 1] = REASON_INDENT .. row.reason
+        end
     end
     return table.concat(lines, "\n")
 end
+
+---@class dev.board.check.RecordRow
+---@field result string how the row ended
+---@field run_id string the ci run id, `-` when the row printed none
+---@field run string the row's command
+---@field reason string? the last line a failed row printed when it printed no run id
 
 ---@class dev.board.check.Record
 ---@field commit string the full commit id the rows ran on
 ---@field change string the change id, `-` in a git project
 ---@field mode string one of `MODE`
----@field rows {result: string, run_id: string, run: string}[] the rows in the order they ran
+---@field rows dev.board.check.RecordRow[] the rows in the order they ran
 
 ---Read a comment that `record` wrote.
 ---@param body string the comment body
@@ -337,14 +364,22 @@ function M.parse(body)
     end
     local rows = {}
     for line in rest:gmatch("[^\n]+") do
-        local index, result, run_id, run = line:match("^(%d+) (%a+) (%S+) (.+)$")
-        if not index or tonumber(index) ~= #rows + 1 then
-            return nil
+        local reason = line:match("^%s+(%S.*)$")
+        if reason then
+            if #rows == 0 or rows[#rows].reason then
+                return nil
+            end
+            rows[#rows].reason = reason
+        else
+            local index, result, run_id, run = line:match("^(%d+) (%a+) (%S+) (.+)$")
+            if not index or tonumber(index) ~= #rows + 1 then
+                return nil
+            end
+            if run_id ~= NO_RUN and not run_id:match("^%x+$") then
+                return nil
+            end
+            rows[#rows + 1] = { result = result, run_id = run_id, run = run }
         end
-        if run_id ~= NO_RUN and not run_id:match("^%x+$") then
-            return nil
-        end
-        rows[#rows + 1] = { result = result, run_id = run_id, run = run }
     end
     return { commit = commit, change = change, mode = mode, rows = rows }
 end

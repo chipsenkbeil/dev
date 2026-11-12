@@ -215,6 +215,50 @@ testing.test("check records the ci run id each row printed", function()
     })
 end)
 
+testing.test("check records why a row failed without a run", function()
+    local root, home, head = git_root()
+    local id = card_with(root, home, { "ls dev-board-check-missing-path", "false" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    local record = check.parse(comments(home)[1].body)
+    testing.eq(record.commit, head)
+    testing.ok(record.rows[1].reason:find("dev-board-check-missing-path", 1, true), out)
+    testing.eq(record.rows[1].run_id, "-")
+    testing.eq(record.rows[2].reason, nil)
+end)
+
+testing.test("check records no reason for a row with a run id", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "echo run 8cb600" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 0, out)
+    local body = comments(home)[1].body
+    testing.ok(body:find("\n1 pass 8cb600 echo run 8cb600", 1, true), body)
+    testing.eq(check.parse(body).rows[1].reason, nil)
+    testing.eq(body:find("\n%s", 1), nil)
+end)
+
+testing.test("check parse reads the reason of a row", function()
+    local state = { commit = "abc123", change = "-" }
+    local rows = {
+        {
+            result = "fail",
+            run_id = "-",
+            run = "dev --remote test",
+            reason = "the hub is draining",
+        },
+        { result = "pass", run_id = "8cb600", run = "dev --remote lint" },
+    }
+    local body = check.record(state, rows, false)
+    testing.ok(
+        body:find("\n1 fail - dev --remote test\n  the hub is draining\n2 pass", 1, true),
+        body
+    )
+    testing.eq(check.parse(body).rows, rows)
+    testing.eq(check.parse((body:gsub("draining\n", "draining\n  again\n"))), nil)
+    testing.eq(check.parse("dev-check: commit=abc123 change=- mode=run\n  orphan"), nil)
+end)
+
 testing.test("check labels the ci run of a row as repo/check/card", function()
     local root, home = git_root()
     local id = card_with(root, home, { "! printenv DEV_CI_VERB DEV_CI_CARD" })

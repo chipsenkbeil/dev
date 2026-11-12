@@ -2210,11 +2210,16 @@ command.
 
 - The run id is the one from the `run <id>` line of `ci run --follow`, so
   `ci logs <id>` reads the row's log. It is `-` when the row printed none.
+- A row that failed with no run id, such as a run the hub refused while it
+  drains, adds a second line under it, indented by two spaces, with the last
+  line the row printed. A row that printed a run id, a negated row and a row
+  that timed out add none.
 
 ```
 dev-check: commit=<full commit id> change=<change id, - in git> mode=run
 1 pass 8cb600 dev --remote lint
 2 fail - dev --remote test
+  Target freebsd-15-dev is draining since 5m ago by agent:infra: image swap.
 ```
 
 The result and the exit code:
