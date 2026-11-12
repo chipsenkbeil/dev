@@ -3040,8 +3040,8 @@ Elsewhere:
 
 ### take
 
-`dev board take CARD [--as NAME] [--max-size N]` claims the card and starts the
-keep-alive loop.
+`dev board take CARD [--as NAME] [--from NAME] [--max-size N]` claims the card
+and starts the keep-alive loop.
 
 The claim:
 
@@ -3077,6 +3077,23 @@ The claim note:
   the name outlives the claim. `review` reads those notes.
 - If that note cannot be written, the claim is released and `take` exits 1.
 - `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
+
+The handoff:
+
+- `--from NAME` takes over the claim of an agent that exited. It lets the lead
+  that verifies a card land it under its own name.
+- When NAME is the card's current claimant, `take` releases that claim and
+  takes the card under the caller's name, then posts the status note
+  `handoff: NAME released the claim and CALLER took it`.
+- It uses the backend's own release and claim calls, so a Pomb board and a
+  local board both work.
+- It refuses with exit 1 and changes nothing when the card has no claim, when
+  NAME is not the claimant, or when NAME is the caller.
+- A failure after the release, such as a claim that Pomb refuses, leaves the
+  card unclaimed. The runner's keep-alive loop is stopped and `take` exits 1.
+- A Pomb release sends the runner's fence when this machine holds its state
+  file, and none otherwise.
+- Without `--from`, a card another name holds still gets the claim refusal.
 
 The size limit:
 

@@ -8655,3 +8655,58 @@ testing.test("move wait gives up at its timeout with the full status", function(
     result = cmd_board.move(backend, args)
     testing.eq(result.code, 2)
 end)
+
+local function local_card_state(home, id)
+    local doc = assert(json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"))))
+    for _, card in ipairs(doc.cards) do
+        if card.id:sub(1, #id) == id then
+            return card
+        end
+    end
+end
+
+testing.test("take --from moves the claim and notes both names", function()
+    local root, home, ids = local_cards()
+    local out, code = dev(root, home, { "board", "take", ids.One }, { agent = "r/runner" })
+    testing.eq(code, 0, out)
+    out, code = dev(
+        root,
+        home,
+        { "board", "take", ids.One, "--from", "r/runner" },
+        { agent = "r/lead" }
+    )
+    testing.eq(code, 0, out)
+    local card = local_card_state(home, ids.One)
+    testing.eq(card.claim.claimant, "r/lead")
+    local bodies = {}
+    for _, comment in ipairs(card.comments) do
+        bodies[#bodies + 1] = comment.body
+    end
+    local text = table.concat(bodies, "\n")
+    testing.ok(text:find("handoff: r/runner released the claim and r/lead took it", 1, true), text)
+    dev(root, home, { "board", "release", ids.One }, { agent = "r/lead" })
+end)
+
+testing.test("take --from refuses a name that is not the claimant and changes nothing", function()
+    local root, home, ids = local_cards()
+    dev(root, home, { "board", "take", ids.One }, { agent = "r/runner" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "take", ids.One, "--from", "r/other" },
+        { agent = "r/lead" }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is claimed by r/runner, not by r/other", 1, true), out)
+    testing.eq(local_card_state(home, ids.One).claim.claimant, "r/runner")
+    out, code = dev(
+        root,
+        home,
+        { "board", "take", ids.Two, "--from", "r/runner" },
+        { agent = "r/lead" }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no claim", 1, true), out)
+    testing.eq(local_card_state(home, ids.Two).claim, nil)
+    dev(root, home, { "board", "release", ids.One }, { agent = "r/runner" })
+end)

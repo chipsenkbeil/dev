@@ -527,9 +527,9 @@ return {
     {
         words = { "board", "take" },
         handler = "lua",
-        flags = "--as --max-size",
-        usage = "dev board take CARD [--as NAME] [--max-size N]",
-        desc = "Claim a card and keep the claim renewed",
+        flags = "--as --from --max-size",
+        usage = "dev board take CARD [--as NAME] [--from NAME] [--max-size N]",
+        desc = "Claim a card and keep the claim renewed, or take over NAME's claim",
     },
     {
         words = { "board", "release" },

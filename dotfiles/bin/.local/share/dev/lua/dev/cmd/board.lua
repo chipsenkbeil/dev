@@ -4773,7 +4773,8 @@ function commands.lint(backend, args)
 end
 
 function commands.take(backend, args)
-    local flags, words = parse(args, { [AS_FLAG] = true, [runner.FLAG] = true })
+    local FROM_FLAG = "--from"
+    local flags, words = parse(args, { [AS_FLAG] = true, [runner.FLAG] = true, [FROM_FLAG] = true })
     if not flags then
         return words
     end
@@ -4792,13 +4793,34 @@ function commands.take(backend, args)
     if not card then
         return err
     end
+    local from = flags[FROM_FLAG]
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    if from then
+        if card.claimant == nil then
+            return failure(
+                "Card "
+                    .. short
+                    .. " has no claim, so "
+                    .. FROM_FLAG
+                    .. " has nothing to take over."
+            )
+        end
+        if card.claimant ~= from then
+            return failure(
+                "Card " .. short .. " is claimed by " .. card.claimant .. ", not by " .. from .. "."
+            )
+        end
+        if from == (name or claimant()) then
+            return failure(from .. " already holds " .. short .. ".")
+        end
+    end
     local refused = runner.refusal(card, limit)
     if refused then
         return refused
     end
     local roles = backend.roles
-    local rival = card.claimant ~= nil and card.claimant ~= (name or claimant())
-    if card.claimant == nil then
+    local rival = not from and card.claimant ~= nil and card.claimant ~= (name or claimant())
+    if card.claimant == nil or from then
         local shaped = runner.shape_refusal(name)
         if shaped then
             return shaped
@@ -4811,9 +4833,30 @@ function commands.take(backend, args)
             return refused
         end
     end
+    if from then
+        local held = claims.read(card.id)
+        local released, stuck = backend:release(card.id, held and held.fence)
+        if not released then
+            return failure(stuck)
+        end
+        claims.stop(card.id)
+    end
     local result, fence = claim_card(backend, card, name)
     if not fence then
         return result
+    end
+    if from then
+        local ok, message = backend:note(
+            card.id,
+            string.format("handoff: %s released the claim and %s took it", from, claimant(name)),
+            fence,
+            { kind = "status" }
+        )
+        if not ok then
+            verb.note(
+                "Took " .. short .. ", but the handoff note was not posted: " .. message .. "."
+            )
+        end
     end
     return claimed_view(backend, card, result)
 end
