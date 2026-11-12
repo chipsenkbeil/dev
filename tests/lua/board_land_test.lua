@@ -111,7 +111,7 @@ local function setup(extra)
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
     assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
-    return root, home, support.tempdir() .. "/land.log"
+    return { root = root, home = home, log = support.tempdir() .. "/land.log" }
 end
 
 local function must(first, second)
@@ -291,21 +291,25 @@ testing.test("an unreadable expect-fail record never refuses a landing", functio
     )
 end)
 
-local function dev(root, home, log, args, extra)
+local function at_root(project, root)
+    return { root = root, home = project.home, log = project.log, bare = project.bare }
+end
+
+local function dev(project, args, extra)
     local env = {
-        HOME = home,
-        XDG_STATE_HOME = home .. "/state",
+        HOME = project.home,
+        XDG_STATE_HOME = project.home .. "/state",
         JJ_USER = "t",
         JJ_EMAIL = "t@example.com",
         DEV_AGENT = "dotfiles/lander",
-        LAND_LOG = log,
+        LAND_LOG = project.log,
         LAND_MSG = "stub land",
         REAL_JJ = dev_os.which("jj"),
     }
     for name, value in pairs(extra or {}) do
         env[name] = value
     end
-    return support.dev(root, args, { env = env })
+    return support.dev(project.root, args, { env = env })
 end
 
 local function board_card(doc, id)
@@ -355,9 +359,9 @@ local function column_of(home, id)
     return "?"
 end
 
-local function new_card(root, home, log)
-    must(dev(root, home, log, { "board", "init" }))
-    local out = dev(root, home, log, {
+local function new_card(project)
+    must(dev(project, { "board", "init" }))
+    local out = dev(project, {
         "board",
         "add",
         "Card",
@@ -369,17 +373,17 @@ local function new_card(root, home, log)
         "It works",
     })
     local id = assert(out:match("added (%x+)"), out)
-    must(dev(root, home, log, { "board", "checks", id, "true" }))
-    if fs.is_dir(root .. "/.jj") then
-        local rename = { "jj", "-R", root, "workspace", "rename", id }
+    must(dev(project, { "board", "checks", id, "true" }))
+    if fs.is_dir(project.root .. "/.jj") then
+        local rename = { "jj", "-R", project.root, "workspace", "rename", id }
         must(dev_os.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
     end
     return id
 end
 
-local function approve_reviews(root, home, log, id)
+local function approve_reviews(project, id)
     for _, kind in ipairs({ "code", "style" }) do
-        must(dev(root, home, log, {
+        must(dev(project, {
             "board",
             "review",
             id,
@@ -395,44 +399,51 @@ local function approve_reviews(root, home, log, id)
     end
 end
 
-local function approve(root, home, log, id)
-    approve_reviews(root, home, log, id)
-    must(dev(root, home, log, { "board", "check", id }))
-    must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+local function approve(project, id)
+    approve_reviews(project, id)
+    must(dev(project, { "board", "check", id }))
+    must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
 end
 
-local function refused(root, home, log, id, wanted, extra)
-    local out, code = dev(root, home, log, { "board", "land", id }, extra)
+local function verified_card(project)
+    local id = new_card(project)
+    must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+    approve(project, id)
+    return id
+end
+
+local function refused(project, id, wanted, extra)
+    local out, code = dev(project, { "board", "land", id }, extra)
     testing.eq(code, 1, out)
     for _, text in ipairs(wanted) do
         testing.ok(out:find(text, 1, true), text .. "\n" .. out)
     end
-    testing.eq(landed_calls(log), "")
+    testing.eq(landed_calls(project.log), "")
     testing.eq(out:find("landed " .. id, 1, true), nil)
-    testing.ok(column_of(home) ~= support.COLUMN_NAME.DONE, column_of(home))
+    testing.ok(column_of(project.home) ~= support.COLUMN_NAME.DONE, column_of(project.home))
     return out
 end
 
 testing.test("land refuses a git project and a caller with no name", function()
-    local root, home, log = setup()
-    must(dev_os.run({ "git", "init", "-q", root }, { stdout = "null" }))
-    local id = new_card(root, home, log)
-    refused(root, home, log, id, { "needs a jj project" })
-    local out, code = dev(root, home, log, { "board", "land", id }, { DEV_AGENT = "" })
+    local project = setup()
+    must(dev_os.run({ "git", "init", "-q", project.root }, { stdout = "null" }))
+    local id = new_card(project)
+    refused(project, id, { "needs a jj project" })
+    local out, code = dev(project, { "board", "land", id }, { DEV_AGENT = "" })
     testing.eq(code, 2, out)
     testing.ok(out:find("needs DEV_AGENT", 1, true), out)
-    out, code = dev(root, home, log, { "board", "land" })
+    out, code = dev(project, { "board", "land" })
     testing.eq(code, 2, out)
     testing.ok(out:find("needs a card", 1, true), out)
 end)
 
 testing.test("land refuses an agent name that is not one word", function()
-    local root, home, log = setup()
-    local id = new_card(root, home, log)
-    local out, code = dev(root, home, log, { "board", "land", id }, { DEV_AGENT = "two words" })
+    local project = setup()
+    local id = new_card(project)
+    local out, code = dev(project, { "board", "land", id }, { DEV_AGENT = "two words" })
     testing.eq(code, 2, out)
     testing.ok(out:find("an agent name is one word of letters, digits and . - _ /", 1, true), out)
-    testing.eq(landed_calls(log), "")
+    testing.eq(landed_calls(project.log), "")
 end)
 
 local CARD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -522,28 +533,29 @@ if has_jj then
     end
 
     local function jj_project(extra)
-        local root, home, log = setup(extra)
-        assert(fs.write(root .. "/bin/jj", LAND_STUB), "write failed")
-        must(dev_os.run({ "chmod", "755", root .. "/bin/jj" }))
+        local project = setup(extra)
+        assert(fs.write(project.root .. "/bin/jj", LAND_STUB), "write failed")
+        must(dev_os.run({ "chmod", "755", project.root .. "/bin/jj" }))
         local bare = support.tempdir()
+        project.bare = bare
         must(
             dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" })
         )
         must(
             dev_os.run(
-                { "jj", "git", "init", root },
+                { "jj", "git", "init", project.root },
                 { stdout = "null", stderr = "null", env = IDENT }
             )
         )
-        jj(root, "git", "remote", "add", "origin", bare)
-        assert(fs.mkdir(root .. "/lib", { parents = true }), "mkdir failed")
-        assert(fs.write(root .. "/lib/seed.txt", "seed\n"), "write failed")
-        jj(root, "commit", "-m", "base")
-        jj(root, "bookmark", "create", "master", "-r", "@-")
-        jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
-        assert(fs.write(root .. "/work.txt", "one\n"), "write failed")
-        jj(root, "describe", "-m", "feat: work")
-        return root, home, log, bare
+        jj(project.root, "git", "remote", "add", "origin", bare)
+        assert(fs.mkdir(project.root .. "/lib", { parents = true }), "mkdir failed")
+        assert(fs.write(project.root .. "/lib/seed.txt", "seed\n"), "write failed")
+        jj(project.root, "commit", "-m", "base")
+        jj(project.root, "bookmark", "create", "master", "-r", "@-")
+        jj(project.root, "git", "push", "--remote", "origin", "--bookmark", "master")
+        assert(fs.write(project.root .. "/work.txt", "one\n"), "write failed")
+        jj(project.root, "describe", "-m", "feat: work")
+        return project
     end
 
     local function head(root)
@@ -586,78 +598,68 @@ if has_jj then
     end
 
     testing.test("land refuses outside the workspace named for the card", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        jj(root, "workspace", "rename", "elsewhere")
-        refused(root, home, log, id, { "elsewhere", "dev ws new " .. id })
+        local project = jj_project()
+        local id = verified_card(project)
+        jj(project.root, "workspace", "rename", "elsewhere")
+        refused(project, id, { "elsewhere", "dev ws new " .. id })
     end)
 
     testing.test("land refuses when jj cannot read the workspace list", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        local before = #comments(home, id)
+        local project = jj_project()
+        local id = verified_card(project)
+        local before = #comments(project.home, id)
         refused(
-            root,
-            home,
-            log,
+            project,
             id,
             { "jj could not read the workspace of" },
             { LOG_FAIL_AT = "workspace" }
         )
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
-        testing.eq(#comments(home, id), before)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
+        testing.eq(#comments(project.home, id), before)
     end)
 
     testing.test(
         "workspace check passes when another workspace shares the working-copy commit",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            jj(root, "workspace", "rename", id)
+            local project = jj_project()
+            local id = new_card(project)
+            jj(project.root, "workspace", "rename", id)
             local base = assert(fs.realpath(support.tempdir()))
             local path = base .. "/other"
-            jj(root, "workspace", "add", "--name", "other", path)
-            local work = head(root)
+            jj(project.root, "workspace", "add", "--name", "other", path)
+            local work = head(project.root)
             jj(path, "edit", work)
             testing.eq(head(path), work)
-            must(dev(root, home, log, { "board", "turn", id }))
-            local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+            must(dev(project, { "board", "turn", id }))
+            local out, code = dev(project, { "board", "turn", id, "--release" })
             testing.eq(code, 0, out)
         end
     )
 
     testing.test("turn refuses outside the workspace named for the card", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "turn", id }))
-        jj(root, "workspace", "rename", "elsewhere")
-        local out, code = dev(root, home, log, { "board", "turn", id })
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "turn", id }))
+        jj(project.root, "workspace", "rename", "elsewhere")
+        local out, code = dev(project, { "board", "turn", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("elsewhere", 1, true), out)
         testing.ok(out:find("dev ws new " .. id, 1, true), out)
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
-        out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
+        out, code = dev(project, { "board", "turn", id, "--release" })
         testing.eq(code, 0, out)
         testing.ok(out:find("gave back the landing turn held for " .. id, 1, true), out)
-        testing.eq(turn_holder(home), nil)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
     testing.test(
         "a card that meets every condition lands, gets a done note and reaches Done",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
-            local commit = head(root)
+            local project = jj_project()
+            local id = verified_card(project)
+            local commit = head(project.root)
             local out, code = dev(
-                root,
-                home,
-                log,
+                project,
                 { "board", "land", id },
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
@@ -670,42 +672,45 @@ if has_jj then
                 ),
                 out
             )
-            testing.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
-            local list = comments(home)
+            testing.ok(
+                landed_calls(project.log):find("land --yes", 1, true),
+                landed_calls(project.log)
+            )
+            local list = comments(project.home)
             local last = list[#list]
             testing.eq(last.kind, KIND_DONE)
             testing.ok(last.body:find("Landed commit " .. commit:sub(1, 12), 1, true), last.body)
-            testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
 
     testing.test(
         "land runs jj land with DEV_BOARD_LAND=1 so the jj guard lets it through",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
+            local project = jj_project()
+            local id = verified_card(project)
             local out, code = dev(
-                root,
-                home,
-                log,
+                project,
                 { "board", "land", id },
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
-            testing.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
-            testing.ok(landed_calls(log):find("DEV_BOARD_LAND=1", 1, true), landed_calls(log))
+            testing.ok(
+                landed_calls(project.log):find("land --yes", 1, true),
+                landed_calls(project.log)
+            )
+            testing.ok(
+                landed_calls(project.log):find("DEV_BOARD_LAND=1", 1, true),
+                landed_calls(project.log)
+            )
         end
     )
 
     testing.test("an old-shape claimant still checks and lands its claimed card", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+        local project = jj_project()
+        local id = verified_card(project)
         local old = "dotfiles/implementer/38f0e013/1"
-        local backend, restore = board_at(home)
+        local backend, restore = board_at(project.home)
         local cards = assert(backend:cards())
         for _, card in ipairs(cards) do
             if card.id:sub(1, #id) == id then
@@ -714,131 +719,104 @@ if has_jj then
         end
         restore()
         local as_old = { DEV_AGENT = old, LAND_TRUNK = LAND_TRUNK_KEEP }
-        local out, code = dev(root, home, log, { "board", "check", id }, as_old)
+        local out, code = dev(project, { "board", "check", id }, as_old)
         testing.eq(code, 0, out)
-        out, code = dev(root, home, log, { "board", "land", id }, as_old)
+        out, code = dev(project, { "board", "land", id }, as_old)
         testing.eq(code, 0, out)
         testing.ok(out:find("landed " .. id, 1, true), out)
-        testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("land refuses a card in Review and names Verify", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.REVIEW }))
-        approve(root, home, log, id)
-        refused(root, home, log, id, { "it is in Review, and only a card in Verify lands" })
-        testing.eq(column_of(home, id), support.COLUMN_NAME.REVIEW)
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.REVIEW }))
+        approve(project, id)
+        refused(project, id, { "it is in Review, and only a card in Verify lands" })
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.REVIEW)
     end)
 
     testing.test("land moves a verified card to Release when the project deploys", function()
-        local root, home, log = jj_project("\n[board.land]\ndeploys = true\n")
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project("\n[board.land]\ndeploys = true\n")
+        local id = verified_card(project)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(out:find("and moved it to Release", 1, true), out)
-        local list = comments(home, id)
+        local list = comments(project.home, id)
         testing.eq(list[#list].kind, KIND_DONE)
         testing.ok(
             list[#list].body:find("waits in Release for the deploy", 1, true),
             list[#list].body
         )
-        testing.eq(column_of(home, id), support.COLUMN_NAME.RELEASE)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
     end)
 
     testing.test("land moves a verified card to Done when the project does not deploy", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = verified_card(project)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(out:find("and moved it to Done", 1, true), out)
-        testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a card in Release moves to Done once every outcome is ticked", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.RELEASE }))
-        local out, code = dev(root, home, log, { "board", "move", id, support.COLUMN.DONE })
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.RELEASE }))
+        local out, code = dev(project, { "board", "move", id, support.COLUMN.DONE })
         testing.eq(code, 1, out)
         testing.ok(out:find("1 of 1 outcomes are unticked", 1, true), out)
-        testing.eq(column_of(home, id), support.COLUMN_NAME.RELEASE)
-        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.DONE }))
-        testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        must(dev(project, { "board", "move", id, support.COLUMN.DONE }))
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a land that rewrites the commit notes the commit on trunk", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        local before = head(root)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_REWRITE }
-        )
+        local project = jj_project()
+        local id = verified_card(project)
+        local before = head(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_REWRITE })
         testing.eq(code, 0, out)
-        local after = jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+        local after =
+            jj(project.root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
         testing.ok(before ~= after, "the stub must rewrite the commit")
         testing.ok(out:find("at commit " .. after:sub(1, 12) .. " and moved", 1, true), out)
         testing.eq(out:find(before:sub(1, 12), 1, true), nil, out)
-        local list = comments(home)
+        local list = comments(project.home)
         local last = list[#list]
         testing.ok(last.body:find("Landed commit " .. after:sub(1, 12), 1, true), last.body)
         testing.eq(last.body:find(before:sub(1, 12), 1, true), nil, last.body)
-        testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test(
         "a land whose trunk cannot be read notes the earlier commit and still reaches Done",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
-            local commit = head(root)
-            local out, code = dev(root, home, log, { "board", "land", id })
+            local project = jj_project()
+            local id = verified_card(project)
+            local commit = head(project.root)
+            local out, code = dev(project, { "board", "land", id })
             testing.eq(code, 0, out)
             testing.ok(out:find("at commit " .. commit:sub(1, 12), 1, true), out)
             testing.ok(out:find("trunk could not be read", 1, true), out)
-            local list = comments(home)
+            local list = comments(project.home)
             local last = list[#list]
             testing.eq(last.kind, KIND_DONE)
             testing.ok(last.body:find(commit:sub(1, 12), 1, true), last.body)
             testing.ok(last.body:find("may differ", 1, true), last.body)
-            testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
 
     testing.test(
         "land verdict refuses needs-work, names the reviewer, and accepts minor",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
+            local project = jj_project()
+            local id = verified_card(project)
             local function judge(by, verdict)
-                must(dev(root, home, log, {
+                must(dev(project, {
                     "board",
                     "review",
                     id,
@@ -853,38 +831,34 @@ if has_jj then
                 }))
             end
             judge("picky", "needs-work")
-            refused(root, home, log, id, { "code review by picky", "needs-work" })
+            refused(project, id, { "code review by picky", "needs-work" })
             judge("kind", "minor")
-            local out, code = dev(root, home, log, { "board", "land", id })
+            local out, code = dev(project, { "board", "land", id })
             testing.eq(code, 0, out)
-            testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
 
     testing.test("a failed jj land leaves the card in Verify and exits non-zero", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        local before = #comments(home)
+        local project = jj_project()
+        local id = verified_card(project)
+        local before = #comments(project.home)
         local out, code = dev(
-            root,
-            home,
-            log,
+            project,
             { "board", "land", id },
             { LAND_CODE = "1", LAND_MSG = "boom" }
         )
         testing.eq(code, 1, out)
         testing.ok(out:find("stays in Verify", 1, true) and out:find("boom", 1, true), out)
-        testing.ok(landed_calls(log):find("land", 1, true))
-        testing.eq(#comments(home), before)
-        testing.eq(column_of(home), support.COLUMN_NAME.VERIFY)
+        testing.ok(landed_calls(project.log):find("land", 1, true))
+        testing.eq(#comments(project.home), before)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.VERIFY)
     end)
 
     testing.test("land names every missing condition and runs nothing", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        refused(root, home, log, id, {
+        local project = jj_project()
+        local id = new_card(project)
+        refused(project, id, {
             "it is in Backlog, and only a card in Verify lands",
             "1 of 1 outcomes are unticked",
             "no code review of change",
@@ -894,41 +868,33 @@ if has_jj then
     end)
 
     testing.test("land refuses another claimant's card", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "take", id, "--as", "dotfiles/builder" }))
-        refused(root, home, log, id, { "claimed by dotfiles/builder", "not dotfiles/lander" })
-        must(dev(root, home, log, { "board", "release", id }))
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "take", id, "--as", "dotfiles/builder" }))
+        refused(project, id, { "claimed by dotfiles/builder", "not dotfiles/lander" })
+        must(dev(project, { "board", "release", id }))
     end)
 
     testing.test("land succeeds after a take --from handoff", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        must(dev(root, home, log, { "board", "take", id, "--as", "dotfiles/builder" }))
-        refused(root, home, log, id, { "claimed by dotfiles/builder", "not dotfiles/lander" })
-        must(dev(root, home, log, { "board", "take", id, "--from", "dotfiles/builder" }))
-        testing.eq(claim_of(home, id).claimant, "dotfiles/lander")
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = verified_card(project)
+        must(dev(project, { "board", "take", id, "--as", "dotfiles/builder" }))
+        refused(project, id, { "claimed by dotfiles/builder", "not dotfiles/lander" })
+        must(dev(project, { "board", "take", id, "--from", "dotfiles/builder" }))
+        testing.eq(claim_of(project.home, id).claimant, "dotfiles/lander")
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(out:find("landed " .. id, 1, true), out)
-        testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a claimed card's review comes from another name, never its claimant", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "take", id, "--as", "dotfiles/builder" }))
-        local before = #comments(home, id)
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "take", id, "--as", "dotfiles/builder" }))
+        local before = #comments(project.home, id)
         for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local out, code = dev(root, home, log, {
+            local out, code = dev(project, {
                 "board",
                 "review",
                 id,
@@ -948,7 +914,7 @@ if has_jj then
             )
         end
         for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local out, code = dev(root, home, log, {
+            local out, code = dev(project, {
                 "board",
                 "review",
                 id,
@@ -967,8 +933,8 @@ if has_jj then
                 out
             )
         end
-        testing.eq(#comments(home, id), before)
-        must(dev(root, home, log, {
+        testing.eq(#comments(project.home, id), before)
+        must(dev(project, {
             "board",
             "review",
             id,
@@ -981,59 +947,53 @@ if has_jj then
             "--verdict",
             "clean",
         }))
-        local list = comments(home, id)
+        local list = comments(project.home, id)
         testing.eq(#list, before + 1)
         testing.ok(list[#list].body:find("dev-review: kind=code by=rev", 1, true), list[#list].body)
     end)
 
     testing.test("land refuses a working copy that is empty or undescribed", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        jj(root, "describe", "-m", "")
-        refused(root, home, log, id, { "has no description" })
-        jj(root, "describe", "-m", "feat: work")
-        jj(root, "new", "-m", "next")
-        refused(root, home, log, id, { "is empty" })
+        local project = jj_project()
+        local id = verified_card(project)
+        jj(project.root, "describe", "-m", "")
+        refused(project, id, { "has no description" })
+        jj(project.root, "describe", "-m", "feat: work")
+        jj(project.root, "new", "-m", "next")
+        refused(project, id, { "is empty" })
     end)
 
     testing.test("a check run at an older commit or with a failing row does not count", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
-        refused(root, home, log, id, { "no run of dev board check is recorded at commit" })
-        must(dev(root, home, log, { "board", "checks", id, "false" }))
-        local _, code = dev(root, home, log, { "board", "check", id })
+        local project = jj_project()
+        local id = verified_card(project)
+        assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
+        refused(project, id, { "no run of dev board check is recorded at commit" })
+        must(dev(project, { "board", "checks", id, "false" }))
+        local _, code = dev(project, { "board", "check", id })
         testing.eq(code, 1)
-        refused(root, home, log, id, {
+        refused(project, id, {
             "earlier commit than",
             "did not pass every row (1 fail false)",
         })
     end)
 
     testing.test("an expect-fail record never counts as a passing check", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "checks", id, "false" }))
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve_reviews(root, home, log, id)
-        must(dev(root, home, log, { "board", "check", id, "--expect-fail" }))
-        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        refused(root, home, log, id, { "no run of dev board check is recorded", "expect-fail" })
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "checks", id, "false" }))
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve_reviews(project, id)
+        must(dev(project, { "board", "check", id, "--expect-fail" }))
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        refused(project, id, { "no run of dev board check is recorded", "expect-fail" })
     end)
 
     testing.test("a change after the reviews needs a recheck at the landing commit", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
-        must(dev(root, home, log, { "board", "check", id }))
-        refused(root, home, log, id, { "earlier commit than", "dev board review --kind recheck" })
-        must(dev(root, home, log, {
+        local project = jj_project()
+        local id = verified_card(project)
+        assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
+        must(dev(project, { "board", "check", id }))
+        refused(project, id, { "earlier commit than", "dev board review --kind recheck" })
+        must(dev(project, {
             "board",
             "review",
             id,
@@ -1046,97 +1006,81 @@ if has_jj then
             "--verdict",
             "clean",
         }))
-        local out, code = dev(root, home, log, { "board", "land", id })
+        local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 0, out)
     end)
 
     testing.test("land rebases onto trunk under the turn when trunk has moved", function()
-        local root, home, log, bare = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+        local project = jj_project()
+        local id = verified_card(project)
         local other = support.tempdir() .. "/clone"
         must(
             dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", bare, other },
+                { "git", "clone", "-q", "--branch", "master", project.bare, other },
                 { stdout = "null", stderr = "null" }
             )
         )
         git(other, "commit", "-q", "--allow-empty", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(out:find("trunk has moved", 1, true), nil, out)
-        testing.eq(column_of(home), support.COLUMN_NAME.DONE)
-        testing.eq(turn_holder(home), nil)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
     testing.test(
         "land names the holder and since when while another card holds the turn",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
-            local held = hold_turn(home, "other", "cccc3333")
-            local out, code = dev(root, home, log, { "board", "land", id, "--wait", "0" })
+            local project = jj_project()
+            local id = verified_card(project)
+            local held = hold_turn(project.home, "other", "cccc3333")
+            local out, code = dev(project, { "board", "land", id, "--wait", "0" })
             testing.eq(code, 1, out)
             testing.ok(out:find("held by other since 20", 1, true), out)
-            testing.eq(column_of(home), support.COLUMN_NAME.VERIFY)
-            _, code = dev(root, home, log, { "board", "land", id, "--wait", "x" })
+            testing.eq(column_of(project.home), support.COLUMN_NAME.VERIFY)
+            _, code = dev(project, { "board", "land", id, "--wait", "x" })
             testing.eq(code, 2)
-            _, code = dev(root, home, log, { "board", "land", id, "--wait", "999999999" })
+            _, code = dev(project, { "board", "land", id, "--wait", "999999999" })
             testing.eq(code, 2)
-            release_turn(home, held)
+            release_turn(project.home, held)
             out, code = dev(
-                root,
-                home,
-                log,
+                project,
                 { "board", "land", id, "--wait", "0" },
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
-            testing.eq(column_of(home), support.COLUMN_NAME.DONE)
-            testing.eq(turn_holder(home), nil)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+            testing.eq(turn_holder(project.home), nil)
         end
     )
 
     testing.test("land leaves a change on an unlanded parent where it is", function()
-        local root, home, log, bare = jj_project()
-        jj(root, "new", "-m", "feat: child")
-        assert(fs.write(root .. "/child.txt", "two\n"), "write failed")
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+        local project = jj_project()
+        jj(project.root, "new", "-m", "feat: child")
+        assert(fs.write(project.root .. "/child.txt", "two\n"), "write failed")
+        local id = verified_card(project)
         local other = support.tempdir() .. "/clone"
         must(
             dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", bare, other },
+                { "git", "clone", "-q", "--branch", "master", project.bare, other },
                 { stdout = "null", stderr = "null" }
             )
         )
         git(other, "commit", "-q", "--allow-empty", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
-        local before = head(root)
-        refused(root, home, log, id, { "sits on an unlanded parent" })
-        testing.eq(head(root), before)
-        testing.eq(turn_holder(home), nil)
+        local before = head(project.root)
+        refused(project, id, { "sits on an unlanded parent" })
+        testing.eq(head(project.root), before)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
     testing.test("land waits up to the wait and then names the holder", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        local held = hold_turn(home, "other", "cccc3333")
-        local backend, restore = board_at(home)
-        backend.root = root
+        local project = jj_project()
+        local id = verified_card(project)
+        local held = hold_turn(project.home, "other", "cccc3333")
+        local backend, restore = board_at(project.home)
+        backend.root = project.root
         local nap, now = dev_os.nap, store.now
         local clock = now()
         local naps = {}
@@ -1161,30 +1105,30 @@ if has_jj then
         for _, secs in ipairs(naps) do
             testing.ok(secs <= 1, "the wait slept past its deadline: " .. secs)
         end
-        testing.eq(assert(turn_holder(home)).name, "other")
-        release_turn(home, held)
+        testing.eq(assert(turn_holder(project.home)).name, "other")
+        release_turn(project.home, held)
     end)
 
     testing.test("land gives the turn back when it refuses", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        local out, code = dev(root, home, log, { "board", "land", id })
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("no code review", 1, true), out)
         testing.ok(
-            fs.read(home .. "/state/dev/boards/mine.json")
+            fs.read(project.home .. "/state/dev/boards/mine.json")
                 :find("dev-turn: holder=dotfiles/lander", 1, true)
         )
-        testing.eq(turn_holder(home), nil)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
-    local function trunk_moves(root, bare, files)
+    local function trunk_moves(project, files)
         local other = support.tempdir() .. "/clone"
         must(
             dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", bare, other },
+                { "git", "clone", "-q", "--branch", "master", project.bare, other },
                 { stdout = "null", stderr = "null" }
             )
         )
@@ -1194,111 +1138,106 @@ if has_jj then
         end
         git(other, "commit", "-q", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
-        jj(root, "git", "fetch", "--remote", "origin")
+        jj(project.root, "git", "fetch", "--remote", "origin")
     end
 
     local function rebase_onto_trunk(root)
         jj(root, "rebase", "-r", "@", "-d", "master")
     end
 
-    local function review_ready(root, home, log, bare, row)
-        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
-        rebase_onto_trunk(root)
-        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
-        local id = new_card(root, home, log)
+    local function review_ready(project, row)
+        trunk_moves(project, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(project.root)
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(project)
         if row then
-            must(dev(root, home, log, { "board", "checks", id, row }))
+            must(dev(project, { "board", "checks", id, row }))
         end
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve(project, id)
         return id
     end
 
-    local function standalone_ready(root, home, log)
-        assert(fs.mkdir(root .. "/.dev/standalone", { parents = true }), "mkdir failed")
-        assert(fs.write(root .. "/.dev/standalone/x.sh", "#!/bin/sh\n"), "write failed")
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+    local function standalone_ready(project)
+        assert(fs.mkdir(project.root .. "/.dev/standalone", { parents = true }), "mkdir failed")
+        assert(fs.write(project.root .. "/.dev/standalone/x.sh", "#!/bin/sh\n"), "write failed")
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
         return id
     end
 
     testing.test(
         "land refuses a commit that adds a standalone file without standalone-ok",
         function()
-            local root, home, log = jj_project()
-            local id = standalone_ready(root, home, log)
-            approve(root, home, log, id)
-            refused(root, home, log, id, {
+            local project = jj_project()
+            local id = standalone_ready(project)
+            approve(project, id)
+            refused(project, id, {
                 "adds .dev/standalone/x.sh, which needs the standalone-ok label",
             })
         end
     )
 
     testing.test("land refuses a commit that moves a file into .dev/standalone", function()
-        local root, home, log = jj_project()
-        jj(root, "describe", "-m", "base2")
-        assert(fs.write(root .. "/x.sh", "#!/bin/sh\n"), "write failed")
-        jj(root, "commit", "-m", "base2")
-        jj(root, "bookmark", "set", "master", "-r", "@-")
-        jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
-        jj(root, "describe", "-m", "feat: move")
-        assert(fs.mkdir(root .. "/.dev/standalone", { parents = true }), "mkdir failed")
-        must(dev_os.run({ "mv", root .. "/x.sh", root .. "/.dev/standalone/x.sh" }))
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        refused(root, home, log, id, { "adds .dev/standalone/x.sh" })
+        local project = jj_project()
+        jj(project.root, "describe", "-m", "base2")
+        assert(fs.write(project.root .. "/x.sh", "#!/bin/sh\n"), "write failed")
+        jj(project.root, "commit", "-m", "base2")
+        jj(project.root, "bookmark", "set", "master", "-r", "@-")
+        jj(project.root, "git", "push", "--remote", "origin", "--bookmark", "master")
+        jj(project.root, "describe", "-m", "feat: move")
+        assert(fs.mkdir(project.root .. "/.dev/standalone", { parents = true }), "mkdir failed")
+        must(dev_os.run({ "mv", project.root .. "/x.sh", project.root .. "/.dev/standalone/x.sh" }))
+        local id = verified_card(project)
+        refused(project, id, { "adds .dev/standalone/x.sh" })
     end)
 
     testing.test(
         "land lands a commit that adds a standalone file when the card has standalone-ok",
         function()
-            local root, home, log = jj_project()
-            local id = standalone_ready(root, home, log)
-            must(
-                dev(root, home, log, { "board", "label", id, "+standalone-ok" }, { DEV_AGENT = "" })
-            )
-            approve(root, home, log, id)
+            local project = jj_project()
+            local id = standalone_ready(project)
+            must(dev(project, { "board", "label", id, "+standalone-ok" }, { DEV_AGENT = "" }))
+            approve(project, id)
             local out, code = dev(
-                root,
-                home,
-                log,
+                project,
                 { "board", "land", id },
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
-            testing.eq(column_of(home), board.DEFAULT_NAMES.done)
+            testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
         end
     )
 
     local TEMPLATE_DIR = "dotfiles/claude/.claude/skills/style/lint/lua"
     local MODULE_DIR = "dotfiles/bin/.local/share/dev/lua/dev"
 
-    local function template_ready(root, home, log, opts)
-        assert(fs.mkdir(root .. "/" .. TEMPLATE_DIR, { parents = true }), "mkdir failed")
-        assert(fs.mkdir(root .. "/" .. MODULE_DIR, { parents = true }), "mkdir failed")
+    local function template_ready(project, opts)
+        assert(fs.mkdir(project.root .. "/" .. TEMPLATE_DIR, { parents = true }), "mkdir failed")
+        assert(fs.mkdir(project.root .. "/" .. MODULE_DIR, { parents = true }), "mkdir failed")
         assert(
-            fs.write(root .. "/" .. TEMPLATE_DIR .. "/lint.lua", 'local fs = require("dev.fs")\n'),
+            fs.write(
+                project.root .. "/" .. TEMPLATE_DIR .. "/lint.lua",
+                'local fs = require("dev.fs")\n'
+            ),
             "write failed"
         )
         if opts.module then
             assert(
-                fs.write(root .. "/" .. MODULE_DIR .. "/" .. opts.module, "return {}\n"),
+                fs.write(project.root .. "/" .. MODULE_DIR .. "/" .. opts.module, "return {}\n"),
                 "write"
             )
         end
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+        local id = verified_card(project)
         return id
     end
 
     testing.test(
         "land refuses a commit that changes the lint-set template and a dev module it requires",
         function()
-            local root, home, log = jj_project()
-            local id = template_ready(root, home, log, { module = "fs.lua" })
-            refused(root, home, log, id, {
+            local project = jj_project()
+            local id = template_ready(project, { module = "fs.lua" })
+            refused(project, id, {
                 "This commit changes the lint-set template and " .. MODULE_DIR .. "/fs.lua",
                 "Land the dev change first, have infra rebake the ci images,",
             })
@@ -1306,101 +1245,83 @@ if has_jj then
     )
 
     testing.test("land lands a template change with a dev module it does not require", function()
-        local root, home, log = jj_project()
-        local id = template_ready(root, home, log, { module = "other.lua" })
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = template_ready(project, { module = "other.lua" })
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        testing.eq(column_of(home), board.DEFAULT_NAMES.done)
+        testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
     end)
 
     testing.test("land lands a commit that changes only the lint-set template", function()
-        local root, home, log = jj_project()
-        local id = template_ready(root, home, log, {})
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = template_ready(project, {})
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        testing.eq(column_of(home), board.DEFAULT_NAMES.done)
+        testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
     end)
 
     testing.test(
         "land after another lander's turn ends rebases without a trunk-moved refusal",
         function()
-            local root, home, log, bare = jj_project()
-            local id = review_ready(root, home, log, bare)
-            local held = hold_turn(home, "other", "cccc3333")
-            local first, first_code = dev(root, home, log, { "board", "land", id, "--wait", "0" })
+            local project = jj_project()
+            local id = review_ready(project)
+            local held = hold_turn(project.home, "other", "cccc3333")
+            local first, first_code = dev(project, { "board", "land", id, "--wait", "0" })
             testing.eq(first_code, 1, first)
             testing.ok(first:find("held by other since", 1, true), first)
-            trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-            release_turn(home, held)
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            release_turn(project.home, held)
             local out, code = dev(
-                root,
-                home,
-                log,
+                project,
                 { "board", "land", id },
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
             testing.ok(not out:find("trunk has moved", 1, true), out)
-            testing.eq(column_of(home), support.COLUMN_NAME.DONE)
-            testing.eq(turn_holder(home), nil)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+            testing.eq(turn_holder(project.home), nil)
         end
     )
 
     testing.test(
         "land carries the check and reviews over a rebase past unrelated commits",
         function()
-            local root, home, log, bare = jj_project()
-            local id = review_ready(root, home, log, bare)
-            local before = head(root)
-            trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-            rebase_onto_trunk(root)
-            testing.ok(head(root) ~= before, "the rebase must rewrite the commit")
+            local project = jj_project()
+            local id = review_ready(project)
+            local before = head(project.root)
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(project.root)
+            testing.ok(head(project.root) ~= before, "the rebase must rewrite the commit")
             local out, code = dev(
-                root,
-                home,
-                log,
+                project,
                 { "board", "land", id },
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
-            local list = comments(home)
+            local list = comments(project.home)
             local last = list[#list]
             testing.eq(last.kind, KIND_DONE)
             testing.ok(
                 last.body:find("carried over from commit " .. before:sub(1, 12), 1, true),
                 last.body
             )
-            testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
 
     testing.test("land reads trunk under the turn, to carry and after the land", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
         local reads = support.tempdir() .. "/fetch.log"
         local out, code = dev(
-            root,
-            home,
-            log,
+            project,
             { "board", "land", id },
             { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_LOG = reads }
         )
         testing.eq(code, 0, out)
-        local list = comments(home)
+        local list = comments(project.home)
         testing.ok(list[#list].body:find("carried over", 1, true), list[#list].body)
         testing.eq(fs.read(reads), "fetch\nfetch\nfetch\n")
     end)
@@ -1411,128 +1332,112 @@ if has_jj then
 
     testing.test("land reruns the recheck rows when the carry crosses trunk commits", function()
         local marker = support.tempdir() .. "/rechecked"
-        local root, home, log, bare = recheck_project("touch " .. marker)
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = recheck_project("touch " .. marker)
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(fs.is_file(marker), "the recheck row never ran")
     end)
 
     testing.test("a failed recheck row refuses the land and leaves trunk alone", function()
-        local root, home, log, bare = recheck_project("false")
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        local out, code = dev(root, home, log, { "board", "land", id })
+        local project = recheck_project("false")
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("recheck row failed and nothing was pushed", 1, true), out)
         testing.ok(out:find("fail - false", 1, true), out)
-        testing.eq(fs.read(log), nil)
-        testing.eq(column_of(home), board.DEFAULT_NAMES.verify)
+        testing.eq(fs.read(project.log), nil)
+        testing.eq(column_of(project.home), board.DEFAULT_NAMES.verify)
     end)
 
     testing.test("land skips the recheck when the check sits on the current trunk", function()
         local marker = support.tempdir() .. "/rechecked"
-        local root, home, log, bare = recheck_project("touch " .. marker)
-        local id = review_ready(root, home, log, bare)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = recheck_project("touch " .. marker)
+        local id = review_ready(project)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(not fs.is_file(marker), "the recheck row ran")
     end)
 
     testing.test("land stays put when the push after a carry is rejected", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        local out, code = dev(root, home, log, { "board", "land", id }, {
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, {
             LAND_CODE = "1",
             LAND_MSG = "push rejected: trunk moved",
         })
         testing.eq(code, 1, out)
         testing.ok(out:find("jj land failed", 1, true), out)
         testing.ok(out:find("push rejected: trunk moved", 1, true), out)
-        testing.eq(column_of(home), support.COLUMN_NAME.VERIFY)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.VERIFY)
     end)
 
     testing.test("land does not carry a pass over a failed run at the rebased commit", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare, "! test -e docs.txt")
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        local out, code = dev(root, home, log, { "board", "check", id })
+        local project = jj_project()
+        local id = review_ready(project, "! test -e docs.txt")
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "check", id })
         testing.ok(code ~= 0, out)
-        refused(root, home, log, id, { "did not pass every row" })
+        refused(project, id, { "did not pass every row" })
     end)
 
     testing.test("land does not carry over an expect-fail record at the rebased commit", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        dev(root, home, log, { "board", "check", id, "--expect-fail" })
-        refused(root, home, log, id, { "no run of dev board check is recorded" })
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        dev(project, { "board", "check", id, "--expect-fail" })
+        refused(project, id, { "no run of dev board check is recorded" })
     end)
 
     testing.test("land does not carry over an unreadable record at the rebased commit", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        local record = "dev-check: commit=" .. head(root) .. " change=chg mode=run\n1 pass dev lint"
-        local backend, restore = board_at(home)
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local record = "dev-check: commit="
+            .. head(project.root)
+            .. " change=chg mode=run\n1 pass dev lint"
+        local backend, restore = board_at(project.home)
         for _, card in ipairs(assert(backend:cards())) do
             if card.id:sub(1, #id) == id then
                 assert(backend:note(card.id, record))
             end
         end
         restore()
-        refused(root, home, log, id, { "could not be read", "run dev board check again" })
+        refused(project, id, { "could not be read", "run dev board check again" })
     end)
 
     testing.test("clean rebase carries the check", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        local before = head(root)
-        trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
-        rebase_onto_trunk(root)
-        testing.ok(head(root) ~= before, "the rebase must rewrite the commit")
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+        trunk_moves(project, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
+        rebase_onto_trunk(project.root)
+        testing.ok(head(project.root) ~= before, "the rebase must rewrite the commit")
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        local list = comments(home)
+        local list = comments(project.home)
         testing.ok(
             list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
             list[#list].body
         )
-        testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a rebase that leaves a conflict does not carry the check", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["shared.txt"] = "a\nb\nc\nd\ne\nf\nX\n" })
-        rebase_onto_trunk(root)
-        refused(root, home, log, id, {
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["shared.txt"] = "a\nb\nc\nd\ne\nf\nX\n" })
+        rebase_onto_trunk(project.root)
+        refused(project, id, {
             "the working-copy commit has conflicts",
             "run dev board check again",
         })
@@ -1541,58 +1446,50 @@ if has_jj then
     testing.test(
         "land names only the unticked outcome after a rebase that the carry accepts",
         function()
-            local root, home, log, bare = jj_project()
-            trunk_moves(root, bare, { ["shared.txt"] = SHARED })
-            rebase_onto_trunk(root)
-            assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve_reviews(root, home, log, id)
-            must(dev(root, home, log, { "board", "check", id }))
-            trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-            rebase_onto_trunk(root)
-            local out = refused(root, home, log, id, { "1 of 1 outcomes are unticked" })
+            local project = jj_project()
+            trunk_moves(project, { ["shared.txt"] = SHARED })
+            rebase_onto_trunk(project.root)
+            assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+            local id = new_card(project)
+            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            approve_reviews(project, id)
+            must(dev(project, { "board", "check", id }))
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(project.root)
+            local out = refused(project, id, { "1 of 1 outcomes are unticked" })
             testing.eq(out:find("review of", 1, true), nil, out)
             testing.eq(out:find("no run of dev board check", 1, true), nil, out)
         end
     )
 
     testing.test("land names the column beside the carry after an accepted rebase", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.PROGRESS }))
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        local out = refused(root, home, log, id, { "only a card in" })
+        local project = jj_project()
+        local id = review_ready(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }))
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out = refused(project, id, { "only a card in" })
         testing.eq(out:find("earlier commit", 1, true), nil, out)
         testing.eq(out:find("no run of dev board check", 1, true), nil, out)
     end)
 
     testing.test("land carries over a rebase past a changed former shared path", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["lib/core.txt"] = "core\n" })
-        rebase_onto_trunk(root)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["lib/core.txt"] = "core\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("land refuses the carry when jj cannot compare the checked commit", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
         refused(
-            root,
-            home,
-            log,
+            project,
             id,
             { "jj could not compare the checked commit" },
             { INTERDIFF_FAIL = "1" }
@@ -1602,35 +1499,33 @@ if has_jj then
     testing.test(
         "land refuses the carry when the checked commit sat off trunk's ancestry",
         function()
-            local root, home, log, bare = jj_project()
-            trunk_moves(root, bare, { ["shared.txt"] = SHARED })
-            jj(root, "new", "master", "-m", "side")
-            assert(fs.write(root .. "/side.txt", "side\n"), "write failed")
-            jj(root, "new", "-m", "feat: work")
-            assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
-            trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-            rebase_onto_trunk(root)
-            refused(root, home, log, id, { "does not sit on a single ancestor of trunk" })
+            local project = jj_project()
+            trunk_moves(project, { ["shared.txt"] = SHARED })
+            jj(project.root, "new", "master", "-m", "side")
+            assert(fs.write(project.root .. "/side.txt", "side\n"), "write failed")
+            jj(project.root, "new", "-m", "feat: work")
+            assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+            local id = verified_card(project)
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(project.root)
+            refused(project, id, { "does not sit on a single ancestor of trunk" })
         end
     )
 
     testing.test("land refuses a carry from a checked commit of another change", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        local trunk = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
-        local change = jj(root, "log", "-r", "@", "--no-graph", "-T", "change_id")
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        local trunk = jj(project.root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+        local change = jj(project.root, "log", "-r", "@", "--no-graph", "-T", "change_id")
         local at = { commit = trunk, change = change }
         local records = {
             check.record(at, { { result = check.RESULT.PASS, run_id = "-", run = "true" } }, false),
             review.record(review.KIND.CODE, "rev", at, review.VERDICT.CLEAN),
             review.record(review.KIND.STYLE, "rev", at, review.VERDICT.CLEAN),
         }
-        local backend, restore = board_at(home)
+        local backend, restore = board_at(project.home)
         for _, card in ipairs(assert(backend:cards())) do
             if card.id:sub(1, #id) == id then
                 for _, body in ipairs(records) do
@@ -1639,86 +1534,68 @@ if has_jj then
             end
         end
         restore()
-        local before = #comments(home, id)
-        refused(root, home, log, id, {
+        local before = #comments(project.home, id)
+        refused(project, id, {
             "the checked commit " .. trunk:sub(1, 12) .. " is not of change",
         })
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
-        testing.eq(#comments(home, id), before)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
+        testing.eq(#comments(project.home, id), before)
     end)
 
     local function reviewed_and_checked(opts)
-        local root, home, log, id = opts.root, opts.home, opts.log, opts.id
-        approve_reviews(root, home, log, id)
-        must(dev(root, home, log, { "board", "check", id }))
-        return head(root)
+        local project, id = opts.project, opts.id
+        approve_reviews(project, id)
+        must(dev(project, { "board", "check", id }))
+        return head(project.root)
     end
 
     local function two_checked_commits(opts)
-        local root, home, log, bare = opts.root, opts.home, opts.log, opts.bare
-        trunk_moves(root, bare, { ["shared.txt"] = SHARED })
-        rebase_onto_trunk(root)
-        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        local older = reviewed_and_checked({ root = root, home = home, log = log, id = id })
-        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
-        local newer = reviewed_and_checked({ root = root, home = home, log = log, id = id })
-        assert(fs.write(root .. "/shared.txt", opts.final_shared), "write failed")
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
+        local project = opts.project
+        trunk_moves(project, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(project.root)
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        local older = reviewed_and_checked({ project = project, id = id })
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+        local newer = reviewed_and_checked({ project = project, id = id })
+        assert(fs.write(project.root .. "/shared.txt", opts.final_shared), "write failed")
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
         return id, older, newer
     end
 
     testing.test("land carries from an older checked commit when the newest one differs", function()
-        local root, home, log, bare = jj_project()
+        local project = jj_project()
         local id, older = two_checked_commits({
-            root = root,
-            home = home,
-            log = log,
-            bare = bare,
+            project = project,
             final_shared = "a\nb\nc\nd\ne\nf\nG\n",
         })
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        local list = comments(home)
+        local list = comments(project.home)
         testing.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
     end)
 
     testing.test("land names the newest checked commit when no candidate carries", function()
-        local root, home, log, bare = jj_project()
+        local project = jj_project()
         local id, older, newer = two_checked_commits({
-            root = root,
-            home = home,
-            log = log,
-            bare = bare,
+            project = project,
             final_shared = "a\nb\nc\nd\ne\nf\nZ\n",
         })
-        local out =
-            refused(root, home, log, id, { "differs from the checked commit " .. newer:sub(1, 12) })
+        local out = refused(project, id, { "differs from the checked commit " .. newer:sub(1, 12) })
         testing.eq(out:find(older:sub(1, 12), 1, true), nil, out)
     end)
 
     testing.test("land refuses at once when jj cannot read the newest checked commit", function()
-        local root, home, log, bare = jj_project()
+        local project = jj_project()
         local id, older, newer = two_checked_commits({
-            root = root,
-            home = home,
-            log = log,
-            bare = bare,
+            project = project,
             final_shared = "a\nb\nc\nd\ne\nf\nG\n",
         })
         local out = refused(
-            root,
-            home,
-            log,
+            project,
             id,
             { "jj could not compare the checked commit " .. newer:sub(1, 12) },
             { INTERDIFF_FAIL_AT = newer }
@@ -1729,18 +1606,13 @@ if has_jj then
     testing.test(
         "land refuses at once when jj cannot read the newest checked commit's change",
         function()
-            local root, home, log, bare = jj_project()
+            local project = jj_project()
             local id, older, newer = two_checked_commits({
-                root = root,
-                home = home,
-                log = log,
-                bare = bare,
+                project = project,
                 final_shared = "a\nb\nc\nd\ne\nf\nG\n",
             })
             local out = refused(
-                root,
-                home,
-                log,
+                project,
                 id,
                 { "jj could not read the checked commit " .. newer:sub(1, 12) },
                 { LOG_FAIL_AT = newer }
@@ -1763,33 +1635,25 @@ if has_jj then
     }
     for _, case in ipairs(failed_reads) do
         testing.test("land refuses at once when jj cannot read the older " .. case.name, function()
-            local root, home, log, bare = jj_project()
+            local project = jj_project()
             local id, older, newer = two_checked_commits({
-                root = root,
-                home = home,
-                log = log,
-                bare = bare,
+                project = project,
                 final_shared = "a\nb\nc\nd\ne\nf\nG\n",
             })
-            local out = refused(root, home, log, id, { case.message }, { [case.switch] = older })
+            local out = refused(project, id, { case.message }, { [case.switch] = older })
             testing.eq(out:find("carried over", 1, true), nil, out)
             testing.eq(out:find(newer:sub(1, 12), 1, true), nil, out)
         end)
     end
 
     testing.test("land names the older candidate when its interdiff read fails", function()
-        local root, home, log, bare = jj_project()
+        local project = jj_project()
         local id, older = two_checked_commits({
-            root = root,
-            home = home,
-            log = log,
-            bare = bare,
+            project = project,
             final_shared = "a\nb\nc\nd\ne\nf\nZ\n",
         })
         refused(
-            root,
-            home,
-            log,
+            project,
             id,
             { "jj could not compare the checked commit " .. older:sub(1, 12) },
             { INTERDIFF_FAIL_AT = older }
@@ -1797,24 +1661,25 @@ if has_jj then
     end)
 
     testing.test("land refuses a rebase of a commit that differs from the checked one", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        local before = head(root)
-        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
-        trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-        rebase_onto_trunk(root)
-        refused(root, home, log, id, { "differs from the checked commit " .. before:sub(1, 12) })
+        local project = jj_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        refused(project, id, { "differs from the checked commit " .. before:sub(1, 12) })
     end)
 
     testing.test(
         "land refuses a duplicate of the checked change under another change id",
         function()
-            local root, home, log, bare = jj_project()
-            local id = review_ready(root, home, log, bare)
-            jj(root, "duplicate", "@")
-            local copy = jj(root, "log", "-r", "children(@-) ~ @", "--no-graph", "-T", "change_id")
-            jj(root, "edit", copy)
-            local out = refused(root, home, log, id, { "no code review of change" })
+            local project = jj_project()
+            local id = review_ready(project)
+            jj(project.root, "duplicate", "@")
+            local copy =
+                jj(project.root, "log", "-r", "children(@-) ~ @", "--no-graph", "-T", "change_id")
+            jj(project.root, "edit", copy)
+            local out = refused(project, id, { "no code review of change" })
             testing.eq(out:find("carried over", 1, true), nil, out)
         end
     )
@@ -1822,12 +1687,12 @@ if has_jj then
     testing.test(
         "land does not carry a review that was never recorded at the checked commit",
         function()
-            local root, home, log, bare = jj_project()
-            trunk_moves(root, bare, { ["shared.txt"] = SHARED })
-            rebase_onto_trunk(root)
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            must(dev(root, home, log, {
+            local project = jj_project()
+            trunk_moves(project, { ["shared.txt"] = SHARED })
+            rebase_onto_trunk(project.root)
+            local id = new_card(project)
+            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            must(dev(project, {
                 "board",
                 "review",
                 id,
@@ -1840,55 +1705,49 @@ if has_jj then
                 "--verdict",
                 "clean",
             }))
-            must(dev(root, home, log, { "board", "check", id }))
-            must(
-                dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" })
-            )
-            trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
-            rebase_onto_trunk(root)
-            refused(root, home, log, id, { "no style review of change" })
+            must(dev(project, { "board", "check", id }))
+            must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(project.root)
+            refused(project, id, { "no style review of change" })
         end
     )
 
     testing.test("land refuses a working copy that holds conflicts", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        local first = jj(root, "log", "-r", "@", "--no-graph", "-T", "change_id")
-        jj(root, "new", "master", "-m", "feat: other")
-        assert(fs.write(root .. "/work.txt", "two\n"), "write failed")
-        jj(root, "rebase", "-r", "@", "-d", first)
-        refused(root, home, log, id, {
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        local first = jj(project.root, "log", "-r", "@", "--no-graph", "-T", "change_id")
+        jj(project.root, "new", "master", "-m", "feat: other")
+        assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
+        jj(project.root, "rebase", "-r", "@", "-d", first)
+        refused(project, id, {
             "the working-copy commit has conflicts",
             "run dev board check again",
         })
     end)
 
     testing.test("land refuses a card labelled needs:human", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.BLOCKED }))
-        must(dev(root, home, log, { "board", "label", id, "needs:human" }))
-        refused(root, home, log, id, { "is labelled needs:human", "waits on the owner" })
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.BLOCKED }))
+        must(dev(project, { "board", "label", id, "needs:human" }))
+        refused(project, id, { "is labelled needs:human", "waits on the owner" })
     end)
 
     testing.test("land refuses when the fetch from the remote of record fails", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        jj(root, "git", "remote", "set-url", "origin", root .. "/missing-remote")
-        refused(root, home, log, id, { "trunk cannot be compared", "the fetch from origin failed" })
+        local project = jj_project()
+        local id = verified_card(project)
+        jj(project.root, "git", "remote", "set-url", "origin", project.root .. "/missing-remote")
+        refused(project, id, { "trunk cannot be compared", "the fetch from origin failed" })
     end)
 
     testing.test("land retries a refused ssh signature once", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
+        local project = jj_project()
+        local id = review_ready(project)
         local count = support.tempdir() .. "/count.log"
         local out, code = dev(
-            root,
-            home,
-            log,
+            project,
             { "board", "land", id },
             { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_REFUSALS = "1", FETCH_COUNT = count }
         )
@@ -1898,13 +1757,11 @@ if has_jj then
     end)
 
     testing.test("land names the hardware key after a second refusal", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
+        local project = jj_project()
+        local id = review_ready(project)
         local count = support.tempdir() .. "/count.log"
         refused(
-            root,
-            home,
-            log,
+            project,
             id,
             { "the fetch from origin failed", "Touch the hardware key", "run land again." },
             { FETCH_REFUSALS = "5", FETCH_COUNT = count }
@@ -1913,9 +1770,9 @@ if has_jj then
     end)
 
     testing.test("land ends a hung fetch at a timeout", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        refused(root, home, log, id, {
+        local project = jj_project()
+        local id = review_ready(project)
+        refused(project, id, {
             "the fetch from origin failed",
             "The fetch ran past 1 seconds",
             "touch it and run land again.",
@@ -1923,8 +1780,8 @@ if has_jj then
     end)
 
     testing.test("land refuses when the card's comments cannot be read", function()
-        local root = jj_project()
-        local backend = fake_backend(root)
+        local project = jj_project()
+        local backend = fake_backend(project.root)
         function backend:comments()
             return nil, "board unavailable: comments timed out"
         end
@@ -1935,8 +1792,8 @@ if has_jj then
     end)
 
     testing.test("land refuses when the board's cards cannot be read", function()
-        local root = jj_project()
-        local backend = fake_backend(root)
+        local project = jj_project()
+        local backend = fake_backend(project.root)
         function backend:cards()
             return nil, "board unavailable: cards timed out"
         end
@@ -1947,8 +1804,8 @@ if has_jj then
     end)
 
     testing.test("land names outcomes that cannot be read and does not land", function()
-        local root = jj_project()
-        local backend = fake_backend(root, { outcomes_unreadable = true })
+        local project = jj_project()
+        local backend = fake_backend(project.root, { outcomes_unreadable = true })
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find(CARD_PREFIX .. " cannot land:", 1, true), result.message)
@@ -1964,56 +1821,36 @@ if has_jj then
     end)
 
     testing.test("land refuses a working copy that jj cannot read", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        local out = refused(
-            root,
-            home,
-            log,
-            id,
-            { "jj could not read the working-copy commit of" },
-            {
-                SHAPE_FAIL = "1",
-            }
-        )
-        testing.ok(out:find(root, 1, true), out)
+        local project = jj_project()
+        local id = verified_card(project)
+        local out = refused(project, id, { "jj could not read the working-copy commit of" }, {
+            SHAPE_FAIL = "1",
+        })
+        testing.ok(out:find(project.root, 1, true), out)
     end)
 
     testing.test("land refuses when the rebase onto trunk fails", function()
-        local root, home, log, bare = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+        local project = jj_project()
+        local id = verified_card(project)
         local other = support.tempdir() .. "/clone"
         must(
             dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", bare, other },
+                { "git", "clone", "-q", "--branch", "master", project.bare, other },
                 { stdout = "null", stderr = "null" }
             )
         )
         git(other, "commit", "-q", "--allow-empty", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
         local FAIL_AT = { REBASE = "rebase" }
-        refused(
-            root,
-            home,
-            log,
-            id,
-            { "the rebase onto trunk failed" },
-            { LOG_FAIL_AT = FAIL_AT.REBASE }
-        )
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
-        testing.eq(turn_holder(home), nil)
+        refused(project, id, { "the rebase onto trunk failed" }, { LOG_FAIL_AT = FAIL_AT.REBASE })
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
     testing.test("land refuses a remote of record that is not a remote of the project", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        refused(root, home, log, id, {
+        local project = jj_project()
+        local id = verified_card(project)
+        refused(project, id, {
             "trunk cannot be compared: the remote of record gerrit is not a remote of this project",
         }, { JJ_FORGE = "gerrit" })
     end)
@@ -2021,17 +1858,18 @@ if has_jj then
     testing.test(
         "a landed commit whose done note was not written is named and exits non-zero",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
-            local commit = head(root)
-            local out, code = dev(root, home, log, { "board", "land", id }, {
+            local project = jj_project()
+            local id = verified_card(project)
+            local commit = head(project.root)
+            local out, code = dev(project, { "board", "land", id }, {
                 LAND_TRUNK = LAND_TRUNK_KEEP,
-                BREAK_BOARD = home .. "/state/dev/boards/mine.json",
+                BREAK_BOARD = project.home .. "/state/dev/boards/mine.json",
             })
             testing.eq(code, 1, out)
-            testing.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
+            testing.ok(
+                landed_calls(project.log):find("land --yes", 1, true),
+                landed_calls(project.log)
+            )
             testing.ok(
                 out:find(
                     "landed commit " .. commit:sub(1, 12) .. ", but the done note was NOT written",
@@ -2047,268 +1885,239 @@ if has_jj then
     testing.test(
         "a fetch that fails after the land falls back to the commit from before it",
         function()
-            local root, home, log = jj_project()
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
-            local before = head(root)
-            local out, code = dev(root, home, log, { "board", "land", id }, {
+            local project = jj_project()
+            local id = verified_card(project)
+            local before = head(project.root)
+            local out, code = dev(project, { "board", "land", id }, {
                 LAND_TRUNK = LAND_TRUNK_REWRITE,
                 FETCH_FAIL = "1",
             })
             testing.eq(code, 0, out)
-            local after = jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+            local after =
+                jj(project.root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
             testing.ok(before ~= after, "the stub must rewrite the commit")
             testing.ok(out:find("at commit " .. before:sub(1, 12), 1, true), out)
             testing.ok(out:find("trunk could not be read", 1, true), out)
             testing.eq(out:find(after:sub(1, 12), 1, true), nil, out)
-            local list = comments(home)
+            local list = comments(project.home)
             local last = list[#list]
             testing.eq(last.kind, KIND_DONE)
             testing.ok(last.body:find(before:sub(1, 12), 1, true), last.body)
             testing.ok(last.body:find("may differ", 1, true), last.body)
-            testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
 
     testing.test("a landed card whose move to Done fails is named and exits non-zero", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
+        local project = jj_project()
+        local id = new_card(project)
         local out = dev(
-            root,
-            home,
-            log,
+            project,
             { "board", "add", "Child", "--problem", "x", "--size", "1", "--done-when", "x" }
         )
         local child = assert(out:match("added (%x+)"), out)
-        must(dev(root, home, log, { "board", "epic", id }))
-        must(dev(root, home, log, { "board", "link", child, "parent", id }))
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
-        must(dev(root, home, log, { "board", "turn", id }))
-        local commit = head(root)
+        must(dev(project, { "board", "epic", id }))
+        must(dev(project, { "board", "link", child, "parent", id }))
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        approve(project, id)
+        must(dev(project, { "board", "turn", id }))
+        local commit = head(project.root)
         local code
-        out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
-        testing.eq(turn_holder(home), nil)
+        out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(turn_holder(project.home), nil)
         testing.eq(code, 1, out)
-        testing.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
+        testing.ok(landed_calls(project.log):find("land --yes", 1, true), landed_calls(project.log))
         testing.ok(
             out:find("landed commit " .. commit:sub(1, 12) .. " and noted it on " .. id, 1, true),
             out
         )
         testing.ok(out:find("but the move to Done failed", 1, true), out)
         testing.ok(out:find("1 of 1 children are open", 1, true), out)
-        local list = comments(home, id)
+        local list = comments(project.home, id)
         testing.eq(list[#list].kind, KIND_DONE)
-        testing.eq(column_of(home, id), support.COLUMN_NAME.VERIFY)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
     end)
 
-    local function in_verify(root, home, log)
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
+    local function in_verify(project)
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
         return id
     end
 
     testing.test("a held turn survives a check and lands the card under it", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        local out, code = dev(root, home, log, { "board", "turn", id })
+        local project = jj_project()
+        local id = in_verify(project)
+        local out, code = dev(project, { "board", "turn", id })
         testing.eq(code, 0, out)
         testing.ok(out:find("holding the landing turn for " .. id, 1, true), out)
-        approve(root, home, log, id)
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
-        out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        approve(project, id)
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
+        out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
-        testing.eq(turn_holder(home), nil)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
     testing.test("a second runner is told who holds the turn and since when", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        must(dev(root, home, log, { "board", "turn", id }))
+        local project = jj_project()
+        local id = in_verify(project)
+        must(dev(project, { "board", "turn", id }))
         local out, code = dev(
-            root,
-            home,
-            log,
+            project,
             { "board", "turn", id, "--wait", "0" },
             { DEV_AGENT = "dotfiles/other" }
         )
         testing.eq(code, 1, out)
         testing.ok(out:find("held by dotfiles/lander since 20", 1, true), out)
-        out, code = dev(root, home, log, { "board", "turn", id, "--hold", "120" })
+        out, code = dev(project, { "board", "turn", id, "--hold", "120" })
         testing.eq(code, 0, out)
         testing.ok(out:find("renewed the landing turn held for " .. id, 1, true), out)
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
     end)
 
     testing.test("land refuses a hold that ran out and lands nothing", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        approve(root, home, log, id)
-        must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
+        local project = jj_project()
+        local id = in_verify(project)
+        approve(project, id)
+        must(dev(project, { "board", "turn", id, "--hold", "1" }))
         dev_os.nap(PAST_HOLD_SECONDS)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 1, out)
         testing.ok(out:find("ran out or was taken by another", 1, true), out)
-        testing.eq(landed_calls(log), "")
-        testing.eq(column_of(home, id), support.COLUMN_NAME.VERIFY)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
     end)
 
     testing.test("land refuses a hold another runner took after it ran out", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        approve(root, home, log, id)
-        must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
+        local project = jj_project()
+        local id = in_verify(project)
+        approve(project, id)
+        must(dev(project, { "board", "turn", id, "--hold", "1" }))
         dev_os.nap(PAST_HOLD_SECONDS)
-        must(dev(root, home, log, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        must(dev(project, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 1, out)
         testing.ok(out:find("ran out or was taken by another", 1, true), out)
-        testing.eq(landed_calls(log), "")
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/other")
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/other")
     end)
 
     testing.test("a refused landing keeps the hold until it is released", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        must(dev(root, home, log, { "board", "turn", id }))
-        local out, code = dev(root, home, log, { "board", "land", id })
+        local project = jj_project()
+        local id = in_verify(project)
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        must(dev(project, { "board", "turn", id }))
+        local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("no code review", 1, true), out)
         testing.ok(out:find("turn you hold for " .. id .. " stays held", 1, true), out)
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
-        out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
+        out, code = dev(project, { "board", "turn", id, "--release" })
         testing.eq(code, 0, out)
-        testing.eq(turn_holder(home), nil)
-        _, code = dev(root, home, log, { "board", "turn", id, "--release" })
+        testing.eq(turn_holder(project.home), nil)
+        _, code = dev(project, { "board", "turn", id, "--release" })
         testing.eq(code, 1)
     end)
 
     testing.test("land leaves no owner on the landed card", function()
         for _, deploys in ipairs({ "", "\n[board.land]\ndeploys = true\n" }) do
-            local root, home, log = jj_project(deploys)
-            local id = new_card(root, home, log)
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-            approve(root, home, log, id)
-            local backend, restore = board_at(home)
+            local project = jj_project(deploys)
+            local id = verified_card(project)
+            local backend, restore = board_at(project.home)
             for _, card in ipairs(assert(backend:cards())) do
                 if card.id:sub(1, #id) == id then
                     assert(backend:claim(card.id, "dotfiles/lander", 3600, nil, { lease = true }))
                 end
             end
             restore()
-            testing.ok(claim_of(home, id), "the card must be claimed before the land")
+            testing.ok(claim_of(project.home, id), "the card must be claimed before the land")
             local out, code = dev(
-                root,
-                home,
-                log,
+                project,
                 { "board", "land", id },
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
-            testing.eq(claim_of(home, id), nil)
+            testing.eq(claim_of(project.home, id), nil)
         end
     end)
 
     testing.test("land refused before the move keeps its hold", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        must(dev(root, home, log, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        must(dev(root, home, log, { "board", "turn", id }))
-        local out, code = dev(root, home, log, { "board", "land", id })
+        local project = jj_project()
+        local id = in_verify(project)
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        must(dev(project, { "board", "turn", id }))
+        local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.verify)
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
     end)
 
     testing.test("a landing refused before the turn is read says the hold is kept", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        must(dev(root, home, log, { "board", "turn", id }))
-        local out, code = dev(root, home, log, { "board", "land", id })
+        local project = jj_project()
+        local id = in_verify(project)
+        must(dev(project, { "board", "turn", id }))
+        local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("turn you hold for " .. id .. " stays held", 1, true), out)
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
     end)
 
     testing.test("turn refuses a hold outside 1 to 3600 seconds", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
+        local project = jj_project()
+        local id = in_verify(project)
         for _, bad in ipairs({ "0", "3601", "x" }) do
-            local out, code = dev(root, home, log, { "board", "turn", id, "--hold", bad })
+            local out, code = dev(project, { "board", "turn", id, "--hold", bad })
             testing.eq(code, 2, out)
         end
-        local _, code = dev(root, home, log, { "board", "turn", id, "--hold", "3600" })
+        local _, code = dev(project, { "board", "turn", id, "--hold", "3600" })
         testing.eq(code, 0)
     end)
 
     testing.test(
         "release clears a hold that ran out, and land then asks for a fresh turn",
         function()
-            local root, home, log = jj_project()
-            local id = in_verify(root, home, log)
-            approve(root, home, log, id)
-            must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
+            local project = jj_project()
+            local id = in_verify(project)
+            approve(project, id)
+            must(dev(project, { "board", "turn", id, "--hold", "1" }))
             dev_os.nap(PAST_HOLD_SECONDS)
-            local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+            local out, code = dev(project, { "board", "turn", id, "--release" })
             testing.eq(code, 0, out)
             testing.ok(out:find("was already gone", 1, true), out)
-            out, code = dev(
-                root,
-                home,
-                log,
-                { "board", "land", id },
-                { LAND_TRUNK = LAND_TRUNK_KEEP }
-            )
+            out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
             testing.eq(code, 0, out)
-            testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
+            testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
         end
     )
 
     testing.test("turn refuses a card that is already in Done", function()
-        local root, home, log = jj_project()
-        local id = in_verify(root, home, log)
-        approve(root, home, log, id)
-        must(dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP }))
-        local out, code = dev(root, home, log, { "board", "turn", id })
+        local project = jj_project()
+        local id = in_verify(project)
+        approve(project, id)
+        must(dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP }))
+        local out, code = dev(project, { "board", "turn", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("is done", 1, true), out)
-        testing.eq(turn_holder(home), nil)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
-    local function lander_ready(root, home, log)
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+    local function lander_ready(project)
+        local id = verified_card(project)
         return id
     end
 
     testing.test("a land that waited keeps a hold taken meanwhile", function()
-        local root, home, log = jj_project()
-        local id = lander_ready(root, home, log)
-        local held = hold_turn(home, "other", "cccc3333")
-        local backend, restore = board_at(home)
-        backend.root = root
+        local project = jj_project()
+        local id = lander_ready(project)
+        local held = hold_turn(project.home, "other", "cccc3333")
+        local backend, restore = board_at(project.home)
+        backend.root = project.root
         local nap = dev_os.nap
         dev_os.nap = function()
             dev_os.nap = nap
-            release_turn(home, held)
-            must(dev(root, home, log, { "board", "turn", id, "--hold", "60" }))
-            must(dev(root, home, log, { "board", "move", id, support.COLUMN.BLOCKED }))
+            release_turn(project.home, held)
+            must(dev(project, { "board", "turn", id, "--hold", "60" }))
+            must(dev(project, { "board", "move", id, support.COLUMN.BLOCKED }))
         end
         local previous = os.getenv("DEV_AGENT") or ""
         ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
@@ -2320,16 +2129,16 @@ if has_jj then
         testing.eq(result.code, 1)
         testing.ok(result.message:find("cannot land", 1, true), result.message)
         testing.ok(result.message:find("stays held", 1, true), result.message)
-        testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
-        local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
+        local out, code = dev(project, { "board", "turn", id, "--release" })
         testing.eq(code, 0, out)
-        testing.eq(turn_holder(home), nil)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
     testing.test("another check does not block a land", function()
-        local root, home, log = jj_project()
-        local landing = lander_ready(root, home, log)
-        local out = dev(root, home, log, {
+        local project = jj_project()
+        local landing = lander_ready(project)
+        local out = dev(project, {
             "board",
             "add",
             "Other",
@@ -2362,17 +2171,17 @@ if has_jj then
             ),
             "write failed"
         )
-        must(dev(root, home, log, { "board", "checks", other, "sh " .. slow }))
+        must(dev(project, { "board", "checks", other, "sh " .. slow }))
         local elsewhere = support.tempdir() .. "/other"
-        jj(root, "workspace", "add", "--name", other, elsewhere)
+        jj(project.root, "workspace", "add", "--name", other, elsewhere)
         local running = support.dev_async(elsewhere, { "board", "check", other }, {
             env = {
-                HOME = home,
-                XDG_STATE_HOME = home .. "/state",
+                HOME = project.home,
+                XDG_STATE_HOME = project.home .. "/state",
                 JJ_USER = "t",
                 JJ_EMAIL = "t@example.com",
                 DEV_AGENT = "dotfiles/lander",
-                LAND_LOG = log,
+                LAND_LOG = project.log,
                 REAL_JJ = dev_os.which("jj"),
             },
         })
@@ -2381,75 +2190,63 @@ if has_jj then
             dev_os.nap(0.1)
         end
         testing.ok(fs.exists(started), "the other card's check must be running")
-        local landed, code = dev(root, home, log, { "board", "land", landing, "--wait", "0" }, {
+        local landed, code = dev(project, { "board", "land", landing, "--wait", "0" }, {
             LAND_TRUNK = LAND_TRUNK_KEEP,
         })
         testing.eq(code, 0, landed)
-        testing.eq(column_of(home, landing), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home, landing), support.COLUMN_NAME.DONE)
         testing.eq(running.finished(), false)
         assert(fs.write(stop, ""), "write failed")
         local output, status = running.wait()
         testing.eq(status, 0, output)
     end)
 
-    local function rebased_and_checked(root, home, log, id)
-        rebase_onto_trunk(root)
-        must(dev(root, home, log, { "board", "check", id }))
+    local function rebased_and_checked(project, id)
+        rebase_onto_trunk(project.root)
+        must(dev(project, { "board", "check", id }))
     end
 
     testing.test("a clean rebase keeps its reviews", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        local before = head(root)
-        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
-        rebased_and_checked(root, home, log, id)
-        testing.ok(head(root) ~= before, "the rebase must rewrite the commit")
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+        trunk_moves(project, { ["lib/extra.txt"] = "extra\n" })
+        rebased_and_checked(project, id)
+        testing.ok(head(project.root) ~= before, "the rebase must rewrite the commit")
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        local list = comments(home)
+        local list = comments(project.home)
         testing.eq(list[#list].kind, KIND_DONE)
         testing.eq(list[#list].body:find("carried over", 1, true), nil, list[#list].body)
-        testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a rebase over edits to the same file keeps its reviews", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
-        rebased_and_checked(root, home, log, id)
-        local out, code = dev(
-            root,
-            home,
-            log,
-            { "board", "land", id },
-            { LAND_TRUNK = LAND_TRUNK_KEEP }
-        )
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
+        rebased_and_checked(project, id)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        testing.eq(column_of(home), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a changed patch still needs a recheck", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        assert(fs.write(root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
-        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
-        rebased_and_checked(root, home, log, id)
-        refused(root, home, log, id, {
+        local project = jj_project()
+        local id = review_ready(project)
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+        trunk_moves(project, { ["lib/extra.txt"] = "extra\n" })
+        rebased_and_checked(project, id)
+        refused(project, id, {
             "the code review is of an earlier commit",
             "the style review is of an earlier commit",
         })
     end)
 
     testing.test("a needs-work review of the same patch still refuses", function()
-        local root, home, log, bare = jj_project()
-        local id = review_ready(root, home, log, bare)
-        must(dev(root, home, log, {
+        local project = jj_project()
+        local id = review_ready(project)
+        must(dev(project, {
             "board",
             "review",
             id,
@@ -2462,41 +2259,37 @@ if has_jj then
             "--verdict",
             "needs-work",
         }))
-        trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
-        rebased_and_checked(root, home, log, id)
-        refused(root, home, log, id, { "the code review by rev2", "says needs-work" })
+        trunk_moves(project, { ["lib/extra.txt"] = "extra\n" })
+        rebased_and_checked(project, id)
+        refused(project, id, { "the code review by rev2", "says needs-work" })
     end)
 
     local function central_project()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        jj(root, "workspace", "rename", "default")
+        local project = jj_project()
+        local id = new_card(project)
+        jj(project.root, "workspace", "rename", "default")
         local base = assert(fs.realpath(support.tempdir()))
         local path = base .. "/proj/" .. id
         assert(fs.mkdir(base .. "/proj", { parents = true }), "mkdir failed")
-        jj(root, "workspace", "add", "--name", id, "-r", "master", path)
+        jj(project.root, "workspace", "add", "--name", id, "-r", "master", path)
         assert(fs.write(path .. "/work.txt", "two\n"), "write failed")
         jj(path, "describe", "-m", "feat: work")
         jj(path, "bookmark", "create", id, "-r", "@")
         must(
             dev(
-                path,
-                home,
-                log,
+                at_root(project, path),
                 { "board", "move", id, support.COLUMN.VERIFY },
                 { DEV_WS_ROOT = base }
             )
         )
-        approve(path, home, log, id)
-        return root, home, log, id, path, base
+        approve(at_root(project, path), id)
+        return project, id, path, base
     end
 
     testing.test("land removes the workspace and bookmark in a jj project", function()
-        local root, home, log, id, path, base = central_project()
+        local project, id, path, base = central_project()
         local out, code = dev(
-            path,
-            home,
-            log,
+            at_root(project, path),
             { "board", "land", id },
             { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
@@ -2504,14 +2297,17 @@ if has_jj then
         testing.ok(out:find("Deleted bookmark " .. id, 1, true), out)
         testing.ok(out:find("removed " .. path, 1, true), out)
         testing.eq(fs.exists(path), false)
-        testing.eq(jj(root, "bookmark", "list", "-T", 'name ++ "\\n"'):find(id, 1, true), nil)
-        testing.eq(jj(root, "workspace", "list"):find(id .. ":", 1, true), nil)
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+        testing.eq(
+            jj(project.root, "bookmark", "list", "-T", 'name ++ "\\n"'):find(id, 1, true),
+            nil
+        )
+        testing.eq(jj(project.root, "workspace", "list"):find(id .. ":", 1, true), nil)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
     end)
 
     testing.test("land keeps a workspace with uncommitted changes", function()
-        local root, home, log, id, path, base = central_project()
-        local out, code = dev(path, home, log, { "board", "land", id }, {
+        local project, id, path, base = central_project()
+        local out, code = dev(at_root(project, path), { "board", "land", id }, {
             LAND_TRUNK = LAND_TRUNK_KEEP,
             LAND_NEW = "1",
             LAND_STRAY = "stray.txt",
@@ -2522,46 +2318,43 @@ if has_jj then
         testing.eq(out:find("Run the next command", 1, true), nil, out)
         testing.eq(fs.exists(path .. "/stray.txt"), true)
         testing.ok(
-            jj(root, "workspace", "list"):find(id .. ":", 1, true),
+            jj(project.root, "workspace", "list"):find(id .. ":", 1, true),
             "the workspace is forgotten"
         )
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
     end)
 
     testing.test("land removes the workspace it runs in", function()
-        local _, home, log, id, path, base = central_project()
+        local project, id, path, base = central_project()
         local out, code = dev(
-            path,
-            home,
-            log,
+            at_root(project, path),
             { "board", "land", id },
             { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
         testing.eq(code, 0, out)
         testing.ok(out:find("Run the next command from another folder.", 1, true), out)
-        local list = comments(home, id)
+        local list = comments(project.home, id)
         testing.eq(list[#list].kind, board.NoteKind.DONE)
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
         testing.eq(fs.exists(path), false)
     end)
 
     testing.test("land keeps a workspace outside the central root and says why", function()
-        local root, home, log = jj_project()
-        local id = new_card(root, home, log)
-        must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
-        approve(root, home, log, id)
+        local project = jj_project()
+        local id = verified_card(project)
         local base = assert(fs.realpath(support.tempdir()))
         local out, code = dev(
-            root,
-            home,
-            log,
+            project,
             { "board", "land", id },
             { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
         testing.eq(code, 0, out)
-        testing.ok(out:find("Kept the workspace: " .. root .. " is outside " .. base, 1, true), out)
-        testing.eq(fs.exists(root), true)
-        testing.eq(column_of(home, id), board.DEFAULT_NAMES.done)
+        testing.ok(
+            out:find("Kept the workspace: " .. project.root .. " is outside " .. base, 1, true),
+            out
+        )
+        testing.eq(fs.exists(project.root), true)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
     end)
 end
 
