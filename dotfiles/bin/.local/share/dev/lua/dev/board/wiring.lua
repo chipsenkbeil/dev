@@ -102,6 +102,7 @@ local function check_rows(opts)
             run = card.checks[i],
             argv = argv,
             seconds = flags.seconds,
+            expect_fail = flags.expect_fail,
             env = {
                 [remote.VERB_ENV] = remote.VERB.CHECK,
                 [remote.CARD_ENV] = short,
@@ -153,7 +154,7 @@ local function check_rows(opts)
             )
         )
     end
-    local passed, good = check.summarize(rows, flags.expect_fail)
+    local passed, good, errors = check.summarize(rows, flags.expect_fail)
     local verdict = string.format(
         "recorded on %s at commit %s: %d of %s passed",
         short,
@@ -164,6 +165,10 @@ local function check_rows(opts)
     if flags.expect_fail and passed > 0 then
         verdict = verdict
             .. "; with --expect-fail every row should fail, so the passing ones prove nothing"
+    end
+    if flags.expect_fail and errors > 0 then
+        verdict = verdict
+            .. ". With --expect-fail a row that never started proves nothing. Fix the row."
     end
     lines[#lines + 1] = verdict
     if not good then

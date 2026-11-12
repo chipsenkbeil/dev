@@ -445,6 +445,53 @@ testing.test("--expect-fail records failing rows and reports a passing one", fun
     testing.eq(#comments(home), 3)
 end)
 
+testing.test("an expect-fail row that exits 127 fails the run", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "no-such-command-for-check" })
+    local out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("the row never started (exit 127)", 1, true), out)
+    testing.ok(out:find("a row that never started proves nothing.", 1, true), out)
+    local record = check.parse(comments(home)[1].body)
+    testing.eq(record.mode, "expect-fail")
+    testing.eq(record.rows[1].result, "error")
+    testing.eq(
+        check.run({
+            root = root,
+            run = "no-such-command-for-check",
+            argv = { "no-such-command-for-check" },
+            seconds = 30,
+        }).result,
+        "fail"
+    )
+end)
+
+testing.test("an expect-fail row that exits 1 still counts as the expected failure", function()
+    local root = setup()
+    local row = check.run({
+        root = root,
+        run = "false",
+        argv = { "false" },
+        seconds = 30,
+        expect_fail = true,
+    })
+    testing.eq(row.result, "fail")
+    local passed, good, errors = check.summarize({ row }, true)
+    testing.eq({ passed, good, errors }, { 0, true, 0 })
+end)
+
+testing.test("an expect-fail remote row that printed no run id never ran", function()
+    testing.ok(check.never_started({ "dev", "--remote", "test" }, 1, nil))
+    testing.ok(check.never_started({ "ci", "run" }, 2, nil))
+    testing.ok(not check.never_started({ "dev", "--remote", "test" }, 1, "abc123"))
+    testing.ok(not check.never_started({ "dev", "--remote", "test" }, 124, nil))
+    testing.ok(not check.never_started({ "dev", "test", "--", "--remote" }, 1, nil))
+    testing.ok(not check.never_started({ "rg", "-n", "x" }, 1, nil))
+    testing.ok(check.never_started({ "rg", "-n", "x" }, 126, nil))
+    local passed, good, errors = check.summarize({ { result = "error" } }, true)
+    testing.eq({ passed, good, errors }, { 0, false, 1 })
+end)
+
 testing.test(
     "note refuses the reserved prefix, and the record cannot be edited or deleted",
     function()

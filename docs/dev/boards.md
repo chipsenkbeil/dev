@@ -2240,14 +2240,19 @@ dev-check: commit=<full commit id> change=<change id, - in git> mode=run
 
 The result and the exit code:
 
-- A row ends as `pass`, `fail` (any non-zero exit) or `timeout`.
+- A row ends as `pass`, `fail` (any non-zero exit) or `timeout`. Under
+  `--expect-fail` a row that never started ends as `error` instead: one that
+  exits 126 or 127 with no run id, or a `ci` or `dev --remote` row that exits
+  non-zero without printing a `run <id>` line.
 - The command prints the same lines (the last 12 lines of a row that did not
   pass follow it, indented) and `recorded on <id prefix> at commit <12
   characters>: N of M rows passed`.
 - It exits 0 when every row passed and 1 otherwise.
 - `--expect-fail` is for filing a card. It records `mode=expect-fail`, exits 0
   when every row failed, and reports a row that passed as one that proves
-  nothing (exit 1, still recorded).
+  nothing (exit 1, still recorded). A row that ends as `error` fails the run
+  the same way (its failure shows nothing about the code). A row that
+  exits 1 or any other code after it started is still the expected failure.
 
 When the comment cannot be written:
 

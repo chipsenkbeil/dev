@@ -25,9 +25,15 @@ local DRAIN_NOTHING_NEW = "nothing new starts"
 local DRAIN_OFF = "`ci fleet drain off"
 local ERROR_PREFIX = "^error: "
 local TIMEOUT_EXIT = 124
+local NOT_EXECUTABLE_EXIT = 126
+local NOT_FOUND_EXIT = 127
+local REMOTE_FLAG = "--remote"
+local CI_COMMAND = "ci"
+local DEV_COMMAND = "dev"
+local DOUBLE_DASH = "--"
 
 ---How a checks row ended.
-M.RESULT = { PASS = "pass", FAIL = "fail", TIMEOUT = "timeout" }
+M.RESULT = { PASS = "pass", FAIL = "fail", TIMEOUT = "timeout", ERROR = "error" }
 
 ---What a run was meant to show, as the record names it.
 M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
@@ -39,7 +45,7 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@class dev.board.check.Row
 ---@field run string the row's command as the card holds it
 ---@field run_id string the ci run id the row printed, `-` when it printed none
----@field result string one of `RESULT`, where a timeout also covers a row killed from outside
+---@field result string one of `RESULT`, where a timeout also covers a row killed from outside and an error is a row that never started under `--expect-fail`
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
 ---@field reason string? the last line a failed row printed when it printed no run id
@@ -257,6 +263,46 @@ end
 ---@field seconds integer how long the row may run
 ---@field env table<string, string>? variables set for the row
 ---@field on_run_id fun(run_id: string)? called with the row's ci run id once its line is complete
+---@field expect_fail boolean? whether the run is meant to show the row failing
+
+---Say whether a row is sent to ci.
+---@param argv string[] the row's words
+---@return boolean remote true for a `ci` row and a `dev` row that holds `--remote` before the double dash
+local function is_remote(argv)
+    if argv[1] == CI_COMMAND then
+        return true
+    end
+    if argv[1] ~= DEV_COMMAND then
+        return false
+    end
+    for i = 2, #argv do
+        if argv[i] == DOUBLE_DASH then
+            return false
+        end
+        if argv[i] == REMOTE_FLAG then
+            return true
+        end
+    end
+    return false
+end
+
+---Say whether a row's command never started.
+---
+---A shell exits 126 for a file it cannot run and 127 for a command it cannot find. A ci row prints
+---`run <id>` once its run starts, so a row that exits non-zero without that line never started.
+---@param argv string[] the row's words
+---@param code integer the exit status
+---@param run_id string? the run id the row printed
+---@return boolean never true when the command never started
+function M.never_started(argv, code, run_id)
+    if run_id or code == 0 or code == TIMEOUT_EXIT then
+        return false
+    end
+    if code == NOT_EXECUTABLE_EXIT or code == NOT_FOUND_EXIT then
+        return true
+    end
+    return is_remote(argv)
+end
 
 ---Run one checks row to its end or its time limit.
 ---@param opts dev.board.check.RunOpts the row and where it runs
@@ -307,6 +353,11 @@ function M.run(opts)
     if result == M.RESULT.FAIL and not run_id and not negated then
         reason = last_line(output)
     end
+    if opts.expect_fail and not refused and M.never_started(opts.argv, code, run_id) then
+        result = M.RESULT.ERROR
+        note = string.format("the row never started (exit %d), so its failure proves nothing", code)
+        reason = reason or last_line(output)
+    end
     return {
         run = opts.run,
         run_id = run_id or NO_RUN,
@@ -343,18 +394,21 @@ end
 ---@param rows dev.board.check.Row[] the finished rows
 ---@param expect_fail boolean whether every row was meant to fail
 ---@return integer passed how many rows passed
----@return boolean good true when every row passed, or with `expect_fail` when none did
+---@return boolean good true when every row passed, or with `expect_fail` when none passed or never started
+---@return integer errors how many rows never started under `expect_fail`
 function M.summarize(rows, expect_fail)
-    local passed = 0
+    local passed, errors = 0, 0
     for _, row in ipairs(rows) do
         if row.result == M.RESULT.PASS then
             passed = passed + 1
+        elseif row.result == M.RESULT.ERROR then
+            errors = errors + 1
         end
     end
     if expect_fail then
-        return passed, passed == 0
+        return passed, passed == 0 and errors == 0, errors
     end
-    return passed, passed == #rows
+    return passed, passed == #rows, errors
 end
 
 ---Write the comment that records a run.
