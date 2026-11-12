@@ -2482,7 +2482,7 @@ Rotating the turn card:
   on a card already past the byte limit. Rotation never bins the card, to leave
   the loss of a card that Pomb purges after 30 days to the owner.
   `take` and `ask` answer `The landing turn card ID is full and Pomb refuses to
-  move it. Rename it so dev makes a fresh one.` and the card stays. Once the
+  move it. Rename it to have dev make a fresh one.` and the card stays. Once the
   owner renames it, the next call makes a fresh card.
 - Rotation re-reads the card first and leaves it when another agent has taken
   it meanwhile.

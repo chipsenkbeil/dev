@@ -249,7 +249,7 @@ local function rotate(backend, card, comments)
         return nil,
             string.format(
                 "The landing turn card %s is full and Pomb refuses to move it. "
-                    .. "Rename it so dev makes a fresh one.",
+                    .. "Rename it to have dev make a fresh one.",
                 card.id:sub(1, 8)
             )
     end
