@@ -961,6 +961,27 @@ testing.test("edit sends the whole new description and prints one line", functio
     testing.eq(backend.calls[1], { "set_description", ID_A, text, nil })
 end)
 
+testing.test("edit --board changes the description on the named board", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    local text = "## Problem\nnew plan\n\n## Change\n- x\n\n## Out of scope\nnone"
+    local result = cmd_board.run("edit", { "11111111-a", "--board", "ci", text }, backend)
+    testing.eq(result.output, "edited 11111111")
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+    testing.eq(sibling.calls[#sibling.calls], { "set_description", ID_A, text, nil })
+end)
+
+testing.test("edit --board refuses a board that is not there", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("edit", { "11111111-a", "--board", "nope", "text" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no board named nope", 1, true), result.message)
+    result = cmd_board.run("edit", { "11111111-a", "--board" }, backend)
+    testing.eq(result.code, 2)
+    testing.eq(#backend.calls, 1)
+end)
+
 testing.test("edit outside Icebox refuses a text that drops a v2 section", function()
     local backend = fake(sample())
     local result = cmd_board.run("edit", { "11111111-a", "## Problem\nnew plan" }, backend)

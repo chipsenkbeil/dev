@@ -416,8 +416,8 @@ return {
     {
         words = { "board", "edit" },
         handler = "lua",
-        flags = "--file",
-        usage = "dev board edit CARD [--file PATH]",
+        flags = "--board --file",
+        usage = "dev board edit CARD [--board B] [--file PATH]",
         desc = "Replace a card's description from a file or standard input",
     },
     {

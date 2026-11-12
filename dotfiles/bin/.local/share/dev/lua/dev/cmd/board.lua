@@ -2068,6 +2068,11 @@ function commands.outcome(backend, args)
 end
 
 function commands.edit(backend, args)
+    local home, rest, refused = guards.on_board(backend, args)
+    if not home then
+        return refused
+    end
+    backend, args = home, rest
     if #args ~= 2 then
         return usage("needs a card and the new description")
     end
@@ -4304,7 +4309,7 @@ M.handlers["board init"] = function(ctx)
 end
 
 local function description_args(args)
-    local flags, words = parse(args, { ["--file"] = true })
+    local flags, words = parse(args, { ["--file"] = true, ["--board"] = true })
     if not flags then
         return nil, words.message
     end
@@ -4325,6 +4330,9 @@ local function description_args(args)
     text = text:gsub("%s+$", "")
     if text == "" then
         return nil, "the new description is empty"
+    end
+    if flags["--board"] then
+        return { words[1], "--board", flags["--board"], text }
     end
     return { words[1], text }
 end

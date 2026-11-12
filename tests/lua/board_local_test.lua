@@ -146,6 +146,18 @@ testing.test("show and note refuse a crossboard --board on a local board", funct
     testing.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
 end)
 
+testing.test("edit --board reaches the dispatcher and a local board refuses it", function()
+    local root, home = local_board()
+    assert(fs.write(root .. "/plan.md", "## Problem\nfrom a file\n"))
+    local out, code = dev(
+        root,
+        home,
+        { "board", "edit", "11111111", "--board", "other", "--file", root .. "/plan.md" }
+    )
+    testing.eq(code, 1, out)
+    testing.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+end)
+
 testing.test("boards and columns answer for a local board's own name only", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "boards" })

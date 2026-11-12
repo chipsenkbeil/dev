@@ -865,8 +865,9 @@ Use it instead of the Pomb API to read a card, so the token stays inside dev.
 `links` lists its links. A child also prints `parent: <id prefix> <name>` under
 the `ls` line, and an epic `children: N of M done`.
 
-`edit CARD` replaces a card's description with the text of `--file PATH`, or of
-standard input when there is no `--file`. It prints `edited <id prefix>`.
+`edit CARD [--board B]` replaces a card's description with the text of
+`--file PATH`, or of standard input when there is no `--file`. It prints
+`edited <id prefix>`.
 
 The format v2 description always holds the current plan, so rewrite it after a
 decision. Trailing whitespace is dropped, and empty text is a usage error (exit
@@ -2097,8 +2098,8 @@ Its facts:
 
 ### edit
 
-`dev board edit CARD [--file PATH]` replaces the card's description and prints
-`edited <id prefix>`.
+`dev board edit CARD [--board B] [--file PATH]` replaces the card's
+description and prints `edited <id prefix>`.
 
 - The text comes from `--file PATH`, else from standard input (a terminal with
   no `--file` is exit 2), with trailing whitespace removed.
@@ -2108,6 +2109,9 @@ Its facts:
 - Empty text, an unreadable file, a missing card argument or an extra word is
   exit 2. An unknown card is exit 1.
 - A card labelled `needs:human` is refused (exit 1).
+- `--board B` replaces the description of the card on the Pomb board named `B`
+  from any repo, looked up as `add --board` looks it up. A local board
+  refuses it (exit 1), and a missing name is exit 2.
 - Titles and comments are not editable here.
 
 While Pomb is unreachable:
