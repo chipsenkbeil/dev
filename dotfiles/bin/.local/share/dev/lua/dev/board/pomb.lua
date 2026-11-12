@@ -58,6 +58,7 @@ local TOKEN_EXPIRED = "token_expired"
 local WHOAMI_PATH = "/api/v1/auth/whoami"
 local EXPIRED = "the role token expired; mint it again from its issuer"
 local ROLES_PATH = "/api/v1/agent-roles/standard"
+local STANDARD_ROLE_KEYS = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
 local SUBTASKS_DELETE = "subtasks.delete"
@@ -2094,10 +2095,34 @@ function Backend:add_checks_field()
     return true
 end
 
+function Backend:__roles_granted(board_id)
+    local rows = self:__request("GET", ROLES_LIST_PATH)
+    if type(rows) ~= "table" then
+        return false
+    end
+    local held = {}
+    for _, row in ipairs(rows) do
+        for _, id in ipairs(type(row.boards) == "table" and row.boards or {}) do
+            if id == board_id and type(row.standard) == "string" then
+                held[row.standard] = true
+            end
+        end
+    end
+    for _, key in ipairs(STANDARD_ROLE_KEYS) do
+        if not held[key] then
+            return false
+        end
+    end
+    return true
+end
+
 function Backend:add_roles()
     local id, message = self:__board_id()
     if not id then
         return nil, message
+    end
+    if self:__roles_granted(id) then
+        return {}
     end
     local reply, status, doc
     reply, message, status, doc = self:__request("POST", ROLES_PATH, { boards = { id } })

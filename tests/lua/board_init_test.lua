@@ -525,6 +525,7 @@ case "$last" in
     esac
     ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/api/v1/agent-roles) body=$(cat "$ROOT/rolelist.json") ;;
 */api/v1/agent-roles/standard)
     line=$(cat "$ROOT/roles.json")
     status=${line%%|*}
@@ -563,6 +564,7 @@ local function sandbox(opts)
         ["colors.json"] = colors_json(),
         ["fields.json"] = opts.fields or FIELDS,
         ["roles.json"] = opts.roles or '200|{"created":[],"roles":[]}\n',
+        ["rolelist.json"] = opts.rolelist or "{}",
         ["export.json"] = EXPORT,
         ["templates.json"] = '[{"id":"tpl-1","name":"agent project","built_in":false}]',
         ["whoami.json"] = '{"kind":"token","name":"x","scope":"admin"}',
@@ -1343,6 +1345,57 @@ testing.test("init creates the limit group of 4 on a board that has none", funct
     )
     testing.ok(out:find("created limit group In Progress, Review and Verify at 4\n", 1, true), out)
     testing.ok(out:find("board demo: 1 change\n", 1, true), out)
+end)
+
+local function granted_roles(skip)
+    local rows = {}
+    for index, key in ipairs({ "planner", "implementer", "reviewer", "verifier", "release", "lead" }) do
+        if key ~= skip then
+            rows[#rows + 1] = '{"id":"role-'
+                .. index
+                .. '","name":"'
+                .. key
+                .. '","standard":"'
+                .. key
+                .. '","boards":["board-1"]}'
+        end
+    end
+    return "[" .. table.concat(rows, ",") .. "]"
+end
+
+local function roles_posts(root)
+    return calls_of(root):find("/api/v1/agent-roles/standard", 1, true)
+end
+
+testing.test(
+    "agent-roles-granted-sends-no-post: every standard role on the board skips it",
+    function()
+        local root, home, tmp = sandbox({ rolelist = granted_roles() })
+        local out, code = dev(root, home, tmp, { "board", "init" })
+        testing.eq(code, 0, out)
+        testing.eq(roles_posts(root), nil, calls_of(root))
+        testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    end
+)
+
+testing.test("agent-roles-missing-still-posts: one role off the board sends the post", function()
+    local root, home, tmp = sandbox({ rolelist = granted_roles("verifier") })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.ok(roles_posts(root), calls_of(root))
+end)
+
+testing.test("agent-roles-granted-reaches-limits: a refused post is never sent", function()
+    local root, home, tmp = sandbox({
+        rolelist = granted_roles(),
+        roles = '403|{"code":"permission_denied","message":"no","permission":"roles.grant",'
+            .. '"board_id":null}\n',
+    })
+    assert(fs.write(root .. "/detail.json", (detail():gsub(',"limit_groups":%b[]', ""))))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(roles_posts(root), nil, calls_of(root))
+    testing.eq(limit_posts(root), 1)
 end)
 
 testing.test("init leaves a board that has a limit group alone and says nothing", function()

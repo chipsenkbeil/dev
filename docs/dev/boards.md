@@ -320,13 +320,18 @@ What it lays out:
     `kept column "X", which is not part of the standard board`.
 - agent roles: the planner, implementer, reviewer, verifier, release and lead
   roles, granted to the board.
-  - `init` posts `{"boards":[board id]}` to Pomb's
+  - `init` first reads `GET /api/v1/agent-roles`, which needs `settings.read`
+    only. When each of the six standard keys (a role's `standard` field) sits
+    on a role whose `boards` list holds this board, it posts nothing and
+    prints `agent roles unchanged`. A failed read counts as not granted.
+  - Otherwise it posts `{"boards":[board id]}` to Pomb's
     `/api/v1/agent-roles/standard` right after the columns.
   - It prints `created agent roles` with the names the reply lists, or
     `agent roles unchanged` on a rerun, which is not counted as a change.
   - A role that exists keeps its template.
-  - The endpoint needs `settings.write` and a board the token holds. A
-    `permission_denied` is shown with the missing permission, and an
+  - The post needs `roles.grant` and a board the token holds.
+    The lead token can run init once the roles exist, as the post is then
+    skipped. A `permission_denied` is shown with the missing permission, and an
     `exceeds_grant` as `the token does not hold board X`, with nothing
     created.
   - A local board has no roles, so it says nothing.
@@ -3603,8 +3608,10 @@ Details by step:
   `init` at that step with a message that it cannot mark a Blocked column yet
   and that `dev board ask` needs it. It sends no write for the mark. A local
   board has no such setting, so it marks nothing and says nothing.
-- agent roles: `POST /api/v1/agent-roles/standard` with
-  `{"boards":[board id]}`. A local board has no roles and says nothing.
+- agent roles: `GET /api/v1/agent-roles` first, and the post is skipped when
+  every standard role is granted to the board. Otherwise
+  `POST /api/v1/agent-roles/standard` with `{"boards":[board id]}`. A local
+  board has no roles and says nothing.
 - limit group: posts the In Progress, Review and Verify column ids with a limit
   of 4 to `/api/boards/{id}/limit-groups`, only when the board has no group. A
   local board gets none.
