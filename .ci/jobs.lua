@@ -11,6 +11,19 @@ local function shell_quote(word)
   return "'" .. (word:gsub("'", "'\\''")) .. "'"
 end
 
+local function selects(file)
+  if #ci.args == 0 then
+    return true
+  end
+  for _, arg in ipairs(ci.args) do
+    local path = arg:gsub("^%./", ""):gsub("/+$", "")
+    if file == path or file:sub(1, #path + 1) == path .. "/" then
+      return true
+    end
+  end
+  return false
+end
+
 local function prepare()
   ci.sh("missing=$(pacman -T " .. PACMAN_PACKAGES .. ") || sudo pacman -Syu --noconfirm --needed $missing", { name = "install packages" })
 end
@@ -35,14 +48,24 @@ return {
           command = command .. " " .. shell_quote(word)
         end
         ci.sh(command .. " </dev/null", { name = "test" })
-        if #ci.args > 0 then
+        local root_files = {}
+        for _, entry in ipairs({
+          { file = "tests/dev/root_test.sh", name = "root test" },
+          { file = "tests/dev/tools_test.sh", name = "tools test" },
+        }) do
+          if selects(entry.file) then
+            root_files[#root_files + 1] = entry
+          end
+        end
+        if #root_files == 0 then
           return
         end
         ci.group("real root", function()
           ci.sh("sudo rm -rf " .. ROOT_CLONE .. " && sudo cp -a \"$PWD\" " .. ROOT_CLONE, { name = "copy clone" })
           ci.sh("sudo chown -R root:root " .. ROOT_CLONE .. " && sudo chmod -R go-w " .. ROOT_CLONE, { name = "chown clone" })
-          real_root("tests/dev/root_test.sh", "root test")
-          real_root("tests/dev/tools_test.sh", "tools test")
+          for _, entry in ipairs(root_files) do
+            real_root(entry.file, entry.name)
+          end
         end)
       end,
     },

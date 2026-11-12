@@ -87,6 +87,31 @@ rc=$?
 assert_eq "a path that names no suite exits 2" "$rc" "2"
 assert_line "a path that names no suite is refused" "$out" "dev test: no suite at tests/a/missing_test.sh"
 
+out="$(cd "$TMP" && "$DEV" test ./tests/a/pass_test.sh 2>&1)"
+assert_line "a dot slash path names the same suite as the plain path" "$out" "PASS tests/a/pass_test.sh"
+
+out="$(cd "$TMP" && "$DEV" test tests/a/ 2>&1)"
+assert_line "a trailing slash path names the same suite as the plain path" "$out" "2 passed, 0 failed, 2 skipped"
+
+out="$(cd "$TMP" && "$DEV" test -x 2>&1)"
+rc=$?
+assert_eq "a dash flag is refused with exit 2" "$rc" "2"
+assert_line "a dash flag is refused with the unknown flag message" "$out" "dev test: unknown flag -x; pass it after -- to reach the script, or add it to the script's # flags: line"
+
+out="$(cd "$TMP" && "$DEV" test -- -x 2>&1)"
+rc=$?
+assert_eq "a dash flag after the double dash is refused with exit 2" "$rc" "2"
+assert_line "a dash flag after the double dash is refused by the verb" "$out" "dev test: unknown flag -x"
+
+if [ "$extra" -eq 0 ]; then
+    out="$(cd "$TMP" && "$DEV" test tests/neomutt/parse-check.sh 2>&1)"
+    rc=$?
+    assert_eq "a suite skipped here exits 2" "$rc" "2"
+    assert_line "a suite skipped here is named as skipped here" "$out" "dev test: tests/neomutt/parse-check.sh is skipped here. It needs neomutt and tmux on PATH."
+else
+    printf 'skip - neomutt and tmux are on PATH, so no suite is skipped here\n'
+fi
+
 printf 'exit 0\n' >"$TMP/tests/a/sp ace_test.sh"
 out="$(cd "$TMP" && "$DEV" test "tests/a/sp ace_test.sh" 2>&1)"
 assert_line "a path with a space is one word" "$out" "PASS tests/a/sp ace_test.sh"

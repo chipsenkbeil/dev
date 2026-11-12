@@ -43,7 +43,8 @@ A checks row for `test` or `lint` reads `dev --remote test -- PATH`, and
 
 The test job hands each word after the `--` to `dev test` as one quoted word.
 `dev test PATH` runs only the suites at each path under `tests/`, and a path
-that names no suite is a usage error. The test job skips the real root group.
+that names no suite is a usage error. The test job runs the real root group
+only for the root test files that a path selects.
 
 ## The remote default
 

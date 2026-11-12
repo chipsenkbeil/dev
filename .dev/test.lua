@@ -1,7 +1,7 @@
 --[[
 Run every test suite under tests/ and report each by name.
 Each argument is a suite file or a directory under tests/ and narrows the run to the suites at that path.
-A path that names no suite is a usage error.
+A path that names no suite is a usage error, and one under a group skipped on this machine says it is skipped here.
 A suite is a .bats file, a *_test.sh or test-*.sh script, or a *_test.lua file run with luajit.
 The neomutt scripts run only when neomutt and tmux are both on PATH.
 Suites run in parallel, DEV_TEST_JOBS at a time (the core count by default, 1 for one after another).
@@ -103,12 +103,19 @@ for _, file in ipairs(checks.find(root, { "tests" }, scripts)) do
     suites[#suites + 1] = script_suite(file, { "bash", file })
 end
 
+local function under(path, dir)
+    return path == dir or path:sub(1, #dir + 1) == dir .. "/"
+end
+
+local unavailable = {}
+
 if dev_os.which("luajit") then
     for _, file in ipairs(checks.find(root, { "tests" }, { "-name", "*_test.lua" })) do
         suites[#suites + 1] = script_suite(file, { "luajit", "tests/lua/run.lua", file })
     end
 else
     stdout:write("SKIP tests/lua (needs luajit)\n")
+    unavailable[#unavailable + 1] = { dir = "tests/lua", why = "needs luajit" }
 end
 
 if dev_os.which("neomutt") and dev_os.which("tmux") then
@@ -121,6 +128,8 @@ if dev_os.which("neomutt") and dev_os.which("tmux") then
     suites[#suites + 1] = script_suite(parse, { "bash", parse, colors })
 else
     stdout:write("SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)\n")
+    unavailable[#unavailable + 1] =
+        { dir = "tests/neomutt", why = "needs neomutt and tmux on PATH" }
 end
 
 if #ctx.args > 0 then
@@ -129,12 +138,17 @@ if #ctx.args > 0 then
         local path = arg:gsub("^%./", ""):gsub("/+$", "")
         local found = false
         for _, suite in ipairs(suites) do
-            if suite.name == path or suite.name:sub(1, #path + 1) == path .. "/" then
+            if under(suite.name, path) then
                 chosen[suite] = true
                 found = true
             end
         end
         if not found then
+            for _, skip in ipairs(unavailable) do
+                if under(path, skip.dir) then
+                    verb.usage_error(ctx, arg .. " is skipped here. It " .. skip.why .. ".")
+                end
+            end
             verb.usage_error(ctx, "no suite at " .. arg)
         end
     end

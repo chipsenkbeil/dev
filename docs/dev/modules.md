@@ -264,8 +264,12 @@ refuses to run off a ci host to avoid loading the machine.
 #### dev test
 
 `dev test PATH...` runs only the suites at each path under `tests/` and
-refuses a path that names no suite with exit 2. `dev test` alone runs every
-bats file, `*_test.sh` and `test-*.sh` script and `*_test.lua` suite.
+refuses a path that names no suite with exit 2. A path under a group skipped on
+this machine (`tests/lua` without luajit, `tests/neomutt` without neomutt and
+tmux) is also exit 2. The message reads `PATH is skipped here. It needs
+luajit.` or names neomutt and tmux. A leading `./` and a trailing slash are
+dropped from a path first. `dev test` alone runs every bats file, `*_test.sh`
+and `test-*.sh` script and `*_test.lua` suite.
 
 The suites run in parallel:
 
@@ -294,10 +298,12 @@ is not Linux it ends with `dev: the real-root cases of tests/dev/root_test.sh
 and tests/dev/tools_test.sh were skipped, run dev --remote test for them`.
 
 The real root group of the ci `test` job in `.ci/jobs.lua` runs both files as
-root. It fails the job when either prints a line starting `SKIP real-root` (a
-case that needs real root or the real pacman). A line starting
-`SKIP user-only` (a case that runs as a user through `FAKE_UID` or `FAKE_OS`)
-still passes.
+root, or for a named run (`dev --remote test PATH`) each file that a path
+selects. A path selects a file when it names the file or a directory above it,
+with a leading `./` and a trailing slash dropped. It fails the job when a file
+it runs prints a line starting `SKIP real-root` (a case that needs real root or
+the real pacman). A line starting `SKIP user-only` (a case that runs as a user
+through `FAKE_UID` or `FAKE_OS`) still passes.
 
 ### The lint-set template rule
 
