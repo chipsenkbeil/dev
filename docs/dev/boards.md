@@ -3019,7 +3019,7 @@ An epic with an open child:
 
 ### discard
 
-`dev board discard CARD [--reason TEXT]` drops a card and prints
+`dev board discard CARD [--board B] [--reason TEXT]` drops a card and prints
 `discarded <id prefix>`. The card is kept, never deleted.
 
 The steps, in order:
@@ -3036,10 +3036,14 @@ The rules:
 - A card labelled `needs:human` is refused before any step, as `move` refuses
   it, so nothing is posted.
 - A blank `--reason` is exit 2.
+- `--board B`, right after `CARD`, drops the card on the Pomb board named `B`
+  from any repo, looked up as `add --board` looks it up. A local board refuses
+  it (exit 1), and a missing name is exit 2. A step that Pomb cannot take is
+  not queued there, so no step replays on this repo's own board.
 - A card lookup that Pomb cannot answer is not queued, and the steps need the
   card's id.
-- When Pomb cannot take a step, the steps left are queued in order under those
-  names, so a reason is never posted twice.
+- Without `--board`, when Pomb cannot take a step, the steps left are queued
+  in order under those names, so a reason is never posted twice.
 
 The planning check:
 

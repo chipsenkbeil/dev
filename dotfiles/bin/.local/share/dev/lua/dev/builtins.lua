@@ -500,8 +500,8 @@ return {
     {
         words = { "board", "discard" },
         handler = "lua",
-        flags = "--reason",
-        usage = "dev board discard CARD [--reason TEXT]",
+        flags = "--board --reason",
+        usage = "dev board discard CARD [--board B] [--reason TEXT]",
         desc = "Drop a card, labelled discarded, into Done",
     },
     {

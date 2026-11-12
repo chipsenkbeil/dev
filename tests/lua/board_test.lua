@@ -1041,6 +1041,49 @@ testing.test("discard refuses a needs:human card before anything is written", fu
     testing.eq(#backend.calls, 0)
 end)
 
+testing.test("discard --board discards the card on the named board", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    local result = cmd_board.run(
+        "discard",
+        { "11111111-a", "--board", "ci", "--reason", "Duplicate" },
+        backend
+    )
+    testing.eq(result.output, "discarded 11111111")
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+    testing.eq(sibling.calls[#sibling.calls - 1][1], "set_labels")
+    testing.eq(
+        sibling.calls[#sibling.calls - 2],
+        { "note", ID_A, "Duplicate", { kind = "decision" } }
+    )
+    testing.eq(sibling.calls[#sibling.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+end)
+
+testing.test("discard --board queues no step a failed write leaves", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    function sibling:set_labels()
+        return false, "boom"
+    end
+    local result = cmd_board.run("discard", { "11111111-a", "--board", "ci" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+    testing.eq(result.queue, nil)
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+end)
+
+testing.test("discard --board refuses a board that is not there", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("discard", { "11111111-a", "--board", "nope" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no board named nope", 1, true), result.message)
+    result = cmd_board.run("discard", { "11111111-a", "--board" }, backend)
+    testing.eq(result.code, 2)
+    testing.eq(#backend.calls, 1)
+end)
+
 testing.test("move to Done refuses a card with unticked outcomes and names them", function()
     local cards = sample()
     cards[1].outcomes = {

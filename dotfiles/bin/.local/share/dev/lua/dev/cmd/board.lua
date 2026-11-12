@@ -1422,6 +1422,12 @@ local DISCARD_LABEL = board.DISCARDED
 ---Close a card as dropped: the reason as a decision note, the label, then the move to Done.
 ---Each step is a command of its own, so when Pomb cannot take a step the steps left are queued.
 function commands.discard(backend, args)
+    local home, rest, refused = guards.on_board(backend, args)
+    if not home then
+        return refused
+    end
+    local elsewhere = home ~= backend
+    backend, args = home, rest
     local flags, words = parse(args, { ["--reason"] = true })
     if not flags then
         return words
@@ -1472,6 +1478,9 @@ function commands.discard(backend, args)
             local left = {}
             for j = i, #steps do
                 left[#left + 1] = steps[j]
+            end
+            if elsewhere then
+                return { message = result.message, code = result.code, unqueued = true }
             end
             return { message = result.message, code = result.code, queue = left }
         end
