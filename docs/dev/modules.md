@@ -36,6 +36,7 @@ The luajit modules of `dev`, one per item.
 - `dev.board`: the column names and short forms, the card-id prefix match, the
   size label, the table lines and the `dev.board.Backend` interface the
   commands call.
+- `dev.board.render`: the color terminal table and summary `board ls` prints.
 - `dev.board.pomb`: that interface over curl. The token comes from
   `DEV_BOARD_TOKEN`, then the file for `DEV_AGENT`, then `pass`, and goes to
   curl on standard input.

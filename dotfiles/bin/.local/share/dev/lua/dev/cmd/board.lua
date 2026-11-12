@@ -13,6 +13,7 @@ local lint = require("dev.board.lint")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
+local render = require("dev.board.render")
 local review = require("dev.board.review")
 local store = require("dev.board.store")
 local text_width = require("dev.text").width
@@ -76,29 +77,6 @@ local ANSWERED_NOTE = " (answered, waiting for your move)"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
-local DOT = "●"
-local HOLLOW = "○"
-local UNSIZED_CELLS = 3
-local METER_CELLS = 4
-local GROUP_INDENT = "  "
-local SIZE_ORDER = { "yellow", "green", "blue", "red" }
-local SIZE_DOTS = { yellow = 1, green = 2, blue = 3, red = 4 }
-local SIZE_WORDS = { yellow = "1", green = "2", blue = "3", red = ">3" }
-local SIZE_STYLES = {
-    yellow = ui.Style.YELLOW,
-    green = ui.Style.GREEN,
-    blue = ui.Style.BLUE,
-    red = ui.Style.RED,
-}
-local function column_style(roles, column)
-    if column == roles.progress then
-        return ui.Style.GREEN
-    elseif column == roles.blocked then
-        return ui.Style.YELLOW
-    end
-    return ui.Style.DIM
-end
-local HEADERS = { "ID", "COLUMN", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
 local QUEUE_RULES = {
     add = { idempotent = false },
     move = { idempotent = true },
@@ -289,158 +267,6 @@ end
 
 local function count_text(count, noun)
     return count .. " " .. noun .. (count == 1 and "" or "s")
-end
-
-local function size_cell(screen, card)
-    local color = card.color or board.SIZES.unsized
-    local dots = SIZE_DOTS[color]
-    if not dots then
-        return ui.paint(screen, HOLLOW:rep(UNSIZED_CELLS), ui.Style.DIM)
-    end
-    return ui.paint(screen, DOT:rep(dots), SIZE_STYLES[color])
-end
-
-local function paint_run(screen, glyph, count, style)
-    if count == 0 then
-        return ""
-    end
-    return ui.paint(screen, glyph:rep(count), style)
-end
-
-local function meter_cell(screen, card)
-    local total = #card.outcomes
-    if total == 0 then
-        return ui.paint(screen, "-", ui.Style.DIM)
-    end
-    local ticked = 0
-    for _, outcome in ipairs(card.outcomes) do
-        if outcome.done then
-            ticked = ticked + 1
-        end
-    end
-    local filled = math.floor(METER_CELLS * ticked / total + 0.5)
-    return paint_run(screen, "▰", filled, ui.Style.GREEN)
-        .. paint_run(screen, "▱", METER_CELLS - filled, ui.Style.DIM)
-        .. " "
-        .. ticked
-        .. "/"
-        .. total
-end
-
----@class dev.cmd.board.LsView
----@field holders boolean whether a claimant column is drawn
----@field with_column boolean whether each row names its column
-
-local function terminal_cells(screen, card, view)
-    local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
-    local cells = { card.id:sub(1, board.MIN_PREFIX) }
-    if view.with_column then
-        local style = column_style(view.roles, card.column)
-        cells[#cells + 1] = ui.paint(screen, card.column, style)
-    end
-    cells[#cells + 1] = size_cell(screen, card)
-    cells[#cells + 1] =
-        ui.paint(screen, labels, #card.labels > 0 and ui.Style.YELLOW or ui.Style.DIM)
-    cells[#cells + 1] = meter_cell(screen, card)
-    if view.holders then
-        cells[#cells + 1] = card.claimant or ui.paint(screen, "-", ui.Style.DIM)
-    end
-    cells[#cells + 1] = board.epic_mark(card) .. card.name
-    return cells
-end
-
-local function terminal_table(screen, cards, view)
-    local headers = {}
-    for _, header in ipairs(HEADERS) do
-        if (header ~= "COLUMN" or view.with_column) and (header ~= "HELD BY" or view.holders) then
-            headers[#headers + 1] = header
-        end
-    end
-    local rows = {}
-    for _, card in ipairs(cards) do
-        rows[#rows + 1] = terminal_cells(screen, card, view)
-    end
-    return ui.table(screen, headers, rows)
-end
-
-local function summary_lines(screen, cards, roles)
-    local counts = {}
-    for _, card in ipairs(cards) do
-        counts[card.column] = (counts[card.column] or 0) + 1
-    end
-    local parts = { ui.paint(screen, count_text(#cards, "card"), ui.Style.BOLD) }
-    local shown = {}
-    for _, column in ipairs(roles.list) do
-        shown[#shown + 1] = column
-    end
-    for _, column in ipairs(roles.finished) do
-        shown[#shown + 1] = column
-    end
-    local seen = {}
-    for _, column in ipairs(shown) do
-        if counts[column] and not seen[column] then
-            seen[column] = true
-            parts[#parts + 1] =
-                ui.paint(screen, counts[column] .. " " .. column:lower(), ui.Style.DIM)
-        end
-    end
-    local legend = { ui.paint(screen, "size", ui.Style.DIM) }
-    for _, color in ipairs(SIZE_ORDER) do
-        legend[#legend + 1] = ui.paint(screen, DOT:rep(SIZE_DOTS[color]), SIZE_STYLES[color])
-            .. " "
-            .. SIZE_WORDS[color]
-    end
-    legend[#legend + 1] = ui.paint(screen, HOLLOW:rep(UNSIZED_CELLS), ui.Style.DIM) .. " unsized"
-    return { table.concat(parts, " · "), table.concat(legend, "  ") }
-end
-
-local function terminal_flat(screen, cards, opts)
-    return terminal_table(
-        screen,
-        cards,
-        { holders = opts.holders, with_column = true, roles = opts.roles }
-    )
-end
-
-local function terminal_grouped(screen, cards, opts)
-    local inner = screen:with_height(screen.height)
-    inner.width = screen.width - #GROUP_INDENT
-    local lines = terminal_table(
-        inner,
-        cards,
-        { holders = opts.holders, with_column = false, roles = opts.roles }
-    )
-    local groups, order = {}, {}
-    for at, card in ipairs(cards) do
-        if not groups[card.column] then
-            groups[card.column] = {}
-            order[#order + 1] = card.column
-        end
-        table.insert(groups[card.column], lines[at + 1])
-    end
-    local out = {}
-    for _, column in ipairs(order) do
-        if #out > 0 then
-            out[#out + 1] = ""
-        end
-        out[#out + 1] = ui.paint(screen, column, ui.Style.BOLD)
-            .. "  "
-            .. ui.paint(screen, count_text(#groups[column], "card"), ui.Style.DIM)
-        for _, line in ipairs(groups[column]) do
-            out[#out + 1] = GROUP_INDENT .. line
-        end
-    end
-    if not opts.shows_done then
-        out[#out + 1] = ""
-        out[#out + 1] = ui.paint(
-            screen,
-            opts.roles:done_column()
-                .. " is left out unless --column "
-                .. opts.roles:done_column():lower(),
-            ui.Style.DIM
-        )
-    end
-    return out
 end
 
 ---Refuse a card that carries `needs:human`, which waits on the owner.
@@ -719,25 +545,12 @@ function commands.ls(backend, args, _, screen)
         return { output = "no cards" }
     end
     if screen and screen.color then
-        local lines = summary_lines(screen, shown_cards, backend.roles)
-        local finished = {}
-        for _, name in ipairs(backend.roles.finished) do
-            finished[name] = true
-        end
-        lines[#lines + 1] = ""
-        local body
-        if grouped then
-            body = terminal_grouped(screen, shown_cards, {
-                holders = holders,
-                shows_done = want ~= nil and finished[want],
-                roles = backend.roles,
-            })
-        else
-            body = terminal_flat(screen, shown_cards, { holders = holders, roles = backend.roles })
-        end
-        for _, line in ipairs(body) do
-            lines[#lines + 1] = line
-        end
+        local lines = render.ls(screen, shown_cards, {
+            holders = holders,
+            grouped = grouped,
+            want = want,
+            roles = backend.roles,
+        })
         return { output = table.concat(lines, "\n"), page = true }
     end
     local rows = {}
