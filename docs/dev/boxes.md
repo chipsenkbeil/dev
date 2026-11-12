@@ -72,7 +72,8 @@ takes a whole number of hours, and `--ttl` with `--keep` exits 2.
 
 `--by` defaults to `$DEV_AGENT`, else `human:$USER` (or `human:$LOGNAME`) when
 stdin is a terminal, and dev always passes it. With none of those, dev exits
-with a message naming `DEV_AGENT` and calls no ci.
+with a message naming `DEV_AGENT` and calls no ci. Claude Code's `!`
+prefix runs with no terminal, and there you pass `--by human:$USER`.
 
 The last line is:
 

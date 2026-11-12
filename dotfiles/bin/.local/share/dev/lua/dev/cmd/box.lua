@@ -581,7 +581,7 @@ local function requester(by)
             return "human:" .. logname
         end
     end
-    verb.die("Cannot tell who asks. Set DEV_AGENT or pass --by LABEL.")
+    verb.die("Cannot tell who asks. Set DEV_AGENT or pass --by LABEL, such as --by human:$USER.")
     return ""
 end
 
