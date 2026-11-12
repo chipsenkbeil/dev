@@ -23,17 +23,18 @@ local LUA_SUITES = {
 return {
   jobs = {
     test = {
+      name = "test on ${target} (${arch})",
       matrix = { { target = "macos-vm-rust", arch = "aarch64" } },
       run = function()
-        ci.sh("HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet " .. BREW_PACKAGES)
+        ci.sh("HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet " .. BREW_PACKAGES, { name = "install packages" })
         for _, file in ipairs(BATS_SUITES) do
-          ci.sh("bats --tap " .. file .. " </dev/null")
+          ci.sh("bats --tap " .. file .. " </dev/null", { name = "test " .. file })
         end
         for _, file in ipairs(SCRIPT_SUITES) do
-          ci.sh("bash " .. file .. " </dev/null")
+          ci.sh("bash " .. file .. " </dev/null", { name = "test " .. file })
         end
         for _, file in ipairs(LUA_SUITES) do
-          ci.sh("luajit tests/lua/run.lua " .. file .. " </dev/null")
+          ci.sh("luajit tests/lua/run.lua " .. file .. " </dev/null", { name = "test " .. file })
         end
       end,
     },
