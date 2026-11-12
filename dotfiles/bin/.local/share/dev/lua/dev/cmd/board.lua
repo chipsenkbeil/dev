@@ -81,6 +81,7 @@ local ANSWERED_NOTE = " (answered, waiting for your move)"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
+---Replay idempotency for each queued subcommand
 local QUEUE_RULES = {
     add = { idempotent = false },
     move = { idempotent = true },
@@ -101,6 +102,7 @@ local QUEUE_RULES = {
 }
 local OutcomeMode =
     { ADD = "add", RENAME = "rename", TICK = "tick", UNTICK = "untick", DELETE = "delete" }
+---Outcome flags mapped to their modes
 local OUTCOME_FLAGS = {
     ["--rename"] = OutcomeMode.RENAME,
     ["--tick"] = OutcomeMode.TICK,
@@ -192,6 +194,7 @@ local function unready(color)
     return color == nil or color == board.SIZES.unsized or color == board.SIZES["3+"]
 end
 
+---Refusal messages for reserved card fields, by key
 local FIELD_REFUSALS = {
     [board.CHECKS_FIELD] = "the board has no checks field, so run dev board init to add it",
 }
@@ -1732,6 +1735,7 @@ function commands.escalate(backend, args)
     return { output = "escalated " .. prefix .. " to " .. board.NEEDS_LEAD }
 end
 
+---Past-tense verb reported for each outcome mode
 local OUTCOME_SAID = {
     [OutcomeMode.DELETE] = "deleted",
     [OutcomeMode.RENAME] = "reworded",
@@ -4529,7 +4533,9 @@ local EventKind = {
     UPDATED = "task_updated",
     COMMENTED = "comment_added",
 }
+---Event kinds a wait watches when it names no stage
 local WAIT_KINDS = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED, EventKind.COMMENTED }
+---Event kinds each wait stage watches
 local WAIT_FOR_KINDS = {
     [WaitFor.READY] = { EventKind.ADDED, EventKind.MOVED },
     [WaitFor.HUMAN] = { EventKind.MOVED, EventKind.COMMENTED },
