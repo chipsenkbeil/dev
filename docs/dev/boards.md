@@ -531,6 +531,9 @@ Every card in every column is fair game for an agent unless it is labelled
   - `needs:human` is yours alone, and only a question for you uses `dev board
     ask`. A question between agents is a blocked note holding the numbered
     menu.
+  - An agent may set the size of a `needs:human` card with `dev board size`,
+    and changes nothing else on it. Until `fff0e011` ships, Pomb refuses it on
+    a locked card, and an agent never sets `unsized`.
   - `needs:planner` is for a planner. An implementer or reviewer who doubts
     a card's plan, an outcome above all, writes why in a blocked note holding
     the numbered menu of choices, moves the card to Blocked and labels it.
