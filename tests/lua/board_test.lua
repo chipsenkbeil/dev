@@ -3743,6 +3743,24 @@ testing.test(
     end
 )
 
+testing.test("stale lists a TODO file at the repo root", function()
+    local root = support.sandbox({ ["TODO.md"] = "x\n", ["docs/TODO.md"] = "y\n" })
+    local backend = fake({}, {})
+    backend.root = root
+    testing.eq(
+        cmd_board.run("stale", {}, backend, NOW).output,
+        "no stale cards\n\ntodo files, move their items onto cards:\nTODO.md\ndocs/TODO.md"
+    )
+end)
+
+testing.test("stale prints no todo heading without a TODO file", function()
+    local backend = fake({}, {})
+    backend.root = support.sandbox({})
+    testing.eq(cmd_board.run("stale", {}, backend, NOW).output, "no stale cards")
+    backend.root = nil
+    testing.eq(cmd_board.run("stale", {}, backend, NOW).output, "no stale cards")
+end)
+
 testing.test("stale names a card it could not date instead of skipping it", function()
     local human = { "needs:human" }
     local cards, times = aged({

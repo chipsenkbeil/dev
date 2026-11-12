@@ -43,6 +43,8 @@ local NAME_PATTERN = '^[^%c"\\]+$'
 local NAME_CHARS = 100
 local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
+---Todo file names under the project root
+local TODO_FILES = { "TODO.md", "docs/TODO.md" }
 local STALE_DAYS = 7
 local ICEBOX_DAYS = 30
 local LEAD_HOURS = 1
@@ -3648,6 +3650,17 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "unsized outside " .. roles.icebox .. ":"
         append(lines, board.table_lines(rows))
+    end
+    local todo = {}
+    for _, name in ipairs(TODO_FILES) do
+        if backend.root and fs.is_file(backend.root .. "/" .. name) then
+            todo[#todo + 1] = name
+        end
+    end
+    if #todo > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "todo files, move their items onto cards:"
+        append(lines, todo)
     end
     if #undated > 0 then
         lines[#lines + 1] = ""

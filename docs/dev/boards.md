@@ -1170,6 +1170,9 @@ These sections follow, each listed apart from the stale cards:
 - `unsized outside Icebox:`: every card that is unsized (white or no colour), in
   any column but Icebox, at any age, with its id prefix, column and name, so a
   planner sees what still needs a size.
+- `todo files, move their items onto cards:`: `TODO.md` and `docs/TODO.md`, one
+  line each, for each that exists under the project's root. The section is
+  absent when neither exists, and dev reads no item in the file.
 - `icebox, untouched for N days:`: the Icebox cards nobody has looked at. The
   card's time in Icebox and its latest comment are both `--icebox-days` days old
   or older (30 by default), counted from the later of the two. Cards labelled
@@ -1988,6 +1991,10 @@ columns as the first list unless noted:
   has no colour, at any age, one line each with id prefix, column and name, in
   board order. Sizing happens in planning, so a card that waits unsized is a
   planner's to size.
+- `todo files, move their items onto cards:` lists `TODO.md` and `docs/TODO.md`
+  one per line, each when it is a file under `backend.root` (read with
+  `dev.fs.is_file`). It is absent when neither exists or the backend has no
+  root, and dev reads no item in the file.
 - `icebox, untouched for N days:` comes last. It lists, oldest first, every
   Icebox card without `needs:human` whose column time and latest comment
   (`backend:comments`) are both `--icebox-days` days old or more (30 by
