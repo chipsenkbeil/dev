@@ -372,6 +372,30 @@ testing.test("capture_timed collects output and the exit code with no stdin", fu
     testing.eq(out, "out\nerr\n")
 end)
 
+testing.test("capture_timed hands output to on_text while the command runs", function()
+    local dir = support.tempdir()
+    local chunks = {}
+    local out, code = dev_os.capture_timed(
+        {
+            "sh",
+            "-c",
+            "echo first; while [ ! -e seen ]; do sleep 0.1; done; echo second",
+        },
+        30,
+        {
+            cwd = dir,
+            on_text = function(text)
+                chunks[#chunks + 1] = text
+                assert(fs.write(dir .. "/seen", "x"))
+            end,
+        }
+    )
+    testing.eq(code, 0)
+    testing.eq(out, "first\nsecond\n")
+    testing.eq(table.concat(chunks), out)
+    testing.ok(#chunks >= 2, "the first line should arrive before the command ends")
+end)
+
 testing.test("capture_timed hands the input to the command", function()
     local out, code = dev_os.capture_timed({ "cat" }, 10, { input = "a b\n" })
     testing.eq(out, "a b\n")

@@ -106,6 +106,9 @@ local function check_rows(opts)
                 [remote.VERB_ENV] = remote.VERB.CHECK,
                 [remote.CARD_ENV] = short,
             },
+            on_run_id = function(run_id)
+                verb.note(string.format("row %d run %s", i, run_id))
+            end,
         })
         if rows[i].refused then
             return failure(

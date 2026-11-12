@@ -2210,6 +2210,10 @@ command.
 
 - The run id is the one from the `run <id>` line of `ci run --follow`, so
   `ci logs <id>` reads the row's log. It is `-` when the row printed none.
+- dev prints `row N run <id>` to standard error the moment the row's `run <id>`
+  line is complete, before the row finishes, so a runner told to stop its own
+  runs finds the ids in its log. It prints one line per row, for the first
+  `run` line the row prints. `land`'s recheck and `ship` print none.
 - A row that failed with no run id adds a second line under it, indented by
   two spaces, with the last line the row printed. A row that printed a run id,
   a negated row and a row that timed out add none.

@@ -437,7 +437,7 @@ return {
         handler = "lua",
         flags = "--expect-fail --timeout",
         usage = "dev board check CARD [--expect-fail] [--timeout SECONDS]",
-        desc = "Run a card's checks rows and record the results",
+        desc = "Run a card's checks rows, print each ci run id and record the results",
     },
     {
         words = { "board", "review" },

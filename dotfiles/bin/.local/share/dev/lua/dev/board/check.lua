@@ -18,6 +18,7 @@ local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "confl
 local SHOWN_LINES = 12
 local NO_CHANGE = "-"
 local NO_RUN = "-"
+local RUN_LINE = "^run (%x+)$"
 local REASON_INDENT = "  "
 local DRAIN_REFUSAL = "is draining"
 local DRAIN_NOTHING_NEW = "nothing new starts"
@@ -255,16 +256,34 @@ end
 ---@field argv string[] the row's words from `argv`, without a leading `! `
 ---@field seconds integer how long the row may run
 ---@field env table<string, string>? variables set for the row
+---@field on_run_id fun(run_id: string)? called with the row's ci run id once its line is complete
 
 ---Run one checks row to its end or its time limit.
 ---@param opts dev.board.check.RunOpts the row and where it runs
 ---@return dev.board.check.Row row how it ended
 function M.run(opts)
-    local output, code = dev_os.capture_timed(
-        opts.argv,
-        opts.seconds,
-        { cwd = opts.root, merge = true, env = opts.env }
-    )
+    local pending, announced = "", false
+    local function watch(text)
+        pending = pending .. text
+        while not announced do
+            local line, rest = pending:match("^([^\n]*)\n(.*)$")
+            if not line then
+                return
+            end
+            pending = rest
+            local id = line:match(RUN_LINE)
+            if id then
+                announced = true
+                opts.on_run_id(id)
+            end
+        end
+    end
+    local output, code = dev_os.capture_timed(opts.argv, opts.seconds, {
+        cwd = opts.root,
+        merge = true,
+        env = opts.env,
+        on_text = opts.on_run_id and watch or nil,
+    })
     local negated = opts.run:match(NEGATED) ~= nil
     local passed = code == 0
     local note
@@ -304,7 +323,7 @@ end
 ---@return string? run_id the id, nil when no line names one
 function M.run_id(output)
     for line in output:gmatch("[^\n]+") do
-        local id = line:match("^run (%x+)$")
+        local id = line:match(RUN_LINE)
         if id then
             return id
         end

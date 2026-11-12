@@ -217,6 +217,40 @@ testing.test("check records the ci run id each row printed", function()
     })
 end)
 
+testing.test("check prints each row ci run id before the row finishes", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "echo run 8cb600", "echo run 1f2e3d" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 0, out)
+    local first = out:find("row 1 run 8cb600", 1, true)
+    local second = out:find("row 2 run 1f2e3d", 1, true)
+    testing.ok(first and second, out)
+    testing.ok(first < out:find("1 pass 8cb600", 1, true), out)
+    testing.ok(second < out:find("2 pass 1f2e3d", 1, true), out)
+end)
+
+testing.test("check.run hands each ci run id to on_run_id before the row ends", function()
+    local dir = support.tempdir()
+    local seen = {}
+    local row = check.run({
+        root = dir,
+        run = "row",
+        argv = {
+            "sh",
+            "-c",
+            "echo run 8cb600; echo run ffffff; while [ ! -e seen ]; do sleep 0.1; done",
+        },
+        seconds = 30,
+        on_run_id = function(run_id)
+            seen[#seen + 1] = run_id
+            assert(fs.write(dir .. "/seen", "x"))
+        end,
+    })
+    testing.eq(row.result, "pass")
+    testing.eq(seen, { "8cb600" })
+    testing.eq(row.run_id, "8cb600")
+end)
+
 testing.test("check records why a row failed without a run", function()
     local root, home, head = git_root()
     local id = card_with(root, home, { "ls dev-board-check-missing-path", "false" })

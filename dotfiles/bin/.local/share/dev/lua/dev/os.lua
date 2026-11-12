@@ -476,6 +476,8 @@ end
 ---@field merge boolean? send standard error to the collected output instead of the terminal
 ---@field reap boolean? kill what the command left running in its process group once it exits on its
 ---   own
+---@field on_text fun(text: string)? called with each new piece of the collected output while the
+---   command runs, and with the rest once it ends
 
 local function nap(secs)
     ffi.C.usleep(secs * MICROS_PER_SEC)
@@ -558,8 +560,23 @@ function M.capture_timed(argv, secs, opts)
     end
     local started = os.time()
     local code
+    local offset = 0
+    local function drain()
+        local file = opts.on_text and io.open(out, "rb")
+        if not file then
+            return
+        end
+        file:seek("set", offset)
+        local text = file:read("*a") or ""
+        file:close()
+        if text ~= "" then
+            offset = offset + #text
+            opts.on_text(text)
+        end
+    end
     local polled, failure = pcall(function()
         while not code do
+            drain()
             local file = io.open(status, "rb")
             if file then
                 code = tonumber(file:read("*a"))
@@ -583,6 +600,7 @@ function M.capture_timed(argv, secs, opts)
     if opts.reap then
         signal_group("KILL", pid)
     end
+    drain()
     if KILLED_EXITS[code] then
         code = TIMEOUT_EXIT
     end
