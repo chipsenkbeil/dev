@@ -1209,6 +1209,10 @@ local function move_once(backend, args, opts)
         end
     end
     if column == roles.ready then
+        local unreadable = guards.unreadable_refusal(card, roles.ready)
+        if unreadable then
+            return unreadable
+        end
         local missing = board.missing(card.description, #card.outcomes, children, epic)
         if #missing > 0 then
             return failure(

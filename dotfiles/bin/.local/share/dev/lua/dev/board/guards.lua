@@ -191,18 +191,29 @@ local function children_refusal(backend, card, column, kids)
     end
 end
 
+---Refuse a move into a column when Pomb sent the card's outcomes in a form dev cannot read.
+---@param card dev.board.Card the card
+---@param column string the column name the refusal names
+---@return dev.cmd.board.Result? err the refusal, nil when the outcomes are readable
+local function unreadable_refusal(card, column)
+    if card.outcomes_unreadable then
+        return failure(
+            card.id:sub(1, board.MIN_PREFIX)
+                .. " cannot move to "
+                .. column
+                .. ": its outcomes cannot be read from Pomb, so they cannot be checked"
+        )
+    end
+end
+
 ---Refuse a move to Done that the card's outcomes do not allow.
 ---@param card dev.board.Card the card
 ---@return dev.cmd.board.Result? err the refusal, nil when every outcome is ticked
 local function done_refusal(card)
     local id = card.id:sub(1, board.MIN_PREFIX)
-    if card.outcomes_unreadable then
-        return unqueued(
-            failure(
-                id
-                    .. " cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked"
-            )
-        )
+    local unreadable = unreadable_refusal(card, board.DEFAULT_NAMES.done)
+    if unreadable then
+        return unqueued(unreadable)
     end
     local open = {}
     for i, outcome in ipairs(card.outcomes) do
@@ -340,6 +351,7 @@ M.workspace_refusal = workspace_refusal
 M.other_home = other_home
 M.on_board = on_board
 M.children_refusal = children_refusal
+M.unreadable_refusal = unreadable_refusal
 M.done_refusal = done_refusal
 M.tick_refused = tick_refused
 M.claimant_refused = claimant_refused

@@ -1297,6 +1297,36 @@ testing.test("move to Done refuses outcomes dev cannot read", function()
     testing.eq(#backend.calls, 0)
 end)
 
+testing.test("move to Ready refuses outcomes dev cannot read", function()
+    local cards = sample()
+    cards[1].column = support.COLUMN_NAME.BACKLOG
+    cards[1].outcomes_unreadable = true
+    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.READY }, fake(cards))
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "11111111 cannot move to Ready: its outcomes cannot be read from Pomb, so they cannot be checked"
+    )
+end)
+
+testing.test("move to Ready with unreadable outcomes sends no move", function()
+    local cards = sample()
+    cards[1].column = support.COLUMN_NAME.BACKLOG
+    cards[1].outcomes_unreadable = true
+    local backend = fake(cards)
+    cmd_board.run("move", { "11111111-a", support.COLUMN.READY }, backend)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("move to Ready still counts outcomes dev can read", function()
+    local cards = sample()
+    cards[1].column = support.COLUMN_NAME.BACKLOG
+    cards[1].outcomes = { { id = "s1", name = "a", done = false } }
+    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.READY }, fake(cards))
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("3 to 7 Done when outcomes, not 1", 1, true), result.message)
+end)
+
 testing.test("move to a working column does not demand outcomes dev cannot read", function()
     local cards = sample()
     cards[1].outcomes_unreadable = true

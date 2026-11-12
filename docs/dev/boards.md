@@ -2989,6 +2989,8 @@ A move into Done (`move CARD done`):
 - That refusal reads
   `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so
   they cannot be checked`.
+- A move to Ready refuses a card with outcomes dev cannot read the same way,
+  naming Ready, and never reports its outcomes as missing.
 - A card with no outcomes, or with all of them ticked, moves as before.
 - A move to Done that Pomb could not answer for is not queued.
 
