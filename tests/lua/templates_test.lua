@@ -330,6 +330,7 @@ end)
 
 testing.test("a Rust project on bash verbs without test.sh passes sync --check", function()
     if not dev_os.which("yq") then
+        testing.ok(os.getenv("CI") ~= "true", "yq is not installed on ci")
         print("skip - yq is not installed")
         return
     end
@@ -354,6 +355,7 @@ end)
 
 testing.test("a Rust project synced from scratch passes sync --check", function()
     if not dev_os.which("yq") then
+        testing.ok(os.getenv("CI") ~= "true", "yq is not installed on ci")
         print("skip - yq is not installed")
         return
     end
