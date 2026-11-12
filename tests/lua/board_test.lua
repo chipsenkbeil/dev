@@ -8029,6 +8029,55 @@ testing.test("wait --for human names the card that left Blocked on a trimmed str
     testing.eq(fs.read(path .. ".human.cursor"), "9\n")
 end)
 
+local function trimmed_wait(before, after)
+    local reads = 0
+    local backend = waiter({ { oldest = "9" } })
+    function backend:cards()
+        reads = reads + 1
+        return reads == 1 and before or after
+    end
+    return cmd_board.wait(backend, { "--for", "human" }, {
+        stem = support.tempdir() .. "/wait",
+        nap = function() end,
+        random = function()
+            return 0
+        end,
+        now = function()
+            return 0
+        end,
+        notice = function() end,
+    })
+end
+
+testing.test("wait --for human counts a human move in the second the wait started", function()
+    local cards = { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
+    local result = waited({
+        got("1", {
+            kind = "task_moved",
+            task_id = ID_A,
+            column = support.COLUMN_NAME.READY,
+            from_column = board.DEFAULT_NAMES.blocked,
+            actor = "human",
+            at = 100,
+        }),
+        got("2"),
+    }, { "--for", "human" }, { cards = cards, now = 100 })
+    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
+end)
+
+testing.test("wait --for human reports a Blocked card that vanished on a trimmed stream", function()
+    local sat = { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
+    local result = trimmed_wait(sat, {})
+    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
+end)
+
+testing.test("wait --for human reports an Icebox card that left on a trimmed stream", function()
+    local before = { { id = ID_B, column = board.DEFAULT_NAMES.icebox, labels = {}, done = false } }
+    local after = { { id = ID_B, column = support.COLUMN_NAME.READY, labels = {}, done = false } }
+    local result = trimmed_wait(before, after)
+    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.icebox)
+end)
+
 testing.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:lead" } },

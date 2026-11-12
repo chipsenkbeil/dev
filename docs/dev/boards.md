@@ -1364,11 +1364,11 @@ Each mode wakes on its own events:
   `<id prefix> is labelled needs:planner in Blocked`.
 - no `--for`: every added card, move, update and comment.
 
-A move by an agent never wakes `--for human`, nor does a move made before the
-wait started or a comment of an agent. The first owner event opens a settle
-window of 60 seconds. The wait keeps listening until no new event from the owner
-has come for that long, to catch a second reply, then prints one line per card
-the owner touched, not one per comment.
+A move by an agent never wakes `--for human`, nor does a move made in an
+earlier second than the wait started or a comment of an agent. The first
+owner event opens a settle window of 60 seconds. The wait keeps listening until
+no new event from the owner has come for that long, to catch a second reply,
+then prints one line per card the owner touched, not one per comment.
 
 The woken agent reads every comment with `dev board show`. Pomb's events carry
 no labels, so `wait` reads the board for each batch of events.
@@ -3396,9 +3396,10 @@ The `--for` modes:
   lines for their own column, and match only a card with no claimant.
 - `human`: sends `task_moved,comment_added` and matches two things. The first
   is a move whose `from_column` is Blocked, whose `actor` is `human` (Pomb's
-  `actor_kind` of `user`) and whose `at` is later than the wait's start. Pomb's
-  `at` is epoch seconds, and `Backend:wait` keeps both on each event. It
-  prints `moved <id prefix> out of Blocked`. The second is a comment event
+  `actor_kind` of `user`) and whose `at` is not earlier than the wait's start,
+  so a move in the start's own second counts. Pomb's `at` is epoch seconds,
+  and `Backend:wait` keeps both on each event. It prints
+  `moved <id prefix> out of Blocked`. The second is a comment event
   whose card is not Done and whose newest comment is the owner's and newer than
   the wait's start, which `wait` reads with `Backend:cards` and
   `Backend:comments`. It prints `the owner commented on <id prefix>`.
@@ -3434,7 +3435,7 @@ The cursor:
 - `--for human` stores the oldest cursor and rereads the cards instead
   (`Owner.sitting` at the start, `Owner.departed` on a trim). It prints
   `moved <id prefix> out of <column>` for each card that sat in Blocked or
-  Icebox and has left it, or keeps waiting when none has.
+  Icebox and has left it or the board, or keeps waiting when none has.
 
 Failures:
 

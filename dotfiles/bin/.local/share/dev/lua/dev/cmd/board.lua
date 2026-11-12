@@ -4625,7 +4625,7 @@ function Owner.comments(backend, events, since)
     return spoke
 end
 
----Collect the cards that sat in Blocked or Icebox and have left them.
+---Collect the cards that sat in Blocked or Icebox and have left them or the board.
 ---
 ---Remove each departed card from `sat`, so it is reported once.
 ---@param backend dev.board.Backend the board
@@ -4637,12 +4637,15 @@ function Owner.departed(backend, sat)
     if not cards then
         return nil, message
     end
-    local lines = {}
+    local now = {}
     for _, card in ipairs(cards) do
-        local from = sat[card.id]
-        if from and card.column ~= from then
-            sat[card.id] = nil
-            lines[#lines + 1] = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " out of " .. from
+        now[card.id] = card.column
+    end
+    local lines = {}
+    for id, from in pairs(sat) do
+        if now[id] ~= from then
+            sat[id] = nil
+            lines[#lines + 1] = "moved " .. id:sub(1, board.MIN_PREFIX) .. " out of " .. from
         end
     end
     table.sort(lines)
@@ -4704,7 +4707,7 @@ local function wait_line(event, opts)
             and event.from_column == roles.blocked
             and event.actor == HUMAN_ACTOR
             and event.at
-            and event.at > opts.started
+            and event.at >= opts.started
         then
             return "moved " .. id .. " out of " .. roles.blocked
         end
