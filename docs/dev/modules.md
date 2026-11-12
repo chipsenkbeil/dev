@@ -39,6 +39,8 @@ The luajit modules of `dev`, one per item.
 - `dev.board.render`: the color terminal table and summary `board ls` prints.
 - `dev.board.guards`: the refusals and guards the `board` verbs run before they
   act, and the usage and failure results they return.
+- `dev.board.runner`: a runner's size limit and refusals, the full-column result
+  and the claim a `take` makes.
 - `dev.board.pomb`: that interface over curl. The token comes from
   `DEV_BOARD_TOKEN`, then the file for `DEV_AGENT`, then `pass`, and goes to
   curl on standard input.

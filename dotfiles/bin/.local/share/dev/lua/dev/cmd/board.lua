@@ -16,6 +16,7 @@ local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
 local render = require("dev.board.render")
 local review = require("dev.board.review")
+local runner = require("dev.board.runner")
 local store = require("dev.board.store")
 local text_width = require("dev.text").width
 local toml = require("dev.toml")
@@ -31,15 +32,12 @@ local usage = guards.usage
 local failure = guards.failure
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
-local runner = {
-    FLAG = "--max-size",
-    FULL = 3,
-    POLL_SECONDS = 15,
-    limits = require("dev.board.limits"),
-}
+local index_of = runner.index_of
+local owner_holds = runner.owner_holds
+local claimant = runner.claimant
+local claim_card = runner.claim_card
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
-local CLAIMANT_CHARS = guards.CLAIMANT_CHARS
 local NAME_PATTERN = '^[^%c"\\]+$'
 local NAME_CHARS = 100
 local ADMIN_SCOPE = "admin"
@@ -145,10 +143,6 @@ end
 ---   a board uses
 local M = { handlers = {} }
 
-function runner.full(message)
-    return { message = message, code = runner.FULL }
-end
-
 local function parse(args, takes, many)
     local flags, positional = {}, {}
     local i = 1
@@ -224,93 +218,12 @@ local function plain(label)
     return label
 end
 
-local function index_of(list, word)
-    for i, item in ipairs(list) do
-        if item == word then
-            return i
-        end
-    end
-end
-
 local function count_text(count, noun)
     return count .. " " .. noun .. (count == 1 and "" or "s")
 end
 
----Refuse a card that carries `needs:human`, which waits on the owner.
----@param card dev.board.Card the card
----@return dev.cmd.board.Result? err the failure, nil when the card is free to change
-local function owner_holds(card)
-    if index_of(card.labels, board.NEEDS_HUMAN) then
-        return failure(
-            card.id:sub(1, board.MIN_PREFIX)
-                .. " is labelled "
-                .. board.NEEDS_HUMAN
-                .. ", so it waits on the owner and only the owner moves or edits it"
-        )
-    end
-end
-
 local function card_line(card)
     return board.table_lines({ board.cells(card) })[1]
-end
-
----Refuse a name that is not <repo>/<role>[/<card>] when it would take a new claim.
----@param name string? the agent name, nil when none is set
----@return dev.cmd.board.Result? err the usage error, nil when the name passes
-function runner.shape_refusal(name)
-    if name and not board.agent_shape(name) then
-        return usage("an agent name is <repo>/<role>[/<card>], got " .. name)
-    end
-end
-
----Read a runner's size limit from the flag, else DEV_MAX_SIZE.
----@param flag string? the value of --max-size
----@return integer? limit the most Pomodori the runner takes, nil when it has no limit
----@return dev.cmd.board.Result? err the usage error for a limit that is not 1, 2 or 3
-function runner.limit(flag)
-    local word = flag
-    if word == nil then
-        word = os.getenv("DEV_MAX_SIZE")
-        if word == nil or word == "" then
-            return nil
-        end
-    end
-    local limit = board.SIZE_LIMITS[word]
-    if not limit then
-        return nil, usage((flag and runner.FLAG or "DEV_MAX_SIZE") .. " is 1, 2 or 3, not " .. word)
-    end
-    return limit
-end
-
----Refuse a card bigger than the runner's size limit.
----
----@param card dev.board.Card the card
----@param limit integer? the most Pomodori the runner takes
----@return dev.cmd.board.Result? err the refusal, nil when the card fits
-function runner.refusal(card, limit)
-    if board.fits(card, limit) then
-        return nil
-    end
-    return failure(
-        card.id:sub(1, board.MIN_PREFIX)
-            .. " is "
-            .. card.size
-            .. ", above this runner's limit of "
-            .. limit
-            .. " Pomodori (DEV_MAX_SIZE)"
-    )
-end
-
-local function claimant(name)
-    if name then
-        return name
-    end
-    local host = dev_os.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", "")
-    local session = os.getenv("CLAUDE_SESSION_ID")
-    if not session or session == "" then
-        session = dev_os.capture({ "sh", "-c", "echo $PPID" }):gsub("%s+$", "")
-    end
-    return ("dev@" .. host .. ":" .. session:gsub("[^%w._-]", "_")):sub(1, CLAIMANT_CHARS)
 end
 
 local function find_card(backend, word)
@@ -323,19 +236,6 @@ local function find_card(backend, word)
         return nil, failure(why)
     end
     return card
-end
-
----Refuse `card` when a Pomb limit on `target` forbids the move.
----
----@param backend dev.board.Backend the board
----@param card dev.board.Card the card the caller is about to move
----@param target string the column it moves to
----@return dev.cmd.board.Result? err the refusal naming the cards at the limit, nil when the move
----   fits
----@private
-function runner.__limited(backend, card, target)
-    local message = runner.limits.refusal(backend, card, target)
-    return message and failure(message)
 end
 
 local function other_card(backend, word)
@@ -1173,71 +1073,6 @@ function commands.note(backend, args)
     }
 end
 
-local function claim_card(backend, card, name)
-    local held = claims.read(card.id)
-    local who = claimant(name)
-    local fence, message =
-        backend:claim(card.id, who, claims.TTL_SECONDS, held and held.fence, { epic = card.epic })
-    if not fence then
-        return failure(message)
-    end
-    claims.stop(card.id)
-    local past, why = backend:comments(card.id)
-    local ok
-    if past and card.claimant ~= who then
-        ok, why = backend:note(card.id, board.claim_record(who), fence, { kind = "status" })
-        past = ok and past
-    end
-    if not past then
-        backend:release(card.id, fence)
-        return failure(
-            "the claim on " .. card.id:sub(1, board.MIN_PREFIX) .. " was dropped: " .. why
-        )
-    end
-    local ticks, minutes = claims.cap(card.size)
-    local state = { card = card.id, fence = fence }
-    ok, message = claims.write(state)
-    if not ok then
-        backend:release(card.id, fence)
-        return failure(message)
-    end
-    local pid
-    pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id), who)
-    if not pid then
-        claims.stop(card.id)
-        backend:release(card.id, fence)
-        return failure(message)
-    end
-    state.pid = pid
-    ok, message = claims.write(state)
-    if not ok then
-        claims.stop(card.id)
-        backend:release(card.id, fence)
-        return failure(message)
-    end
-    if pid == 0 then
-        return {
-            output = string.format(
-                "took %s, fence %d, held for %dm",
-                card.id:sub(1, board.MIN_PREFIX),
-                fence,
-                minutes
-            ),
-        },
-            fence
-    end
-    return {
-        output = string.format(
-            "took %s, fence %d, renewing every %dm for up to %dm",
-            card.id:sub(1, board.MIN_PREFIX),
-            fence,
-            claims.TICK_MINUTES,
-            minutes
-        ),
-    },
-        fence
-end
-
 ---Refuse a move that takes a card out of In Progress before its claimant has noted.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card being moved
@@ -1274,8 +1109,7 @@ end
 ---@param args string[] the card and the column
 ---@param opts {drop: boolean?}? `drop` skips the outcome check, and the planning check from Icebox
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
----@private
-function runner.__move_once(backend, args, opts)
+local function move_once(backend, args, opts)
     local flags, words = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
     if not flags then
         return words
@@ -1411,13 +1245,13 @@ function runner.__move_once(backend, args, opts)
             if wrong then
                 return wrong
             end
-            refused = runner.__limited(backend, card, column)
+            refused = runner.limited(backend, card, column)
             if refused then
                 return runner.full(refused.message)
             end
         end
     elseif card.column ~= column and not to_done then
-        local refused = runner.__limited(backend, card, column)
+        local refused = runner.limited(backend, card, column)
         if refused then
             return runner.full(refused.message)
         end
@@ -1478,7 +1312,7 @@ end
 ---Move a card, and with `--wait SECONDS` try again while its column is full.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card, the column and the flags
----@param opts dev.cmd.board.MoveOpts? the options of `runner.__move_once` and the clock
+---@param opts dev.cmd.board.MoveOpts? the options of `move_once` and the clock
 ---@return dev.cmd.board.Result result the result of the last try
 local function move_card(backend, args, opts)
     local flags = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
@@ -1493,7 +1327,7 @@ local function move_card(backend, args, opts)
     local clock = opts and opts.now or os.time
     local deadline = clock() + wait
     while true do
-        local result = runner.__move_once(backend, args, opts)
+        local result = move_once(backend, args, opts)
         local left = deadline - clock()
         if result.code ~= runner.FULL or left <= 0 then
             return result
@@ -4355,7 +4189,7 @@ function commands.take(backend, args)
     end
     local limited = card.column ~= roles.progress and not claims.read(card.id) and not rival
     if limited then
-        refused = runner.__limited(backend, card, roles.progress)
+        refused = runner.limited(backend, card, roles.progress)
         if refused then
             return refused
         end
