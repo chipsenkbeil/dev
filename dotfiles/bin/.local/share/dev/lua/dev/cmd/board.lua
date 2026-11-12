@@ -1156,7 +1156,7 @@ local function move_once(backend, args, opts)
         end
     end
     if to_done then
-        local refused = guards.done_refusal(card)
+        local refused = guards.done_refusal(card, roles:done_column())
         if refused then
             return refused
         end
@@ -2636,7 +2636,7 @@ end
 ---@param name string what to call that revision
 ---@return string? reason why it stays, nil when it may move
 function Ship.reason(backend, card, commit, name)
-    if guards.done_refusal(card) then
+    if guards.done_refusal(card, backend.roles:done_column()) then
         return "an outcome is not ticked"
     end
     local comments = backend:comments(card.id)

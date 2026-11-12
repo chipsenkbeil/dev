@@ -2983,6 +2983,8 @@ A move into Done (`move CARD done`):
   text); the reviewer ticks them with dev board outcome CARD --tick N --as NAME,
   or dev board discard CARD drops it`
   (exit 1, on both backends, each open outcome numbered as `show` numbers it).
+  Both refusals name the board's own Done column, so a board that renames
+  Done reads `cannot move to Shipped`.
 - Outcomes that Pomb sent in a form dev cannot read refuse the move the same
   way. That is a `subtasks` that is not a list, or an entry without a string
   name.

@@ -202,7 +202,7 @@ local function card_problems(backend, card, who)
             .. ", and only that claimant lands it, not "
             .. who.name
     end
-    local open = guards.done_refusal(card)
+    local open = guards.done_refusal(card, roles:done_column())
     if open then
         problems[#problems + 1] = open.message
     end

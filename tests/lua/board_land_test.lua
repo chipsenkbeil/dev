@@ -1814,6 +1814,32 @@ if has_jj then
         testing.eq(backend.notes, {})
     end)
 
+    testing.test("land names a renamed Done column for unreadable outcomes", function()
+        local project = jj_project()
+        local backend = fake_backend(project.root, { outcomes_unreadable = true })
+        backend.column_map = { done = "Shipped" }
+        local result = land_as_lander(backend)
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find("cannot move to Shipped: its outcomes", 1, true),
+            result.message
+        )
+    end)
+
+    testing.test("land names a renamed Done column for unticked outcomes", function()
+        local project = jj_project()
+        local backend = fake_backend(project.root, {
+            outcomes = { { id = "o1", name = "It works", done = false } },
+        })
+        backend.column_map = { done = "Shipped" }
+        local result = land_as_lander(backend)
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find("cannot move to Shipped: 1 of 1 outcomes", 1, true),
+            result.message
+        )
+    end)
+
     testing.test("land refuses a working copy that jj cannot read", function()
         local project = jj_project()
         local id = verified_card(project)

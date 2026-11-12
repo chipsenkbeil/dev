@@ -208,10 +208,11 @@ end
 
 ---Refuse a move to Done that the card's outcomes do not allow.
 ---@param card dev.board.Card the card
+---@param column string the board's Done column name the refusal names
 ---@return dev.cmd.board.Result? err the refusal, nil when every outcome is ticked
-local function done_refusal(card)
+local function done_refusal(card, column)
     local id = card.id:sub(1, board.MIN_PREFIX)
-    local unreadable = unreadable_refusal(card, board.DEFAULT_NAMES.done)
+    local unreadable = unreadable_refusal(card, column)
     if unreadable then
         return unqueued(unreadable)
     end
@@ -227,8 +228,9 @@ local function done_refusal(card)
     return unqueued(
         failure(
             string.format(
-                "%s cannot move to Done: %d of %d outcomes are unticked (%s); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it",
+                "%s cannot move to %s: %d of %d outcomes are unticked (%s); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it",
                 id,
+                column,
                 #open,
                 #card.outcomes,
                 table.concat(open, ", ")

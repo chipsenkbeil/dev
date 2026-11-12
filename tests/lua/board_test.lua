@@ -1297,6 +1297,42 @@ testing.test("move to Done refuses outcomes dev cannot read", function()
     testing.eq(#backend.calls, 0)
 end)
 
+local SHIPPED = "Shipped"
+
+local function shipped_backend(card)
+    local backend = fake({ card }, nil, { SHIPPED })
+    backend.column_map = { done = SHIPPED }
+    return backend
+end
+
+testing.test("move to Done names a renamed Done column for unreadable outcomes", function()
+    local card = sample()[1]
+    card.outcomes_unreadable = true
+    local backend = shipped_backend(card)
+    local result = cmd_board.run("move", { "11111111-a", SHIPPED }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "11111111 cannot move to "
+            .. SHIPPED
+            .. ": its outcomes cannot be read from Pomb, so they cannot be checked"
+    )
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("move to Done names a renamed Done column for unticked outcomes", function()
+    local card = sample()[1]
+    card.outcomes = { { id = "s1", name = "A works", done = false } }
+    local backend = shipped_backend(card)
+    local result = cmd_board.run("move", { "11111111-a", SHIPPED }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("cannot move to " .. SHIPPED .. ": 1 of 1 outcomes", 1, true),
+        result.message
+    )
+    testing.eq(#backend.calls, 0)
+end)
+
 testing.test("move to Ready refuses outcomes dev cannot read", function()
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.BACKLOG
