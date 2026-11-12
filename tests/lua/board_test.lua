@@ -7609,8 +7609,12 @@ end
 local function waited(replies, args, opts)
     opts = opts or {}
     local backend, seen = waiter(replies)
-    if opts.cards or opts.cards_error then
+    if opts.cards or opts.cards_error or opts.cards_errors then
         function backend:cards()
+            local down = opts.cards_errors and table.remove(opts.cards_errors, 1)
+            if down then
+                return nil, down
+            end
             return opts.cards, opts.cards_error
         end
     end
@@ -7973,6 +7977,57 @@ testing.test("wait --for lead leaves the cursor alone when the board cannot be r
     testing.eq(result.code, 1)
     testing.eq(fs.read(path .. ".lead.cursor"), "1\n")
 end)
+
+local DOWN = "board unavailable: cannot reach https://p (curl exit 7)"
+
+local function lead_added()
+    return got("2", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED })
+end
+
+local function lead_board()
+    return { { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:lead" } } }
+end
+
+testing.test("wait --for lead retries an unreachable board read", function()
+    local result, seen = waited(
+        { got("1"), lead_added(), lead_added() },
+        { "--for", "lead" },
+        { cards = lead_board(), cards_errors = { DOWN } }
+    )
+    testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
+    testing.eq(seen.naps, { 30 })
+end)
+
+testing.test(
+    "wait --for lead asks again from the same cursor after an unreachable board read",
+    function()
+        local result, seen, path = waited(
+            { got("1"), lead_added(), lead_added() },
+            { "--for", "lead" },
+            { cards = lead_board(), cards_errors = { DOWN } }
+        )
+        testing.eq(result.code, nil)
+        testing.eq(seen.afters, { "none", "1", "1" })
+        testing.eq(fs.read(path .. ".lead.cursor"), "2\n")
+    end
+)
+
+testing.test(
+    "wait --for lead gives up after ten unreachable board reads and keeps the cursor",
+    function()
+        local replies = { got("1") }
+        local errors = {}
+        for i = 1, 10 do
+            replies[#replies + 1] = lead_added()
+            errors[i] = DOWN
+        end
+        local result, seen, path = waited(replies, { "--for", "lead" }, { cards_errors = errors })
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("curl exit 7", 1, true), result.message)
+        testing.eq(#seen.naps, 9)
+        testing.eq(fs.read(path .. ".lead.cursor"), "1\n")
+    end
+)
 
 testing.test("wait without --for matches every kind", function()
     local result, seen = waited({

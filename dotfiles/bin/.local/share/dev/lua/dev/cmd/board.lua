@@ -4795,19 +4795,22 @@ function M.wait(backend, args, opts)
             WAIT_FOR_KINDS[only] or WAIT_KINDS,
             last and math.max(1, Owner.SETTLE_SECONDS - (clock() - last))
         )
+        local leads
+        if reply and board.BLOCKED_LABELS[only] and #reply.events > 0 then
+            local why
+            leads, why = lead_cards(backend, roles, board.BLOCKED_LABELS[only])
+            if not leads then
+                if not pomb.unreachable(why, true) then
+                    return failure(why)
+                end
+                reply, message = nil, why
+            end
+        end
         if reply then
             failures = 0
             limited = 0
             if type(reply.cursor) ~= "string" then
                 return flush(failure("pomb answered without a cursor"))
-            end
-            local leads
-            if board.BLOCKED_LABELS[only] and #reply.events > 0 then
-                local why
-                leads, why = lead_cards(backend, roles, board.BLOCKED_LABELS[only])
-                if not leads then
-                    return failure(why)
-                end
             end
             local stage
             if WaitFor.STAGES[only] and #reply.events > 0 then

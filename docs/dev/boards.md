@@ -3405,7 +3405,9 @@ Failures:
 
 - a failure that `pomb.unreachable` counts (idempotent rules) is retried
   after a 30 second nap. The tenth in a row exits 1 with its message (an
-  endless silent retry would hide a dead Pomb from the session).
+  endless silent retry would hide a dead Pomb from the session). The
+  card read of lead and planner is retried like the events call: a read that
+  fails the same way keeps the cursor and asks the same call again.
 - a 429 whose body has the code `too_many_waits` (4 open waits per token, and
   every session shares the token) is never a failure. `Backend:wait` returns a
   fourth value, `true`. `wait` prints
