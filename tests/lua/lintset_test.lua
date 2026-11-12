@@ -100,6 +100,69 @@ testing.test("files honours lint-ignore and the hidden switch in a git work tree
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("files lists a jj checkout with jj file list, not ignored files", function()
+    if not dev_os.which("jj") then
+        print("skip - jj is not installed")
+        return
+    end
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/src", { parents = true }), "mkdir src failed")
+    assert(fs.mkdir(root .. "/target", { parents = true }), "mkdir target failed")
+    assert(fs.write(root .. "/src/new.rs", ""), "fixture setup failed")
+    assert(fs.write(root .. "/src/skip.rs", ""), "fixture setup failed")
+    assert(fs.write(root .. "/target/built.rs", ""), "fixture setup failed")
+    assert(fs.write(root .. "/.gitignore", "src/skip.rs\n"), "fixture setup failed")
+    assert(dev_os.run({ "jj", "git", "init", root }) == 0, "jj git init failed")
+    local lint = lint_for(root)
+    testing.eq(lint:files({ "*.rs" }), { "src/new.rs" })
+    assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir dev failed")
+    assert(fs.write(root .. "/.dev/hidden.rs", ""), "fixture setup failed")
+    local files = lint:files({ "*.rs" })
+    table.sort(files)
+    testing.eq(files, { ".dev/hidden.rs", "src/new.rs" })
+    lint.skip_hidden = true
+    testing.eq(lint:files({ "*.rs" }), { "src/new.rs" })
+    assert(fs.write(root .. "/.dev/lint-ignore", "src/new.rs\n"), "fixture setup failed")
+    testing.eq(lint:files({ "*.rs" }), {})
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("files rg fallback honours gitignore without a git repository", function()
+    if not dev_os.which("rg") then
+        print("skip - rg is not installed")
+        return
+    end
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/src", { parents = true }), "mkdir src failed")
+    assert(fs.write(root .. "/src/new.rs", ""), "fixture setup failed")
+    assert(fs.write(root .. "/src/skip.rs", ""), "fixture setup failed")
+    assert(fs.write(root .. "/.gitignore", "src/skip.rs\n"), "fixture setup failed")
+    testing.eq(lint_for(root):files({ "*.rs" }), { "src/new.rs" })
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("files rg fallback matches a literal name, a dot and a question mark", function()
+    if not dev_os.which("rg") then
+        print("skip - rg is not installed")
+        return
+    end
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/sub", { parents = true }), "mkdir sub failed")
+    local names = { "Cargo.toml", "sub/Cargo.toml", "CargoXtoml", "a.lua", "ab.lua", "fooxlua" }
+    for _, name in ipairs(names) do
+        assert(fs.write(root .. "/" .. name, ""), "fixture setup failed")
+    end
+    local lint = lint_for(root)
+    local files = lint:files({ "Cargo.toml" })
+    table.sort(files)
+    testing.eq(files, { "Cargo.toml", "sub/Cargo.toml" })
+    testing.eq(lint:files({ "?.lua" }), { "a.lua" })
+    files = lint:files({ "*.lua" })
+    table.sort(files)
+    testing.eq(files, { "a.lua", "ab.lua" })
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("finish names the failed checks and returns 1", function()
     local lint = lint_for("/")
     testing.eq(lint:finish(), 0)
