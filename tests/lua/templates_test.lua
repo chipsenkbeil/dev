@@ -64,6 +64,26 @@ testing.test(
     end
 )
 
+testing.test("render keeps a project's advisories ignore array in deny.toml", function()
+    local mark = "# --- project-specific entries below (dev sync keeps them) ---"
+    local want = '[advisories]\nignore = [\n    "RUSTSEC-1",\n]\nyanked = "deny"\n\n'
+    local root = support.sandbox({
+        ["deny.toml"] = want .. mark .. "\nkept = 1\n",
+    }, {})
+    local src = root .. "/src.toml"
+    assert(
+        fs.write(src, '[advisories]\nyanked = "deny"\n\n' .. mark .. "\n"),
+        "fixture setup failed"
+    )
+    testing.eq(
+        templates.render(
+            root,
+            { kind = Kind.RUST, dest = "deny.toml", src = src, channel = "stable" }
+        ),
+        want .. mark .. "\nkept = 1\n"
+    )
+end)
+
 testing.test("render keeps the project's text below the deny.toml and lint.lua markers", function()
     local root = support.sandbox({
         ["deny.toml"] = "old\n# --- project-specific entries below (dev sync keeps them) ---\nkept = 1\n\n",

@@ -250,6 +250,29 @@ function M.skip_pending(root, entries)
     return kept, pending
 end
 
+local function advisories_ignore(text)
+    local in_table, found = false, nil
+    for _, line in ipairs(lines_of(text)) do
+        if line == DENY_MARKER then
+            break
+        end
+        if found then
+            found[#found + 1] = line
+            if line:find("]", 1, true) then
+                break
+            end
+        elseif line:find("^%[") then
+            in_table = line == "[advisories]"
+        elseif in_table and line:find("^ignore%s*=") then
+            found = { line }
+            if line:find("]", 1, true) then
+                break
+            end
+        end
+    end
+    return found
+end
+
 local function deny_text(root, content)
     local text = fs.read(root .. "/deny.toml")
     local tail = text and after_marker(text, DENY_MARKER)
@@ -258,6 +281,17 @@ local function deny_text(root, content)
     end
     local cut = content:find(DENY_MARKER, 1, true)
     local head = cut and content:sub(1, cut - 1) or content
+    local ignore = advisories_ignore(text)
+    if ignore then
+        local lines = lines_of(head)
+        for i, line in ipairs(lines) do
+            if line == "[advisories]" then
+                table.insert(lines, i + 1, table.concat(ignore, "\n"))
+                break
+            end
+        end
+        head = table.concat(lines, "\n") .. "\n"
+    end
     return head .. DENY_MARKER .. "\n" .. strip(tail)
 end
 
