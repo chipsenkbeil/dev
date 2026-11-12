@@ -10,10 +10,12 @@ local support = require("support")
 local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
-local function setup()
-    local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n',
-    }, {})
+local function setup(files)
+    local all = { [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n' }
+    for name, text in pairs(files or {}) do
+        all[name] = text
+    end
+    local root = support.sandbox(all, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
     assert(fs.write(home .. "/.config/dev/config.toml", ""))
@@ -54,8 +56,8 @@ local function card_with(root, home, rows)
     return id
 end
 
-local function git_root()
-    local root, home = setup()
+local function git_root(files)
+    local root, home = setup(files)
     local function git(...)
         local argv =
             { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
@@ -225,6 +227,78 @@ testing.test("check records why a row failed without a run", function()
     testing.ok(record.rows[1].reason:find("dev-board-check-missing-path", 1, true), out)
     testing.eq(record.rows[1].run_id, "-")
     testing.eq(record.rows[2].reason, nil)
+end)
+
+local REFUSED_STUB = table.concat({
+    "echo 'error: the hub is draining since 1m ago by agent:infra: protocol 67 deploy; running jobs finish and nothing new starts until `ci fleet drain off`' >&2",
+    "exit 1",
+}, "\n")
+local TARGET_STUB = table.concat({
+    "echo 'error: Target linux is draining since 1m ago by agent:infra. Running jobs finish and nothing new starts on it until `ci fleet drain off linux`.' >&2",
+    "exit 1",
+}, "\n")
+local FAILED_STUB = table.concat({
+    "echo 'error: Failed to run the pipeline' >&2",
+    "exit 1",
+}, "\n")
+local REFUSAL =
+    "the hub is draining since 1m ago by agent:infra: protocol 67 deploy; running jobs finish and nothing new starts until `ci fleet drain off`"
+
+testing.test("check records no row for a run the hub refused", function()
+    local root, home = git_root({ ["stub-ci.sh"] = REFUSED_STUB })
+    local id = card_with(root, home, { "true", "sh stub-ci.sh", "false" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.eq(comments(home)[1], nil)
+end)
+
+testing.test("check prints the refusal reason of a refused run and exits 1", function()
+    local root, home = git_root({ ["stub-ci.sh"] = REFUSED_STUB })
+    local id = card_with(root, home, { "sh stub-ci.sh" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The ci hub refused row 1 (sh stub-ci.sh).", 1, true), out)
+    testing.ok(out:find("The hub said: " .. REFUSAL, 1, true), out)
+    testing.eq(out:find("passed", 1, true), nil, out)
+end)
+
+testing.test("check records no row for a run a draining target refused", function()
+    local root, home = git_root({ ["stub-ci.sh"] = TARGET_STUB })
+    local id = card_with(root, home, { "sh stub-ci.sh" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.eq(comments(home)[1], nil)
+end)
+
+testing.test("check records no row for a negated run the hub refused", function()
+    local root, home = git_root({ ["stub-ci.sh"] = REFUSED_STUB })
+    local id = card_with(root, home, { "! sh stub-ci.sh" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.eq(comments(home)[1], nil)
+end)
+
+testing.test("check run fails a negated row the hub refused", function()
+    local root = setup({ ["stub-ci.sh"] = REFUSED_STUB })
+    local row = check.run({
+        root = root,
+        run = "! sh stub-ci.sh",
+        argv = { "sh", "stub-ci.sh" },
+        seconds = 60,
+    })
+    testing.eq(row.result, "fail")
+    testing.eq(row.refused, REFUSAL)
+end)
+
+testing.test("check tells a refused run from a failed one", function()
+    local root, home = git_root({ ["stub-ci.sh"] = FAILED_STUB })
+    local id = card_with(root, home, { "sh stub-ci.sh" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.eq(out:find("The ci hub refused", 1, true), nil, out)
+    local record = check.parse(comments(home)[1].body)
+    testing.eq(record.rows[1].result, "fail")
+    testing.eq(record.rows[1].reason, "error: Failed to run the pipeline")
 end)
 
 testing.test("check records no reason for a row with a run id", function()

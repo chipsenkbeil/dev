@@ -19,6 +19,10 @@ local SHOWN_LINES = 12
 local NO_CHANGE = "-"
 local NO_RUN = "-"
 local REASON_INDENT = "  "
+local DRAIN_REFUSAL = "is draining"
+local DRAIN_NOTHING_NEW = "nothing new starts"
+local DRAIN_OFF = "`ci fleet drain off"
+local ERROR_PREFIX = "^error: "
 local TIMEOUT_EXIT = 124
 
 ---How a checks row ended.
@@ -38,6 +42,7 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
 ---@field reason string? the last line a failed row printed when it printed no run id
+---@field refused string? ci's refusal line when the hub refused the run, which no row records
 
 local GLOBAL_FLAGS = {
     ["--remote"] = true,
@@ -223,6 +228,18 @@ local function last_line(output)
     return last and last:match("^%s*(.-)%s*$")
 end
 
+local function drain_refusal(output)
+    for line in output:gmatch("[^\n]+") do
+        if
+            line:find(DRAIN_REFUSAL, 1, true)
+            and line:find(DRAIN_NOTHING_NEW, 1, true)
+            and line:find(DRAIN_OFF, 1, true)
+        then
+            return (line:gsub("^%s+", ""):gsub(ERROR_PREFIX, ""))
+        end
+    end
+end
+
 local function tail_of(output)
     local lines = {}
     for line in output:gmatch("[^\n]+") do
@@ -259,12 +276,15 @@ function M.run(opts)
             note = string.format("the command failed with exit %d, which is an error", code)
         end
     end
-    local result = passed and M.RESULT.PASS or M.RESULT.FAIL
+    local run_id = M.run_id(output)
+    local reason, refused
+    if not run_id and code ~= 0 then
+        refused = drain_refusal(output)
+    end
+    local result = passed and not refused and M.RESULT.PASS or M.RESULT.FAIL
     if code == TIMEOUT_EXIT then
         result = M.RESULT.TIMEOUT
     end
-    local run_id = M.run_id(output)
-    local reason
     if result == M.RESULT.FAIL and not run_id and not negated then
         reason = last_line(output)
     end
@@ -272,6 +292,7 @@ function M.run(opts)
         run = opts.run,
         run_id = run_id or NO_RUN,
         reason = reason,
+        refused = refused,
         result = result,
         code = code,
         tail = note and (note .. "\n" .. tail_of(output)) or tail_of(output),

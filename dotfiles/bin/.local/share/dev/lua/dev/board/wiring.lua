@@ -107,6 +107,17 @@ local function check_rows(opts)
                 [remote.CARD_ENV] = short,
             },
         })
+        if rows[i].refused then
+            return failure(
+                string.format(
+                    "The ci hub refused row %d (%s). Nothing was recorded on %s. The hub said: %s",
+                    i,
+                    card.checks[i],
+                    short,
+                    rows[i].refused
+                )
+            )
+        end
     end
     local lines = check_lines(rows)
     local after = check.state(backend.root)

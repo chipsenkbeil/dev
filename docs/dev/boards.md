@@ -2210,16 +2210,24 @@ command.
 
 - The run id is the one from the `run <id>` line of `ci run --follow`, so
   `ci logs <id>` reads the row's log. It is `-` when the row printed none.
-- A row that failed with no run id, such as a run the hub refused while it
-  drains, adds a second line under it, indented by two spaces, with the last
-  line the row printed. A row that printed a run id, a negated row and a row
-  that timed out add none.
+- A row that failed with no run id adds a second line under it, indented by
+  two spaces, with the last line the row printed. A row that printed a run id,
+  a negated row and a row that timed out add none.
+- A run the ci hub refused while it drains is not a failed row. The hub's
+  refusal is a line that says it `is draining`, that `nothing new starts` and
+  that names the `ci fleet drain off` command, for the whole hub or for one
+  target. When a row that printed no run id exits nonzero with that line, a
+  negated row included, dev stops at that row, records no comment, prints
+  `The ci hub refused row N (ROW). Nothing was recorded on CARD. The hub said: `
+  and the refusal line, and exits 1. A negated row the hub refused is a fail
+  wherever a row runs. Rows that already ran are not recorded either, and
+  dev does not wait or retry.
 
 ```
 dev-check: commit=<full commit id> change=<change id, - in git> mode=run
 1 pass 8cb600 dev --remote lint
 2 fail - dev --remote test
-  Target freebsd-15-dev is draining since 5m ago by agent:infra: image swap.
+  error: Failed to run the pipeline
 ```
 
 The result and the exit code:
