@@ -3000,6 +3000,8 @@ A move into any column but Icebox or Ready:
   `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it
   with dev board size, edit and outcome`
   (exit 1, on both backends, `dev.board.unplanned`).
+- An unsized card with children is told only `a size` and never the missing
+  outcomes, which the refusal names once the card is sized.
 - A `discard` is refused the same way for a missing size or heading, with no
   outcome needed, except an unplanned Icebox card given a `--reason`.
 

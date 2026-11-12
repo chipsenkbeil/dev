@@ -1150,6 +1150,33 @@ testing.test("move refuses an unsized card into every column but Icebox", functi
     testing.eq(backend.calls, { { "move", ID_C, support.COLUMN_NAME.ICEBOX } })
 end)
 
+testing.test("an unsized umbrella refusal names the size and not outcomes", function()
+    local card = planned()
+    card.color = nil
+    card.size = "unsized"
+    card.epic = { done = 0, total = 2 }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("it lacks a size;", 1, true), result.message)
+    testing.ok(not result.message:find("outcomes", 1, true), result.message)
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the refused move was sent")
+    end
+end)
+
+testing.test("an unsized card with no children still names size and outcomes", function()
+    local card = planned()
+    card.color = nil
+    card.size = "unsized"
+    local backend = fake({ card })
+    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("it lacks a size, Done when outcomes;", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
 testing.test("move refuses a sized card that lacks a section or outcomes outside Icebox", function()
     for _, column in ipairs({
         support.COLUMN.BACKLOG,

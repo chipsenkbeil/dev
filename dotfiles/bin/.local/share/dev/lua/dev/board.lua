@@ -958,7 +958,9 @@ function M.unplanned(card)
     end
     if card.need_outcomes then
         if card.outcomes == 0 and checklist_items(description) == 0 and not card.closing then
-            missing[#missing + 1] = "Done when outcomes"
+            if missing[1] ~= "a size" or card.children == 0 then
+                missing[#missing + 1] = "Done when outcomes"
+            end
         elseif (card.children > 0 or card.epic) and card.outcomes > M.MAX_EPIC_OUTCOMES then
             missing[#missing + 1] = epic_outcomes(card.outcomes)
         end
