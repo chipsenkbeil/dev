@@ -2246,6 +2246,11 @@ command.
   and the refusal line, and exits 1. A negated row the hub refused is a fail
   wherever a row runs. Rows that already ran are not recorded either, and
   dev does not wait or retry.
+- A row that printed no run id and exits 12 is refused the same way. Exit 12
+  is the `draining` code, which a drain wait ends with after 1 hour. The
+  refusal line is the one holding `The drain did not lift within`, else the
+  last line the row printed. A row that printed a run id and exits 12 is a
+  failed row.
 
 ```
 dev-check: commit=<full commit id> change=<change id, - in git> mode=run

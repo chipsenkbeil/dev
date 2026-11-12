@@ -335,6 +335,44 @@ testing.test("check tells a refused run from a failed one", function()
     testing.eq(record.rows[1].reason, "error: Failed to run the pipeline")
 end)
 
+local CAP_LINE =
+    "The drain did not lift within 60 minutes. The hub is draining since 1h ago by agent:infra: protocol 67 deploy."
+local CAP_STUB = "echo 'error: " .. CAP_LINE .. "' >&2\nexit 12"
+local EXIT_12_STUB = "echo 'error: something else' >&2\nexit 12"
+local RUN_THEN_12_STUB = "echo 'run 8cb600'\necho 'error: late' >&2\nexit 12"
+
+testing.test("a row that exits 12 with no run id is refused", function()
+    local root, home = git_root({ ["stub-ci.sh"] = EXIT_12_STUB })
+    local id = card_with(root, home, { "sh stub-ci.sh" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The ci hub refused row 1 (sh stub-ci.sh).", 1, true), out)
+    testing.ok(out:find("The hub said: error: something else", 1, true), out)
+    testing.eq(comments(home)[1], nil)
+end)
+
+testing.test("a row that exits 12 after its run id is not refused", function()
+    local root = setup({ ["stub-ci.sh"] = RUN_THEN_12_STUB })
+    local row = check.run({
+        root = root,
+        run = "sh stub-ci.sh",
+        argv = { "sh", "stub-ci.sh" },
+        seconds = 60,
+    })
+    testing.eq(row.result, "fail")
+    testing.eq(row.refused, nil)
+    testing.eq(row.run_id, "8cb600")
+end)
+
+testing.test("check prints the drain cap message of a refused run", function()
+    local root, home = git_root({ ["stub-ci.sh"] = CAP_STUB })
+    local id = card_with(root, home, { "sh stub-ci.sh" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The hub said: " .. CAP_LINE, 1, true), out)
+    testing.eq(comments(home)[1], nil)
+end)
+
 testing.test("check records no reason for a row with a run id", function()
     local root, home = git_root()
     local id = card_with(root, home, { "echo run 8cb600" })

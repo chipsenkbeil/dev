@@ -25,6 +25,8 @@ local DRAIN_NOTHING_NEW = "nothing new starts"
 local DRAIN_OFF = "`ci fleet drain off"
 local ERROR_PREFIX = "^error: "
 local TIMEOUT_EXIT = 124
+local DRAINING_EXIT = 12
+local DRAIN_CAP = "The drain did not lift within"
 local NOT_EXECUTABLE_EXIT = 126
 local NOT_FOUND_EXIT = 127
 local REMOTE_FLAG = "--remote"
@@ -247,6 +249,15 @@ local function drain_refusal(output)
     end
 end
 
+local function drain_cap_refusal(output)
+    for line in output:gmatch("[^\n]+") do
+        if line:find(DRAIN_CAP, 1, true) then
+            return (line:gsub("^%s+", ""):gsub(ERROR_PREFIX, ""))
+        end
+    end
+    return last_line(output)
+end
+
 local function tail_of(output)
     local lines = {}
     for line in output:gmatch("[^\n]+") do
@@ -345,6 +356,9 @@ function M.run(opts)
     local reason, refused
     if not run_id and code ~= 0 then
         refused = drain_refusal(output)
+        if not refused and code == DRAINING_EXIT then
+            refused = drain_cap_refusal(output)
+        end
     end
     local result = passed and not refused and M.RESULT.PASS or M.RESULT.FAIL
     if code == TIMEOUT_EXIT then
