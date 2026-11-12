@@ -1496,6 +1496,10 @@ project's kanban board so an agent never handles the API.
 
 It is machine-local. `--remote` refuses it, as does the root refusal.
 
+`dev help board` lists every subcommand. `tests/lua/help_test.lua` fails when a
+verb in the commands table or a board handler has no builtins row, or when a
+non-hidden row is missing from that listing.
+
 ### status
 
 `dev board status` prints the board the config names, with no network.

@@ -2,6 +2,11 @@ local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
+local builtins = require("dev.builtins")
+local cmd_board = require("dev.cmd.board")
+local help = require("dev.help")
+local registry = require("dev.registry")
+local ui = require("dev.ui")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
@@ -111,8 +116,6 @@ testing.test("--no-pager is accepted by help and changes nothing off a terminal"
 end)
 
 local function styled(root, width)
-    local help = require("dev.help")
-    local ui = require("dev.ui")
     local reg = require("dev.registry").load(root)
     local c = ui.context({ color = true, interactive = false, width = width })
     return help.overview_text({ root = root, args = {}, name = "help" }, reg, c)
@@ -141,8 +144,6 @@ testing.test(
 )
 
 testing.test("the filter hint is dim and follows the text", function()
-    local help = require("dev.help")
-    local ui = require("dev.ui")
     local out = help.hinted("body\n", ui.context({ color = true, interactive = false }))
     testing.eq(out, "body\n\n\27[2m& filters · / searches · q quits\27[0m\n")
     out = help.hinted("body\n", ui.context({ color = false, interactive = false }))
@@ -152,7 +153,6 @@ end)
 testing.test(
     "the curated view pages at any height and less gets -+F, topics keep the height rule",
     function()
-        local help = require("dev.help")
         local plan = help.page_plan({ curated = true }, nil, nil)
         testing.eq(plan.page.rows, 0)
         testing.eq(plan.page.allowed, true)
@@ -181,7 +181,6 @@ testing.test(
 )
 
 testing.test("the hint is for less only", function()
-    local help = require("dev.help")
     testing.ok(help.uses_less(nil))
     testing.ok(help.uses_less(""))
     testing.ok(help.uses_less("less -R"))
@@ -201,8 +200,6 @@ local function noun_fixture()
 end
 
 testing.test("noun help wraps a long subcommand description under its column", function()
-    local help = require("dev.help")
-    local ui = require("dev.ui")
     local text = require("dev.text")
     local reg = require("dev.registry").load(noun_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
@@ -221,8 +218,6 @@ testing.test("noun help wraps a long subcommand description under its column", f
 end)
 
 testing.test("noun help keeps a short subcommand description on one line", function()
-    local help = require("dev.help")
-    local ui = require("dev.ui")
     local reg = require("dev.registry").load(noun_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
     local plain = help.noun_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
@@ -237,4 +232,48 @@ testing.test("noun help keeps a short subcommand description on one line", funct
         ),
         out
     )
+end)
+
+local BOARD_SOURCE = REPO .. "/dotfiles/bin/.local/share/dev/lua/dev/cmd/board.lua"
+
+local function board_rows()
+    local rows = {}
+    for _, row in ipairs(builtins) do
+        if row.words[1] == "board" and #row.words == 2 then
+            rows[#rows + 1] = row
+        end
+    end
+    return rows
+end
+
+testing.test("dev help board names every board verb of the builtins table", function()
+    local reg = registry.load(project({}))
+    local c = ui.context({ color = false, interactive = false, width = 100 })
+    local out = help.noun_text(reg, c, { "board" })
+    local rows = board_rows()
+    testing.ok(#rows > 0, "no board rows")
+    for _, row in ipairs(rows) do
+        if not row.hidden then
+            testing.ok(out:find("\n  " .. row.words[2] .. " ", 1, true), row.words[2])
+        end
+    end
+end)
+
+testing.test("every board verb the commands table or handlers run has a builtins row", function()
+    local rowed = {}
+    for _, row in ipairs(board_rows()) do
+        rowed[row.words[2]] = true
+    end
+    local verbs = {}
+    for name in assert(fs.read(BOARD_SOURCE)):gmatch("\nfunction commands%.(%a+)%(") do
+        verbs[#verbs + 1] = name
+    end
+    for key in pairs(cmd_board.handlers) do
+        verbs[#verbs + 1] = key:match("^board (%a+)")
+    end
+    table.sort(verbs)
+    testing.ok(#verbs > 30, "found only " .. #verbs .. " board verbs")
+    for _, name in ipairs(verbs) do
+        testing.ok(rowed[name], "board " .. name .. " has no builtins row")
+    end
 end)
