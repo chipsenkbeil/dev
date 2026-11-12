@@ -103,7 +103,8 @@ card's bookmark.
   project's Lua verbs unwritten while any of its bash verbs exists, the
   rendering that keeps the project's text below the `lint.lua` and `deny.toml`
   markers, the `[workspace.lints]` block, the library-register attribute and
-  the guide part of `docs/STYLE.md`. It also holds `render_readme`, which
+  the guide part of `docs/STYLE.md`. It holds `EDITORCONFIG`, the text of the
+  `.editorconfig` that `init` writes. It also holds `render_readme`, which
   keeps the project's text from the `## Commands in this repo` line of
   `.dev/README.md` and takes everything above it from the template that
   `readme_template` names. `sync` and `init` both call it, and

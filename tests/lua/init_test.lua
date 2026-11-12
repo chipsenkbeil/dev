@@ -268,3 +268,21 @@ testing.test("a second init keeps an edited .dev/README.md", function()
     testing.eq(fs.read(root .. "/.dev/README.md"), edited)
     fs.remove(root, { recursive = true })
 end)
+
+testing.test("init writes an .editorconfig with indent_size 4", function()
+    if not dev_os.which("git") then
+        print("skip - git is not installed")
+        return
+    end
+    local root = project()
+    local out, code = support.dev(root, { "init", "--type", "lua", "--no-gerrit" })
+    testing.eq(code, 0)
+    testing.ok(out:find("created: .editorconfig", 1, true), out)
+    testing.ok(fs.read(root .. "/.editorconfig"):find("indent_size = 4", 1, true))
+    local edited = "root = true\n"
+    assert(fs.write(root .. "/.editorconfig", edited))
+    local again = support.dev(root, { "init", "--type", "lua", "--no-gerrit" })
+    testing.ok(again:find("skipped: .editorconfig exists", 1, true), again)
+    testing.eq(fs.read(root .. "/.editorconfig"), edited)
+    fs.remove(root, { recursive = true })
+end)

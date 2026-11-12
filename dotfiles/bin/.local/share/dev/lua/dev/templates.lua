@@ -18,6 +18,19 @@ M.STYLE_MARKER = "## This project"
 ---The marker line that starts the project's own part of `.dev/README.md`.
 M.README_MARKER = "## Commands in this repo"
 
+---The `.editorconfig` text for a new project.
+M.EDITORCONFIG = [[root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+
+[{Makefile,*.go}]
+indent_style = tab
+]]
+
 ---The lint sets' directory below the dotfiles clone.
 M.BASE = BASE
 

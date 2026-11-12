@@ -294,6 +294,10 @@ local function init_readme(run)
     end
 end
 
+local function init_editorconfig(run)
+    put_text(run, ".editorconfig", templates.EDITORCONFIG)
+end
+
 local function init_ci(run)
     put_text(run, ".ci/jobs.lua", pipelines.jobs(run.kind == Kind.RUST))
 end
@@ -497,6 +501,7 @@ function M.run(ctx, reg)
     init_style(run)
     init_readme(run)
     init_ci(run)
+    init_editorconfig(run)
     init_remotes(run)
     init_board_hint(run)
     summarize(run)
