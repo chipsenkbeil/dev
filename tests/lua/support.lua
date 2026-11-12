@@ -229,7 +229,7 @@ case "$last" in
 */api/tasks/]] .. first_id .. [[)
     body=$(cat "$ROOT/task.json")
     if [ -f "$ROOT/owner_name" ]; then
-        body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true,\"fence\":7},|")
+        body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true},\"claim\":{\"fence\":7},|")
     fi
     case "$*" in
     *"-X PATCH"*)
