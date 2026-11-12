@@ -2,7 +2,7 @@
 
 ## Global flags
 
-Six flags work anywhere before a `--` on the line, whatever the verb.
+Seven flags work anywhere before a `--` on the line, whatever the verb.
 
 - `-v` or `--verbose`: print each command before it runs, and export
   `VERBOSE=1` to it.
@@ -19,10 +19,14 @@ Six flags work anywhere before a `--` on the line, whatever the verb.
 - `-C DIR`: run as if dev started in `DIR`. The launcher enters `DIR` before
   `luajit` starts, so the project root, the config and a `--remote` run all
   come from `DIR`.
+- `--agent NAME`: export `DEV_AGENT=NAME` to the command. The launcher sets it
+  before `luajit` starts, so a plain `dev -C DIR --agent NAME board land CARD`
+  names its claimant with no `export` or env prefix in the call.
 
-A missing `DIR` or an empty word after `-C` is a usage error (exit 2).
+A missing `DIR` or an empty word after `-C` is a usage error (exit 2), and so is
+a missing or empty `NAME` after `--agent`.
 Repeated `-C` flags apply in turn, a relative one from the directory before.
-After the verb `guide` a `-C` is part of the question.
+After the verb `guide` a `-C` or `--agent` is part of the question.
 
 `-v` and `-vv` also stack as `-vvv`, and the count is capped at 2. Setting
 `VERBOSE` in the environment counts the same: empty, `no` and `false` mean

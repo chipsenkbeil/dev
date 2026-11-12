@@ -374,6 +374,7 @@ local function verb_text(ctx, reg, c, opts)
         .. "  --local     run this command here, whatever the default is (refused for a ci verb under DEV_AGENT)\n"
         .. "  --detach    with --remote, start the job and return\n"
         .. "  -C DIR      run as if dev started in DIR\n"
+        .. "  --agent NAME  export DEV_AGENT=NAME to the command\n"
     return table.concat(out)
 end
 

@@ -14,4 +14,5 @@ Global flags:
   --local     run this command here, whatever the default is (refused for a ci verb under DEV_AGENT)
   --detach    with --remote, start the job and return
   -C DIR      run as if dev started in DIR
+  --agent NAME  export DEV_AGENT=NAME to the command
 exit 0

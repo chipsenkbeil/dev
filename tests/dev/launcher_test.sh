@@ -250,6 +250,17 @@ assert_eq "-C names a relative directory as it was given" "$out" "dev: -C cannot
 out="$(PATH="$NOLUA" "$DEV" -C "" lint 2>&1)"
 assert_eq "-C with an empty word exits 2" "$?" "2"
 assert_eq "-C with an empty word says it needs a directory" "$out" "dev: -C needs a directory"
+
+rm -f "$ENV_OUT"
+PATH="$RECORDER:$NOLUA" "$DEV" --agent dotfiles/implementer/x lint >/dev/null 2>&1
+assert_eq "--agent exports DEV_AGENT to the verb" "$(grep '^DEV_AGENT=' "$ENV_OUT")" "DEV_AGENT=dotfiles/implementer/x"
+assert_eq "--agent is taken out of the arguments" "$(sed "s/^[^ ]* //" "$ARGS_OUT")" "lint"
+out="$(PATH="$NOLUA" "$DEV" --agent "" lint 2>&1)"
+assert_eq "--agent with an empty word exits 2" "$?" "2"
+assert_eq "--agent with an empty word says it needs a name" "$out" "The --agent flag needs a name."
+out="$(PATH="$NOLUA" "$DEV" lint --agent 2>&1)"
+assert_eq "--agent with no word after it exits 2" "$?" "2"
+assert_eq "--agent with no word after it says it needs a name" "$out" "The --agent flag needs a name."
 C_DOTFILES="$TMP/c-dotfiles"
 mkdir -p "$C_DOTFILES"
 

@@ -335,7 +335,8 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 --remote
 --local
 --detach
--C"
+-C
+--agent"
 out="$(run_dev "$rust" __flags sync)"
 assert_eq "__flags sync" "$out" "--check
 --yes
@@ -346,7 +347,8 @@ assert_eq "__flags sync" "$out" "--check
 --remote
 --local
 --detach
--C"
+-C
+--agent"
 out="$(run_dev "$rust" help sync)"
 assert_contains "help sync lists --yes" "$out" "--yes"
 assert_contains "help <verb> mentions the global flags" "$out" "Global flags:"
@@ -875,7 +877,8 @@ assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
 --remote
 --local
 --detach
--C"
+-C
+--agent"
 assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
 printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/widget.sh"
 chmod +x "$nn/.dev/widget.sh"

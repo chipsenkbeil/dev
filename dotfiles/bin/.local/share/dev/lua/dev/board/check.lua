@@ -77,7 +77,7 @@ local function bare_name(row)
         local word = words[i]
         if word == "--remote" then
             remote = true
-        elseif word == "-C" then
+        elseif word == "-C" or word == "--agent" then
             i = i + 1
         elseif word:sub(1, 1) ~= "-" then
             verb_at = i
@@ -95,7 +95,7 @@ local function bare_name(row)
         local word = words[k]
         if word == "--remote" then
             remote = true
-        elseif word == "-C" then
+        elseif word == "-C" or word == "--agent" then
             k = k + 1
         elseif not (GLOBAL_FLAGS[word] or word:find("^%-v+$")) then
             extra = extra or word
