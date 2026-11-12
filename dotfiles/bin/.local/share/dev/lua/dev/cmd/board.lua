@@ -6,6 +6,7 @@ local config = require("dev.config")
 local device = require("dev.board.device")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
+local guards = require("dev.board.guards")
 local init = require("dev.board.init")
 local json = require("dev.json")
 local land = require("dev.board.land")
@@ -24,8 +25,12 @@ local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
 local NO_BOARD = "dev: no board for this project"
-local USAGE = 2
-local FAILURE = 1
+local USAGE = guards.USAGE
+local FAILURE = guards.FAILURE
+local usage = guards.usage
+local failure = guards.failure
+local unqueued = guards.unqueued
+local agent_name = guards.agent_name
 local runner = {
     FLAG = "--max-size",
     FULL = 3,
@@ -34,7 +39,7 @@ local runner = {
 }
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
-local CLAIMANT_CHARS = 200
+local CLAIMANT_CHARS = guards.CLAIMANT_CHARS
 local NAME_PATTERN = '^[^%c"\\]+$'
 local NAME_CHARS = 100
 local ADMIN_SCOPE = "admin"
@@ -66,7 +71,7 @@ local KIND_FLAG = "--kind"
 local BY_FLAG = "--by"
 local REV_FLAG = "--rev"
 local GROUP_FLAG = "--group"
-local AS_FLAG = "--as"
+local AS_FLAG = guards.AS_FLAG
 local REASON_FLAG = "--reason"
 local NOTE_DECISION = "decision"
 local RUN_END_FLAG = "--end"
@@ -140,14 +145,6 @@ end
 ---   a board uses
 local M = { handlers = {} }
 
-local function usage(message)
-    return { message = message, code = USAGE }
-end
-
-local function failure(message)
-    return { message = message, code = FAILURE }
-end
-
 function runner.full(message)
     return { message = message, code = runner.FULL }
 end
@@ -186,36 +183,6 @@ local function named_column(backend, word)
         return nil, usage("unknown column " .. word .. ", the columns are " .. backend.roles:help())
     end
     return column
-end
-
----Refuse a board that still has the In Review column and lacks a stage column.
----@param backend dev.board.Backend the board
----@return dev.cmd.board.Result? refusal naming `dev board init`, nil when the board needs no
----   migration
----@private
-function M.__stage_refusal(backend)
-    local rows = backend:columns()
-    if type(rows) ~= "table" then
-        return nil
-    end
-    local has = {}
-    for _, row in ipairs(rows) do
-        has[row.name:lower()] = true
-    end
-    if not has["in review"] then
-        return nil
-    end
-    local roles = backend.roles or board.roles()
-    for _, name in ipairs({ roles.review, roles.verify, roles.release }) do
-        if not has[name:lower()] then
-            return failure(
-                "the board has an In Review column and no "
-                    .. name
-                    .. " column, so run dev board init to move the board to the stage columns"
-            )
-        end
-    end
-    return nil
 end
 
 local function sized(word)
@@ -285,25 +252,6 @@ end
 
 local function card_line(card)
     return board.table_lines({ board.cells(card) })[1]
-end
-
-local function agent_name(flag)
-    local name = flag
-    if name == nil then
-        name = os.getenv("DEV_AGENT")
-    end
-    if name == nil or (flag == nil and name == "") then
-        return nil
-    end
-    if #name > CLAIMANT_CHARS or not name:find("^[%w._/-]+$") then
-        return nil,
-            usage(
-                "an agent name is one word of letters, digits and . - _ / up to "
-                    .. CLAIMANT_CHARS
-                    .. " characters"
-            )
-    end
-    return name
 end
 
 ---Refuse a name that is not <repo>/<role>[/<card>] when it would take a new claim.
@@ -406,82 +354,6 @@ local function other_card(backend, word)
         return nil, nil, err
     end
     return other, (other_name and other_name .. ":" or "") .. other.id:sub(1, board.MIN_PREFIX)
-end
-
----Refuse the first checks row that is not a plain command.
----@param runs string[] the rows as given
----@return dev.cmd.board.Result? refusal a usage error naming the row, nil when every row is plain
----@private
-function M.__row_refusal(runs)
-    for _, run in ipairs(runs) do
-        local why = check.refusal(run)
-        if why then
-            return usage(why)
-        end
-    end
-    return nil
-end
-
----Refuse a verb run outside the jj workspace `dev ws new` names for the card.
----@param backend dev.board.Backend the board the command runs on
----@param short string the card's short id
----@return dev.cmd.board.Result? refusal a failure naming the workspace found, nil when the verb may
----   go on
----@private
-function M.__workspace_refusal(backend, short)
-    if not backend.root then
-        return nil
-    end
-    local problem = land.workspace_problem(backend.root, short)
-    if problem then
-        return failure(problem)
-    end
-    return nil
-end
-
----Open the Pomb board named `name` with this board's column map, root and roles.
----@param backend dev.board.Backend the board the command runs on
----@param name string the other board's name
----@return dev.board.Backend? home the named board, nil when it cannot be opened
----@return string? why the reason, set when home is nil
----@private
-function M.__other_home(backend, name)
-    local home, why = backend:other_board(name)
-    if not home then
-        return nil, why
-    end
-    local found, message = home:find()
-    if found == nil then
-        return nil, message
-    end
-    if not found then
-        return nil, "pomb has no board named " .. name
-    end
-    home.column_map = backend.column_map
-    home.root = backend.root
-    home.roles = board.roles(backend.column_map, home:done_columns() or {})
-    return home
-end
-
----Move to the board named by a `--board NAME` right after the card, else keep this one.
----@param backend dev.board.Backend the board the command runs on
----@param args string[] the command's words, the card first
----@return dev.board.Backend? home the board to act on, nil when refused
----@return string[]? rest the words with `--board NAME` removed, nil when refused
----@return dev.cmd.board.Result? refused the usage error or failure, set when home is nil
----@private
-function M.__on_board(backend, args)
-    if args[2] ~= "--board" then
-        return backend, args
-    end
-    if not args[3] then
-        return nil, nil, usage("--board needs a board name")
-    end
-    local home, why = M.__other_home(backend, args[3])
-    if not home then
-        return nil, nil, failure(why)
-    end
-    return home, { args[1], unpack(args, 4) }
 end
 
 local commands = {}
@@ -667,7 +539,7 @@ function commands.add(backend, args)
         return usage("needs a card name")
     end
     if flags["--board"] then
-        local home, why = M.__other_home(backend, flags["--board"])
+        local home, why = guards.other_home(backend, flags["--board"])
         if not home then
             return failure(why)
         end
@@ -709,7 +581,7 @@ function commands.add(backend, args)
         end
         checks[#checks + 1] = run
     end
-    local refused_row = M.__row_refusal(checks)
+    local refused_row = guards.row_refusal(checks)
     if refused_row then
         return refused_row
     end
@@ -1172,7 +1044,7 @@ local function card_view(backend, card)
 end
 
 function commands.show(backend, args)
-    local home, rest, refused = M.__on_board(backend, args)
+    local home, rest, refused = guards.on_board(backend, args)
     if not home then
         return refused
     end
@@ -1268,7 +1140,7 @@ function commands.note(backend, args)
     if args[2] == "--board" and (args[4] == EDIT_FLAG or args[4] == DELETE_FLAG) then
         return usage("--board takes no " .. EDIT_FLAG .. " or " .. DELETE_FLAG)
     end
-    local home, rest, refused = M.__on_board(backend, args)
+    local home, rest, refused = guards.on_board(backend, args)
     if not home then
         return refused
     end
@@ -1366,83 +1238,6 @@ local function claim_card(backend, card, name)
         fence
 end
 
----Mark a refusal as one a queue must not keep.
----@param result dev.cmd.board.Result the refusal
----@return dev.cmd.board.Result result the same refusal, marked unqueued
-local function unqueued(result)
-    result.unqueued = true
-    return result
-end
-
----Refuse a move of an epic with an open child into a WIP-limited or done column.
----@param backend dev.board.Backend the board
----@param card dev.board.Card the card
----@param column string the column it moves to
----@param kids {done: integer, total: integer}? the epic's children from its task read
----@return dev.cmd.board.Result? err the refusal, nil when the move is allowed
-local function children_refusal(backend, card, column, kids)
-    local unfinished = board.open_children(kids)
-    if unfinished == 0 or card.column == column then
-        return nil
-    end
-    local rows, why = backend:columns()
-    if not rows then
-        return unqueued(failure(why))
-    end
-    for _, row in ipairs(rows) do
-        local kind = row.is_done and "done" or row.wip_limit and "WIP-limited"
-        if kind and row.name:lower() == column:lower() then
-            return unqueued(
-                failure(
-                    string.format(
-                        "%s is an epic and cannot enter %s, a %s column: %d of %d children are open",
-                        card.id:sub(1, board.MIN_PREFIX),
-                        row.name,
-                        kind,
-                        unfinished,
-                        kids.total
-                    )
-                )
-            )
-        end
-    end
-end
-
----Refuse a move to Done that the card's outcomes do not allow.
----@param card dev.board.Card the card
----@return dev.cmd.board.Result? err the refusal, nil when every outcome is ticked
-local function done_refusal(card)
-    local id = card.id:sub(1, board.MIN_PREFIX)
-    if card.outcomes_unreadable then
-        return unqueued(
-            failure(
-                id
-                    .. " cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked"
-            )
-        )
-    end
-    local open = {}
-    for i, outcome in ipairs(card.outcomes) do
-        if not outcome.done then
-            open[#open + 1] = i .. ". " .. outcome.name
-        end
-    end
-    if #open == 0 then
-        return nil
-    end
-    return unqueued(
-        failure(
-            string.format(
-                "%s cannot move to Done: %d of %d outcomes are unticked (%s); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it",
-                id,
-                #open,
-                #card.outcomes,
-                table.concat(open, ", ")
-            )
-        )
-    )
-end
-
 ---Refuse a move that takes a card out of In Progress before its claimant has noted.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card being moved
@@ -1502,7 +1297,7 @@ function runner.__move_once(backend, args, opts)
         or column == roles.verify
         or column == roles.release
     then
-        local refused = M.__stage_refusal(backend)
+        local refused = guards.stage_refusal(backend)
         if refused then
             return refused
         end
@@ -1523,7 +1318,7 @@ function runner.__move_once(backend, args, opts)
         end
     end
     if to_done then
-        local refused = done_refusal(card)
+        local refused = guards.done_refusal(card)
         if refused then
             return refused
         end
@@ -1573,7 +1368,7 @@ function runner.__move_once(backend, args, opts)
         end
     end
     if not (opts and opts.drop) then
-        local refused = children_refusal(backend, card, column, kids)
+        local refused = guards.children_refusal(backend, card, column, kids)
         if refused then
             return refused
         end
@@ -2135,69 +1930,6 @@ local function split_ticker(args)
     return args
 end
 
-local function tick_refused(card, flag)
-    if not card.claimant and not flag then
-        return nil
-    end
-    local ticker, why = agent_name(flag)
-    if why then
-        return why
-    end
-    if not card.claimant then
-        return nil, ticker
-    end
-    if not ticker then
-        return usage(
-            "ticking an outcome on a claimed card needs the ticker's name, with "
-                .. AS_FLAG
-                .. " NAME or DEV_AGENT"
-        )
-    end
-    if ticker == card.claimant then
-        return failure(
-            card.id:sub(1, board.MIN_PREFIX)
-                .. " is claimed by "
-                .. ticker
-                .. ", so its claimant cannot tick its outcomes"
-        )
-    end
-    return nil, ticker
-end
-
-local function claimant_refused(backend, card, opts)
-    local names = {}
-    local given, env = opts.as, os.getenv("DEV_AGENT")
-    if given and given:find("/", 1, true) then
-        names[#names + 1] = given
-    end
-    if env and env:find("/", 1, true) then
-        names[#names + 1] = env
-    end
-    if #names == 0 then
-        return nil
-    end
-    local past, why = backend:comments(card.id)
-    if not past then
-        return failure(why)
-    end
-    local claimed = board.claimants(past)
-    for _, name in ipairs(names) do
-        if name == card.claimant or claimed[name] then
-            return failure(
-                card.id:sub(1, board.MIN_PREFIX)
-                    .. (name == card.claimant and " is" or " was")
-                    .. " claimed by "
-                    .. name
-                    .. ", so "
-                    .. name
-                    .. " cannot "
-                    .. opts.what
-                    .. ". Pass the change back with a note instead"
-            )
-        end
-    end
-end
-
 local function convert_outcomes(backend, card, opts)
     local fence = opts.fence
     local prefix = card.id:sub(1, board.MIN_PREFIX)
@@ -2212,7 +1944,7 @@ local function convert_outcomes(backend, card, opts)
     for _, item in ipairs(items) do
         ticks = ticks or item.done
     end
-    local refused = ticks and tick_refused(card, opts.flag)
+    local refused = ticks and guards.tick_refused(card, opts.flag)
     if refused then
         return refused
     end
@@ -2328,7 +2060,7 @@ function commands.outcome(backend, args)
             return err
         end
         local refused =
-            claimant_refused(backend, card, { what = "add its outcomes", as = ticker_flag })
+            guards.claimant_refused(backend, card, { what = "add its outcomes", as = ticker_flag })
         if refused then
             return refused
         end
@@ -2368,7 +2100,7 @@ function commands.outcome(backend, args)
             return usage(REASON_FLAG .. " needs the reason")
         end
         local agent = os.getenv("DEV_AGENT") or ""
-        if not M.is_lead(agent) then
+        if not guards.is_lead(agent) then
             return failure(
                 "only the lead deletes an outcome, and DEV_AGENT "
                     .. agent
@@ -2391,14 +2123,17 @@ function commands.outcome(backend, args)
     end
     local ticker
     if mode == OutcomeMode.ADD or mode == OutcomeMode.RENAME or mode == OutcomeMode.DELETE then
-        local refused =
-            claimant_refused(backend, card, { what = mode .. " its outcomes", as = ticker_flag })
+        local refused = guards.claimant_refused(
+            backend,
+            card,
+            { what = mode .. " its outcomes", as = ticker_flag }
+        )
         if refused then
             return refused
         end
     elseif mode == OutcomeMode.TICK then
         local refused
-        refused, ticker = tick_refused(card, ticker_flag)
+        refused, ticker = guards.tick_refused(card, ticker_flag)
         if refused then
             return refused
         end
@@ -2615,7 +2350,7 @@ function commands.checks(backend, args)
     for pos = 2, #args do
         runs[#runs + 1] = args[pos]
     end
-    local refused_row = M.__row_refusal(runs)
+    local refused_row = guards.row_refusal(runs)
     if refused_row then
         return refused_row
     end
@@ -2623,7 +2358,7 @@ function commands.checks(backend, args)
     if not found then
         return err
     end
-    local refused = claimant_refused(backend, found, { what = "change its checks" })
+    local refused = guards.claimant_refused(backend, found, { what = "change its checks" })
     if refused then
         return refused
     end
@@ -2778,7 +2513,7 @@ function commands.check(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
-    local elsewhere = M.__workspace_refusal(backend, short)
+    local elsewhere = guards.workspace_refusal(backend, short)
     if elsewhere then
         return elsewhere
     end
@@ -2927,7 +2662,7 @@ local function card_problems(backend, card, who)
             .. ", and only that claimant lands it, not "
             .. who.name
     end
-    local open = done_refusal(card)
+    local open = guards.done_refusal(card)
     if open then
         problems[#problems + 1] = open.message
     end
@@ -3262,7 +2997,7 @@ function commands.land(backend, args)
     if not name then
         return usage("needs DEV_AGENT, the name that lands the card")
     end
-    local legacy = M.__stage_refusal(backend)
+    local legacy = guards.stage_refusal(backend)
     if legacy then
         return legacy
     end
@@ -3271,7 +3006,7 @@ function commands.land(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
-    local elsewhere = M.__workspace_refusal(backend, short)
+    local elsewhere = guards.workspace_refusal(backend, short)
     if elsewhere then
         return elsewhere
     end
@@ -3462,7 +3197,7 @@ end
 ---@param name string what to call that revision
 ---@return string? reason why it stays, nil when it may move
 function Ship.reason(backend, card, commit, name)
-    if done_refusal(card) then
+    if guards.done_refusal(card) then
         return "an outcome is not ticked"
     end
     local comments = backend:comments(card.id)
@@ -3634,7 +3369,7 @@ function commands.turn(backend, args)
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
     if not releasing then
-        local elsewhere = M.__workspace_refusal(backend, short)
+        local elsewhere = guards.workspace_refusal(backend, short)
         if elsewhere then
             return elsewhere
         end
@@ -3867,27 +3602,6 @@ function commands.epic(backend, args)
     return { output = "made " .. card.id:sub(1, board.MIN_PREFIX) .. " an epic" }
 end
 
-function M.is_lead(name)
-    if not name:find("/", 1, true) then
-        return true
-    end
-    return name:match("^[^/]*/([^/]*)") == "lead"
-end
-
-local function delete_refusal(action)
-    local name = os.getenv("DEV_AGENT") or ""
-    if not M.is_lead(name) then
-        return failure(
-            "only the lead "
-                .. (action or "deletes a card")
-                .. ", and DEV_AGENT "
-                .. name
-                .. " is not a lead name, whose role segment is lead; ask the lead"
-                .. (action and "" or ", with the card and the reason")
-        )
-    end
-end
-
 function commands.delete(backend, args)
     local flags, words = parse(args, { ["--reason"] = true })
     if not flags then
@@ -3897,7 +3611,7 @@ function commands.delete(backend, args)
     if #words ~= 1 or reason == nil or reason:find("^%s*$") then
         return usage("needs a card and --reason TEXT")
     end
-    local refused = delete_refusal()
+    local refused = guards.delete_refusal()
     if refused then
         return refused
     end
@@ -5257,7 +4971,7 @@ local function open_board(ctx)
 end
 
 local function open_lead(ctx, action, permission)
-    local refused = delete_refusal(action)
+    local refused = guards.delete_refusal(action)
     if refused then
         verb.die("dev: " .. refused.message)
     end
@@ -5597,7 +5311,7 @@ function M.wait(backend, args, opts)
         )
     end
     local roles = backend.roles or board.roles()
-    local legacy = M.__stage_refusal(backend)
+    local legacy = guards.stage_refusal(backend)
     if legacy then
         return legacy
     end
