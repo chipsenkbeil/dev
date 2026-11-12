@@ -173,6 +173,7 @@ M.COLUMN_NAME = {
     BLOCKED = "Blocked",
     DONE = "Done",
     ICEBOX = "Icebox",
+    IN_REVIEW = "In Review",
     PROGRESS = "In Progress",
     READY = "Ready",
     RELEASE = "Release",

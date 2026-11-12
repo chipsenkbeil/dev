@@ -94,6 +94,9 @@ for word in "$@"; do
 done
 exec "$REAL_JJ" "$@"
 ]]
+local LAND_TRUNK_KEEP = "keep"
+local LAND_TRUNK_REWRITE = "rewrite"
+local KIND_DONE = "done"
 local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
 local PAST_HOLD_SECONDS = 2.2
@@ -484,7 +487,7 @@ end
 testing.test("land on a board with In Review and no Verify names dev board init", function()
     local backend = fake_backend("/nonexistent")
     backend.rows = {
-        { name = "In Review", is_done = false },
+        { name = support.COLUMN_NAME.IN_REVIEW, is_done = false },
         { name = support.COLUMN_NAME.DONE, is_done = true },
     }
     local result = land_as_lander(backend)
@@ -651,7 +654,13 @@ if has_jj then
             must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
             approve(root, home, log, id)
             local commit = head(root)
-            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            local out, code = dev(
+                root,
+                home,
+                log,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
             testing.eq(code, 0, out)
             testing.ok(
                 out:find(
@@ -664,7 +673,7 @@ if has_jj then
             testing.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
             local list = comments(home)
             local last = list[#list]
-            testing.eq(last.kind, "done")
+            testing.eq(last.kind, KIND_DONE)
             testing.ok(last.body:find("Landed commit " .. commit:sub(1, 12), 1, true), last.body)
             testing.eq(column_of(home), support.COLUMN_NAME.DONE)
         end
@@ -677,7 +686,13 @@ if has_jj then
             local id = new_card(root, home, log)
             must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
             approve(root, home, log, id)
-            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            local out, code = dev(
+                root,
+                home,
+                log,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
             testing.eq(code, 0, out)
             testing.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
             testing.ok(landed_calls(log):find("DEV_BOARD_LAND=1", 1, true), landed_calls(log))
@@ -698,7 +713,7 @@ if has_jj then
             end
         end
         restore()
-        local as_old = { DEV_AGENT = old, LAND_TRUNK = "keep" }
+        local as_old = { DEV_AGENT = old, LAND_TRUNK = LAND_TRUNK_KEEP }
         local out, code = dev(root, home, log, { "board", "check", id }, as_old)
         testing.eq(code, 0, out)
         out, code = dev(root, home, log, { "board", "land", id }, as_old)
@@ -721,11 +736,17 @@ if has_jj then
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
         approve(root, home, log, id)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.ok(out:find("and moved it to Release", 1, true), out)
         local list = comments(home, id)
-        testing.eq(list[#list].kind, "done")
+        testing.eq(list[#list].kind, KIND_DONE)
         testing.ok(
             list[#list].body:find("waits in Release for the deploy", 1, true),
             list[#list].body
@@ -738,7 +759,13 @@ if has_jj then
         local id = new_card(root, home, log)
         must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
         approve(root, home, log, id)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.ok(out:find("and moved it to Done", 1, true), out)
         testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
@@ -763,7 +790,13 @@ if has_jj then
         must(dev(root, home, log, { "board", "move", id, support.COLUMN.VERIFY }))
         approve(root, home, log, id)
         local before = head(root)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "rewrite" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_REWRITE }
+        )
         testing.eq(code, 0, out)
         local after = jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
         testing.ok(before ~= after, "the stub must rewrite the commit")
@@ -790,7 +823,7 @@ if has_jj then
             testing.ok(out:find("trunk could not be read", 1, true), out)
             local list = comments(home)
             local last = list[#list]
-            testing.eq(last.kind, "done")
+            testing.eq(last.kind, KIND_DONE)
             testing.ok(last.body:find(commit:sub(1, 12), 1, true), last.body)
             testing.ok(last.body:find("may differ", 1, true), last.body)
             testing.eq(column_of(home), support.COLUMN_NAME.DONE)
@@ -877,7 +910,13 @@ if has_jj then
         refused(root, home, log, id, { "claimed by dotfiles/builder", "not dotfiles/lander" })
         must(dev(root, home, log, { "board", "take", id, "--from", "dotfiles/builder" }))
         testing.eq(claim_of(home, id).claimant, "dotfiles/lander")
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.ok(out:find("landed " .. id, 1, true), out)
         testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
@@ -1025,7 +1064,13 @@ if has_jj then
         )
         git(other, "commit", "-q", "--allow-empty", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.eq(out:find("trunk has moved", 1, true), nil, out)
         testing.eq(column_of(home), support.COLUMN_NAME.DONE)
@@ -1054,7 +1099,7 @@ if has_jj then
                 home,
                 log,
                 { "board", "land", id, "--wait", "0" },
-                { LAND_TRUNK = "keep" }
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
             testing.eq(column_of(home), support.COLUMN_NAME.DONE)
@@ -1214,7 +1259,13 @@ if has_jj then
                 dev(root, home, log, { "board", "label", id, "+standalone-ok" }, { DEV_AGENT = "" })
             )
             approve(root, home, log, id)
-            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            local out, code = dev(
+                root,
+                home,
+                log,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
             testing.eq(code, 0, out)
             testing.eq(column_of(home), board.DEFAULT_NAMES.done)
         end
@@ -1257,7 +1308,13 @@ if has_jj then
     testing.test("land lands a template change with a dev module it does not require", function()
         local root, home, log = jj_project()
         local id = template_ready(root, home, log, { module = "other.lua" })
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.eq(column_of(home), board.DEFAULT_NAMES.done)
     end)
@@ -1265,7 +1322,13 @@ if has_jj then
     testing.test("land lands a commit that changes only the lint-set template", function()
         local root, home, log = jj_project()
         local id = template_ready(root, home, log, {})
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.eq(column_of(home), board.DEFAULT_NAMES.done)
     end)
@@ -1281,7 +1344,13 @@ if has_jj then
             testing.ok(first:find("held by other since", 1, true), first)
             trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
             release_turn(home, held)
-            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            local out, code = dev(
+                root,
+                home,
+                log,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
             testing.eq(code, 0, out)
             testing.ok(not out:find("trunk has moved", 1, true), out)
             testing.eq(column_of(home), support.COLUMN_NAME.DONE)
@@ -1298,11 +1367,17 @@ if has_jj then
             trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
             rebase_onto_trunk(root)
             testing.ok(head(root) ~= before, "the rebase must rewrite the commit")
-            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            local out, code = dev(
+                root,
+                home,
+                log,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
             testing.eq(code, 0, out)
             local list = comments(home)
             local last = list[#list]
-            testing.eq(last.kind, "done")
+            testing.eq(last.kind, KIND_DONE)
             testing.ok(
                 last.body:find("carried over from commit " .. before:sub(1, 12), 1, true),
                 last.body
@@ -1322,7 +1397,7 @@ if has_jj then
             home,
             log,
             { "board", "land", id },
-            { LAND_TRUNK = "keep", FETCH_LOG = reads }
+            { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_LOG = reads }
         )
         testing.eq(code, 0, out)
         local list = comments(home)
@@ -1340,7 +1415,13 @@ if has_jj then
         local id = review_ready(root, home, log, bare)
         trunk_moves(root, bare, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(root)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.ok(fs.is_file(marker), "the recheck row never ran")
     end)
@@ -1362,7 +1443,13 @@ if has_jj then
         local marker = support.tempdir() .. "/rechecked"
         local root, home, log, bare = recheck_project("touch " .. marker)
         local id = review_ready(root, home, log, bare)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.ok(not fs.is_file(marker), "the recheck row ran")
     end)
@@ -1424,7 +1511,13 @@ if has_jj then
         trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
         rebase_onto_trunk(root)
         testing.ok(head(root) ~= before, "the rebase must rewrite the commit")
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         local list = comments(home)
         testing.ok(
@@ -1480,7 +1573,13 @@ if has_jj then
         local id = review_ready(root, home, log, bare)
         trunk_moves(root, bare, { ["lib/core.txt"] = "core\n" })
         rebase_onto_trunk(root)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.eq(column_of(home), support.COLUMN_NAME.DONE)
     end)
@@ -1581,7 +1680,13 @@ if has_jj then
             bare = bare,
             final_shared = "a\nb\nc\nd\ne\nf\nG\n",
         })
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         local list = comments(home)
         testing.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
@@ -1785,7 +1890,7 @@ if has_jj then
             home,
             log,
             { "board", "land", id },
-            { LAND_TRUNK = "keep", FETCH_REFUSALS = "1", FETCH_COUNT = count }
+            { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_REFUSALS = "1", FETCH_COUNT = count }
         )
         testing.eq(code, 0, out)
         testing.eq(fs.read(count), "1\n")
@@ -1922,7 +2027,7 @@ if has_jj then
             approve(root, home, log, id)
             local commit = head(root)
             local out, code = dev(root, home, log, { "board", "land", id }, {
-                LAND_TRUNK = "keep",
+                LAND_TRUNK = LAND_TRUNK_KEEP,
                 BREAK_BOARD = home .. "/state/dev/boards/mine.json",
             })
             testing.eq(code, 1, out)
@@ -1948,7 +2053,7 @@ if has_jj then
             approve(root, home, log, id)
             local before = head(root)
             local out, code = dev(root, home, log, { "board", "land", id }, {
-                LAND_TRUNK = "rewrite",
+                LAND_TRUNK = LAND_TRUNK_REWRITE,
                 FETCH_FAIL = "1",
             })
             testing.eq(code, 0, out)
@@ -1959,7 +2064,7 @@ if has_jj then
             testing.eq(out:find(after:sub(1, 12), 1, true), nil, out)
             local list = comments(home)
             local last = list[#list]
-            testing.eq(last.kind, "done")
+            testing.eq(last.kind, KIND_DONE)
             testing.ok(last.body:find(before:sub(1, 12), 1, true), last.body)
             testing.ok(last.body:find("may differ", 1, true), last.body)
             testing.eq(column_of(home), support.COLUMN_NAME.DONE)
@@ -1983,7 +2088,7 @@ if has_jj then
         must(dev(root, home, log, { "board", "turn", id }))
         local commit = head(root)
         local code
-        out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(turn_holder(home), nil)
         testing.eq(code, 1, out)
         testing.ok(landed_calls(log):find("land --yes", 1, true), landed_calls(log))
@@ -1994,7 +2099,7 @@ if has_jj then
         testing.ok(out:find("but the move to Done failed", 1, true), out)
         testing.ok(out:find("1 of 1 children are open", 1, true), out)
         local list = comments(home, id)
-        testing.eq(list[#list].kind, "done")
+        testing.eq(list[#list].kind, KIND_DONE)
         testing.eq(column_of(home, id), support.COLUMN_NAME.VERIFY)
     end)
 
@@ -2012,7 +2117,7 @@ if has_jj then
         testing.ok(out:find("holding the landing turn for " .. id, 1, true), out)
         approve(root, home, log, id)
         testing.eq(assert(turn_holder(home)).name, "dotfiles/lander")
-        out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
         testing.eq(turn_holder(home), nil)
@@ -2043,7 +2148,13 @@ if has_jj then
         approve(root, home, log, id)
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
         dev_os.nap(PAST_HOLD_SECONDS)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 1, out)
         testing.ok(out:find("ran out or was taken by another", 1, true), out)
         testing.eq(landed_calls(log), "")
@@ -2057,7 +2168,13 @@ if has_jj then
         must(dev(root, home, log, { "board", "turn", id, "--hold", "1" }))
         dev_os.nap(PAST_HOLD_SECONDS)
         must(dev(root, home, log, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 1, out)
         testing.ok(out:find("ran out or was taken by another", 1, true), out)
         testing.eq(landed_calls(log), "")
@@ -2095,7 +2212,13 @@ if has_jj then
             end
             restore()
             testing.ok(claim_of(home, id), "the card must be claimed before the land")
-            local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            local out, code = dev(
+                root,
+                home,
+                log,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
             testing.eq(code, 0, out)
             testing.eq(claim_of(home, id), nil)
         end
@@ -2144,7 +2267,13 @@ if has_jj then
             local out, code = dev(root, home, log, { "board", "turn", id, "--release" })
             testing.eq(code, 0, out)
             testing.ok(out:find("was already gone", 1, true), out)
-            out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+            out, code = dev(
+                root,
+                home,
+                log,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
             testing.eq(code, 0, out)
             testing.eq(column_of(home, id), support.COLUMN_NAME.DONE)
         end
@@ -2154,7 +2283,7 @@ if has_jj then
         local root, home, log = jj_project()
         local id = in_verify(root, home, log)
         approve(root, home, log, id)
-        must(dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" }))
+        must(dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP }))
         local out, code = dev(root, home, log, { "board", "turn", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("is done", 1, true), out)
@@ -2253,7 +2382,7 @@ if has_jj then
         end
         testing.ok(fs.exists(started), "the other card's check must be running")
         local landed, code = dev(root, home, log, { "board", "land", landing, "--wait", "0" }, {
-            LAND_TRUNK = "keep",
+            LAND_TRUNK = LAND_TRUNK_KEEP,
         })
         testing.eq(code, 0, landed)
         testing.eq(column_of(home, landing), support.COLUMN_NAME.DONE)
@@ -2275,10 +2404,16 @@ if has_jj then
         trunk_moves(root, bare, { ["lib/extra.txt"] = "extra\n" })
         rebased_and_checked(root, home, log, id)
         testing.ok(head(root) ~= before, "the rebase must rewrite the commit")
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         local list = comments(home)
-        testing.eq(list[#list].kind, "done")
+        testing.eq(list[#list].kind, KIND_DONE)
         testing.eq(list[#list].body:find("carried over", 1, true), nil, list[#list].body)
         testing.eq(column_of(home), support.COLUMN_NAME.DONE)
     end)
@@ -2288,7 +2423,13 @@ if has_jj then
         local id = review_ready(root, home, log, bare)
         trunk_moves(root, bare, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
         rebased_and_checked(root, home, log, id)
-        local out, code = dev(root, home, log, { "board", "land", id }, { LAND_TRUNK = "keep" })
+        local out, code = dev(
+            root,
+            home,
+            log,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
         testing.eq(code, 0, out)
         testing.eq(column_of(home), support.COLUMN_NAME.DONE)
     end)
@@ -2357,7 +2498,7 @@ if has_jj then
             home,
             log,
             { "board", "land", id },
-            { LAND_TRUNK = "keep", LAND_NEW = "1", DEV_WS_ROOT = base }
+            { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
         testing.eq(code, 0, out)
         testing.ok(out:find("Deleted bookmark " .. id, 1, true), out)
@@ -2371,7 +2512,7 @@ if has_jj then
     testing.test("land keeps a workspace with uncommitted changes", function()
         local root, home, log, id, path, base = central_project()
         local out, code = dev(path, home, log, { "board", "land", id }, {
-            LAND_TRUNK = "keep",
+            LAND_TRUNK = LAND_TRUNK_KEEP,
             LAND_NEW = "1",
             LAND_STRAY = "stray.txt",
             DEV_WS_ROOT = base,
@@ -2394,7 +2535,7 @@ if has_jj then
             home,
             log,
             { "board", "land", id },
-            { LAND_TRUNK = "keep", LAND_NEW = "1", DEV_WS_ROOT = base }
+            { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
         testing.eq(code, 0, out)
         testing.ok(out:find("Run the next command from another folder.", 1, true), out)
@@ -2415,7 +2556,7 @@ if has_jj then
             home,
             log,
             { "board", "land", id },
-            { LAND_TRUNK = "keep", LAND_NEW = "1", DEV_WS_ROOT = base }
+            { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
         )
         testing.eq(code, 0, out)
         testing.ok(out:find("Kept the workspace: " .. root .. " is outside " .. base, 1, true), out)
