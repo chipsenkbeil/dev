@@ -228,7 +228,7 @@ local function done_refusal(card, column)
     return unqueued(
         failure(
             string.format(
-                "%s cannot move to %s: %d of %d outcomes are unticked (%s); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it",
+                "%s cannot move to %s: %d of %d outcomes are unticked (%s). The reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it.",
                 id,
                 column,
                 #open,

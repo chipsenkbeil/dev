@@ -1097,7 +1097,7 @@ testing.test("move to Done refuses a card with unticked outcomes and names them"
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works); the reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it"
+        "11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works). The reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it."
     )
     testing.eq(#backend.calls, 0)
 end)
