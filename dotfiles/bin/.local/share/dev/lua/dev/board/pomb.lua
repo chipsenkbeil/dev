@@ -1727,8 +1727,12 @@ function Backend:release(id, fence)
         return nil, "The card is held by " .. name .. ". Only that member can release it in Pomb."
     end
     local done
-    done, message =
-        self:__request("POST", "/api/tasks/" .. id .. "/owner/release", { name = name }, fence)
+    done, message = self:__request(
+        "POST",
+        "/api/tasks/" .. id .. "/owner/release",
+        { name = name },
+        fence or present(task.owner.fence)
+    )
     if not done then
         return nil, message
     end

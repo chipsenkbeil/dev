@@ -6760,6 +6760,25 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
     testing.ok(loop_gone(pid))
 end)
 
+testing.test("a release with no claim file sends the owner fence pomb reports", function()
+    local live =
+        '"owner":{"holder":{"kind":"agent","name":"r/old"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
+    local export = PLANNED_EXPORT:gsub('"labels":%["docs"%]', '"labels":["docs"],' .. live, 1)
+    local root, home = sandbox({ export = export })
+    assert(fs.write(root .. "/owner_name", "r/old"))
+    local out, code = dev(
+        root,
+        home,
+        { "board", "take", "11111111-a", "--from", "r/old" },
+        { agent = "r/one" }
+    )
+    testing.ok(code == 0, out)
+    local released = read(root, "calls"):match("[^\n]*/owner/release\n?")
+    testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
+    testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
+    dev(root, home, { "board", "release", "11111111-a" }, { agent = "r/one" })
+end)
+
 testing.test("a refused move into progress frees the owner", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     refusing_moves(root)
