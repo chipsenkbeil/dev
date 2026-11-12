@@ -95,6 +95,13 @@ end
 ---@return integer code the exit code
 M.handlers["ws new"] = function(ctx)
     local name = parse(ctx)
+    local marked = false
+    for _, marker in ipairs({ ".jj", ".git", ".dev" }) do
+        marked = marked or fs.exists(ctx.root .. "/" .. marker)
+    end
+    if not marked then
+        verb.die("dev ws new: " .. ctx.root .. " is not inside a project")
+    end
     local base = workspace_root()
     local path = fs.join(base, repo_name(base, ctx.root), name)
     if fs.exists(path) then

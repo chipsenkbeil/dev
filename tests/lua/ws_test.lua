@@ -130,6 +130,16 @@ testing.test("new outside version control makes a plain folder", function()
     testing.eq(fs.is_dir(path), true)
 end)
 
+testing.test("new outside a project refuses and makes no workspace", function()
+    local root, _, env = setup("none")
+    local bare = assert(fs.realpath(support.tempdir()))
+    env.cwd = bare
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, "dev ws new: " .. bare .. " is not inside a project\n")
+    testing.eq(fs.exists(env.env.DEV_WS_ROOT), false)
+end)
+
 testing.test("new refuses a path that exists", function()
     local root, path, env, log = setup("jj")
     assert(fs.mkdir(path, { parents = true }))

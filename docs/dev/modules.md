@@ -60,13 +60,15 @@ then the project folder's name, then NAME. A path that exists is refused with
 exit 1. A project inside the central root is named by its folder just below
 the root, so a workspace makes siblings.
 
-`ws new NAME` works by project kind:
+`ws new NAME` refuses with exit 1 and makes nothing when the project root
+holds no `.jj`, `.git` or `.dev`, which is a folder outside any project.
+Otherwise it works by project kind:
 
 - A jj project first fetches its remote of record (`forge.resolve`, then
   `jj git fetch --remote NAME`). A failed fetch exits 1 with its output and
   adds nothing. It then gets `jj workspace add --name NAME -r trunk()`.
 - A git project gets `git worktree add -b NAME`.
-- Any other folder gets a plain directory.
+- A folder with only `.dev` gets a plain directory.
 
 The path is printed. `ws ls` prints each folder under ROOT/<repo> as its name,
 a tab and its path.
