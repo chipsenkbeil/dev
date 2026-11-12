@@ -7,6 +7,10 @@
 A script replaces a built-in of the same name, and `dev help -a` marks it
 `(override)`. A script that matches no built-in is a local verb.
 
+Every verb that works in a repository supports jj when the repo uses it and git
+otherwise, a worktree included. That holds for a project script and for a
+built-in alike, and a new verb ships with both.
+
 ```
 dev help -a
 dev help lint
