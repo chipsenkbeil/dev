@@ -1004,8 +1004,25 @@ testing.test("rename sends the new title and prints renamed", function()
     testing.eq(cmd_board.run("rename", { "11111111-a", "  " }, backend).code, 2)
     testing.eq(cmd_board.run("rename", { "11111111-a", "x", "--force" }, backend).code, 2)
     testing.eq(cmd_board.run("rename", { "11111111-a", 'say "hi"' }, backend).code, 2)
-    testing.eq(cmd_board.run("rename", { "deadbeef", "x" }, backend).code, 1)
+    testing.eq(cmd_board.run("rename", { "deadbeef", "x" }, backend).code, 2)
     testing.eq(#backend.calls, 1)
+end)
+
+testing.test("rename of a missing card is a usage error", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("rename", { "deadbeef", "x" }, backend)
+    testing.eq(result.code, 2)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("rename of a card on an unreadable board still fails with exit 1", function()
+    local backend = fake(sample())
+    backend.cards = function()
+        return nil, "board unavailable"
+    end
+    local result = cmd_board.run("rename", { "11111111-a", "x" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "board unavailable")
 end)
 
 testing.test("discard posts the reason, labels the card and moves it to Done", function()

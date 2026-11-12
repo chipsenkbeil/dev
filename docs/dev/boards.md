@@ -2155,6 +2155,8 @@ While Pomb is unreachable:
 - The words after the card are the title. It must not be blank, must be at most
   100 characters with no quote, backslash or control character, and may not
   hold a word starting with `-` (each exit 2).
+- A card word that matches no card, or more than one, is exit 2 with the
+  reason. A board that cannot be read is exit 1.
 - A card labelled `needs:human` is refused like `edit`.
 - A title change is queued while Pomb is unreachable, like `edit`.
 

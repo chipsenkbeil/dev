@@ -2143,16 +2143,21 @@ function commands.rename(backend, args)
                 .. " characters, with no quotes or backslashes"
         )
     end
-    local card, err = find_card(backend, args[1])
+    local cards, message = backend:cards()
+    if not cards then
+        return failure(message)
+    end
+    local card, why = board.resolve(cards, args[1])
     if not card then
-        return err
+        return usage(why)
     end
     local held_back = owner_holds(card)
     if held_back then
         return held_back
     end
     local held = claims.read(card.id)
-    local ok, message = backend:set_name(card.id, name, held and held.fence)
+    local ok
+    ok, message = backend:set_name(card.id, name, held and held.fence)
     if not ok then
         return failure(message)
     end
