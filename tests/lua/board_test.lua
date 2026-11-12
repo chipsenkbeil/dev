@@ -8029,6 +8029,52 @@ testing.test(
     end
 )
 
+local function comment_added()
+    return got("2", { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY })
+end
+
+local function human_board()
+    return { { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false } }
+end
+
+testing.test("wait --for human retries an unreachable comment read", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local result, seen = waited({
+        got("1"),
+        comment_added(),
+        comment_added(),
+        got("3"),
+    }, { "--for", "human" }, {
+        cards = human_board(),
+        cards_errors = { false, DOWN },
+        comments = { [ID_A] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } } },
+        now = started,
+    })
+    testing.eq(result.output, "the owner commented on 11111111")
+    testing.eq(seen.naps, { 30 })
+    testing.eq(seen.afters, { "none", "1", "1", "2" })
+end)
+
+testing.test(
+    "wait --for human gives up after ten unreachable comment reads and keeps the cursor",
+    function()
+        local replies = { got("1") }
+        local errors = { false }
+        for _ = 1, 10 do
+            replies[#replies + 1] = comment_added()
+            errors[#errors + 1] = DOWN
+        end
+        local result, seen, path = waited(replies, { "--for", "human" }, {
+            cards = human_board(),
+            cards_errors = errors,
+        })
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("curl exit 7", 1, true), result.message)
+        testing.eq(#seen.naps, 9)
+        testing.eq(fs.read(path .. ".human.cursor"), "1\n")
+    end
+)
+
 testing.test("wait without --for matches every kind", function()
     local result, seen = waited({
         got("1", { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),

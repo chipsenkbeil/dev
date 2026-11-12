@@ -4806,6 +4806,17 @@ function M.wait(backend, args, opts)
                 reply, message = nil, why
             end
         end
+        local spoke
+        if reply and only == WaitFor.HUMAN then
+            local why
+            spoke, why = Owner.comments(backend, reply.events, started)
+            if not spoke then
+                if not pomb.unreachable(why, true) then
+                    return flush(failure(why))
+                end
+                reply, message = nil, why
+            end
+        end
         if reply then
             failures = 0
             limited = 0
@@ -4818,14 +4829,6 @@ function M.wait(backend, args, opts)
                 stage, why = Owner.stage_cards(backend, roles[only])
                 if not stage then
                     return failure(why)
-                end
-            end
-            local spoke
-            if only == WaitFor.HUMAN then
-                local why
-                spoke, why = Owner.comments(backend, reply.events, started)
-                if not spoke then
-                    return flush(failure(why))
                 end
             end
             local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
