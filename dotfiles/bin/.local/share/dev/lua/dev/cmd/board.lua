@@ -3543,7 +3543,7 @@ function commands.stale(backend, args, now)
                 }
             end
         end
-        if not card.done and (mine or roles.stale[card.column]) then
+        if mine or (not card.done and roles.stale[card.column]) then
             local stamp = entered[card.id]
             if not stamp then
                 undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name

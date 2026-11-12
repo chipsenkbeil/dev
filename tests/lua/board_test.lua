@@ -3670,6 +3670,7 @@ testing.test("stale lists every needs:human card apart at any age, and never as 
         "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n"
             .. "00000003  Blocked  50d  unsized  Card 3\n\n"
             .. "moved by the owner, remove needs:human:\n"
+            .. "00000004  Done     60d  unsized  Card 4\n"
             .. "00000002  Backlog  20d  unsized  Card 2\n"
             .. "00000005  Ready    1d   unsized  Card 5\n\nunsized outside Icebox:\n"
             .. "00000002  Backlog  Card 2"
@@ -3679,6 +3680,22 @@ testing.test("stale lists every needs:human card apart at any age, and never as 
     testing.eq(
         result.output,
         "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Ready  9d  unsized  Card 1"
+    )
+end)
+
+testing.test("stale lists a needs:human card the owner moved to Done", function()
+    local cards, times = aged({ support.COLUMN_NAME.DONE }, { 60 }, { { "needs:human" } })
+    testing.eq(
+        cmd_board.run("stale", {}, fake(cards, times), NOW).output,
+        "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Done  60d  unsized  Card 1"
+    )
+end)
+
+testing.test("stale keeps a needs:human card in Blocked out of moved by the owner", function()
+    local cards, times = aged({ support.COLUMN_NAME.BLOCKED }, { 50 }, { { "needs:human" } })
+    testing.eq(
+        cmd_board.run("stale", {}, fake(cards, times), NOW).output,
+        "no stale cards\n\nfor the owner (needs:human):\n00000001  Blocked  50d  unsized  Card 1"
     )
 end)
 
@@ -3780,7 +3797,9 @@ testing.test("stale names a card it could not date instead of skipping it", func
             .. cards[1].id
             .. " Card 1\ncould not date "
             .. cards[2].id
-            .. " Card 2"
+            .. " Card 2\ncould not date "
+            .. cards[3].id
+            .. " Card 3"
     )
 end)
 

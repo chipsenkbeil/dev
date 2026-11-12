@@ -1159,8 +1159,8 @@ These sections follow, each listed apart from the stale cards:
   Blocked or Icebox, at any age, with its column and days in column. It never
   appears among the stale ones (it waits on the owner, not on an agent).
 - `moved by the owner, remove needs:human:`: a card with that label in any other
-  column but Done, to show that the owner moved it out and an agent should take
-  the label off (per the board guide).
+  column, Done included, to show that the owner moved it out and an agent
+  should take the label off (per the board guide).
 - `for a lead (needs:lead):`: every card labelled `needs:lead` (and not
   `needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
   default), with its time as `<hours>h`.
@@ -1987,7 +1987,7 @@ columns as the first list unless noted:
   `needs:human`, `needs:lead` and `needs:planner`, at any age, with the same
   columns as the first list.
 - `moved by the owner, remove needs:human:` lists every `needs:human` card in
-  any other column but Done, with no answer note.
+  any other column, Done included, with no answer note.
 - `newest comment is the owner's:` lists every other card but Done and not
   listed above whose newest comment is the owner's, whatever its label and age.
 - `unsized outside Icebox:` lists every card outside Icebox that is white or
