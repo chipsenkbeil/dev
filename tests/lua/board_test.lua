@@ -1182,13 +1182,13 @@ testing.test("epic_move_refused", function()
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open"
+        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open."
     )
     result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Review, a WIP-limited column: 2 of 3 children are open"
+        "cccccccc is an epic and cannot enter Review, a WIP-limited column: 2 of 3 children are open."
     )
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
@@ -1220,7 +1220,7 @@ testing.test("an epic with no outcomes and an open child is refused", function()
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open"
+        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open."
     )
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
@@ -1335,7 +1335,7 @@ testing.test("move to Done refuses outcomes dev cannot read", function()
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "11111111 cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked"
+        "11111111 cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked."
     )
     testing.eq(#backend.calls, 0)
 end)
@@ -1358,7 +1358,7 @@ testing.test("move to Done names a renamed Done column for unreadable outcomes",
         result.message,
         "11111111 cannot move to "
             .. SHIPPED
-            .. ": its outcomes cannot be read from Pomb, so they cannot be checked"
+            .. ": its outcomes cannot be read from Pomb, so they cannot be checked."
     )
     testing.eq(#backend.calls, 0)
 end)
@@ -1384,7 +1384,7 @@ testing.test("move to Ready refuses outcomes dev cannot read", function()
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "11111111 cannot move to Ready: its outcomes cannot be read from Pomb, so they cannot be checked"
+        "11111111 cannot move to Ready: its outcomes cannot be read from Pomb, so they cannot be checked."
     )
 end)
 
@@ -5387,7 +5387,7 @@ testing.test("epic_move_refused_by_settings", function()
         local out, code = dev(root, home, { "board", "move", "11111111-a", column })
         testing.eq(code, 1, out)
         testing.ok(out:find("is an epic and cannot enter", 1, true), out)
-        testing.ok(out:find("2 of 3 children are open", 1, true), out)
+        testing.ok(out:find("2 of 3 children are open.", 1, true), out)
     end
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
@@ -5432,7 +5432,7 @@ testing.test("an epic with an open child in the task read is refused", function(
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
     testing.eq(code, 1, out)
     testing.ok(out:find("is an epic and cannot enter", 1, true), out)
-    testing.ok(out:find("2 of 3 children are open", 1, true), out)
+    testing.ok(out:find("2 of 3 children are open.", 1, true), out)
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)
 end)
 
@@ -8583,7 +8583,7 @@ testing.test(
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find(
-                "run dev board init to move the board to the stage columns",
+                "run dev board init to move the board to the stage columns.",
                 1,
                 true
             ),
@@ -8612,7 +8612,7 @@ testing.test("wait on a board with In Review and no Review names dev board init"
     local result = cmd_board.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
     testing.eq(result.code, 1)
     testing.ok(
-        result.message:find("run dev board init to move the board to the stage columns", 1, true),
+        result.message:find("run dev board init to move the board to the stage columns.", 1, true),
         result.message
     )
 end)

@@ -2916,7 +2916,7 @@ The refusals run in this order:
   check runs before the card is read. A board that still has an In Review
   column and lacks a stage column fails with
   `the board has an In Review column and no <name> column, so run dev board init
-  to move the board to the stage columns`
+  to move the board to the stage columns.`
   (exit 1).
 - After the card is read, `move` refuses a card labelled `needs:human` that
   moves to a different column.
@@ -2994,7 +2994,7 @@ A move into Done (`move CARD done`):
   name.
 - That refusal reads
   `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so
-  they cannot be checked`.
+  they cannot be checked.`
 - A move to Ready refuses a card with outcomes dev cannot read the same way,
   naming Ready, and never reports its outcomes as missing.
 - A card with no outcomes, or with all of them ticked, moves as before.
@@ -3006,7 +3006,7 @@ An epic with an open child:
   done, never one picked by its name.
 - The refusal reads
   `<id prefix> is an epic and cannot enter COLUMN, a done column: N of M
-  children are open`
+  children are open.`
   (or `a WIP-limited column`, exit 1, on both backends).
 - `Backend:columns` reports each column's `is_done` and `wip_limit`. A local
   column has no limit, so only `is_done` applies there.

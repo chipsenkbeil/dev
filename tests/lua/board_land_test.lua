@@ -498,7 +498,7 @@ testing.test("land on a board with In Review and no Verify names dev board init"
     local result = land_as_lander(backend)
     testing.eq(result.code, 1)
     testing.ok(
-        result.message:find("run dev board init to move the board to the stage columns", 1, true),
+        result.message:find("run dev board init to move the board to the stage columns.", 1, true),
         result.message
     )
     testing.eq(backend.notes, {})
@@ -1805,7 +1805,7 @@ if has_jj then
         testing.ok(result.message:find(CARD_PREFIX .. " cannot land:", 1, true), result.message)
         testing.ok(
             result.message:find(
-                "its outcomes cannot be read from Pomb, so they cannot be checked",
+                "its outcomes cannot be read from Pomb, so they cannot be checked.",
                 1,
                 true
             ),
@@ -1952,7 +1952,7 @@ if has_jj then
             out
         )
         testing.ok(out:find("but the move to Done failed", 1, true), out)
-        testing.ok(out:find("1 of 1 children are open", 1, true), out)
+        testing.ok(out:find("1 of 1 children are open.", 1, true), out)
         local list = comments(project.home, id)
         testing.eq(list[#list].kind, KIND_DONE)
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)

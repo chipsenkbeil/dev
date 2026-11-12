@@ -50,7 +50,7 @@ local function agent_name(flag)
             usage(
                 "an agent name is one word of letters, digits and . - _ / up to "
                     .. CLAIMANT_CHARS
-                    .. " characters"
+                    .. " characters."
             )
     end
     return name
@@ -78,7 +78,7 @@ local function stage_refusal(backend)
             return failure(
                 "the board has an In Review column and no "
                     .. name
-                    .. " column, so run dev board init to move the board to the stage columns"
+                    .. " column, so run dev board init to move the board to the stage columns."
             )
         end
     end
@@ -129,7 +129,7 @@ local function other_home(backend, name)
         return nil, message
     end
     if not found then
-        return nil, "pomb has no board named " .. name
+        return nil, "pomb has no board named " .. name .. "."
     end
     home.column_map = backend.column_map
     home.root = backend.root
@@ -148,7 +148,7 @@ local function on_board(backend, args)
         return backend, args
     end
     if not args[3] then
-        return nil, nil, usage("--board needs a board name")
+        return nil, nil, usage("--board needs a board name.")
     end
     local home, why = other_home(backend, args[3])
     if not home then
@@ -178,7 +178,7 @@ local function children_refusal(backend, card, column, kids)
             return unqueued(
                 failure(
                     string.format(
-                        "%s is an epic and cannot enter %s, a %s column: %d of %d children are open",
+                        "%s is an epic and cannot enter %s, a %s column: %d of %d children are open.",
                         card.id:sub(1, board.MIN_PREFIX),
                         row.name,
                         kind,
@@ -201,7 +201,7 @@ local function unreadable_refusal(card, column)
             card.id:sub(1, board.MIN_PREFIX)
                 .. " cannot move to "
                 .. column
-                .. ": its outcomes cannot be read from Pomb, so they cannot be checked"
+                .. ": its outcomes cannot be read from Pomb, so they cannot be checked."
         )
     end
 end
@@ -259,7 +259,7 @@ local function tick_refused(card, flag)
         return usage(
             "ticking an outcome on a claimed card needs the ticker's name, with "
                 .. AS_FLAG
-                .. " NAME or DEV_AGENT"
+                .. " NAME or DEV_AGENT."
         )
     end
     if ticker == card.claimant then
@@ -267,7 +267,7 @@ local function tick_refused(card, flag)
             card.id:sub(1, board.MIN_PREFIX)
                 .. " is claimed by "
                 .. ticker
-                .. ", so its claimant cannot tick its outcomes"
+                .. ", so its claimant cannot tick its outcomes."
         )
     end
     return nil, ticker
@@ -306,7 +306,7 @@ local function claimant_refused(backend, card, opts)
                     .. name
                     .. " cannot "
                     .. opts.what
-                    .. ". Pass the change back with a note instead"
+                    .. ". Pass the change back with a note instead."
             )
         end
     end
@@ -335,6 +335,7 @@ local function delete_refusal(action)
                 .. name
                 .. " is not a lead name, whose role segment is lead; ask the lead"
                 .. (action and "" or ", with the card and the reason")
+                .. "."
         )
     end
 end
