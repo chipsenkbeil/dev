@@ -1956,8 +1956,8 @@ function commands.outcome(backend, args)
             return failure(
                 "only the lead deletes an outcome, and DEV_AGENT "
                     .. agent
-                    .. " is not a lead name, whose role segment is lead; "
-                    .. "ask the lead, with the card, the number and the reason"
+                    .. " is not a lead name, whose role segment is lead. "
+                    .. "Ask the lead, with the card, the number and the reason."
             )
         end
     else
