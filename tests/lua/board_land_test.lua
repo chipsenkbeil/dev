@@ -2284,8 +2284,8 @@ if has_jj then
         refused(project, id, { "the code review by rev2", "says needs-work" })
     end)
 
-    local function central_project()
-        local project = jj_project()
+    local function central_project(extra)
+        local project = jj_project(extra)
         local id = new_card(project)
         jj(project.root, "workspace", "rename", "default")
         local base = assert(fs.realpath(support.tempdir()))
@@ -2318,6 +2318,52 @@ if has_jj then
         )
         testing.eq(jj(project.root, "workspace", "list"):find(id .. ":", 1, true), nil)
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+    end)
+
+    local function follow_script(project)
+        local script = project.root .. "/.dev/follow.sh"
+        assert(fs.write(script, '#!/bin/sh\necho "followed $PWD"\n'), "write failed")
+        must(dev_os.run({ "chmod", "755", script }))
+    end
+
+    testing.test("land.runs.the.project.follow.script.on.a.board.with.no.release.column", function()
+        local project, id, _, base, inside = central_project()
+        follow_script(project)
+        local out, code = dev(
+            inside,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
+        )
+        testing.eq(code, 0, out)
+        testing.ok(out:find("followed " .. project.root, 1, true), out)
+    end)
+
+    testing.test("land.leaves.a.main.checkout.with.edits.alone.and.says.why", function()
+        local project, id, _, base, inside = central_project()
+        local out, code = dev(
+            inside,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
+        )
+        testing.eq(code, 0, out)
+        testing.ok(
+            out:find(project.root .. " left alone: it has uncommitted changes", 1, true),
+            out
+        )
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+    end)
+
+    testing.test("land.skips.follow.on.a.board.with.a.release.column", function()
+        local project, id, _, base, inside = central_project("\n[board.land]\ndeploys = true\n")
+        follow_script(project)
+        local out, code = dev(
+            inside,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, LAND_NEW = "1", DEV_WS_ROOT = base }
+        )
+        testing.eq(code, 0, out)
+        testing.eq(out:find("followed", 1, true), nil, out)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
     end)
 
     testing.test("land keeps a workspace with uncommitted changes", function()

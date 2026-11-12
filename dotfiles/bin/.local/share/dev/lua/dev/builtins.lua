@@ -67,6 +67,12 @@ return {
         group = "Share it",
     },
     {
+        words = { "follow" },
+        handler = "lua",
+        desc = "Move the main checkout onto trunk",
+        group = "Share it",
+    },
+    {
         words = { "sync" },
         handler = "lua",
         flags = "--check --yes -y",

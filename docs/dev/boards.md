@@ -2585,6 +2585,17 @@ Cleanup never changes the exit code or the card's column.
 - A workspace outside the central root, or one with changes not in a commit,
   stays. The output names it and why.
 
+Following trunk:
+
+- On a board where `[board.land]` has no `deploys = true`, a successful `land`
+  then runs `dev follow`, which moves the repo's main checkout onto the new
+  trunk, and adds its one line to the output.
+- On a board that deploys, `land` does not run it. `ship` does.
+- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in for
+  `land` and `ship` alike. `dev help follow` and `docs/dev/flags.md`
+  describe the verb.
+- It never changes the exit code or the card's column.
+
 ### turn
 
 `dev board turn CARD [--hold SECONDS] [--wait SECONDS] [--release]` takes the
@@ -2821,6 +2832,14 @@ A failing command:
 
 - When a command fails or times out, `ship` stops at it and moves no card.
 - It prints the command and its output tail, and exits 1.
+
+Following trunk:
+
+- After every command passes, `ship` runs `dev follow` and adds its one line
+  to the output, whether or not each card moved.
+- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in. When
+  a command fails, `ship` runs neither.
+- The line never changes the exit code.
 
 ### size
 

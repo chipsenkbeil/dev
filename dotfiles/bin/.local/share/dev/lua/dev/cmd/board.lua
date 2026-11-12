@@ -5,6 +5,7 @@ local claims = require("dev.board.claims")
 local config = require("dev.config")
 local device = require("dev.board.device")
 local dev_os = require("dev.os")
+local follow = require("dev.cmd.follow")
 local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 local init = require("dev.board.init")
@@ -2509,6 +2510,8 @@ function commands.land(backend, args)
         end
         return message
     end
+    local main = config.get(backend.root, "board.land.deploys") ~= true
+        and follow.main(backend.root)
     local result = wiring.land_held({
         backend = backend,
         card = current,
@@ -2522,6 +2525,9 @@ function commands.land(backend, args)
         return result
     end
     turn.release(backend, hold)
+    if main and not result.code then
+        result.output = result.output .. "\n" .. follow.launch(main)
+    end
     return result
 end
 
@@ -2768,6 +2774,10 @@ function commands.ship(backend, args)
         end
     end
     local lines, ok = ship_batch(backend, waiting, rev, commit)
+    local main = follow.main(backend.root)
+    if main then
+        lines[#lines + 1] = follow.launch(main)
+    end
     local text = table.concat(lines, "\n")
     if not ok then
         return failure(text)

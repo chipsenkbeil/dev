@@ -12,6 +12,7 @@ Share it
   deploy                Deploy the project (needs .dev/deploy.sh)
   push                  Push the trunk or current branch to the remote of record
   pull                  Fetch the remote and rebase local work onto it
+  follow                Move the main checkout onto trunk
   board                 Read and update the project's board
 
 Set up a machine or project

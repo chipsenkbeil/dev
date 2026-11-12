@@ -1,3 +1,4 @@
+local follow = require("dev.cmd.follow")
 local fs = require("dev.fs")
 local markdown = require("dev.ui.markdown")
 local project = require("dev.project")
@@ -23,7 +24,7 @@ local LESS = "less -R"
 local FILTER_HINT = "& filters · / searches · q quits"
 local HELP_CTX = { name = "help" }
 local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic."
-local LISTED = { push = push, pull = pull, sync = sync }
+local LISTED = { push = push, pull = pull, sync = sync, follow = follow }
 local HELPERS = {
     { "__verbs", "List the verbs with their descriptions, for shell completion" },
     { "__subs", "List the subcommands of a noun, for shell completion" },

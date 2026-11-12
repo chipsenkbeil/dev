@@ -282,9 +282,10 @@ Every other command goes to `dev.remote.ci_runner`. The topic is
 `docs/dev/remote.md`.
 
 `--remote` refuses the machine-local verbs `install`, `uninstall`, `restow`,
-`sync`, `setup`, `fmt`, `fetch`, `help`, `init`, `push`, `pull`, `guide` and
-`connect`, and every `tools`, `box`, `board`, `ws`, `pi` and `antinote`
-subcommand. The refusal exits 2 whatever the runner, with this message:
+`sync`, `setup`, `fmt`, `fetch`, `help`, `init`, `push`, `pull`, `follow`,
+`guide` and `connect`, and every `tools`, `box`, `board`, `ws`, `pi` and
+`antinote` subcommand. The refusal exits 2 whatever the runner, with this
+message:
 
 ```
 dev <verb>: runs on this machine only, so --remote does not apply
@@ -299,6 +300,31 @@ gerrit project, else `origin`, from the same forge setting `jj land` reads.
 `dev push origin` and `dev push gerrit` push to the one remote named.
 `dev push` prints which forge and remote it chose and why. A flag or argument
 a verb does not take is a usage error that names it and exits 2.
+
+## Follow
+
+`dev follow` moves the repo's main checkout onto trunk. It takes no argument and
+works from the main checkout, a jj workspace or a git worktree.
+
+- A folder with `.jj` answers to jj, and its main checkout is the workspace
+  named `default`. Any other folder with `.git` answers to git, and its main
+  checkout holds the common git folder. A folder with neither exits 1.
+- A main checkout with `.jj` uses jj and one with only `.git` uses git.
+- A clean checkout is fetched, then moved onto trunk. jj opens a new empty
+  change on `trunk()`. git switches to `master` or `main` and fast-forwards it
+  to the `origin` remote, or to the first remote when there is no `origin`.
+- A checkout with uncommitted edits stays as it is. For jj that means an
+  `@` that is not empty, and for git a changed tracked file. A git checkout on
+  a detached HEAD that no branch holds stays as it is too. One line names the
+  folder and says why.
+- The verb prints one line that starts with the words dev follow and a colon.
+  It reads `FOLDER is on trunk COMMIT` or
+  `FOLDER left alone: it has uncommitted changes`, and the exit code is 0 for
+  both. A failed jj or git command exits 1 with a line that names it.
+- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in.
+  `dev board land` on a board with no `deploys = true` under `[board.land]`
+  and `dev board ship` run it through the launcher, and the script runs in
+  the main checkout.
 
 ## The launcher
 
@@ -395,6 +421,8 @@ Other modules serve these commands.
 - `dev.cmd.push` and `dev.cmd.pull`: `push` and `pull`, with the backend and
   the forge setting in `dev.vcs` and `dev.forge`. `dev help push` and
   `dev help pull` print their commands from the same code.
+- `dev.cmd.follow`: `follow`, and the `main` and `launch` calls `board land` and
+  `board ship` make.
 - `dev.cmd.tools` and, as root, `dev.root`: `tools install` and `tools check`.
 - `dev.cmd.init`: `init`.
 
