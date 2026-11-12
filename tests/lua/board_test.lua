@@ -6524,6 +6524,31 @@ testing.test(
     end
 )
 
+testing.test("take under DEV_AGENT sends the role part of the name with the grab", function()
+    local root, home = sandbox()
+    local out, code = dev(
+        root,
+        home,
+        { "board", "take", "11111111-a" },
+        { agent = "pomb/runner/abc" }
+    )
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find('"name":"pomb/runner/abc"', 1, true), calls)
+    testing.ok(calls:find('"role":"runner"', 1, true), calls)
+    dev(root, home, { "board", "release", "11111111-a" }, { agent = "pomb/runner/abc" })
+end)
+
+testing.test("take without DEV_AGENT sends no role with the grab", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find('"ttl_seconds":900', 1, true), calls)
+    testing.eq(calls:find('"role"', 1, true), nil)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
 testing.test("the state file holds the card, the fence and the pid at mode 600", function()
     local root, home = sandbox()
     dev(root, home, { "board", "take", "11111111-a" })

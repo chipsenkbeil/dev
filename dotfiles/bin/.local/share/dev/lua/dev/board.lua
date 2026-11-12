@@ -360,6 +360,16 @@ function M.agent_shape(name)
     return parts == 2 or parts == 3
 end
 
+---The role part of a name shaped <repo>/<role>[/<card>].
+---@param name string? the agent name
+---@return string? role the role, nil when the name has no role part
+function M.agent_role(name)
+    if type(name) ~= "string" or not M.agent_shape(name) then
+        return nil
+    end
+    return name:match("^[^/]*/([^/]*)")
+end
+
 ---The backends a project may name.
 M.Backend = { POMB = "pomb", LOCAL = "local" }
 

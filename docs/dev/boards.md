@@ -1425,6 +1425,10 @@ and an optional card id, as in `dotfiles/lead` and
 The usual roles are `lead`, `runner`, `planner`, `implementer`, `code-examiner`,
 `style-examiner`, `recheck-examiner`, `verifier`, `land`, `release` and `check`.
 
+A grab on a Pomb card sends the role part of that name as the owner's `role`,
+so `dotfiles/implementer/f5f0e007` sends `implementer`. A name with no role part,
+such as the default `dev@<host>:<session or pid>`, sends no role.
+
 A name of another shape is refused with
 `an agent name is <repo>/<role>[/<card>], got NAME` (exit 2). That happens when
 `take` or a `move` into In Progress would take a new claim, whether the name

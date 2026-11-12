@@ -1695,15 +1695,15 @@ function Backend:claim(id, claimant, ttl, fence, opts)
                 opts.epic.total
             )
     end
+    local grab = { name = claimant, ttl_seconds = ttl, role = board.agent_role(claimant) }
     if fence then
-        owner, message, status =
-            self:__request("POST", path .. "/renew", { name = claimant, ttl_seconds = ttl }, fence)
+        owner, message, status = self:__request("POST", path .. "/renew", grab, fence)
         if not owner and status ~= CONFLICT then
             return nil, message
         end
     end
     if not owner then
-        owner, message = self:__request("POST", path, { name = claimant, ttl_seconds = ttl })
+        owner, message = self:__request("POST", path, grab)
     end
     if not owner then
         return nil, message
