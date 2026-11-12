@@ -48,7 +48,7 @@ local function backend_at(home)
         path = home .. "/state/dev/boards/mine.json",
         private = true,
     })
-    backend.roles = { icebox = "Icebox" }
+    backend.roles = board.roles(nil, {})
     return backend
 end
 
@@ -382,6 +382,94 @@ testing.test("a claim lost after the turn card was read still names the holder",
     backend.card = card
     testing.eq(taken, nil)
     testing.ok(message:find("held by alpha", 1, true), message)
+end)
+
+local function fill(backend, id)
+    local notes = assert(backend:comments(id))
+    for _ = #notes + 1, turn.MAX_NOTES do
+        assert(backend:note(id, "filler"))
+    end
+end
+
+local function open_turn_card(backend)
+    local cards = assert(backend:cards())
+    for _, card in ipairs(cards) do
+        if card.name == turn.NAME and not card.done then
+            return card
+        end
+    end
+end
+
+testing.test("a full landing turn card rotates to a fresh one", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the full card was reused")
+    testing.eq(open_turn_card(backend).id, second.card)
+    testing.eq(assert(backend:card(first.card)).done, true)
+end)
+
+testing.test("a held landing turn card is not rotated", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    fill(backend, first.card)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
+    testing.eq(open_turn_card(backend).id, first.card)
+    testing.eq(turn.holder(backend).name, "alpha")
+    turn.release(backend, first)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the freed full card was reused")
+end)
+
+testing.test("rotation keeps the line of askers", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
+    assert(turn.ask(backend, { name = "gamma", card = "cccc3333", seconds = 60 }))
+    assert(turn.ask(backend, { name = "late", card = "dddd4444", seconds = 1 }))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    advance(turn.ASK_GRACE_SECONDS + 2)
+    testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    local fresh = open_turn_card(backend)
+    testing.ok(fresh.id ~= first.card, "the full card was kept")
+    local bodies = {}
+    for _, comment in ipairs(assert(backend:comments(fresh.id))) do
+        bodies[#bodies + 1] = comment.body
+    end
+    testing.eq(#bodies, 2)
+    testing.ok(bodies[1]:find("holder=beta card=bbbb2222", 1, true), bodies[1])
+    testing.ok(bodies[2]:find("holder=gamma card=cccc3333", 1, true), bodies[2])
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.eq(second.card, fresh.id)
+    turn.release(backend, second)
+    testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
+end)
+
+testing.test("a card past the byte limit rotates", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    local move = backend.move
+    backend.move = function()
+        return nil, "limit reached: at most 1048576 bytes in one task", true
+    end
+    backend.bin = function(self, id)
+        return move(self, id, self.roles:done_column())
+    end
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the stuck card was reused")
+    testing.eq(open_turn_card(backend).id, second.card)
+    backend.bin = nil
+    fill(backend, second.card)
+    turn.release(backend, second)
+    local refused, message = turn.take(backend, "gamma", "cccc3333")
+    testing.eq(refused, nil)
+    testing.ok(message:find("could not be retired", 1, true), message)
 end)
 
 local function as_agent(name, run)

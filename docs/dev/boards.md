@@ -2466,6 +2466,26 @@ Asking for the turn:
 - Only the claim's fence releases the turn, and a waiter that gives up releases
   nothing.
 
+Rotating the turn card:
+
+- The landing turn card rotates once it holds 500 notes (`MAX_NOTES`), before
+  Pomb refuses a note at 1048576 bytes in a task and every turn answers
+  `limit reached`.
+- `ask` and `take` check the count, and only on a card with no owner. A held
+  card keeps its notes until the hold ends, at most `MAX_HOLD_SECONDS`.
+- Rotation moves the card to Done, adds a fresh landing turn card and posts the
+  live asks onto it again in their order, with their end times. An ask that ran
+  out or was answered is not carried.
+- A move to Done adds a history event, so Pomb refuses it with `limit reached`
+  on a card already past the byte limit. Rotation then moves the card to the
+  bin, which Pomb does not refuse. Any other move failure leaves the card.
+- Rotation re-reads the card first and leaves it when another agent has taken
+  it meanwhile.
+- When neither works, `take` and `ask` answer `The full landing turn card could
+  not be retired.` and the card stays.
+- `land` asks once before it polls, and every poll runs `take`, so a card that
+  fills while a waiter waits rotates on the next poll.
+
 Polling while it waits:
 
 - A poll sleeps 5 seconds at first, then 1.5 times longer after each poll that

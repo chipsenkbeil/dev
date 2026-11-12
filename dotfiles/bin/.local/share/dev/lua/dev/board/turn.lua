@@ -23,6 +23,8 @@ M.HOLD_SECONDS = 1800
 
 M.MAX_HOLD_SECONDS = 3600
 
+M.MAX_NOTES = 500
+
 local RECORD_PREFIX = board.TURN_PREFIX .. " "
 local HOLDER_PATTERN =
     "^dev%-turn: holder=(%S+) card=(%S+) taken=(%S+) fence=(%d+) lease=(%d+) hold=([01])$"
@@ -186,12 +188,8 @@ end
 ---@field card string the short id of the card that wants to land
 ---@field expires string when the wait ends, an RFC 3339 stamp
 
-local function queue(backend, holding)
+local function queue(comments)
     local ASK_PATTERN = "^dev%-turn: ask holder=(%S+) card=(%S+) until=(%S+)$"
-    local comments, message = backend:comments(holding.id)
-    if not comments then
-        return nil, message
-    end
     local line = {}
     local function drop(name, card)
         for i = #line, 1, -1 do
@@ -225,6 +223,74 @@ local function queue(backend, holding)
     return live
 end
 
+local function note_ask(backend, id, asker)
+    return backend:note(
+        id,
+        string.format(
+            "%sask holder=%s card=%s until=%s",
+            RECORD_PREFIX,
+            asker.name,
+            asker.card,
+            asker.expires
+        ),
+        nil,
+        { kind = board.NoteKind.STATUS }
+    )
+end
+
+local function rotate(backend, card, comments)
+    local line = queue(comments)
+    local current = backend:card(card.id)
+    if not current or current.claimant then
+        return card
+    end
+    local moved, message = backend:move(card.id, backend.roles:done_column())
+    if not moved and backend.bin and (message or ""):find("limit reached", 1, true) then
+        moved, message = backend:bin(card.id)
+    end
+    if not moved then
+        return nil, "The full landing turn card could not be retired. " .. (message or "")
+    end
+    turn_card_ids[backend] = nil
+    local fresh_card
+    fresh_card, message = turn_card(backend)
+    if not fresh_card then
+        return nil, message
+    end
+    for _, asker in ipairs(line) do
+        local ok
+        ok, message = note_ask(backend, fresh_card.id, asker)
+        if not ok then
+            return nil, message
+        end
+    end
+    return fresh_card
+end
+
+local function open_card(backend)
+    local holding, message = turn_card(backend)
+    if not holding then
+        return nil, nil, message
+    end
+    local comments
+    comments, message = backend:comments(holding.id)
+    if not comments then
+        return nil, nil, message
+    end
+    if holding.claimant or #comments < M.MAX_NOTES then
+        return holding, comments
+    end
+    holding, message = rotate(backend, holding, comments)
+    if not holding then
+        return nil, nil, message
+    end
+    comments, message = backend:comments(holding.id)
+    if not comments then
+        return nil, nil, message
+    end
+    return holding, comments
+end
+
 ---@class dev.board.turn.AskOpts
 ---@field name string the name that waits
 ---@field card string the short id of the card that wants to land
@@ -236,23 +302,12 @@ end
 ---@return true? ok true once the ask is on the board
 ---@return string? message why it could not be written
 function M.ask(backend, opts)
-    local holding, message = turn_card(backend)
+    local holding, _, message = open_card(backend)
     if not holding then
         return nil, message
     end
     local expires = store.stamp(store.now() + opts.seconds + M.ASK_GRACE_SECONDS)
-    return backend:note(
-        holding.id,
-        string.format(
-            "%sask holder=%s card=%s until=%s",
-            RECORD_PREFIX,
-            opts.name,
-            opts.card,
-            expires
-        ),
-        nil,
-        { kind = board.NoteKind.STATUS }
-    )
+    return note_ask(backend, holding.id, { name = opts.name, card = opts.card, expires = expires })
 end
 
 ---Leave the line for the turn, which a live hold of the same name and card survives.
@@ -305,15 +360,11 @@ end
 function M.take(backend, name, card, opts)
     local lease = opts and opts.seconds or M.LEASE_SECONDS
     local hold = opts and opts.hold or false
-    local holding, message = turn_card(backend)
+    local holding, comments, message = open_card(backend)
     if not holding then
         return nil, message
     end
-    local line
-    line, message = queue(backend, holding)
-    if not line then
-        return nil, message
-    end
+    local line = queue(comments)
     local place = #line + 1
     for index, asker in ipairs(line) do
         if asker.name == name and asker.card == card then
