@@ -842,6 +842,49 @@ function M.carry(opts)
     return nil, newest_problem
 end
 
+local CONFIG_PATH = ".dev/config.toml"
+
+---Read the project config file as trunk holds it.
+---@param root string the project root
+---@return string? text the file's text, empty when trunk has no such file
+---@return string? problem why trunk or its file could not be read
+function M.trunk_config(root)
+    if vcs.backend(root) == vcs.GIT then
+        local found, why = forge.resolve(root)
+        if not found then
+            return nil, "Trunk cannot be read. " .. why
+        end
+        local ref, ref_why = vcs.remote_trunk(root, found.remote)
+        if not ref then
+            return nil, "Trunk cannot be read. The remote " .. ref_why .. "."
+        end
+        local listed = git_out(root, "ls-tree", "--name-only", ref, "--", CONFIG_PATH)
+        if listed == nil then
+            return nil, "Git could not list " .. CONFIG_PATH .. " at " .. ref .. "."
+        end
+        if listed == "" then
+            return ""
+        end
+        local text = git_out(root, "show", ref .. ":" .. CONFIG_PATH)
+        if text == nil then
+            return nil, "Git could not read " .. CONFIG_PATH .. " at " .. ref .. "."
+        end
+        return text
+    end
+    local listed = jj_out(root, "file", "list", "-r", TRUNK_REVSET, CONFIG_PATH)
+    if listed == nil then
+        return nil, "jj could not list " .. CONFIG_PATH .. " at trunk."
+    end
+    if listed == "" then
+        return ""
+    end
+    local text = jj_out(root, "file", "show", "-r", TRUNK_REVSET, CONFIG_PATH)
+    if text == nil then
+        return nil, "jj could not read " .. CONFIG_PATH .. " at trunk."
+    end
+    return text
+end
+
 ---@class dev.board.land.RecheckOpts
 ---@field root string the project root, a jj project
 ---@field commit string the checked commit the landing commit carries from

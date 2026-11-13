@@ -43,7 +43,8 @@ local function find(root, key, opts)
         return nil
     end
     local home = os.getenv("HOME")
-    local paths = { root .. "/.dev/config.toml" }
+    local project = root .. "/.dev/config.toml"
+    local paths = { project }
     if home and home ~= "" then
         local user = home .. "/.config/dev/config.toml"
         if opts.user_first then
@@ -58,7 +59,13 @@ local function find(root, key, opts)
     end
     local trees = {}
     for index, path in ipairs(paths) do
-        local tree, err = read(path)
+        local tree, err
+        if opts.project_text and path == project then
+            tree, err = toml.parse(opts.project_text)
+            err = err and "dev: trunk " .. project .. ":" .. err
+        else
+            tree, err = read(path)
+        end
         if not tree then
             verb.die(err)
         end
@@ -82,6 +89,19 @@ end
 ---@return any? value the value, or nil when neither file sets it
 function M.get(root, key)
     return find(root, key, {})
+end
+
+---Look up a dotted key with the project file's text given, not read from disk.
+---
+---The text stands for the project file and still wins over the user file, which a
+---caller uses to read the file as another commit holds it. Errors end the process
+---as in `get`.
+---@param root string the project root
+---@param key string dotted key
+---@param text string the project file's text, empty when that commit has none
+---@return any? value the value, or nil when neither the text nor the user file sets it
+function M.get_text(root, key, text)
+    return find(root, key, { project_text = text })
 end
 
 ---Look up a dotted key with the user file winning over the project file, for a

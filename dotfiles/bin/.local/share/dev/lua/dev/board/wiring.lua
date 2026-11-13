@@ -375,12 +375,20 @@ local function land_held(opts)
             return lost
         end
     end
+    local trunk_text
+    if carried then
+        local read_why
+        trunk_text, read_why = land.trunk_config(backend.root)
+        if not trunk_text then
+            return failure(short .. " cannot land: " .. read_why)
+        end
+    end
     local unchecked = carried
         and land.recheck_problem({
             root = backend.root,
             commit = carried,
             card = short,
-            rows = config.get(backend.root, "board.land.recheck"),
+            rows = config.get_text(backend.root, "board.land.recheck", trunk_text),
             note = verb.note,
         })
     if unchecked then

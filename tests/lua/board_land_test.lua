@@ -103,6 +103,7 @@ local PAST_HOLD_SECONDS = 2.2
 local CHECK_WAIT_SECONDS = 60
 local CHECK_STOP_SECONDS = 300
 local SHARED = "a\nb\nc\nd\ne\nf\ng\n"
+local NARROWED = '[board]\nbackend = "local"\nname = "mine"\n\n[board.land]\nrecheck = []\n'
 
 local function setup(extra)
     local root = support.sandbox({
@@ -1435,6 +1436,35 @@ if has_jj then
         testing.ok(not fs.is_file(marker), "the recheck row ran")
     end)
 
+    testing.test("land reruns trunk's recheck rows when the change empties its own", function()
+        local marker = support.tempdir() .. "/rechecked"
+        local project = recheck_project("touch " .. marker)
+        assert(fs.write(project.root .. "/.dev/config.toml", NARROWED), "write failed")
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.ok(fs.is_file(marker), "trunk's recheck row never ran")
+    end)
+
+    testing.test("land ignores a recheck row the change adds to its own config", function()
+        local project = jj_project()
+        assert(
+            fs.write(
+                project.root .. "/.dev/config.toml",
+                '[board]\nbackend = "local"\nname = "mine"\n\n[board.land]\nrecheck = ["false"]\n'
+            ),
+            "write failed"
+        )
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.ok(not out:find("recheck row failed", 1, true), out)
+    end)
+
     testing.test("land stays put when the push after a carry is rejected", function()
         local project = jj_project()
         local id = review_ready(project)
@@ -2594,8 +2624,8 @@ local function git_dev(project, args, extra)
     return dev(project, args, env)
 end
 
-local function git_project()
-    local project = setup()
+local function git_project(extra)
+    local project = setup(extra)
     local root = project.root
     project.bare = support.tempdir()
     must(
@@ -2674,6 +2704,20 @@ testing.test("land.git.lands rebases a card onto fetched trunk and pushes it", f
     testing.eq(note.kind, board.NoteKind.DONE)
     testing.ok(note.body:find("Landed commit " .. landed:sub(1, 12), 1, true), note.body)
     testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+end)
+
+testing.test("land.git.recheck reruns trunk's rows when the change empties its own", function()
+    local marker = support.tempdir() .. "/rechecked"
+    local project = git_project('\n[board.land]\nrecheck = ["touch ' .. marker .. '"]\n')
+    local id = project.id
+    assert(fs.write(project.root .. "/.dev/config.toml", NARROWED), "write failed")
+    git_at(project.root, "add", "-A")
+    git_at(project.root, "commit", "-q", "--amend", "--no-edit")
+    git_approve(project)
+    git_trunk_moves(project, "other.txt", "other\n")
+    local out, code = git_dev(project, { "board", "land", id })
+    testing.eq(code, 0, out)
+    testing.ok(fs.is_file(marker), "trunk's recheck row never ran")
 end)
 
 testing.test("land.git.refused names a failed fetch or rebase and keeps the card", function()

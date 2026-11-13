@@ -2576,8 +2576,10 @@ The settings:
   on the trunk `land` rebased onto, `land` runs each row on the landing commit
   under the landing turn, in order. A row that fails refuses the land with the
   row, its run id and the end of its output, and nothing is pushed. A check on
-  the current trunk or an empty list lands as before. This repo sets it to
-  `dev --remote lint`.
+  the current trunk or an empty list lands as before. `land` reads the rows
+  from the project config as trunk holds it, then from the user config, so the
+  landing change cannot edit the rows that guard it. A trunk or a file `land`
+  cannot read refuses the land. This repo sets it to `dev --remote lint`.
 - In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
   exits 1 and names `dev board land`.
 - `dev board land` sets `DEV_BOARD_LAND=1` for the `jj land` it runs, and
