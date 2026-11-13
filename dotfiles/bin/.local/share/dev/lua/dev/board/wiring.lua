@@ -10,6 +10,7 @@ local render = require("dev.board.render")
 local standalone = require("dev.standalone")
 local store = require("dev.board.store")
 local turn = require("dev.board.turn")
+local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
 ---The parsing, refusals and turn waits behind the `board` check and land verbs.
@@ -224,7 +225,8 @@ local function land_problems(backend, card, who)
         return problems
     end
     local added = land.added(backend.root, state.commit)
-    local standalone_problem = "jj could not list the files the commit adds."
+    local tool = vcs.LABEL[vcs.backend(backend.root) or vcs.JJ]
+    local standalone_problem = tool .. " could not list the files the commit adds."
     if added then
         standalone_problem = standalone.land_problem(added, card.labels)
     end
@@ -232,7 +234,7 @@ local function land_problems(backend, card, who)
         problems[#problems + 1] = standalone_problem
     end
     local touched = land.touched(backend.root, state.commit)
-    local template_problem = "jj could not list the files the commit touches."
+    local template_problem = tool .. " could not list the files the commit touches."
     if touched then
         template_problem = land.template_problem(backend.root, touched)
     end

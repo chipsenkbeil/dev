@@ -9,7 +9,8 @@ local fs = require("dev.fs")
 ---@class dev.vcs
 ---@field JJ "jj" the jj backend
 ---@field GIT "git" the git backend
-local M = { JJ = "jj", GIT = "git" }
+---@field LABEL table<dev.vcs.Backend, string> the backend's name at the start of a message
+local M = { JJ = "jj", GIT = "git", LABEL = { jj = "jj", git = "Git" } }
 
 local function lines_of(text)
     local out = {}

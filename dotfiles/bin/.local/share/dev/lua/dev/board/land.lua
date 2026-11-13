@@ -38,8 +38,33 @@ local function jj_out(root, ...)
     return out
 end
 
+local function git_out(root, ...)
+    local argv = vcs.with(vcs.base(root, vcs.GIT), ...)
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        return nil
+    end
+    return out
+end
+
 local function interdiff(root, commit)
     return jj_out(root, "interdiff", "--from", commit, "--to", "@", "--name-only")
+end
+
+local function identical(root, commit, state)
+    if vcs.backend(root) == vcs.GIT then
+        local merged = git_out(
+            root,
+            "merge-tree",
+            "--write-tree",
+            "--merge-base=" .. commit .. "^",
+            state.commit .. "^",
+            commit
+        )
+        local tree = git_out(root, "rev-parse", state.commit .. "^{tree}")
+        return merged ~= nil and tree ~= nil and merged:match("^%x+") == tree:match("^%x+")
+    end
+    return interdiff(root, commit) == ""
 end
 
 local function same_patch(root, state)
@@ -52,7 +77,7 @@ local function same_patch(root, state)
             return false
         end
         if seen[commit] == nil then
-            seen[commit] = interdiff(root, commit) == ""
+            seen[commit] = identical(root, commit, state)
         end
         return seen[commit]
     end
@@ -66,12 +91,53 @@ local function count_lines(text)
     return n
 end
 
+local function worktree_problem(root, short)
+    local dirs, code = dev_os.capture(
+        vcs.with(
+            vcs.base(root, vcs.GIT),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-dir",
+            "--git-common-dir"
+        ),
+        { stderr = "null" }
+    )
+    local dir, common = dirs:match("^([^\n]+)\n([^\n]+)\n?$")
+    if code ~= 0 or not dir then
+        return "Git could not read the worktree of " .. root .. "."
+    end
+    if dir == common then
+        return nil
+    end
+    local out, branch_code = dev_os.capture(
+        vcs.with(vcs.base(root, vcs.GIT), "symbolic-ref", "--short", "-q", "HEAD"),
+        { stderr = "null" }
+    )
+    local branch = out:gsub("\n$", "")
+    if branch_code == 0 and branch == short then
+        return nil
+    end
+    local where = branch_code == 0 and ("the branch " .. branch) or "a detached HEAD"
+    return string.format(
+        "This is the worktree on %s, not the one named for %s. "
+            .. "Run dev ws new %s and work from there.",
+        where,
+        short,
+        short
+    )
+end
+
 ---Say whether the working copy sits in the workspace `dev ws new` names for a card.
 ---@param root string the project root
 ---@param short string the card's short id, which names its workspace
----@return string? problem why this is the wrong workspace, nil in a git project or the right one
+---@return string? problem why this is the wrong workspace, nil in the right one or a git checkout
+---   that is not a linked worktree
 function M.workspace_problem(root, short)
-    if vcs.backend(root) ~= vcs.JJ then
+    local backend = vcs.backend(root)
+    if backend == vcs.GIT then
+        return worktree_problem(root, short)
+    end
+    if backend ~= vcs.JJ then
         return nil
     end
     local out, code =
@@ -97,13 +163,36 @@ end
 ---Name the change a landing would carry.
 ---
 ---The working-copy commit must hold work, carry a description and have no conflicts.
----@param root string the project root, a jj project
+---@param root string the project root
 ---@return dev.board.check.State? state the commit and change
 ---@return string? message why the working copy cannot land
 function M.state(root)
     local state, message = check.state(root)
     if not state then
         return nil, message
+    end
+    if vcs.backend(root) == vcs.GIT then
+        local files = git_out(
+            root,
+            "diff-tree",
+            "-m",
+            "-r",
+            "--root",
+            "--no-commit-id",
+            "--name-only",
+            state.commit
+        )
+        local body = git_out(root, "log", "-1", "--format=%B", state.commit)
+        if not files or not body then
+            return nil, "Git could not read the HEAD commit of " .. root .. "."
+        end
+        if not files:match("%S") then
+            return nil, "The working-copy commit is empty. There is no change to land."
+        end
+        if not body:match("%S") then
+            return nil, "The working-copy commit has no description."
+        end
+        return state
     end
     local out, code = dev_os.capture(
         jj(root, "log", "-r", "@", "--no-graph", "-T", SHAPE_TEMPLATE),
@@ -448,34 +537,79 @@ local function carry_problem(root, state, commit)
     end
 end
 
-local function sorted_paths(root, rev, template)
-    local out = jj_out(root, "log", "-r", rev, "--no-graph", "-T", template)
-    if not out then
-        return nil
-    end
+local function sorted_set(set)
     local paths = {}
-    for path in pairs(file_set(out)) do
+    for path in pairs(set) do
         paths[#paths + 1] = path
     end
     table.sort(paths)
     return paths
 end
 
+local function sorted_paths(root, rev, template)
+    local out = jj_out(root, "log", "-r", rev, "--no-graph", "-T", template)
+    if not out then
+        return nil
+    end
+    return sorted_set(file_set(out))
+end
+
+local function git_paths(root, rev, opts)
+    local only_added = opts.only_added
+    local out = git_out(
+        root,
+        "diff-tree",
+        "-m",
+        "-r",
+        "--root",
+        "--no-commit-id",
+        "-M",
+        "--name-status",
+        "-z",
+        rev
+    )
+    if not out then
+        return nil
+    end
+    local words = {}
+    for word in out:gmatch("([^%z]+)") do
+        words[#words + 1] = word
+    end
+    local set = {}
+    local i = 1
+    while i <= #words do
+        local kind = words[i]:sub(1, 1)
+        local moved = kind == "R" or kind == "C"
+        local path = words[i + (moved and 2 or 1)]
+        if path and (not only_added or (kind ~= "M" and kind ~= "T" and kind ~= "D")) then
+            set[path] = true
+        end
+        i = i + (moved and 3 or 2)
+    end
+    return sorted_set(set)
+end
+
 ---List the files a commit adds, a moved or copied file counting at its new path.
----@param root string the project root, a jj project
----@param rev string the revset of one commit
----@return string[]? paths the sorted paths, nil when jj could not read them
+---@param root string the project root
+---@param rev string the revset of one jj commit or the id of one git commit
+---@return string[]? paths the sorted paths, nil when the files could not be read
 function M.added(root, rev)
+    if vcs.backend(root) == vcs.GIT then
+        return git_paths(root, rev, { only_added = true })
+    end
     local ADDED_TEMPLATE = 'self.diff().files().filter(|f| f.status() != "modified" && '
         .. 'f.status() != "removed").map(|f| f.target().path() ++ "\\n").join("")'
     return sorted_paths(root, rev, ADDED_TEMPLATE)
 end
 
 ---List the files a commit touches, a moved or copied file counting at its new path.
----@param root string the project root, a jj project
----@param rev string the revset of one commit
----@return string[]? paths the sorted paths, nil when jj could not read them
+---@param root string the project root
+---@param rev string the revset of one jj commit or the id of one git commit
+---@return string[]? paths the sorted paths, nil when the files could not be read
 function M.touched(root, rev)
+    if vcs.backend(root) == vcs.GIT then
+        return git_paths(root, rev, {})
+    end
     local TOUCHED_TEMPLATE = 'self.diff().files().map(|f| f.target().path() ++ "\\n").join("")'
     return sorted_paths(root, rev, TOUCHED_TEMPLATE)
 end
@@ -498,18 +632,25 @@ function M.template_problem(root, touched)
     if not changed_template then
         return nil
     end
-    local listed = jj_out(
-        root,
-        "file",
-        "list",
-        "-r",
-        "@",
-        "-T",
-        'path ++ "\\n"',
-        'root:"' .. templates.BASE .. '"'
-    )
+    local backend = vcs.backend(root) or vcs.JJ
+    local listed
+    if backend == vcs.GIT then
+        listed = git_out(root, "ls-tree", "-r", "-z", "--name-only", "HEAD", "--", templates.BASE)
+        listed = listed and listed:gsub("%z", "\n")
+    else
+        listed = jj_out(
+            root,
+            "file",
+            "list",
+            "-r",
+            "@",
+            "-T",
+            'path ++ "\\n"',
+            'root:"' .. templates.BASE .. '"'
+        )
+    end
     if not listed then
-        return "jj could not list the lint-set template files."
+        return vcs.LABEL[backend] .. " could not list the lint-set template files."
     end
     local modules = {}
     for path in listed:gmatch("[^\n]+") do
