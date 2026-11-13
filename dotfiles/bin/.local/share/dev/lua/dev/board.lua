@@ -605,6 +605,17 @@ function M.roles(map, finished)
     return roles
 end
 
+---Point `backend` at a `columns` map, a `root` and its roles.
+---@param backend dev.board.Backend the backend to retarget
+---@param columns table<string, string>? the `[board.columns]` map the runner resolves into
+---@param root string? the project root the board's config lives under
+---@param finished string[]? the names of the columns the backend marks finished
+function M.retarget(backend, columns, root, finished)
+    backend.column_map = columns
+    backend.roles = M.roles(columns, finished)
+    backend.root = root
+end
+
 ---The column `discard` moves a card to: the mapped done column, else the first finished one.
 ---@return string
 function Roles:done_column()

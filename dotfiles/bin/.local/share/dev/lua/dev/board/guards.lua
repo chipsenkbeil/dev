@@ -131,9 +131,7 @@ local function other_home(backend, name)
     if not found then
         return nil, "pomb has no board named " .. name .. "."
     end
-    home.column_map = backend.column_map
-    home.root = backend.root
-    home.roles = board.roles(backend.column_map, home:done_columns() or {})
+    board.retarget(home, backend.column_map, backend.root, home:done_columns())
     return home
 end
 

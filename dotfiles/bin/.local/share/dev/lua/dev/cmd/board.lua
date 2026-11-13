@@ -409,6 +409,37 @@ function commands.next(backend, args)
     }
 end
 
+---Link a new card as blocked by each blocker, and name the first link that fails.
+---@param backend dev.board.Backend the board the card is on
+---@param card dev.board.Card the card just added
+---@param blockers dev.board.Card[] the cards that block it
+---@return dev.cmd.board.Result? refused the failure, nil when every link is made
+local function link_blockers(backend, card, blockers)
+    local card_prefix = card.id:sub(1, board.MIN_PREFIX)
+    for linked, blocker in ipairs(blockers) do
+        local ok, why = backend:link(card.id, board.LinkKind.BLOCKED_BY, blocker.id)
+        if not ok then
+            return {
+                message = card_prefix
+                    .. " was added to "
+                    .. card.column
+                    .. " but its blocked_by link to "
+                    .. blocker.id:sub(1, board.MIN_PREFIX)
+                    .. " was not. "
+                    .. (linked - 1)
+                    .. " of "
+                    .. #blockers
+                    .. " links were made before it. Reason: "
+                    .. why
+                    .. ".",
+                code = 1,
+                unqueued = true,
+            }
+        end
+    end
+    return nil
+end
+
 function commands.add(backend, args)
     local flags, words = parse(args, {
         ["--column"] = true,
@@ -657,25 +688,9 @@ function commands.add(backend, args)
         return failure(message)
     end
     local card_prefix = card.id:sub(1, board.MIN_PREFIX)
-    for linked, blocker in ipairs(blockers) do
-        local ok, why = backend:link(card.id, board.LinkKind.BLOCKED_BY, blocker.id)
-        if not ok then
-            return {
-                message = card_prefix
-                    .. " was added to "
-                    .. card.column
-                    .. " but its blocked_by link to "
-                    .. blocker.id:sub(1, board.MIN_PREFIX)
-                    .. " was not, and "
-                    .. (linked - 1)
-                    .. " of "
-                    .. #blockers
-                    .. " links were made before it: "
-                    .. why,
-                code = 1,
-                unqueued = true,
-            }
-        end
+    local refused = link_blockers(backend, card, blockers)
+    if refused then
+        return refused
     end
     if origin then
         local ok, why = backend:link(card.id, board.LinkKind.RELATED, origin.id)
@@ -4078,7 +4093,7 @@ end
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 function M.run(sub, args, backend, now, screen)
     local finished = backend:done_columns() or {}
-    backend.roles = board.roles(backend.column_map, finished)
+    board.retarget(backend, backend.column_map, backend.root, finished)
     local run = commands[sub] or internal[sub]
     return run(backend, args, now, screen)
 end
@@ -4122,9 +4137,7 @@ function M.open(settings, opts)
     local token = opts and opts.token_key or TOKEN_KEY
     local backend, message = open_backend(settings, token)
     if backend then
-        backend.column_map = settings.columns
-        backend.roles = board.roles(settings.columns)
-        backend.root = settings.root
+        board.retarget(backend, settings.columns, settings.root)
     end
     return backend, message
 end
