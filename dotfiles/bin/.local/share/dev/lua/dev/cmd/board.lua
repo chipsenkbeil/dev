@@ -1226,7 +1226,7 @@ local function move_once(backend, args, opts)
                     .. "; add outcomes with dev board outcome and fix the description with dev board edit, where a v1 Done when checklist also counts"
             )
         end
-        if #card.checks == 0 then
+        if #card.checks == 0 and children == 0 then
             local why, problem = named_field_problem(backend, board.CHECKS_FIELD)
             if problem then
                 return problem

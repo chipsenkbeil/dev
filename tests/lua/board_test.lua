@@ -2510,6 +2510,18 @@ testing.test("move to Ready counts a card with no checks row as missing them", f
     testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
 end)
 
+testing.test("move to Ready lets a card with children in without a checks row", function()
+    local card = planned()
+    card.checks = {}
+    card.epic = { done = 0, total = 2 }
+    card.outcomes = { { id = "s1", name = "a", done = false } }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+    testing.eq(result.output, "moved cccccccc to Ready")
+    testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.READY })
+end)
+
 testing.test("show prints the checks rows under the description", function()
     local card = colored("green")
     card.checks = { "dev lint", "dev test" }

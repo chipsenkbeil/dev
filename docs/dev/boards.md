@@ -492,7 +492,7 @@ Every card in every column is fair game for an agent unless it is labelled
   - The planner then moves it to Ready.
 - Ready: an agent can run it with no questions.
   - It has size 1 to 3, v2, 3 to 7 outcomes (1 to 3 for an epic) and a checks
-    row, which `dev board` enforces.
+    row, which `dev board` enforces, except for an epic with children.
   - The top card is next, and the order within Ready is the priority.
   - A runner takes it by size: yellow by a haiku agent, green and blue by a
     sonnet agent.
@@ -796,7 +796,8 @@ A card needs a checks row to enter Ready too. The checks live in the board's
 `dev.checks` field, a table with a `run` column, and `add --checks CMD`
 (repeatable) writes one row per command.
 
-- `move CARD ready` refuses a card with no row (exit 1).
+- `move CARD ready` refuses a card with no row (exit 1), unless the card has
+  children.
 - `add --column ready` without `--checks` is a usage error (exit 2).
 - On a Pomb board that has no checks field, both say so and point to
   `dev board init`, which defines the field once and never touches one that
@@ -1225,7 +1226,8 @@ The rules:
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
 - Outside Icebox and Done: a description of at most 400 words. In Ready, In
-  Progress and Review, a checks row. In Ready, no red size.
+  Progress and Review, a checks row, unless the card has children. In Ready, no
+  red size.
 - `needs:human` sits only in Blocked or Icebox.
 - A Blocked card holds a `question` or `blocked` note or a `blocked_by` link.
 - An In Progress card holds a claimant, an epic too.
@@ -3022,8 +3024,8 @@ A move into Ready:
   edit, where a v1 Done when checklist also counts`
   (exit 1, on both backends, size checked first).
 - `dev.board.missing(description, outcomes)` lists what is missing.
-- A card with no checks row is refused after those, before the backend is
-  called.
+- A card with no checks row and no children is refused after those, before the
+  backend is called.
 - That refusal reads
   `<id prefix> has no checks row and cannot enter Ready; give it one with dev
   board checks CARD CMD`,
@@ -3032,8 +3034,8 @@ A move into Ready:
   both backends, which `checks_field` tells apart).
 - A local board always has the checks field.
 - A card with children is an epic (`kind` epic or `children_total` on Pomb,
-  `parent` links on a local board). It enters Ready under the same checks as
-  any card.
+  `parent` links on a local board). It enters Ready under the same rules as any
+  card, except that it needs no checks row, as its children carry the checks.
 - A move into any other column, Icebox included, is never checked for the Ready
   rules.
 
