@@ -142,6 +142,23 @@ function M.delete_branch(root, backend, name)
     return true
 end
 
+---List the project's tracked files.
+---@param root string absolute path of the project root
+---@param backend dev.vcs.Backend the project's backend
+---@return string? names the paths, each ended by NUL, nil on failure
+---@return string? err why the listing failed
+function M.files(root, backend)
+    local argv = { "git", "ls-files", "-z" }
+    if backend == M.JJ then
+        argv = { "jj", "file", "list", "-T", [[path.display() ++ "\0"]] }
+    end
+    local out, code = dev_os.capture(argv, { cwd = root })
+    if code ~= 0 then
+        return nil, "Cannot list the tracked files with " .. backend .. "."
+    end
+    return out
+end
+
 ---Pick `master` or `main`, whichever the list holds.
 ---@param names string[] branch names
 ---@return string? name the trunk's name

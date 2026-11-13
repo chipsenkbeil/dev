@@ -52,3 +52,68 @@ testing.test("a jj only repo without jj needs jj", function()
     end)
     fs.remove(root, { recursive = true })
 end)
+
+local function run(argv)
+    assert(dev_os.run(argv, { stdout = "null", stderr = "null" }) == 0, argv[1] .. " failed")
+end
+
+local function git_repo()
+    local root = assert(fs.realpath(support.tempdir()))
+    run({ "git", "-C", root, "init", "-q", "-b", "master" })
+    assert(fs.write(root .. "/a.txt", "a\n"))
+    run({ "git", "-C", root, "add", "a.txt" })
+    run({
+        "git",
+        "-C",
+        root,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.com",
+        "commit",
+        "-q",
+        "-m",
+        "base",
+    })
+    return root
+end
+
+testing.test("vcs.files lists a plain git repo", function()
+    local root = git_repo()
+    testing.eq(vcs.files(root, vcs.GIT), "a.txt\0")
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("vcs.files lists a git worktree", function()
+    local root = git_repo()
+    local tree = assert(fs.realpath(support.tempdir())) .. "/tree"
+    run({ "git", "-C", root, "worktree", "add", "-q", "-b", "card", tree })
+    testing.eq(vcs.backend(tree), vcs.GIT)
+    testing.eq(vcs.files(tree, vcs.GIT), "a.txt\0")
+    fs.remove(root, { recursive = true })
+    fs.remove(fs.dirname(tree), { recursive = true })
+end)
+
+testing.test("vcs.files lists a colocated repo with git when jj is absent", function()
+    local root = git_repo()
+    assert(fs.mkdir(root .. "/.jj"))
+    with_jj(false, function()
+        local backend = vcs.require(root)
+        testing.eq(backend, vcs.GIT)
+        testing.eq(vcs.files(root, backend), "a.txt\0")
+    end)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("vcs.files lists a jj repo with jj installed", function()
+    if not dev_os.which("jj") then
+        print("skip - jj is not installed")
+        return
+    end
+    local root = assert(fs.realpath(support.tempdir()))
+    run({ "jj", "git", "init", root })
+    assert(fs.write(root .. "/a.txt", "a\n"))
+    testing.eq(vcs.require(root), vcs.JJ)
+    testing.eq(vcs.files(root, vcs.JJ), "a.txt\0")
+    fs.remove(root, { recursive = true })
+end)
