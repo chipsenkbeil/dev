@@ -24,8 +24,8 @@ end
 
 testing.test("a project with Cargo.toml and package.json is rust", function()
     local root = tree({ ["Cargo.toml"] = "", ["package.json"] = '{"scripts":{"test":"x"}}' })
-    testing.eq(project.detect_type(root), "rust")
-    testing.eq(lines_for(root, "test"), {
+    testing.eq(project.detect_type(root), project.Kind.RUST)
+    testing.eq(lines_for(root, types.Verb.TEST), {
         "cargo nextest run --all-features",
         "cargo test --doc --all-features",
     })
@@ -37,10 +37,10 @@ testing.test(
     function()
         local root =
             tree({ ["x.lua"] = "return 1\n", Makefile = "test:\n\ttrue\nlint :\n\ttrue\n" })
-        testing.eq(project.detect_type(root), "lua")
-        testing.eq(lines_for(root, "test"), { "make -C " .. root .. " test" })
-        testing.eq(lines_for(root, "lint"), { "make -C " .. root .. " lint" })
-        testing.eq(lines_for(root, "build"), { "The Makefile has no build target." })
+        testing.eq(project.detect_type(root), project.Kind.LUA)
+        testing.eq(lines_for(root, types.Verb.TEST), { "make -C " .. root .. " test" })
+        testing.eq(lines_for(root, types.Verb.LINT), { "make -C " .. root .. " lint" })
+        testing.eq(lines_for(root, types.Verb.BUILD), { "The Makefile has no build target." })
         testing.eq(lines_for(root, types.Verb.FMT), { "stylua " .. root .. "/x.lua" })
         fs.remove(root, { recursive = true })
     end
@@ -119,24 +119,27 @@ end)
 
 testing.test("a love2d project runs love and has make targets only for test and lint", function()
     local root = tree({ ["main.lua"] = "", ["conf.lua"] = "", Makefile = "lint:\n\ttrue\n" })
-    testing.eq(lines_for(root, "run"), { "love " .. root })
-    testing.eq(lines_for(root, "lint"), { "make -C " .. root .. " lint" })
-    testing.eq(lines_for(root, "test"), { "The Makefile has no test target." })
-    testing.eq(lines_for(root, "build"), { "There is no built-in build for love2d projects." })
+    testing.eq(lines_for(root, types.Verb.RUN), { "love " .. root })
+    testing.eq(lines_for(root, types.Verb.LINT), { "make -C " .. root .. " lint" })
+    testing.eq(lines_for(root, types.Verb.TEST), { "The Makefile has no test target." })
+    testing.eq(
+        lines_for(root, types.Verb.BUILD),
+        { "There is no built-in build for love2d projects." }
+    )
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("a node project names the package.json scripts it has", function()
     local root = tree({ ["package.json"] = '{"scripts":{"test":"echo hi","lint":null}}' })
-    testing.eq(lines_for(root, "test"), { "npm --prefix " .. root .. " run test" })
-    testing.eq(lines_for(root, "lint"), { "The package.json has no lint script." })
-    testing.eq(lines_for(root, "build"), { "The package.json has no build script." })
+    testing.eq(lines_for(root, types.Verb.TEST), { "npm --prefix " .. root .. " run test" })
+    testing.eq(lines_for(root, types.Verb.LINT), { "The package.json has no lint script." })
+    testing.eq(lines_for(root, types.Verb.BUILD), { "The package.json has no build script." })
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("the rust lint help quotes the glob the shell would expand", function()
     local root = tree({ ["Cargo.toml"] = "", ["sgconfig.yml"] = "" })
-    testing.eq(lines_for(root, "lint"), {
+    testing.eq(lines_for(root, types.Verb.LINT), {
         "cargo +nightly fmt --check",
         "cargo clippy --all-targets --all-features -- -D warnings",
         "ast-grep scan --globs '!target/**'",
@@ -146,9 +149,12 @@ end)
 
 testing.test("rust fetch adds cargo deny only with a deny.toml", function()
     local root = tree({ ["Cargo.toml"] = "" })
-    testing.eq(lines_for(root, "fetch"), { "env CARGO_NET_OFFLINE=false cargo fetch --locked" })
+    testing.eq(
+        lines_for(root, types.Verb.FETCH),
+        { "env CARGO_NET_OFFLINE=false cargo fetch --locked" }
+    )
     assert(fs.write(root .. "/deny.toml", ""))
-    testing.eq(lines_for(root, "fetch"), {
+    testing.eq(lines_for(root, types.Verb.FETCH), {
         "env CARGO_NET_OFFLINE=false cargo fetch --locked",
         "env CARGO_NET_OFFLINE=false cargo deny fetch",
     })
@@ -157,7 +163,10 @@ end)
 
 testing.test("an undetected project has no built-in", function()
     local root = tree({})
-    testing.eq(lines_for(root, "lint"), { "There is no built-in lint for an undetected project." })
+    testing.eq(
+        lines_for(root, types.Verb.LINT),
+        { "There is no built-in lint for an undetected project." }
+    )
     fs.remove(root, { recursive = true })
 end)
 
@@ -165,7 +174,7 @@ testing.test(
     "a failing make target ends dev with make's exit code after showing the command",
     function()
         local root = support.sandbox({ ["x.lua"] = "return 1\n", Makefile = "test:\n\ttrue\n" })
-        local out, code = support.dev(root, { "-v", "test", "a", "b" }, { code = "3" })
+        local out, code = support.dev(root, { "-v", types.Verb.TEST, "a", "b" }, { code = "3" })
         testing.eq(code, 3)
         testing.ok(out:find("+ make -C " .. root .. " test a b\n", 1, true), out)
         testing.ok(out:find("make -C " .. root .. " test a b cwd=", 1, true), out)
@@ -176,10 +185,10 @@ testing.test(
 
 testing.test("arguments reach npm after a --, and no -- without arguments", function()
     local root = support.sandbox({ ["package.json"] = '{"scripts":{"test":"x"}}' })
-    local out, code = support.dev(root, { "test", "--watch", "a" })
+    local out, code = support.dev(root, { types.Verb.TEST, "--watch", "a" })
     testing.eq(code, 0)
     testing.ok(out:find("npm --prefix " .. root .. " run test -- --watch a cwd=", 1, true), out)
-    out = support.dev(root, { "test" })
+    out = support.dev(root, { types.Verb.TEST })
     testing.ok(out:find("npm --prefix " .. root .. " run test cwd=", 1, true), out)
     testing.ok(not out:find(" -- ", 1, true), out)
     fs.remove(root, { recursive = true })
@@ -191,11 +200,11 @@ testing.test(
         local root =
             support.sandbox({ ["Cargo.toml"] = "", ["sgconfig.yml"] = "", ["deny.toml"] = "" })
         assert(fs.mkdir(root .. "/sub", { parents = true }))
-        local out, code = support.dev(root, { "lint" }, { cwd = root .. "/sub" })
+        local out, code = support.dev(root, { types.Verb.LINT }, { cwd = root .. "/sub" })
         testing.eq(code, 0)
         testing.ok(out:find("ast-grep scan --globs !target/** cwd=" .. root .. "\n", 1, true), out)
         testing.ok(out:find("cargo +nightly fmt --check cwd=" .. root .. "/sub\n", 1, true), out)
-        out, code = support.dev(root, { "fetch" }, { cwd = root .. "/sub" })
+        out, code = support.dev(root, { types.Verb.FETCH }, { cwd = root .. "/sub" })
         testing.eq(code, 0)
         testing.ok(out:find("cargo fetch --locked cwd=" .. root .. "\n", 1, true), out)
         testing.ok(out:find("cargo deny fetch cwd=" .. root .. "\n", 1, true), out)
