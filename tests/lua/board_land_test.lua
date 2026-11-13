@@ -1650,6 +1650,49 @@ if has_jj then
         testing.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
     end)
 
+    testing.test(
+        "land carries a checked commit whose reviews sit at an earlier identical patch",
+        function()
+            local project = jj_project()
+            local id = new_card(project)
+            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+            approve_reviews(project, id)
+            jj(project.root, "describe", "-m", "feat: work again")
+            must(dev(project, { "board", "check", id }))
+            local at_check = head(project.root)
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(project.root)
+            local out, code = dev(
+                project,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
+            testing.eq(code, 0, out)
+            local list = comments(project.home)
+            testing.ok(
+                list[#list].body:find("carried over from commit " .. at_check:sub(1, 12), 1, true)
+            )
+        end
+    )
+
+    testing.test(
+        "land does not carry a checked commit whose reviews sit at a different patch",
+        function()
+            local project = jj_project()
+            local id = new_card(project)
+            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+            approve_reviews(project, id)
+            assert(fs.write(project.root .. "/other.txt", "other\n"), "write failed")
+            must(dev(project, { "board", "check", id }))
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(project.root)
+            local out = refused(project, id, { "no run of dev board check" })
+            testing.eq(out:find("carried over", 1, true), nil, out)
+        end
+    )
+
     testing.test("land names the newest checked commit when no candidate carries", function()
         local project = jj_project()
         local id, older, newer = two_checked_commits({

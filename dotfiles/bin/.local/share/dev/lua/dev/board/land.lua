@@ -544,7 +544,7 @@ local function file_set(out)
     return set
 end
 
-local function checked_commits(comments, state, rows)
+local function checked_commits(root, comments, state, rows)
     local found = {}
     for i = #comments, 1, -1 do
         local record = check.parse(comments[i].body)
@@ -557,8 +557,8 @@ local function checked_commits(comments, state, rows)
             local at = { commit = record.commit, change = state.change }
             if
                 not M.checks_problem(comments, at, rows)
-                and #M.missing_reviews(comments, at) == 0
-                and #M.refused_reviews(comments, at) == 0
+                and #M.missing_reviews(comments, at, root) == 0
+                and #M.refused_reviews(comments, at, root) == 0
             then
                 found[#found + 1] = record.commit
             end
@@ -820,7 +820,7 @@ function M.carry(opts)
             return nil
         end
     end
-    local candidates = checked_commits(comments, state, rows)
+    local candidates = checked_commits(root, comments, state, rows)
     if #candidates == 0 then
         return nil
     end
