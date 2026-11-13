@@ -1544,7 +1544,12 @@ non-hidden row is missing from that listing.
 
 ### ls
 
-`dev board ls [--column C] [--label L] [--size S] [--group]` lists the cards.
+`dev board ls [--column C] [--label L] [--size S] [--lane L] [--group]` lists
+the cards.
+
+- `--lane L` keeps the cards of one swimlane. A lane the board lacks is a usage
+  error (exit 2) that names the lanes it has, and a board with fewer than two
+  lanes has none to name.
 
 - It prints one line per card: id prefix (8 characters), column, size, labels
   (`-` for none) and name, in column then board order, aligned.
@@ -1575,9 +1580,12 @@ non-hidden row is missing from that listing.
 
 ### next
 
-`dev board next [--column C] [--for planner|lead] [--max-size N]` prints the
-top Ready card that is unclaimed, not blocked and not labelled `needs:human`
-or `run`.
+`dev board next [--column C] [--for planner|lead] [--lane L] [--max-size N]`
+prints the top Ready card that is unclaimed, not blocked and not labelled
+`needs:human` or `run`.
+
+- `--lane L` takes the top such card of one swimlane, with the same usage error
+  as `ls` for a lane the board lacks.
 
 - The card is in the `ls` format, followed by `N comments, M the owner's`
   (`1 comment` for one).
@@ -1656,12 +1664,16 @@ this project's board, from a fresh `GET /api/boards/{id}`.
 ### add
 
 `dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD]
-[--id-only] [--top | --before CARD | --after CARD] [--column C]
+[--id-only] [--top | --before CARD | --after CARD] [--column C] [--lane L]
 [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT]
 [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...` creates the
 card.
 
 - The card goes in Backlog by default.
+- `--lane L` puts the card in that swimlane, and without it Pomb picks the
+  lane. A lane the board lacks is a usage error (exit 2) that names the lanes
+  it has. `--before` and `--after` put the card in the lane of `CARD`, and a
+  `--lane` that names another lane is a usage error.
 - It prints `added <id prefix> <column>`.
 - `--size` gives the card the colour of the size, as `size` does.
 - Each `--label L` (repeatable, duplicates dropped) gives it a label.
@@ -2973,8 +2985,12 @@ Whose comment:
 
 ### move
 
-`dev board move CARD COLUMN [--max-size N] [--wait SECONDS]` moves the card to
-the top of the column and prints `moved <id prefix> to <column>`.
+`dev board move CARD COLUMN [--lane L] [--max-size N] [--wait SECONDS]` moves
+the card to the top of the column and prints `moved <id prefix> to <column>`.
+
+- The card keeps its swimlane. `--lane L` moves it to that lane too, and puts it
+  at the top of the column in that lane. Pomb counts a position within one
+  column and lane, so `order` takes cards of one lane only.
 
 A full column:
 

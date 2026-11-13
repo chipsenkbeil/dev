@@ -68,6 +68,8 @@ local M = {}
 ---   id, or nil and a message
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order,
 ---   or nil and a message
+---@field lanes fun(self: dev.board.Backend): string[]?, string? the names of the lanes in board
+---   order, empty on a board with fewer than two lanes, or nil and a message
 ---@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board
 ---   defines the custom field with that key, or nil and a message
 ---@field next fun(self: dev.board.Backend, column: string, opts: dev.board.NextOpts?):
@@ -194,7 +196,8 @@ local M = {}
 
 ---@class dev.board.MoveOpts
 ---@field fence integer? the claim fence the move is checked against
----@field position integer? the zero-based place in the column, the top when nil
+---@field position integer? the zero-based place in the column and lane, the top when nil
+---@field lane string? the name of the lane to move the card to, its own lane when nil
 
 ---@class dev.board.Comment
 ---@field id string the comment's full id
@@ -221,6 +224,7 @@ local M = {}
 ---@class dev.board.NextOpts
 ---@field label string? the label the card must carry
 ---@field max_size integer? the most Pomodori the card may be, nil for any size
+---@field lane string? the name of the lane the card must sit in
 
 ---@class dev.board.AddOpts
 ---@field description string? the card's description
@@ -229,6 +233,7 @@ local M = {}
 ---@field checks string[] the run commands to give it, one checks row each
 ---@field outcomes string[]? the Done when outcomes to give it, one subtask each
 ---@field epic boolean? whether to create it as an epic
+---@field lane string? the name of the lane to put it in
 
 ---@class dev.board.Layout
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a

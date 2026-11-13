@@ -208,6 +208,14 @@ local function lane_name(doc, card)
     return lane and lane.name
 end
 
+local function lane_named(doc, name)
+    for _, lane in ipairs(doc.swimlanes) do
+        if lane.name:lower() == name:lower() then
+            return lane
+        end
+    end
+end
+
 local function card_view(doc, card)
     local color = card.color_id and find_by_id(doc.colors, card.color_id)
     local column = find_by_id(doc.columns, card.column_id)
@@ -599,6 +607,20 @@ function Backend:done_columns()
     return names
 end
 
+function Backend:lanes()
+    local doc, message = self:__read()
+    if not doc then
+        return nil, message
+    end
+    local names = {}
+    if #doc.swimlanes > 1 then
+        for _, lane in ipairs(doc.swimlanes) do
+            names[#names + 1] = lane.name
+        end
+    end
+    return names
+end
+
 function Backend:next(column, opts)
     local label = opts and opts.label
     local doc, message = self:__read()
@@ -617,6 +639,7 @@ function Backend:next(column, opts)
             and not board.labelled(card, board.NEEDS_HUMAN)
             and not board.labelled(card, board.RUN)
             and (not label or board.labelled(card, label))
+            and (not (opts and opts.lane) or lane_name(doc, card) == opts.lane)
         then
             local view = card_view(doc, card)
             if board.open_children(view.epic) == 0 and board.fits(view, opts and opts.max_size) then
@@ -639,6 +662,13 @@ function Backend:add(name, column, opts)
         local target = column_named(doc, column)
         if not target then
             return nil, "the board has no " .. column .. " column, run dev board init"
+        end
+        local lane
+        if opts and opts.lane then
+            lane = lane_named(doc, opts.lane)
+            if not lane then
+                return nil, "the board has no " .. opts.lane .. " lane"
+            end
         end
         local color_id
         if opts and opts.color then
@@ -677,6 +707,7 @@ function Backend:add(name, column, opts)
             name = name,
             description = opts and opts.description or nil,
             column_id = target.id,
+            swimlane_id = lane and lane.id or nil,
             color_id = color_id,
             kind = opts and opts.epic and board.Kind.EPIC or board.Kind.TASK,
             labels = opts and opts.labels or {},
@@ -843,11 +874,22 @@ function Backend:move(id, column, opts)
         if not target then
             return nil, "the board has no " .. column .. " column, run dev board init"
         end
+        local lane
+        if opts.lane then
+            lane = lane_named(doc, opts.lane)
+            if not lane then
+                return nil, "the board has no " .. opts.lane .. " lane"
+            end
+        end
         local _, index = find_by_id(doc.cards, id)
         table.remove(doc.cards, index)
+        if lane then
+            card.swimlane_id = lane.id
+        end
+        local rank = lane_rank(doc, card)
         local seen, at = 0, #doc.cards + 1
         for i, other in ipairs(doc.cards) do
-            if other.column_id == target.id then
+            if other.column_id == target.id and lane_rank(doc, other) == rank then
                 if seen == position then
                     at = i
                     break

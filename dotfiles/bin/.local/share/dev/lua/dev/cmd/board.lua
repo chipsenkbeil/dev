@@ -183,6 +183,22 @@ local function named_column(backend, word)
     return column
 end
 
+local function named_lane(backend, word)
+    local lanes, message = backend:lanes()
+    if not lanes then
+        return nil, failure(message)
+    end
+    for _, lane in ipairs(lanes) do
+        if lane:lower() == word:lower() then
+            return lane
+        end
+    end
+    if #lanes == 0 then
+        return nil, usage("the board has no lanes, so --lane " .. word .. " names none")
+    end
+    return nil, usage("unknown lane " .. word .. ", the lanes are " .. table.concat(lanes, ", "))
+end
+
 local function sized(word)
     local color = board.size_color(word)
     if not color then
@@ -272,12 +288,25 @@ function commands.ls(backend, args, _, screen)
             rest[#rest + 1] = arg
         end
     end
-    local flags, extra = parse(rest, { ["--column"] = true, ["--label"] = true, ["--size"] = true })
+    local flags, extra = parse(rest, {
+        ["--column"] = true,
+        ["--label"] = true,
+        ["--size"] = true,
+        ["--lane"] = true,
+    })
     if not flags then
         return extra
     end
     if #extra > 0 then
         return usage("unknown argument " .. extra[1])
+    end
+    local lane
+    if flags["--lane"] then
+        local named, err = named_lane(backend, flags["--lane"])
+        if not named then
+            return err
+        end
+        lane = named
     end
     local color
     if flags["--size"] then
@@ -312,6 +341,9 @@ function commands.ls(backend, args, _, screen)
         if shown and color then
             shown = board.has_color(card, color)
         end
+        if shown and lane then
+            shown = card.lane == lane
+        end
         if shown then
             shown_cards[#shown_cards + 1] = card
             holders = holders or card.claimant ~= nil
@@ -341,13 +373,25 @@ function commands.ls(backend, args, _, screen)
 end
 
 function commands.next(backend, args)
-    local flags, words =
-        parse(args, { ["--column"] = true, ["--for"] = true, [runner.FLAG] = true })
+    local flags, words = parse(args, {
+        ["--column"] = true,
+        ["--for"] = true,
+        ["--lane"] = true,
+        [runner.FLAG] = true,
+    })
     if not flags then
         return words
     end
     if #words > 0 then
         return usage("unknown argument " .. words[1])
+    end
+    local lane
+    if flags["--lane"] then
+        local named, err = named_lane(backend, flags["--lane"])
+        if not named then
+            return err
+        end
+        lane = named
     end
     local limit, bad = runner.limit(flags[runner.FLAG])
     if bad then
@@ -381,6 +425,7 @@ function commands.next(backend, args)
     local card, message = backend:next(column, {
         label = column == roles.blocked and board.BLOCKED_LABELS[asked or "lead"] or nil,
         max_size = limit,
+        lane = lane,
     })
     if not card then
         if message then
@@ -459,6 +504,7 @@ function commands.add(backend, args)
         ["--from"] = true,
         ["--before"] = true,
         ["--after"] = true,
+        ["--lane"] = true,
         ["--top"] = SWITCH,
         [ID_ONLY_FLAG] = SWITCH,
         ["--epic"] = SWITCH,
@@ -550,6 +596,14 @@ function commands.add(backend, args)
             return err
         end
         column = named
+    end
+    local lane
+    if flags["--lane"] then
+        local named, err = named_lane(backend, flags["--lane"])
+        if not named then
+            return err
+        end
+        lane = named
     end
     if
         index_of(labels or {}, board.NEEDS_HUMAN)
@@ -666,8 +720,20 @@ function commands.add(backend, args)
                         .. "."
                 )
             end
+            if lane and anchor.lane ~= lane then
+                return usage(
+                    "Card "
+                        .. anchor.id:sub(1, board.MIN_PREFIX)
+                        .. " is in lane "
+                        .. (anchor.lane or "none")
+                        .. ". The new card goes to lane "
+                        .. lane
+                        .. "."
+                )
+            end
+            lane = lane or anchor.lane
             for _, other in ipairs(cards) do
-                if other.column == column then
+                if other.column == column and other.lane == anchor.lane then
                     position = position + 1
                 end
                 if other.id == anchor.id then
@@ -686,6 +752,7 @@ function commands.add(backend, args)
         checks = checks,
         outcomes = outcomes,
         epic = flags["--epic"] or nil,
+        lane = lane,
     })
     if not card then
         return failure(message)
@@ -1127,18 +1194,28 @@ local function unnoted(backend, card, column)
     end
 end
 
+local MOVE_FLAGS = { [runner.FLAG] = true, [WAIT_FLAG] = true, ["--lane"] = true }
+
 ---Move a card to a column, checking its outcomes first when the column is Done.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card and the column
 ---@param opts {drop: boolean?}? `drop` skips the outcome check, and the planning check from Icebox
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 local function move_once(backend, args, opts)
-    local flags, words = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
+    local flags, words = parse(args, MOVE_FLAGS)
     if not flags then
         return words
     end
     if #words < 2 then
         return usage("needs a card and a column")
+    end
+    local lane
+    if flags["--lane"] then
+        local named, bad = named_lane(backend, flags["--lane"])
+        if not named then
+            return bad
+        end
+        lane = named
     end
     if flags[runner.FLAG] then
         local _, bad = runner.limit(flags[runner.FLAG])
@@ -1305,7 +1382,8 @@ local function move_once(backend, args, opts)
         started = true
         held = { fence = fence }
     end
-    local ok, message, at_limit = backend:move(card.id, column, { fence = held and held.fence })
+    local ok, message, at_limit =
+        backend:move(card.id, column, { fence = held and held.fence, lane = lane })
     if not ok then
         if started then
             claims.stop(card.id)
@@ -1342,7 +1420,7 @@ end
 ---@param opts dev.cmd.board.MoveOpts? the options of `move_once` and the clock
 ---@return dev.cmd.board.Result result the result of the last try
 local function move_card(backend, args, opts)
-    local flags = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
+    local flags = parse(args, MOVE_FLAGS)
     local wait = 0
     if flags and flags[WAIT_FLAG] then
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
@@ -1382,7 +1460,7 @@ end
 ---@param args string[] the arguments after `move`
 ---@return boolean
 local function closes_epic(backend, args)
-    local flags, words = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
+    local flags, words = parse(args, MOVE_FLAGS)
     if not flags or #words < 2 then
         return false
     end
@@ -1426,6 +1504,18 @@ function commands.order(backend, args)
                     .. named[1].id:sub(1, board.MIN_PREFIX)
                     .. " is in "
                     .. column
+            )
+        end
+        if named[1] and card.lane ~= named[1].lane then
+            return failure(
+                "order takes cards of one lane, but "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " is in lane "
+                    .. (card.lane or "none")
+                    .. " and "
+                    .. named[1].id:sub(1, board.MIN_PREFIX)
+                    .. " is in lane "
+                    .. (named[1].lane or "none")
             )
         end
         column = card.column

@@ -255,8 +255,8 @@ return {
     {
         words = { "board", "ls" },
         handler = "lua",
-        flags = "--column --label --size --group",
-        usage = "dev board ls [--column C] [--label L] [--size S] [--group]",
+        flags = "--column --label --size --lane --group",
+        usage = "dev board ls [--column C] [--label L] [--size S] [--lane L] [--group]",
         desc = "List the cards of the board",
     },
     {
@@ -286,15 +286,15 @@ return {
     {
         words = { "board", "next" },
         handler = "lua",
-        flags = "--column --for --max-size",
-        usage = "dev board next [--column C] [--for planner|lead] [--max-size N]",
+        flags = "--column --for --lane --max-size",
+        usage = "dev board next [--column C] [--for planner|lead] [--lane L] [--max-size N]",
         desc = "Show the top unclaimed Ready card",
     },
     {
         words = { "board", "add" },
         handler = "lua",
-        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when --board --blocked-by --from --epic --id-only --top --before --after",
-        usage = "dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD] [--epic] [--id-only] [--top | --before CARD | --after CARD] [--column C] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
+        flags = "--column --description --problem --change --out-of-scope --size --label --checks --done-when --board --blocked-by --from --epic --id-only --top --before --after --lane",
+        usage = "dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD] [--epic] [--id-only] [--top | --before CARD | --after CARD] [--column C] [--lane L] [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT] [--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...",
         desc = "Add a card to the board",
     },
     {
@@ -493,8 +493,8 @@ return {
     {
         words = { "board", "move" },
         handler = "lua",
-        flags = "--max-size --wait",
-        usage = "dev board move CARD COLUMN [--max-size N] [--wait SECONDS]",
+        flags = "--lane --max-size --wait",
+        usage = "dev board move CARD COLUMN [--lane L] [--max-size N] [--wait SECONDS]",
         desc = "Move a card to the top of a column",
     },
     {

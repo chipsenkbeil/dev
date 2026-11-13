@@ -9510,3 +9510,64 @@ testing.test("ls and show print the lane of a card", function()
     testing.ok(not out:find("Fixes", 1, true), out)
     testing.ok(not out:find("Parity", 1, true), out)
 end)
+
+testing.test("add with a lane puts the card in that lane", function()
+    local root, home = laned(LANED_TASKS)
+    local args = { "board", "add", "New", "--size", "1", "--problem", "x", "--done-when", "a" }
+    local out, code = dev(root, home, args)
+    testing.eq(code, 0, out)
+    testing.ok(not read(root, "calls"):find("swimlane_id", 1, true), read(root, "calls"))
+    table.insert(args, "--lane")
+    table.insert(args, "fixes")
+    out, code = dev(root, home, args)
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find('"swimlane_id":"lane-fixes"', 1, true), read(root, "calls"))
+end)
+
+testing.test("move keeps the lane unless a lane is given", function()
+    local root, home = laned(LANED_TASKS)
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.ICEBOX })
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/move", 1, true), out)
+    testing.ok(not read(root, "calls"):find("swimlane_id", 1, true), read(root, "calls"))
+    out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", support.COLUMN.ICEBOX, "--lane", "Parity" }
+    )
+    testing.eq(code, 0, out)
+    testing.ok(
+        read(root, "calls"):find('"swimlane_id":"lane-parity"', 1, true),
+        read(root, "calls")
+    )
+end)
+
+testing.test("ls and next with a lane list only that lane", function()
+    local root, home = laned(LANED_TASKS)
+    local out, code =
+        dev(root, home, { "board", "ls", "--column", support.COLUMN.READY, "--lane", "parity" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Charlie", 1, true) and out:find("Bravo", 1, true), out)
+    testing.ok(not out:find("Alpha", 1, true), out)
+    out, code = dev(root, home, { "board", "next", "--lane", "Fixes" })
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find("&swimlane_id=lane-fixes", 1, true), read(root, "calls"))
+end)
+
+testing.test("a lane the board lacks is refused", function()
+    local root, home = laned(LANED_TASKS)
+    for _, args in ipairs({
+        { "board", "ls", "--lane", "Features" },
+        { "board", "next", "--lane", "Features" },
+        { "board", "move", "11111111-a", support.COLUMN.ICEBOX, "--lane", "Features" },
+        { "board", "add", "New", "--lane", "Features" },
+    }) do
+        local out, code = dev(root, home, args)
+        testing.eq(code, 2, out)
+        testing.ok(out:find("unknown lane Features, the lanes are Parity, Fixes", 1, true), out)
+    end
+    root, home = sandbox()
+    local out, code = dev(root, home, { "board", "ls", "--lane", "Parity" })
+    testing.eq(code, 2, out)
+    testing.ok(out:find("the board has no lanes", 1, true), out)
+end)

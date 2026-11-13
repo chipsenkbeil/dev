@@ -3266,6 +3266,61 @@ testing.test("local sorts a card with no lane last with no lane name", function(
     testing.eq(rows, { "Parity Charlie", "Fixes Alpha", "- Bravo" })
 end)
 
+testing.test("local add with a lane puts the card in that lane", function()
+    local root, home = laned_board()
+    local args = { "board", "add", "Delta", "--problem", "x", "--size", "1", "--done-when", "a" }
+    local out, code = dev(root, home, args)
+    testing.eq(code, 0, out)
+    table.insert(args, "--lane")
+    table.insert(args, "fixes")
+    args[3] = "Echo"
+    out, code = dev(root, home, args)
+    testing.eq(code, 0, out)
+    local cards = document(file_of(home)).cards
+    testing.eq(cards[4].swimlane_id, nil)
+    testing.eq(cards[5].swimlane_id, "lane-fixes")
+end)
+
+testing.test("local move keeps the lane unless a lane is given", function()
+    local root, home, ids = laned_board()
+    local function lane_of(name)
+        for _, card in ipairs(document(file_of(home)).cards) do
+            if card.name == name then
+                return card.swimlane_id
+            end
+        end
+    end
+    local out, code = dev(root, home, { "board", "move", ids.Alpha, COLUMN.ICEBOX })
+    testing.eq(code, 0, out)
+    testing.eq(lane_of("Alpha"), "lane-fixes")
+    out, code = dev(root, home, { "board", "move", ids.Alpha, COLUMN.ICEBOX, "--lane", "Parity" })
+    testing.eq(code, 0, out)
+    testing.eq(lane_of("Alpha"), "lane-parity")
+end)
+
+testing.test("local ls and next with a lane list only that lane", function()
+    local root, home, ids = laned_board()
+    local out = dev(root, home, { "board", "ls", "--lane", "fixes" })
+    testing.ok(out:find("Alpha", 1, true), out)
+    testing.ok(not out:find("Bravo", 1, true) and not out:find("Charlie", 1, true), out)
+    out = dev(root, home, { "board", "next", "--column", COLUMN.BACKLOG, "--lane", "Fixes" })
+    testing.ok(out:find(ids.Alpha, 1, true), out)
+end)
+
+testing.test("local a lane the board lacks is refused", function()
+    local root, home, ids = laned_board()
+    for _, args in ipairs({
+        { "board", "ls", "--lane", "Features" },
+        { "board", "next", "--lane", "Features" },
+        { "board", "move", ids.Alpha, COLUMN.ICEBOX, "--lane", "Features" },
+        { "board", "add", "New", "--lane", "Features" },
+    }) do
+        local out, code = dev(root, home, args)
+        testing.eq(code, 2, out)
+        testing.ok(out:find("unknown lane Features, the lanes are Parity, Fixes", 1, true), out)
+    end
+end)
+
 testing.test("a local board with one lane prints no lane", function()
     local root, home, ids = laned_board()
     local doc = document(file_of(home))

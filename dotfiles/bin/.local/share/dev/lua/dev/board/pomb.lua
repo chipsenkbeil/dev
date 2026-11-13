@@ -593,6 +593,32 @@ function Backend:__lane_name(id)
     end
 end
 
+---Find the id of a lane by name.
+---@private
+---@param name string the lane's name
+---@return string? id the lane's id, nil when the board has no such lane
+function Backend:__lane_id(name)
+    for _, lane in ipairs(self.__detail.swimlanes) do
+        if lane.name:lower() == name:lower() then
+            return lane.id
+        end
+    end
+end
+
+function Backend:lanes()
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local names = {}
+    if #self.__detail.swimlanes > 1 then
+        for _, lane in ipairs(self.__detail.swimlanes) do
+            names[#names + 1] = lane.name
+        end
+    end
+    return names
+end
+
 local function holder(task)
     local owner = task.owner
     if type(owner) ~= "table" or type(owner.holder) ~= "table" then
@@ -821,12 +847,21 @@ function Backend:next(column, opts)
         return nil, unavailable("the board has no " .. column .. " column")
     end
     local ready_filter = column == self:__roles().ready and "&ready=true" or ""
+    local lane_filter = ""
+    if opts and opts.lane then
+        local lane_id = self:__lane_id(opts.lane)
+        if not lane_id then
+            return nil, unavailable("the board has no " .. opts.lane .. " lane")
+        end
+        lane_filter = "&swimlane_id=" .. lane_id
+    end
     local cursor
     repeat
         local query = "/api/boards/"
             .. self.__detail.id
             .. "/tasks?limit=50&claimed=false"
             .. ready_filter
+            .. lane_filter
             .. "&column_id="
             .. id
         if cursor then
@@ -938,6 +973,12 @@ function Backend:add(name, column, opts)
         end
     end
     local body = { name = name, column_id = id }
+    if opts and opts.lane then
+        body.swimlane_id = self:__lane_id(opts.lane)
+        if not body.swimlane_id then
+            return nil, unavailable("the board has no " .. opts.lane .. " lane")
+        end
+    end
     if opts and opts.epic then
         body.kind = board.Kind.EPIC
     end
@@ -1193,13 +1234,16 @@ function Backend:move(id, column, opts)
         return nil, unavailable("the board has no " .. column .. " column")
     end
     opts = opts or {}
+    local body = { column_id = target, position = opts.position or TOP }
+    if opts.lane then
+        body.swimlane_id = self:__lane_id(opts.lane)
+        if not body.swimlane_id then
+            return nil, unavailable("the board has no " .. opts.lane .. " lane")
+        end
+    end
     local moved, status, doc
-    moved, message, status, doc = self:__request(
-        "POST",
-        "/api/tasks/" .. id .. "/move",
-        { column_id = target, position = opts.position or TOP },
-        opts.fence
-    )
+    moved, message, status, doc =
+        self:__request("POST", "/api/tasks/" .. id .. "/move", body, opts.fence)
     if not moved then
         if status == CONFLICT and type(doc) == "table" and doc.code == LIMIT_REACHED then
             return nil, present(doc.message) or message, FULL
