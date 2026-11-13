@@ -14,6 +14,7 @@ local M = {}
 local SHAPE_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ if(description == "", "bare", "named")'
 local COMMIT_TEMPLATE = 'commit_id ++ "\\n"'
 local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
+local TRUNK_REVSET = "trunk()"
 local COMMIT_CHARS = 12
 local FETCH_SECONDS = 120
 local FETCH_ATTEMPTS = 2
@@ -953,9 +954,10 @@ function M.trunk_commit(root, change)
     return M.fetched_commit(root, change .. " & ::trunk()")
 end
 
----Read the one commit a revset names once the remote of record is fetched.
----@param root string the project root, a jj project
----@param revset string the jj revset
+---Read the one commit a revision names once the remote of record is fetched.
+---@param root string the project root
+---@param revset string the jj revset, or in git a revision where the default trunk revset names
+---   the remote trunk
 ---@return string? commit the full commit id, nil when the fetch or the read failed or the revset
 ---   holds more than one commit
 function M.fetched_commit(root, revset)
@@ -966,6 +968,14 @@ function M.fetched_commit(root, revset)
     local _, fetched = fetch(root, found.remote)
     if fetched ~= 0 then
         return nil
+    end
+    if vcs.backend(root) == vcs.GIT then
+        local rev = revset
+        if revset == TRUNK_REVSET then
+            rev = vcs.remote_trunk(root, found.remote)
+        end
+        local read = rev and git_out(root, "rev-parse", "--verify", "-q", rev .. "^{commit}")
+        return read and read:match("^(%x+)\n$")
     end
     local out, code = dev_os.capture(
         jj(root, "log", "-r", revset, "--no-graph", "-T", COMMIT_TEMPLATE),
@@ -978,11 +988,14 @@ function M.fetched_commit(root, revset)
 end
 
 ---Say whether a commit is an ancestor of a revision, or the revision itself.
----@param root string the project root, a jj project
+---@param root string the project root
 ---@param commit string the commit id, full or shortened
----@param rev string the jj revset naming one revision
+---@param rev string the jj revset naming one revision, or in git a revision
 ---@return boolean held true when the revision holds the commit
 function M.holds(root, commit, rev)
+    if vcs.backend(root) == vcs.GIT then
+        return git_out(root, "merge-base", "--is-ancestor", commit, rev) ~= nil
+    end
     local out = jj_out(
         root,
         "log",

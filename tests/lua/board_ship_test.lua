@@ -392,3 +392,92 @@ if dev_os.which("jj") then
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
     end)
 end
+
+local function git(root, ...)
+    local argv = {
+        "git",
+        "-C",
+        root,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        ...,
+    }
+    must(dev_os.run(argv, { stdout = "null", stderr = "null" }))
+end
+
+local function git_head(root)
+    return (dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", ""))
+end
+
+local function git_project()
+    local root = support.sandbox({
+        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "'
+            .. BOARD
+            .. '"\n[board.release]\nchecks = ["true"]\n',
+    }, {})
+    local home = support.tempdir()
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
+    assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
+    local bare = assert(fs.realpath(support.tempdir()))
+    must(dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" }))
+    must(dev_os.run({ "git", "init", "-q", "-b", "master", root }, { stdout = "null" }))
+    git(root, "remote", "add", "origin", bare)
+    assert(fs.write(root .. "/seed.txt", "seed\n"), "write failed")
+    git(root, "add", "seed.txt")
+    git(root, "commit", "-q", "-m", "base")
+    git(root, "push", "-q", "origin", "master")
+    return root, home
+end
+
+local function git_push_commit(root, name)
+    assert(fs.write(root .. "/" .. name .. ".txt", name .. "\n"), "write failed")
+    git(root, "add", name .. ".txt")
+    git(root, "commit", "-q", "-m", name)
+    git(root, "push", "-q", "origin", "master")
+    return git_head(root)
+end
+
+local function git_release_card(root, home, name, landed)
+    local out = dev(
+        root,
+        home,
+        { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "It works" }
+    )
+    local id = assert(out:match("added (%x+)"), out)
+    must(dev(root, home, { "board", "move", id, support.COLUMN.RELEASE }))
+    land_note(root, home, id, landed)
+    tick(root, home, id)
+    return id
+end
+
+testing.test("ship.in.a.git.project.moves.a.card.landed.in.trunk", function()
+    local root, home = git_project()
+    must(dev(root, home, { "board", "init" }))
+    local id = git_release_card(root, home, "First", git_head(root))
+    local trunk = git_head(root)
+    local out, code = dev(root, home, { "board", "ship" })
+    testing.eq(code, 0, out)
+    testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+    local notes = done_notes(select(2, state(home, id)))
+    testing.eq(#notes, 1)
+    testing.ok(notes[1]:find(trunk:sub(1, 12), 1, true), notes[1])
+    testing.ok(out:find("shipped 1 card", 1, true), out)
+end)
+
+testing.test("ship.in.a.git.project.leaves.a.card.landed.after.the.rev", function()
+    local root, home = git_project()
+    must(dev(root, home, { "board", "init" }))
+    local pinned = git_head(root)
+    local early = git_release_card(root, home, "Early", pinned)
+    local late = git_release_card(root, home, "Late", git_push_commit(root, "later"))
+    local out, code = dev(root, home, { "board", "ship", "--rev", pinned })
+    testing.eq(code, 0, out)
+    testing.eq((state(home, early)), support.COLUMN_NAME.DONE)
+    testing.eq((state(home, late)), support.COLUMN_NAME.RELEASE)
+    testing.ok(out:find("is not in", 1, true), out)
+    testing.eq(#done_notes(select(2, state(home, late))), 0)
+end)

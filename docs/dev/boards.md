@@ -2824,7 +2824,8 @@ The commands:
 
 The revision:
 
-- REV is a jj revset that names one commit, and it defaults to trunk.
+- REV is a jj revset that names one commit, and it defaults to trunk. In a git
+  project REV is a git revision, and the default is the fetched remote trunk.
 - When REV cannot be read, `ship` runs nothing and moves no card.
 
 The move:
