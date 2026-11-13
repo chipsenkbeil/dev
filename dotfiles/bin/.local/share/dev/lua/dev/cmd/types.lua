@@ -87,9 +87,76 @@ local function make_steps(root, verb_name, args)
     return { { argv = argv, needs = { MAKE } } }
 end
 
+local function nul_split(text)
+    local items = {}
+    for item in text:gmatch("([^%z]+)") do
+        items[#items + 1] = item
+    end
+    return items
+end
+
+local function git_lua_files(root)
+    local out, code = dev_os.capture({
+        "git",
+        "-C",
+        root,
+        "ls-files",
+        "-z",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "--",
+        "*.lua",
+    }, { stderr = "null" })
+    if code ~= 0 then
+        return nil
+    end
+    local files = {}
+    for _, path in ipairs(nul_split(out)) do
+        if fs.is_file(root .. "/" .. path) and not fs.is_link(root .. "/" .. path) then
+            files[#files + 1] = root .. "/" .. path
+        end
+    end
+    return files
+end
+
+local function find_lua_files(root)
+    local out = dev_os.capture({
+        "find",
+        root,
+        "(",
+        "-name",
+        ".git",
+        "-o",
+        "-name",
+        ".jj",
+        ")",
+        "-prune",
+        "-o",
+        "-type",
+        "f",
+        "-name",
+        "*.lua",
+        "-print0",
+    }, { stderr = "null" })
+    return nul_split(out)
+end
+
+local function lua_files(root)
+    local files = git_lua_files(root) or find_lua_files(root)
+    table.sort(files)
+    return files
+end
+
 local function stylua_steps(root, args)
+    local files = lua_files(root)
+    if #files == 0 then
+        return {}, "No .lua file lies under the project root. Nothing to format."
+    end
     local argv = concat({ "stylua" }, args)
-    argv[#argv + 1] = root
+    for _, file in ipairs(files) do
+        argv[#argv + 1] = file
+    end
     return { { argv = argv, needs = { { "stylua", "brew install stylua" } } } }
 end
 
@@ -216,10 +283,11 @@ end
 ---@param root string the project root
 ---@param kind string the project type, `none` for an undetected one
 ---@param verb_name dev.cmd.types.Verb the verb
----@return string[] lines one command per line, or a single `(none: ...)` line
+---@return string[] lines one command per line, or a single line that says why there is none, such
+---   as `(none: ...)`, or the nothing-to-format sentence for a fmt with no .lua file
 function M.commands(root, kind, verb_name)
     local steps, none_line = plan(root, kind, verb_name, {})
-    if not steps then
+    if not steps or #steps == 0 then
         return { none_line }
     end
     local lines = {}
@@ -257,8 +325,9 @@ end
 
 ---Run the standard sequence of a verb for the detected project type.
 ---
----The first command that fails ends the run with its exit code. A verb the
----type has no built-in for prints the usual message and returns 1.
+---1. When a command fails, the run stops and returns its exit code.
+---2. A verb the type has no built-in for prints the usual message and returns 1.
+---3. A fmt with no .lua file to format prints why and returns 0.
 ---@param ctx dev.Ctx the verb's context, whose `args` reach the last command verbatim
 ---@param verb_name dev.cmd.types.Verb the verb
 ---@return integer code 0 when every command passed
@@ -267,9 +336,13 @@ function M.run(ctx, verb_name)
     if not kind then
         return unsupported(verb_name, "undetected")
     end
-    local steps = plan(ctx.root, kind, verb_name, ctx.args)
+    local steps, reason = plan(ctx.root, kind, verb_name, ctx.args)
     if not steps then
         return unsupported(verb_name, kind)
+    end
+    if #steps == 0 then
+        verb.note(reason)
+        return 0
     end
     for _, step in ipairs(steps) do
         for _, need in ipairs(step.needs or {}) do

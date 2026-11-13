@@ -1,4 +1,5 @@
 local testing = require("dev.testing")
+local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
 local support = require("support")
@@ -14,6 +15,11 @@ end
 
 local function lines_for(root, verb)
     return types.commands(root, project.detect_type(root) or "none", verb)
+end
+
+local function git(root, ...)
+    local argv = { "git", "-C", root, ... }
+    assert(dev_os.run(argv, { stdout = "null", stderr = "null" }) == 0, "git failed in " .. root)
 end
 
 testing.test("a project with Cargo.toml and package.json is rust", function()
@@ -35,10 +41,81 @@ testing.test(
         testing.eq(lines_for(root, "test"), { "make -C " .. root .. " test" })
         testing.eq(lines_for(root, "lint"), { "make -C " .. root .. " lint" })
         testing.eq(lines_for(root, "build"), { "(none: no build target in the Makefile)" })
-        testing.eq(lines_for(root, "fmt"), { "stylua " .. root })
+        testing.eq(lines_for(root, types.Verb.FMT), { "stylua " .. root .. "/x.lua" })
         fs.remove(root, { recursive = true })
     end
 )
+
+testing.test("lua fmt names .lua files under dot-directories and skips .git and .jj", function()
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/.dev", { parents = true }))
+    assert(fs.mkdir(root .. "/.git", { parents = true }))
+    assert(fs.mkdir(root .. "/.jj", { parents = true }))
+    assert(fs.write(root .. "/x.lua", "return 1\n"))
+    assert(fs.write(root .. "/.dev/y.lua", "return 1\n"))
+    assert(fs.write(root .. "/.git/z.lua", "return 1\n"))
+    assert(fs.write(root .. "/.jj/w.lua", "return 1\n"))
+    testing.eq(
+        lines_for(root, types.Verb.FMT),
+        { "stylua " .. root .. "/.dev/y.lua " .. root .. "/x.lua" }
+    )
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("lua fmt skips a gitignored .lua file in a git checkout", function()
+    local root = support.tempdir()
+    git(root, "init", "-q")
+    assert(fs.write(root .. "/.gitignore", "vendor/\n"))
+    assert(fs.mkdir(root .. "/vendor", { parents = true }))
+    assert(fs.write(root .. "/x.lua", "return 1\n"))
+    assert(fs.write(root .. "/vendor/c.lua", "return 1\n"))
+    testing.eq(lines_for(root, types.Verb.FMT), { "stylua " .. root .. "/x.lua" })
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("lua fmt skips a tracked .lua file that was removed from disk", function()
+    local root = support.tempdir()
+    git(root, "init", "-q")
+    assert(fs.write(root .. "/b.lua", "return 1\n"))
+    git(root, "add", "b.lua")
+    fs.remove(root .. "/b.lua")
+    assert(fs.write(root .. "/x.lua", "return 1\n"))
+    testing.eq(lines_for(root, types.Verb.FMT), { "stylua " .. root .. "/x.lua" })
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("lua fmt exits 0 when git excludes every .lua file", function()
+    local root = support.tempdir()
+    git(root, "init", "-q")
+    assert(fs.write(root .. "/.gitignore", "build/\n"))
+    assert(fs.mkdir(root .. "/build", { parents = true }))
+    assert(fs.write(root .. "/build/gen.lua", "return 1\n"))
+    testing.eq(types.run({ root = root, args = {} }, types.Verb.FMT), 0)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("lua fmt skips a tracked symlink to a .lua file outside the project", function()
+    local root = support.tempdir()
+    local outside = support.tempdir()
+    assert(fs.write(outside .. "/outside.lua", "return 1\n"))
+    git(root, "init", "-q")
+    assert(fs.symlink(outside .. "/outside.lua", root .. "/link.lua"))
+    git(root, "add", "link.lua")
+    assert(fs.write(root .. "/x.lua", "return 1\n"))
+    testing.eq(lines_for(root, types.Verb.FMT), { "stylua " .. root .. "/x.lua" })
+    fs.remove(root, { recursive = true })
+    fs.remove(outside, { recursive = true })
+end)
+
+testing.test("lua fmt says when a project has no .lua file to format", function()
+    local root = support.tempdir()
+    assert(fs.write(root .. "/notes.txt", "x\n"))
+    testing.eq(
+        types.commands(root, project.Kind.LUA, types.Verb.FMT),
+        { "No .lua file lies under the project root. Nothing to format." }
+    )
+    fs.remove(root, { recursive = true })
+end)
 
 testing.test("a love2d project runs love and has make targets only for test and lint", function()
     local root = tree({ ["main.lua"] = "", ["conf.lua"] = "", Makefile = "lint:\n\ttrue\n" })
