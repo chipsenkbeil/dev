@@ -294,9 +294,8 @@ local function claimant_refused(backend, card, opts)
     if not past then
         return failure(why)
     end
-    local claimed = board.claimants(past)
     for _, name in ipairs(names) do
-        if name == card.claimant or claimed[name] then
+        if name == card.claimant or board.worked(past, name) then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
                     .. (name == card.claimant and " is" or " was")

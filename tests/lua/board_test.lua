@@ -3186,9 +3186,36 @@ local function released_by(name, claimant)
     card.claimant = claimant
     card.outcomes = outcomes(2)
     local backend = fake({ card })
-    backend.listed = { { id = COMMENT_1, who = "human", body = board.claim_record(name) } }
+    backend.listed = {
+        { id = COMMENT_1, who = "human", body = board.claim_record(name) },
+        { id = COMMENT_2, who = "human", body = "Built the change." },
+    }
     return backend
 end
+
+testing.test("a claim released with no work does not make a past claimant", function()
+    local backend = released_by("project-run/main")
+    backend.listed[2] = nil
+    as_agent("project-run/main", function()
+        local result = cmd_board.run(
+            "outcome",
+            { "cccccccc", "--rename", "1", "New", "--reason", "x" },
+            backend
+        )
+        testing.eq(result.code, nil)
+        testing.eq(cmd_board.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
+    end)
+end)
+
+testing.test("a later claimant's note does not make an idle claim a past claimant", function()
+    local backend = released_by("project-run/main")
+    local other = board.claim_record("project-run/a")
+    backend.listed[2] = { id = COMMENT_2, who = "human", body = other }
+    backend.listed[3] = { id = COMMENT_1, who = "human", body = "Built the change." }
+    as_agent("project-run/main", function()
+        testing.eq(cmd_board.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
+    end)
+end)
 
 testing.test("a name that released the card cannot reclaim the finish line", function()
     local released = "project-run/a"
