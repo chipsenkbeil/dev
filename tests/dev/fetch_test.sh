@@ -112,7 +112,7 @@ assert_eq "the override runs no cargo" "$(cat "$CARGO_LOG")" ""
 lua="$(project lua lua)"
 out="$(run_fetch "$lua" fetch)"
 assert_eq "a lua project exits 1" "$?" "1"
-assert_contains "a lua project gets the unsupported message" "$out" "dev: no built-in fetch for lua projects, add .dev/fetch.sh"
+assert_contains "a lua project gets the unsupported message" "$out" "There is no built-in fetch for lua projects."
 
 out="$(run_fetch "$plain" --remote fetch)"
 assert_eq "--remote fetch exits 2" "$?" "2"

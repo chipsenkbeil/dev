@@ -158,7 +158,7 @@ mkdir -p "$none/.ci"
 printf 'return {}\n' >"$none/.ci/jobs.lua"
 out="$(run_dev "$none" lint 2>&1)"
 assert_eq "undetected project exits 1" "$?" "1"
-assert_contains "undetected project explains" "$out" "no built-in lint for undetected"
+assert_contains "undetected project explains" "$out" "There is no built-in lint for an undetected project."
 assert_contains "a .lua file in a dot directory does not make a lua project" "$(run_dev "$none")" "dev: project at"
 
 # A local override wins over the built-in

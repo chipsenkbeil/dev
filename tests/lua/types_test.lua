@@ -157,7 +157,7 @@ end)
 
 testing.test("an undetected project has no built-in", function()
     local root = tree({})
-    testing.eq(lines_for(root, "lint"), { "There is no built-in lint for none projects." })
+    testing.eq(lines_for(root, "lint"), { "There is no built-in lint for an undetected project." })
     fs.remove(root, { recursive = true })
 end)
 
