@@ -384,17 +384,34 @@ local function land_held(opts)
         lost.lost = true
         return lost
     end
+    local in_git = vcs.backend(backend.root) == vcs.GIT
     local landed, output = land.run(backend.root)
     if not landed then
         return failure(
-            short .. " stays in " .. card.column .. ", jj land failed:\n" .. output:gsub("\n$", "")
+            short
+                .. " stays in "
+                .. card.column
+                .. ", "
+                .. (in_git and "git push" or "jj land")
+                .. " failed:\n"
+                .. output:gsub("\n$", "")
         )
     end
     local on_trunk = land.trunk_commit(backend.root, state.change)
     local commit = land.short(on_trunk or state.commit)
     local held = claims.read(card.id)
     local text
-    if on_trunk then
+    if in_git then
+        text = string.format("Landed commit %s on trunk, run by %s.", commit, name)
+        if not on_trunk then
+            text = string.format(
+                "Landed commit %s, run by %s. Trunk could not be read after the push. "
+                    .. "The commit may not be on it.",
+                commit,
+                name
+            )
+        end
+    elseif on_trunk then
         text = string.format(
             "Landed commit %s (change %s) on trunk, run by %s.",
             commit,

@@ -1,3 +1,5 @@
+local ffi = require("ffi")
+
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
@@ -284,4 +286,119 @@ testing.test("git recheck skips rows when the parent is shared", function()
         note = function() end,
     })
     testing.ok(problem and problem:find("recheck row failed", 1, true), tostring(problem))
+end)
+
+local function landing_env(fn)
+    local self = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/bin/dev"
+    local set = {
+        DEV_SELF = self,
+        GIT_COMMITTER_NAME = "t",
+        GIT_COMMITTER_EMAIL = "t@example.com",
+        GIT_AUTHOR_NAME = "t",
+        GIT_AUTHOR_EMAIL = "t@example.com",
+    }
+    local before = {}
+    for name, value in pairs(set) do
+        before[name] = os.getenv(name) or ""
+        ffi.C.setenv(name, value, 1)
+    end
+    local ok, err = pcall(fn)
+    for name, value in pairs(before) do
+        ffi.C.setenv(name, value, 1)
+    end
+    assert(ok, err)
+end
+
+local function remote_main(root)
+    local out = dev_os.capture({ "git", "-C", root, "ls-remote", "origin", "refs/heads/main" })
+    return out:match("^(%x+)")
+end
+
+local function work_behind_trunk()
+    local root = with_origin({ ["f.txt"] = BODY })
+    git(root, "checkout", "-q", "-b", "work")
+    write(root, "w.txt", "w\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "feat: work")
+    git(root, "checkout", "-q", "main")
+    write(root, "g.txt", "g\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "trunk moves")
+    git(root, "push", "-q", "origin", "main")
+    git(root, "checkout", "-q", "work")
+    return root
+end
+
+testing.test("land.git.rebase moves a change onto fetched trunk and refuses the rest", function()
+    landing_env(function()
+        local root = work_behind_trunk()
+        testing.eq(land.rebase(root), true)
+        testing.eq(land.rebase(root), false)
+        local parent = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD~1" })
+        testing.eq(parent:match("^%x+"), remote_main(root))
+        write(root, "x.txt", "x\n")
+        git(root, "add", "-A")
+        git(root, "commit", "-q", "-m", "feat: stacked")
+        git(root, "checkout", "-q", "main")
+        write(root, "h.txt", "h\n")
+        git(root, "add", "-A")
+        git(root, "commit", "-q", "-m", "trunk moves again")
+        git(root, "push", "-q", "origin", "main")
+        git(root, "checkout", "-q", "work")
+        local moved, why = land.rebase(root)
+        testing.eq(moved, nil)
+        testing.ok(why:find("unlanded parent", 1, true), tostring(why))
+    end)
+end)
+
+testing.test("land.git.rebase names a conflict and leaves the branch where it was", function()
+    landing_env(function()
+        local root = with_origin({ ["f.txt"] = "one\n" })
+        git(root, "checkout", "-q", "-b", "work")
+        write(root, "f.txt", "work\n")
+        git(root, "commit", "-q", "-a", "-m", "feat: work")
+        local before = head(root)
+        git(root, "checkout", "-q", "main")
+        write(root, "f.txt", "trunk\n")
+        git(root, "commit", "-q", "-a", "-m", "trunk moves")
+        git(root, "push", "-q", "origin", "main")
+        git(root, "checkout", "-q", "work")
+        local moved, why = land.rebase(root)
+        testing.eq(moved, nil)
+        testing.ok(why:find("The rebase onto trunk failed", 1, true), tostring(why))
+        testing.eq(head(root), before)
+        local status = dev_os.capture({ "git", "-C", root, "status", "--porcelain" })
+        testing.eq(status, "")
+    end)
+end)
+
+testing.test("land.git.rebase names a failed fetch", function()
+    landing_env(function()
+        local root = work_behind_trunk()
+        git(root, "remote", "set-url", "origin", root .. "/missing")
+        local moved, why = land.rebase(root)
+        testing.eq(moved, nil)
+        testing.ok(why:find("the fetch from origin failed", 1, true), tostring(why))
+    end)
+end)
+
+testing.test("land.git.run pushes HEAD to trunk and refuses a rejected push", function()
+    landing_env(function()
+        local root = work_behind_trunk()
+        assert(land.rebase(root))
+        local commit = head(root)
+        local landed, out = land.run(root)
+        testing.eq(landed, true, out)
+        testing.eq(remote_main(root), commit)
+        testing.eq(land.trunk_commit(root, "-"), commit)
+        git(root, "checkout", "-q", "-b", "stale", "HEAD~1")
+        write(root, "s.txt", "s\n")
+        git(root, "add", "-A")
+        git(root, "commit", "-q", "-m", "feat: stale")
+        landed, out = land.run(root)
+        testing.eq(landed, false)
+        testing.ok(out:find("rejected", 1, true), out)
+        testing.eq(remote_main(root), commit)
+        testing.eq(land.trunk_commit(root, "-"), nil)
+    end)
 end)

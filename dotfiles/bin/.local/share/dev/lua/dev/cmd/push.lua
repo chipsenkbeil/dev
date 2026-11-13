@@ -35,6 +35,21 @@ local function guard_path()
     return guard
 end
 
+M.guard_path = guard_path
+
+---@class dev.cmd.push.Opts
+---@field guard string the `commit-guard` path
+---@field remote string the remote to push to
+---@field sha string the commit to send
+---@field ref string the branch to move
+
+---Build the guarded git push of one commit to a branch on a remote.
+---@param opts dev.cmd.push.Opts the guard, remote, commit and branch
+---@return string[] argv the command line
+function M.git_argv(opts)
+    return { opts.guard, "push", "--", opts.remote, opts.sha .. ":refs/heads/" .. opts.ref }
+end
+
 local function resolve(root, tags_only)
     local backend, err = vcs.require(root)
     if not backend then
@@ -93,7 +108,7 @@ local function argv_for(root, plan, remote)
             plan.ref
         )
     end
-    return { plan.guard, "push", "--", remote, plan.sha .. ":refs/heads/" .. plan.ref }
+    return M.git_argv({ guard = plan.guard, remote = remote, sha = plan.sha, ref = plan.ref })
 end
 
 local function store_dir(root, plan)

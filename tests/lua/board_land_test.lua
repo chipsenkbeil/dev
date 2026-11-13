@@ -464,11 +464,9 @@ local function refused(project, id, wanted, extra)
     return out
 end
 
-testing.test("land refuses a git project and a caller with no name", function()
+testing.test("land refuses a caller with no name", function()
     local project = setup()
-    must(dev_os.run({ "git", "init", "-q", project.root }, { stdout = "null" }))
     local id = new_card(project)
-    refused(project, id, { "needs a jj project" })
     local out, code = dev(project, { "board", "land", id }, { DEV_AGENT = "" })
     testing.eq(code, 2, out)
     testing.ok(out:find("needs DEV_AGENT", 1, true), out)
@@ -2494,4 +2492,152 @@ testing.test("land removes the worktree and branch in a git project", function()
     testing.ok(lines:find("Deleted branch card", 1, true), lines)
     testing.eq(fs.exists(path), false)
     ffi.C.setenv("DEV_WS_ROOT", "", 1)
+end)
+
+local GIT_IDENT = {
+    GIT_AUTHOR_NAME = "t",
+    GIT_AUTHOR_EMAIL = "t@example.com",
+    GIT_COMMITTER_NAME = "t",
+    GIT_COMMITTER_EMAIL = "t@example.com",
+}
+
+local function git_at(dir, ...)
+    local argv = { "git", "-C", dir, "-c", "commit.gpgsign=false", ... }
+    must(dev_os.run(argv, { stdout = "null", stderr = "null", env = GIT_IDENT }))
+end
+
+local function git_dev(project, args, extra)
+    local env = {}
+    for name, value in pairs(GIT_IDENT) do
+        env[name] = value
+    end
+    for name, value in pairs(extra or {}) do
+        env[name] = value
+    end
+    return dev(project, args, env)
+end
+
+local function git_project()
+    local project = setup()
+    local root = project.root
+    project.bare = support.tempdir()
+    must(
+        dev_os.run(
+            { "git", "init", "--bare", "-q", "-b", "master", project.bare },
+            { stdout = "null" }
+        )
+    )
+    must(dev_os.run({ "git", "init", "-q", "-b", "master", root }, { stdout = "null" }))
+    git_at(root, "remote", "add", "origin", project.bare)
+    project.id = new_card(project)
+    git_at(root, "add", "-A")
+    git_at(root, "commit", "-q", "-m", "base")
+    git_at(root, "push", "-q", "origin", "master")
+    git_at(root, "checkout", "-q", "-b", "work")
+    assert(fs.write(root .. "/work.txt", "one\n"), "write failed")
+    git_at(root, "add", "-A")
+    git_at(root, "commit", "-q", "-m", "feat: work")
+    return project
+end
+
+local function git_approve(project)
+    local id = project.id
+    must(git_dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+    for _, kind in ipairs({ "code", "style" }) do
+        must(git_dev(project, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            kind,
+            "--by",
+            "rev",
+            "--rev",
+            "HEAD",
+            "--verdict",
+            "clean",
+        }))
+    end
+    must(git_dev(project, { "board", "check", id }))
+    must(git_dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+end
+
+local function git_trunk_moves(project, name, text)
+    local clone = assert(fs.realpath(support.tempdir())) .. "/clone"
+    must(dev_os.run({ "git", "clone", "-q", project.bare, clone }, { stdout = "null" }))
+    assert(fs.write(clone .. "/" .. name, text), "write failed")
+    git_at(clone, "add", "-A")
+    git_at(clone, "commit", "-q", "-m", "trunk moves")
+    git_at(clone, "push", "-q", "origin", "master")
+end
+
+local function git_rev(dir, rev)
+    local out = dev_os.capture({ "git", "-C", dir, "rev-parse", rev })
+    return out:match("^(%x+)")
+end
+
+local function git_remote_master(project)
+    return git_rev(project.bare, "refs/heads/master")
+end
+
+testing.test("land.git.lands rebases a card onto fetched trunk and pushes it", function()
+    local project = git_project()
+    local id = project.id
+    git_approve(project)
+    git_trunk_moves(project, "other.txt", "other\n")
+    local trunk = git_remote_master(project)
+    local out, code = git_dev(project, { "board", "land", id })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("landed " .. id, 1, true), out)
+    local landed = git_rev(project.root, "HEAD")
+    testing.eq(git_remote_master(project), landed)
+    testing.eq(git_rev(project.root, "HEAD~1"), trunk)
+    local list = comments(project.home, id)
+    local note = list[#list]
+    testing.eq(note.kind, board.NoteKind.DONE)
+    testing.ok(note.body:find("Landed commit " .. landed:sub(1, 12), 1, true), note.body)
+    testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+end)
+
+testing.test("land.git.refused names a failed fetch or rebase and keeps the card", function()
+    local project = git_project()
+    local id = project.id
+    git_approve(project)
+    local before = git_rev(project.root, "HEAD")
+    git_trunk_moves(project, "work.txt", "other\n")
+    local trunk = git_remote_master(project)
+    local out, code = git_dev(project, { "board", "land", id })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The rebase onto trunk failed", 1, true), out)
+    testing.eq(git_rev(project.root, "HEAD"), before)
+    testing.eq(git_remote_master(project), trunk)
+    testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
+    git_at(project.root, "remote", "set-url", "origin", project.bare .. "/missing")
+    out, code = git_dev(project, { "board", "land", id })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("the fetch from origin failed", 1, true), out)
+    testing.eq(git_remote_master(project), trunk)
+    testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
+end)
+
+testing.test("land.git.worktree lands a linked worktree and removes it", function()
+    local project = git_project()
+    local id = project.id
+    local main = project.root
+    git_at(main, "checkout", "-q", "master")
+    local base = assert(fs.realpath(support.tempdir()))
+    local path = base .. "/" .. fs.basename(main) .. "/" .. id
+    assert(fs.mkdir(base .. "/" .. fs.basename(main), { parents = true }), "mkdir failed")
+    git_at(main, "worktree", "add", "-q", "-b", id, path, "work")
+    local tree = at_root(project, path)
+    tree.id = id
+    git_approve(tree)
+    local landed = git_rev(path, "HEAD")
+    local out, code = git_dev(tree, { "board", "land", id }, { DEV_WS_ROOT = base })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("removed " .. path, 1, true), out)
+    testing.ok(out:find("Deleted branch " .. id, 1, true), out)
+    testing.eq(fs.exists(path), false)
+    testing.eq(git_remote_master(project), landed)
+    testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
 end)

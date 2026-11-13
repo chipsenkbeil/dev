@@ -2464,12 +2464,6 @@ function commands.land(backend, args)
     if not backend.root then
         return failure("dev board land needs the project's root")
     end
-    if vcs.backend(backend.root) ~= vcs.JJ then
-        return failure(
-            short
-                .. " cannot land: dev board land needs a jj project, and does not land in plain git"
-        )
-    end
     local list, message = backend:comments(card.id)
     if not list then
         return failure(message)

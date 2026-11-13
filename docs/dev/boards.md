@@ -2364,7 +2364,9 @@ card's change on trunk.
 In order, it:
 
 - takes the landing turn and rebases the working-copy change onto trunk
-- lands the change with `jj land --yes -r @`, run in the project root
+- lands the change with `jj land --yes -r @`, run in the project root, or in a
+  git project pushes the HEAD commit to the trunk branch of the remote of
+  record through the guarded push `dev push` uses
 - writes a `done` note
 - moves the card to Release when `[board.land] deploys` is true and to Done
   otherwise
@@ -2382,7 +2384,12 @@ The command:
 
 - It refuses outside the card's workspace, as `check` does.
 - It needs `DEV_AGENT` (usage error, exit 2, without it).
-- It needs a jj project. In plain git it refuses and says so.
+- It works in a jj project and in a git project, a checkout or a linked
+  worktree. In git it fetches the remote of record, rebases the branch onto the
+  remote trunk when the trunk moved, refuses a change that sits on an unlanded
+  parent, and pushes the commit to the trunk branch as a fast-forward. A failed
+  fetch, rebase or push leaves the card where it is and names the step. A
+  conflicted rebase is aborted and leaves the branch as it was.
 - `--wait` is a whole number of seconds up to 86400 (60 by default), otherwise
   exit 2.
 - It is never queued.
@@ -2569,7 +2576,7 @@ The settings:
 The result:
 
 - A failed `jj land` leaves the card where it is, exits 1 and prints jj's
-  output.
+  output. A failed git push does the same and prints git's output.
 - A landing whose done note or move then fails exits 1 and says what to finish
   by hand.
 - `jj land` can rewrite the commit through the forge, so after it succeeds
@@ -2577,7 +2584,8 @@ The result:
   on trunk by its change id. The `dev-check:` and `dev-review:` records keep the
   commit from before the land.
 - The done note reads
-  `Landed commit <12 characters> (change <id>) on trunk, run by NAME.` and
+  `Landed commit <12 characters> (change <id>) on trunk, run by NAME.` (in git
+  `Landed commit <12 characters> on trunk, run by NAME.`) and
   success prints
   `landed <id prefix> at commit <12 characters> and moved it to Done`
   (or Release). Both name the commit on trunk.

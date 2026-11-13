@@ -3,6 +3,7 @@ local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
 local dev_remote = require("dev.remote")
+local push = require("dev.cmd.push")
 local review = require("dev.board.review")
 local templates = require("dev.templates")
 local vcs = require("dev.vcs")
@@ -469,8 +470,34 @@ function M.trunk_problem(root)
     end
 end
 
+local function git_rebase(root, remote)
+    local on_trunk, why = git_parent_on_trunk(root, remote)
+    if on_trunk == nil then
+        return nil, "Trunk cannot be compared. " .. why
+    end
+    if on_trunk then
+        return false
+    end
+    local ref = assert(vcs.remote_trunk(root, remote))
+    local parents = git_parents(root, "HEAD")
+    if not parents or #parents ~= 1 then
+        return nil, "The HEAD commit is a merge or has no parent. Git cannot rebase it onto trunk."
+    end
+    local stacked = git_out(root, "rev-list", "--count", ref .. "..HEAD~1")
+    if not stacked or stacked:match("^0%s*$") == nil then
+        return nil, "The change sits on an unlanded parent, so land the parent first."
+    end
+    local out, code =
+        dev_os.capture(vcs.with(vcs.base(root, vcs.GIT), "rebase", ref), { stderr = "stdout" })
+    if code ~= 0 then
+        dev_os.capture(vcs.with(vcs.base(root, vcs.GIT), "rebase", "--abort"), { stderr = "null" })
+        return nil, "The rebase onto trunk failed: " .. out
+    end
+    return true
+end
+
 ---Fetch the remote of record and rebase the working-copy change onto trunk when it sits elsewhere.
----@param root string the project root, a jj project
+---@param root string the project root
 ---@return boolean? rebased true when the change moved, false when it already sat on trunk
 ---@return string? problem why trunk could not be read or the rebase failed
 function M.rebase(root)
@@ -486,6 +513,9 @@ function M.rebase(root)
                 found.remote,
                 out
             )
+    end
+    if vcs.backend(root) == vcs.GIT then
+        return git_rebase(root, found.remote)
     end
     if parent_on_trunk(root) then
         return false
@@ -902,11 +932,24 @@ function M.recheck_problem(opts)
 end
 
 ---Read the commit that holds a change on trunk, which `jj land` may have rewritten.
----@param root string the project root, a jj project
----@param change string the change id, which survives the rewrite
+---@param root string the project root
+---@param change string the change id, which survives the rewrite, ignored in git
 ---@return string? commit the full commit id, nil when trunk does not hold exactly one commit of the
----   change
+---   change, or in git when the remote trunk does not hold HEAD
 function M.trunk_commit(root, change)
+    if vcs.backend(root) == vcs.GIT then
+        local found = forge.resolve(root)
+        if not found then
+            return nil
+        end
+        local _, fetched = fetch(root, found.remote)
+        local ref = fetched == 0 and vcs.remote_trunk(root, found.remote)
+        local head = ref and git_out(root, "rev-parse", "HEAD")
+        if not head or not git_out(root, "merge-base", "--is-ancestor", "HEAD", ref) then
+            return nil
+        end
+        return head:match("^(%x+)\n$")
+    end
     return M.fetched_commit(root, change .. " & ::trunk()")
 end
 
@@ -952,11 +995,42 @@ function M.holds(root, commit, rev)
     return out ~= nil and out:match("^%x+\n") ~= nil
 end
 
----Land the working-copy change with `jj land`.
----@param root string the project root, a jj project
----@return boolean ok true when jj land exited 0
----@return string output what jj land printed
+local function git_run(root)
+    local found, why = forge.resolve(root)
+    if not found then
+        return false, why
+    end
+    local ref, read_why = vcs.remote_trunk(root, found.remote)
+    if not ref then
+        return false, "The remote " .. read_why .. "."
+    end
+    local guard, guard_why = push.guard_path()
+    if not guard then
+        return false, guard_why
+    end
+    local head = git_out(root, "rev-parse", "HEAD")
+    if not head then
+        return false, "Git could not read the HEAD commit of " .. root .. "."
+    end
+    local branch = ref:sub(#found.remote + 2)
+    local argv = push.git_argv({
+        guard = guard,
+        remote = found.remote,
+        sha = head:match("^%x+"),
+        ref = branch,
+    })
+    local out, code = dev_os.capture(argv, { stderr = "stdout", cwd = root })
+    return code == 0, out
+end
+
+---Land the working-copy change with `jj land`, or push the HEAD commit to trunk in git.
+---@param root string the project root
+---@return boolean ok true when the land exited 0
+---@return string output what the land printed
 function M.run(root)
+    if vcs.backend(root) == vcs.GIT then
+        return git_run(root)
+    end
     local out, code = dev_os.capture(
         vcs.with(vcs.base(root, vcs.JJ), "land", "--yes", "-r", "@"),
         { stderr = "stdout", cwd = root, env = { DEV_BOARD_LAND = "1" } }
