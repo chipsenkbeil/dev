@@ -1,3 +1,4 @@
+local bit = require("bit")
 local board = require("dev.board")
 local dev_os = require("dev.os")
 local vcs = require("dev.vcs")
@@ -20,6 +21,13 @@ local NO_CHANGE = "-"
 local NO_RUN = "-"
 local RUN_LINE = "^run (%x+)$"
 local REASON_INDENT = "  "
+local REASON_MAX = 120
+local COMMENT_BUDGET_BYTES = 4800
+local NEWLINE_BYTE = 10
+local FNV_OFFSET = 2166136261
+local FNV_MODULUS = 4294967296
+local FNV_HIGH = 16777216
+local FNV_LOW = 403
 local DRAIN_REFUSAL = "is draining"
 local DRAIN_NOTHING_NEW = "nothing new starts"
 local DRAIN_OFF = "`ci fleet drain off"
@@ -425,40 +433,69 @@ function M.summarize(rows, expect_fail)
     return passed, passed == #rows, errors
 end
 
+---Hash a list of checks rows to show whether they changed.
+---@param commands string[] the card's checks rows in order
+---@return string sum eight lowercase hex digits
+function M.fingerprint(commands)
+    local hash = FNV_OFFSET
+    for _, command in ipairs(commands) do
+        for i = 1, #command + 1 do
+            local byte = i <= #command and command:byte(i) or NEWLINE_BYTE
+            hash = bit.bxor(hash, byte) % FNV_MODULUS
+            hash = ((hash % 256) * FNV_HIGH + hash * FNV_LOW) % FNV_MODULUS
+        end
+    end
+    return string.format("%08x", hash)
+end
+
 ---Write the comment that records a run.
+---
+---A reason line is cut to 120 bytes and left out once the comment would pass 4800 bytes.
 ---@param state dev.board.check.State the commit the rows ran on
 ---@param rows dev.board.check.Row[] the finished rows
 ---@param expect_fail boolean whether every row was meant to fail
 ---@return string text the comment body, which begins with the reserved prefix
 function M.record(state, rows, expect_fail)
-    local lines = {
-        string.format(
-            "%s commit=%s change=%s mode=%s",
-            board.CHECK_PREFIX,
-            state.commit,
-            state.change,
-            expect_fail and M.MODE.EXPECT_FAIL or M.MODE.RUN
-        ),
-    }
+    local commands = {}
+    local lines = {}
+    local size = 0
     for i, row in ipairs(rows) do
-        lines[#lines + 1] = M.line(i, row)
-        if row.reason then
-            lines[#lines + 1] = REASON_INDENT .. row.reason
+        commands[i] = row.run
+        lines[i] = string.format("%d %s %s", i, row.result, row.run_id)
+        size = size + #lines[i] + 1
+    end
+    local head = string.format(
+        "%s commit=%s change=%s mode=%s rows=%d sum=%s",
+        board.CHECK_PREFIX,
+        state.commit,
+        state.change,
+        expect_fail and M.MODE.EXPECT_FAIL or M.MODE.RUN,
+        #rows,
+        M.fingerprint(commands)
+    )
+    size = size + #head
+    local out = { head }
+    for i, row in ipairs(rows) do
+        out[#out + 1] = lines[i]
+        local reason = row.reason and (REASON_INDENT .. row.reason:sub(1, REASON_MAX))
+        if reason and size + #reason + 1 <= COMMENT_BUDGET_BYTES then
+            out[#out + 1] = reason
+            size = size + #reason + 1
         end
     end
-    return table.concat(lines, "\n")
+    return table.concat(out, "\n")
 end
 
 ---@class dev.board.check.RecordRow
 ---@field result string how the row ended
 ---@field run_id string the ci run id, `-` when the row printed none
----@field run string the row's command
 ---@field reason string? the last line a failed row printed when it printed no run id
 
 ---@class dev.board.check.Record
 ---@field commit string the full commit id the rows ran on
 ---@field change string the change id, `-` in a git project
 ---@field mode string one of `MODE`
+---@field sum string the fingerprint of the checks rows the run used
 ---@field rows dev.board.check.RecordRow[] the rows in the order they ran
 
 ---Read a comment that `record` wrote.
@@ -466,7 +503,8 @@ end
 ---@return dev.board.check.Record? record nil when the body is not a record
 function M.parse(body)
     local head, rest = body:match("^([^\n]*)\n?(.*)$")
-    local prefix, commit, change, mode = head:match("^(%S+) commit=(%x+) change=(%S+) mode=(%S+)$")
+    local prefix, commit, change, mode, count, sum =
+        head:match("^(%S+) commit=(%x+) change=(%S+) mode=(%S+) rows=(%d+) sum=(%x+)$")
     if prefix ~= board.CHECK_PREFIX then
         return nil
     end
@@ -479,17 +517,20 @@ function M.parse(body)
             end
             rows[#rows].reason = reason
         else
-            local index, result, run_id, run = line:match("^(%d+) (%a+) (%S+) (.+)$")
+            local index, result, run_id = line:match("^(%d+) (%a+) (%S+)$")
             if not index or tonumber(index) ~= #rows + 1 then
                 return nil
             end
             if run_id ~= NO_RUN and not run_id:match("^%x+$") then
                 return nil
             end
-            rows[#rows + 1] = { result = result, run_id = run_id, run = run }
+            rows[#rows + 1] = { result = result, run_id = run_id }
         end
     end
-    return { commit = commit, change = change, mode = mode, rows = rows }
+    if #rows ~= tonumber(count) then
+        return nil
+    end
+    return { commit = commit, change = change, mode = mode, sum = sum, rows = rows }
 end
 
 ---Read the commit of a comment that carries a record's head but does not parse.

@@ -120,11 +120,20 @@ local function must(first, second)
 end
 
 local function checked(commit, mode, rows)
-    local lines = { "dev-check: commit=" .. commit .. " change=chg mode=" .. mode }
+    local lines, commands = {}, {}
     for i, row in ipairs(rows) do
-        lines[#lines + 1] = i .. " " .. row
+        local result, run_id, command = row:match("^(%a+) (%S+) (.+)$")
+        lines[i] = i .. " " .. result .. " " .. run_id
+        commands[i] = command
     end
-    return { body = table.concat(lines, "\n") }
+    local head = string.format(
+        "dev-check: commit=%s change=chg mode=%s rows=%d sum=%s",
+        commit,
+        mode,
+        #rows,
+        check.fingerprint(commands)
+    )
+    return { body = head .. "\n" .. table.concat(lines, "\n") }
 end
 
 local function reviewed(kind, commit)
@@ -143,14 +152,48 @@ testing.test("check.parse reads what check.record wrote and nothing else", funct
     testing.eq(record.change, "chg")
     testing.eq(record.mode, check.MODE.EXPECT_FAIL)
     testing.eq(record.rows, {
-        { run_id = "8cb600", run = "dev lint", result = "pass" },
-        { run_id = "-", run = "dev test", result = "fail" },
+        { run_id = "8cb600", result = "pass" },
+        { run_id = "-", result = "fail" },
     })
+    testing.eq(record.sum, check.fingerprint({ "dev lint", "dev test" }))
+    local head = "dev-check: commit=aa change=c mode=run rows="
     testing.eq(check.parse("a note"), nil)
-    testing.eq(check.parse("dev-check: commit=zz change=c mode=run"), nil)
-    testing.eq(check.parse("dev-check: commit=aa change=c mode=run\n2 pass x"), nil)
-    testing.eq(check.parse("dev-check: commit=aa change=c mode=run\n1 pass dev lint"), nil)
-    testing.eq(check.parse("dev-check: commit=aa change=c mode=run\n1 pass zz dev lint"), nil)
+    testing.eq(check.parse("dev-check: commit=zz change=c mode=run rows=0 sum=ab"), nil)
+    testing.eq(check.parse(head .. "1 sum=ab\n2 pass x"), nil)
+    testing.eq(check.parse(head .. "1 sum=ab\n1 pass dev lint"), nil)
+    testing.eq(check.parse(head .. "2 sum=ab\n1 pass 8cb600"), nil)
+end)
+
+testing.test("land reads a short check record and refuses rows that changed", function()
+    local rows = { "dev lint", "dev test" }
+    local pass = checked(COMMIT, check.MODE.RUN, { "pass 8cb600 dev lint", "pass 1f2e3d dev test" })
+    testing.eq(land.checks_problem({ pass }, STATE, rows), nil)
+    local problem = land.checks_problem({ pass }, STATE, { "dev lint", "dev other" })
+    testing.ok(problem:find("checks rows changed", 1, true), problem)
+    testing.ok(problem:find("Run dev board check again", 1, true), problem)
+    local swapped = land.checks_problem({ pass }, STATE, { "dev test", "dev lint" })
+    testing.ok(swapped:find("checks rows changed", 1, true), swapped)
+end)
+
+testing.test("an old check record is refused with a rerun sentence", function()
+    local old = {
+        body = "dev-check: commit=" .. COMMIT .. " change=chg mode=run\n1 pass 8cb600 dev lint",
+    }
+    local problem = land.checks_problem({ old }, STATE, { "dev lint" })
+    testing.ok(problem:find("could not be read", 1, true), problem)
+    testing.ok(problem:find("run dev board check again", 1, true), problem)
+end)
+
+testing.test("carry reads a short check record as the commit's own and does not carry", function()
+    local pass = checked(COMMIT, check.MODE.RUN, { "pass 8cb600 dev lint" })
+    local opts = {
+        root = "/nonexistent",
+        comments = { pass, reviewed("code", COMMIT), reviewed("style", COMMIT) },
+        state = STATE,
+        rows = { "dev lint" },
+    }
+    testing.eq(check.parse(pass.body).commit, COMMIT)
+    testing.eq({ land.carry(opts) }, {})
 end)
 
 testing.test("review.parse reads what review.record wrote and nothing else", function()
@@ -242,7 +285,10 @@ testing.test("checks_problem counts only the newest passing run at the commit", 
     testing.ok(land.checks_problem({ pass, failed }, STATE, rows):find("2 fail dev test", 1, true))
     testing.eq(land.checks_problem({ failed, pass }, STATE, rows), nil)
     testing.ok(land.checks_problem({ pass }, STATE, { "dev lint" }):find("has 2 rows", 1, true))
-    testing.ok(land.checks_problem({ pass }, STATE, { "dev lint", "dev x" }):find("dev x", 1, true))
+    testing.ok(
+        land.checks_problem({ pass }, STATE, { "dev lint", "dev x" })
+            :find("checks rows changed", 1, true)
+    )
     testing.ok(
         land.checks_problem(
             { checked(COMMIT, check.MODE.RUN, { "timeout - dev lint" }) },

@@ -340,19 +340,17 @@ function M.checks_problem(comments, state, rows)
             #rows
         )
     end
+    if latest.sum ~= check.fingerprint(rows) then
+        return string.format(
+            "The checks rows changed since the newest check run at commit %s. "
+                .. "Run dev board check again.",
+            M.short(state.commit)
+        )
+    end
     local bad = {}
     for i, row in ipairs(latest.rows) do
-        if row.run ~= rows[i] then
-            return string.format(
-                "the newest check run at commit %s ran %q as row %d and the card now holds %q; run dev board check again",
-                M.short(state.commit),
-                row.run,
-                i,
-                rows[i]
-            )
-        end
         if row.result ~= check.RESULT.PASS then
-            bad[#bad + 1] = string.format("%d %s %s", i, row.result, row.run)
+            bad[#bad + 1] = string.format("%d %s %s", i, row.result, rows[i])
         end
     end
     if #bad > 0 then

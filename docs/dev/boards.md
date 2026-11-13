@@ -2262,11 +2262,19 @@ command.
   failed row.
 
 ```
-dev-check: commit=<full commit id> change=<change id, - in git> mode=run
-1 pass 8cb600 dev --remote lint
-2 fail - dev --remote test
+dev-check: commit=<full commit id> change=<change id, - in git> mode=run rows=2 sum=<hash>
+1 pass 8cb600
+2 fail -
   error: Failed to run the pipeline
 ```
+
+A row's line holds its index, result and ci run id and no command text, so
+the record stays under Pomb's 5000-byte comment cap up to about 300 rows.
+`sum` is a hash of the card's checks rows in order, and land refuses a record
+whose `sum` differs from the card's rows with `run dev board check again`. A
+reason line is cut to 120 bytes and dropped once the comment nears 4800 bytes.
+A record from before this form has no `rows` or `sum`, reads as unreadable and
+is refused the same way.
 
 The result and the exit code:
 

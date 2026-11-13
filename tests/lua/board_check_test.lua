@@ -193,7 +193,11 @@ testing.test("check records each row and the commit, and the run is clean in git
     local body = comments(home)[1].body
     testing.eq(
         body,
-        "dev-check: commit=" .. head .. " change=- mode=run\n1 pass - true\n2 fail - false"
+        "dev-check: commit="
+            .. head
+            .. " change=- mode=run rows=2 sum="
+            .. check.fingerprint({ "true", "false" })
+            .. "\n1 pass -\n2 fail -"
     )
     testing.eq(comments(home)[1].kind, "status")
     must(dev(root, home, { "board", "checks", id, "true" }))
@@ -212,9 +216,45 @@ testing.test("check records the ci run id each row printed", function()
     local record = check.parse(comments(home)[1].body)
     testing.eq(record.commit, head)
     testing.eq(record.rows, {
-        { result = "pass", run_id = "8cb600", run = "echo run 8cb600" },
-        { result = "pass", run_id = "1f2e3d", run = "echo run 1f2e3d" },
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "1f2e3d" },
     })
+end)
+
+testing.test("a 147 row check record stays under the pomb comment cap", function()
+    local state = { commit = string.rep("a", 40), change = string.rep("k", 32) }
+    local rows, commands = {}, {}
+    for i = 1, 147 do
+        commands[i] = "rg -n " .. string.rep("x", 250) .. i
+        rows[i] = {
+            result = "fail",
+            run_id = "-",
+            run = commands[i],
+            reason = string.rep("a long reason ", 30),
+        }
+    end
+    local body = check.record(state, rows, false)
+    testing.ok(#body < 5000, #body)
+    local record = check.parse(body)
+    testing.eq(#record.rows, 147)
+    testing.eq(record.sum, check.fingerprint(commands))
+    for i = 1, 147 do
+        rows[i].reason = nil
+        rows[i].run_id = "007201"
+        rows[i].result = "pass"
+    end
+    testing.ok(#check.record(state, rows, false) < 3000)
+end)
+
+testing.test("show lists a short check record", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "true", "echo run 8cb600" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "show", id })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("rows=2 sum=", 1, true), out)
+    testing.ok(out:find("2 pass 8cb600", 1, true), out)
 end)
 
 testing.test("check prints each row ci run id before the row finishes", function()
@@ -379,7 +419,7 @@ testing.test("check records no reason for a row with a run id", function()
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
     local body = comments(home)[1].body
-    testing.ok(body:find("\n1 pass 8cb600 echo run 8cb600", 1, true), body)
+    testing.ok(body:find("\n1 pass 8cb600", 1, true), body)
     testing.eq(check.parse(body).rows[1].reason, nil)
     testing.eq(body:find("\n%s", 1), nil)
 end)
@@ -396,13 +436,14 @@ testing.test("check parse reads the reason of a row", function()
         { result = "pass", run_id = "8cb600", run = "dev --remote lint" },
     }
     local body = check.record(state, rows, false)
-    testing.ok(
-        body:find("\n1 fail - dev --remote test\n  the hub is draining\n2 pass", 1, true),
-        body
-    )
-    testing.eq(check.parse(body).rows, rows)
+    testing.ok(body:find("\n1 fail -\n  the hub is draining\n2 pass", 1, true), body)
+    testing.eq(check.parse(body).rows, {
+        { result = "fail", run_id = "-", reason = "the hub is draining" },
+        { result = "pass", run_id = "8cb600" },
+    })
     testing.eq(check.parse((body:gsub("draining\n", "draining\n  again\n"))), nil)
-    testing.eq(check.parse("dev-check: commit=abc123 change=- mode=run\n  orphan"), nil)
+    local head = "dev-check: commit=abc123 change=- mode=run rows=0 sum=ab"
+    testing.eq(check.parse(head .. "\n  orphan"), nil)
 end)
 
 testing.test("check labels the ci run of a row as repo/check/card", function()
@@ -453,7 +494,7 @@ testing.test("check ends a row at the time limit and records a timeout", functio
     local id = card_with(root, home, { "sleep 30" })
     local out, code = dev(root, home, { "board", "check", id, "--timeout", "1" })
     testing.eq(code, 1, out)
-    testing.eq(comments(home)[1].body:match("\n(.*)$"), "1 timeout - sleep 30")
+    testing.eq(comments(home)[1].body:match("\n(.*)$"), "1 timeout -")
     out, code = dev(root, home, { "board", "check", id, "--timeout", "0" })
     testing.eq(code, 2, out)
 end)
@@ -470,7 +511,11 @@ testing.test("--expect-fail records failing rows and reports a passing one", fun
     testing.eq(code, 0, out)
     testing.eq(
         comments(home)[1].body,
-        "dev-check: commit=" .. head .. " change=- mode=expect-fail\n1 fail - false"
+        "dev-check: commit="
+            .. head
+            .. " change=- mode=expect-fail rows=1 sum="
+            .. check.fingerprint({ "false" })
+            .. "\n1 fail -"
     )
     must(dev(root, home, { "board", "checks", id, "true", "false" }))
     out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
@@ -628,7 +673,13 @@ if has_jj then
             local commit, change = want:match("^(%x+) (%a+)")
             testing.eq(
                 comments(home)[1].body,
-                "dev-check: commit=" .. commit .. " change=" .. change .. " mode=run\n1 pass - true"
+                "dev-check: commit="
+                    .. commit
+                    .. " change="
+                    .. change
+                    .. " mode=run rows=1 sum="
+                    .. check.fingerprint({ "true" })
+                    .. "\n1 pass -"
             )
             testing.ok(out:find(commit:sub(1, 12), 1, true), out)
         end
