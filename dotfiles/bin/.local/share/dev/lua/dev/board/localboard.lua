@@ -333,6 +333,23 @@ local function is_blocked(doc, card)
     return false
 end
 
+---Report whether a card outside Done blocks a card.
+---A blocker the board no longer holds does not.
+---@param id string the card id
+---@return boolean? blocked, string? message nil with the message when the board cannot be read
+function Backend:blocked(id)
+    local doc, message = self:__read()
+    if not doc then
+        return nil, message
+    end
+    local card
+    card, message = card_of(doc, id)
+    if not card then
+        return nil, message
+    end
+    return is_blocked(doc, card)
+end
+
 function Backend:link(id, kind, other)
     return self:__update(function(doc)
         local card, message = card_of(doc, id)

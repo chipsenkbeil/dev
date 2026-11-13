@@ -843,6 +843,18 @@ function Backend:next(column, opts)
     until not cursor
 end
 
+---Report whether a card outside Done blocks a card.
+---A blocker that cannot be read counts as blocking.
+---@param id string the card id
+---@return boolean? blocked, string? message nil with the message when the board cannot be read
+function Backend:blocked(id)
+    local links, message = self:links(id)
+    if not links then
+        return nil, message
+    end
+    return self:__blocked(links)
+end
+
 ---Report whether `blocked_by` links hold a card: a linked card holds it unless it is in Done, and
 ---a card that cannot be read holds it too.
 ---@param links dev.board.Link[] the links the card holds

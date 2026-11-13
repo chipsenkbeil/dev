@@ -92,6 +92,12 @@ local function fake(cards, times, finished)
     function backend:has_field()
         return not backend.nofield
     end
+    function backend:blocked(id)
+        if backend.blocked_error then
+            return nil, backend.blocked_error
+        end
+        return (backend.blockers or {})[id] == true
+    end
     function backend:add(name, column, opts)
         backend.opts = opts
         calls[#calls + 1] = { "add", name, column, opts.description, opts.color, opts.labels }
@@ -4052,6 +4058,67 @@ testing.test("stale --lead-hours moves the bound and refuses a bad value", funct
     testing.eq(cmd_board.run("stale", { "--lead-hours" }, fake({}), NOW).code, 2)
 end)
 
+local function held_leads()
+    local lead = { board.NEEDS_LEAD }
+    local cards, times = aged({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+    }, { 0, 0, 0, 0 }, { lead, { board.NEEDS_LEAD, board.RUN }, lead, lead })
+    for _, card in ipairs(cards) do
+        times[card.id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", NOW - 5 * box.SECONDS_PER_HOUR)
+    end
+    cards[4].claimant = "someone"
+    local backend = fake(cards, times)
+    backend.blockers = { [cards[3].id] = true, [cards[4].id] = true }
+    return backend
+end
+
+testing.test("stale lead rows leave out a run card", function()
+    local result = cmd_board.run("stale", {}, held_leads(), NOW)
+    testing.ok(not result.output:find("Card 2", 1, true), result.output)
+    testing.ok(result.output:find("Card 1", 1, true), result.output)
+end)
+
+testing.test("stale lead rows leave out a card an open card blocks", function()
+    local result = cmd_board.run("stale", {}, held_leads(), NOW)
+    testing.ok(not result.output:find("Card 3", 1, true), result.output)
+end)
+
+testing.test("stale lead rows keep a claimed card that is blocked", function()
+    local result = cmd_board.run("stale", {}, held_leads(), NOW)
+    testing.ok(result.output:find("Card 4", 1, true), result.output)
+end)
+
+testing.test("stale lead rows leave out an epic with an open child", function()
+    local backend = held_leads()
+    local card = backend:cards()[1]
+    card.epic = { done = 0, total = 1 }
+    local result = cmd_board.run("stale", {}, backend, NOW)
+    testing.ok(not result.output:find("Card 1", 1, true), result.output)
+end)
+
+testing.test("stale planner rows leave out a run card and keep a free one", function()
+    local cards, times = aged({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BLOCKED,
+    }, { 0, 0 }, { { board.NEEDS_PLANNER }, { board.NEEDS_PLANNER, board.RUN } })
+    for _, card in ipairs(cards) do
+        times[card.id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", NOW - 5 * box.SECONDS_PER_HOUR)
+    end
+    local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+    testing.ok(result.output:find("Card 1", 1, true), result.output)
+    testing.ok(not result.output:find("Card 2", 1, true), result.output)
+end)
+
+testing.test("stale refuses when the blockers of a lead card cannot be read", function()
+    local backend = held_leads()
+    backend.blocked_error = "pomb is down"
+    local result = cmd_board.run("stale", {}, backend, NOW)
+    testing.eq(result.code, 1)
+end)
+
 testing.test("next --column blocked asks the backend for a needs:lead card", function()
     local backend = fake(sample())
     cmd_board.run("next", { "--column", support.COLUMN.BLOCKED }, backend)
@@ -7903,6 +7970,12 @@ local function waited(replies, args, opts)
             return opts.comments[id] or {}
         end
     end
+    function backend:blocked(id)
+        if opts.blocked_error then
+            return nil, opts.blocked_error
+        end
+        return (opts.blockers or {})[id] == true
+    end
     local path = opts.path or support.tempdir() .. "/wait"
     local result = cmd_board.wait(backend, args, {
         stem = path,
@@ -8238,6 +8311,40 @@ testing.test("wait --for lead wakes once on a needs:lead card in Blocked", funct
     testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
     testing.eq(seen.kinds[1], "task_added,task_moved,task_updated")
     testing.eq(fs.read(path .. ".lead.cursor"), "3\n")
+end)
+
+testing.test("wait --for lead skips a run card and a card an open card blocks", function()
+    local cards = {
+        {
+            id = ID_A,
+            column = support.COLUMN_NAME.BLOCKED,
+            labels = { board.NEEDS_LEAD, board.RUN },
+        },
+        { id = ID_B, column = support.COLUMN_NAME.BLOCKED, labels = { board.NEEDS_LEAD } },
+        { id = ID_C, column = support.COLUMN_NAME.BLOCKED, labels = { board.NEEDS_LEAD } },
+    }
+    local result = waited({
+        got("1"),
+        got(
+            "2",
+            { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED },
+            { kind = "task_added", task_id = ID_B, column = support.COLUMN_NAME.BLOCKED }
+        ),
+        got("3", { kind = "task_added", task_id = ID_C, column = support.COLUMN_NAME.BLOCKED }),
+    }, { "--for", "lead" }, { cards = cards, blockers = { [ID_B] = true } })
+    testing.eq(result.output, "cccccccc is labelled needs:lead in Blocked")
+end)
+
+testing.test("wait --for lead fails and keeps the cursor on unreadable blockers", function()
+    local cards = {
+        { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { board.NEEDS_LEAD } },
+    }
+    local result, _, path = waited({
+        got("1"),
+        got("2", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }),
+    }, { "--for", "lead" }, { cards = cards, blocked_error = "bad links" })
+    testing.eq(result.code, 1)
+    testing.eq(fs.read(path .. ".lead.cursor"), "1\n")
 end)
 
 testing.test("wait --for planner wakes once on a needs:planner card in Blocked", function()

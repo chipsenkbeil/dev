@@ -1164,7 +1164,9 @@ These sections follow, each listed apart from the stale cards:
   should take the label off (per the board guide).
 - `for a lead (needs:lead):`: every card labelled `needs:lead` (and not
   `needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
-  default), with its time as `<hours>h`.
+  default), with its time as `<hours>h`. An unclaimed card that `next --column
+  blocked` would skip (a run card, an epic with an open child or a card an open
+  card blocks) is not listed. A claimed card is.
 - `for a planner (needs:planner):`: a card labelled `needs:planner` in Blocked
   for as long, listed the same way.
 - `asks nobody, add a needs label:`: every card in Blocked with none of
@@ -1360,7 +1362,9 @@ Each mode wakes on its own events:
   It prints `moved <id prefix> out of Blocked` or
   `the owner commented on <id prefix>`.
 - `--for lead`: a card added, moved or updated that is now in Blocked with the
-  `needs:lead` label, no claim and without `needs:human`. It prints
+  `needs:lead` label, no claim and without `needs:human`. It skips what
+  `next --column blocked` skips: a run card, an epic with an open child or a
+  card an open card blocks. It prints
   `<id prefix> is labelled needs:lead in Blocked`.
 - `--for planner`: the same for `needs:planner`. It prints
   `<id prefix> is labelled needs:planner in Blocked`.
@@ -1986,7 +1990,9 @@ columns as the first list unless noted:
   `(answered, waiting for your move)` when the newest comment is the owner's.
 - `for a lead (needs:lead):` lists every card labelled `needs:lead` (and not
   `needs:human`) that has sat in Blocked for `--lead-hours` hours or more (1 by
-  default), with its time as `<hours>h`.
+  default), with its time as `<hours>h`. It leaves out an unclaimed run card,
+  an epic with an open child or a card an open card blocks, as
+  `next --column blocked` does.
 - `for a planner (needs:planner):` lists a card labelled `needs:planner` in
   Blocked for as long, the same way.
 - `asks nobody, add a needs label:` lists every Blocked card with none of
@@ -3460,8 +3466,11 @@ The `--for` modes:
 - `lead` and `planner`: send `task_added,task_moved,task_updated`. For each
   reply with events they read `Backend:cards` and match an event whose card is
   in Blocked with no claimant, no `needs:human` and the label `needs:lead`
-  (`needs:planner` for `--for planner`). The line is
-  `<id prefix> is labelled needs:lead in Blocked`, once per card per reply.
+  (`needs:planner` for `--for planner`), skipping a run card, an epic with an
+  open child or a card an open card blocks, which `Backend:blocked` answers. A
+  card that such a blocker held back is not announced again when the blocker
+  clears. The line is `<id prefix> is labelled needs:lead in Blocked`, once per
+  card per reply.
 - no `--for`: all four kinds match, printed as `added <id> to <column>`,
   `moved <id> to <column>` (`another board` when the column is unknown),
   `updated <id>` and `commented on <id>`.

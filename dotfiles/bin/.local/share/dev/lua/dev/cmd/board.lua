@@ -3386,6 +3386,18 @@ function Owner.commented(backend, card, since)
     return at ~= nil and at > since
 end
 
+---Check whether `next` would skip an unclaimed card: a run card, an epic with an open child, or a
+---card an open card blocks.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@return boolean? skipped, string? why nil with the reason when the board could not be read
+local function skipped_by_next(backend, card)
+    if board.labelled(card, board.RUN) or board.open_children(card.epic) > 0 then
+        return true
+    end
+    return backend:blocked(card.id)
+end
+
 local function stale_rows(cards)
     local rows = {}
     for _, card in ipairs(cards) do
@@ -3550,14 +3562,24 @@ function commands.stale(backend, args, now)
             else
                 local hours = math.floor((now - at) / box.SECONDS_PER_HOUR)
                 if hours >= lead_limit then
-                    asks[#asks + 1] = {
-                        id = card.id,
-                        column = card.column,
-                        size = card.size,
-                        name = card.name,
-                        hours = hours,
-                        at = at,
-                    }
+                    local skipped = false
+                    if not card.claimant then
+                        local why
+                        skipped, why = skipped_by_next(backend, card)
+                        if skipped == nil then
+                            return failure(why)
+                        end
+                    end
+                    if not skipped then
+                        asks[#asks + 1] = {
+                            id = card.id,
+                            column = card.column,
+                            size = card.size,
+                            name = card.name,
+                            hours = hours,
+                            at = at,
+                        }
+                    end
                 end
             end
         end
@@ -4607,7 +4629,13 @@ local function lead_cards(backend, roles, label)
             and index_of(card.labels, label)
             and not index_of(card.labels, board.NEEDS_HUMAN)
         then
-            waiting[card.id] = true
+            local skipped, why = skipped_by_next(backend, card)
+            if skipped == nil then
+                return nil, why
+            end
+            if not skipped then
+                waiting[card.id] = true
+            end
         end
     end
     return waiting
