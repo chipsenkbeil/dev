@@ -1136,7 +1136,18 @@ function Backend:read()
     for _, card in ipairs(doc.cards) do
         cards[#cards + 1] = { id = card.id, name = card.name, color_id = present(card.color_id) }
     end
-    return { columns = columns, colors = colors, cards = cards, has_checks = true }
+    local lanes = {}
+    for _, lane in ipairs(doc.swimlanes) do
+        lanes[#lanes + 1] = lane.name
+    end
+    return { columns = columns, colors = colors, cards = cards, has_checks = true, lanes = lanes }
+end
+
+function Backend:add_lane(name)
+    return self:__update(function(doc)
+        doc.swimlanes[#doc.swimlanes + 1] = { id = store.id(), name = name }
+        return true
+    end)
 end
 
 function Backend:add_column(name, is_done)

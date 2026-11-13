@@ -381,15 +381,39 @@ local function strip_step(layout, state, say)
     return true
 end
 
+local function lanes_step(layout, state, say)
+    local have = {}
+    for _, lane in ipairs(state.lanes) do
+        have[lane:lower()] = true
+    end
+    for _, lane in ipairs(state.wanted_lanes) do
+        if not have[lane:lower()] then
+            local ok, message = layout:add_lane(lane)
+            if not ok then
+                return nil, message
+            end
+            have[lane:lower()] = true
+            say("created lane " .. quoted(lane))
+            state.changes = state.changes + 1
+        end
+    end
+    return true
+end
+
 ---Bring a board to the standard, saying each change as it is made.
 ---@param layout dev.board.Layout the board to lay out
 ---@param name string the board's name
 ---@param say fun(line: string) prints one line
 ---@param roles dev.board.Roles? the column set to lay out, the standard names when nil
+---@param lanes string[]? the lanes the board config lists, made in this order when missing
 ---@return integer? changes how many changes were made
 ---@return string? message why it stopped, with the changes made so far already said
-function M.run(layout, name, say, roles)
-    local state = { changes = 0, roles = roles or board.roles() }
+function M.run(layout, name, say, roles, lanes)
+    local state = {
+        changes = 0,
+        roles = roles or board.roles(),
+        wanted_lanes = lanes or {},
+    }
     local found, message = layout:find()
     if found == nil then
         return nil, advise(message)
@@ -414,6 +438,7 @@ function M.run(layout, name, say, roles)
     end
     state.columns, state.colors, state.cards, state.has_checks =
         layout_state.columns, layout_state.colors, layout_state.cards, layout_state.has_checks
+    state.lanes = layout_state.lanes or {}
     for _, step in ipairs({
         columns_step,
         roles_step,
@@ -424,6 +449,7 @@ function M.run(layout, name, say, roles)
         default_step,
         limits_step,
         worn_step,
+        lanes_step,
     }) do
         local ok
         ok, message = step(layout, state, say)

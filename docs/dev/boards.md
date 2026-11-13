@@ -329,6 +329,19 @@ What it lays out:
   - A rerun changes nothing.
   - A column it does not know stays, comes after Done and is reported as
     `kept column "X", which is not part of the standard board`.
+- lanes: the names in the `lanes` list of `[board]` in `.dev/config.toml`, in
+  list order.
+  - `init` makes each lane the board lacks at the end of the lane order, one
+    line per change such as `created lane "Parity"`, and leaves the lanes that
+    exist alone. A name matches without regard to case.
+  - It never renames, reorders or deletes a lane. A board with no `lanes` list
+    gets none.
+  - On a Pomb board the call is `POST /api/swimlanes`, which needs
+    `swimlanes.create`, and only the lead token holds it. `init` uses the
+    configured `lead_token` for every request unless `--admin` is given. Under
+    `--admin` the run stops at the lane step, after the other steps, when a
+    lane is missing. It sends no lane request and names `lead_token`.
+  - A local board gets the lane in the `swimlanes` list of its file.
 - agent roles: the planner, implementer, reviewer, verifier, release and lead
   roles, granted to the board.
   - `init` first reads `GET /api/v1/agent-roles`, which needs `settings.read`

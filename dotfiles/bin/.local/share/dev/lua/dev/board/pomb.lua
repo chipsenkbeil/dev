@@ -66,6 +66,8 @@ local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NEEDS_LEAD =
     "pomb refused the delete: it needs subtasks.delete, which only the lead token holds. Set [board.pomb] lead_token in ~/.config/dev/config.toml"
+local NEEDS_LEAD_LANE =
+    "making a lane needs swimlanes.create, which only the lead token holds. Set [board.pomb] lead_token in ~/.config/dev/config.toml and run init without --admin"
 local NOT_YOURS = "that comment is not yours to change"
 local LOCKED = "pomb locked this card while it is labelled "
     .. board.NEEDS_HUMAN
@@ -2161,7 +2163,34 @@ function Backend:read()
             color_id = present(task.color_id),
         }
     end
-    return { columns = columns, colors = colors, cards = cards, has_checks = has_checks }
+    local lanes = {}
+    for _, lane in ipairs(type(detail.swimlanes) == "table" and detail.swimlanes or {}) do
+        lanes[#lanes + 1] = lane.name
+    end
+    return {
+        columns = columns,
+        colors = colors,
+        cards = cards,
+        has_checks = has_checks,
+        lanes = lanes,
+    }
+end
+
+function Backend:add_lane(name)
+    if not self.__opts.lead then
+        return nil, NEEDS_LEAD_LANE
+    end
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local made
+    made, message = self:__request("POST", "/api/swimlanes", { board_id = id, name = name })
+    if not made then
+        return nil, message
+    end
+    self.__detail = nil
+    return true
 end
 
 function Backend:add_checks_field()

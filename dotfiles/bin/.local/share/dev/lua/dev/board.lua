@@ -264,6 +264,8 @@ local M = {}
 ---   limit groups the board holds, false when the board has no limits to set, or nil and a message
 ---@field add_limit_group fun(self: dev.board.Layout, names: string[], limit: integer): boolean?,
 ---   string? the columns named made one limit group of cards
+---@field add_lane fun(self: dev.board.Layout, name: string): boolean?, string? a lane made last in
+---   the board's lane order
 
 ---@class dev.board.LayoutColumn
 ---@field id string the column's id
@@ -278,6 +280,7 @@ local M = {}
 ---   boolean, enabled: boolean}[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 ---@field has_checks boolean whether the board has the checks field
+---@field lanes string[]? the names of the board's lanes in board order
 
 ---The key of the custom field that holds a card's checks.
 M.CHECKS_FIELD = "dev.checks"

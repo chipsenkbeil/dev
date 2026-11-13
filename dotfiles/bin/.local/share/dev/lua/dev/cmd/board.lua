@@ -4390,6 +4390,21 @@ local function host()
     return (dev_os.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", ""))
 end
 
+local function config_lanes(ctx)
+    local lanes = config.get(ctx.root, "board.lanes")
+    if lanes == nil then
+        return {}
+    end
+    local ok = type(lanes) == "table"
+    for _, lane in ipairs(ok and lanes or {}) do
+        ok = ok and type(lane) == "string" and lane ~= ""
+    end
+    if not ok then
+        verb.die("dev: [board] lanes must be a list of lane names in .dev/config.toml")
+    end
+    return lanes
+end
+
 local function init_local(ctx, flags, admin)
     if admin then
         verb.usage_error(ctx, "--admin applies to a Pomb board, not a local one")
@@ -4406,7 +4421,7 @@ local function init_local(ctx, flags, admin)
         verb.die(message)
     end
     local changes
-    changes, message = init.run(backend, found.name, print, backend.roles)
+    changes, message = init.run(backend, found.name, print, backend.roles, config_lanes(ctx))
     if not changes then
         verb.die("dev: " .. message)
     end
@@ -4447,6 +4462,7 @@ M.handlers["board init"] = function(ctx)
         url = config.user("board.pomb.url"),
         token = config.user("board.pomb.lead_token"),
         name = name,
+        lead = not admin,
     }
     if not admin and opts.token == nil then
         verb.die(
@@ -4478,7 +4494,7 @@ M.handlers["board init"] = function(ctx)
         end
     end
     local changes
-    changes, message = init.run(backend, name, print, backend.roles)
+    changes, message = init.run(backend, name, print, backend.roles, config_lanes(ctx))
     if not changes then
         verb.die("dev: " .. message)
     end

@@ -1459,3 +1459,61 @@ testing.test("a missing board gets one limit group once", function()
     testing.eq(changes, 0)
     testing.eq(#lines, 0)
 end)
+
+local LANES_PROJECT =
+    '[board]\nbackend = "pomb"\nname = "demo"\nlanes = ["Parity", "Fixes", "Features"]\n'
+
+local function with_lanes(root, json)
+    local text = detail():gsub('"swimlanes":%[%]', '"swimlanes":' .. json, 1)
+    assert(fs.write(root .. "/detail.json", text))
+end
+
+testing.test("init creates the lanes the board config lists", function()
+    local root, home, tmp = sandbox({ project = LANES_PROJECT })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        UNCHANGED
+            .. 'created lane "Parity"\ncreated lane "Fixes"\ncreated lane "Features"\n'
+            .. "board demo: 3 changes\n"
+    )
+    local calls = calls_of(root)
+    local at = 1
+    for _, lane in ipairs({ "Parity", "Fixes", "Features" }) do
+        local body = '{"board_id":"board-1","name":"' .. lane .. '"}'
+        local sent = "--data-raw " .. body .. " https://pomb.example/api/swimlanes"
+        local from = calls:find(sent, at, true)
+        testing.ok(from, calls)
+        at = from + 1
+    end
+    testing.eq(writes(root), 3)
+    testing.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
+end)
+
+testing.test("init leaves the lanes that exist alone", function()
+    local root, home, tmp = sandbox({ project = LANES_PROJECT })
+    with_lanes(root, '[{"id":"l1","name":"parity"},{"id":"l2","name":"Fixes"}]')
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(out, UNCHANGED .. 'created lane "Features"\nboard demo: 1 change\n')
+    testing.eq(writes(root), 1)
+    root, home, tmp = sandbox({ project = LANES_PROJECT })
+    with_lanes(
+        root,
+        '[{"id":"l1","name":"Parity"},{"id":"l2","name":"Fixes"},{"id":"l3","name":"Features"}]'
+    )
+    out = dev(root, home, tmp, { "board", "init" })
+    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.eq(writes(root), 0)
+end)
+
+testing.test("a worker token is refused a lane", function()
+    local root, home, tmp = sandbox({ project = LANES_PROJECT })
+    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("swimlanes.create", 1, true), out)
+    testing.ok(out:find("lead token", 1, true), out)
+    testing.eq(calls_of(root):find("/api/swimlanes", 1, true), nil)
+    testing.eq(writes(root), 0)
+end)
