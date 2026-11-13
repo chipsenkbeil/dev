@@ -325,7 +325,7 @@ for verb in lint fmt test build run deploy push pull sync init help; do
     assert_contains "__verbs lists built-in $verb" "$verbs_out" "$verb	"
 done
 out="$(run_dev "$rust" help deploy)"
-assert_contains "help deploy shows the table's usage line" "$out" "(none: add .dev/deploy.sh)"
+assert_contains "help deploy shows the table's usage line" "$out" "Add .dev/deploy.sh."
 out="$(run_dev "$rust" __flags install)"
 assert_eq "__flags reads the flags line of a script and adds the global flags" "$out" "--now
 --later
@@ -708,7 +708,7 @@ git -C "$gp" config forge.remote nosuch
 out="$(run_dev "$gp" push 2>&1)"
 assert_eq "a remote of record the project lacks exits 1" "$?" "1"
 assert_contains "push names the missing remote of record" "$out" "The remote of record nosuch is not a remote of this project"
-assert_contains "help push gives the same reason" "$(run_dev "$gp" help push)" "(none: the remote of record nosuch is not a remote"
+assert_contains "help push gives the same reason" "$(run_dev "$gp" help push)" "The remote of record nosuch is not a remote"
 git -C "$gp" config forge.kind bogus
 out="$(run_dev "$gp" push 2>&1)"
 assert_eq "an unknown forge exits 1" "$?" "1"
@@ -748,7 +748,7 @@ git -C "$gp" checkout -q --detach
 out="$(run_dev "$gp" push 2>&1)"
 assert_eq "git push on a detached HEAD exits 1" "$?" "1"
 assert_contains "git push explains a detached HEAD" "$out" "HEAD is detached"
-assert_contains "help push gives the detached HEAD reason" "$(run_dev "$gp" help push)" "(none: HEAD is detached"
+assert_contains "help push gives the detached HEAD reason" "$(run_dev "$gp" help push)" "HEAD is detached in $gp"
 out="$(run_dev "$gp" pull 2>&1)"
 assert_eq "git pull on a detached HEAD exits 1" "$?" "1"
 git -C "$gp" checkout -q main
@@ -772,7 +772,7 @@ shown="$(run_dev "$gp" -v push 2>&1 | grep '^+ ' | sed 's/^+ //')"
 assert_eq "help push previews the command push runs" "$preview" "$shown"
 assert_contains "help pull shows the git command" "$(run_dev "$gp" help pull)" "pull --rebase origin main"
 echo dirty >>"$gp/a"
-assert_contains "help pull gives the dirty tree reason" "$(run_dev "$gp" help pull)" "(none: $gp has uncommitted changes"
+assert_contains "help pull gives the dirty tree reason" "$(run_dev "$gp" help pull)" "$gp has uncommitted changes"
 git -C "$gp" checkout -q -- a
 
 if command -v jj >/dev/null 2>&1; then
@@ -796,7 +796,7 @@ if command -v jj >/dev/null 2>&1; then
     out="$(run_dev "$notrunk" push 2>&1)"
     assert_eq "jj push without a trunk bookmark exits 1" "$?" "1"
     assert_contains "jj push without a trunk bookmark explains" "$out" "No master or main bookmark in"
-    assert_contains "help push gives the same reason push dies with" "$help_out" "(none: no master or main bookmark in"
+    assert_contains "help push gives the same reason push dies with" "$help_out" "No master or main bookmark in"
     git init -q --bare -b main "$TMP/jgerrit.git"
     git -C "$gremote" push -q "$TMP/jgerrit.git" main
     jj --no-pager -R "$jp" git remote add gerrit "$TMP/jgerrit.git"

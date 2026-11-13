@@ -38,11 +38,11 @@ end
 
 ---The command lines `dev help pull` shows.
 ---@param root string absolute path of the project root
----@return string[] lines one command per line, or a single `(none: ...)` line
+---@return string[] lines one command per line, or a single message line
 function M.commands(root)
     local steps, err = resolve(root)
     if not steps then
-        return { "(none: " .. err .. ")" }
+        return { text.sentence(err) }
     end
     local lines = {}
     for _, argv in ipairs(steps) do

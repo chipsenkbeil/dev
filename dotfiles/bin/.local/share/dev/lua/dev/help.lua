@@ -313,7 +313,7 @@ local function builtin_commands(ctx, row)
     if LISTED[row.name] then
         return LISTED[row.name].commands(ctx.root)
     end
-    return { "(none: no built-in " .. row.name .. ")" }
+    return { "There is no built-in " .. row.name .. "." }
 end
 
 local function verb_text(ctx, reg, c, opts)

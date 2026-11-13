@@ -197,11 +197,11 @@ end
 
 ---List the command lines `dev help follow` shows.
 ---@param root string absolute path of the project root
----@return string[] lines one command per line, or a single `(none: ...)` line
+---@return string[] lines one command per line, or a single message line
 function M.commands(root)
     local main, err = M.main(root)
     if not main then
-        return { "(none: " .. err .. ")" }
+        return { text.sentence(err) }
     end
     if vcs.backend(main) == vcs.JJ then
         return { "jj -R " .. main .. " new trunk()" }

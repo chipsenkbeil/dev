@@ -222,11 +222,11 @@ end
 
 ---The command lines `dev help push` shows.
 ---@param root string absolute path of the project root
----@return string[] lines one command per line, or a single `(none: ...)` line
+---@return string[] lines one command per line, or a single message line
 function M.commands(root)
     local plan, err = resolve(root)
     if not plan then
-        return { "(none: " .. err .. ")" }
+        return { text.sentence(err) }
     end
     local lines = {}
     for _, remote in ipairs(plan.remotes) do

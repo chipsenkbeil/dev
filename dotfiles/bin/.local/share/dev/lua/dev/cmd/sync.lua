@@ -113,7 +113,7 @@ function M.commands(root)
     local kind = project.detect_type(root) or NONE
     local set = templates.set_for(kind)
     if not set then
-        return { "(none: no lint templates for " .. kind .. " projects)" }
+        return { "There are no lint templates for " .. kind .. " projects." }
     end
     return {
         "diff the project's lint files against "
