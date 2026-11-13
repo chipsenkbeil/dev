@@ -81,7 +81,7 @@ end
 
 local function make_steps(root, verb_name, args)
     if not has_make_target(root, verb_name) then
-        return nil, "(none: no " .. verb_name .. " target in the Makefile)"
+        return nil, "The Makefile has no " .. verb_name .. " target."
     end
     local argv = concat({ "make", "-C", root, verb_name }, args)
     return { { argv = argv, needs = { MAKE } } }
@@ -252,7 +252,7 @@ end
 
 local function node_steps(root, verb_name, args)
     if not node_script(root, verb_name) then
-        return nil, "(none: no " .. verb_name .. " script in package.json)"
+        return nil, "The package.json has no " .. verb_name .. " script."
     end
     local argv = { "npm", "--prefix", root, "run", verb_name }
     if #args > 0 then
@@ -276,15 +276,15 @@ local function plan(root, kind, verb_name, args)
     if build then
         steps, none_line = build(root, verb_name, args)
     end
-    return steps, none_line or "(none: no built-in " .. verb_name .. " for " .. kind .. " projects)"
+    local fallback = "There is no built-in " .. verb_name .. " for " .. kind .. " projects."
+    return steps, none_line or fallback
 end
 
 ---List the command lines a built-in runs, as `dev help <verb>` prints them.
 ---@param root string the project root
 ---@param kind string the project type, `none` for an undetected one
 ---@param verb_name dev.cmd.types.Verb the verb
----@return string[] lines one command per line, or a single line that says why there is none, such
----   as `(none: ...)`, or the nothing-to-format sentence for a fmt with no .lua file
+---@return string[] lines one command per line, or a single sentence that says why there is none
 function M.commands(root, kind, verb_name)
     local steps, none_line = plan(root, kind, verb_name, {})
     if not steps or #steps == 0 then

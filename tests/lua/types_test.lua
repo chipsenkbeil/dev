@@ -40,7 +40,7 @@ testing.test(
         testing.eq(project.detect_type(root), "lua")
         testing.eq(lines_for(root, "test"), { "make -C " .. root .. " test" })
         testing.eq(lines_for(root, "lint"), { "make -C " .. root .. " lint" })
-        testing.eq(lines_for(root, "build"), { "(none: no build target in the Makefile)" })
+        testing.eq(lines_for(root, "build"), { "The Makefile has no build target." })
         testing.eq(lines_for(root, types.Verb.FMT), { "stylua " .. root .. "/x.lua" })
         fs.remove(root, { recursive = true })
     end
@@ -121,16 +121,16 @@ testing.test("a love2d project runs love and has make targets only for test and 
     local root = tree({ ["main.lua"] = "", ["conf.lua"] = "", Makefile = "lint:\n\ttrue\n" })
     testing.eq(lines_for(root, "run"), { "love " .. root })
     testing.eq(lines_for(root, "lint"), { "make -C " .. root .. " lint" })
-    testing.eq(lines_for(root, "test"), { "(none: no test target in the Makefile)" })
-    testing.eq(lines_for(root, "build"), { "(none: no built-in build for love2d projects)" })
+    testing.eq(lines_for(root, "test"), { "The Makefile has no test target." })
+    testing.eq(lines_for(root, "build"), { "There is no built-in build for love2d projects." })
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("a node project names the package.json scripts it has", function()
     local root = tree({ ["package.json"] = '{"scripts":{"test":"echo hi","lint":null}}' })
     testing.eq(lines_for(root, "test"), { "npm --prefix " .. root .. " run test" })
-    testing.eq(lines_for(root, "lint"), { "(none: no lint script in package.json)" })
-    testing.eq(lines_for(root, "build"), { "(none: no build script in package.json)" })
+    testing.eq(lines_for(root, "lint"), { "The package.json has no lint script." })
+    testing.eq(lines_for(root, "build"), { "The package.json has no build script." })
     fs.remove(root, { recursive = true })
 end)
 
@@ -157,7 +157,7 @@ end)
 
 testing.test("an undetected project has no built-in", function()
     local root = tree({})
-    testing.eq(lines_for(root, "lint"), { "(none: no built-in lint for none projects)" })
+    testing.eq(lines_for(root, "lint"), { "There is no built-in lint for none projects." })
     fs.remove(root, { recursive = true })
 end)
 
