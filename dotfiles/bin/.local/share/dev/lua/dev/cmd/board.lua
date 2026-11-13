@@ -1374,6 +1374,24 @@ function M.move(backend, args, opts)
     return move_card(backend, args, opts)
 end
 
+---Tell whether a move args list closes an epic, a move of an epic into the Done column.
+---@param backend dev.board.Backend the board
+---@param args string[] the arguments after `move`
+---@return boolean
+local function closes_epic(backend, args)
+    local flags, words = parse(args, { [runner.FLAG] = true, [WAIT_FLAG] = true })
+    if not flags or #words < 2 then
+        return false
+    end
+    backend.roles = backend.roles or board.roles(backend.column_map, backend:done_columns() or {})
+    local column = named_column(backend, table.concat(words, " ", 2))
+    if not column or column ~= backend.roles:done_column() then
+        return false
+    end
+    local card = find_card(backend, words[1])
+    return card ~= nil and (card.epic ~= nil or card.kind == board.Kind.EPIC)
+end
+
 function commands.order(backend, args)
     local flags, words = parse(args, {})
     if not flags then
@@ -5120,6 +5138,13 @@ for sub in pairs(commands) do
             backend = open_lead(ctx, "deletes an outcome", "subtasks.delete")
         else
             backend, pending = open_board(ctx)
+            if
+                sub == "move"
+                and settings(ctx).backend == board.Backend.POMB
+                and closes_epic(backend, args)
+            then
+                backend, pending = open_lead(ctx, "closes an epic", "epics.manage"), nil
+            end
         end
         local result = M.run(sub, args, backend, nil, sub == "ls" and ui.context() or nil)
         if result.message then

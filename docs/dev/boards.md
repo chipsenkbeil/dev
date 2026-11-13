@@ -212,6 +212,17 @@ A token from `DEV_BOARD_TOKEN` or from `pass` is never retried this way, and
 an expired one fails with the expired message as before. A runner cannot mint
 for itself, and dispatch's own re-mint is a separate matter.
 
+### Closing an epic
+
+`dev board move EPIC done` on a Pomb board reads the card with the worker
+token first. When the card is an epic and the column is the Done column, dev
+opens the board again with `[board.pomb] lead_token`, as `delete` does, and
+sends the move with it, and never queues it when Pomb is unreachable. Pomb grants `epics.manage` to the `lead` preset alone.
+A `DEV_AGENT` that is not a lead is refused with "only the lead closes an
+epic" before the move goes out, and an unset `lead_token` exits 1 naming
+`epics.manage`. The move still refuses a child that is open and an outcome
+that is unticked, and names the count and the outcomes.
+
 ### Ending a role token: token-revoke
 
 `dev board token revoke --as NAME` ends the token that `token mint` issued as

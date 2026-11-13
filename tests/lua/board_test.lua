@@ -5290,6 +5290,126 @@ testing.test(
     end
 )
 
+local function epic_sandbox(children_done, ticked)
+    local export = SUBTASKS_EXPORT:gsub('"done":%a+', '"done":' .. tostring(ticked))
+        :gsub('"labels":%["docs"%]', '"kind":"epic","labels":["docs"]')
+    local task = '{"id":"'
+        .. ID_A
+        .. '","name":"First","column_id":"col-ready","color_id":"yellow-id","kind":"epic",'
+        .. '"children_total":2,"children_done":'
+        .. children_done
+        .. ',"labels":[]}'
+    local root, home = sandbox({ export = export, task = task, user = LEAD_USER })
+    two_tokens(root)
+    executable(
+        root .. "/bin/curl",
+        (
+            CURL:gsub(
+                'cat >"$ROOT/stdin"\n',
+                'cat >"$ROOT/stdin"\ncase "$*" in *"/move"*) cp "$ROOT/stdin" "$ROOT/move_stdin" ;; esac\n',
+                1
+            )
+        )
+    )
+    return root, home
+end
+
+testing.test("the lead closes an epic with the lead token", function()
+    local root, home = epic_sandbox(2, true)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111", support.COLUMN.DONE },
+        { agent = LEAD }
+    )
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved 11111111 to Done\n")
+    local sent = read(root, "move_stdin")
+    testing.ok(
+        sent:find("Bearer " .. LEAD_SECRET, 1, true),
+        "the move did not carry the lead token"
+    )
+    testing.eq(sent:find(WORK_SECRET, 1, true), nil)
+end)
+
+testing.test("a worker's move of an epic into Done is refused before the move", function()
+    local root, home = epic_sandbox(2, true)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111", support.COLUMN.DONE },
+        { agent = "dotfiles/implementer/82f0e002/1" }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("only the lead closes an epic", 1, true), out)
+    testing.eq(read(root, "move_stdin"), "")
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
+testing.test("the lead's close of an epic names the open children and unticked outcomes", function()
+    local root, home = epic_sandbox(1, true)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111", support.COLUMN.DONE },
+        { agent = LEAD }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("1 of 2 children are open", 1, true), out)
+    testing.eq(read(root, "move_stdin"), "")
+    root, home = epic_sandbox(2, false)
+    out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111", support.COLUMN.DONE },
+        { agent = LEAD }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("2 of 2 outcomes are unticked (1. A works, 2. B works)", 1, true), out)
+    testing.eq(read(root, "move_stdin"), "")
+end)
+
+testing.test("the lead's close of an epic with no lead token set names epics.manage", function()
+    local root, home = epic_sandbox(2, true)
+    assert(
+        fs.write(
+            home .. "/.config/dev/config.toml",
+            '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
+        )
+    )
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111", support.COLUMN.DONE },
+        { agent = LEAD }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("epics.manage", 1, true), out)
+    testing.eq(read(root, "move_stdin"), "")
+end)
+
+testing.test("the lead's close of an epic is not queued when Pomb is unreachable", function()
+    local root, home = epic_sandbox(2, true)
+    executable(
+        root .. "/bin/curl",
+        (
+            CURL:gsub(
+                'cat >"$ROOT/stdin"\n',
+                'cat >"$ROOT/stdin"\ncase "$*" in *"/move"*) exit 7 ;; esac\n',
+                1
+            )
+        )
+    )
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111", support.COLUMN.DONE },
+        { agent = LEAD }
+    )
+    testing.eq(code, 1, out)
+    testing.eq(fs.exists(queue_file(home)), false)
+end)
+
 testing.test("outcome past the last subtask exits 1 and changes nothing", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
@@ -5532,7 +5652,9 @@ testing.test("epic_move_refused_by_settings", function()
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
         1
     )
-    local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail })
+    local root, home =
+        sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail, user = LEAD_USER })
+    two_tokens(root)
     for _, column in ipairs({ support.COLUMN.BACKLOG, support.COLUMN.DONE }) do
         local out, code = dev(root, home, { "board", "move", "11111111-a", column })
         testing.eq(code, 1, out)
@@ -5567,7 +5689,8 @@ end)
 
 testing.test("an epic closes when the task read shows every child Done", function()
     local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
-    local root, home = sandbox({ export = export, task = EPIC_TASK:format(3) })
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(3), user = LEAD_USER })
+    two_tokens(root)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
     testing.eq(code, 0, out)
     testing.ok(
@@ -5578,7 +5701,8 @@ end)
 
 testing.test("an epic with an open child in the task read is refused", function()
     local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
-    local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), user = LEAD_USER })
+    two_tokens(root)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
     testing.eq(code, 1, out)
     testing.ok(out:find("is an epic and cannot enter", 1, true), out)
