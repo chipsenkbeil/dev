@@ -21,7 +21,7 @@ end
 -- Install the project's pinned channel, which the runner image usually bakes in
 local function install_rust()
   local channel = toolchain()
-  ci.group("install rust " .. channel, function()
+  ci.group("Install rust " .. channel, function()
     run("rustup toolchain install " .. channel .. " --component clippy,rustfmt")
     run("rustup toolchain install nightly --profile minimal --component rustfmt")
     run("command -v cargo-nextest >/dev/null || { mkdir -p $HOME/.cargo/bin && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C $HOME/.cargo/bin; }")
