@@ -84,6 +84,52 @@ testing.test("render keeps a project's advisories ignore array in deny.toml", fu
     )
 end)
 
+local DENY_MARK = "# --- project-specific entries below (dev sync keeps them) ---"
+
+local function render_deny(project_head, template_head)
+    local root = support.sandbox({
+        ["deny.toml"] = table.concat({ project_head, DENY_MARK, "kept = 1", "" }, "\n"),
+    }, {})
+    local src = root .. "/src.toml"
+    assert(
+        fs.write(src, table.concat({ template_head, DENY_MARK, "" }, "\n")),
+        "fixture setup failed"
+    )
+    return templates.render(
+        root,
+        { kind = Kind.RUST, dest = "deny.toml", src = src, channel = "stable" }
+    )
+end
+
+testing.test(
+    "render keeps the whole advisories ignore array when a comment holds a bracket",
+    function()
+        local want = table.concat({
+            "[advisories]",
+            "ignore = [",
+            '    "RUSTSEC-1", # see [issue]',
+            '    "RUSTSEC-2",',
+            "]",
+            'yanked = "deny"',
+            "",
+        }, "\n")
+        local template = table.concat({ "[advisories]", 'yanked = "deny"', "" }, "\n")
+        testing.eq(
+            render_deny(want, template),
+            table.concat({ want, DENY_MARK, "kept = 1", "" }, "\n")
+        )
+    end
+)
+
+testing.test("render leaves deny.toml alone when the project has no ignore array", function()
+    local template = table.concat({ "[advisories]", 'yanked = "deny"', "" }, "\n")
+    local existing = table.concat({ "[advisories]", 'yanked = "warn"', "" }, "\n")
+    testing.eq(
+        render_deny(existing, template),
+        table.concat({ template, DENY_MARK, "kept = 1", "" }, "\n")
+    )
+end)
+
 testing.test("render keeps the project's text below the deny.toml and lint.lua markers", function()
     local root = support.sandbox({
         ["deny.toml"] = "old\n# --- project-specific entries below (dev sync keeps them) ---\nkept = 1\n\n",

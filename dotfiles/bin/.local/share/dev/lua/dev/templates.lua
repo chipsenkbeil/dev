@@ -250,22 +250,48 @@ function M.skip_pending(root, entries)
     return kept, pending
 end
 
+local function bracket_depth(line, depth)
+    local quote, i = nil, 1
+    while i <= #line do
+        local c = line:sub(i, i)
+        if quote then
+            if c == "\\" and quote == '"' then
+                i = i + 1
+            elseif c == quote then
+                quote = nil
+            end
+        elseif c == '"' or c == "'" then
+            quote = c
+        elseif c == "#" then
+            break
+        elseif c == "[" then
+            depth = depth + 1
+        elseif c == "]" then
+            depth = depth - 1
+        end
+        i = i + 1
+    end
+    return depth
+end
+
 local function advisories_ignore(text)
-    local in_table, found = false, nil
+    local in_table, found, depth = false, nil, 0
     for _, line in ipairs(lines_of(text)) do
         if line == DENY_MARKER then
             break
         end
         if found then
             found[#found + 1] = line
-            if line:find("]", 1, true) then
+            depth = bracket_depth(line, depth)
+            if depth <= 0 then
                 break
             end
         elseif line:find("^%[") then
             in_table = line == "[advisories]"
         elseif in_table and line:find("^ignore%s*=") then
             found = { line }
-            if line:find("]", 1, true) then
+            depth = bracket_depth(line, 0)
+            if depth <= 0 then
                 break
             end
         end
