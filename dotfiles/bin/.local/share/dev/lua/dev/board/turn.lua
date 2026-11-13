@@ -9,6 +9,8 @@ M.NAME = "landing turn"
 
 M.LEASE_SECONDS = 900
 
+M.RECHECK_LEASE_SECONDS = 3000
+
 M.POLL_SECONDS = 5
 
 M.POLL_MAX_SECONDS = 30
@@ -549,6 +551,21 @@ function M.renew(backend, turn)
         return nil, "the landing turn ran out and was lost, so ask for it again"
     end
     return true
+end
+
+---Renew `turn` for at least `seconds`, then go back to the lease the holder asked for.
+---@param backend dev.board.Backend the board backend
+---@param turn dev.board.turn.Turn the turn in hand
+---@param seconds integer the lease of this one renewal, never below the turn's own lease
+---@return true? ok true while the turn is still this holder's
+---@return string? message why the turn is lost or over the cap of a hold
+---@return boolean? capped true when a hold has been kept for `MAX_HOLD_SECONDS` already
+function M.stretch(backend, turn, seconds)
+    local own = turn.lease
+    turn.lease = math.max(own, seconds)
+    local ok, message, capped = M.renew(backend, turn)
+    turn.lease = own
+    return ok, message, capped
 end
 
 ---Renew a hold for `seconds` and record that lease, so a later landing renews to it.

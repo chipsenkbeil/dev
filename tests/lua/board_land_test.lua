@@ -1379,6 +1379,40 @@ if has_jj then
         testing.ok(fs.is_file(marker), "the recheck row never ran")
     end)
 
+    testing.test("land stretches the turn lease before the recheck rows run", function()
+        local snapshot = support.tempdir() .. "/board.json"
+        local project = recheck_project("bin/snap")
+        assert(
+            fs.write(
+                project.root .. "/bin/snap",
+                '#!/bin/sh\ncp "$XDG_STATE_HOME/dev/boards/mine.json" "$SNAPSHOT"\n'
+            ),
+            "write failed"
+        )
+        must(dev_os.run({ "chmod", "755", project.root .. "/bin/snap" }))
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(
+            project,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, SNAPSHOT = snapshot }
+        )
+        testing.eq(code, 0, out)
+        local doc = assert(json.decode(assert(fs.read(snapshot))), "decode failed")
+        local claim
+        for _, card in ipairs(doc.cards) do
+            if card.name == turn.NAME then
+                claim = card.claim
+            end
+        end
+        testing.ok(claim ~= nil, "the turn was not held while the row ran")
+        testing.ok(
+            claim.expires_at > store.stamp(os.time() + turn.LEASE_SECONDS + 60),
+            claim.expires_at
+        )
+    end)
+
     testing.test("a failed recheck row refuses the land and leaves trunk alone", function()
         local project = recheck_project("false")
         local id = review_ready(project)

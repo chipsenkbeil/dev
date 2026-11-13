@@ -366,6 +366,15 @@ local function land_held(opts)
             short .. " cannot land:\n  - " .. table.concat(problems, "\n  - ") .. rebase_note
         )
     end
+    if carried then
+        local stretched
+        stretched, message = turn.stretch(backend, hold, turn.RECHECK_LEASE_SECONDS)
+        if not stretched then
+            local lost = failure(short .. " cannot land: " .. message)
+            lost.lost = true
+            return lost
+        end
+    end
     local unchecked = carried
         and land.recheck_problem({
             root = backend.root,

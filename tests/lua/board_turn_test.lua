@@ -119,6 +119,45 @@ testing.test("a holder that returns after its lease ran out must ask again", fun
     testing.eq(turn.holder(backend), nil)
 end)
 
+testing.test("a stretched turn outlasts its first lease", function()
+    local backend = backend_at(board_home())
+    local STRETCH_SECONDS = 10
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    advance(PAST_HOLD_SECONDS)
+    testing.eq(turn.stretch(backend, first, STRETCH_SECONDS), true)
+    advance(PAST_LEASE_SECONDS)
+    restore()
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a stretch restores the holders own lease", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(turn.stretch(backend, first, TURN_HOLD_SECONDS), true)
+    restore()
+    testing.eq(first.lease, LEASE_SECONDS)
+end)
+
+testing.test("a stretch keeps a hold longer lease", function()
+    local backend = backend_at(board_home())
+    local LONG_HOLD_SECONDS = 6
+    local SHORT_STRETCH_SECONDS = 3
+    local PAST_SHORT_SECONDS = 5
+    local held = assert(turn.take(backend, "alpha", "aaaa1111", {
+        hold = true,
+        seconds = LONG_HOLD_SECONDS,
+    }))
+    advance(PAST_HOLD_SECONDS)
+    testing.eq(turn.stretch(backend, held, SHORT_STRETCH_SECONDS), true)
+    advance(PAST_SHORT_SECONDS)
+    testing.eq(held.lease, LONG_HOLD_SECONDS)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
 testing.test("a holder that renews in time keeps the turn past its first lease", function()
     local backend = backend_at(board_home())
     local LONG_LEASE_SECONDS = 4
