@@ -1732,7 +1732,7 @@ function Backend:release(id, fence)
         "POST",
         "/api/tasks/" .. id .. "/owner/release",
         { name = name },
-        fence or present(task.claim and task.claim.fence)
+        fence or present(task.owner.fence) or present(task.claim and task.claim.fence)
     )
     if not done then
         return nil, message
