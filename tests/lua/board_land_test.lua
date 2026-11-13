@@ -229,30 +229,31 @@ testing.test("missing_reviews wants a code and a style review of the change", fu
     )
 end)
 
-local function judged(kind, commit, by, verdict)
+local function judged(kind, commit, opts)
     return {
-        body = review.record(kind, by, { commit = commit, change = "chg" }, verdict),
+        body = review.record(kind, opts.by, { commit = commit, change = "chg" }, opts.verdict),
     }
 end
 
 testing.test("refused_reviews names the reviewer whose latest verdict is needs-work", function()
-    testing.eq(land.refused_reviews({ judged("code", COMMIT, "r1", "clean") }, STATE), {})
-    testing.eq(land.refused_reviews({ judged("style", COMMIT, "r2", "minor") }, STATE), {})
+    local clean = judged("code", COMMIT, { by = "r1", verdict = "clean" })
+    testing.eq(land.refused_reviews({ clean }, STATE), {})
+    local minor = judged("style", COMMIT, { by = "r2", verdict = "minor" })
+    testing.eq(land.refused_reviews({ minor }, STATE), {})
     testing.eq(land.refused_reviews({ reviewed("code", COMMIT) }, STATE), {})
-    local refused = land.refused_reviews({ judged("style", COMMIT, "r2", "needs-work") }, STATE)
+    local style_needs = judged("style", COMMIT, { by = "r2", verdict = "needs-work" })
+    local refused = land.refused_reviews({ style_needs }, STATE)
     testing.eq(#refused, 1)
     testing.ok(refused[1]:find("style review by r2", 1, true), refused[1])
     testing.ok(refused[1]:find("needs-work", 1, true), refused[1])
-    refused = land.refused_reviews({ judged("recheck", COMMIT, "r3", "needs-work") }, STATE)
+    local recheck = judged("recheck", COMMIT, { by = "r3", verdict = "needs-work" })
+    refused = land.refused_reviews({ recheck }, STATE)
     testing.ok(refused[1]:find("recheck review by r3", 1, true), refused[1])
-    testing.eq(
-        land.refused_reviews({
-            judged("code", COMMIT, "r1", "needs-work"),
-            judged("code", COMMIT, "r4", "clean"),
-        }, STATE),
-        {}
-    )
-    testing.eq(land.refused_reviews({ judged("code", OTHER, "r1", "needs-work") }, STATE), {})
+    local code_needs = judged("code", COMMIT, { by = "r1", verdict = "needs-work" })
+    local code_clean = judged("code", COMMIT, { by = "r4", verdict = "clean" })
+    testing.eq(land.refused_reviews({ code_needs, code_clean }, STATE), {})
+    local other = judged("code", OTHER, { by = "r1", verdict = "needs-work" })
+    testing.eq(land.refused_reviews({ other }, STATE), {})
 end)
 
 testing.test("a review of an earlier commit needs a recheck at the landing commit", function()
@@ -453,8 +454,8 @@ local function verified_card(project)
     return id
 end
 
-local function refused(project, id, wanted, extra)
-    local out, code = dev(project, { "board", "land", id }, extra)
+local function refused(project, id, wanted, opts)
+    local out, code = dev(project, { "board", "land", id }, opts)
     testing.eq(code, 1, out)
     for _, text in ipairs(wanted) do
         testing.ok(out:find(text, 1, true), text .. "\n" .. out)
