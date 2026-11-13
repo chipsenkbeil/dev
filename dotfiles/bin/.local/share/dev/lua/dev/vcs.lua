@@ -21,15 +21,17 @@ end
 
 ---Pick the backend a project uses.
 ---
----A project with `.jj` uses jj, one with only `.git` uses git.
+---A project with `.jj` uses jj when jj is installed or `.git` is missing. Otherwise a project with
+---`.git` uses git.
 ---@param root string absolute path of the project root
 ---@return dev.vcs.Backend? backend nil when the project has neither
 ---@return string? err why there is no backend
 function M.backend(root)
-    if fs.is_dir(root .. "/.jj") then
+    local git = fs.exists(root .. "/.git")
+    if fs.is_dir(root .. "/.jj") and (dev_os.which("jj") or not git) then
         return M.JJ
     end
-    if fs.exists(root .. "/.git") then
+    if git then
         return M.GIT
     end
     return nil, "neither .jj nor .git found in " .. root

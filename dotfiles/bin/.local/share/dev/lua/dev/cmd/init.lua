@@ -130,7 +130,7 @@ end
 
 local function init_vcs(run)
     local root = run.root
-    if fs.is_dir(root .. "/.jj") then
+    if vcs.backend(root) == vcs.JJ then
         run.hint = "jj git remote add"
         skipped(run, ".jj exists")
     elseif fs.is_file(root .. "/.git") then
