@@ -277,3 +277,23 @@ testing.test("every board verb the commands table or handlers run has a builtins
         testing.ok(rowed[name], "board " .. name .. " has no builtins row")
     end
 end)
+
+testing.test("every global flag description starts at one column", function()
+    local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n" })
+    local out = dev(root, { "a", "--help" })
+    local column, seen, inside = nil, 0, false
+    for line in out:gmatch("([^\n]*)\n") do
+        if line == "Global flags:" then
+            inside = true
+        elseif inside and line:sub(1, 2) == "  " then
+            local _, stop = line:find("  +", 3)
+            testing.ok(stop ~= nil, line)
+            column = column or stop + 1
+            testing.ok(stop + 1 == column, line)
+            seen = seen + 1
+        elseif inside then
+            break
+        end
+    end
+    testing.ok(seen > 0, out)
+end)

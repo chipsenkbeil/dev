@@ -368,14 +368,28 @@ local function verb_text(ctx, reg, c, opts)
             out[#out + 1] = "  " .. line .. "\n"
         end
     end
+    ---Global flags with their descriptions
+    local GLOBAL_FLAG_HELP = {
+        { "-v", "print each command before it runs" },
+        { "-vv", "also trace every line of dev and of each bash script" },
+        { "--remote", "run this command on a remote runner, see `dev help remote`" },
+        {
+            "--local",
+            "run this command here, whatever the default is "
+                .. "(refused for a ci verb under DEV_AGENT)",
+        },
+        { "--detach", "with --remote, start the job and return" },
+        { "-C DIR", "run as if dev started in DIR" },
+        { "--agent NAME", "export DEV_AGENT=NAME to the command" },
+    }
+    local width = 0
+    for _, flag in ipairs(GLOBAL_FLAG_HELP) do
+        width = math.max(width, #flag[1])
+    end
     out[#out + 1] = "\nGlobal flags:\n"
-        .. "  -v          print each command before it runs\n"
-        .. "  -vv         also trace every line of dev and of each bash script\n"
-        .. "  --remote    run this command on a remote runner, see `dev help remote`\n"
-        .. "  --local     run this command here, whatever the default is (refused for a ci verb under DEV_AGENT)\n"
-        .. "  --detach    with --remote, start the job and return\n"
-        .. "  -C DIR      run as if dev started in DIR\n"
-        .. "  --agent NAME  export DEV_AGENT=NAME to the command\n"
+    for _, flag in ipairs(GLOBAL_FLAG_HELP) do
+        out[#out + 1] = "  " .. flag[1] .. string.rep(" ", width - #flag[1] + 2) .. flag[2] .. "\n"
+    end
     return table.concat(out)
 end
 
