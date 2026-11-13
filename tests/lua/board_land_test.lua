@@ -2393,7 +2393,7 @@ if has_jj then
         )
         testing.eq(code, 0, out)
         testing.ok(
-            out:find(project.root .. " left alone: it has uncommitted changes", 1, true),
+            out:find(project.root .. " was left alone: it has uncommitted changes.", 1, true),
             out
         )
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)

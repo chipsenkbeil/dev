@@ -1,6 +1,7 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
+local check = require("dev.board.check")
 local land = require("dev.board.land")
 local support = require("support")
 local templates = require("dev.templates")
@@ -179,7 +180,8 @@ local function with_origin(files)
 end
 
 local function checked_record(commit)
-    return { body = "dev-check: commit=" .. commit .. " change=- mode=run\n1 pass - dev lint" }
+    local rows = { { result = check.RESULT.PASS, run_id = "-", run = "dev lint" } }
+    return { body = check.record({ commit = commit, change = "-" }, rows, false) }
 end
 
 local function carry_opts(root, checked)

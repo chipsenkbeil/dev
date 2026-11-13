@@ -317,10 +317,11 @@ works from the main checkout, a jj workspace or a git worktree.
   `@` that is not empty, and for git a changed tracked file. A git checkout on
   a detached HEAD that no branch holds stays as it is too. One line names the
   folder and says why.
-- The verb prints one line that starts with the words dev follow and a colon.
-  It reads `FOLDER is on trunk COMMIT` or
-  `FOLDER left alone: it has uncommitted changes`, and the exit code is 0 for
-  both. A failed jj or git command exits 1 with a line that names it.
+- The verb prints one sentence with a final period. It reads
+  `FOLDER is on trunk COMMIT.` or
+  `FOLDER was left alone: it has uncommitted changes.`, and the exit code is 0
+  for both. A failed jj or git command exits 1 with a sentence that names it,
+  such as `The git fetch command failed in FOLDER: OUTPUT.`
 - A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in.
   `dev board land` on a board with no `deploys = true` under `[board.land]`
   and `dev board ship` run it through the launcher, and the script runs in

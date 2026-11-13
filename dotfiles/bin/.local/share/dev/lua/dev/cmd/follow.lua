@@ -15,6 +15,11 @@ local function chomp(out)
     return (out:gsub("\n$", ""))
 end
 
+local function failed(main, command, out)
+    local why = out and out ~= "" and ": " .. out or ""
+    return text.sentence("the " .. command .. " command failed in " .. main .. why), 1
+end
+
 local function main_of_jj(root)
     local argv = vcs.with(
         vcs.base(root, vcs.JJ, { quiet = true }),
@@ -80,36 +85,36 @@ local function jj_follow(main)
     local jj, read = runner(base)
     local out, code = jj("workspace", "update-stale")
     if code ~= 0 then
-        return main .. ": jj failed, " .. out, 1
+        return failed(main, "jj workspace update-stale", out)
     end
     local empty
     empty, code = read("log", "-r", "@", "--no-graph", "-T", "empty")
     if code ~= 0 then
-        return main .. ": jj log failed", 1
+        return failed(main, "jj log")
     end
     if empty ~= "true" then
-        return main .. " left alone: it has uncommitted changes", 0
+        return main .. " was left alone: it has uncommitted changes.", 0
     end
     if #vcs.remotes(main, vcs.JJ) > 0 then
         out, code = jj("git", "fetch", "--all-remotes")
         if code ~= 0 then
-            return main .. ": jj git fetch failed, " .. out, 1
+            return failed(main, "jj git fetch", out)
         end
     end
     local trunk
     trunk, code = read("log", "-r", "trunk()", "--no-graph", "-T", 'if(root, "root", commit_id)')
     if code ~= 0 or trunk == ROOT_MARK or trunk == "" then
-        return main .. ": jj finds no trunk", 1
+        return "There is no trunk in " .. main .. ".", 1
     end
     local parent
     parent, code = read("log", "-r", "@-", "--no-graph", "-T", "commit_id")
     if code == 0 and parent ~= trunk then
         out, code = jj("new", "trunk()")
         if code ~= 0 then
-            return main .. ": jj new failed, " .. out, 1
+            return failed(main, "jj new", out)
         end
     end
-    return main .. " is on trunk " .. short(trunk), 0
+    return main .. " is on trunk " .. short(trunk) .. ".", 0
 end
 
 local function holds(list, word)
@@ -126,31 +131,31 @@ local function git_follow(main)
     local git, read = runner(base)
     local dirty, code = read("status", "--porcelain", "--untracked-files=no")
     if code ~= 0 then
-        return main .. ": git status failed", 1
+        return failed(main, "git status")
     end
     if dirty ~= "" then
-        return main .. " left alone: it has uncommitted changes", 0
+        return main .. " was left alone: it has uncommitted changes.", 0
     end
     local trunk = vcs.trunk(vcs.branches(main, vcs.GIT))
     if not trunk then
-        return main .. ": no master or main branch", 1
+        return main .. " has no master or main branch.", 1
     end
     local _, attached = read("symbolic-ref", "--quiet", "HEAD")
     local held = read("for-each-ref", "--contains", "HEAD", "--format=%(refname)", "refs/heads")
     if attached ~= 0 and held == "" then
-        return main .. " left alone: its detached HEAD holds commits no branch has", 0
+        return main .. " was left alone: its detached HEAD holds commits no branch has.", 0
     end
     local out
     local remotes = vcs.remotes(main, vcs.GIT)
     if #remotes > 0 then
         out, code = git("fetch", "--all", "--quiet")
         if code ~= 0 then
-            return main .. ": git fetch failed, " .. out, 1
+            return failed(main, "git fetch", out)
         end
     end
     out, code = git("checkout", "--quiet", trunk)
     if code ~= 0 then
-        return main .. ": cannot switch to " .. trunk .. ", " .. out, 1
+        return failed(main, "git checkout", out)
     end
     local remote = "origin"
     if #remotes > 0 and not holds(remotes, remote) then
@@ -161,15 +166,15 @@ local function git_follow(main)
     if known == 0 then
         out, code = git("merge", "--ff-only", "--quiet", upstream)
         if code ~= 0 then
-            return main .. ": " .. trunk .. " cannot fast-forward to " .. upstream .. ", " .. out, 1
+            return failed(main, "git merge", out)
         end
     end
     local head
     head, code = read("rev-parse", "HEAD")
     if code ~= 0 then
-        return main .. ": git rev-parse failed", 1
+        return failed(main, "git rev-parse")
     end
-    return main .. " is on trunk " .. short(head), 0
+    return main .. " is on trunk " .. short(head) .. ".", 0
 end
 
 ---Move a main checkout onto trunk.
@@ -182,7 +187,7 @@ end
 function M.follow(main)
     local backend, err = vcs.require(main)
     if not backend then
-        return main .. ": " .. err, 1
+        return "Cannot follow " .. main .. ". " .. text.sentence(err), 1
     end
     if backend == vcs.JJ then
         return jj_follow(main)
@@ -215,11 +220,11 @@ end
 function M.run(ctx)
     local main, err = M.main(ctx.root)
     if not main then
-        verb.note("dev follow: " .. err)
+        verb.note(text.sentence(err))
         return 1
     end
     local line, code = M.follow(main)
-    verb.say("dev follow: " .. line)
+    verb.say(line)
     return code
 end
 
@@ -230,7 +235,7 @@ end
 function M.launch(main)
     local launcher = os.getenv("DEV_SELF") or ""
     if launcher:sub(1, 1) ~= "/" or not fs.is_exec(launcher) then
-        return "dev follow: DEV_SELF is not the dev launcher. " .. main .. " was not moved"
+        return "DEV_SELF is not the dev launcher. " .. main .. " was not moved."
     end
     local out = dev_os.capture({ launcher, "follow" }, { cwd = main, stderr = "stdout" })
     return text.trim(out)

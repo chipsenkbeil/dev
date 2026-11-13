@@ -13,9 +13,9 @@ repeats for several tags. It goes to the remote of record, or to the remote
 named.
 
 Before anything is pushed, dev refuses a tag that does not exist locally
-(`dev: no local tag NAME`) and a tag the remote holds at another commit. It
-never forces, and it reports and skips a tag the remote holds at the same
-commit.
+(`There is no local tag NAME. No tag was pushed.`) and a tag the remote
+holds at another commit. It never forces, and it reports and skips a tag the
+remote holds at the same commit.
 
 A tag push needs no trunk bookmark or branch, so a detached HEAD is fine. It
 goes through `commit-guard`, which checks the tagged commit for an attribution

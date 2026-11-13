@@ -23,14 +23,14 @@ local function guard_path()
     local self = os.getenv("DEV_SELF") or ""
     if self:sub(1, 1) ~= "/" then
         return nil,
-            "DEV_SELF is not an absolute path, refusing to push without the attribution check"
+            "DEV_SELF is not an absolute path. Dev refuses to push without the attribution check."
     end
     local guard = fs.dirname(self) .. "/commit-guard"
     if not fs.is_exec(guard) then
         return nil,
-            "commit-guard is missing at "
+            "The guard commit-guard is missing at "
                 .. guard
-                .. ", refusing to push without the attribution check"
+                .. ". Dev refuses to push without the attribution check."
     end
     return guard
 end
@@ -50,7 +50,7 @@ local function resolve(root, tags_only)
         local branch, code =
             dev_os.capture({ "git", "-C", root, "symbolic-ref", "--short", "-q", "HEAD" })
         if code ~= 0 and not tags_only then
-            return nil, "HEAD is detached in " .. root .. ", check out a branch to push"
+            return nil, "HEAD is detached in " .. root .. ", and a push needs a branch"
         end
         plan.ref = text.trim(branch)
         plan.sha = text.trim(dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }))
@@ -125,7 +125,7 @@ local function check_tags(git, tags, remotes)
             { stderr = "null" }
         )
         if code ~= 0 then
-            verb.die("dev: no local tag " .. tag .. ", nothing was pushed")
+            verb.die("There is no local tag " .. tag .. ". No tag was pushed.")
         end
         shas[tag] = text.trim(sha)
     end
@@ -139,14 +139,12 @@ local function check_tags(git, tags, remotes)
                 { stderr = "stdout" }
             )
             if code ~= 0 then
-                verb.die(
-                    "dev: cannot read the tags of " .. remote .. ", nothing was pushed\n" .. out
-                )
+                verb.die("The tags of " .. remote .. " cannot be read. No tag was pushed.\n" .. out)
             end
             local held = peeled(out, ref)
             if held and held ~= shas[tag] then
                 verb.die(
-                    "dev: "
+                    "The remote "
                         .. remote
                         .. " holds tag "
                         .. tag
@@ -154,7 +152,7 @@ local function check_tags(git, tags, remotes)
                         .. held
                         .. ", not "
                         .. shas[tag]
-                        .. ", refusing to overwrite it, nothing was pushed"
+                        .. ". Dev refuses to overwrite it and no tag was pushed."
                 )
             end
             if not held then
@@ -168,7 +166,7 @@ end
 local function push_tags(ctx, plan, tags, remotes)
     local guard, err = guard_path()
     if not guard then
-        verb.die("dev: " .. err)
+        verb.die(text.sentence(err))
     end
     local dir = store_dir(ctx.root, plan)
     local git = dir and { "git", "--git-dir=" .. dir } or { "git", "-C", ctx.root }
@@ -177,7 +175,7 @@ local function push_tags(ctx, plan, tags, remotes)
     for _, remote in ipairs(remotes) do
         for _, tag in ipairs(tags) do
             if not text.contains(todo[remote], tag) then
-                io.write(remote, ": tag ", tag, " is already there\n")
+                verb.say("Tag " .. tag .. " is already on " .. remote .. ".")
             end
         end
         if #todo[remote] > 0 then
@@ -193,9 +191,9 @@ local function push_tags(ctx, plan, tags, remotes)
             local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
             local shown = table.concat(todo[remote], " ")
             if code == 0 then
-                io.write(remote, ": pushed tags ", shown, "\n")
+                verb.say("Pushed tags " .. shown .. " to " .. remote .. ".")
             else
-                io.write(remote, ": push of tags ", shown, " failed\n")
+                verb.say("The push of tags " .. shown .. " to " .. remote .. " failed.")
                 status = 1
             end
             out = out:gsub("\n+$", "")
@@ -247,7 +245,7 @@ function M.run(ctx)
     end
     local plan, err = resolve(ctx.root, #tags > 0)
     if not plan then
-        verb.die("dev: " .. err)
+        verb.die(text.sentence(err))
     end
     local remotes = plan.remotes
     if #names > 0 then
@@ -284,9 +282,9 @@ function M.run(ctx)
         verb.show(ctx, argv)
         local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
         if code == 0 then
-            io.write(remote, ": pushed ", plan.ref, "\n")
+            verb.say("Pushed " .. plan.ref .. " to " .. remote .. ".")
         else
-            io.write(remote, ": push of ", plan.ref, " failed\n")
+            verb.say("The push of " .. plan.ref .. " to " .. remote .. " failed.")
             status = 1
         end
         out = out:gsub("\n+$", "")

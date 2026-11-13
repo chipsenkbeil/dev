@@ -27,7 +27,7 @@ local function resolve(root)
     end
     local branch, code = dev_os.capture(vcs.with(base, "symbolic-ref", "--short", "-q", "HEAD"))
     if code ~= 0 then
-        return nil, "HEAD is detached in " .. root .. ", check out a branch to pull"
+        return nil, "HEAD is detached in " .. root .. ", and a pull needs a branch"
     end
     local dirty = dev_os.capture(vcs.with(base, "status", "--porcelain", "--untracked-files=no"))
     if dirty ~= "" then
@@ -60,7 +60,7 @@ end
 function M.run(ctx)
     local steps, err = resolve(ctx.root)
     if not steps then
-        verb.die("dev: " .. err)
+        verb.die(text.sentence(err))
     end
     for _, argv in ipairs(steps) do
         verb.show(ctx, argv)

@@ -99,6 +99,17 @@ function M.trim(s)
     return (s:gsub("%s+$", ""))
 end
 
+---Turn a message into a sentence that starts with a capital and ends with a period.
+---@param s string the message
+---@return string sentence the message, trimmed
+function M.sentence(s)
+    s = M.trim(s):gsub("^%l", string.upper)
+    if not s:find("%.$") then
+        s = s .. "."
+    end
+    return s
+end
+
 ---Tell whether a list holds a value.
 ---@param list any[] the list
 ---@param want any the value to look for

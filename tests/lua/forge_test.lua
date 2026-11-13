@@ -168,7 +168,7 @@ testing.test("the guard path is refused when DEV_SELF is not absolute", function
         testing.eq(code, 1)
         testing.eq(
             out,
-            "dev: DEV_SELF is not an absolute path, refusing to push without the attribution check\n"
+            "DEV_SELF is not an absolute path. Dev refuses to push without the attribution check.\n"
         )
     end
     fs.remove(root, { recursive = true })
