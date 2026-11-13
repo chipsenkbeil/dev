@@ -618,6 +618,23 @@ function Backend:add(name, column, opts)
                 end
             end
         end
+        if opts and opts.labels and board.labelled({ labels = opts.labels }, board.RUN) then
+            for _, open in ipairs(doc.cards) do
+                local held = find_by_id(doc.columns, open.column_id)
+                if
+                    open.name == name
+                    and board.labelled(open, board.RUN)
+                    and not (held and held.is_done)
+                then
+                    return nil,
+                        string.format(
+                            "%s already has the run card %s. Close it with dev board run --end first.",
+                            name,
+                            open.id:sub(1, board.MIN_PREFIX)
+                        )
+                end
+            end
+        end
         local now = store.stamp()
         local card = {
             id = store.id(),

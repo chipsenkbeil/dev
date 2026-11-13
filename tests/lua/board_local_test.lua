@@ -1680,6 +1680,37 @@ testing.test("six processes writing at once lose no card", function()
     testing.eq(fs.list(home .. "/state/dev/boards"), { "mine.json", "mine.json.lock" })
 end)
 
+testing.test("six simultaneous run --orders calls leave one open run card", function()
+    local root, home = local_board()
+    local script = string.format(
+        'for i in 1 2 3 4 5 6; do luajit %s board run --orders "go" 2>&1 || echo "exit $?" & done; wait',
+        dev_os.quote(MAIN)
+    )
+    local out, code = dev_os.capture({ "sh", "-c", script }, {
+        cwd = root,
+        stderr = "stdout",
+        env = {
+            HOME = home,
+            XDG_STATE_HOME = home .. "/state",
+            DEV_AGENT = "dotfiles/one",
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            DEV_SELF = REPO .. "/dotfiles/bin/.local/bin/dev",
+        },
+    })
+    testing.eq(code, 0, out)
+    local runs = 0
+    for _, card in ipairs(document(file_of(home)).cards) do
+        if #card.labels > 0 then
+            runs = runs + 1
+        end
+    end
+    testing.eq(runs, 1, out)
+    local losers = select(2, out:gsub("already has the run card", ""))
+    testing.eq(losers, 5, out)
+    local failed = select(2, out:gsub("exit 1", ""))
+    testing.eq(failed, 5, out)
+end)
+
 local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"dotfiles","columns":['
     .. '{"id":"col-backlog","name":"Backlog"},{"id":"col-ready","name":"Ready"},'
