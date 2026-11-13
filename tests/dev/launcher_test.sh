@@ -75,6 +75,14 @@ out="$(PATH="$NOLUA" "$DEV" lint 2>&1)"
 assert_eq "no luajit exits 1" "$?" "1"
 assert_eq "no luajit prints the one line" "$out" "$missing"
 
+scribe_missing='scribe: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
+out="$(PATH="$NOLUA" "$REPO/dotfiles/scribe/.local/bin/scribe" 2>&1)"
+assert_eq "scribe without luajit prints the hint" "$out" "$scribe_missing"
+
+guide_missing='guide: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
+out="$(PATH="$NOLUA" "$REPO/dotfiles/guide/.local/bin/guide" 2>&1)"
+assert_eq "guide without luajit prints the hint" "$out" "$guide_missing"
+
 out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run 2>&1)"
 assert_eq "bootstrap needs no luajit" "$?" "0"
 assert_contains "bootstrap prints the plan" "$out" "bootstrap plan (dry run, nothing will change)"
