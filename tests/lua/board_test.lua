@@ -9430,3 +9430,83 @@ testing.test("take --from refuses a name that is not the claimant and changes no
     testing.eq(local_card_state(home, ids.Two).claim, nil)
     dev(root, home, { "board", "release", ids.One }, { agent = "r/runner" })
 end)
+
+local LANES = '"swimlanes":[{"id":"lane-parity","name":"Parity"},'
+    .. '{"id":"lane-fixes","name":"Fixes"}]'
+
+local function laned(lane_fields)
+    local tasks = {}
+    for _, task in ipairs(lane_fields) do
+        tasks[#tasks + 1] = string.format(
+            '{"id":"%s","name":"%s","column_id":"%s","swimlane_id":"%s","position":%d,'
+                .. '"color_id":null,"labels":[]}',
+            task.id,
+            task.name,
+            task.column or "col-ready",
+            task.lane,
+            task.position
+        )
+    end
+    return sandbox({
+        detail = (DETAIL:gsub('"swimlanes":%[%]', LANES, 1)),
+        export = '{"tasks":[' .. table.concat(tasks, ",") .. "]}",
+    })
+end
+
+local LANED_TASKS = {
+    { id = ID_A, name = "Alpha", lane = "lane-fixes", position = 1 },
+    { id = ID_B, name = "Bravo", lane = "lane-parity", position = 3 },
+    { id = ID_C, name = "Charlie", lane = "lane-parity", position = 2 },
+}
+
+testing.test("pomb orders cards by lane then position", function()
+    local root, home = laned(LANED_TASKS)
+    local out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
+    testing.eq(code, 0, out)
+    local rows = {}
+    local pattern = support.COLUMN_NAME.READY .. "%s+(%S+)%s+%S+%s+%S+%s+(%S+)"
+    for lane, name in out:gmatch(pattern) do
+        rows[#rows + 1] = lane .. " " .. name
+    end
+    testing.eq(rows, { "Parity Charlie", "Parity Bravo", "Fixes Alpha" })
+end)
+
+testing.test("pomb puts column order before lane order", function()
+    local root, home = laned({
+        { id = ID_A, name = "Alpha", lane = "lane-fixes", position = 1 },
+        { id = ID_B, name = "Bravo", lane = "lane-parity", position = 3 },
+        { id = ID_C, name = "Charlie", lane = "lane-fixes", position = 2, column = "col-backlog" },
+    })
+    local out, code = dev(root, home, { "board", "ls" })
+    testing.eq(code, 0, out)
+    local names = {}
+    for line in out:gmatch("[^\n]+") do
+        names[#names + 1] = line:match("(%S+)$")
+    end
+    testing.eq(names, { "Charlie", "Bravo", "Alpha" })
+end)
+
+testing.test("pomb sorts a card in an unknown lane last with no lane name", function()
+    local tasks = { { id = ID_D, name = "Delta", lane = "lane-gone", position = 0 } }
+    for _, task in ipairs(LANED_TASKS) do
+        tasks[#tasks + 1] = task
+    end
+    local root, home = laned(tasks)
+    local out = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
+    local rows = {}
+    local pattern = support.COLUMN_NAME.READY .. "%s+(%S+)%s+%S+%s+%S+%s+(%S+)"
+    for lane, name in out:gmatch(pattern) do
+        rows[#rows + 1] = lane .. " " .. name
+    end
+    testing.eq(rows, { "Parity Charlie", "Parity Bravo", "Fixes Alpha", "- Delta" })
+end)
+
+testing.test("ls and show print the lane of a card", function()
+    local root, home = laned(LANED_TASKS)
+    local out = dev(root, home, { "board", "show", "11111111-a" })
+    testing.ok(out:find(support.COLUMN_NAME.READY .. "  Fixes  ", 1, true), out)
+    root, home = sandbox()
+    out = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
+    testing.ok(not out:find("Fixes", 1, true), out)
+    testing.ok(not out:find("Parity", 1, true), out)
+end)

@@ -1297,6 +1297,9 @@ A local board works as follows:
 - claims: `take` sets a claim that lapses after twice the card's size and needs
   no loop. `release` gives it up.
 - notes: only a note written by dev can be edited or deleted.
+- lanes: an optional `swimlanes` list of `{id, name}` in the file orders the
+  lanes, and a card's `swimlane_id` names its lane. A card with none or an
+  unknown lane sorts after every lane and prints `-` for its lane.
 
 ## When Pomb is unreachable
 
@@ -1545,6 +1548,10 @@ non-hidden row is missing from that listing.
 
 - It prints one line per card: id prefix (8 characters), column, size, labels
   (`-` for none) and name, in column then board order, aligned.
+- On a board with more than one swimlane, a lane column sits after the column,
+  and the order is column, then lane order, then position. A card in no known
+  lane sorts after every lane and prints `-`. A board with one lane prints no
+  lane.
 - Done is left out unless `--column` names it.
 - A done column such as `1/3` (ticked outcomes over all, `-` for a card with
   none) sits after the labels, only when a listed card has outcomes.
@@ -2107,7 +2114,8 @@ without the API or the token.
 
 The layout, top to bottom:
 
-- The card as `ls` does (id prefix, column, size, labels, name).
+- The card as `ls` does (id prefix, column, lane on a board with several lanes,
+  size, labels, name).
 - On a child, `parent: <id prefix> <name>` under the `ls` line. On an epic,
   `kind: epic, N open` above it and `children: N of M done`.
 - A blank line and the description (`no description` when empty), from the same

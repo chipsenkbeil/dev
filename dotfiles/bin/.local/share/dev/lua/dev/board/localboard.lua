@@ -26,6 +26,8 @@ local M = {}
 ---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
 ---@field colors {id: string, value: string, label: string, description: string, is_default:
 ---   boolean, enabled: boolean?}[] the palette
+---@field swimlanes {id: string, name: string}[] the swimlanes in board order, empty on a board
+---   that never had one
 ---@field cards table<integer, table<string, any>> the cards, each a table of the fields the file
 ---   holds
 
@@ -91,6 +93,7 @@ function Backend:__read()
         return nil, self.__opts.path .. " is not a board file"
     end
     doc.colors = doc.colors or {}
+    doc.swimlanes = doc.swimlanes or {}
     doc.name = doc.name or self.__opts.name
     return doc
 end
@@ -192,6 +195,19 @@ local function child_counts(doc, card)
     return { done = done, total = #children }
 end
 
+local function lane_rank(doc, card)
+    local _, index = find_by_id(doc.swimlanes, card.swimlane_id)
+    return index or #doc.swimlanes + 1
+end
+
+local function lane_name(doc, card)
+    if #doc.swimlanes < 2 then
+        return nil
+    end
+    local lane = find_by_id(doc.swimlanes, card.swimlane_id)
+    return lane and lane.name
+end
+
 local function card_view(doc, card)
     local color = card.color_id and find_by_id(doc.colors, card.color_id)
     local column = find_by_id(doc.columns, card.column_id)
@@ -202,6 +218,7 @@ local function card_view(doc, card)
         id = card.id,
         name = card.name,
         column = column and column.name or "?",
+        lane = lane_name(doc, card),
         done = column ~= nil and column.is_done == true,
         size = board.size(color and color.label),
         color = color and color.value or nil,
@@ -219,9 +236,11 @@ end
 local function ordered(doc)
     local sorted = {}
     for _, column in ipairs(doc.columns) do
-        for _, card in ipairs(doc.cards) do
-            if card.column_id == column.id then
-                sorted[#sorted + 1] = card
+        for rank = 1, #doc.swimlanes + 1 do
+            for _, card in ipairs(doc.cards) do
+                if card.column_id == column.id and lane_rank(doc, card) == rank then
+                    sorted[#sorted + 1] = card
+                end
             end
         end
     end

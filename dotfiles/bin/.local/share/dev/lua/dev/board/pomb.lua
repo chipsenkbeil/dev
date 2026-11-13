@@ -532,6 +532,7 @@ function Backend:__load()
             self.__ids[color.value] = color.id
         end
     end
+    detail.swimlanes = detail.swimlanes or {}
     self.__detail = detail
     return true
 end
@@ -574,6 +575,22 @@ function Backend:__column_name(id)
         end
     end
     return "?"
+end
+
+---Name the lane a task sits in, for a board that holds more than one lane.
+---@private
+---@param id string? the task's swimlane id
+---@return string? name the lane's name, nil on a one-lane board or an unknown lane
+function Backend:__lane_name(id)
+    local lanes = self.__detail.swimlanes
+    if #lanes < 2 then
+        return nil
+    end
+    for _, lane in ipairs(lanes) do
+        if lane.id == id then
+            return lane.name
+        end
+    end
 end
 
 local function holder(task)
@@ -702,6 +719,7 @@ function Backend:__card(task)
         id = task.id,
         name = task.name,
         column = self:__column_name(task.column_id),
+        lane = self:__lane_name(present(task.swimlane_id)),
         done = self:__column_done(task.column_id),
         size = board.size(self.__colors[present(task.color_id)]),
         color = present(task.color_id) and (self.__values[task.color_id] or "unknown") or nil,
@@ -724,6 +742,10 @@ function Backend:cards()
     for index, column in ipairs(self.__detail.columns) do
         order[column.id] = index
     end
+    local lanes = {}
+    for index, lane in ipairs(self.__detail.swimlanes) do
+        lanes[lane.id] = index
+    end
     local tasks = {}
     for _, task in ipairs(doc.tasks) do
         tasks[#tasks + 1] = task
@@ -732,6 +754,11 @@ function Backend:cards()
         local oa, ob = order[a.column_id] or math.huge, order[b.column_id] or math.huge
         if oa ~= ob then
             return oa < ob
+        end
+        local la = lanes[present(a.swimlane_id)] or math.huge
+        local lb = lanes[present(b.swimlane_id)] or math.huge
+        if la ~= lb then
+            return la < lb
         end
         return (a.position or 0) < (b.position or 0)
     end)

@@ -13,6 +13,7 @@ local M = {}
 ---@field id string the card's full id
 ---@field name string the card's title
 ---@field column string the name of the column it sits in
+---@field lane string? the name of the swimlane it sits in, nil on a board with one lane
 ---@field done boolean? whether that column is one of finished cards
 ---@field size string the colour's palette label, or `unsized`
 ---@field color string? the colour's standard value (`yellow`, `green`, `blue`, `red`, `white`), nil
@@ -1101,14 +1102,20 @@ end
 
 ---Say a card in one line.
 ---@param card dev.board.Card the card
----@param opts {holders: boolean?, progress: boolean?}? `holders` adds the claim holder before the
----   name, `progress` the ticked outcomes before the holder
----@return string[] cells id prefix, column, size, labels, the ticks and the holder when asked for,
----   and name
+---@param opts {holders: boolean?, progress: boolean?, lanes: boolean?}? `holders` adds the claim
+---   holder before the name, `progress` the ticked outcomes before the holder, `lanes` the lane
+---   after the column
+---@return string[] cells id prefix, column, the lane when asked for, size, labels, the ticks and
+---   the holder when asked for, and name
 function M.cells(card, opts)
     opts = opts or {}
     local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
-    local cells = { card.id:sub(1, M.MIN_PREFIX), card.column, card.size, labels }
+    local cells = { card.id:sub(1, M.MIN_PREFIX), card.column }
+    if opts.lanes then
+        cells[#cells + 1] = card.lane or "-"
+    end
+    cells[#cells + 1] = card.size
+    cells[#cells + 1] = labels
     if opts.progress then
         cells[#cells + 1] = M.ticks(card)
     end

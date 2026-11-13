@@ -24,7 +24,7 @@ local SIZE_STYLES = {
     red = ui.Style.RED,
 }
 ---The table headers, before a column is left out.
-local HEADERS = { "ID", "COLUMN", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
+local HEADERS = { "ID", "COLUMN", "LANE", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
 
 local function count_text(count, noun)
     return count .. " " .. noun .. (count == 1 and "" or "s")
@@ -78,6 +78,7 @@ end
 ---@class dev.board.render.View
 ---@field holders boolean whether a claimant column is drawn
 ---@field with_column boolean whether each row names its column
+---@field lanes boolean whether each row names its lane
 ---@field roles dev.board.Roles the board's column roles
 
 local function terminal_cells(screen, card, view)
@@ -86,6 +87,9 @@ local function terminal_cells(screen, card, view)
     if view.with_column then
         local style = column_style(view.roles, card.column)
         cells[#cells + 1] = ui.paint(screen, card.column, style)
+    end
+    if view.lanes then
+        cells[#cells + 1] = ui.paint(screen, card.lane or "-", ui.Style.DIM)
     end
     cells[#cells + 1] = size_cell(screen, card)
     cells[#cells + 1] =
@@ -101,7 +105,10 @@ end
 local function terminal_table(screen, cards, view)
     local headers = {}
     for _, header in ipairs(HEADERS) do
-        if (header ~= "COLUMN" or view.with_column) and (header ~= "HELD BY" or view.holders) then
+        local shown = (header ~= "COLUMN" or view.with_column)
+            and (header ~= "LANE" or view.lanes)
+            and (header ~= "HELD BY" or view.holders)
+        if shown then
             headers[#headers + 1] = header
         end
     end
@@ -147,7 +154,7 @@ local function terminal_flat(screen, cards, opts)
     return terminal_table(
         screen,
         cards,
-        { holders = opts.holders, with_column = true, roles = opts.roles }
+        { holders = opts.holders, with_column = true, lanes = opts.lanes, roles = opts.roles }
     )
 end
 
@@ -157,7 +164,7 @@ local function terminal_grouped(screen, cards, opts)
     local lines = terminal_table(
         inner,
         cards,
-        { holders = opts.holders, with_column = false, roles = opts.roles }
+        { holders = opts.holders, with_column = false, lanes = opts.lanes, roles = opts.roles }
     )
     local groups, order = {}, {}
     for at, card in ipairs(cards) do
@@ -194,6 +201,7 @@ end
 
 ---@class dev.board.render.Options
 ---@field holders boolean whether a claimant column is drawn
+---@field lanes boolean whether a lane column is drawn
 ---@field grouped boolean whether the rows sit under a heading per column
 ---@field want string? the column the listing was asked for
 ---@field roles dev.board.Roles the board's column roles
@@ -214,11 +222,16 @@ function M.ls(screen, cards, opts)
     if opts.grouped then
         body = terminal_grouped(screen, cards, {
             holders = opts.holders,
+            lanes = opts.lanes,
             shows_done = opts.want ~= nil and finished[opts.want],
             roles = opts.roles,
         })
     else
-        body = terminal_flat(screen, cards, { holders = opts.holders, roles = opts.roles })
+        body = terminal_flat(
+            screen,
+            cards,
+            { holders = opts.holders, lanes = opts.lanes, roles = opts.roles }
+        )
     end
     for _, line in ipairs(body) do
         lines[#lines + 1] = line

@@ -228,7 +228,7 @@ local function count_text(count, noun)
 end
 
 local function card_line(card)
-    return board.table_lines({ board.cells(card) })[1]
+    return board.table_lines({ board.cells(card, { lanes = card.lane ~= nil }) })[1]
 end
 
 local function find_card(backend, word)
@@ -300,7 +300,7 @@ function commands.ls(backend, args, _, screen)
         return failure(message)
     end
     local shown_cards = {}
-    local holders, progress = false, false
+    local holders, progress, lanes = false, false, false
     for _, card in ipairs(cards) do
         local shown = card.column == want or (not want and not card.done)
         if shown and flags["--label"] then
@@ -316,6 +316,7 @@ function commands.ls(backend, args, _, screen)
             shown_cards[#shown_cards + 1] = card
             holders = holders or card.claimant ~= nil
             progress = progress or #card.outcomes > 0
+            lanes = lanes or card.lane ~= nil
         end
     end
     if #shown_cards == 0 then
@@ -324,6 +325,7 @@ function commands.ls(backend, args, _, screen)
     if screen and screen.color then
         local lines = render.ls(screen, shown_cards, {
             holders = holders,
+            lanes = lanes,
             grouped = grouped,
             want = want,
             roles = backend.roles,
@@ -332,7 +334,8 @@ function commands.ls(backend, args, _, screen)
     end
     local rows = {}
     for _, card in ipairs(shown_cards) do
-        rows[#rows + 1] = board.cells(card, { holders = holders, progress = progress })
+        rows[#rows + 1] =
+            board.cells(card, { holders = holders, progress = progress, lanes = lanes })
     end
     return { output = table.concat(board.table_lines(rows), "\n") }
 end

@@ -3202,3 +3202,77 @@ testing.test("attach, attachments and detach refuse plainly on a local board", f
         testing.ok(out:find("a local board holds no attachments", 1, true), out)
     end
 end)
+
+local function laned_board()
+    local root, home = local_board()
+    local ids = {}
+    for _, name in ipairs({ "Alpha", "Bravo", "Charlie" }) do
+        local out = dev(
+            root,
+            home,
+            { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "a" }
+        )
+        ids[name] = prefix_of(out)
+    end
+    local doc = document(file_of(home))
+    doc.swimlanes = {
+        { id = "lane-parity", name = "Parity" },
+        { id = "lane-fixes", name = "Fixes" },
+    }
+    doc.cards[1].swimlane_id = "lane-fixes"
+    doc.cards[2].swimlane_id = "lane-parity"
+    doc.cards[3].swimlane_id = "lane-parity"
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    return root, home, ids
+end
+
+testing.test("local orders cards by lane then position", function()
+    local root, home, ids = laned_board()
+    local out = dev(root, home, { "board", "ls", "--column", COLUMN.BACKLOG })
+    local rows = {}
+    local pattern = support.COLUMN_NAME.BACKLOG .. "%s+(%S+)%s+%S+%s+%S+%s+%S+%s+%S+%s+(%S+)"
+    for lane, name in out:gmatch(pattern) do
+        rows[#rows + 1] = lane .. " " .. name
+    end
+    testing.eq(rows, { "Parity Bravo", "Parity Charlie", "Fixes Alpha" })
+    out = dev(root, home, { "board", "next", "--column", COLUMN.BACKLOG })
+    local want = ids.Bravo .. "  " .. support.COLUMN_NAME.BACKLOG .. "  Parity  "
+    testing.ok(out:find(want, 1, true), out)
+end)
+
+testing.test("local puts column order before lane order", function()
+    local root, home, ids = laned_board()
+    local out, code = dev(root, home, { "board", "move", ids.Alpha, COLUMN.ICEBOX })
+    testing.eq(code, 0, out)
+    out = dev(root, home, { "board", "ls" })
+    local names = {}
+    for line in out:gmatch("[^\n]+") do
+        names[#names + 1] = line:match("(%S+)$")
+    end
+    testing.eq(names, { "Alpha", "Bravo", "Charlie" })
+end)
+
+testing.test("local sorts a card with no lane last with no lane name", function()
+    local root, home = laned_board()
+    local doc = document(file_of(home))
+    doc.cards[2].swimlane_id = nil
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    local out = dev(root, home, { "board", "ls", "--column", COLUMN.BACKLOG })
+    local rows = {}
+    local pattern = support.COLUMN_NAME.BACKLOG .. "%s+(%S+)%s+%S+%s+%S+%s+%S+%s+%S+%s+(%S+)"
+    for lane, name in out:gmatch(pattern) do
+        rows[#rows + 1] = lane .. " " .. name
+    end
+    testing.eq(rows, { "Parity Charlie", "Fixes Alpha", "- Bravo" })
+end)
+
+testing.test("a local board with one lane prints no lane", function()
+    local root, home, ids = laned_board()
+    local doc = document(file_of(home))
+    doc.swimlanes = { { id = "lane-parity", name = "Parity" } }
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    local out = dev(root, home, { "board", "show", ids.Alpha })
+    testing.ok(not out:find("Parity", 1, true), out)
+    out = dev(root, home, { "board", "ls", "--column", COLUMN.BACKLOG })
+    testing.ok(not out:find("Parity", 1, true), out)
+end)
