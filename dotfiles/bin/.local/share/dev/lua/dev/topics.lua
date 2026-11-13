@@ -4,10 +4,8 @@ local project = require("dev.project")
 local registry = require("dev.registry")
 
 local NAME = "^[A-Za-z0-9_-]+$"
-local GLOBAL_FLAGS = {}
 local ACCEPTED_FLAGS = { ["--"] = true, ["-h"] = true, ["--help"] = true }
 for _, flag in ipairs(registry.GLOBAL_FLAGS) do
-    GLOBAL_FLAGS[flag] = true
     ACCEPTED_FLAGS[flag] = true
 end
 local COMMAND_END = { ["|"] = true, ["||"] = true, ["&&"] = true, [";"] = true, [">"] = true }
@@ -66,8 +64,8 @@ local function has_sub(reg, noun, sub)
 end
 
 local function skip_global(words, i)
-    while words[i] and (words[i]:find("^%-v+$") or GLOBAL_FLAGS[words[i]]) do
-        i = i + ((words[i] == "-C" or words[i] == "--agent") and 2 or 1)
+    while words[i] and (registry.is_bare(words[i]) or registry.VALUE_FLAGS[words[i]]) do
+        i = i + (registry.VALUE_FLAGS[words[i]] and 2 or 1)
     end
     return i
 end
@@ -105,7 +103,7 @@ local function command_error(reg, line)
             break
         end
         word = word:gsub("^%[", ""):gsub("%].*$", ""):gsub("=.*$", "")
-        if word:sub(1, 1) == "-" and not ACCEPTED_FLAGS[word] and not word:find("^%-v+$") then
+        if word:sub(1, 1) == "-" and not ACCEPTED_FLAGS[word] and not registry.is_bare(word) then
             if not valid[word] then
                 return string.format("dev %s takes no flag %s", shown, word)
             end

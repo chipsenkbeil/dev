@@ -7,8 +7,18 @@ local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = io.stderr
 local RESERVED_DIRS = { lua = true, topics = true, standalone = true }
 local HIDDEN_GROUP = "hidden"
-local GLOBAL_FLAGS =
-    { "-v", "--verbose", "-vv", "--remote", "--local", "--detach", "-C", "--agent" }
+local BARE_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach" }
+local VALUE_FLAGS = { "-C", "--agent" }
+local GLOBAL_FLAGS = {}
+local bare_set, value_set = {}, {}
+for _, flag in ipairs(BARE_FLAGS) do
+    GLOBAL_FLAGS[#GLOBAL_FLAGS + 1] = flag
+    bare_set[flag] = true
+end
+for _, flag in ipairs(VALUE_FLAGS) do
+    GLOBAL_FLAGS[#GLOBAL_FLAGS + 1] = flag
+    value_set[flag] = true
+end
 
 ---@class dev.Script
 ---@field path string path of the script
@@ -53,6 +63,16 @@ local M = {}
 
 ---The flags dev takes before any verb's own, in the order completion lists them.
 M.GLOBAL_FLAGS = GLOBAL_FLAGS
+
+---The global flags that take a value, the word after one of them being its value.
+M.VALUE_FLAGS = value_set
+
+---Check whether a word is a global flag that takes no value, any run of `v` included.
+---@param word string the word to check
+---@return boolean bare true for a bare global flag
+function M.is_bare(word)
+    return bare_set[word] == true or word:find("^%-v+$") ~= nil
+end
 
 local function glob_names(dir)
     local present = {}

@@ -1,6 +1,7 @@
 local bit = require("bit")
 local board = require("dev.board")
 local dev_os = require("dev.os")
+local registry = require("dev.registry")
 local vcs = require("dev.vcs")
 
 ---@class dev.board.check
@@ -61,13 +62,6 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field reason string? the last line a failed row printed when it printed no run id
 ---@field refused string? ci's refusal line when the hub refused the run, which no row records
 
-local GLOBAL_FLAGS = {
-    ["--remote"] = true,
-    ["--local"] = true,
-    ["--detach"] = true,
-    ["--verbose"] = true,
-}
-
 ---Say why a `dev --remote test` or `dev --remote lint` row passes a word before the double dash.
 ---@param row string the row without its leading `! `
 ---@return string? message why the row is refused, nil when it is allowed
@@ -85,7 +79,7 @@ local function bare_name(row)
         local word = words[i]
         if word == "--remote" then
             remote = true
-        elseif word == "-C" or word == "--agent" then
+        elseif registry.VALUE_FLAGS[word] then
             i = i + 1
         elseif word:sub(1, 1) ~= "-" then
             verb_at = i
@@ -103,9 +97,9 @@ local function bare_name(row)
         local word = words[k]
         if word == "--remote" then
             remote = true
-        elseif word == "-C" or word == "--agent" then
+        elseif registry.VALUE_FLAGS[word] then
             k = k + 1
-        elseif not (GLOBAL_FLAGS[word] or word:find("^%-v+$")) then
+        elseif not registry.is_bare(word) then
             extra = extra or word
         end
         k = k + 1
