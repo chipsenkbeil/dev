@@ -371,7 +371,7 @@ testing.test("help for a built-in outside the type verbs runs no project detecti
 end)
 
 testing.test(
-    "dev help over a tree deeper than the project search returns within its bound",
+    "dev help over a deep tree returns within its bound and reports no lua project",
     function()
         local bound_secs = 10
         local levels = 8
@@ -394,6 +394,7 @@ testing.test(
         })
         testing.eq(code, 0)
         testing.ok(out:find("dev: project at", 1, true), out)
+        testing.ok(not out:find("lua project at", 1, true), out)
         fs.remove(root, { recursive = true })
     end
 )
