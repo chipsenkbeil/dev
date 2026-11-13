@@ -18,6 +18,10 @@ local GIT_STUB = [[#!/bin/sh
 case "$*" in
     *"--show-toplevel"*) pwd; exit 0 ;;
     *"--git-common-dir"*) echo .git; exit 0 ;;
+    *" remote") printf '%s' "$REMOTES"; exit 0 ;;
+    *"config --get"*) exit 1 ;;
+    *" fetch "*) echo "git $*" >> "$LOG"; printf '%s' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;
+    *"for-each-ref"*) printf '%s' "$REFS"; exit 0 ;;
 esac
 echo "git $*" >> "$LOG"
 mkdir -p "$(eval echo \$$#)"
@@ -114,12 +118,55 @@ testing.test("new in a jj project refuses a missing remote of record", function(
     testing.eq(fs.exists(path), false)
 end)
 
-testing.test("new in a git project adds a worktree on a new branch", function()
+testing.test("new in a git project adds a worktree on the fetched trunk", function()
     local root, path, env, log = setup("git")
+    env.env.REFS = "origin/HEAD\norigin/feat\norigin/main\n"
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
     testing.eq(code, 0)
     testing.eq(out, path .. "\n")
-    testing.eq(fs.read(log), "git -C " .. root .. " worktree add -b feat " .. path .. "\n")
+    testing.eq(
+        fs.read(log),
+        table.concat({
+            "git -C " .. root .. " fetch origin",
+            "git -C " .. root .. " worktree add --no-track -b feat " .. path .. " origin/main",
+            "",
+        }, "\n")
+    )
+end)
+
+testing.test("new in a git project stops at a failed fetch with no worktree", function()
+    local root, path, env, log = setup("git")
+    env.env.FETCH_CODE = "1"
+    env.env.FETCH_OUT = "fatal: could not connect\n"
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, "The fetch from origin failed: fatal: could not connect.\n")
+    testing.eq(fs.read(log), "git -C " .. root .. " fetch origin\n")
+    testing.eq(fs.exists(path), false)
+    testing.eq(fs.exists(fs.dirname(path)), false)
+end)
+
+testing.test("new in a git project refuses a remote with no trunk branch", function()
+    local root, path, env, log = setup("git")
+    env.env.REFS = "origin/dev\n"
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, "Origin has no master or main branch.\n")
+    testing.eq(fs.read(log), "git -C " .. root .. " fetch origin\n")
+    testing.eq(fs.exists(path), false)
+end)
+
+testing.test("new in a git project refuses a missing remote of record", function()
+    local root, path, env, log = setup("git")
+    env.env.REMOTES = ""
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "Trunk cannot be compared: the remote of record origin is not a remote of this project (detected: no gerrit remote and origin is not on github.com).\n"
+    )
+    testing.eq(fs.exists(log), false)
+    testing.eq(fs.exists(path), false)
 end)
 
 testing.test("new outside version control makes a plain folder", function()

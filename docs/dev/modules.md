@@ -67,7 +67,11 @@ Otherwise it works by project kind:
 - A jj project first fetches its remote of record (`forge.resolve`, then
   `jj git fetch --remote NAME`). A failed fetch exits 1 with its output and
   adds nothing. It then gets `jj workspace add --name NAME -r trunk()`.
-- A git project gets `git worktree add -b NAME`.
+- A git project fetches its remote of record the same way (`git fetch
+  NAME`), and a failed fetch exits 1 and adds nothing. It then gets
+  `git worktree add --no-track -b NAME PATH REMOTE/TRUNK`, where TRUNK is the
+  `master` or `main` branch the remote holds, and a remote with neither exits
+  1. A git project with no remote of record exits 1 and adds nothing.
 - A folder with only `.dev` gets a plain directory.
 
 The path is printed. `ws ls` prints each folder under ROOT/<repo> as its name,

@@ -46,21 +46,43 @@ local function parse(ctx)
     return name
 end
 
+local function remote_trunk(root, remote)
+    local prefix = remote .. "/"
+    local argv = vcs.with(
+        vcs.base(root, vcs.GIT, { quiet = true }),
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/remotes/" .. remote
+    )
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    local names = {}
+    for line in (code == 0 and out or ""):gmatch("[^\n]+") do
+        if line:sub(1, #prefix) == prefix then
+            names[#names + 1] = line:sub(#prefix + 1)
+        end
+    end
+    local trunk = vcs.trunk(names)
+    if trunk == nil then
+        return nil, sentence(string.format("%s has no master or main branch", remote))
+    end
+    return prefix .. trunk
+end
+
 local function fetch_trunk(ctx)
-    if vcs.backend(ctx.root) ~= vcs.JJ then
+    local backend = vcs.backend(ctx.root)
+    if backend ~= vcs.JJ and backend ~= vcs.GIT then
         return nil
     end
     local found, why = forge.resolve(ctx.root)
     if not found then
         return sentence("trunk cannot be compared: " .. why)
     end
-    local argv = vcs.with(
-        vcs.base(ctx.root, vcs.JJ, { quiet = true }),
-        "git",
-        "fetch",
-        "--remote",
-        found.remote
-    )
+    local argv = vcs.base(ctx.root, backend, { quiet = true })
+    if backend == vcs.JJ then
+        argv = vcs.with(argv, "git", "fetch", "--remote", found.remote)
+    else
+        argv = vcs.with(argv, "fetch", found.remote)
+    end
     verb.show(ctx, argv)
     local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
@@ -68,10 +90,20 @@ local function fetch_trunk(ctx)
             string.format("the fetch from %s failed: %s", found.remote, (out:gsub("\n$", "")))
         )
     end
+    if backend == vcs.GIT then
+        local start, err = remote_trunk(ctx.root, found.remote)
+        if start == nil then
+            return err
+        end
+        return nil, start
+    end
     return nil
 end
 
-local function plan(root, name, path)
+---@class dev.cmd.ws.PlanOpts
+---@field start string? nil when unset, the git start point of the worktree
+
+local function plan(root, name, path, opts)
     local backend = vcs.backend(root)
     if backend == vcs.JJ then
         return vcs.with(
@@ -86,7 +118,19 @@ local function plan(root, name, path)
         )
     end
     if backend == vcs.GIT then
-        return vcs.with(vcs.base(root, backend), "worktree", "add", "-b", name, path)
+        if opts.start == nil then
+            error("a git worktree needs a start point")
+        end
+        return vcs.with(
+            vcs.base(root, backend),
+            "worktree",
+            "add",
+            "--no-track",
+            "-b",
+            name,
+            path,
+            opts.start
+        )
     end
     return nil
 end
@@ -95,8 +139,9 @@ end
 ---
 ---The path is `DEV_WS_ROOT`, else `~/.local/share/workspaces`, then the
 ---project's folder name, then NAME. A jj project gets a jj workspace on the
----trunk revision, a git project a worktree on a new branch NAME, and any other
----folder a plain directory. The path is printed on standard output.
+---trunk revision, a git project a worktree on a new branch NAME at the fetched
+---trunk of the remote of record, and any other folder a plain directory. The
+---path is printed on standard output.
 ---@param ctx dev.Ctx the verb's context
 ---@return integer code the exit code
 M.handlers["ws new"] = function(ctx)
@@ -113,7 +158,7 @@ M.handlers["ws new"] = function(ctx)
     if fs.exists(path) then
         verb.die(path .. " already exists.")
     end
-    local failure = fetch_trunk(ctx)
+    local failure, start = fetch_trunk(ctx)
     if failure then
         verb.die(failure)
     end
@@ -121,7 +166,7 @@ M.handlers["ws new"] = function(ctx)
     if not made then
         verb.die(sentence(why))
     end
-    local argv = plan(ctx.root, name, path)
+    local argv = plan(ctx.root, name, path, { start = start })
     if argv == nil then
         made, why = fs.mkdir(path)
         if not made then
