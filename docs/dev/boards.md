@@ -2410,7 +2410,10 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   record never counts, even when it does not parse.
 - The commit's parent is the current trunk, compared after
   `jj git fetch --remote <remote of record>`, with the remote taken from the
-  forge settings (see `forge`). A failed fetch refuses.
+  forge settings (see `forge`). A failed fetch refuses. The git reads
+  behind this are `git fetch <remote of record>` and the remote's `master` or
+  `main` branch as trunk. Plain git does not reach them until the git land
+  lands.
   Each fetch stops after 120 seconds, or after `DEV_LAND_FETCH_SECONDS`
   when that is set, and one fetch that fails with `agent refused operation`
   is retried once. A second refusal or a timeout refuses with a message that
@@ -2514,7 +2517,9 @@ Carrying a check and reviews across a rebase:
   all of these hold:
   - the commit's parent is the current trunk
   - the checked commit sat on one ancestor of that trunk
-  - `jj interdiff` between the checked commit and the landing one is empty
+  - `jj interdiff` between the checked commit and the landing one is empty (in
+    a git project, a `git merge-tree` of the two patches that gives the landing
+    commit's tree)
   - the rebase left no conflict
 - A trunk commit that touched the same files does not stop the carry. The
   release run tests the whole batch and catches a clash the rebase cannot see.

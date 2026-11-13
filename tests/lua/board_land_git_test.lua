@@ -161,3 +161,125 @@ testing.test("git template problem reads the template listing", function()
     local problem = land.template_problem(root, touched)
     testing.ok(problem and problem:find(MODULE, 1, true), tostring(problem))
 end)
+
+local NUMBERED = {}
+for i = 1, 30 do
+    NUMBERED[i] = "line " .. i
+end
+local BODY = table.concat(NUMBERED, "\n") .. "\n"
+
+local function with_origin(files)
+    local root = repo(files)
+    local bare = assert(fs.realpath(support.tempdir()))
+    local code = dev_os.run({ "git", "init", "-q", "--bare", bare }, { stdout = "null" })
+    assert(code == 0, "git init failed")
+    git(root, "remote", "add", "origin", bare)
+    git(root, "push", "-q", "origin", "main")
+    return root
+end
+
+local function checked_record(commit)
+    return { body = "dev-check: commit=" .. commit .. " change=- mode=run\n1 pass - dev lint" }
+end
+
+local function carry_opts(root, checked)
+    return {
+        root = root,
+        comments = {
+            checked_record(checked),
+            review_of("code", checked),
+            review_of("style", checked),
+        },
+        state = { commit = head(root), change = "-" },
+        rows = { "dev lint" },
+    }
+end
+
+local function checked_then_trunk_moves()
+    local root = with_origin({ ["f.txt"] = BODY })
+    git(root, "checkout", "-q", "-b", "work")
+    write(root, "f.txt", (BODY:gsub("line 15\n", "line fifteen\n")))
+    git(root, "commit", "-q", "-a", "-m", "feat: f")
+    local checked = head(root)
+    git(root, "checkout", "-q", "main")
+    write(root, "f.txt", "top\n" .. BODY)
+    git(root, "commit", "-q", "-a", "-m", "trunk moves")
+    git(root, "push", "-q", "origin", "main")
+    return root, checked
+end
+
+testing.test("git trunk problem names a moved trunk", function()
+    local root = with_origin({})
+    git(root, "checkout", "-q", "-b", "work")
+    write(root, "f.txt", "f\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "feat: f")
+    testing.eq(land.trunk_problem(root), nil)
+    git(root, "checkout", "-q", "main")
+    write(root, "g.txt", "g\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "trunk moves")
+    git(root, "push", "-q", "origin", "main")
+    git(root, "checkout", "-q", "work")
+    local problem = land.trunk_problem(root)
+    testing.ok(problem and problem:find("has moved", 1, true), tostring(problem))
+end)
+
+testing.test("git carry keeps a check across a rebase with an unchanged patch", function()
+    local root, checked = checked_then_trunk_moves()
+    git(root, "checkout", "-q", "-b", "moved")
+    git(root, "cherry-pick", checked)
+    local commit, problem = land.carry(carry_opts(root, checked))
+    testing.eq(commit, checked)
+    testing.eq(problem, nil)
+end)
+
+testing.test("git carry refuses a changed patch or a moved parent", function()
+    local root, checked = checked_then_trunk_moves()
+    git(root, "checkout", "-q", "-b", "moved")
+    git(root, "cherry-pick", checked)
+    write(root, "f.txt", "top\n" .. BODY .. "extra\n")
+    git(root, "commit", "-q", "-a", "--amend", "-m", "feat: f")
+    local commit, problem = land.carry(carry_opts(root, checked))
+    testing.eq(commit, nil)
+    testing.ok(
+        problem and problem:find("differs from the checked commit", 1, true),
+        tostring(problem)
+    )
+    git(root, "checkout", "-q", "-b", "stale", checked)
+    git(root, "commit", "-q", "--allow-empty", "-m", "feat: stale")
+    commit, problem = land.carry(carry_opts(root, checked))
+    testing.eq(commit, nil)
+    testing.ok(problem and problem:find("has moved", 1, true), tostring(problem))
+end)
+
+testing.test("git recheck skips rows when the parent is shared", function()
+    local root = with_origin({})
+    git(root, "checkout", "-q", "-b", "work")
+    write(root, "f.txt", "f\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "feat: f")
+    local checked = head(root)
+    git(root, "commit", "-q", "--amend", "-m", "feat: f again")
+    local problem = land.recheck_problem({
+        root = root,
+        commit = checked,
+        card = "abc12345",
+        rows = { "dev lint" },
+        note = function()
+            error("a shared parent runs no row")
+        end,
+    })
+    testing.eq(problem, nil)
+    local moved_root, first = checked_then_trunk_moves()
+    git(moved_root, "checkout", "-q", "-b", "moved")
+    git(moved_root, "cherry-pick", first)
+    problem = land.recheck_problem({
+        root = moved_root,
+        commit = first,
+        card = "abc12345",
+        rows = { "false" },
+        note = function() end,
+    })
+    testing.ok(problem and problem:find("recheck row failed", 1, true), tostring(problem))
+end)

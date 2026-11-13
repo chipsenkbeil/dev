@@ -373,7 +373,12 @@ end
 ---@return string output what the fetch wrote
 ---@return integer code the exit status of the last attempt
 local function fetch(root, remote)
-    local argv = jj(root, "git", "fetch", "--remote", remote)
+    local argv
+    if vcs.backend(root) == vcs.GIT then
+        argv = vcs.with(vcs.base(root, vcs.GIT), "fetch", remote)
+    else
+        argv = jj(root, "git", "fetch", "--remote", remote)
+    end
     local seconds = tonumber(os.getenv("DEV_LAND_FETCH_SECONDS")) or FETCH_SECONDS
     local out, code, refused
     for _ = 1, FETCH_ATTEMPTS do
@@ -408,8 +413,34 @@ local function parent_on_trunk(root)
     return count_lines(parents) == 1 and on_trunk == parents
 end
 
+local function git_parents(root, rev)
+    local out = git_out(root, "rev-list", "--parents", "-n", "1", rev)
+    if out == nil then
+        return nil
+    end
+    local parents = {}
+    for id in out:gmatch("%x+") do
+        parents[#parents + 1] = id
+    end
+    table.remove(parents, 1)
+    return parents
+end
+
+local function git_parent_on_trunk(root, remote)
+    local ref, why = vcs.remote_trunk(root, remote)
+    if not ref then
+        return nil, "The remote " .. why .. "."
+    end
+    local trunk = git_out(root, "rev-parse", "--verify", ref .. "^{commit}")
+    local parents = git_parents(root, "HEAD")
+    if not trunk or not parents then
+        return nil, "Git could not read the parent of the working-copy commit or " .. ref .. "."
+    end
+    return #parents == 1 and parents[1] == trunk:match("^%x+")
+end
+
 ---Fetch the remote of record and say whether the change still sits on trunk.
----@param root string the project root, a jj project
+---@param root string the project root
 ---@return string? problem what is wrong, nil when the change's parent is the current trunk
 function M.trunk_problem(root)
     local found, why = forge.resolve(root)
@@ -423,6 +454,17 @@ function M.trunk_problem(root)
             found.remote,
             out
         )
+    end
+    if vcs.backend(root) == vcs.GIT then
+        local on_trunk, read_why = git_parent_on_trunk(root, found.remote)
+        if on_trunk == nil then
+            return "Trunk cannot be compared. " .. read_why
+        end
+        if not on_trunk then
+            return "Trunk has moved since the change was built. Rebase it onto the remote trunk, "
+                .. "then record the reviews and run dev board check again."
+        end
+        return nil
     end
     if not parent_on_trunk(root) then
         return "trunk has moved since the change was built, so rebase it onto trunk(), then record the reviews and run dev board check again"
@@ -496,7 +538,48 @@ local function checked_commits(comments, state, rows)
     return found
 end
 
+local function git_carry_problem(root, state, commit)
+    local label = M.short(commit)
+    local parents = git_parents(root, commit)
+    if parents == nil then
+        return string.format("Git could not read the checked commit %s.", label), true
+    end
+    local code = 1
+    if #parents == 1 then
+        local _, status = dev_os.capture(
+            vcs.with(
+                vcs.base(root, vcs.GIT),
+                "merge-base",
+                "--is-ancestor",
+                parents[1],
+                state.commit .. "^"
+            ),
+            { stderr = "null" }
+        )
+        code = status
+    end
+    if code ~= 0 and code ~= 1 then
+        return string.format("Git could not read the ancestor of the checked commit %s.", label),
+            true
+    end
+    if code == 1 then
+        return string.format(
+            "The checked commit %s does not sit on a single ancestor of trunk.",
+            label
+        )
+    end
+    if not identical(root, commit, state) then
+        return string.format(
+            "This commit differs from the checked commit %s. Run dev board check again.",
+            label
+        )
+    end
+end
+
 local function carry_problem(root, state, commit)
+    if vcs.backend(root) == vcs.GIT then
+        return git_carry_problem(root, state, commit)
+    end
     local label = M.short(commit)
     local change = jj_out(root, "log", "-r", commit, "--no-graph", "-T", 'change_id ++ "\\n"')
     if change == nil then
@@ -763,11 +846,32 @@ function M.recheck_problem(opts)
         end
         argvs[i] = argv
     end
-    local direct =
-        jj_out(opts.root, "log", "-r", opts.commit .. "- & @-", "--no-graph", "-T", COMMIT_TEMPLATE)
+    local direct
+    if vcs.backend(opts.root) == vcs.GIT then
+        local old, new = git_parents(opts.root, opts.commit), git_parents(opts.root, "HEAD")
+        if old and new then
+            direct = ""
+            for _, id in ipairs(old) do
+                for _, other in ipairs(new) do
+                    direct = id == other and id or direct
+                end
+            end
+        end
+    else
+        direct = jj_out(
+            opts.root,
+            "log",
+            "-r",
+            opts.commit .. "- & @-",
+            "--no-graph",
+            "-T",
+            COMMIT_TEMPLATE
+        )
+    end
     if direct == nil then
         return string.format(
-            "jj could not read the parent of the checked commit %s.",
+            "%s could not read the parent of the checked commit %s.",
+            vcs.LABEL[vcs.backend(opts.root) or vcs.JJ],
             M.short(opts.commit)
         )
     end

@@ -47,25 +47,11 @@ local function parse(ctx)
 end
 
 local function remote_trunk(root, remote)
-    local prefix = remote .. "/"
-    local argv = vcs.with(
-        vcs.base(root, vcs.GIT, { quiet = true }),
-        "for-each-ref",
-        "--format=%(refname:short)",
-        "refs/remotes/" .. remote
-    )
-    local out, code = dev_os.capture(argv, { stderr = "null" })
-    local names = {}
-    for line in (code == 0 and out or ""):gmatch("[^\n]+") do
-        if line:sub(1, #prefix) == prefix then
-            names[#names + 1] = line:sub(#prefix + 1)
-        end
+    local ref, err = vcs.remote_trunk(root, remote)
+    if ref == nil then
+        return nil, sentence(err)
     end
-    local trunk = vcs.trunk(names)
-    if trunk == nil then
-        return nil, sentence(string.format("%s has no master or main branch", remote))
-    end
-    return prefix .. trunk
+    return ref
 end
 
 local function fetch_trunk(ctx)

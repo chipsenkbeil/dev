@@ -174,6 +174,33 @@ function M.trunk(names)
     return nil
 end
 
+---Name the trunk branch of a git remote, as `remote/branch`.
+---@param root string absolute path of the project root
+---@param remote string the remote of record
+---@return string? ref the remote-tracking ref of its master or main branch
+---@return string? err why the remote has none
+function M.remote_trunk(root, remote)
+    local prefix = remote .. "/"
+    local argv = M.with(
+        M.base(root, M.GIT, { quiet = true }),
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/remotes/" .. remote
+    )
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    local names = {}
+    for line in (code == 0 and out or ""):gmatch("[^\n]+") do
+        if line:sub(1, #prefix) == prefix then
+            names[#names + 1] = line:sub(#prefix + 1)
+        end
+    end
+    local trunk = M.trunk(names)
+    if trunk == nil then
+        return nil, string.format("%s has no master or main branch", remote)
+    end
+    return prefix .. trunk
+end
+
 ---Read a git config value from the repository's own store.
 ---
 ---For a jj project that is the git store under `.jj`.
