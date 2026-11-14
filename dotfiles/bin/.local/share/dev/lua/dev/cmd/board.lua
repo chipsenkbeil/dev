@@ -247,6 +247,16 @@ local function card_line(card)
     return board.table_lines({ board.cells(card, { lanes = card.lane ~= nil }) })[1]
 end
 
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@return string lines the card's link line behind a newline, empty when the board has no host
+local function link_suffix(backend, card)
+    if not backend.card_url then
+        return ""
+    end
+    return "\nlink: " .. backend:card_url(card.id)
+end
+
 local function find_card(backend, word)
     local cards, message = backend:cards()
     if not cards then
@@ -453,7 +463,7 @@ function commands.next(backend, args)
             #list,
             #list == 1 and "comment" or "comments",
             owners
-        ),
+        ) .. link_suffix(backend, card),
     }
 end
 
@@ -799,7 +809,11 @@ function commands.add(backend, args)
     end
     return {
         output = flags[ID_ONLY_FLAG] and card.id
-            or "added " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. card.column,
+            or "added "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " "
+                .. card.column
+                .. link_suffix(backend, card),
         warnings = board.prose_warnings(prose),
     }
 end
@@ -1023,6 +1037,7 @@ local function card_view(backend, card)
         end
     end
     return card_line(card)
+        .. link_suffix(backend, card)
         .. "\n"
         .. kin
         .. "\n"

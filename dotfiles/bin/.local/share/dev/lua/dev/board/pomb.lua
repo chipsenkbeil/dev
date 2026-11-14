@@ -313,6 +313,13 @@ function Backend:describe()
     return "pomb " .. self.__opts.name
 end
 
+---Build the link that opens a card on the host.
+---@param id string the card id
+---@return string url the card's page on the host
+function Backend:card_url(id)
+    return self.__opts.url .. "/t/" .. id
+end
+
 ---@private
 ---@param method string the HTTP method
 ---@param path string the path under the server's URL

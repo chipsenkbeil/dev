@@ -1626,7 +1626,8 @@ prints the top Ready card that is unclaimed, not blocked and not labelled
   filter. A local board sorts by lane already.
 
 - The card is in the `ls` format, followed by `N comments, M the owner's`
-  (`1 comment` for one).
+  (`1 comment` for one). On a Pomb board a `link: <url>/t/<card id>` line
+  follows it.
 - With no such card it prints `no ready cards` (exit 0).
 - Comments that cannot be read are exit 1.
 - `--column backlog`, `icebox`, `review`, `verify` or `release` takes the top
@@ -1708,6 +1709,7 @@ this project's board, from a fresh `GET /api/boards/{id}`.
 card.
 
 - The card goes in Backlog by default.
+- On a Pomb board `add` prints `link: <url>/t/<card id>` under the `added` line.
 - `--lane L` puts the card in that swimlane, and without it Pomb picks the
   lane. A lane the board lacks is a usage error (exit 2) that names the lanes
   it has. `--before` and `--after` put the card in the lane of `CARD`, and a
@@ -2168,6 +2170,8 @@ The layout, top to bottom:
 
 - The card as `ls` does (id prefix, column, lane on a board with several lanes,
   size, labels, name).
+- On a Pomb board, `link: <url>/t/<card id>` under that line, the link that
+  opens the card. A local board has no host and prints none.
 - On a child, `parent: <id prefix> <name>` under the `ls` line. On an epic,
   `kind: epic, N open` above it and `children: N of M done`.
 - A blank line and the description (`no description` when empty), from the same

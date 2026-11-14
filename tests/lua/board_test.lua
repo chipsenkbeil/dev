@@ -8,6 +8,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 local json = require("dev.json")
+local pomb = require("dev.board.pomb")
 local ui = require("dev.ui")
 local support = require("support")
 
@@ -17,6 +18,7 @@ local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+local LINK_A = "link: https://pomb.example/t/" .. ID_A
 local LEAD = "dotfiles/lead/1"
 local PROGRESS_COLUMN = "col-progress"
 local READY_COLUMN = "col-ready"
@@ -3683,6 +3685,69 @@ testing.test("next shows the top card or says none", function()
     testing.eq(result.output, "no ready cards")
 end)
 
+local function hosted(backend)
+    function backend:card_url(id)
+        return "https://pomb.example/t/" .. id
+    end
+    return backend
+end
+
+testing.test("next prints the card link on a board with a host", function()
+    local result = cmd_board.run("next", {}, hosted(fake(sample())))
+    testing.eq(
+        result.output,
+        "11111111  "
+            .. support.COLUMN_NAME.READY
+            .. "  1 Pomodoro  docs  Write docs  0 comments, 0 the owner's\n"
+            .. "link: https://pomb.example/t/"
+            .. ID_A
+    )
+end)
+
+testing.test("show prints the card link under the card line", function()
+    local result = cmd_board.run("show", { "11111111-b" }, hosted(fake(sample())))
+    testing.eq(
+        result.output,
+        "11111111  "
+            .. support.COLUMN_NAME.BACKLOG
+            .. "  unsized  -  Fix lint\nlink: https://pomb.example/t/"
+            .. ID_B
+            .. "\n\nno description\n\nno comments"
+    )
+end)
+
+testing.test("add prints the new card link and --id-only prints the id alone", function()
+    local args = { "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+    local result = cmd_board.run("add", args, hosted(fake(sample())))
+    testing.eq(
+        result.output,
+        "added cccccccc "
+            .. support.COLUMN_NAME.BACKLOG
+            .. "\nlink: https://pomb.example/t/"
+            .. ID_C
+    )
+    args[#args + 1] = "--id-only"
+    result = cmd_board.run("add", args, hosted(fake(sample())))
+    testing.eq(result.output, ID_C)
+end)
+
+testing.test("a board with no host prints no link", function()
+    local backend = fake(sample())
+    local args = { "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+    local added = "added cccccccc " .. support.COLUMN_NAME.BACKLOG
+    testing.eq(cmd_board.run("add", args, backend).output, added)
+    testing.eq(cmd_board.run("next", {}, backend).output:find("link:", 1, true), nil)
+end)
+
+testing.test("pomb card url joins the host and the card id", function()
+    local backend = assert(pomb.new({
+        url = "https://pomb.example/",
+        token = "pass:secrets/worker/token/pomb",
+        name = "dotfiles",
+    }))
+    testing.eq(backend:card_url(ID_A), "https://pomb.example/t/" .. ID_A)
+end)
+
 testing.test("next counts the comments of the card and how many are the owner's", function()
     local backend = fake(sample())
     backend.listed = {
@@ -5593,7 +5658,10 @@ testing.test("a renamed Pomb board is read through the column map and is_done", 
     })
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
-    testing.eq(out, "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
+    testing.eq(
+        out,
+        "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's\n" .. LINK_A .. "\n"
+    )
     testing.ok(
         read(root, "calls"):find("ready=true&column_id=col-ready", 1, true),
         read(root, "calls")
@@ -5618,7 +5686,10 @@ testing.test("next asks for the unclaimed unblocked top of Ready", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0)
-    testing.eq(out, "11111111  Ready  1 Pomodoro  docs  First  2 comments, 1 the owner's\n")
+    testing.eq(
+        out,
+        "11111111  Ready  1 Pomodoro  docs  First  2 comments, 1 the owner's\n" .. LINK_A .. "\n"
+    )
     testing.ok(
         read(root, "calls"):find(
             "/api/boards/board-1/tasks?limit=50&claimed=false&ready=true&column_id=col-ready",
@@ -5837,7 +5908,7 @@ testing.test("add posts the card to the named column", function()
         "dev test",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n")
+    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
     testing.ok(calls:find('"fields":{"dev.checks":[{"run":"dev test"}]}', 1, true), calls)
     testing.ok(calls:find("-X POST", 1, true), calls)
@@ -5867,7 +5938,7 @@ testing.test("add --done-when posts one subtask per outcome after the card", fun
         "B works",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n")
+    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
     local first = calls:find("/api/tasks --", 1, true) or calls:find("-X POST", 1, true)
     testing.ok(first, calls)
@@ -6054,7 +6125,7 @@ testing.test("add --size and size reach pomb with the id of the colour, not its 
         { "board", "add", "New", "--problem", "x", "--size", "3+", "--done-when", "a" }
     )
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n")
+    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
     testing.ok(calls:find('"color_id":"red-id"', 1, true), calls)
     out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
@@ -6114,7 +6185,7 @@ testing.test("add --label and label reach pomb as the whole list", function()
         "b",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n")
+    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
     testing.ok(read(root, "calls"):find('"labels":["a","b"]', 1, true), read(root, "calls"))
     out, code = dev(root, home, { "board", "label", "11111111-a", "+needs:lead" })
     testing.eq(code, 0)
@@ -6626,7 +6697,9 @@ testing.test("notes, note --edit and note --delete reach pomb's comment routes",
     testing.eq(code, 0)
     testing.eq(
         out,
-        "11111111  Ready  1 Pomodoro  docs  First\n\nWhy it matters.\n\n"
+        "11111111  Ready  1 Pomodoro  docs  First\n"
+            .. LINK_A
+            .. "\n\nWhy it matters.\n\n"
             .. "checks:\n- dev test\n- dev lint\n\n"
             .. "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\n"
             .. (" "):rep(42)

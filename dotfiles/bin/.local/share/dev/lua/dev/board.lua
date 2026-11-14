@@ -59,6 +59,8 @@ local M = {}
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints
 ---   them
+---@field card_url (fun(self: dev.board.Backend, id: string): string)? the link that opens the
+---   card, nil on a board with no host
 ---@field done_columns fun(self: dev.board.Backend): string[]?, string? the names of the columns
 ---   marked finished, in board order, or nil and a message
 ---@field column_map table<string, string>? the `[board.columns]` map the runner resolves into
