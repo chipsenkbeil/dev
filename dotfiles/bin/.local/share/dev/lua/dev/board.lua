@@ -764,8 +764,8 @@ local function heading_of(line)
     return line:match("^##%s+(.-)%s*$")
 end
 
----Give a description the three v2 headings, filling Problem from the text given. A text that
----already holds a v2 heading or the v1 Done when heading is kept as it is.
+---Give a description the three v3 headings, filling Problem from the text given. A text that
+---already holds a v3 heading or the v1 Done when heading is kept as it is.
 ---@param description string? the text the caller gave, if any
 ---@return string description the text with the headings
 function M.scaffold(description)
@@ -986,7 +986,7 @@ end
 ---@field closing boolean? whether an epic with every child Done is closing
 ---@field children integer how many children it has, 0 for a card that is no epic
 ---@field epic boolean? whether it is an epic even with no children
----@field sections boolean? whether the v2 sections are checked, true when nil
+---@field sections boolean? whether the v3 sections are checked, true when nil
 
 ---The refusal for an epic whose outcome count is out of range.
 ---@param outcomes integer how many outcomes the epic has
@@ -999,7 +999,7 @@ local function epic_outcomes(outcomes)
         .. outcomes
 end
 
----List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v2 section with text under
+---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v3 section with text under
 ---Problem, and, when asked, at least one Done when outcome. A v1 `## Done when` checklist item
 ---counts as an outcome. An epic, a card with children, needs 1 to 3 outcomes as its final
 ---check, unless it is closing with every child Done.

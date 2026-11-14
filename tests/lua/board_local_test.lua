@@ -1075,7 +1075,7 @@ testing.test("a local board keeps an unsized or red card out of Ready", function
 end)
 
 testing.test(
-    "a local board scaffolds the v2 headings and keeps a card without them out of Ready",
+    "a local board scaffolds the v3 headings and keeps a card without them out of Ready",
     function()
         local root, home = local_board()
         local a = prefix_of((dev(root, home, {

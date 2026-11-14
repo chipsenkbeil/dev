@@ -384,7 +384,7 @@ testing.test("dev board lint exits 1 on a bad local board and 0 on a clean one",
     testing.ok(out:find("Backlog +over 400 words"), out)
 end)
 
-testing.test("strict holds a Done card to the v2 sections, by flag and by the config", function()
+testing.test("strict holds a Done card to the v3 sections, by flag and by the config", function()
     local dev, path = local_board(LOCAL)
     bare_done_card(dev, path)
     local out, code = dev({ "board", "lint" })

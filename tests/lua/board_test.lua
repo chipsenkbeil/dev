@@ -992,7 +992,7 @@ testing.test("edit --board refuses a board that is not there", function()
     testing.eq(#backend.calls, 1)
 end)
 
-testing.test("edit outside Icebox refuses a text that drops a v2 section", function()
+testing.test("edit outside Icebox refuses a text that drops a v3 section", function()
     local backend = fake(sample())
     local result = cmd_board.run("edit", { "11111111-a", "## Problem\nnew plan" }, backend)
     testing.eq(result.code, 1)
@@ -2179,7 +2179,7 @@ testing.test(
 )
 
 testing.test(
-    "add scaffolds the v2 headings, fills Problem and keeps a text that has them",
+    "add scaffolds the v3 headings, fills Problem and keeps a text that has them",
     function()
         local backend = fake(sample())
         cmd_board.run(
