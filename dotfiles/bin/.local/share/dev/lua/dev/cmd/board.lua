@@ -4421,7 +4421,11 @@ local function init_local(ctx, flags, admin)
         verb.die(message)
     end
     local changes
-    changes, message = init.run(backend, found.name, print, backend.roles, config_lanes(ctx))
+    changes, message = init.run(backend, found.name, verb.say, {
+        roles = backend.roles,
+        lanes = config_lanes(ctx),
+        warn_first_lane = false,
+    })
     if not changes then
         verb.die("dev: " .. message)
     end
@@ -4494,7 +4498,11 @@ M.handlers["board init"] = function(ctx)
         end
     end
     local changes
-    changes, message = init.run(backend, name, print, backend.roles, config_lanes(ctx))
+    changes, message = init.run(backend, name, verb.say, {
+        roles = backend.roles,
+        lanes = config_lanes(ctx),
+        warn_first_lane = true,
+    })
     if not changes then
         verb.die("dev: " .. message)
     end

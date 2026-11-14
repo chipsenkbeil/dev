@@ -107,6 +107,7 @@ local function fake_layout(opts)
             colors = state.colors,
             cards = state.cards,
             has_checks = state.has_checks,
+            lanes = opts.lanes,
         })
     end
     function layout:add_roles()
@@ -1516,6 +1517,55 @@ testing.test("init leaves the lanes that exist alone", function()
     out = dev(root, home, tmp, { "board", "init" })
     testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
     testing.eq(writes(root), 0)
+end)
+
+testing.test("init warns when the first lane is not in the lanes list", function()
+    -- Expect the warning after the new lanes on a Pomb board with an unlisted first lane
+    local root, home, tmp = sandbox({ project = LANES_PROJECT })
+    with_lanes(root, '[{"id":"l1","name":"Default"}]')
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(out, UNCHANGED .. table.concat({
+        'created lane "Parity"',
+        'created lane "Fixes"',
+        'created lane "Features"',
+        'The first lane "Default" is not in the [board] lanes list. '
+            .. "Cards filed without --lane land in it. "
+            .. "Delete or reorder it in the Pomb UI.",
+        "board demo: 3 changes",
+    }, "\n") .. "\n")
+
+    -- Expect no warning from a local board, even with an unlisted first lane
+    local lines = {}
+    local layout = fake_layout({ columns = template_columns(), lanes = { "Default", "Parity" } })
+    init.run(layout, "demo", function(line)
+        lines[#lines + 1] = line
+    end, { lanes = { "Parity" }, warn_first_lane = false })
+    for _, line in ipairs(lines) do
+        testing.eq(line:find("first lane", 1, true), nil, line)
+    end
+
+    -- Expect no warning without a lanes list, even with an unlisted first lane
+    local plain_root, plain_home, plain_tmp = sandbox()
+    with_lanes(plain_root, '[{"id":"l1","name":"Default"}]')
+    local plain_out, plain_code = dev(plain_root, plain_home, plain_tmp, { "board", "init" })
+    testing.eq(plain_code, 0, plain_out)
+    testing.eq(
+        plain_out,
+        UNCHANGED .. "board demo already follows the standard, nothing to change\n"
+    )
+end)
+
+testing.test("init stays silent when the first lane is listed", function()
+    local root, home, tmp = sandbox({ project = LANES_PROJECT })
+    with_lanes(root, '[{"id":"l1","name":"parity"},{"id":"l2","name":"Extra"}]')
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(out, UNCHANGED .. table.concat({
+        'created lane "Fixes"',
+        'created lane "Features"',
+        "board demo: 2 changes",
+    }, "\n") .. "\n")
 end)
 
 testing.test("a worker token is refused a lane", function()

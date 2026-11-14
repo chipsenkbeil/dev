@@ -3346,3 +3346,24 @@ testing.test("local init creates the lanes the board config lists once", functio
     testing.ok(out:find("already follows the standard", 1, true), out)
     testing.eq(#document(file_of(home)).swimlanes, 2)
 end)
+
+testing.test("local init says nothing about an unlisted first lane", function()
+    -- Create the lanes the config lists
+    local root, home =
+        setup('[board]\nbackend = "local"\nname = "mine"\nlanes = ["Parity", "Fixes"]\n')
+    local out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+
+    -- Give the board a first lane the config does not list
+    local doc = document(file_of(home))
+    doc.swimlanes = { { id = "lane-default", name = "Default" } }
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+
+    -- Run init again over the unlisted first lane
+    out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+
+    -- Expect the new lane and no warning
+    testing.ok(out:find('created lane "Parity"', 1, true), out)
+    testing.ok(not out:find("first lane", 1, true), out)
+end)

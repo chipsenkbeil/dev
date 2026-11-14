@@ -334,6 +334,9 @@ What it lays out:
   - `init` makes each lane the board lacks at the end of the lane order, one
     line per change such as `created lane "Parity"`, and leaves the lanes that
     exist alone. A name matches without regard to case.
+  - On a Pomb board, `init` says when the first lane is not in the `lanes` list
+    and names it, to show where cards filed without `--lane` land. It changes
+    nothing. Delete or reorder the lane in the Pomb UI.
   - It never renames, reorders or deletes a lane. A board with no `lanes` list
     gets none.
   - On a Pomb board the call is `POST /api/swimlanes`, which needs

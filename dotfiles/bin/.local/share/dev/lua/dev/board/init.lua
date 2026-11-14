@@ -390,10 +390,17 @@ local function strip_step(layout, state, say)
 end
 
 local function lanes_step(layout, state, say)
+    -- Index the lanes the board has and the lanes the config lists
     local have = {}
     for _, lane in ipairs(state.lanes) do
         have[lane:lower()] = true
     end
+    local listed = {}
+    for _, lane in ipairs(state.wanted_lanes) do
+        listed[lane:lower()] = true
+    end
+
+    -- Create each listed lane the board lacks
     for _, lane in ipairs(state.wanted_lanes) do
         if not have[lane:lower()] then
             local ok, message = layout:add_lane(lane)
@@ -405,22 +412,47 @@ local function lanes_step(layout, state, say)
             state.changes = state.changes + 1
         end
     end
+
+    -- Warn when the first lane falls outside the config list
+    local first = state.lanes[1]
+    if
+        state.warn_first_lane
+        and first
+        and #state.wanted_lanes > 0
+        and not listed[first:lower()]
+    then
+        say(
+            "The first lane "
+                .. quoted(first)
+                .. " is not in the [board] lanes list. "
+                .. "Cards filed without --lane land in it. "
+                .. "Delete or reorder it in the Pomb UI."
+        )
+    end
     return true
 end
 
+---@class dev.board.Opts
+---@field roles? dev.board.Roles the column set to lay out, the standard names when nil
+---@field lanes? string[] the lanes the board config lists, an empty list when nil
+---@field warn_first_lane? boolean whether to warn when the first lane is unlisted, false when nil
+
 ---Bring a board to the standard, saying each change as it is made.
+---
+---Missing lanes are made in list order, at the end of the lane order.
 ---@param layout dev.board.Layout the board to lay out
 ---@param name string the board's name
 ---@param say fun(line: string) prints one line
----@param roles dev.board.Roles? the column set to lay out, the standard names when nil
----@param lanes string[]? the lanes the board config lists, made in this order when missing
+---@param opts dev.board.Opts? what to lay out and how, the defaults when nil
 ---@return integer? changes how many changes were made
 ---@return string? message why it stopped, with the changes made so far already said
-function M.run(layout, name, say, roles, lanes)
+function M.run(layout, name, say, opts)
+    opts = opts or {}
     local state = {
         changes = 0,
-        roles = roles or board.roles(),
-        wanted_lanes = lanes or {},
+        roles = opts.roles or board.roles(),
+        wanted_lanes = opts.lanes or {},
+        warn_first_lane = opts.warn_first_lane or false,
     }
     local found, message = layout:find()
     if found == nil then
