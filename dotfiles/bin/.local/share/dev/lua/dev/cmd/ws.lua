@@ -370,7 +370,7 @@ local function main_root(root, backend)
 end
 
 ---@class dev.cmd.ws.BlockerOpts
----@field locked_only boolean? false when unset, true to ignore other worktrees' prunable records
+---@field gone table<string, boolean>? paths of other worktrees whose prunable records may drop
 
 local function prune_blocker(anchor, paths, opts)
     local argv = vcs.with(vcs.base(anchor, vcs.GIT), "worktree", "list", "--porcelain")
@@ -386,7 +386,7 @@ local function prune_blocker(anchor, paths, opts)
             end
         elseif
             path
-            and not opts.locked_only
+            and not (opts.gone and opts.gone[path])
             and block:find("\nprunable")
             and not block:find("\nlocked")
         then
@@ -634,6 +634,12 @@ local function prune_workspaces(ctx, steps, opts)
     local future = opts.backend == vcs.JJ and "Would forget" or "Would remove"
     local pruned, kept, failure = 0, 0, nil
     local freed = {}
+    local gone = {}
+    for _, step in ipairs(steps) do
+        if step.kind == Step.GONE then
+            gone[step.path] = true
+        end
+    end
     for _, step in ipairs(steps) do
         local ok, message, purged
         if step.kind == Step.KEEP then
@@ -648,7 +654,7 @@ local function prune_workspaces(ctx, steps, opts)
                     message = prune_blocker(
                         ctx.root,
                         { step.path, fs.realpath(step.path) },
-                        { locked_only = true }
+                        { gone = gone }
                     )
                     ok = message == nil
                 end

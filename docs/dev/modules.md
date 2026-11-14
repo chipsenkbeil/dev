@@ -82,24 +82,25 @@ instead of dying, and `opts.inside` skips only the refusal of the workspace
 dev runs in, which `dev board land` uses when it removes the card's workspace.
 
 It refuses a NAME that is missing, a link, outside the central root or the
-workspace dev runs in, and a folder whose jj `@` is not empty or whose
-`git status --porcelain` is not empty.
+workspace dev runs in, and a folder whose jj `@` is not empty or whose `git
+status --porcelain` is not empty.
 
-It deletes nothing it can rename instead. It first moves the folder,
-ignored files included, to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the
-stamp reads `YYYYMMDDTHHMMSSZ`, and then runs `jj workspace forget NAME` or
-`git worktree prune` from the project's main folder. A plain folder is only
-moved.
+It deletes nothing it can rename instead. It first moves the folder, ignored
+files included, to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the stamp reads
+`YYYYMMDDTHHMMSSZ`, and then runs `jj workspace forget NAME` or `git worktree
+prune` from the project's main folder. A plain folder is only moved.
 
-The move comes first, so a move that fails leaves the folder and the
-workspace as they were, and a forget or prune that fails moves the folder
-back. A target that already exists fails the move. Before the move, a git
-worktree is refused when `git worktree list --porcelain` marks it locked (the
-prune would skip it) or marks another worktree prunable (the prune would drop
-its record). A locked worktree needs `git worktree unlock` first, and a
-prunable one `git worktree prune`. `ws prune` removes the records of gone
-folders before it removes finished worktrees. `ws ls` and `ws prune` read only
-ROOT/<repo>, so they never treat the trash as a workspace.
+The move comes first, so a move that fails leaves the folder and the workspace
+as they were, and a forget or prune that fails moves the folder back. A target
+that already exists fails the move. Before the move, a git worktree is refused
+when `git worktree list --porcelain` marks it locked (the prune would skip it)
+or marks another worktree prunable (the prune would drop its record). A locked
+worktree needs `git worktree unlock` first, and a prunable one `git worktree
+prune`. `ws prune` removes the records of gone folders before it removes
+finished worktrees, and its `--dry-run` applies the same refusal to each
+finished worktree, ignoring only the records of gone folders it would remove
+first. `ws ls` and `ws prune` read only ROOT/<repo>, so they never treat the
+trash as a workspace.
 
 The trash sits on the same filesystem as the workspaces, so the move is a
 rename. A folder that is a mount of its own is copied and then deleted, and

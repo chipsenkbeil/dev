@@ -384,17 +384,12 @@ testing.test("rm puts a folder back when the git prune fails", function()
     testing.eq(#fs.list(trash_dir(env, root)), 0)
 end)
 
-local function rm_worktrees(root, path, extra)
-    return table.concat({
-        "worktree " .. root,
-        "HEAD x",
-        "branch refs/heads/master",
-        "",
-        "worktree " .. path,
-        "HEAD x",
-        "branch refs/heads/x" .. extra,
-        "",
-    }, "\n")
+local function worktrees(root, ...)
+    local blocks = { "worktree " .. root .. "\nHEAD x\nbranch refs/heads/master" }
+    for _, path in ipairs({ ... }) do
+        blocks[#blocks + 1] = "worktree " .. path .. "\nHEAD x\nbranch refs/heads/x"
+    end
+    return table.concat(blocks, "\n\n") .. "\n"
 end
 
 testing.test("rm refuses and says so when git worktree list fails", function()
@@ -409,7 +404,7 @@ end)
 
 testing.test("rm refuses a locked git worktree and leaves its folder", function()
     local root, path, env, log = rm_setup("git")
-    env.env.WORKTREES = rm_worktrees(root, path, "\nlocked on a usb stick")
+    env.env.WORKTREES = worktrees(root, path) .. "locked on a usb stick\n"
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
     testing.eq(code, 1)
     testing.eq(out, path .. " is a locked git worktree. Run git worktree unlock first.\n")
@@ -420,7 +415,7 @@ end)
 testing.test("rm keeps the record of another git worktree whose folder is gone", function()
     local root, path, env, log = rm_setup("git")
     local gone = fs.dirname(path) .. "/gone1"
-    env.env.WORKTREES = rm_worktrees(root, path, "")
+    env.env.WORKTREES = worktrees(root, path)
         .. table.concat({
             "",
             "worktree " .. gone,
@@ -444,7 +439,7 @@ end)
 testing.test("rm ignores another git worktree that is locked and gone", function()
     local root, path, env, log = rm_setup("git")
     local gone = fs.dirname(path) .. "/gone1"
-    env.env.WORKTREES = rm_worktrees(root, path, "")
+    env.env.WORKTREES = worktrees(root, path)
         .. table.concat({
             "",
             "worktree " .. gone,
@@ -739,14 +734,6 @@ local function seed_board(root, env, cards)
         }
     end
     assert(fs.write(root .. "/.dev/board.json", assert(json.encode(doc))))
-end
-
-local function worktrees(root, ...)
-    local blocks = { "worktree " .. root .. "\nHEAD x\nbranch refs/heads/master" }
-    for _, path in ipairs({ ... }) do
-        blocks[#blocks + 1] = "worktree " .. path .. "\nHEAD x\nbranch refs/heads/x"
-    end
-    return table.concat(blocks, "\n\n") .. "\n"
 end
 
 local function prune_setup(kind)
@@ -1212,6 +1199,57 @@ testing.test("prune dry-run keeps a locked git worktree of a done card", functio
                 .. " is a locked git worktree. Run git worktree unlock first.",
             "Git keeps no empty heads, so only worktrees are pruned.",
             "Would prune 0 worktrees and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test(
+    "prune dry-run keeps a done worktree beside a prunable sibling with a folder",
+    function()
+        local root, dir, env, log = prune_setup("git")
+        seed_board(root, env, { { id = DONE_ID, done = true } })
+        local done = dir .. DONE_ID
+        assert(fs.mkdir(done, { parents = true }))
+        assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
+        local sibling = dir .. "sibling"
+        assert(fs.mkdir(sibling, { parents = true }))
+        env.env.WORKTREES = worktrees(root, done, sibling) .. "prunable gitdir file is missing\n"
+        local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+        testing.eq(code, 0, out)
+        testing.eq(
+            out,
+            lines(
+                "Kept worktree "
+                    .. DONE_ID
+                    .. ". Git worktree prune would also drop the record of "
+                    .. sibling
+                    .. ", which git marks prunable. Run git worktree prune first.",
+                "Git keeps no empty heads, so only worktrees are pruned.",
+                "Would prune 0 worktrees and 0 heads. Left 1 item alone."
+            )
+        )
+        testing.eq(fs.exists(log), false)
+    end
+)
+
+testing.test("prune dry-run removes a done worktree beside a prunable gone one", function()
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local done = dir .. DONE_ID
+    assert(fs.mkdir(done, { parents = true }))
+    assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
+    local gone = dir .. "gone1"
+    env.env.WORKTREES = worktrees(root, done, gone) .. "prunable gone\n"
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Would remove worktree gone1. Its folder " .. gone .. " is gone.",
+            "Would remove worktree " .. DONE_ID .. ". Its card is done.",
+            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Would prune 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
     testing.eq(fs.exists(log), false)
