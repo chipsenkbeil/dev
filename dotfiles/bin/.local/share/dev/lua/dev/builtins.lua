@@ -137,7 +137,7 @@ return {
         handler = "lua",
         flags = "--forgotten",
         usage = "dev ws rm NAME [--forgotten]",
-        desc = "Remove a workspace of this project and delete its folder",
+        desc = "Remove a workspace of this project and move its folder to the trash",
     },
     {
         words = { "ws", "prune" },

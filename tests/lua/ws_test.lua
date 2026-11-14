@@ -256,6 +256,7 @@ case "$*" in
     *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
 esac
 echo "git $*" >> "$LOG"
+if [ -n "$FAIL" ]; then exit 3; fi
 ]]
 
 local function rm_setup(kind)
@@ -367,6 +368,15 @@ testing.test("rm puts a folder back when the forget fails", function()
     local root, path, env = rm_setup("jj")
     env.env.FAIL = "1"
     stub(root, "jj", RM_JJ_STUB .. 'if [ -n "$FAIL" ]; then exit 3; fi\n')
+    local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 3)
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(#fs.list(trash_dir(env, root)), 0)
+end)
+
+testing.test("rm puts a folder back when the git prune fails", function()
+    local root, path, env = rm_setup("git")
+    env.env.FAIL = "1"
     local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
     testing.eq(code, 3)
     testing.eq(fs.exists(path .. "/file"), true)

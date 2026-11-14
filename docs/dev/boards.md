@@ -2693,9 +2693,8 @@ That removal moves the folder to the trash under the workspaces root, so a
 landed card's workspace stays recoverable for at least 14 days.
 Cleanup never changes the exit code or the card's column.
 
-- A shell left inside the workspace sees dev exit 1 with the deleted working
-  directory message, and the output says to run the next command from another
-  folder.
+- A shell left inside the workspace stays in the moved folder under the trash,
+  and the output says to run the next command from another folder.
 - A workspace outside the central root, or one with changes not in a commit,
   stays. The output names it and why.
 
