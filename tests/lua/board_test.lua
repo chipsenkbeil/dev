@@ -9571,3 +9571,39 @@ testing.test("a lane the board lacks is refused", function()
     testing.eq(code, 2, out)
     testing.ok(out:find("the board has no lanes", 1, true), out)
 end)
+
+testing.test("pomb next asks each lane in lane order", function()
+    local root, home = laned(LANED_TASKS)
+    local _, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0)
+    local calls = read(root, "calls")
+    local parity = calls:find("&swimlane_id=lane-parity", 1, true)
+    testing.ok(parity, calls)
+    local fixes = calls:find("&swimlane_id=lane-fixes", 1, true)
+    testing.ok(fixes == nil or parity < fixes, calls)
+end)
+
+testing.test("pomb next on a one lane board sends no lane filter", function()
+    local root, home = sandbox()
+    local _, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0)
+    testing.eq(read(root, "calls"):find("swimlane_id", 1, true), nil)
+end)
+
+testing.test("pomb next falls through to the next lane when one has no card", function()
+    local root, home = laned(LANED_TASKS)
+    testing.eq(dev_os.run({ "mv", root .. "/bin/curl", root .. "/bin/curl_real" }), 0)
+    executable(
+        root .. "/bin/curl",
+        "#!/bin/sh\n"
+            .. 'case " $* " in *swimlane_id=lane-parity*)\n'
+            .. 'printf \'curl %s\\n\' "$*" >>"$ROOT/calls"\n'
+            .. "printf '%s\\n%s' '{\"items\":[],\"next_cursor\":null}' 200 ;;\n"
+            .. '*) exec "$ROOT/bin/curl_real" "$@" ;; esac\n'
+    )
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find(ID_A:sub(1, 8), 1, true), out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find("&swimlane_id=lane-fixes", 1, true), calls)
+end)

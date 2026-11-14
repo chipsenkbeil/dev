@@ -839,7 +839,6 @@ function Backend:entered()
 end
 
 function Backend:next(column, opts)
-    local label = opts and opts.label
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -849,21 +848,45 @@ function Backend:next(column, opts)
         return nil, unavailable("the board has no " .. column .. " column")
     end
     local ready_filter = column == self:__roles().ready and "&ready=true" or ""
-    local lane_filter = ""
+    local filters = { "" }
     if opts and opts.lane then
         local lane_id = self:__lane_id(opts.lane)
         if not lane_id then
             return nil, unavailable("the board has no " .. opts.lane .. " lane")
         end
-        lane_filter = "&swimlane_id=" .. lane_id
+        filters[1] = "&swimlane_id=" .. lane_id
+    elseif #self.__detail.swimlanes > 1 then
+        filters = {}
+        for _, lane in ipairs(self.__detail.swimlanes) do
+            filters[#filters + 1] = "&swimlane_id=" .. lane.id
+        end
+        filters[#filters + 1] = ""
     end
+    for _, lane_filter in ipairs(filters) do
+        local card
+        card, message = self:__next_in(id, ready_filter .. lane_filter, opts)
+        if card or message then
+            return card, message
+        end
+    end
+end
+
+---Find the first card a runner may take in one column, within one lane filter.
+---@private
+---@param id string the column's id
+---@param filter string the query filters to add
+---@param opts dev.board.NextOpts? the options `next` was given
+---@return dev.board.Card? card the first card that may be taken
+---@return dev.cmd.board.Result|string? message why the board could not be read
+function Backend:__next_in(id, filter, opts)
+    local label = opts and opts.label
+    local message
     local cursor
     repeat
         local query = "/api/boards/"
             .. self.__detail.id
             .. "/tasks?limit=50&claimed=false"
-            .. ready_filter
-            .. lane_filter
+            .. filter
             .. "&column_id="
             .. id
         if cursor then
