@@ -16,8 +16,6 @@ local STALE_BOOKMARKS = "bookmarks() ~ ::trunk()"
 local HEAD_TEMPLATE = 'commit_id ++ "\\t" ++ description.first_line() ++ "\\n"'
 local BOOKMARK_TEMPLATE = 'if(remote, "", name ++ "\\n")'
 local SHORT_ID = 12
-local TRASH_DIR = ".trash"
-local TRASH_SECS = 14 * 24 * 60 * 60
 local STAMP_FORMAT = "!%Y%m%dT%H%M%SZ"
 
 ---@enum dev.cmd.ws.Step
@@ -345,6 +343,7 @@ local function remove_missing(root, name, opts)
 end
 
 local function purge(dir)
+    local TRASH_SECS = 14 * 24 * 60 * 60
     local cutoff = os.date(STAMP_FORMAT, os.time() - TRASH_SECS)
     local purged = {}
     for _, entry in ipairs(fs.list(dir) or {}) do
@@ -362,30 +361,14 @@ local function purge(dir)
     return purged
 end
 
-local function main_root(root, backend)
-    if backend == vcs.JJ then
-        local link = fs.join(root, ".jj", "repo")
-        local target = fs.is_file(link) and fs.read(link) or nil
-        local repo = target and fs.realpath(fs.join(root, ".jj", (target:gsub("%s+$", ""))))
-        return repo and fs.dirname(fs.dirname(repo)) or root
-    elseif backend == vcs.GIT then
-        local argv = vcs.with(
-            vcs.base(root, vcs.GIT),
-            "rev-parse",
-            "--path-format=absolute",
-            "--git-common-dir"
-        )
-        local out, code = dev_os.capture(argv, { stderr = "null" })
-        if code == 0 then
-            return (out:gsub("\n$", ""):gsub("/%.git$", ""))
-        end
-    end
-    return root
-end
-
 ---@class dev.cmd.ws.BlockerOpts
 ---@field gone table<string, boolean>? paths of other worktrees whose prunable records may drop
 
+---Name what would stop `git worktree prune` from dropping only the given worktrees.
+---@param anchor string the project's main folder, where git runs
+---@param paths string[] the worktree paths the prune is meant to drop
+---@param opts dev.cmd.ws.BlockerOpts the records that may drop with them
+---@return string? message the reason, nil when nothing blocks
 local function prune_blocker(anchor, paths, opts)
     local argv = vcs.with(vcs.base(anchor, vcs.GIT), "worktree", "list", "--porcelain")
     local out, code = dev_os.capture(argv, { stderr = "null" })
@@ -469,6 +452,7 @@ end
 ---@param opts dev.cmd.ws.RemoveOpts? what to skip and show
 ---@return dev.cmd.ws.RemoveResult result
 function M.remove(root, name, opts)
+    local TRASH_DIR = ".trash"
     opts = opts or {}
     if opts.missing then
         return remove_missing(root, name, opts)
@@ -515,7 +499,7 @@ function M.remove(root, name, opts)
             return refused(why)
         end
     end
-    local anchor = real == real_root and main_root(root, backend) or root
+    local anchor = real == real_root and vcs.main_root(root, backend) or root
     if backend == vcs.GIT then
         local blocked = prune_blocker(anchor, { path, real }, {})
         if blocked then
@@ -536,8 +520,8 @@ end
 ---the workspace the command runs in. The folder moves to the trash, a jj
 ---workspace is forgotten, a git worktree record is pruned, and a folder with
 ---changes not in a commit is refused and left in place. A jj folder whose
----workspace jj no longer lists is refused unless `--forgotten` is given, which
----moves it to the trash. A plain file directly under ROOT/<repo> is moved.
+---workspace jj no longer lists is refused unless `--forgotten` is given (it
+---then moves to the trash). A plain file directly under ROOT/<repo> is moved.
 ---@param ctx dev.Ctx the verb's context
 ---@return integer code the exit code
 M.handlers["ws rm"] = function(ctx)

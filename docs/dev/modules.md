@@ -86,8 +86,8 @@ It refuses a NAME that is missing, a link, outside the central root or the
 workspace dev runs in, and a folder whose jj `@` is not empty or whose `git
 status --porcelain` is not empty.
 
-It deletes nothing it can rename instead. It first moves the folder, ignored
-files included, to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the stamp reads
+It deletes nothing it can rename instead. It first moves the folder (ignored
+files included) to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the stamp reads
 `YYYYMMDDTHHMMSSZ`, and then runs `jj workspace forget NAME` or `git worktree
 prune` from the project's main folder. A plain folder is only moved.
 

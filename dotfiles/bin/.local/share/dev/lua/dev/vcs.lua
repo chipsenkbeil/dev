@@ -223,4 +223,25 @@ function M.config(root, backend, key)
     return (out:gsub("\n$", ""))
 end
 
+---Find the main folder of a project, whichever workspace or worktree root is in.
+---@param root string absolute path of a workspace or worktree of the project
+---@param backend dev.vcs.Backend the project's backend
+---@return string main absolute path of the main folder, root itself when it cannot be told
+function M.main_root(root, backend)
+    if backend == M.JJ then
+        local link = fs.join(root, ".jj", "repo")
+        local target = fs.is_file(link) and fs.read(link) or nil
+        local repo = target and fs.realpath(fs.join(root, ".jj", (target:gsub("%s+$", ""))))
+        return repo and fs.dirname(fs.dirname(repo)) or root
+    elseif backend == M.GIT then
+        local argv =
+            M.with(M.base(root, M.GIT), "rev-parse", "--path-format=absolute", "--git-common-dir")
+        local out, code = dev_os.capture(argv, { stderr = "null" })
+        if code == 0 then
+            return (out:gsub("\n$", ""):gsub("/%.git$", ""))
+        end
+    end
+    return root
+end
+
 return M
