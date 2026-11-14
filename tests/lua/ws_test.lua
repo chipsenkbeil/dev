@@ -253,6 +253,7 @@ local RM_GIT_STUB = [[#!/bin/sh
 case "$*" in
     *"--show-toplevel"*) pwd; exit 0 ;;
     *"--git-common-dir"*) echo .git; exit 0 ;;
+    *"worktree list"*) if [ -n "$LIST_FAIL" ]; then exit 128; fi; printf '%s' "$WORKTREES"; exit 0 ;;
     *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
 esac
 echo "git $*" >> "$LOG"
@@ -383,6 +384,82 @@ testing.test("rm puts a folder back when the git prune fails", function()
     testing.eq(#fs.list(trash_dir(env, root)), 0)
 end)
 
+local function rm_worktrees(root, path, extra)
+    return table.concat({
+        "worktree " .. root,
+        "HEAD x",
+        "branch refs/heads/master",
+        "",
+        "worktree " .. path,
+        "HEAD x",
+        "branch refs/heads/x" .. extra,
+        "",
+    }, "\n")
+end
+
+testing.test("rm refuses and says so when git worktree list fails", function()
+    local root, path, env, log = rm_setup("git")
+    env.env.LIST_FAIL = "1"
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, "The git worktree list command exited 128.\n")
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("rm refuses a locked git worktree and leaves its folder", function()
+    local root, path, env, log = rm_setup("git")
+    env.env.WORKTREES = rm_worktrees(root, path, "\nlocked on a usb stick")
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(out, path .. " is a locked git worktree. Run git worktree unlock first.\n")
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("rm keeps the record of another git worktree whose folder is gone", function()
+    local root, path, env, log = rm_setup("git")
+    local gone = fs.dirname(path) .. "/gone1"
+    env.env.WORKTREES = rm_worktrees(root, path, "")
+        .. table.concat({
+            "",
+            "worktree " .. gone,
+            "HEAD x",
+            "branch refs/heads/y",
+            "prunable gitdir file points to non-existent location",
+            "",
+        }, "\n")
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "Git worktree prune would also drop the record of "
+            .. gone
+            .. ", which git marks prunable. Run git worktree prune first.\n"
+    )
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("rm ignores another git worktree that is locked and gone", function()
+    local root, path, env, log = rm_setup("git")
+    local gone = fs.dirname(path) .. "/gone1"
+    env.env.WORKTREES = rm_worktrees(root, path, "")
+        .. table.concat({
+            "",
+            "worktree " .. gone,
+            "HEAD x",
+            "branch refs/heads/y",
+            "locked usb stick",
+            "prunable gitdir file points to non-existent location",
+            "",
+        }, "\n")
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(out, "Moved " .. path .. " to " .. trashed(env, root, "feat") .. ".\n")
+    testing.eq(fs.read(log), "git -C " .. root .. " worktree prune\n")
+end)
+
 testing.test("ls does not list the trash", function()
     local root, path, env = rm_setup("none")
     local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
@@ -505,7 +582,7 @@ testing.test("rm leaves the folder when the version control command fails", func
     stub(
         root,
         "git",
-        '#!/bin/sh\ncase "$*" in *--git-common-dir*) echo .git; exit 0;; *--show-toplevel*) pwd; exit 0;; *status*) exit 0;; esac\nexit 3\n'
+        '#!/bin/sh\ncase "$*" in *--git-common-dir*) echo .git; exit 0;; *--show-toplevel*) pwd; exit 0;; *status*) exit 0;; *worktree*list*) exit 0;; esac\nexit 3\n'
     )
     local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
     testing.eq(code, 3)
@@ -618,7 +695,11 @@ local PRUNE_GIT_STUB = [[#!/bin/sh
 case "$*" in
     *"--show-toplevel"*) pwd; exit 0 ;;
     *"--git-common-dir"*) echo .git; exit 0 ;;
-    *"worktree list"*) printf '%s' "$WORKTREES"; exit 0 ;;
+    *"worktree list"*)
+        if [ -n "$AFTER" ] && grep -q "worktree remove" "$LOG" 2>/dev/null; then
+            printf '%s' "$AFTER"; exit 0
+        fi
+        printf '%s' "$WORKTREES"; exit 0 ;;
     *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
 esac
 echo "git $*" >> "$LOG"
@@ -1005,6 +1086,66 @@ testing.test("prune keeps a dirty git worktree of a done card", function()
     testing.eq(fs.exists(log), false)
 end)
 
+testing.test("prune keeps a locked git worktree of a done card", function()
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local done = dir .. DONE_ID
+    assert(fs.mkdir(done, { parents = true }))
+    assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
+    env.env.WORKTREES = worktrees(root, done) .. "locked\n"
+    local out, code = support.dev(root, { "ws", "prune" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Kept worktree "
+                .. DONE_ID
+                .. ". "
+                .. done
+                .. " is a locked git worktree. Run git worktree unlock first.",
+            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Pruned 0 worktrees and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.exists(done .. "/.git"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("prune removes a gone worktree before a done one listed ahead of it", function()
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local done = dir .. DONE_ID
+    assert(fs.mkdir(done, { parents = true }))
+    assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
+    local gone = dir .. "gone1"
+    env.env.WORKTREES = worktrees(root, done, gone) .. "prunable gone\n"
+    env.env.AFTER = worktrees(root, done)
+    local out, code = support.dev(root, { "ws", "prune" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Removed worktree gone1. Its folder " .. gone .. " is gone.",
+            "Removed worktree "
+                .. DONE_ID
+                .. ". Its card is done. Moved "
+                .. done
+                .. " to "
+                .. trashed(env, root, DONE_ID)
+                .. ".",
+            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Pruned 2 worktrees and 0 heads. Left 0 items alone."
+        )
+    )
+    testing.eq(
+        fs.read(log),
+        lines(
+            "git -C " .. root .. " worktree remove " .. gone,
+            "git -C " .. root .. " worktree prune"
+        )
+    )
+end)
+
 testing.test("prune keeps the workspace it runs in", function()
     local root, _, env, log = prune_setup("jj")
     local base = assert(fs.realpath(support.tempdir())) .. "/ws"
@@ -1050,6 +1191,30 @@ testing.test("prune dry-run changes no git worktree", function()
     )
     testing.eq(fs.exists(log), false)
     testing.eq(fs.exists(done .. "/.git"), true)
+end)
+
+testing.test("prune dry-run keeps a locked git worktree of a done card", function()
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local done = dir .. DONE_ID
+    assert(fs.mkdir(done, { parents = true }))
+    assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
+    env.env.WORKTREES = worktrees(root, done) .. "locked\n"
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Kept worktree "
+                .. DONE_ID
+                .. ". "
+                .. done
+                .. " is a locked git worktree. Run git worktree unlock first.",
+            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Would prune 0 worktrees and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune goes on after a failed removal and exits with its code", function()

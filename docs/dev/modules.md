@@ -93,8 +93,13 @@ moved.
 
 The move comes first, so a move that fails leaves the folder and the
 workspace as they were, and a forget or prune that fails moves the folder
-back. A target that already exists fails the move. `ws ls` and `ws prune`
-read only ROOT/<repo>, so they never treat the trash as a workspace.
+back. A target that already exists fails the move. Before the move, a git
+worktree is refused when `git worktree list --porcelain` marks it locked (the
+prune would skip it) or marks another worktree prunable (the prune would drop
+its record). A locked worktree needs `git worktree unlock` first, and a
+prunable one `git worktree prune`. `ws prune` removes the records of gone
+folders before it removes finished worktrees. `ws ls` and `ws prune` read only
+ROOT/<repo>, so they never treat the trash as a workspace.
 
 The trash sits on the same filesystem as the workspaces, so the move is a
 rename. A folder that is a mount of its own is copied and then deleted, and
@@ -137,7 +142,8 @@ to the trash and its line ends with `Moved PATH to TRASH.` The default
 workspace and the main worktree are never listed.
 
 A folder with changes not in a commit, and the workspace dev runs in, are kept
-and each gets a `Kept` line. A folder that jj or git cannot read is kept too,
+and each gets a `Kept` line, as does a git worktree that is locked or sits
+beside a prunable one. A folder that jj or git cannot read is kept too,
 and its line ends with the first line of their error. Ignored files do not
 count as changes, as with `ws rm`. A project with no board, or a board that cannot be read, skips the
 card test and says so. A board setting that is invalid stops prune with exit 1

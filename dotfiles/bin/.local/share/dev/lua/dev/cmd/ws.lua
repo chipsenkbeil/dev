@@ -369,11 +369,42 @@ local function main_root(root, backend)
     return root
 end
 
+---@class dev.cmd.ws.BlockerOpts
+---@field locked_only boolean? false when unset, true to ignore other worktrees' prunable records
+
+local function prune_blocker(anchor, paths, opts)
+    local argv = vcs.with(vcs.base(anchor, vcs.GIT), "worktree", "list", "--porcelain")
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        return "the git worktree list command exited " .. code
+    end
+    for block in (out .. "\n"):gmatch("(.-)\n\n") do
+        local path = block:match("^worktree ([^\n]+)")
+        if path and (path == paths[1] or path == paths[2]) then
+            if block:find("\nlocked") then
+                return path .. " is a locked git worktree. Run git worktree unlock first."
+            end
+        elseif
+            path
+            and not opts.locked_only
+            and block:find("\nprunable")
+            and not block:find("\nlocked")
+        then
+            return "git worktree prune would also drop the record of "
+                .. path
+                .. ", which git marks prunable. Run git worktree prune first."
+        end
+    end
+end
+
 ---Remove a workspace of the project at `root` and move its folder to the trash.
 ---
 ---The folder moves to `.trash/<repo>/<name>-<UTC stamp>` under the central
 ---workspaces root, ignored files included, before a jj workspace is forgotten
 ---or the git worktree record is pruned. If the forget or prune fails the folder moves back.
+---A locked git worktree, or one whose project has another worktree with a gone
+---folder, is refused before the move. The prune would skip the locked one or
+---drop the other record.
 ---Trash entries whose stamp is over 14 days old are then purged. A message
 ---names what stopped the removal, and `code` is set when jj or git itself failed.
 ---With `opts.missing` the folder is already gone, so the jj workspace is
@@ -431,11 +462,17 @@ function M.remove(root, name, opts)
     end
     local trash = fs.join(base, TRASH_DIR, repo_name(base, root))
     local target = fs.join(trash, name .. "-" .. os.date(STAMP_FORMAT))
+    local anchor = real == real_root and main_root(root, backend) or root
+    if backend == vcs.GIT then
+        local blocked = prune_blocker(anchor, { path, real }, {})
+        if blocked then
+            return false, blocked
+        end
+    end
     local made, why = fs.mkdir(trash, { parents = true })
     if not made then
         return false, why
     end
-    local anchor = real == real_root and main_root(root, backend) or root
     local moved, err = fs.move(path, target)
     if not moved then
         return false, err
@@ -554,12 +591,13 @@ end
 
 local function plan_workspaces(root, found, finished)
     local steps = {}
+    local ordered = {}
     local here = fs.realpath(root)
     for _, space in ipairs(found) do
         local step = { name = space.name, path = space.path }
         if not fs.exists(space.path) then
             step.kind = Step.GONE
-            steps[#steps + 1] = step
+            ordered[#ordered + 1] = step
         elseif finished and finished[space.name] then
             local base = workspace_root()
             local own = fs.realpath(fs.join(base, repo_name(base, root), space.name))
@@ -571,7 +609,10 @@ local function plan_workspaces(root, found, finished)
             end
         end
     end
-    return steps
+    for _, step in ipairs(steps) do
+        ordered[#ordered + 1] = step
+    end
+    return ordered
 end
 
 local function workspace_line(label, step, opts)
@@ -603,6 +644,14 @@ local function prune_workspaces(ctx, steps, opts)
                 ok, message = false, step.path .. " is a link, not removed"
             elseif step.kind == Step.DONE then
                 ok, message = M.__clean(opts.backend, step.path)
+                if ok and opts.backend == vcs.GIT then
+                    message = prune_blocker(
+                        ctx.root,
+                        { step.path, fs.realpath(step.path) },
+                        { locked_only = true }
+                    )
+                    ok = message == nil
+                end
             end
         else
             local code
