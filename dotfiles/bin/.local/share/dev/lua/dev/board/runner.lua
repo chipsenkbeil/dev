@@ -141,7 +141,8 @@ local function claim_card(backend, card, name)
     local past, why = backend:comments(card.id)
     local ok
     if past and card.claimant ~= who then
-        ok, why = backend:note(card.id, board.claim_record(who), fence, { kind = "status" })
+        ok, why =
+            backend:note(card.id, board.claim_record(who), fence, { kind = board.NoteKind.STATUS })
         past = ok and past
     end
     if not past then

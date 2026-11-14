@@ -42,7 +42,6 @@ local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
 local HTTP_ERROR = 400
 local TOP = 0
 local COMMENT_KIND = "agent"
-local QUESTION_KIND = "question"
 local DEFAULT_AUTHOR = "api-token"
 local ACTORS = { user = "human", api_token = "agent" }
 local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
@@ -1144,7 +1143,7 @@ function Backend:ask(id, question, fence)
     end
     local made
     made, message = self:__request("POST", "/api/tasks/" .. id .. "/comments", {
-        kind = QUESTION_KIND,
+        kind = board.NoteKind.QUESTION,
         question = {
             text = question.text,
             choices = choices,

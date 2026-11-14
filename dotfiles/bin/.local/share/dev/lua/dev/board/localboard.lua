@@ -796,7 +796,7 @@ function Backend:answer(id, choice, quote, fence)
                 .. choice
                 .. ", quote: "
                 .. quote,
-            kind = "decision",
+            kind = board.NoteKind.DECISION,
         }
         return true
     end)

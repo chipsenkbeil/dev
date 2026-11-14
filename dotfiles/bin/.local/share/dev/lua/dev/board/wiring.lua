@@ -143,7 +143,7 @@ local function check_rows(opts)
         card.id,
         check.record(before, rows, flags.expect_fail),
         held and held.fence,
-        { kind = "status" }
+        { kind = board.NoteKind.STATUS }
     )
     if not ok then
         return failure(
@@ -456,7 +456,8 @@ local function land_held(opts)
         text = text .. " It waits in " .. target .. " for the deploy."
     end
     local noted
-    noted, message = backend:note(card.id, text, held and held.fence, { kind = "done" })
+    noted, message =
+        backend:note(card.id, text, held and held.fence, { kind = board.NoteKind.DONE })
     if not noted then
         local refused = failure(
             string.format(

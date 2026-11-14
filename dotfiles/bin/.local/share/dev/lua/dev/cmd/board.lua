@@ -73,7 +73,6 @@ local REV_FLAG = "--rev"
 local GROUP_FLAG = "--group"
 local AS_FLAG = guards.AS_FLAG
 local REASON_FLAG = "--reason"
-local NOTE_DECISION = "decision"
 local RUN_END_FLAG = "--end"
 local RUN_ORDERS_FLAG = "--orders"
 local RUN_NAME = "run "
@@ -1609,7 +1608,8 @@ function commands.discard(backend, args)
     end
     local steps = {}
     if reason then
-        steps[#steps + 1] = { sub = "note", args = { words[1], KIND_FLAG, "decision", reason } }
+        steps[#steps + 1] =
+            { sub = "note", args = { words[1], KIND_FLAG, board.NoteKind.DECISION, reason } }
     end
     steps[#steps + 1] = { sub = "label", args = { words[1], DISCARD_LABEL } }
     steps[#steps + 1] = { sub = "discard_move", args = { words[1], backend.roles:done_column() } }
@@ -2165,7 +2165,7 @@ function commands.outcome(backend, args)
             return unqueued(failure(message))
         end
         local body = "Deleted outcome " .. number .. ": " .. deleted_text .. " Reason: " .. text
-        ok, message = backend:note(card.id, body, fence, { kind = NOTE_DECISION })
+        ok, message = backend:note(card.id, body, fence, { kind = board.NoteKind.DECISION })
         if not ok then
             return unqueued(
                 failure(
@@ -2200,7 +2200,7 @@ function commands.outcome(backend, args)
             .. text
             .. " Reason: "
             .. reason
-        ok, message = backend:note(card.id, body, fence, { kind = NOTE_DECISION })
+        ok, message = backend:note(card.id, body, fence, { kind = board.NoteKind.DECISION })
         if not ok then
             return unqueued(
                 failure(
@@ -2493,7 +2493,7 @@ function commands.review(backend, args)
         card.id,
         review.record(kind, by, rev, verdict),
         held and held.fence,
-        { kind = "status" }
+        { kind = board.NoteKind.STATUS }
     )
     if not ok then
         return failure(
@@ -2825,7 +2825,7 @@ local function ship_batch(backend, cards, rev, commit)
             local moved_ok = result ~= nil and not result.code
             local noted, why = moved_ok, nil
             if moved_ok then
-                noted, why = backend:note(card.id, text, nil, { kind = "done" })
+                noted, why = backend:note(card.id, text, nil, { kind = board.NoteKind.DONE })
             end
             if moved_ok and noted then
                 moved[#moved + 1] = "  " .. short .. " " .. card.name
@@ -3224,7 +3224,7 @@ function commands.delete(backend, args)
     if not card then
         return err
     end
-    local ok, message = backend:note(card.id, text, nil, { kind = "decision" })
+    local ok, message = backend:note(card.id, text, nil, { kind = board.NoteKind.DECISION })
     if not ok then
         return failure(message)
     end
@@ -4009,7 +4009,7 @@ function commands.take(backend, args)
             card.id,
             string.format("handoff: %s released the claim and %s took it", from, claimant(name)),
             fence,
-            { kind = "status" }
+            { kind = board.NoteKind.STATUS }
         )
         if not ok then
             verb.note(

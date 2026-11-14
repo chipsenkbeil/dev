@@ -32,7 +32,7 @@ end
 
 local function asks(comments)
     for _, comment in ipairs(comments) do
-        if comment.kind == "question" or comment.kind == "blocked" then
+        if comment.kind == board.NoteKind.QUESTION or comment.kind == board.NoteKind.BLOCKED then
             return true
         end
     end
