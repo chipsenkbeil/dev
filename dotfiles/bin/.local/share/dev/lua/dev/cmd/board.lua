@@ -246,6 +246,7 @@ local function card_line(card)
     return board.table_lines({ board.cells(card, { lanes = card.lane ~= nil }) })[1]
 end
 
+---Build the link line for `card`.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@return string lines the card's link line behind a newline, empty when the board has no host

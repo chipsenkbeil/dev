@@ -3692,6 +3692,10 @@ local function hosted(backend)
     return backend
 end
 
+local function new_card_args()
+    return { "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+end
+
 testing.test("next prints the card link on a board with a host", function()
     local result = cmd_board.run("next", {}, hosted(fake(sample())))
     testing.eq(
@@ -3717,7 +3721,7 @@ testing.test("show prints the card link under the card line", function()
 end)
 
 testing.test("add prints the new card link and --id-only prints the id alone", function()
-    local args = { "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+    local args = new_card_args()
     local result = cmd_board.run("add", args, hosted(fake(sample())))
     testing.eq(
         result.output,
@@ -3733,9 +3737,8 @@ end)
 
 testing.test("a board with no host prints no link", function()
     local backend = fake(sample())
-    local args = { "A", "--problem", "x", "--size", "1", "--done-when", "a" }
     local added = "added cccccccc " .. support.COLUMN_NAME.BACKLOG
-    testing.eq(cmd_board.run("add", args, backend).output, added)
+    testing.eq(cmd_board.run("add", new_card_args(), backend).output, added)
     testing.eq(cmd_board.run("next", {}, backend).output:find("link:", 1, true), nil)
 end)
 
@@ -5688,7 +5691,11 @@ testing.test("next asks for the unclaimed unblocked top of Ready", function()
     testing.eq(code, 0)
     testing.eq(
         out,
-        "11111111  Ready  1 Pomodoro  docs  First  2 comments, 1 the owner's\n" .. LINK_A .. "\n"
+        "11111111  "
+            .. support.COLUMN_NAME.READY
+            .. "  1 Pomodoro  docs  First  2 comments, 1 the owner's\n"
+            .. LINK_A
+            .. "\n"
     )
     testing.ok(
         read(root, "calls"):find(
@@ -5908,7 +5915,7 @@ testing.test("add posts the card to the named column", function()
         "dev test",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
+    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
     testing.ok(calls:find('"fields":{"dev.checks":[{"run":"dev test"}]}', 1, true), calls)
     testing.ok(calls:find("-X POST", 1, true), calls)
@@ -5938,7 +5945,7 @@ testing.test("add --done-when posts one subtask per outcome after the card", fun
         "B works",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
+    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
     local first = calls:find("/api/tasks --", 1, true) or calls:find("-X POST", 1, true)
     testing.ok(first, calls)
@@ -6125,7 +6132,7 @@ testing.test("add --size and size reach pomb with the id of the colour, not its 
         { "board", "add", "New", "--problem", "x", "--size", "3+", "--done-when", "a" }
     )
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
+    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
     testing.ok(calls:find('"color_id":"red-id"', 1, true), calls)
     out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
@@ -6185,7 +6192,7 @@ testing.test("add --label and label reach pomb as the whole list", function()
         "b",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 Ready\n" .. LINK_A .. "\n")
+    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. LINK_A .. "\n")
     testing.ok(read(root, "calls"):find('"labels":["a","b"]', 1, true), read(root, "calls"))
     out, code = dev(root, home, { "board", "label", "11111111-a", "+needs:lead" })
     testing.eq(code, 0)
@@ -6697,7 +6704,9 @@ testing.test("notes, note --edit and note --delete reach pomb's comment routes",
     testing.eq(code, 0)
     testing.eq(
         out,
-        "11111111  Ready  1 Pomodoro  docs  First\n"
+        "11111111  "
+            .. support.COLUMN_NAME.READY
+            .. "  1 Pomodoro  docs  First\n"
             .. LINK_A
             .. "\n\nWhy it matters.\n\n"
             .. "checks:\n- dev test\n- dev lint\n\n"
