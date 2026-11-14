@@ -63,6 +63,7 @@ local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
 local SUBTASKS_DELETE = "subtasks.delete"
 local ROLES_GRANT = "roles.grant"
+local ROLES_UNREADABLE = "roles.unreadable"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NEEDS_LEAD =
@@ -2260,9 +2261,9 @@ function Backend:add_checks_field()
 end
 
 function Backend:__roles_granted(board_id)
-    local rows = self:__request("GET", ROLES_LIST_PATH)
+    local rows, message = self:__request("GET", ROLES_LIST_PATH)
     if type(rows) ~= "table" then
-        return false
+        return false, message or "pomb sent a roles list dev cannot read"
     end
     local held = {}
     for _, row in ipairs(rows) do
@@ -2285,7 +2286,8 @@ function Backend:add_roles()
     if not id then
         return nil, message
     end
-    if self:__roles_granted(id) then
+    local granted, unread = self:__roles_granted(id)
+    if granted then
         return {}
     end
     local reply, status, doc
@@ -2308,6 +2310,9 @@ function Backend:add_roles()
             and doc.code == PERMISSION_DENIED
             and doc.permission == ROLES_GRANT
             and present(doc.board_id) == nil
+        if no_grant and unread then
+            return nil, unread, ROLES_UNREADABLE
+        end
         if no_grant then
             return nil, message, ROLES_GRANT
         end

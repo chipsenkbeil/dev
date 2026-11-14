@@ -526,7 +526,14 @@ case "$last" in
     esac
     ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
-*/api/v1/agent-roles) body=$(cat "$ROOT/rolelist.json") ;;
+*/api/v1/agent-roles)
+    body=$(cat "$ROOT/rolelist.json")
+    if [ -f "$ROOT/rolelist.fail" ]; then
+        line=$(cat "$ROOT/rolelist.fail")
+        status=${line%%|*}
+        body=${line#*|}
+    fi
+    ;;
 */api/v1/agent-roles/standard)
     line=$(cat "$ROOT/roles.json")
     status=${line%%|*}
@@ -1463,6 +1470,8 @@ end)
 
 local LANES_PROJECT =
     '[board]\nbackend = "pomb"\nname = "demo"\nlanes = ["Parity", "Fixes", "Features"]\n'
+local NO_ROLES_GRANT = '403|{"code":"permission_denied","message":"no",'
+    .. '"permission":"roles.grant","board_id":null}\n'
 
 local function with_lanes(root, json)
     local text = detail():gsub('"swimlanes":%[%]', '"swimlanes":' .. json, 1)
@@ -1520,8 +1529,6 @@ testing.test("a worker token is refused a lane", function()
 end)
 
 testing.test("init-lead-without-roles-grant-creates-lanes", function()
-    local NO_ROLES_GRANT = '403|{"code":"permission_denied","message":"no",'
-        .. '"permission":"roles.grant","board_id":null}\n'
     local root, home, tmp = sandbox({ project = LANES_PROJECT, roles = NO_ROLES_GRANT })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
@@ -1555,6 +1562,38 @@ testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
         said = said + (line == "agent roles left for dev board init --admin" and 1 or 0)
     end
     testing.eq(said, 1)
+end)
+
+testing.test("init-lead-roles-read-fails-names-the-failure", function()
+    local root, home, tmp = sandbox({ project = LANES_PROJECT, roles = NO_ROLES_GRANT })
+    assert(
+        fs.write(
+            root .. "/rolelist.fail",
+            '403|{"code":"permission_denied","message":"no","permission":"settings.read",'
+                .. '"board_id":null}\n'
+        )
+    )
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find("agent roles not checked, the roles list could not be read: ", 1, true),
+        out
+    )
+    testing.ok(out:find("settings.read", 1, true), out)
+    testing.eq(out:find("left for dev board init --admin", 1, true), nil, out)
+    testing.eq(roles_posts(root) ~= nil, true, calls_of(root))
+end)
+
+testing.test("init-lead-roles-missing-after-a-read-still-names-the-admin-step", function()
+    local root, home, tmp = sandbox({
+        project = LANES_PROJECT,
+        roles = NO_ROLES_GRANT,
+        rolelist = granted_roles("verifier"),
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("agent roles left for dev board init --admin\n", 1, true), out)
+    testing.eq(out:find("could not be read", 1, true), nil, out)
 end)
 
 testing.test("init refuses a lanes value that is not a list", function()

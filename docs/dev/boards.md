@@ -349,7 +349,10 @@ What it lays out:
   - `init` first reads `GET /api/v1/agent-roles`, which needs `settings.read`
     only. When each of the six standard keys (a role's `standard` field) sits
     on a role whose `boards` list holds this board, it posts nothing and
-    prints `agent roles unchanged`. A failed read counts as not granted.
+    prints `agent roles unchanged`. A failed read counts as not granted, and
+    when the post is then refused for `roles.grant`, `init` prints `agent roles
+    not checked, the roles list could not be read` with the read's failure in
+    place of the line that leaves the roles for `--admin`.
   - Otherwise it posts `{"boards":[board id]}` to Pomb's
     `/api/v1/agent-roles/standard` right after the columns.
   - It prints `created agent roles` with the names the reply lists, or

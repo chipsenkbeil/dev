@@ -192,6 +192,10 @@ local function roles_step(layout, state, say)
     local ROLES_UNCHANGED = "agent roles unchanged"
     local created, message, missing = layout:add_roles()
     if created == nil then
+        if missing == "roles.unreadable" then
+            say("agent roles not checked, the roles list could not be read: " .. message)
+            return true
+        end
         if missing == "roles.grant" then
             say("agent roles left for dev board init --admin")
             return true
