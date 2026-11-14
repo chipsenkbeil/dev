@@ -1517,3 +1517,40 @@ testing.test("a worker token is refused a lane", function()
     testing.eq(calls_of(root):find("/api/swimlanes", 1, true), nil)
     testing.eq(writes(root), 0)
 end)
+
+testing.test("init-lead-without-roles-grant-creates-lanes", function()
+    local NO_ROLES_GRANT = '403|{"code":"permission_denied","message":"no",'
+        .. '"permission":"roles.grant","board_id":null}\n'
+    local root, home, tmp = sandbox({ project = LANES_PROJECT, roles = NO_ROLES_GRANT })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    local calls = calls_of(root)
+    for _, lane in ipairs({ "Parity", "Fixes", "Features" }) do
+        local body = '{"board_id":"board-1","name":"' .. lane .. '"}'
+        local sent = "--data-raw " .. body .. " https://pomb.example/api/swimlanes"
+        testing.ok(calls:find(sent, 1, true), calls)
+    end
+    testing.eq(
+        out,
+        "agent roles left for dev board init --admin\n"
+            .. 'created lane "Parity"\ncreated lane "Fixes"\ncreated lane "Features"\n'
+            .. "board demo: 3 changes\n"
+    )
+end)
+
+testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:add_roles()
+        return nil,
+            "board unavailable: pomb answered 403: this token lacks the roles.grant permission "
+                .. "on every board; use a token that has it"
+    end
+    local changes, message, lines = run(layout)
+    testing.eq(message, nil)
+    testing.ok(changes > 0)
+    local said = 0
+    for _, line in ipairs(lines) do
+        said = said + (line == "agent roles left for dev board init --admin" and 1 or 0)
+    end
+    testing.eq(said, 1)
+end)

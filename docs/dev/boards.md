@@ -338,9 +338,11 @@ What it lays out:
     gets none.
   - On a Pomb board the call is `POST /api/swimlanes`, which needs
     `swimlanes.create`, and only the lead token holds it. `init` uses the
-    configured `lead_token` for every request unless `--admin` is given. Under
-    `--admin` the run stops at the lane step, after the other steps, when a
-    lane is missing. It sends no lane request and names `lead_token`.
+    configured `lead_token` for every request unless `--admin` is given. The
+    lead token may lack `roles.grant`, and the roles step then leaves its work
+    for `--admin` without stopping the run, so the lead token makes the lanes.
+    Under `--admin` the run stops at the lane step, after the other steps,
+    when a lane is missing. It sends no lane request and names `lead_token`.
   - A local board gets the lane in the `swimlanes` list of its file.
 - agent roles: the planner, implementer, reviewer, verifier, release and lead
   roles, granted to the board.
@@ -358,6 +360,10 @@ What it lays out:
     skipped. A `permission_denied` is shown with the missing permission, and an
     `exceeds_grant` as `the token does not hold board X`, with nothing
     created.
+  - When the refused permission is `roles.grant`, `init` prints `agent roles
+    left for dev board init --admin`, counts no change and goes on to the
+    later steps, the lane step included. Any other refusal still stops the
+    run.
   - A local board has no roles, so it says nothing.
 - role refusals: a refusal reads the token's `role_name` from
   `GET /api/v1/auth/whoami`, once, and only then.
