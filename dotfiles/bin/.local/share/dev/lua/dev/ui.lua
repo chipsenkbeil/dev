@@ -352,15 +352,15 @@ local function capture_or_interrupted(argv)
     local ok, result, code = pcall(dev_os.capture, argv)
     if not ok then
         local reason = tostring(result)
-        if
-            reason:find("interrupted!", 1, true)
-            or reason:find("capture lost the exit status", 1, true)
-        then
-            return "", INTERRUPTED
+        if reason:find("capture lost the exit status", 1, true) then
+            return "", INTERRUPTED, true
+        end
+        if reason:find("interrupted!", 1, true) then
+            return "", INTERRUPTED, false
         end
         error(result, 0)
     end
-    return result, code
+    return result, code, true
 end
 
 local function start_job(argv, dir, streams)
@@ -376,8 +376,8 @@ local function start_job(argv, dir, streams)
     for _, word in ipairs(argv) do
         launch[#launch + 1] = word
     end
-    local pid, code = capture_or_interrupted(launch)
-    return tonumber(pid), code
+    local pid, code, exited = capture_or_interrupted(launch)
+    return tonumber(pid), code, exited
 end
 
 local STOP_POLLS = 40
@@ -508,12 +508,12 @@ function M.spin(ctx, label, argv, opts)
         return dev_os.run(argv)
     end
     local err = ctx:stderr()
-    local dir, pid
+    local dir, pid, exited
     stderr:write(HIDE_CURSOR)
     local ok, code = pcall(function()
         dir = make_workdir(ctx)
         local launched
-        pid, launched = start_job(argv, dir, capture and '2>"$dir/err"' or "2>&1")
+        pid, launched, exited = start_job(argv, dir, capture and '2>"$dir/err"' or "2>&1")
         if launched == INTERRUPTED then
             return INTERRUPTED
         end
@@ -528,7 +528,7 @@ function M.spin(ctx, label, argv, opts)
         captured = read_all(dir .. (capture and "/err" or "/out"))
         output = capture and read_all(dir .. "/out") or ""
         local stopping = not ok or code == INTERRUPTED
-        pid = pid or launched_pid(dir, stopping)
+        pid = pid or launched_pid(dir, stopping and not exited)
         if pid and stopping then
             stop_job(pid)
         end

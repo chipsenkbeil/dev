@@ -320,3 +320,47 @@ dash_holding_launcher() {
         process_gone 'sleep 7.654'
     done
 }
+
+@test "ctrl-c still stops a job whose launcher writes its pid late" {
+    dash_holding_launcher
+    local inner="$BATS_TEST_TMPDIR/inner-late.sh" mark="$OUT.launched" hold="$BATS_TEST_TMPDIR/hold-late.sh"
+    {
+        printf ': >"$LAUNCH_MARK"\n'
+        printf 'n=0\n'
+        printf 'while [ "$n" -lt 300000 ]; do n=$((n+1)); done\n'
+    } >"$hold"
+    {
+        printf 'export LAUNCH_MARK=%q LAUNCH_HOLD=%q\n' "$mark" "$hold"
+        printf 'luajit %q sh -c %q\n' "$SPIN" 'sleep 7.655; echo done'
+        printf 'echo $? >%q\n' "$OUT.status"
+    } >"$inner"
+    pty_run '\003' 0 0 "$inner" "$mark" "$OUT.status" >"$OUT.pty"
+    status_is_130
+    process_gone 'sleep 7.655'
+}
+
+@test "ctrl-c exits 130 within a second when the launcher died before writing its pid" {
+    [ -n "$(bash -c 'echo $EPOCHREALTIME')" ] || skip "bash has no EPOCHREALTIME"
+    local LIMIT_MS=1000
+    mkdir -p "$BATS_TEST_TMPDIR/deadbin"
+    {
+        printf '#!/usr/bin/env bash\n'
+        printf 'if [ "$1" = -c ] && [[ "$2" == trap\\ * ]]; then\n'
+        printf '    exit 130\n'
+        printf 'fi\n'
+        printf 'exec /bin/sh "$@"\n'
+    } >"$BATS_TEST_TMPDIR/deadbin/sh"
+    chmod +x "$BATS_TEST_TMPDIR/deadbin/sh"
+    PATH="$BATS_TEST_TMPDIR/deadbin:$PATH"
+    local inner="$BATS_TEST_TMPDIR/inner-dead.sh"
+    {
+        printf 'start=$EPOCHREALTIME\n'
+        printf 'luajit %q sh -c %q\n' "$SPIN" 'sleep 7.656'
+        printf 'echo $? >%q\n' "$OUT.status"
+        printf 'end=$EPOCHREALTIME\n'
+        printf 'echo $(( (${end/./} - ${start/./}) / 1000 )) >%q\n' "$OUT.elapsed"
+    } >"$inner"
+    pty_run '' 0 0 "$inner" "" "$OUT.elapsed" >"$OUT.pty"
+    status_is_130
+    [ "$(cat "$OUT.elapsed")" -lt "$LIMIT_MS" ]
+}
