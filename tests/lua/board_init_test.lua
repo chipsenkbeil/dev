@@ -21,6 +21,7 @@ local STANDARD = {
 }
 
 local UNCHANGED = "agent roles unchanged\n"
+local LANES_DIE = "dev: [board] lanes must be a list of lane names in .dev/config.toml"
 local STANDARD_ROLES = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 
 local function copy(value)
@@ -1554,4 +1555,24 @@ testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
         said = said + (line == "agent roles left for dev board init --admin" and 1 or 0)
     end
     testing.eq(said, 1)
+end)
+
+testing.test("init refuses a lanes value that is not a list", function()
+    local root, home, tmp = sandbox({
+        project = '[board]\nbackend = "pomb"\nname = "demo"\nlanes = "Parity"\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find(LANES_DIE, 1, true), out)
+    testing.eq(writes(root), 0)
+end)
+
+testing.test("init refuses a lane name that is empty", function()
+    local root, home, tmp = sandbox({
+        project = '[board]\nbackend = "pomb"\nname = "demo"\nlanes = [""]\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find(LANES_DIE, 1, true), out)
+    testing.eq(writes(root), 0)
 end)
