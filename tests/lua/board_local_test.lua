@@ -2178,7 +2178,7 @@ testing.test("a replay Pomb refuses is reported and dropped, the rest still go",
     assert(fs.remove(root .. "/down"))
     local out, code = pomb_dev(root, home, { "board", "sync" })
     testing.eq(code, 0, out)
-    testing.ok(out:find("dropped move deadbeef: no card starts with deadbeef", 1, true), out)
+    testing.ok(out:find("dropped move deadbeef: No card starts with deadbeef.", 1, true), out)
     testing.ok(out:find("synced note aaaaaaaa", 1, true), out)
     testing.eq(fs.exists(queue_path(home)), false)
 end)

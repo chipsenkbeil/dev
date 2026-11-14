@@ -388,10 +388,10 @@ testing.test("resolve refuses a short, unknown or ambiguous prefix", function()
     testing.ok(message:find("at least 8", 1, true), message)
     card, message = board.resolve(cards, "11111111")
     testing.eq(card, nil)
-    testing.ok(message:find("more than one card", 1, true), message)
+    testing.eq(message, "More than one card starts with 11111111. Give more characters.")
     card, message = board.resolve(cards, "deadbeef")
     testing.eq(card, nil)
-    testing.ok(message:find("no card starts with deadbeef", 1, true), message)
+    testing.eq(message, "No card starts with deadbeef.")
     card, message = board.resolve(cards, "zzzzzzzz")
     testing.eq(card, nil)
     testing.ok(message:find("hex", 1, true), message)
@@ -1653,7 +1653,7 @@ testing.test("link to BOARD:CARD resolves the card on the other board", function
     testing.ok(result.message:find("no board named nope", 1, true), result.message)
     result = cmd_board.run("link", { "11111111-a", "related", "ci:eeeeeeee" }, backend)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("no card starts with eeeeeeee", 1, true), result.message)
+    testing.ok(result.message:find("No card starts with eeeeeeee", 1, true), result.message)
     testing.eq(#backend.calls, 5)
 end)
 
@@ -2075,11 +2075,11 @@ testing.test("note --edit and --delete refuse a bad comment prefix or a bad shap
     end
     testing.eq(
         cmd_board.run("note", { "cccccccc", "--delete", "bbbb" }, backend).message,
-        "a comment id needs at least 8 hex characters: bbbb"
+        "A comment id needs at least 8 hex characters: bbbb."
     )
     testing.eq(
         cmd_board.run("note", { "cccccccc", "--delete", "cccccccc" }, backend).message,
-        "no comment starts with cccccccc"
+        "No comment starts with cccccccc."
     )
     for _, args in ipairs({
         { "cccccccc", "--edit", "bbbbbbbb" },
@@ -6778,7 +6778,7 @@ testing.test("a 403 on a comment says it is not yours and exits 1", function()
     testing.eq(out, "dev: that comment is not yours to change\n")
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: a comment id needs at least 8 hex characters: eeee\n")
+    testing.eq(out, "dev: A comment id needs at least 8 hex characters: eeee.\n")
 end)
 
 testing.test("a card_locked 403 on a comment says the card is locked and exits 1", function()

@@ -311,7 +311,7 @@ testing.test("lint with a card that matches none fails", function()
     local result =
         cmd_board.run("lint", { "00000009" }, backend({ card(1, support.COLUMN_NAME.READY) }))
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("no card starts with", 1, true), result.message)
+    testing.ok(result.message:find("No card starts with", 1, true), result.message)
 end)
 
 testing.test("lint fails when a card's comments cannot be read", function()

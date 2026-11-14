@@ -722,7 +722,7 @@ function M.resolve(items, word, noun)
     local prefix = word:lower()
     if #prefix < M.MIN_PREFIX or not prefix:find("^[%x-]+$") then
         return nil,
-            "a " .. noun .. " id needs at least " .. M.MIN_PREFIX .. " hex characters: " .. word
+            ("A %s id needs at least %d hex characters: %s."):format(noun, M.MIN_PREFIX, word)
     end
     local found
     for _, item in ipairs(items) do
@@ -731,13 +731,14 @@ function M.resolve(items, word, noun)
                 return item
             end
             if found then
-                return nil, word .. " matches more than one " .. noun .. ", give more characters"
+                return nil,
+                    "More than one " .. noun .. " starts with " .. word .. ". Give more characters."
             end
             found = item
         end
     end
     if not found then
-        return nil, "no " .. noun .. " starts with " .. word
+        return nil, "No " .. noun .. " starts with " .. word .. "."
     end
     return found
 end
