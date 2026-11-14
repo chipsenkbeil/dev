@@ -727,7 +727,7 @@ assert_eq "push with an unknown flag exits 2" "$?" "2"
 assert_contains "push names the unknown flag" "$out" "dev push: unknown flag --force"
 out="$(run_dev "$gp" pull extra 2>&1)"
 assert_eq "pull with an argument exits 2" "$?" "2"
-assert_contains "pull names the argument" "$out" "dev pull: unknown argument extra"
+assert_contains "pull names the argument" "$out" "dev pull: Unknown argument extra."
 
 echo b >"$gp/b"
 git -C "$gp" add b

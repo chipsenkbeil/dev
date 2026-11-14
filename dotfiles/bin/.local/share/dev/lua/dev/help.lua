@@ -468,8 +468,11 @@ end
 ---@param reg dev.Registry the project's registry
 ---@param arg string the argument that is not taken
 function M.bad_argument(ctx, reg, arg)
-    local kind = arg:sub(1, 1) == "-" and "flag" or "argument"
-    stderr:write("dev ", ctx.name, ": unknown ", kind, " ", arg, "\n\n")
+    local message = "unknown flag " .. arg
+    if arg:sub(1, 1) ~= "-" then
+        message = "Unknown argument " .. arg .. "."
+    end
+    stderr:write("dev ", ctx.name, ": ", message, "\n\n")
     stderr:write(overview(ctx, reg, screen():stderr(), {}))
     os.exit(2)
 end
