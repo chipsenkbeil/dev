@@ -26,7 +26,7 @@ function M.usage_error(ctx, msg)
     os.exit(2)
 end
 
----Refuse any positional argument, as a verb that takes only `KEY=value` does.
+---Refuse any positional argument, for a verb that takes no positional arguments.
 ---@param ctx dev.Ctx the verb's context
 function M.no_args(ctx)
     local arg = ctx.args[1]
@@ -36,10 +36,7 @@ function M.no_args(ctx)
     if arg:sub(1, 1) == "-" then
         M.usage_error(ctx, "unknown flag " .. arg)
     end
-    M.usage_error(
-        ctx,
-        "unknown argument " .. arg .. ", " .. ctx.name .. " takes only KEY=value arguments"
-    )
+    M.usage_error(ctx, "Unknown argument " .. arg .. ". This verb takes no positional arguments.")
 end
 
 ---Write `msg` and a newline to standard output.

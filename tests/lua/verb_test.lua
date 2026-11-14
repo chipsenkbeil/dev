@@ -12,6 +12,16 @@ testing.test("note writes the message and a newline to standard error", function
     testing.eq(out, "dev sync: nothing to pull\n")
 end)
 
+testing.test("no_args refuses a stray argument with one message", function()
+    local script = string.format(
+        "package.path = %q; require('dev.verb').no_args({ name = 'lint', args = { 'extra' } })",
+        support.absolute_path()
+    )
+    local out, code = dev_os.capture({ "luajit", "-e", script }, { stderr = "stdout" })
+    testing.eq(code, 2)
+    testing.eq(out, "dev lint: Unknown argument extra. This verb takes no positional arguments.\n")
+end)
+
 testing.test("say writes the message and a newline to standard output", function()
     local script = string.format(
         "package.path = %q; require('dev.verb').say('dev sync: nothing to pull')",

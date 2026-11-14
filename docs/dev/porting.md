@@ -49,8 +49,8 @@ another code, return it, or call `os.exit`.
 `require("dev.verb")` holds the helpers a verb needs:
 
 - `verb.usage_error(ctx, msg)`: print `dev <name>: <msg>` and exit 2
-- `verb.no_args(ctx)`: refuse any positional argument, as a verb that takes only
-  `KEY=value` does
+- `verb.no_args(ctx)`: refuse any positional argument, for a verb that takes
+  no positional arguments
 - `verb.note(msg)`: write `msg` and a newline to standard error
 - `verb.die(msg)`: print `msg` and exit 1
 - `verb.show(ctx, argv)`: print `+ <argv>` on standard error when `ctx.verbose`
@@ -206,7 +206,7 @@ set -eo pipefail
 if [ "$#" -gt 0 ]; then
     case "$1" in
     -*) printf 'dev list: unknown flag %s\n' "$1" >&2 ;;
-    *) printf 'dev list: unknown argument %s, list takes only KEY=value arguments\n' "$1" >&2 ;;
+    *) printf 'dev list: Unknown argument %s. This verb takes no positional arguments.\n' "$1" >&2 ;;
     esac
     exit 2
 fi
