@@ -468,7 +468,7 @@ end
 ---@param reg dev.Registry the project's registry
 ---@param arg string the argument that is not taken
 function M.bad_argument(ctx, reg, arg)
-    local message = "unknown flag " .. arg
+    local message = "Unknown flag " .. arg .. "."
     if arg:sub(1, 1) ~= "-" then
         message = "Unknown argument " .. arg .. "."
     end

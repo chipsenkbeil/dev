@@ -205,7 +205,7 @@ if [ "$REAL_ROOT" = 0 ]; then
     assert_contains "check reports the missing tool" "$out" "[ ] pkg-a"
     out="$(tools "$proj" check --bogus 2>&1)"
     assert_eq "check with a bad flag exits 2" "$?" "2"
-    assert_contains "check names the bad flag" "$out" "dev tools check: unknown flag --bogus"
+    assert_contains "check names the bad flag" "$out" "dev tools check: Unknown flag --bogus"
     assert_contains "check shows the curated help" "$out" "Set up a machine or project"
 
     hostile="$TMP/x'\$(touch PWNED)"

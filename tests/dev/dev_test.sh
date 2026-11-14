@@ -288,8 +288,8 @@ bounded_dev "$rust" init --name
 assert_eq "init --name with no value exits 2" "$BOUNDED_RC" "2"
 assert_contains "init names the --name with no value" "$BOUNDED_OUT" "dev init: --name needs a value"
 out="$(run_dev "$rust" init --bogus 2>&1)"
-assert_eq "init with an unknown flag exits 2" "$?" "2"
-assert_contains "init names the unknown flag" "$out" "dev init: unknown flag --bogus"
+assert_eq "init with a bad flag exits 2" "$?" "2"
+assert_contains "init names the bad flag" "$out" "dev init: Unknown flag --bogus"
 out="$(run_dev "$rust" init --type cobol 2>&1)"
 assert_eq "init with an unknown type exits 2" "$?" "2"
 out="$(run_dev "$rust")"
@@ -400,8 +400,8 @@ assert_contains "the sync refusal names --yes" "$out" "pass --yes to apply witho
 run_dev "$sync" sync --yes --check >/dev/null 2>&1
 assert_eq "sync --yes --check exits 2" "$?" "2"
 out="$(run_dev "$sync" sync --bogus 2>&1)"
-assert_eq "sync with an unknown flag exits 2" "$?" "2"
-assert_contains "sync names the unknown flag" "$out" "dev sync: unknown flag --bogus"
+assert_eq "sync with a bad flag exits 2" "$?" "2"
+assert_contains "sync names the bad flag" "$out" "dev sync: Unknown flag --bogus"
 if [ -x /usr/bin/yq ] || [ -x /bin/yq ]; then
     printf 'skip - rust sync without yq (yq is in /usr/bin or /bin)\n'
 else
@@ -723,8 +723,8 @@ out="$(run_dev "$gp" push nosuch 2>&1)"
 assert_eq "push to a remote the project lacks exits 2" "$?" "2"
 assert_contains "push names the missing remote" "$out" "no remote nosuch"
 out="$(run_dev "$gp" push --force 2>&1)"
-assert_eq "push with an unknown flag exits 2" "$?" "2"
-assert_contains "push names the unknown flag" "$out" "dev push: unknown flag --force"
+assert_eq "push with a bad flag exits 2" "$?" "2"
+assert_contains "push names the bad flag" "$out" "dev push: Unknown flag --force"
 out="$(run_dev "$gp" pull extra 2>&1)"
 assert_eq "pull with an argument exits 2" "$?" "2"
 assert_contains "pull names the argument" "$out" "dev pull: Unknown argument extra."
