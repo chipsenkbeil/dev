@@ -1101,7 +1101,7 @@ testing.test(
         out, code =
             dev(root, home, { "board", "add", "Direct", "--column", COLUMN.READY, "--size", "1" })
         testing.eq(code, 2)
-        testing.ok(out:find("card format v2", 1, true), out)
+        testing.ok(out:find("card format v3", 1, true), out)
         local ice =
             prefix_of((dev(root, home, { "board", "add", "Loose", "--column", COLUMN.ICEBOX })))
         out = dev(root, home, { "board", "show", ice })

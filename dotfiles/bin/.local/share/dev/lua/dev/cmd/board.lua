@@ -649,7 +649,7 @@ function commands.add(backend, args)
             return usage(
                 "a card outside "
                     .. roles.icebox
-                    .. " needs a size, card format v2 and Done when outcomes, and this one lacks "
+                    .. " needs a size, card format v3 and Done when outcomes, and this one lacks "
                     .. table.concat(missing, ", ")
                     .. "; pass --size, --problem and --done-when, or add it to "
                     .. roles.icebox
@@ -660,7 +660,7 @@ function commands.add(backend, args)
         local missing = board.missing(description, #outcomes, 0, flags["--epic"])
         if #missing > 0 then
             return usage(
-                "a card needs card format v2 before it enters Ready, and this one lacks "
+                "a card needs card format v3 before it enters Ready, and this one lacks "
                     .. table.concat(missing, ", ")
                     .. "; add it to Backlog or pass --problem, --change, --out-of-scope and --done-when"
             )
@@ -1348,7 +1348,7 @@ local function move_once(backend, args, opts)
         if #missing > 0 then
             return failure(
                 card.id:sub(1, board.MIN_PREFIX)
-                    .. " is not in card format v2 and cannot enter Ready; it lacks "
+                    .. " is not in card format v3 and cannot enter Ready; it lacks "
                     .. table.concat(missing, ", ")
                     .. "; add outcomes with dev board outcome and fix the description with dev board edit, where a v1 Done when checklist also counts"
             )
@@ -2284,7 +2284,7 @@ function commands.edit(backend, args)
                 card.id:sub(1, board.MIN_PREFIX)
                     .. " is outside "
                     .. backend.roles.icebox
-                    .. " and keeps card format v2; that text lacks "
+                    .. " and keeps card format v3; that text lacks "
                     .. table.concat(missing, ", ")
             )
         end
