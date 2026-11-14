@@ -742,7 +742,7 @@ function M.resolve(items, word, noun)
     return found
 end
 
----The headings of card format v2, in order.
+---The headings of card format v3, in order.
 M.HEADINGS = { "Problem", "Change", "Out of scope" }
 
 ---The fewest and the most Done when outcomes a planned card has.
@@ -903,7 +903,7 @@ local function sections(description)
     return seen, filled
 end
 
----Build a card format v2 description from the text of each section.
+---Build a card format v3 description from the text of each section.
 ---@param problem string? the Problem text
 ---@param change string? the Change text
 ---@param out_of_scope string? the Out of scope text
@@ -918,7 +918,7 @@ function M.compose(problem, change, out_of_scope)
     return table.concat(parts, "\n")
 end
 
----List what a card lacks of card format v2 outside Icebox: each missing heading, and Problem text.
+---List what a card lacks of card format v3 outside Icebox: each missing heading, and Problem text.
 ---@param description string? the card's description
 ---@return string[] missing the problems, empty when the card follows the format outside Icebox
 function M.backlog_missing(description)
@@ -936,7 +936,7 @@ function M.backlog_missing(description)
     return missing
 end
 
----List the shapes card format v2 refuses outside Icebox: a Change or Out of scope section with no
+---List the shapes card format v3 refuses outside Icebox: a Change or Out of scope section with no
 ---text under it, and a Problem text with a line that starts `Change:` or `Out of scope:`.
 ---@param description string? the card's description
 ---@return string[] shapes the problems, empty when the sections have the right shape
@@ -1085,7 +1085,7 @@ function M.unnamed_checks(outcomes, checks)
     return unnamed
 end
 
----List what a card lacks of card format v2 to enter Ready: each missing or empty section, and
+---List what a card lacks of card format v3 to enter Ready: each missing or empty section, and
 ---Done when outcomes. The outcomes are 3 to 7 subtasks, or 1 to 3 for an epic, and a card with none
 ---is accepted when its description has a v1 `## Done when` checklist item.
 ---@param description string? the card's description
