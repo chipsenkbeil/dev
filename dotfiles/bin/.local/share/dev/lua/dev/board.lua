@@ -434,6 +434,9 @@ M.NOTE_KINDS = {
 ---The most characters of the label `note --as` sends, which Pomb enforces.
 M.AUTHOR_CHARS = 80
 
+---The ending that marks an outcome as decided by the reviewer.
+M.JUDGEMENT = "(reviewer judgement)"
+
 ---The prefix of the comment `check` writes, which no note may begin with.
 M.CHECK_PREFIX = "dev-check:"
 
@@ -1054,6 +1057,32 @@ function M.epic_mark(card)
         return "[epic] "
     end
     return "[epic " .. M.open_children(epic) .. " of " .. epic.total .. " open] "
+end
+
+---List the outcomes that name no deciding check.
+---
+---An outcome names one by ending with `(check: ROW)`, where ROW is a non-blank substring of one of
+---the checks rows, or with `(reviewer judgement)`.
+---@param outcomes dev.board.Outcome[] the card's outcomes
+---@param checks string[] the card's checks rows
+---@return string[] unnamed the names of the outcomes with neither ending, or a ROW no row holds
+function M.unnamed_checks(outcomes, checks)
+    local unnamed = {}
+    for _, outcome in ipairs(outcomes) do
+        local name = outcome.name:gsub("%s+$", "")
+        local row = name:match("%(check: (.+)%)$")
+        row = row and row:match("^%s*(.-)%s*$")
+        local named = name:sub(-#M.JUDGEMENT) == M.JUDGEMENT
+        for _, check in ipairs(checks) do
+            if row and row ~= "" and check:find(row, 1, true) then
+                named = true
+            end
+        end
+        if not named then
+            unnamed[#unnamed + 1] = outcome.name
+        end
+    end
+    return unnamed
 end
 
 ---List what a card lacks of card format v2 to enter Ready: each missing or empty section, and

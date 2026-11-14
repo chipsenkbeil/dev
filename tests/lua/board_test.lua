@@ -2402,8 +2402,11 @@ testing.test(
         end
         local card = colored("green")
         card.description = V2
-        card.outcomes =
-            { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
+        card.outcomes = {
+            { id = "s1", name = "a (reviewer judgement)" },
+            { id = "s2", name = "b (reviewer judgement)" },
+            { id = "s3", name = "c (reviewer judgement)" },
+        }
         testing.eq(
             cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
             nil
@@ -2520,6 +2523,29 @@ testing.test("move to Ready counts a card with no checks row as missing them", f
     testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
 end)
 
+testing.test("move to Ready refuses an outcome that names no deciding check", function()
+    local card = planned()
+    card.checks = { "dev --remote test", "dev (x) y" }
+    card.outcomes = {
+        { id = "s1", name = "A is refused (check: remote test)", done = false },
+        { id = "s2", name = "B reads well (reviewer judgement)", done = false },
+        { id = "s3", name = "C works", done = false },
+        { id = "s4", name = "D works (check: nothing)", done = false },
+        { id = "s5", name = "E blank (check:   )", done = false },
+        { id = "s6", name = "F parens (check: dev (x) y)", done = false },
+    }
+    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card }))
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("names no deciding check", 1, true), result.message)
+    testing.ok(result.message:find("C works, D works", 1, true), result.message)
+    testing.ok(result.message:find("E blank (check:   )", 1, true), result.message)
+    testing.eq(result.message:find("A is refused", 1, true), nil)
+    testing.eq(result.message:find("F parens", 1, true), nil)
+    card.outcomes = { card.outcomes[1], card.outcomes[2], card.outcomes[6] }
+    result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card }))
+    testing.eq(result.code, nil)
+end)
+
 testing.test("move to Ready lets a card with children in without a checks row", function()
     local card = planned()
     card.checks = {}
@@ -2597,10 +2623,14 @@ testing.test("move to Ready refuses a card missing a heading or a Done when item
     )
 end)
 
-local function outcomes(count, ticked)
+local function outcomes(count, ticked, marker)
     local list = {}
     for i = 1, count do
-        list[i] = { id = "s" .. i, name = "Outcome " .. i, done = i <= (ticked or 0) }
+        list[i] = {
+            id = "s" .. i,
+            name = "Outcome " .. i .. (marker or ""),
+            done = i <= (ticked or 0),
+        }
     end
     return list
 end
@@ -2611,7 +2641,7 @@ testing.test(
         for _, count in ipairs({ 3, 5, 7 }) do
             local card = colored("green")
             card.description = V2
-            card.outcomes = outcomes(count)
+            card.outcomes = outcomes(count, 0, " (reviewer judgement)")
             testing.eq(
                 cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
                 nil
@@ -2717,15 +2747,19 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
         "--checks",
         "dev test",
         "--done-when",
-        "a",
+        "a (reviewer judgement)",
         "--done-when",
-        "b",
+        "b (reviewer judgement)",
     }
     result = cmd_board.run("add", ready, backend)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
     ready[#ready + 1] = "--done-when"
     ready[#ready + 1] = "c"
+    result = cmd_board.run("add", ready, backend)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("These outcomes lack one: c", 1, true), result.message)
+    ready[#ready] = "c (check: dev test)"
     testing.eq(cmd_board.run("add", ready, backend).code, nil)
     result = cmd_board.run(
         "add",
@@ -6008,11 +6042,11 @@ testing.test(
             "--checks",
             "dev test",
             "--done-when",
-            "a",
+            "a (reviewer judgement)",
             "--done-when",
-            "b",
+            "b (reviewer judgement)",
             "--done-when",
-            "c",
+            "c (reviewer judgement)",
         })
         testing.eq(code, 0, out)
         local calls = read(root, "calls")
@@ -9382,11 +9416,11 @@ local function pomb_placed(extra)
         "--checks",
         "dev test",
         "--done-when",
-        "a",
+        "a (reviewer judgement)",
         "--done-when",
-        "b",
+        "b (reviewer judgement)",
         "--done-when",
-        "c",
+        "c (reviewer judgement)",
     }
     for _, word in ipairs(extra) do
         args[#args + 1] = word

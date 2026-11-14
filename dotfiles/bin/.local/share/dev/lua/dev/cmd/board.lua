@@ -678,6 +678,23 @@ function commands.add(backend, args)
             return usage("a card needs a checks row before it enters Ready; pass --checks CMD")
         end
     end
+    if column == roles.ready and not flags["--epic"] then
+        local named = {}
+        for i, item in ipairs(outcomes) do
+            named[i] = { name = item }
+        end
+        local unnamed = board.unnamed_checks(named, checks)
+        if #unnamed > 0 then
+            return usage(
+                "An outcome needs a deciding check before the card enters Ready. "
+                    .. "These outcomes lack one: "
+                    .. table.concat(unnamed, ", ")
+                    .. ". End each with (check: ROW) naming part of a checks row, or with "
+                    .. board.JUDGEMENT
+                    .. "."
+            )
+        end
+    end
     local blockers, seen = {}, {}
     for _, word in ipairs(flags["--blocked-by"] or {}) do
         local blocker, _, err = other_card(backend, word)
@@ -1348,6 +1365,20 @@ local function move_once(backend, args, opts)
                         .. " has no checks row and cannot enter Ready; give it one with dev board checks CARD CMD"
                     )
             )
+        end
+        if children == 0 and not epic and not card.outcomes_unreadable then
+            local unnamed = board.unnamed_checks(card.outcomes, card.checks)
+            if #unnamed > 0 then
+                return failure(
+                    card.id:sub(1, board.MIN_PREFIX)
+                        .. " has an outcome that names no deciding check and cannot enter Ready. "
+                        .. "These outcomes lack one: "
+                        .. table.concat(unnamed, ", ")
+                        .. ". End each with (check: ROW) naming part of a checks row, or with "
+                        .. board.JUDGEMENT
+                        .. "."
+                )
+            end
         end
     end
     if column == roles.progress then
@@ -4096,11 +4127,11 @@ local function start_run(backend, name, orders)
         "--out-of-scope",
         "The work on other cards; this card holds only the run's state.",
         "--done-when",
-        "The orders below are carried out",
+        "The orders below are carried out " .. board.JUDGEMENT,
         "--done-when",
-        "Every card the run took is Done or released",
+        "Every card the run took is Done or released " .. board.JUDGEMENT,
         "--done-when",
-        "Anything left over is a card on the board",
+        "Anything left over is a card on the board " .. board.JUDGEMENT,
         "--checks",
         RUN_CHECK,
     }

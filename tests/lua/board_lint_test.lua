@@ -10,7 +10,8 @@ local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Don
 local function outcomes(ticked)
     local list = {}
     for i = 1, 3 do
-        list[i] = { id = "o" .. i, name = "outcome " .. i, done = i <= ticked }
+        list[i] =
+            { id = "o" .. i, name = "outcome " .. i .. " (reviewer judgement)", done = i <= ticked }
     end
     return list
 end
@@ -209,6 +210,24 @@ testing.test("lint asks a card without children for a checks row and an epic for
         { "00000002 In Progress no checks row" }
     )
 end)
+
+testing.test(
+    "lint flags an outcome that names no deciding check in Ready and In Progress",
+    function()
+        local named = { { id = "o1", name = "x (check: test)", done = false } }
+        local bare = { { id = "o1", name = "bare", done = false } }
+        local cards = {
+            card(1, support.COLUMN_NAME.READY, { outcomes = bare, claimant = false }),
+            card(2, support.COLUMN_NAME.READY, { outcomes = named, claimant = false }),
+            card(3, support.COLUMN_NAME.PROGRESS, { outcomes = bare }),
+            card(4, support.COLUMN_NAME.BACKLOG, { outcomes = bare }),
+        }
+        testing.eq(findings(cmd_board.run("lint", {}, backend(cards)).output), {
+            "00000001 " .. support.COLUMN_NAME.READY .. " outcome names no deciding check: bare",
+            "00000003 " .. support.COLUMN_NAME.PROGRESS .. " outcome names no deciding check: bare",
+        })
+    end
+)
 
 testing.test("lint flags a Done card with outcomes and an open child", function()
     local fake = backend({ card(1, "Done") })

@@ -823,6 +823,8 @@ A card also needs card format v2 to enter Ready:
 - all three headings with text under each
 - no `Change:` or `Out of scope:` line under Problem
 - 3 to 7 Done when outcomes (subtasks)
+- each outcome ends with `(check: ROW)`, where ROW is part of one checks row,
+  or with `(reviewer judgement)`
 
 A card with no outcomes is still accepted when its description has a v1
 `## Done when` checklist item, until the boards are converted.
@@ -2130,6 +2132,10 @@ size, the v2 sections and the outcomes. It adds these:
 - Outside Icebox and Done: `over 400 words (N)`.
 - In Ready, In Progress and In Review, for a card with no children:
   `no checks row`.
+- In Ready and In Progress, for a card with a checks row that is not an epic:
+  `outcome names no deciding check: NAME`, once per outcome that ends with
+  neither `(check: ROW)` naming part of a checks row nor `(reviewer
+  judgement)`, as `dev.board.unnamed_checks` lists them.
 - In Ready: `red card in Ready`.
 - Anywhere: `needs:human outside Blocked and Icebox`.
 - In Blocked: `blocked with no question or blocked note and no blocker`. It
@@ -3123,6 +3129,9 @@ A move into Ready:
   `the board has no checks field, so run dev board init to add it` (exit 1, on
   both backends, which `checks_field` tells apart).
 - A local board always has the checks field.
+- An outcome that ends with neither `(check: ROW)` naming part of a checks row
+  nor `(reviewer judgement)` is refused after the checks row, and the refusal
+  names each such outcome (exit 1). An epic is not asked.
 - A card with children is an epic (`kind` epic or `children_total` on Pomb,
   `parent` links on a local board). It enters Ready under the same rules as any
   card, except that it needs no checks row, as its children carry the checks.

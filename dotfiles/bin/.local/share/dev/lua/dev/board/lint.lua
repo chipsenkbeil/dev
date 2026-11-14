@@ -148,6 +148,22 @@ function M.card(card, opts)
                 add("no checks row")
             end
         end
+        if
+            (column == roles.ready or column == roles.progress)
+            and #card.checks > 0
+            and not card.outcomes_unreadable
+            and card.kind ~= board.Kind.EPIC
+        then
+            local found, why = children()
+            if not found then
+                return nil, why
+            end
+            if found.total == 0 then
+                for _, name in ipairs(board.unnamed_checks(card.outcomes, card.checks)) do
+                    add("outcome names no deciding check: " .. name)
+                end
+            end
+        end
         if column == roles.ready and card.color == board.SIZES["3+"] then
             add("red card in " .. column)
         end
