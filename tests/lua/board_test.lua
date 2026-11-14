@@ -2403,9 +2403,9 @@ testing.test(
         local card = colored("green")
         card.description = V2
         card.outcomes = {
-            { id = "s1", name = "a (reviewer judgement)" },
-            { id = "s2", name = "b (reviewer judgement)" },
-            { id = "s3", name = "c (reviewer judgement)" },
+            { id = "s1", name = "a " .. board.JUDGEMENT },
+            { id = "s2", name = "b " .. board.JUDGEMENT },
+            { id = "s3", name = "c " .. board.JUDGEMENT },
         }
         testing.eq(
             cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
@@ -2527,18 +2527,21 @@ testing.test("move to Ready refuses an outcome that names no deciding check", fu
     local card = planned()
     card.checks = { "dev --remote test", "dev (x) y" }
     card.outcomes = {
-        { id = "s1", name = "A is refused (check: remote test)", done = false },
-        { id = "s2", name = "B reads well (reviewer judgement)", done = false },
+        { id = "s1", name = "A is refused " .. board.CHECK_OPEN .. "remote test)", done = false },
+        { id = "s2", name = "B reads well " .. board.JUDGEMENT, done = false },
         { id = "s3", name = "C works", done = false },
-        { id = "s4", name = "D works (check: nothing)", done = false },
-        { id = "s5", name = "E blank (check:   )", done = false },
-        { id = "s6", name = "F parens (check: dev (x) y)", done = false },
+        { id = "s4", name = "D works " .. board.CHECK_OPEN .. "nothing)", done = false },
+        { id = "s5", name = "E blank " .. board.CHECK_OPEN .. "  )", done = false },
+        { id = "s6", name = "F parens " .. board.CHECK_OPEN .. "dev (x) y)", done = false },
     }
     local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card }))
     testing.eq(result.code, 1)
     testing.ok(result.message:find("names no deciding check", 1, true), result.message)
     testing.ok(result.message:find("C works, D works", 1, true), result.message)
-    testing.ok(result.message:find("E blank (check:   )", 1, true), result.message)
+    testing.ok(
+        result.message:find("E blank " .. board.CHECK_OPEN .. "  )", 1, true),
+        result.message
+    )
     testing.eq(result.message:find("A is refused", 1, true), nil)
     testing.eq(result.message:find("F parens", 1, true), nil)
     card.outcomes = { card.outcomes[1], card.outcomes[2], card.outcomes[6] }
@@ -2641,7 +2644,7 @@ testing.test(
         for _, count in ipairs({ 3, 5, 7 }) do
             local card = colored("green")
             card.description = V2
-            card.outcomes = outcomes(count, 0, " (reviewer judgement)")
+            card.outcomes = outcomes(count, 0, " " .. board.JUDGEMENT)
             testing.eq(
                 cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
                 nil
@@ -2747,9 +2750,9 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
         "--checks",
         "dev test",
         "--done-when",
-        "a (reviewer judgement)",
+        "a " .. board.JUDGEMENT,
         "--done-when",
-        "b (reviewer judgement)",
+        "b " .. board.JUDGEMENT,
     }
     result = cmd_board.run("add", ready, backend)
     testing.eq(result.code, 2)
@@ -2759,7 +2762,7 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
     result = cmd_board.run("add", ready, backend)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("These outcomes lack one: c", 1, true), result.message)
-    ready[#ready] = "c (check: dev test)"
+    ready[#ready] = "c " .. board.CHECK_OPEN .. "dev test)"
     testing.eq(cmd_board.run("add", ready, backend).code, nil)
     result = cmd_board.run(
         "add",
@@ -6042,11 +6045,11 @@ testing.test(
             "--checks",
             "dev test",
             "--done-when",
-            "a (reviewer judgement)",
+            "a " .. board.JUDGEMENT,
             "--done-when",
-            "b (reviewer judgement)",
+            "b " .. board.JUDGEMENT,
             "--done-when",
-            "c (reviewer judgement)",
+            "c " .. board.JUDGEMENT,
         })
         testing.eq(code, 0, out)
         local calls = read(root, "calls")
@@ -9416,11 +9419,11 @@ local function pomb_placed(extra)
         "--checks",
         "dev test",
         "--done-when",
-        "a (reviewer judgement)",
+        "a " .. board.JUDGEMENT,
         "--done-when",
-        "b (reviewer judgement)",
+        "b " .. board.JUDGEMENT,
         "--done-when",
-        "c (reviewer judgement)",
+        "c " .. board.JUDGEMENT,
     }
     for _, word in ipairs(extra) do
         args[#args + 1] = word

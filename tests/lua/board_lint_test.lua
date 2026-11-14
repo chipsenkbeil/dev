@@ -1,4 +1,5 @@
 local testing = require("dev.testing")
+local board = require("dev.board")
 local cmd_board = require("dev.cmd.board")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -11,7 +12,7 @@ local function outcomes(ticked)
     local list = {}
     for i = 1, 3 do
         list[i] =
-            { id = "o" .. i, name = "outcome " .. i .. " (reviewer judgement)", done = i <= ticked }
+            { id = "o" .. i, name = "outcome " .. i .. " " .. board.JUDGEMENT, done = i <= ticked }
     end
     return list
 end
@@ -214,7 +215,7 @@ end)
 testing.test(
     "lint flags an outcome that names no deciding check in Ready and In Progress",
     function()
-        local named = { { id = "o1", name = "x (check: test)", done = false } }
+        local named = { { id = "o1", name = "x " .. board.CHECK_OPEN .. "test)", done = false } }
         local bare = { { id = "o1", name = "bare", done = false } }
         local cards = {
             card(1, support.COLUMN_NAME.READY, { outcomes = bare, claimant = false }),

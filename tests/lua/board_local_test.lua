@@ -1,5 +1,6 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
+local board = require("dev.board")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -1274,11 +1275,11 @@ testing.test("outcome delete refuses from Ready on on a local board", function()
         "--size",
         "1",
         "--done-when",
-        "A works (check: dev test)",
+        "A works " .. board.CHECK_OPEN .. "dev test)",
         "--done-when",
-        "B works (check: dev test)",
+        "B works " .. board.CHECK_OPEN .. "dev test)",
         "--done-when",
-        "C works (check: dev test)",
+        "C works " .. board.CHECK_OPEN .. "dev test)",
         "--change",
         "y",
         "--out-of-scope",
@@ -2529,11 +2530,11 @@ testing.test(
             "--checks",
             "dev test",
             "--done-when",
-            "a (reviewer judgement)",
+            "a " .. board.JUDGEMENT,
             "--done-when",
-            "b (reviewer judgement)",
+            "b " .. board.JUDGEMENT,
             "--done-when",
-            "c (reviewer judgement)",
+            "c " .. board.JUDGEMENT,
         })))
         local out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
         testing.eq(code, 1)
