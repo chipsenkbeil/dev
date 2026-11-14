@@ -85,17 +85,39 @@ It refuses a NAME that is missing, a link, outside the central root or the
 workspace dev runs in, and a folder whose jj `@` is not empty or whose
 `git status --porcelain` is not empty.
 
-It then runs `jj workspace forget NAME` or `git worktree remove PATH` and
-deletes the folder. A plain folder is only deleted.
+It deletes nothing it can rename instead. It first moves the folder,
+ignored files included, to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the
+stamp reads `YYYYMMDDTHHMMSSZ`, and then runs `jj workspace forget NAME` or
+`git worktree prune` from the project's main folder. A plain folder is only
+moved.
+
+The move comes first, so a move that fails leaves the folder and the
+workspace as they were, and a forget or prune that fails moves the folder
+back. A target that already exists fails the move. `ws ls` and `ws prune`
+read only ROOT/<repo>, so they never treat the trash as a workspace.
+
+The trash sits on the same filesystem as the workspaces, so the move is a
+rename. A folder that is a mount of its own is copied and then deleted, and
+fails with the error of `mv`.
+
+Each call then purges the trash of the repo. An entry whose name ends in a
+stamp more than 14 days old is deleted and gets one line, `Purged PATH from
+the trash.` The stamp is compared as text with the stamp of the cutoff, never
+the entry's mtime, and an entry with no stamp is left alone.
+
+The purge runs only when a later removal runs, so an old entry can stay on
+disk until then. Nothing restores an entry. The folder is moved back by hand.
 
 A jj folder whose name `jj workspace list` no longer shows is refused by
 default. jj has no working-copy commit to read there, and the message says jj
-no longer tracks it and that `dev ws rm NAME --forgotten` discards it.
-`--forgotten` skips the clean check and the forget and deletes the folder under
-the same guards. It is refused for a folder jj still lists.
+no longer tracks it and that `dev ws rm NAME --forgotten` moves it to the
+trash. `--forgotten` skips the clean check and the forget and moves the folder
+under the same guards. It is refused for a folder jj still lists.
 
-A plain file directly under ROOT/<repo> is deleted under the same guards, and
-`ws rm` prints `removed PATH`.
+A plain file directly under ROOT/<repo> is moved under the same guards, and
+`ws rm` prints `Moved PATH to TRASH.` followed by the purge lines. The call
+returns the purge lines as a fourth value, so `dev board land` adds them to
+its cleanup lines.
 
 `ws.remove` also takes `opts.missing`, the folder jj or git recorded. A folder
 that is gone skips every folder check, and the call only forgets the jj
@@ -110,7 +132,8 @@ any jj command, reading a workspace snapshots its working copy.
 A jj workspace or git worktree is pruned when its recorded folder is gone,
 through `ws.remove` with `opts.missing`. It is also pruned when its name is the
 short id of a Done card on the project's board and its folder sits where
-`ws new` puts it, through the same `ws.remove` as `ws rm`. The default
+`ws new` puts it, through the same `ws.remove` as `ws rm`, so the folder goes
+to the trash and its line ends with `Moved PATH to TRASH.` The default
 workspace and the main worktree are never listed.
 
 A folder with changes not in a commit, and the workspace dev runs in, are kept

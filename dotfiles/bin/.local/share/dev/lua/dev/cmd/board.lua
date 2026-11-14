@@ -2549,9 +2549,12 @@ function M.clean_up(root, short)
     else
         delete_branch_from(root)
     end
-    local removed, message = ws.remove(root, short, { inside = true })
+    local removed, message, _, purged = ws.remove(root, short, { inside = true })
     if removed then
         add(message)
+        for _, line in ipairs(purged or {}) do
+            add(line)
+        end
         add("The workspace is gone. Run the next command from another folder.")
         if kind == vcs.GIT then
             delete_branch_from(main)

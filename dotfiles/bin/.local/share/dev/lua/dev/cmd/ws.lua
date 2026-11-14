@@ -16,6 +16,9 @@ local STALE_BOOKMARKS = "bookmarks() ~ ::trunk()"
 local HEAD_TEMPLATE = 'commit_id ++ "\\t" ++ description.first_line() ++ "\\n"'
 local BOOKMARK_TEMPLATE = 'if(remote, "", name ++ "\\n")'
 local SHORT_ID = 12
+local TRASH_DIR = ".trash"
+local TRASH_SECS = 14 * 24 * 60 * 60
+local STAMP_FORMAT = "!%Y%m%dT%H%M%SZ"
 
 ---@enum dev.cmd.ws.Step
 local Step = { GONE = "gone", DONE = "done", KEEP = "keep" }
@@ -285,11 +288,14 @@ end
 ---@field backend dev.vcs.Backend? the backend that forgets or removes, nil to do nothing
 ---@field path string the folder the workspace had
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
+---@field moved boolean? false when unset, true when the folder is already in the trash
 
 local function detach(root, name, opts)
     local argv
     if opts.backend == vcs.JJ then
         argv = vcs.with(vcs.base(root, vcs.JJ), "workspace", "forget", name)
+    elseif opts.backend == vcs.GIT and opts.moved then
+        argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "prune")
     elseif opts.backend == vcs.GIT then
         argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "remove", opts.path)
     end
@@ -324,18 +330,61 @@ local function remove_missing(root, name, opts)
     return true, "forgot " .. name
 end
 
----Remove a workspace of the project at `root` and its folder.
+local function purge(dir)
+    local cutoff = os.date(STAMP_FORMAT, os.time() - TRASH_SECS)
+    local purged = {}
+    for _, entry in ipairs(fs.list(dir) or {}) do
+        local stamp = entry:match("^.+%-(%d%d%d%d%d%d%d%dT%d%d%d%d%d%dZ)$")
+        if stamp and stamp < cutoff then
+            local path = fs.join(dir, entry)
+            local removed, err = fs.remove(path, { recursive = true })
+            if removed then
+                purged[#purged + 1] = "Purged " .. path .. " from the trash."
+            else
+                purged[#purged + 1] = sentence("Could not purge " .. path .. ": " .. err)
+            end
+        end
+    end
+    return purged
+end
+
+local function main_root(root, backend)
+    if backend == vcs.JJ then
+        local link = fs.join(root, ".jj", "repo")
+        local target = fs.is_file(link) and fs.read(link) or nil
+        local repo = target and fs.realpath(fs.join(root, ".jj", (target:gsub("%s+$", ""))))
+        return repo and fs.dirname(fs.dirname(repo)) or root
+    elseif backend == vcs.GIT then
+        local argv = vcs.with(
+            vcs.base(root, vcs.GIT),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir"
+        )
+        local out, code = dev_os.capture(argv, { stderr = "null" })
+        if code == 0 then
+            return (out:gsub("\n$", ""):gsub("/%.git$", ""))
+        end
+    end
+    return root
+end
+
+---Remove a workspace of the project at `root` and move its folder to the trash.
 ---
----A jj workspace is forgotten and a git worktree is removed. A message names
----what stopped the removal, and `code` is set when jj or git itself failed.
+---The folder moves to `.trash/<repo>/<name>-<UTC stamp>` under the central
+---workspaces root, ignored files included, before a jj workspace is forgotten
+---or the git worktree record is pruned. If the forget or prune fails the folder moves back.
+---Trash entries whose stamp is over 14 days old are then purged. A message
+---names what stopped the removal, and `code` is set when jj or git itself failed.
 ---With `opts.missing` the folder is already gone, so the jj workspace is
----forgotten or the git worktree record is removed and nothing is deleted.
+---forgotten or the git worktree record is removed and nothing is moved.
 ---@param root string absolute path of the project root dev runs in
 ---@param name string the workspace folder's name
 ---@param opts dev.cmd.ws.RemoveOpts? what to skip and show
 ---@return boolean ok whether the workspace is gone
----@return string? message the removal, or what kept the workspace
+---@return string? message the move, or what kept the workspace
 ---@return integer? code the exit code of a failed jj or git
+---@return string[]? purged one sentence for each trash entry purged
 function M.remove(root, name, opts)
     opts = opts or {}
     if opts.missing then
@@ -380,26 +429,41 @@ function M.remove(root, name, opts)
             return false, why
         end
     end
-    local ok, message, code =
-        detach(root, name, { backend = not gone and backend or nil, path = path, show = opts.show })
-    if not ok then
-        return false, message, code
+    local trash = fs.join(base, TRASH_DIR, repo_name(base, root))
+    local target = fs.join(trash, name .. "-" .. os.date(STAMP_FORMAT))
+    local made, why = fs.mkdir(trash, { parents = true })
+    if not made then
+        return false, why
     end
-    local removed, err = fs.remove(path, { recursive = true })
-    if not removed then
+    local anchor = real == real_root and main_root(root, backend) or root
+    local moved, err = fs.move(path, target)
+    if not moved then
         return false, err
     end
-    return true, "removed " .. path
+    local ok, message, code = detach(anchor, name, {
+        backend = not gone and backend or nil,
+        path = path,
+        show = opts.show,
+        moved = true,
+    })
+    if not ok then
+        local back, back_err = fs.move(target, path)
+        if not back then
+            message = message .. ". The folder stayed at " .. target .. ": " .. back_err
+        end
+        return false, message, code
+    end
+    return true, "Moved " .. path .. " to " .. target .. ".", nil, purge(trash)
 end
 
 ---Remove a workspace of the current project and its folder.
 ---
 ---Only a folder directly under ROOT/<repo> is removed, never a link and never
----the workspace the command runs in. A jj workspace is forgotten, a git
----worktree is removed, and a folder with changes not in a commit is refused
----and left in place. A jj folder whose workspace jj no longer lists is refused
----unless `--forgotten` is given, which deletes it. A plain file directly under
----ROOT/<repo> is deleted.
+---the workspace the command runs in. The folder moves to the trash, a jj
+---workspace is forgotten, a git worktree record is pruned, and a folder with
+---changes not in a commit is refused and left in place. A jj folder whose
+---workspace jj no longer lists is refused unless `--forgotten` is given, which
+---moves it to the trash. A plain file directly under ROOT/<repo> is moved.
 ---@param ctx dev.Ctx the verb's context
 ---@return integer code the exit code
 M.handlers["ws rm"] = function(ctx)
@@ -412,7 +476,7 @@ M.handlers["ws rm"] = function(ctx)
         end
     end
     local name = parse(ctx)
-    local ok, message, code = M.remove(ctx.root, name, {
+    local ok, message, code, purged = M.remove(ctx.root, name, {
         forgotten = discard,
         show = function(argv)
             verb.show(ctx, argv)
@@ -425,6 +489,9 @@ M.handlers["ws rm"] = function(ctx)
         verb.die(sentence(message))
     end
     print(message)
+    for _, line in ipairs(purged or {}) do
+        verb.say(line)
+    end
     return 0
 end
 
@@ -527,7 +594,7 @@ local function prune_workspaces(ctx, steps, opts)
     local pruned, kept, failure = 0, 0, nil
     local freed = {}
     for _, step in ipairs(steps) do
-        local ok, message
+        local ok, message, purged
         if step.kind == Step.KEEP then
             ok, message = false, step.note
         elseif opts.dry then
@@ -539,7 +606,7 @@ local function prune_workspaces(ctx, steps, opts)
             end
         else
             local code
-            ok, message, code = M.remove(ctx.root, step.name, {
+            ok, message, code, purged = M.remove(ctx.root, step.name, {
                 missing = step.kind == Step.GONE and step.path or nil,
                 show = function(argv)
                     verb.show(ctx, argv)
@@ -552,7 +619,14 @@ local function prune_workspaces(ctx, steps, opts)
             if opts.dry then
                 freed[#freed + 1] = step.name
             end
-            verb.say(workspace_line(label, step, { verb = opts.dry and future or past }))
+            local line = workspace_line(label, step, { verb = opts.dry and future or past })
+            if step.kind == Step.DONE and not opts.dry then
+                line = line .. " " .. message
+            end
+            verb.say(line)
+            for _, purge_line in ipairs(purged or {}) do
+                verb.say(purge_line)
+            end
         else
             kept = kept + 1
             verb.say(string.format("Kept %s %s. %s", label, step.name, sentence(message)))

@@ -256,8 +256,6 @@ case "$*" in
     *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
 esac
 echo "git $*" >> "$LOG"
-for last; do :; done
-rm -rf "$last"
 ]]
 
 local function rm_setup(kind)
@@ -300,12 +298,88 @@ testing.test("ls takes no arguments", function()
     testing.eq(out, "dev ws ls: takes no arguments, got x\n")
 end)
 
-testing.test("rm forgets a jj workspace and deletes its folder", function()
+local function trash_dir(env, root)
+    return env.env.DEV_WS_ROOT .. "/.trash/" .. fs.basename(root)
+end
+
+local function trashed(env, root, name)
+    local found = {}
+    for _, entry in ipairs(fs.list(trash_dir(env, root)) or {}) do
+        if entry:match("^" .. name .. "%-%d%d%d%d%d%d%d%dT%d%d%d%d%d%dZ$") then
+            found[#found + 1] = entry
+        end
+    end
+    testing.eq(#found, 1)
+    return trash_dir(env, root) .. "/" .. found[1]
+end
+
+local function stamp_ago(days)
+    return os.date("!%Y%m%dT%H%M%SZ", os.time() - days * 24 * 60 * 60)
+end
+
+testing.test("rm moves a jj folder to the trash with its ignored files", function()
     local root, path, env, log = rm_setup("jj")
+    assert(fs.write(path .. "/.env", "secret"))
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
     testing.eq(code, 0)
-    testing.eq(out, "removed " .. path .. "\n")
+    local target = trashed(env, root, "feat")
+    testing.eq(out, "Moved " .. path .. " to " .. target .. ".\n")
     testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget feat\n")
+    testing.eq(fs.exists(path), false)
+    testing.eq(fs.read(target .. "/.env"), "secret")
+end)
+
+testing.test("rm moves a git folder to the trash with its ignored files", function()
+    local root, path, env, log = rm_setup("git")
+    assert(fs.write(path .. "/.env", "secret"))
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 0)
+    local target = trashed(env, root, "feat")
+    testing.eq(out, "Moved " .. path .. " to " .. target .. ".\n")
+    testing.eq(fs.read(log), "git -C " .. root .. " worktree prune\n")
+    testing.eq(fs.exists(path), false)
+    testing.eq(fs.read(target .. "/.env"), "secret")
+end)
+
+testing.test("rm purges trash entries older than 14 days and keeps newer ones", function()
+    local root, path, env = rm_setup("jj")
+    local dir = trash_dir(env, root)
+    local old = dir .. "/old-" .. stamp_ago(15)
+    local recent = dir .. "/recent-" .. stamp_ago(13)
+    local unstamped = dir .. "/notes"
+    for _, entry in ipairs({ old, recent, unstamped }) do
+        assert(fs.mkdir(entry, { parents = true }))
+        assert(fs.write(entry .. "/file", "x"))
+    end
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 0)
+    local target = trashed(env, root, "feat")
+    testing.eq(
+        out,
+        "Moved " .. path .. " to " .. target .. ".\nPurged " .. old .. " from the trash.\n"
+    )
+    testing.eq(fs.exists(old), false)
+    testing.eq(fs.exists(recent .. "/file"), true)
+    testing.eq(fs.exists(unstamped .. "/file"), true)
+end)
+
+testing.test("rm puts a folder back when the forget fails", function()
+    local root, path, env = rm_setup("jj")
+    env.env.FAIL = "1"
+    stub(root, "jj", RM_JJ_STUB .. 'if [ -n "$FAIL" ]; then exit 3; fi\n')
+    local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 3)
+    testing.eq(fs.exists(path .. "/file"), true)
+    testing.eq(#fs.list(trash_dir(env, root)), 0)
+end)
+
+testing.test("ls does not list the trash", function()
+    local root, path, env = rm_setup("none")
+    local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 0)
+    testing.eq(fs.exists(trashed(env, root, "feat")), true)
+    local out = support.dev(root, { "ws", "ls" }, env)
+    testing.eq(out, "")
     testing.eq(fs.exists(path), false)
 end)
 
@@ -324,13 +398,13 @@ testing.test("ws rm refuses a forgotten folder without --forgotten", function()
     testing.eq(fs.exists(log), false)
 end)
 
-testing.test("ws rm --forgotten removes a forgotten folder", function()
+testing.test("ws rm --forgotten moves a forgotten folder to the trash", function()
     local root, path, env, log = rm_setup("jj")
     env.env.WORKSPACES = "default"
     env.env.LOG_CODE = "1"
     local out, code = support.dev(root, { "ws", "rm", "feat", "--forgotten" }, env)
     testing.eq(code, 0)
-    testing.eq(out, "removed " .. path .. "\n")
+    testing.eq(out, "Moved " .. path .. " to " .. trashed(env, root, "feat") .. ".\n")
     testing.eq(fs.exists(log), false)
     testing.eq(fs.exists(path), false)
 end)
@@ -355,13 +429,13 @@ testing.test("ws rm --forgotten refuses a git worktree", function()
     testing.eq(fs.exists(log), false)
 end)
 
-testing.test("ws rm removes a stray file", function()
+testing.test("ws rm moves a stray file to the trash", function()
     local root, path, env, log = rm_setup("jj")
     local stray = fs.dirname(path) .. "/check.log"
     assert(fs.write(stray, "x"))
     local out, code = support.dev(root, { "ws", "rm", "check.log" }, env)
     testing.eq(code, 0)
-    testing.eq(out, "removed " .. stray .. "\n")
+    testing.eq(out, "Moved " .. stray .. " to " .. trashed(env, root, "check.log") .. ".\n")
     testing.eq(fs.exists(stray), false)
     testing.eq(fs.exists(log), false)
     testing.eq(fs.is_dir(path), true)
@@ -377,20 +451,11 @@ testing.test("ws rm still refuses a folder with uncommitted changes", function()
     testing.eq(fs.exists(log), false)
 end)
 
-testing.test("rm removes a git worktree and its folder", function()
-    local root, path, env, log = rm_setup("git")
-    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
-    testing.eq(code, 0)
-    testing.eq(out, "removed " .. path .. "\n")
-    testing.eq(fs.read(log), "git -C " .. root .. " worktree remove " .. path .. "\n")
-    testing.eq(fs.exists(path), false)
-end)
-
-testing.test("rm deletes a plain folder", function()
+testing.test("rm moves a plain folder to the trash", function()
     local root, path, env, log = rm_setup("none")
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
     testing.eq(code, 0)
-    testing.eq(out, "removed " .. path .. "\n")
+    testing.eq(out, "Moved " .. path .. " to " .. trashed(env, root, "feat") .. ".\n")
     testing.eq(fs.exists(path), false)
     testing.eq(fs.exists(log), false)
 end)
@@ -548,8 +613,6 @@ case "$*" in
 esac
 echo "git $*" >> "$LOG"
 if [ -n "$FAIL" ]; then exit 3; fi
-for last; do :; done
-rm -rf "$last"
 ]]
 local function seed_board(root, env, cards)
     assert(
@@ -650,7 +713,13 @@ testing.test("prune forgets a jj workspace named for a done card", function()
     testing.eq(
         out,
         lines(
-            "Forgot workspace " .. DONE_ID .. ". Its card is done.",
+            "Forgot workspace "
+                .. DONE_ID
+                .. ". Its card is done. Moved "
+                .. done
+                .. " to "
+                .. trashed(env, root, DONE_ID)
+                .. ".",
             "Pruned 1 workspace and 0 heads. Left 0 items alone."
         )
     )
@@ -883,7 +952,13 @@ testing.test("prune removes git worktrees whose folder is gone or named for a do
         out,
         lines(
             "Removed worktree gone1. Its folder " .. gone .. " is gone.",
-            "Removed worktree " .. DONE_ID .. ". Its card is done.",
+            "Removed worktree "
+                .. DONE_ID
+                .. ". Its card is done. Moved "
+                .. done
+                .. " to "
+                .. trashed(env, root, DONE_ID)
+                .. ".",
             "Git keeps no empty heads, so only worktrees are pruned.",
             "Pruned 2 worktrees and 0 heads. Left 0 items alone."
         )
@@ -892,7 +967,7 @@ testing.test("prune removes git worktrees whose folder is gone or named for a do
         fs.read(log),
         lines(
             "git -C " .. root .. " worktree remove " .. gone,
-            "git -C " .. root .. " worktree remove " .. done
+            "git -C " .. root .. " worktree prune"
         )
     )
     testing.eq(fs.exists(done), false)

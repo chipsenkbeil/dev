@@ -94,8 +94,8 @@ functions in its doc comments.
   `capture_timed`), `which`, `exec`, `getuid`, `isatty`, `quote`, and
   `on_exit(fn)` for a cleanup in place of a bash `trap` on `EXIT`
 - `dev.fs`: `exists`, `is_dir`, `is_file`, `is_link`, `is_exec`, `read`,
-  `write`, `mkdir`, `remove`, `list`, `stat`, `realpath`, `readlink`, `mktemp`,
-  `symlink`, `join`, `dirname`, `basename`
+  `write`, `mkdir`, `remove`, `move`, `list`, `stat`, `realpath`,
+  `readlink`, `mktemp`, `symlink`, `join`, `dirname`, `basename`
 - `dev.json`: `decode` and `encode`
 - `dev.toml`: `parse`
 - `dev.config`: `get(root, "a.b")` reads `~/.config/dev/config.toml` and then

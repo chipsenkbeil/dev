@@ -2689,6 +2689,8 @@ Cleanup:
 
 After the move, `land` deletes the bookmark named for the card, then runs the
 removal behind `dev ws rm` on the card's workspace, which is the one it runs in.
+That removal moves the folder to the trash under the workspaces root, so a
+landed card's workspace stays recoverable for at least 14 days.
 Cleanup never changes the exit code or the card's column.
 
 - A shell left inside the workspace sees dev exit 1 with the deleted working

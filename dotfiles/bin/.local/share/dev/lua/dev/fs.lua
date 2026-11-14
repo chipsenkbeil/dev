@@ -118,6 +118,20 @@ function M.remove(path, opts)
     return try(opts and opts.recursive and { "rm", "-rf", "--", path } or { "rm", "--", path })
 end
 
+---Move a file, link or directory to a path that does not exist yet.
+---
+---A move across filesystems copies and then deletes, so it can fail part way.
+---@param from string path to move
+---@param to string new path, whose parent must exist
+---@return true? ok true on success
+---@return string? message why it failed
+function M.move(from, to)
+    if M.exists(to) or M.is_link(to) then
+        return nil, to .. " already exists"
+    end
+    return try({ "mv", "--", from, to })
+end
+
 ---List the names in a directory.
 ---@param dir string directory to list
 ---@return string[]? names sorted names without the directory, or nil on failure
