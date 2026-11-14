@@ -114,8 +114,9 @@ short id of a Done card on the project's board and its folder sits where
 workspace and the main worktree are never listed.
 
 A folder with changes not in a commit, and the workspace dev runs in, are kept
-and each gets a `Kept` line. Ignored files do not count as changes, as with
-`ws rm`. A project with no board, or a board that cannot be read, skips the
+and each gets a `Kept` line. A folder that jj or git cannot read is kept too,
+and its line ends with the first line of their error. Ignored files do not
+count as changes, as with `ws rm`. A project with no board, or a board that cannot be read, skips the
 card test and says so. A board setting that is invalid stops prune with exit 1
 before any change. `dev.cmd.board.finished(root)` lists the Done short ids.
 

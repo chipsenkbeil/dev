@@ -181,6 +181,15 @@ M.handlers["ws new"] = function(ctx)
     return 0
 end
 
+local function first_line(text)
+    for line in text:gmatch("[^\n]+") do
+        if line:find("%S") then
+            return line
+        end
+    end
+    return nil
+end
+
 ---Check that a workspace folder holds nothing outside a commit.
 ---@private
 ---@param backend dev.vcs.Backend? the backend of the workspace folder
@@ -207,7 +216,12 @@ function M.__clean(backend, path)
     end
     local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
-        return false, "cannot read the state of " .. path
+        local why = "cannot read the state of " .. path
+        local line = first_line(out)
+        if line then
+            why = why .. ": " .. line
+        end
+        return false, why
     end
     if out ~= "" then
         return false, path .. " holds changes not in a commit"

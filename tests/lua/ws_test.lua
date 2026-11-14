@@ -525,7 +525,9 @@ case "$*" in
             if [ "$name" = "$last" ]; then echo "$path"; fi
         done
         exit 0 ;;
-    *"log -r @ "*) printf '%s' "$WARN" >&2; printf '%s' "$DIRTY"; exit 0 ;;
+    *"log -r @ "*)
+        if [ -n "$ERROR" ]; then printf '%s\n' "$ERROR" >&2; exit 1; fi
+        printf '%s' "$WARN" >&2; printf '%s' "$DIRTY"; exit 0 ;;
     *"& empty()"*) printf '%s' "$EMPTY"; exit 0 ;;
     *"~ empty()"*) printf '%s' "$STRAYS"; exit 0 ;;
     *"bookmark list"*) printf '%s' "$BOOKMARKS"; exit 0 ;;
@@ -730,6 +732,28 @@ testing.test("prune keeps a folder when jj refuses to snapshot a file", function
         )
     )
     testing.eq(fs.exists(big .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("prune keeps an unreadable jj workspace and names its error", function()
+    local root, dir, env, log = prune_setup("jj")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local broken = folder(dir, DONE_ID)
+    env.env.WORKSPACES = table.concat({ "default", DONE_ID }, "\n")
+    env.env.ROOTS = DONE_ID .. " " .. broken
+    env.env.ERROR = table.concat({
+        "Error: The working copy is stale",
+        "Hint: Run `jj workspace update-stale` to update it",
+    }, "\n")
+    local out, code = support.dev(root, { "ws", "prune" }, env)
+    testing.eq(code, 0, out)
+    local kept = "Kept workspace "
+        .. DONE_ID
+        .. ". Cannot read the state of "
+        .. broken
+        .. ": Error: The working copy is stale."
+    testing.eq(out, lines(kept, "Pruned 0 workspaces and 0 heads. Left 1 item alone."))
+    testing.eq(fs.exists(broken .. "/file"), true)
     testing.eq(fs.exists(log), false)
 end)
 
