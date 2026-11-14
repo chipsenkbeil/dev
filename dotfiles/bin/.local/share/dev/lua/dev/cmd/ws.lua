@@ -311,23 +311,37 @@ local function detach(root, name, opts)
     return true
 end
 
+---@class dev.cmd.ws.RemoveResult
+---@field ok boolean whether the workspace is gone
+---@field message string the move, or what kept the workspace
+---@field code integer? the exit code of a failed jj or git, nil when a check refused
+---@field purged string[] one sentence for each trash entry purged
+
+---Build the result of a removal that stopped.
+---@param message string
+---@param code integer?
+---@return dev.cmd.ws.RemoveResult
+local function refused(message, code)
+    return { ok = false, message = message, code = code, purged = {} }
+end
+
 local function remove_missing(root, name, opts)
     local backend = vcs.backend(root)
     if backend ~= vcs.JJ and backend ~= vcs.GIT then
-        return false, root .. " is neither a jj nor a git project"
+        return refused(root .. " is neither a jj nor a git project")
     end
     if fs.exists(opts.missing) then
-        return false, opts.missing .. " still exists"
+        return refused(opts.missing .. " still exists")
     end
     if backend == vcs.JJ and (name == "default" or forgotten(root, name)) then
-        return false, name .. " is not a jj workspace that can be forgotten"
+        return refused(name .. " is not a jj workspace that can be forgotten")
     end
     local ok, message, code =
         detach(root, name, { backend = backend, path = opts.missing, show = opts.show })
     if not ok then
-        return false, message, code
+        return refused(message, code)
     end
-    return true, "forgot " .. name
+    return { ok = true, message = "forgot " .. name, purged = {} }
 end
 
 local function purge(dir)
@@ -397,6 +411,47 @@ local function prune_blocker(anchor, paths, opts)
     end
 end
 
+---@class dev.cmd.ws.TrashOpts
+---@field trash string the trash folder of the project
+---@field backend dev.vcs.Backend? the backend that forgets or prunes, nil to do nothing
+---@field path string the folder the workspace has
+---@field show fun(argv: string[])? nil when unset, called with the command before it runs
+
+---Move a workspace folder to the trash and detach its record.
+---@param anchor string
+---@param name string
+---@param opts dev.cmd.ws.TrashOpts
+---@return dev.cmd.ws.RemoveResult
+local function move_to_trash(anchor, name, opts)
+    local target = fs.join(opts.trash, name .. "-" .. os.date(STAMP_FORMAT))
+    local made, why = fs.mkdir(opts.trash, { parents = true })
+    if not made then
+        return refused(why)
+    end
+    local moved, err = fs.move(opts.path, target)
+    if not moved then
+        return refused(err)
+    end
+    local ok, message, code = detach(anchor, name, {
+        backend = opts.backend,
+        path = opts.path,
+        show = opts.show,
+        moved = true,
+    })
+    if not ok then
+        local back, back_err = fs.move(target, opts.path)
+        if not back then
+            message = message .. ". The folder stayed at " .. target .. ": " .. back_err
+        end
+        return refused(message, code)
+    end
+    return {
+        ok = true,
+        message = "Moved " .. opts.path .. " to " .. target .. ".",
+        purged = purge(opts.trash),
+    }
+end
+
 ---Remove a workspace of the project at `root` and move its folder to the trash.
 ---
 ---The folder moves to `.trash/<repo>/<name>-<UTC stamp>` under the central
@@ -412,10 +467,7 @@ end
 ---@param root string absolute path of the project root dev runs in
 ---@param name string the workspace folder's name
 ---@param opts dev.cmd.ws.RemoveOpts? what to skip and show
----@return boolean ok whether the workspace is gone
----@return string? message the move, or what kept the workspace
----@return integer? code the exit code of a failed jj or git
----@return string[]? purged one sentence for each trash entry purged
+---@return dev.cmd.ws.RemoveResult result
 function M.remove(root, name, opts)
     opts = opts or {}
     if opts.missing then
@@ -429,68 +481,53 @@ function M.remove(root, name, opts)
     local stray = fs.is_file(path)
     if not fs.is_dir(path) and not stray then
         if opts.inside and real_base and real_root and not under(real_root, real_base) then
-            return false, root .. " is outside " .. base
+            return refused(root .. " is outside " .. base)
         end
-        return false, path .. " is not a workspace folder"
+        return refused(path .. " is not a workspace folder")
     end
     if fs.is_link(path) or real == nil or real_base == nil then
-        return false, path .. " is a link, not removed"
+        return refused(path .. " is a link, not removed")
     end
     if not under(real, real_base) then
-        return false, path .. " is outside " .. base
+        return refused(path .. " is outside " .. base)
     end
     if real == real_root and not opts.inside then
-        return false, path .. " is the workspace dev runs in"
+        return refused(path .. " is the workspace dev runs in")
     end
     local backend = not stray and vcs.backend(path) or nil
     local gone = backend == vcs.JJ and forgotten(root, name)
     if gone and not opts.forgotten then
-        return false,
+        return refused(
             path
                 .. " is a jj folder jj no longer tracks. Run dev ws rm "
                 .. name
                 .. " --forgotten to discard it."
+        )
     end
     if opts.forgotten and not gone then
-        return false, path .. " is not a jj folder jj no longer lists. --forgotten does not apply."
+        return refused(
+            path .. " is not a jj folder jj no longer lists. --forgotten does not apply."
+        )
     end
     if not gone then
         local clean, why = M.__clean(backend, path)
         if not clean then
-            return false, why
+            return refused(why)
         end
     end
-    local trash = fs.join(base, TRASH_DIR, repo_name(base, root))
-    local target = fs.join(trash, name .. "-" .. os.date(STAMP_FORMAT))
     local anchor = real == real_root and main_root(root, backend) or root
     if backend == vcs.GIT then
         local blocked = prune_blocker(anchor, { path, real }, {})
         if blocked then
-            return false, blocked
+            return refused(blocked)
         end
     end
-    local made, why = fs.mkdir(trash, { parents = true })
-    if not made then
-        return false, why
-    end
-    local moved, err = fs.move(path, target)
-    if not moved then
-        return false, err
-    end
-    local ok, message, code = detach(anchor, name, {
+    return move_to_trash(anchor, name, {
+        trash = fs.join(base, TRASH_DIR, repo_name(base, root)),
         backend = not gone and backend or nil,
         path = path,
         show = opts.show,
-        moved = true,
     })
-    if not ok then
-        local back, back_err = fs.move(target, path)
-        if not back then
-            message = message .. ". The folder stayed at " .. target .. ": " .. back_err
-        end
-        return false, message, code
-    end
-    return true, "Moved " .. path .. " to " .. target .. ".", nil, purge(trash)
 end
 
 ---Remove a workspace of the current project and its folder.
@@ -513,20 +550,20 @@ M.handlers["ws rm"] = function(ctx)
         end
     end
     local name = parse(ctx)
-    local ok, message, code, purged = M.remove(ctx.root, name, {
+    local result = M.remove(ctx.root, name, {
         forgotten = discard,
         show = function(argv)
             verb.show(ctx, argv)
         end,
     })
-    if not ok then
-        if code then
-            return code
+    if not result.ok then
+        if result.code then
+            return result.code
         end
-        verb.die(sentence(message))
+        verb.die(sentence(result.message))
     end
-    print(message)
-    for _, line in ipairs(purged or {}) do
+    print(result.message)
+    for _, line in ipairs(result.purged) do
         verb.say(line)
     end
     return 0
@@ -660,14 +697,14 @@ local function prune_workspaces(ctx, steps, opts)
                 end
             end
         else
-            local code
-            ok, message, code, purged = M.remove(ctx.root, step.name, {
+            local result = M.remove(ctx.root, step.name, {
                 missing = step.kind == Step.GONE and step.path or nil,
                 show = function(argv)
                     verb.show(ctx, argv)
                 end,
             })
-            failure = failure or code
+            ok, message, purged = result.ok, result.message, result.purged
+            failure = failure or result.code
         end
         if ok then
             pruned = pruned + 1

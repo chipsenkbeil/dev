@@ -77,9 +77,10 @@ Otherwise it works by project kind:
 The path is printed. `ws ls` prints each folder under ROOT/<repo> as its name,
 a tab and its path.
 
-`ws rm NAME` calls `ws.remove(root, name, opts)`. It returns ok and a message
-instead of dying, and `opts.inside` skips only the refusal of the workspace
-dev runs in, which `dev board land` uses when it removes the card's workspace.
+`ws rm NAME` calls `ws.remove(root, name, opts)`. It returns a result table with
+`ok`, `message`, `code` and `purged` instead of dying, and `opts.inside` skips
+only the refusal of the workspace dev runs in, which `dev board land` uses when
+it removes the card's workspace.
 
 It refuses a NAME that is missing, a link, outside the central root or the
 workspace dev runs in, and a folder whose jj `@` is not empty or whose `git
