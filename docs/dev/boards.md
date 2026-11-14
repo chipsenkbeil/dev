@@ -1238,10 +1238,14 @@ comments it cannot read, gets a `could not` line after the section.
 An orchestrator can run it at startup and re-plan, escalate or ice each card it
 lists, and scope the Icebox ones.
 
-`lint [--strict]` reports every card that breaks the board's rules. The guards
-in `move`, `add` and `discard` stop a bad write only when it goes through
+`lint [CARD] [--strict]` reports every card that breaks the board's rules. The
+guards in `move`, `add` and `discard` stop a bad write only when it goes through
 `dev board`, and lint also sees the cards written in the Pomb UI, by another
 client or before a guard existed.
+
+With a `CARD` id prefix, lint reports only that card, so a checks row of
+`dev board lint CARD` fails only for its own card. A prefix that matches no card
+or more than one is exit 1.
 
 It makes no write of its own and calls no model. Like every board command on a
 Pomb board, it first replays any queued changes. Each finding is one line of id
@@ -2109,8 +2113,9 @@ Exit codes:
 
 ### lint
 
-`dev board lint [--strict]` reads every card (`backend:cards`) and prints one
-line per broken rule.
+`dev board lint [CARD] [--strict]` reads every card (`backend:cards`) and prints
+one line per broken rule. With `CARD`, it resolves the prefix with
+`board.resolve` and lints only that card.
 
 - Each line holds the id prefix, column and rule, aligned, in board order.
 - A finding on a `needs:human` card ends in `(owner)`, unless it is
@@ -2119,7 +2124,8 @@ line per broken rule.
   owner's).
 - It exits 1 only when a finding without the mark is left.
 - A clean board prints `no findings` and exits 0.
-- A flag other than `--strict` is exit 2.
+- A flag other than `--strict`, or a second card, is exit 2. A `CARD` that
+  matches no card or several is exit 1.
 - `--strict` is also on when `board.lint.strict` is `true` in the config
   (`config.get`, project over user file). A non-boolean value is exit 1.
 - A read that fails is exit 1 with the message.

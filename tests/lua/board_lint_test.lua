@@ -285,8 +285,33 @@ testing.test("lint reads comments only for a Blocked card and writes nothing", f
     testing.eq(fake.calls, { "family", "family", "comments", "links", "family", "family" })
 end)
 
-testing.test("lint refuses an argument", function()
-    testing.eq(cmd_board.run("lint", { "extra" }, backend({})).code, 2)
+testing.test("lint refuses a second card and an unknown flag", function()
+    testing.eq(cmd_board.run("lint", { "00000001", "00000002" }, backend({})).code, 2)
+    testing.eq(cmd_board.run("lint", { "--loud" }, backend({})).code, 2)
+end)
+
+testing.test("lint with a card reports only that card", function()
+    local cards = {
+        card(1, support.COLUMN_NAME.READY, { checks = {} }),
+        card(2, support.COLUMN_NAME.READY),
+        card(3, support.COLUMN_NAME.READY, { checks = {} }),
+    }
+    local result = cmd_board.run("lint", { "00000002" }, backend(cards))
+    testing.eq(result.output, "no findings")
+    testing.eq(result.code, nil)
+    result = cmd_board.run("lint", { "00000003", "--strict" }, backend(cards))
+    testing.eq(result.code, 1)
+    testing.eq(
+        findings(result.output),
+        { "00000003 " .. support.COLUMN_NAME.READY .. " no checks row" }
+    )
+end)
+
+testing.test("lint with a card that matches none fails", function()
+    local result =
+        cmd_board.run("lint", { "00000009" }, backend({ card(1, support.COLUMN_NAME.READY) }))
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("no card starts with", 1, true), result.message)
 end)
 
 testing.test("lint fails when a card's comments cannot be read", function()

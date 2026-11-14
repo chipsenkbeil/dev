@@ -3905,16 +3905,24 @@ function commands.stale(backend, args, now)
 end
 
 function commands.lint(backend, args)
-    local strict = false
-    for _, arg in ipairs(args) do
-        if arg ~= STRICT_FLAG then
-            return usage("takes only " .. STRICT_FLAG .. ", got " .. arg)
-        end
-        strict = true
+    local flags, words = parse(args, { [STRICT_FLAG] = SWITCH })
+    if not flags then
+        return words
     end
+    if #words > 1 then
+        return usage("Takes at most one card.")
+    end
+    local strict = flags[STRICT_FLAG] == true
     local cards, message = backend:cards()
     if not cards then
         return failure(message)
+    end
+    if words[1] then
+        local only, why = board.resolve(cards, words[1])
+        if not only then
+            return failure(why)
+        end
+        cards = { only }
     end
     local rows = {}
     local fixable = false

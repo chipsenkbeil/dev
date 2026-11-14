@@ -534,8 +534,8 @@ return {
         words = { "board", "lint" },
         flags = "--strict",
         handler = "lua",
-        usage = "dev board lint [--strict]",
-        desc = "Report every card that breaks the board's rules",
+        usage = "dev board lint [CARD] [--strict]",
+        desc = "Report every card, or just CARD, that breaks the board's rules",
     },
     {
         words = { "board", "take" },
