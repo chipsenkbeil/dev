@@ -528,8 +528,12 @@ case "$*" in
     *"log -r @ "*)
         if [ -n "$ERROR" ]; then printf '%s\n' "$ERROR" >&2; exit 1; fi
         printf '%s' "$WARN" >&2; printf '%s' "$DIRTY"; exit 0 ;;
-    *"& empty()"*) printf '%s' "$EMPTY"; exit 0 ;;
-    *"~ empty()"*) printf '%s' "$STRAYS"; exit 0 ;;
+    *"& empty()"*)
+        case "$*" in *'~ "gone1"@'*) printf '%s' "$FREED_EMPTY"; exit 0 ;; esac
+        printf '%s' "$EMPTY"; exit 0 ;;
+    *"~ empty()"*)
+        case "$*" in *'~ "gone1"@'*) printf '%s' "$FREED_STRAYS"; exit 0 ;; esac
+        printf '%s' "$STRAYS"; exit 0 ;;
     *"bookmark list"*) printf '%s' "$BOOKMARKS"; exit 0 ;;
 esac
 echo "jj $*" >> "$LOG"
@@ -600,6 +604,8 @@ local function prune_setup(kind)
     env.env.DIRTY = ""
     env.env.EMPTY = ""
     env.env.STRAYS = ""
+    env.env.FREED_EMPTY = ""
+    env.env.FREED_STRAYS = ""
     env.env.BOOKMARKS = ""
     return root, dir, env, log
 end
@@ -788,6 +794,7 @@ testing.test("prune dry-run changes nothing", function()
     env.env.WORKSPACES = table.concat({ "default", "gone1", DONE_ID }, "\n")
     env.env.ROOTS = table.concat({ "gone1 " .. dir .. "gone1", DONE_ID .. " " .. done }, "\n")
     env.env.EMPTY = ("e"):rep(40) .. "\t\n"
+    env.env.FREED_EMPTY = env.env.EMPTY
     env.env.BOOKMARKS = lines("old")
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
     testing.eq(code, 0, out)
@@ -803,6 +810,63 @@ testing.test("prune dry-run changes nothing", function()
     )
     testing.eq(fs.exists(log), false)
     testing.eq(fs.exists(done .. "/file"), true)
+end)
+
+testing.test("prune dry-run abandons the empty head a forgotten jj workspace frees", function()
+    local root, dir, env, log = prune_setup("jj")
+    env.env.WORKSPACES = table.concat({ "default", "gone1" }, "\n")
+    env.env.ROOTS = "gone1 " .. dir .. "gone1"
+    env.env.FREED_EMPTY = ("f"):rep(40) .. "\t\n"
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Skipped the card test. This project has no board.",
+            "Would forget workspace gone1. Its folder " .. dir .. "gone1 is gone.",
+            "Would abandon empty head ffffffffffff.",
+            "Would prune 1 workspace and 1 head. Left 0 items alone."
+        )
+    )
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("prune dry-run lists the non-empty head a forgotten jj workspace frees", function()
+    local root, dir, env, log = prune_setup("jj")
+    env.env.WORKSPACES = table.concat({ "default", "gone1" }, "\n")
+    env.env.ROOTS = "gone1 " .. dir .. "gone1"
+    env.env.FREED_STRAYS = ("d"):rep(40) .. "\tchore: bump\n"
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Skipped the card test. This project has no board.",
+            "Would forget workspace gone1. Its folder " .. dir .. "gone1 is gone.",
+            "Left non-empty head dddddddddddd (chore: bump) alone. Nothing holds it.",
+            "Would prune 1 workspace and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.exists(log), false)
+end)
+
+testing.test("prune dry-run holds the heads of a jj workspace it does not forget", function()
+    local root, dir, env, log = prune_setup("jj")
+    local path = folder(dir, "gone1")
+    env.env.WORKSPACES = table.concat({ "default", "gone1" }, "\n")
+    env.env.ROOTS = "gone1 " .. path
+    env.env.FREED_EMPTY = ("f"):rep(40) .. "\t\n"
+    env.env.FREED_STRAYS = ("d"):rep(40) .. "\tchore: bump\n"
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Skipped the card test. This project has no board.",
+            "Would prune 0 workspaces and 0 heads. Left 0 items alone."
+        )
+    )
+    testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune removes git worktrees whose folder is gone or named for a done card", function()

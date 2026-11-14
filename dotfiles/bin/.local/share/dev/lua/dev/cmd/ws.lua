@@ -9,9 +9,9 @@ local verb = require("dev.verb")
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `ws` subcommands
 local M = { handlers = {} }
 
-local HELD_BY_REF = " ~ working_copies() ~ bookmarks() ~ remote_bookmarks() ~ tags()"
-local EMPTY_HEADS = "heads(mutable()) & empty()" .. HELD_BY_REF
-local STRAY_HEADS = "heads(mutable()) ~ empty()" .. HELD_BY_REF
+local EMPTY_HEADS = "heads(mutable()) & empty()"
+local STRAY_HEADS = "heads(mutable()) ~ empty()"
+local HELD_BY_REF = " ~ bookmarks() ~ remote_bookmarks() ~ tags()"
 local STALE_BOOKMARKS = "bookmarks() ~ ::trunk()"
 local HEAD_TEMPLATE = 'commit_id ++ "\\t" ++ description.first_line() ++ "\\n"'
 local BOOKMARK_TEMPLATE = 'if(remote, "", name ++ "\\n")'
@@ -525,6 +525,7 @@ local function prune_workspaces(ctx, steps, opts)
     local past = opts.backend == vcs.JJ and "Forgot" or "Removed"
     local future = opts.backend == vcs.JJ and "Would forget" or "Would remove"
     local pruned, kept, failure = 0, 0, nil
+    local freed = {}
     for _, step in ipairs(steps) do
         local ok, message
         if step.kind == Step.KEEP then
@@ -548,13 +549,24 @@ local function prune_workspaces(ctx, steps, opts)
         end
         if ok then
             pruned = pruned + 1
+            if opts.dry then
+                freed[#freed + 1] = step.name
+            end
             verb.say(workspace_line(label, step, { verb = opts.dry and future or past }))
         else
             kept = kept + 1
             verb.say(string.format("Kept %s %s. %s", label, step.name, sentence(message)))
         end
     end
-    return pruned, kept, failure
+    return pruned, kept, failure, freed
+end
+
+local function unheld_heads(heads, freed)
+    local held = "working_copies()"
+    for _, name in ipairs(freed) do
+        held = held .. ' ~ "' .. name:gsub('[\\"]', "\\%0") .. '"@'
+    end
+    return heads .. " ~ (" .. held .. ")" .. HELD_BY_REF
 end
 
 local function jj_heads(root, revset)
@@ -601,9 +613,9 @@ local function abandon_heads(ctx, heads, opts)
     return #heads
 end
 
-local function list_strays(root)
+local function list_strays(root, freed)
     local left = 0
-    for _, head in ipairs(jj_heads(root, STRAY_HEADS)) do
+    for _, head in ipairs(jj_heads(root, unheld_heads(STRAY_HEADS, freed))) do
         verb.say(sentence("Left non-empty head " .. head_text(head) .. " alone. Nothing holds it"))
         left = left + 1
     end
@@ -657,14 +669,16 @@ M.handlers["ws prune"] = function(ctx)
 
     local found = backend == vcs.JJ and jj_workspaces(ctx.root) or git_worktrees(ctx.root)
     local steps = plan_workspaces(ctx.root, found, finished_cards(ctx.root))
-    local pruned, left, failure = prune_workspaces(ctx, steps, { backend = backend, dry = dry })
+    local pruned, left, failure, freed =
+        prune_workspaces(ctx, steps, { backend = backend, dry = dry })
 
     local abandoned = 0
     if backend == vcs.JJ then
         local code
-        abandoned, code = abandon_heads(ctx, jj_heads(ctx.root, EMPTY_HEADS), { dry = dry })
+        local empty = jj_heads(ctx.root, unheld_heads(EMPTY_HEADS, freed))
+        abandoned, code = abandon_heads(ctx, empty, { dry = dry })
         failure = failure or code
-        left = left + list_strays(ctx.root)
+        left = left + list_strays(ctx.root, freed)
     else
         verb.say("Git keeps no empty heads, so only worktrees are pruned.")
     end

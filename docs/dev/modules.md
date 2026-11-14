@@ -126,9 +126,10 @@ line. A jj or git command that only reads state and fails exits 1 at once.
 
 A jj project then abandons every head of `heads(mutable()) & empty()` that no
 working copy, bookmark, remote bookmark or tag holds. It runs after the
-forgets, so the working copy of a forgotten workspace goes too, which a dry run
-cannot count. Only heads go, so a chain of empty commits needs one run per
-commit.
+forgets, so the working copy of a forgotten workspace goes too. A dry run
+leaves the workspaces it would forget out of the held working copies, so it
+lists the same heads a real run does. Only heads go, so a chain of empty
+commits needs one run per commit.
 
 It lists and leaves alone every non-empty head that nothing holds, and every
 bookmark whose commit is not an ancestor of `trunk()`. There is no age
