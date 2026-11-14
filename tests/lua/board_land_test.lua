@@ -39,14 +39,18 @@ for word in "$@"; do
             esac
         fi
         ;;
-    *"- & ::@-"*)
-        if [ -n "$ANCESTOR_FAIL_AT" ] && [ "$word" = "$ANCESTOR_FAIL_AT- & ::@-" ]; then
-            exit 1
+    "heads((::"*"& ::@-")
+        if [ -n "$ANCESTOR_FAIL_AT" ]; then
+            case "$word" in
+            "heads((::$ANCESTOR_FAIL_AT-)"*) exit 1 ;;
+            esac
         fi
         ;;
-    [0-9a-f]*-)
-        if [ -n "$PARENT_FAIL_AT" ] && [ "$word" = "$PARENT_FAIL_AT-" ]; then
-            exit 1
+    "heads((::"*)
+        if [ -n "$PARENT_FAIL_AT" ]; then
+            case "$word" in
+            "heads((::$PARENT_FAIL_AT-)"*) exit 1 ;;
+            esac
         fi
         ;;
     fetch)
@@ -1109,6 +1113,94 @@ if has_jj then
         )
         git(other, "commit", "-q", "--allow-empty", "-m", "moved")
         git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        local before = head(project.root)
+        refused(project, id, { "sits on an unlanded parent" })
+        testing.eq(head(project.root), before)
+        testing.eq(turn_holder(project.home), nil)
+    end)
+
+    local function stack_on_parent(project, parent)
+        jj(project.root, "new", "master", unpack(parent.args))
+        if parent.body then
+            assert(fs.write(project.root .. "/mid.txt", parent.body), "write failed")
+        end
+        jj(project.root, "new", "-m", "feat: child")
+        assert(fs.write(project.root .. "/child.txt", "two\n"), "write failed")
+    end
+
+    ---The parent spec for an empty undescribed commit
+    local EMPTY_PARENT = { args = {} }
+
+    testing.test(
+        "land accepts a change whose parent is an empty undescribed commit on trunk",
+        function()
+            local project = jj_project()
+            stack_on_parent(project, EMPTY_PARENT)
+            local id = verified_card(project)
+            local out, code = dev(
+                project,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
+            testing.eq(code, 0, out)
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+            testing.eq(turn_holder(project.home), nil)
+        end
+    )
+
+    testing.test(
+        "land carries a check across the rebase past an empty undescribed parent",
+        function()
+            local project = jj_project()
+            stack_on_parent(project, EMPTY_PARENT)
+            local id = verified_card(project)
+            local before = head(project.root)
+            local out, code = dev(
+                project,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
+            testing.eq(code, 0, out)
+            testing.ok(head(project.root) ~= before, "the rebase must rewrite the commit")
+            local list = comments(project.home)
+            local last = list[#list]
+            testing.eq(last.kind, KIND_DONE)
+            testing.ok(
+                last.body:find("carried over from commit " .. before:sub(1, 12), 1, true),
+                last.body
+            )
+        end
+    )
+
+    testing.test("land abandons the empty undescribed parent it rebases past", function()
+        local project = jj_project()
+        stack_on_parent(project, EMPTY_PARENT)
+        local id = verified_card(project)
+        local parent = jj(project.root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+        local alive = "::visible_heads() & " .. parent
+        testing.eq(jj(project.root, "log", "-r", alive, "--no-graph", "-T", "commit_id"), parent)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.eq(jj(project.root, "log", "-r", alive, "--no-graph", "-T", "commit_id"), "")
+    end)
+
+    testing.test(
+        "land refuses a change whose parent is an empty commit with a description",
+        function()
+            local project = jj_project()
+            stack_on_parent(project, { args = { "-m", "docs: keep this" } })
+            local id = verified_card(project)
+            local before = head(project.root)
+            refused(project, id, { "sits on an unlanded parent" })
+            testing.eq(head(project.root), before)
+            testing.eq(turn_holder(project.home), nil)
+        end
+    )
+
+    testing.test("land refuses a change whose parent is a non-empty undescribed commit", function()
+        local project = jj_project()
+        stack_on_parent(project, { args = {}, body = "mid\n" })
+        local id = verified_card(project)
         local before = head(project.root)
         refused(project, id, { "sits on an unlanded parent" })
         testing.eq(head(project.root), before)

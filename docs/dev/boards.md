@@ -2532,7 +2532,12 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
 `land` rebases the change onto trunk itself while it holds the turn, so the
 last condition holds unless the rebase failed. The conditions on the reviews and
 the check are then judged at the rebased commit. A change that sits on an
-unlanded parent is refused and not rebased.
+unlanded parent is refused and not rebased. In a jj project an unlanded parent
+that is empty, has no description and is not a merge (the commit `dev ws new`
+leaves under a change built with `jj new`) does not count. `land` abandons
+it, then rebases the change onto trunk. A parent with a description or
+a patch is still refused, and a git project still refuses every unlanded
+parent.
 
 When the newest `dev-check:` record at the commit does not parse and its mode is
 not `expect-fail` (as with one written before rows carried run ids), `land`
@@ -2632,7 +2637,9 @@ Carrying a check and reviews across a rebase:
 - It tries them newest first and carries the records of the first one for which
   all of these hold:
   - the commit's parent is the current trunk
-  - the checked commit sat on one ancestor of that trunk
+  - the checked commit sat on one ancestor of that trunk, where an empty
+    undescribed parent that is not a merge is skipped to the commit below it
+    (jj only)
   - `jj interdiff` between the checked commit and the landing one is empty (in
     a git project, a `git merge-tree` of the two patches that gives the landing
     commit's tree)

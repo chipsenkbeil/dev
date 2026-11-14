@@ -15,6 +15,7 @@ local SHAPE_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ if(description == "
 local COMMIT_TEMPLATE = 'commit_id ++ "\\n"'
 local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local TRUNK_REVSET = "trunk()"
+local BARE_LINK = 'empty() & description(exact:"") & ~merges()'
 local COMMIT_CHARS = 12
 local FETCH_SECONDS = 120
 local FETCH_ATTEMPTS = 2
@@ -413,6 +414,10 @@ local function parent_on_trunk(root)
     return count_lines(parents) == 1 and on_trunk == parents
 end
 
+local function base_revset(commit)
+    return string.format("heads((::%s-) ~ (%s))", commit, BARE_LINK)
+end
+
 local function git_parents(root, rev)
     local out = git_out(root, "rev-list", "--parents", "-n", "1", rev)
     if out == nil then
@@ -502,6 +507,7 @@ end
 ---@return boolean? rebased true when the change moved, false when it already sat on trunk
 ---@return string? problem why trunk could not be read or the rebase failed
 function M.rebase(root)
+    local UNLANDED = "::@- ~ ::trunk()"
     local found, why = forge.resolve(root)
     if not found then
         return nil, "trunk cannot be compared: " .. why
@@ -522,11 +528,41 @@ function M.rebase(root)
         return false
     end
     local stacked = dev_os.capture(
-        jj(root, "log", "-r", "::@- ~ ::trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
+        jj(
+            root,
+            "log",
+            "-r",
+            string.format("(%s) ~ (%s)", UNLANDED, BARE_LINK),
+            "--no-graph",
+            "-T",
+            COMMIT_TEMPLATE
+        ),
         { stderr = "null" }
     )
     if stacked ~= "" then
         return nil, "the change sits on an unlanded parent, so land the parent first"
+    end
+    local bare = jj_out(
+        root,
+        "log",
+        "-r",
+        string.format("(%s) & (%s)", UNLANDED, BARE_LINK),
+        "--no-graph",
+        "-T",
+        COMMIT_TEMPLATE
+    )
+    if bare == nil then
+        return nil, "jj could not read the empty parents of the change."
+    end
+    local ids = {}
+    for id in bare:gmatch("%x+") do
+        ids[#ids + 1] = id
+    end
+    if #ids > 0 then
+        out, code = dev_os.capture(jj(root, "abandon", unpack(ids)), { stderr = "stdout" })
+        if code ~= 0 then
+            return nil, "The empty parent could not be abandoned. " .. out
+        end
     end
     out, code =
         dev_os.capture(jj(root, "rebase", "-r", "@", "-d", "trunk()"), { stderr = "stdout" })
@@ -623,12 +659,13 @@ local function carry_problem(root, state, commit)
             state.change
         )
     end
-    local base = jj_out(root, "log", "-r", commit .. "-", "--no-graph", "-T", COMMIT_TEMPLATE)
+    local base_rev = base_revset(commit)
+    local base = jj_out(root, "log", "-r", base_rev, "--no-graph", "-T", COMMIT_TEMPLATE)
     if base == nil then
         return string.format("jj could not read the parent of the checked commit %s.", label), true
     end
     local ancestor = count_lines(base) == 1
-        and jj_out(root, "log", "-r", commit .. "- & ::@-", "--no-graph", "-T", COMMIT_TEMPLATE)
+        and jj_out(root, "log", "-r", base_rev .. " & ::@-", "--no-graph", "-T", COMMIT_TEMPLATE)
     if ancestor == nil then
         return string.format("jj could not read the ancestor of the checked commit %s", label), true
     end
@@ -936,7 +973,7 @@ function M.recheck_problem(opts)
             opts.root,
             "log",
             "-r",
-            opts.commit .. "- & @-",
+            base_revset(opts.commit) .. " & @-",
             "--no-graph",
             "-T",
             COMMIT_TEMPLATE
