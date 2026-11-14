@@ -1681,6 +1681,27 @@ if has_jj then
         testing.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
     end)
 
+    testing.test("a commit with two passing runs still carries", function()
+        local project = jj_project()
+        trunk_moves(project, { ["shared.txt"] = SHARED })
+        rebase_onto_trunk(project.root)
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        local id = new_card(project)
+        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        local older = reviewed_and_checked({ project = project, id = id })
+        must(dev(project, { "board", "check", id }))
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+        reviewed_and_checked({ project = project, id = id })
+        assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        local list = comments(project.home)
+        testing.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
+    end)
+
     testing.test(
         "land carries a checked commit whose reviews sit at an earlier identical patch",
         function()

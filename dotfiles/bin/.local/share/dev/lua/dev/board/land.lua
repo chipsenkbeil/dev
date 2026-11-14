@@ -545,7 +545,7 @@ local function file_set(out)
 end
 
 local function checked_commits(root, comments, state, rows)
-    local found = {}
+    local found, seen = {}, {}
     for i = #comments, 1, -1 do
         local record = check.parse(comments[i].body)
         if
@@ -553,7 +553,9 @@ local function checked_commits(root, comments, state, rows)
             and record.mode == check.MODE.RUN
             and record.change == state.change
             and record.commit ~= state.commit
+            and not seen[record.commit]
         then
+            seen[record.commit] = true
             local at = { commit = record.commit, change = state.change }
             if
                 not M.checks_problem(comments, at, rows)
