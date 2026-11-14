@@ -348,6 +348,9 @@ local function read_all(path)
     return body
 end
 
+---@return string output standard output of the command, empty when it was interrupted
+---@return integer code exit status of the command, or INTERRUPTED
+---@return boolean exited false when the user interrupted the capture before it returned
 local function capture_or_interrupted(argv)
     local ok, result, code = pcall(dev_os.capture, argv)
     if not ok then
@@ -363,6 +366,9 @@ local function capture_or_interrupted(argv)
     return result, code, true
 end
 
+---@return integer? pid process group leader of the command, nil when the launcher printed none
+---@return integer code exit status of the launcher, or INTERRUPTED
+---@return boolean exited false when the user interrupted the launch before it returned
 local function start_job(argv, dir, streams)
     local launch = {
         "sh",
@@ -394,11 +400,11 @@ local STOP = string.format(
 local PID_POLLS = 200
 local PID_POLL_SECS = 0.05
 
-local function launched_pid(dir, wait)
+local function launched_pid(dir, opts)
     local polls = 0
     while true do
         local pid = tonumber(read_all(dir .. "/pid"):match("^%d+"))
-        if pid or not wait or polls >= PID_POLLS then
+        if pid or not opts.wait or polls >= PID_POLLS then
             return pid
         end
         polls = polls + 1
@@ -528,7 +534,7 @@ function M.spin(ctx, label, argv, opts)
         captured = read_all(dir .. (capture and "/err" or "/out"))
         output = capture and read_all(dir .. "/out") or ""
         local stopping = not ok or code == INTERRUPTED
-        pid = pid or launched_pid(dir, stopping and not exited)
+        pid = pid or launched_pid(dir, { wait = stopping and not exited })
         if pid and stopping then
             stop_job(pid)
         end
