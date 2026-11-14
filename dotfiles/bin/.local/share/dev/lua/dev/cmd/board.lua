@@ -3563,6 +3563,7 @@ local function icebox_rows(backend, cards, entered, limit, now)
         if
             card.column == backend.roles.icebox
             and index_of(card.labels, board.NEEDS_HUMAN) == nil
+            and not board.is_turn_card(card)
         then
             local latest, skipped = icebox_latest(backend, card, entered[card.id], limit, now)
             if skipped then

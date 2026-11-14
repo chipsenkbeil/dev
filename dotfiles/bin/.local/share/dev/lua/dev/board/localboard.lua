@@ -638,6 +638,7 @@ function Backend:next(column, opts)
             and not is_blocked(doc, card)
             and not board.labelled(card, board.NEEDS_HUMAN)
             and not board.labelled(card, board.RUN)
+            and not board.is_turn_card(card)
             and (not label or board.labelled(card, label))
             and (not (opts and opts.lane) or lane_name(doc, card) == opts.lane)
         then

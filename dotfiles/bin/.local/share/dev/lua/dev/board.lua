@@ -357,6 +357,16 @@ function M.labelled(card, label)
     return false
 end
 
+---The name of the card that holds the landing turn.
+M.TURN_NAME = "landing turn"
+
+---Check whether a card is the landing turn card, which no agent takes.
+---@param card dev.board.Card the card
+---@return boolean
+function M.is_turn_card(card)
+    return card.name == M.TURN_NAME
+end
+
 ---Check that a name has the shape <repo>/<role>[/<card>].
 ---@param name string the agent name
 ---@return boolean

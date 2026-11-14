@@ -5,7 +5,7 @@ local store = require("dev.board.store")
 ---@class dev.board.turn
 local M = {}
 
-M.NAME = "landing turn"
+M.NAME = board.TURN_NAME
 
 M.LEASE_SECONDS = 900
 

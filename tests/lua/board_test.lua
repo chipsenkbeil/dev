@@ -4352,6 +4352,18 @@ testing.test(
     end
 )
 
+testing.test("stale never lists the landing turn card", function()
+    local cards, times = aged(
+        { support.COLUMN_NAME.ICEBOX, support.COLUMN_NAME.ICEBOX },
+        { 60, 60 }
+    )
+    cards[1].name = "landing turn"
+    testing.eq(
+        cmd_board.run("stale", {}, fake(cards, times), NOW).output,
+        "no stale cards\n\nicebox, untouched for 30 days:\n00000002  Icebox  60d  unsized  Card 2"
+    )
+end)
+
 testing.test("stale counts an Icebox card exactly at the limit as untouched", function()
     local cards, times = aged(
         { support.COLUMN_NAME.ICEBOX, support.COLUMN_NAME.ICEBOX },
@@ -5593,6 +5605,13 @@ testing.test("a renamed Pomb board is read through the column map and is_done", 
     testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN_NAME.PROGRESS })
     testing.eq(code, 0, out)
+end)
+
+testing.test("next never offers the landing turn card on a pomb board", function()
+    local root, home = sandbox({ task = TASK:gsub('"First"', '"landing turn"') })
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "no ready cards\n")
 end)
 
 testing.test("next asks for the unclaimed unblocked top of Ready", function()

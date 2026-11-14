@@ -922,6 +922,7 @@ function Backend:__next_in(id, filter, opts)
                 and board.open_children(card.epic) == 0
                 and not board.labelled(card, board.NEEDS_HUMAN)
                 and not board.labelled(card, board.RUN)
+                and not board.is_turn_card(card)
                 and (not label or board.labelled(card, label))
                 and board.fits(card, opts and opts.max_size)
             then

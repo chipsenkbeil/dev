@@ -2530,6 +2530,8 @@ The landing turn:
 - It is the owner of a card named `landing turn`, which `land` creates in the
   Icebox when the board has none. That keeps the holder on the board and not in
   one session.
+- `next`, in any column, and the Icebox list of `stale` never list that card,
+  so no agent is offered it. Its notes stay bounded by the rotation below.
 - On a Pomb board the turn grabs that owner with `POST /api/tasks/{id}/owner`
   and the turn's lease as `ttl_seconds`, renews it through `/owner/renew` with
   `If-Owner-Fence`, and gives it back through `/owner/release`.

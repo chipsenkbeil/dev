@@ -313,6 +313,17 @@ testing.test("next --column backlog skips a needs:human card", function()
     testing.eq(out, "no cards in Backlog\n")
 end)
 
+testing.test("next --column icebox never offers the landing turn card", function()
+    local root, home = local_board()
+    dev(root, home, { "board", "add", "landing turn", "--column", COLUMN.ICEBOX })
+    local out = dev(root, home, { "board", "next", "--column", COLUMN.ICEBOX })
+    testing.eq(out, "no cards in Icebox\n")
+    local other =
+        prefix_of((dev(root, home, { "board", "add", "Other", "--column", COLUMN.ICEBOX })))
+    out = dev(root, home, { "board", "next", "--column", COLUMN.ICEBOX })
+    testing.ok(out:find(other, 1, true) and not out:find("landing turn", 1, true), out)
+end)
+
 testing.test("next --column blocked returns the top unclaimed needs:lead card only", function()
     local root, home = local_board()
     local function blocked(name, label)
