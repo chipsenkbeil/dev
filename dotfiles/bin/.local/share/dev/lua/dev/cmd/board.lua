@@ -689,7 +689,9 @@ function commands.add(backend, args)
                 "An outcome needs a deciding check before the card enters Ready. "
                     .. "These outcomes lack one: "
                     .. table.concat(unnamed, ", ")
-                    .. ". End each with (check: ROW) naming part of a checks row, or with "
+                    .. ". End each with "
+                    .. board.CHECK_OPEN
+                    .. "ROW) naming part of a checks row, or with "
                     .. board.JUDGEMENT
                     .. "."
             )
@@ -1374,7 +1376,9 @@ local function move_once(backend, args, opts)
                         .. " has an outcome that names no deciding check and cannot enter Ready. "
                         .. "These outcomes lack one: "
                         .. table.concat(unnamed, ", ")
-                        .. ". End each with (check: ROW) naming part of a checks row, or with "
+                        .. ". End each with "
+                        .. board.CHECK_OPEN
+                        .. "ROW) naming part of a checks row, or with "
                         .. board.JUDGEMENT
                         .. "."
                 )

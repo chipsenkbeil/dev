@@ -437,6 +437,9 @@ M.AUTHOR_CHARS = 80
 ---The ending that marks an outcome as decided by the reviewer.
 M.JUDGEMENT = "(reviewer judgement)"
 
+---What opens the ending that names a checks row as an outcome's deciding check.
+M.CHECK_OPEN = "(check: "
+
 ---The prefix of the comment `check` writes, which no note may begin with.
 M.CHECK_PREFIX = "dev-check:"
 
@@ -1062,16 +1065,17 @@ end
 
 ---List the outcomes that name no deciding check.
 ---
----An outcome names one by ending with `(check: ROW)`, where ROW is a non-blank substring of one of
----the checks rows, or with `(reviewer judgement)`.
+---An outcome names one by ending with `CHECK_OPEN`, a ROW and a closing parenthesis, where ROW is
+---a non-blank substring of one of the checks rows, or with `JUDGEMENT`.
 ---@param outcomes dev.board.Outcome[] the card's outcomes
 ---@param checks string[] the card's checks rows
 ---@return string[] unnamed the names of the outcomes with neither ending, or a ROW no row holds
 function M.unnamed_checks(outcomes, checks)
     local unnamed = {}
+    local pattern = M.CHECK_OPEN:gsub("%p", "%%%0") .. "(.+)%)$"
     for _, outcome in ipairs(outcomes) do
         local name = outcome.name:gsub("%s+$", "")
-        local row = name:match("%(check: (.+)%)$")
+        local row = name:match(pattern)
         row = row and row:match("^%s*(.-)%s*$")
         local named = name:sub(-#M.JUDGEMENT) == M.JUDGEMENT
         for _, check in ipairs(checks) do
