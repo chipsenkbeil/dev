@@ -2878,3 +2878,48 @@ testing.test("land.git.worktree lands a linked worktree and removes it", functio
     testing.eq(git_remote_master(project), landed)
     testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
 end)
+
+local function land_kept_worktree(prepare)
+    local project = git_project()
+    local id = project.id
+    local main = project.root
+    git_at(main, "checkout", "-q", "master")
+    local base = assert(fs.realpath(support.tempdir()))
+    local folder = base .. "/" .. fs.basename(main)
+    local path = folder .. "/" .. id
+    assert(fs.mkdir(folder, { parents = true }), "mkdir failed")
+    git_at(main, "worktree", "add", "-q", "-b", id, path, "work")
+    prepare(main, folder, path)
+    local tree = at_root(project, path)
+    tree.id = id
+    git_approve(tree)
+    local landed = git_rev(path, "HEAD")
+    local out, code = git_dev(tree, { "board", "land", id }, { DEV_WS_ROOT = base })
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), true)
+    testing.eq(out:find("The workspace is gone", 1, true), nil, out)
+    testing.eq(git_remote_master(project), landed)
+    testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+    return out, path
+end
+
+testing.test("land.git.worktree.keeps.a.locked worktree and says why", function()
+    local out, path = land_kept_worktree(function(main, _, tree)
+        git_at(main, "worktree", "lock", tree)
+    end)
+    local reason = path .. " is a locked git worktree. Run git worktree unlock first."
+    testing.ok(out:find("Kept the workspace: " .. reason, 1, true), out)
+end)
+
+testing.test("land.git.worktree.keeps.one.beside.a.prunable sibling and says why", function()
+    local sibling
+    local out = land_kept_worktree(function(main, folder)
+        sibling = folder .. "/sibling"
+        git_at(main, "worktree", "add", "-q", "-b", "sibling", sibling, "work")
+        assert(fs.remove(sibling, { recursive = true }))
+    end)
+    local reason = "git worktree prune would also drop the record of "
+        .. sibling
+        .. ", which git marks prunable. Run git worktree prune first."
+    testing.ok(out:find("Kept the workspace: " .. reason, 1, true), out)
+end)
