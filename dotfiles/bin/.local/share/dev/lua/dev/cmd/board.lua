@@ -4584,6 +4584,31 @@ local function stderr_news(line)
     end
 end
 
+---List the cards of a project's board that sit in a done column.
+---@param root string absolute path of the project root
+---@return table<string, boolean>? finished the short ids of the done cards, nil when unread
+---@return string? why why the board was not read
+function M.finished(root)
+    if config.get(root, "board.backend") == nil then
+        return nil, "this project has no board"
+    end
+    local backend, message = M.open(settings({ root = root }))
+    if not backend then
+        return nil, (message:gsub("^dev: ", ""))
+    end
+    local cards, why = backend:cards()
+    if not cards then
+        return nil, why
+    end
+    local finished = {}
+    for _, card in ipairs(cards) do
+        if card.done then
+            finished[card.id:sub(1, board.MIN_PREFIX)] = true
+        end
+    end
+    return finished
+end
+
 local function open_board(ctx)
     local found = settings(ctx)
     local backend, message = M.open(found)

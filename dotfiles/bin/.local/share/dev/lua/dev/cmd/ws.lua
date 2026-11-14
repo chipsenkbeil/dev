@@ -1,3 +1,4 @@
+local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
@@ -7,6 +8,17 @@ local verb = require("dev.verb")
 ---@class dev.cmd.ws
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `ws` subcommands
 local M = { handlers = {} }
+
+local HELD_BY_REF = " ~ working_copies() ~ bookmarks() ~ remote_bookmarks() ~ tags()"
+local EMPTY_HEADS = "heads(mutable()) & empty()" .. HELD_BY_REF
+local STRAY_HEADS = "heads(mutable()) ~ empty()" .. HELD_BY_REF
+local STALE_BOOKMARKS = "bookmarks() ~ ::trunk()"
+local HEAD_TEMPLATE = 'commit_id ++ "\\t" ++ description.first_line() ++ "\\n"'
+local BOOKMARK_TEMPLATE = 'if(remote, "", name ++ "\\n")'
+local SHORT_ID = 12
+
+---@enum dev.cmd.ws.Step
+local Step = { GONE = "gone", DONE = "done", KEEP = "keep" }
 
 local function sentence(text)
     text = text:gsub("^%l", string.upper)
@@ -193,7 +205,7 @@ function M.__clean(backend, path)
     else
         argv = vcs.with(vcs.base(path, backend), "status", "--porcelain")
     end
-    local out, code = dev_os.capture(argv, { stderr = "null" })
+    local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
         return false, "cannot read the state of " .. path
     end
@@ -250,13 +262,60 @@ end
 
 ---@class dev.cmd.ws.RemoveOpts
 ---@field inside boolean? false when unset, skips only the refusal of the workspace dev runs in
----@field forgotten boolean? false when unset, removes a jj folder jj no longer lists and refuses any other
+---@field forgotten boolean? false when unset, removes a jj folder that jj does not list and refuses
+---   any other
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
+---@field missing string? nil when unset, the recorded folder that is already gone
+
+---@class dev.cmd.ws.DetachOpts
+---@field backend dev.vcs.Backend? the backend that forgets or removes, nil to do nothing
+---@field path string the folder the workspace had
+---@field show fun(argv: string[])? nil when unset, called with the command before it runs
+
+local function detach(root, name, opts)
+    local argv
+    if opts.backend == vcs.JJ then
+        argv = vcs.with(vcs.base(root, vcs.JJ), "workspace", "forget", name)
+    elseif opts.backend == vcs.GIT then
+        argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "remove", opts.path)
+    end
+    if argv ~= nil then
+        if opts.show then
+            opts.show(argv)
+        end
+        local code = dev_os.run(argv) or 1
+        if code ~= 0 then
+            return false, "the " .. argv[1] .. " command exited " .. code, code
+        end
+    end
+    return true
+end
+
+local function remove_missing(root, name, opts)
+    local backend = vcs.backend(root)
+    if backend ~= vcs.JJ and backend ~= vcs.GIT then
+        return false, root .. " is neither a jj nor a git project"
+    end
+    if fs.exists(opts.missing) then
+        return false, opts.missing .. " still exists"
+    end
+    if backend == vcs.JJ and (name == "default" or forgotten(root, name)) then
+        return false, name .. " is not a jj workspace that can be forgotten"
+    end
+    local ok, message, code =
+        detach(root, name, { backend = backend, path = opts.missing, show = opts.show })
+    if not ok then
+        return false, message, code
+    end
+    return true, "forgot " .. name
+end
 
 ---Remove a workspace of the project at `root` and its folder.
 ---
 ---A jj workspace is forgotten and a git worktree is removed. A message names
 ---what stopped the removal, and `code` is set when jj or git itself failed.
+---With `opts.missing` the folder is already gone, so the jj workspace is
+---forgotten or the git worktree record is removed and nothing is deleted.
 ---@param root string absolute path of the project root dev runs in
 ---@param name string the workspace folder's name
 ---@param opts dev.cmd.ws.RemoveOpts? what to skip and show
@@ -265,6 +324,9 @@ end
 ---@return integer? code the exit code of a failed jj or git
 function M.remove(root, name, opts)
     opts = opts or {}
+    if opts.missing then
+        return remove_missing(root, name, opts)
+    end
     local base = workspace_root()
     local path = fs.join(base, repo_name(base, root), name)
     local real = fs.realpath(path)
@@ -304,20 +366,10 @@ function M.remove(root, name, opts)
             return false, why
         end
     end
-    local argv
-    if backend == vcs.JJ and not gone then
-        argv = vcs.with(vcs.base(root, vcs.JJ), "workspace", "forget", name)
-    elseif backend == vcs.GIT then
-        argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "remove", path)
-    end
-    if argv ~= nil then
-        if opts.show then
-            opts.show(argv)
-        end
-        local code = dev_os.run(argv) or 1
-        if code ~= 0 then
-            return false, argv[1] .. " exited " .. code, code
-        end
+    local ok, message, code =
+        detach(root, name, { backend = not gone and backend or nil, path = path, show = opts.show })
+    if not ok then
+        return false, message, code
     end
     local removed, err = fs.remove(path, { recursive = true })
     if not removed then
@@ -360,6 +412,259 @@ M.handlers["ws rm"] = function(ctx)
     end
     print(message)
     return 0
+end
+
+local function counted(count, noun)
+    return count .. " " .. noun .. (count == 1 and "" or "s")
+end
+
+local function jj_lines(root, ...)
+    local argv = vcs.with(vcs.base(root, vcs.JJ, { quiet = true }), ...)
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        verb.die(sentence("The jj command failed in " .. root))
+    end
+    local lines = {}
+    for line in out:gmatch("[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
+local function jj_workspaces(root)
+    local found = {}
+    for _, name in ipairs(jj_lines(root, "workspace", "list", "-T", 'name ++ "\\n"')) do
+        if name ~= "default" then
+            local argv = vcs.with(
+                vcs.base(root, vcs.JJ, { quiet = true }),
+                "workspace",
+                "root",
+                "--name",
+                name
+            )
+            local out, code = dev_os.capture(argv, { stderr = "null" })
+            if code == 0 and out ~= "" then
+                found[#found + 1] = { name = name, path = (out:gsub("\n$", "")) }
+            end
+        end
+    end
+    return found
+end
+
+local function git_worktrees(root)
+    local argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "list", "--porcelain")
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        verb.die(sentence("git worktree list failed in " .. root))
+    end
+    local found = {}
+    local seen = 0
+    for line in out:gmatch("[^\n]+") do
+        local path = line:match("^worktree (.+)$")
+        if path then
+            seen = seen + 1
+            if seen > 1 then
+                found[#found + 1] = { name = fs.basename(path), path = path }
+            end
+        end
+    end
+    return found
+end
+
+local function plan_workspaces(root, found, finished)
+    local steps = {}
+    local here = fs.realpath(root)
+    for _, space in ipairs(found) do
+        local step = { name = space.name, path = space.path }
+        if not fs.exists(space.path) then
+            step.kind = Step.GONE
+            steps[#steps + 1] = step
+        elseif finished and finished[space.name] then
+            local base = workspace_root()
+            local own = fs.realpath(fs.join(base, repo_name(base, root), space.name))
+            local there = fs.realpath(space.path)
+            if own ~= nil and own == there then
+                step.kind = there == here and Step.KEEP or Step.DONE
+                step.note = "it is the workspace dev runs in"
+                steps[#steps + 1] = step
+            end
+        end
+    end
+    return steps
+end
+
+local function workspace_line(label, step, opts)
+    if step.kind == Step.GONE then
+        return string.format(
+            "%s %s %s. Its folder %s is gone.",
+            opts.verb,
+            label,
+            step.name,
+            step.path
+        )
+    end
+    return string.format("%s %s %s. Its card is done.", opts.verb, label, step.name)
+end
+
+local function prune_workspaces(ctx, steps, opts)
+    local label = opts.backend == vcs.JJ and "workspace" or "worktree"
+    local past = opts.backend == vcs.JJ and "Forgot" or "Removed"
+    local future = opts.backend == vcs.JJ and "Would forget" or "Would remove"
+    local pruned, kept, failure = 0, 0, nil
+    for _, step in ipairs(steps) do
+        local ok, message
+        if step.kind == Step.KEEP then
+            ok, message = false, step.note
+        elseif opts.dry then
+            ok = true
+            if step.kind == Step.DONE and fs.is_link(step.path) then
+                ok, message = false, step.path .. " is a link, not removed"
+            elseif step.kind == Step.DONE then
+                ok, message = M.__clean(opts.backend, step.path)
+            end
+        else
+            local code
+            ok, message, code = M.remove(ctx.root, step.name, {
+                missing = step.kind == Step.GONE and step.path or nil,
+                show = function(argv)
+                    verb.show(ctx, argv)
+                end,
+            })
+            failure = failure or code
+        end
+        if ok then
+            pruned = pruned + 1
+            verb.say(workspace_line(label, step, { verb = opts.dry and future or past }))
+        else
+            kept = kept + 1
+            verb.say(string.format("Kept %s %s. %s", label, step.name, sentence(message)))
+        end
+    end
+    return pruned, kept, failure
+end
+
+local function jj_heads(root, revset)
+    local found = {}
+    for _, line in ipairs(jj_lines(root, "log", "-r", revset, "--no-graph", "-T", HEAD_TEMPLATE)) do
+        local id, description = line:match("^(%x+)\t?(.*)$")
+        if id then
+            found[#found + 1] = { id = id, description = description }
+        end
+    end
+    return found
+end
+
+local function head_text(head)
+    local text = head.id:sub(1, SHORT_ID)
+    if head.description ~= "" then
+        text = text .. " (" .. head.description .. ")"
+    end
+    return text
+end
+
+local function abandon_heads(ctx, heads, opts)
+    local dry = opts.dry
+    if #heads == 0 then
+        return 0
+    end
+    if not dry then
+        local argv = vcs.with(vcs.base(ctx.root, vcs.JJ), "abandon")
+        for _, head in ipairs(heads) do
+            argv[#argv + 1] = head.id
+        end
+        verb.show(ctx, argv)
+        local code = dev_os.run(argv) or 1
+        if code ~= 0 then
+            verb.say(sentence("Left the empty heads alone. The jj abandon command exited " .. code))
+            return 0, code
+        end
+    end
+    for _, head in ipairs(heads) do
+        verb.say(
+            sentence((dry and "Would abandon" or "Abandoned") .. " empty head " .. head_text(head))
+        )
+    end
+    return #heads
+end
+
+local function list_strays(root)
+    local left = 0
+    for _, head in ipairs(jj_heads(root, STRAY_HEADS)) do
+        verb.say(sentence("Left non-empty head " .. head_text(head) .. " alone. Nothing holds it"))
+        left = left + 1
+    end
+    for _, name in
+        ipairs(jj_lines(root, "bookmark", "list", "-r", STALE_BOOKMARKS, "-T", BOOKMARK_TEMPLATE))
+    do
+        verb.say(sentence("Left bookmark " .. name .. " alone. It is not on trunk"))
+        left = left + 1
+    end
+    return left
+end
+
+local function finished_cards(root)
+    local finished, why = cmd_board.finished(root)
+    if not finished then
+        verb.say("Skipped the card test. " .. sentence(why))
+    end
+    return finished
+end
+
+---Forget the finished workspaces of the current project and abandon its empty heads.
+---
+---A jj workspace or git worktree is pruned when its folder is gone, or when
+---its name is the short id of a done card on the project's board and its
+---folder sits at the path `ws new` makes. A project with no readable board
+---skips the card test and says so.
+---
+---The default workspace, the main worktree, the workspace dev runs in and any
+---folder with changes not in a commit are never pruned. A jj project also
+---abandons the empty heads that nothing holds and lists the rest.
+---
+---`--dry-run` prints the plan and removes nothing. Each action is one line and
+---the last line counts them.
+---@param ctx dev.Ctx the verb's context
+---@return integer code the exit code
+M.handlers["ws prune"] = function(ctx)
+    local dry = false
+    for i, arg in ipairs(ctx.args) do
+        if arg == "--dry-run" then
+            dry = true
+            table.remove(ctx.args, i)
+            break
+        end
+    end
+    verb.no_args(ctx)
+
+    local backend = vcs.backend(ctx.root)
+    if backend ~= vcs.JJ and backend ~= vcs.GIT then
+        verb.die(ctx.root .. " is not a jj or git project.")
+    end
+
+    local found = backend == vcs.JJ and jj_workspaces(ctx.root) or git_worktrees(ctx.root)
+    local steps = plan_workspaces(ctx.root, found, finished_cards(ctx.root))
+    local pruned, left, failure = prune_workspaces(ctx, steps, { backend = backend, dry = dry })
+
+    local abandoned = 0
+    if backend == vcs.JJ then
+        local code
+        abandoned, code = abandon_heads(ctx, jj_heads(ctx.root, EMPTY_HEADS), { dry = dry })
+        failure = failure or code
+        left = left + list_strays(ctx.root)
+    else
+        verb.say("Git keeps no empty heads, so only worktrees are pruned.")
+    end
+
+    verb.say(
+        string.format(
+            "%s %s and %s. Left %s alone.",
+            dry and "Would prune" or "Pruned",
+            counted(pruned, backend == vcs.JJ and "workspace" or "worktree"),
+            counted(abandoned, "head"),
+            counted(left, "item")
+        )
+    )
+    return failure or 0
 end
 
 return M

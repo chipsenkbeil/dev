@@ -52,7 +52,7 @@ The luajit modules of `dev`, one per item.
 
 ### Workspaces
 
-`dev.cmd.ws` holds `ws new NAME`, `ws ls` and `ws rm NAME`. `ws` is
+`dev.cmd.ws` holds `ws new NAME`, `ws ls`, `ws rm NAME` and `ws prune`. `ws` is
 machine-local, so `--remote` refuses it.
 
 The path of a workspace is `DEV_WS_ROOT`, else `~/.local/share/workspaces`,
@@ -96,6 +96,43 @@ the same guards. It is refused for a folder jj still lists.
 
 A plain file directly under ROOT/<repo> is deleted under the same guards, and
 `ws rm` prints `removed PATH`.
+
+`ws.remove` also takes `opts.missing`, the folder jj or git recorded. A folder
+that is gone skips every folder check, and the call only forgets the jj
+workspace or removes the git worktree record, never the default workspace.
+
+`ws prune [--dry-run]` clears what finished work leaves behind, for a jj or a
+git project. Each action is one sentence on standard output and the last line
+counts them, for example `Pruned 2 workspaces and 1 head. Left 3 items alone.`
+A dry run says `Would forget` and `Would prune` and removes nothing. As with
+any jj command, reading a workspace snapshots its working copy.
+
+A jj workspace or git worktree is pruned when its recorded folder is gone,
+through `ws.remove` with `opts.missing`. It is also pruned when its name is the
+short id of a Done card on the project's board and its folder sits where
+`ws new` puts it, through the same `ws.remove` as `ws rm`. The default
+workspace and the main worktree are never listed.
+
+A folder with changes not in a commit, and the workspace dev runs in, are kept
+and each gets a `Kept` line. Ignored files do not count as changes, as with
+`ws rm`. A project with no board, or a board that cannot be read, skips the
+card test and says so. A board setting that is invalid stops prune with exit 1
+before any change. `dev.cmd.board.finished(root)` lists the Done short ids.
+
+A forget, removal or abandon that fails gets a line saying so, and prune goes
+on with the rest. It exits with the code of the first failure after the count
+line. A jj or git command that only reads state and fails exits 1 at once.
+
+A jj project then abandons every head of `heads(mutable()) & empty()` that no
+working copy, bookmark, remote bookmark or tag holds. It runs after the
+forgets, so the working copy of a forgotten workspace goes too, which a dry run
+cannot count. Only heads go, so a chain of empty commits needs one run per
+commit.
+
+It lists and leaves alone every non-empty head that nothing holds, and every
+bookmark whose commit is not an ancestor of `trunk()`. There is no age
+threshold. A git project has no heads to abandon and says so, so only
+worktrees are pruned.
 
 `vcs.delete_branch(root, backend, name)` runs `jj bookmark delete` or
 `git branch -D` when `vcs.branches` lists the name. `land` calls it for the

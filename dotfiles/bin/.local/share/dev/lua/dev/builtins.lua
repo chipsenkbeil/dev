@@ -140,6 +140,13 @@ return {
         desc = "Remove a workspace of this project and delete its folder",
     },
     {
+        words = { "ws", "prune" },
+        handler = "lua",
+        flags = "--dry-run",
+        usage = "dev ws prune [--dry-run]",
+        desc = "Forget finished workspaces and abandon empty heads",
+    },
+    {
         words = { "connect" },
         handler = "lua",
         flags = "--ssh",
