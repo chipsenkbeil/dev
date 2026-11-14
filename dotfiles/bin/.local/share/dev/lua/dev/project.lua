@@ -12,6 +12,7 @@ local Kind = {
     NODE = "node",
     LUA = "lua",
     MAKE = "make",
+    NONE = "none",
 }
 
 local LUA_SEARCH_DEPTH = 4

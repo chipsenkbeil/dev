@@ -5,7 +5,6 @@ local project = require("dev.project")
 local verb = require("dev.verb")
 
 local Kind = project.Kind
-local UNDETECTED = "none"
 
 ---@enum dev.cmd.types.Verb
 local Verb = {
@@ -272,7 +271,7 @@ local PLANS = {
 }
 
 local function no_built_in(verb_name, kind)
-    local subject = kind == UNDETECTED and "an undetected project" or kind .. " projects"
+    local subject = kind == Kind.NONE and "an undetected project" or kind .. " projects"
     return "There is no built-in " .. verb_name .. " for " .. subject .. "."
 end
 
@@ -287,7 +286,7 @@ end
 
 ---List the command lines a built-in runs, as `dev help <verb>` prints them.
 ---@param root string the project root
----@param kind string the project type, `none` for an undetected one
+---@param kind string the project type, `project.Kind.NONE` for an undetected one
 ---@param verb_name dev.cmd.types.Verb the verb
 ---@return string[] lines one command per line, or a single sentence that says why there is none
 function M.commands(root, kind, verb_name)
@@ -331,7 +330,7 @@ end
 function M.run(ctx, verb_name)
     local kind = project.detect_type(ctx.root)
     if not kind then
-        return unsupported(verb_name, UNDETECTED)
+        return unsupported(verb_name, Kind.NONE)
     end
     local steps, reason = plan(ctx.root, kind, verb_name, ctx.args)
     if not steps then

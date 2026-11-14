@@ -10,7 +10,6 @@ local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
 local Kind = project.Kind
-local NONE = "none"
 local TYPES = {
     [Kind.RUST] = true,
     [Kind.LOVE2D] = true,
@@ -476,7 +475,7 @@ function M.run(ctx, reg)
     local root = ctx.root
     local kind = opts.type
     if kind == nil or kind == "" then
-        kind = project.detect_type(root) or NONE
+        kind = project.detect_type(root) or Kind.NONE
     elseif not TYPES[kind] then
         verb.usage_error(ctx, "--type takes rust, love2d, lua, godot or node")
     end

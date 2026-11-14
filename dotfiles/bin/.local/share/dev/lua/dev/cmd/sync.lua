@@ -5,7 +5,6 @@ local templates = require("dev.templates")
 local ui = require("dev.ui")
 local verb = require("dev.verb")
 
-local NONE = "none"
 local README = "/.dev/README.md"
 
 ---@class dev.cmd.sync
@@ -110,7 +109,7 @@ end
 ---@param root string absolute path of the project root
 ---@return string[] lines the text `dev help sync` prints
 function M.commands(root)
-    local kind = project.detect_type(root) or NONE
+    local kind = project.detect_type(root) or project.Kind.NONE
     local set = templates.set_for(kind)
     if not set then
         return { "There are no lint templates for " .. kind .. " projects." }
@@ -136,7 +135,7 @@ end
 function M.run(ctx)
     local root = ctx.root
     local check, yes = parse(ctx)
-    local kind = project.detect_type(root) or NONE
+    local kind = project.detect_type(root) or project.Kind.NONE
     local readme = readme_head(root)
     if not templates.set_for(kind) then
         return sync_readme(root, kind, readme, check, yes)

@@ -184,7 +184,7 @@ local function print_topic(ctx, name, opts)
 end
 
 local function project_type(ctx)
-    return project.detect_type(ctx.root) or "none"
+    return project.detect_type(ctx.root) or project.Kind.NONE
 end
 
 ---@class dev.help.ListOpts
@@ -245,7 +245,7 @@ local function overview(ctx, reg, c, opts)
     local kind = project_type(ctx)
     local top = ui.paint(c, "dev", Style.BOLD)
         .. ": "
-        .. (kind == "none" and "" or kind .. " ")
+        .. (kind == project.Kind.NONE and "" or kind .. " ")
         .. "project at "
         .. ctx.root
     out[#out + 1] = fit_line(c, top) .. "\n"
