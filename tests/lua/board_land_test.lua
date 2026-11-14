@@ -2857,18 +2857,28 @@ testing.test("land.git.refused names a failed fetch or rebase and keeps the card
     testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
 end)
 
-testing.test("land.git.worktree lands a linked worktree and removes it", function()
+local function linked_worktree(prepare)
     local project = git_project()
     local id = project.id
     local main = project.root
     git_at(main, "checkout", "-q", "master")
     local base = assert(fs.realpath(support.tempdir()))
-    local path = base .. "/" .. fs.basename(main) .. "/" .. id
-    assert(fs.mkdir(base .. "/" .. fs.basename(main), { parents = true }), "mkdir failed")
+    local folder = base .. "/" .. fs.basename(main)
+    local path = folder .. "/" .. id
+    assert(fs.mkdir(folder, { parents = true }), "mkdir failed")
     git_at(main, "worktree", "add", "-q", "-b", id, path, "work")
+    if prepare then
+        prepare(main, folder, path)
+    end
     local tree = at_root(project, path)
     tree.id = id
     git_approve(tree)
+    return project, tree, base, path
+end
+
+testing.test("land.git.worktree lands a linked worktree and removes it", function()
+    local project, tree, base, path = linked_worktree()
+    local id = project.id
     local landed = git_rev(path, "HEAD")
     local out, code = git_dev(tree, { "board", "land", id }, { DEV_WS_ROOT = base })
     testing.eq(code, 0, out)
@@ -2880,19 +2890,8 @@ testing.test("land.git.worktree lands a linked worktree and removes it", functio
 end)
 
 local function land_kept_worktree(prepare)
-    local project = git_project()
+    local project, tree, base, path = linked_worktree(prepare)
     local id = project.id
-    local main = project.root
-    git_at(main, "checkout", "-q", "master")
-    local base = assert(fs.realpath(support.tempdir()))
-    local folder = base .. "/" .. fs.basename(main)
-    local path = folder .. "/" .. id
-    assert(fs.mkdir(folder, { parents = true }), "mkdir failed")
-    git_at(main, "worktree", "add", "-q", "-b", id, path, "work")
-    prepare(main, folder, path)
-    local tree = at_root(project, path)
-    tree.id = id
-    git_approve(tree)
     local landed = git_rev(path, "HEAD")
     local out, code = git_dev(tree, { "board", "land", id }, { DEV_WS_ROOT = base })
     testing.eq(code, 0, out)
