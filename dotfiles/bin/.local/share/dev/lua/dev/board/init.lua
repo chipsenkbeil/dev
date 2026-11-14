@@ -190,10 +190,9 @@ end
 
 local function roles_step(layout, state, say)
     local ROLES_UNCHANGED = "agent roles unchanged"
-    local created, message = layout:add_roles()
+    local created, message, missing = layout:add_roles()
     if created == nil then
-        local NO_GRANT = "lacks the roles.grant permission"
-        if message:find(NO_GRANT, 1, true) then
+        if missing == "roles.grant" then
             say("agent roles left for dev board init --admin")
             return true
         end

@@ -1543,7 +1543,8 @@ testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
     function layout:add_roles()
         return nil,
             "board unavailable: pomb answered 403: this token lacks the roles.grant permission "
-                .. "on every board; use a token that has it"
+                .. "on every board; use a token that has it",
+            "roles.grant"
     end
     local changes, message, lines = run(layout)
     testing.eq(message, nil)

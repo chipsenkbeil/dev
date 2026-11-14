@@ -258,8 +258,9 @@ local M = {}
 ---   string? a card's name or colour
 ---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined
 ---   on the board
----@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string? the standard agent roles
----   granted to the board, the names this call created, or false when the board has no roles
+---@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string?, string? the standard
+---   agent roles granted to the board, the names this call created, or false when the board has no
+---   roles. A refusal for a missing permission names it in the third value, as `roles.grant`
 ---@field limit_groups fun(self: dev.board.Layout): table<string, any>[]|false|nil, string? the
 ---   limit groups the board holds, false when the board has no limits to set, or nil and a message
 ---@field add_limit_group fun(self: dev.board.Layout, names: string[], limit: integer): boolean?,

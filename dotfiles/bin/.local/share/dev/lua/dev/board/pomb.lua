@@ -62,6 +62,7 @@ local STANDARD_ROLE_KEYS = { "planner", "implementer", "reviewer", "verifier", "
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
 local SUBTASKS_DELETE = "subtasks.delete"
+local ROLES_GRANT = "roles.grant"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NEEDS_LEAD =
@@ -2301,6 +2302,14 @@ function Backend:add_roles()
                         .. id
                         .. "), so it cannot be granted the standard roles; add the board to the token"
                 )
+        end
+        local no_grant = status == FORBIDDEN
+            and type(doc) == "table"
+            and doc.code == PERMISSION_DENIED
+            and doc.permission == ROLES_GRANT
+            and present(doc.board_id) == nil
+        if no_grant then
+            return nil, message, ROLES_GRANT
         end
         return nil, message
     end
