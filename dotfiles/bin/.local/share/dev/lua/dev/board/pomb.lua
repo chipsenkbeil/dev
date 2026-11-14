@@ -1148,29 +1148,56 @@ function Backend:ask(id, question, fence)
     return true
 end
 
+local function same_menu(first, other)
+    local mine, theirs = first.choices, other.choices
+    if #mine ~= #theirs then
+        return false
+    end
+    for index, choice in ipairs(mine) do
+        if choice.label ~= theirs[index].label or choice.column_id ~= theirs[index].column_id then
+            return false
+        end
+    end
+    return true
+end
+
 function Backend:answer(id, choice, quote, fence)
     local comments, message = self:comments(id)
     if not comments then
         return nil, message
     end
-    local open
+    local open = {}
     for _, comment in ipairs(comments) do
         if comment.question and not present(comment.question.answer) then
-            open = comment
+            open[#open + 1] = comment
         end
     end
-    if not open then
+    if #open == 0 then
         return nil, "the card holds no open question to answer"
     end
-    local done
-    done, message = self:__request(
-        "POST",
-        "/api/tasks/" .. id .. "/comments/" .. open.id .. "/answer",
-        { choice = choice, quote = quote },
-        fence
-    )
-    if not done then
-        return nil, message
+    local texts = {}
+    for index, comment in ipairs(open) do
+        texts[index] = '"' .. tostring(comment.question.text) .. '"'
+    end
+    for _, comment in ipairs(open) do
+        if not same_menu(open[1].question, comment.question) then
+            return nil,
+                "The card holds open questions with different menus. Answer each in the browser: "
+                    .. table.concat(texts, ", ")
+                    .. "."
+        end
+    end
+    for _, comment in ipairs(open) do
+        local done
+        done, message = self:__request(
+            "POST",
+            "/api/tasks/" .. id .. "/comments/" .. comment.id .. "/answer",
+            { choice = choice, quote = quote },
+            fence
+        )
+        if not done then
+            return nil, message
+        end
     end
     return true
 end
@@ -1212,11 +1239,12 @@ function Backend:__question(question)
     end
     named.answer = present(question.answer)
     named.recommended = present(question.recommended)
+    named.choices = {}
     if type(question.choices) == "table" then
-        named.choices = {}
         for index, choice in ipairs(question.choices) do
             named.choices[index] = {
                 label = choice.label,
+                column_id = present(choice.column_id),
                 column = present(choice.column_id) and self:__column_name(choice.column_id) or nil,
             }
         end

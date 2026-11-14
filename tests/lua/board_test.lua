@@ -19,6 +19,8 @@ local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 local LEAD = "dotfiles/lead/1"
 local PROGRESS_COLUMN = "col-progress"
+local READY_COLUMN = "col-ready"
+local ICEBOX_COLUMN = "col-icebox"
 local PROGRESS_NAME = support.COLUMN_NAME.PROGRESS
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
@@ -6358,6 +6360,76 @@ testing.test("answer records the choice through Pomb", function()
     )
     testing.ok(calls:find('"choice":2', 1, true), calls)
     testing.ok(calls:find('"quote":"go with two"', 1, true), calls)
+end)
+
+local SHIP_OR_PARK = '[{"label":"Ship it","column_id":"'
+    .. READY_COLUMN
+    .. '"},{"label":"Park it","column_id":"'
+    .. ICEBOX_COLUMN
+    .. '"}]'
+
+local function open_question(id, text, choices)
+    return '{"id":"'
+        .. id
+        .. '","author":"api-token","actor_kind":"api_token","token_name":"worker",'
+        .. '"created_at":"2026-10-27T09:30:12Z","body":"'
+        .. text
+        .. '","kind":"question","question":{"text":"'
+        .. text
+        .. '","choices":'
+        .. choices
+        .. ',"recommended":1,"why":"w","answer":null}}'
+end
+
+testing.test("answer settles every open question on Pomb", function()
+    local root, home = owner_card_sandbox()
+    local second =
+        open_question("rrrrrrrr-1111-4111-8111-111111111111", "Which order?", SHIP_OR_PARK)
+    local first = QUESTION_COMMENT:format("null"):sub(2, -2)
+    assert(fs.write(root .. "/comments.json", "[" .. first .. "," .. second .. "]"))
+    local out, code = dev(
+        root,
+        home,
+        { "board", "answer", "11111111-a", "--choice", "2", "--quote", "go with two" }
+    )
+    testing.eq(code, 0, out)
+    testing.eq(out, "answered 11111111 with choice 2\n")
+    local calls = read(root, "calls")
+    local first_answer = calls:find(
+        "/api/tasks/" .. ID_A .. "/comments/qqqqqqqq-1111-4111-8111-111111111111/answer",
+        1,
+        true
+    )
+    local second_answer = calls:find(
+        "/api/tasks/" .. ID_A .. "/comments/rrrrrrrr-1111-4111-8111-111111111111/answer",
+        1,
+        true
+    )
+    testing.ok(first_answer and second_answer and first_answer < second_answer, calls)
+    testing.ok(calls:find('"quote":"go with two"', 1, true), calls)
+end)
+
+testing.test("answer refuses open questions with different menus on Pomb", function()
+    local root, home = owner_card_sandbox()
+    local other = open_question(
+        "rrrrrrrr-1111-4111-8111-111111111111",
+        "Which order?",
+        '[{"label":"Ship it","column_id":"'
+            .. READY_COLUMN
+            .. '"},{"label":"Park it","column_id":"'
+            .. READY_COLUMN
+            .. '"}]'
+    )
+    local first = QUESTION_COMMENT:format("null"):sub(2, -2)
+    assert(fs.write(root .. "/comments.json", "[" .. first .. "," .. other .. "]"))
+    local out, code = dev(
+        root,
+        home,
+        { "board", "answer", "11111111-a", "--choice", "2", "--quote", "go with two" }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find('"Which way?", "Which order?"', 1, true), out)
+    testing.ok(not read(root, "calls"):find("/answer", 1, true), read(root, "calls"))
 end)
 
 testing.test("show on Pomb names each open choice's column and marks the recommended", function()

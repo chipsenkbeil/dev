@@ -674,9 +674,17 @@ on that agent's loop.
 Pomb's answer API. The quote must hold your own words and may not be empty. dev
 refuses an empty one before it calls Pomb.
 
-Pomb removes `needs:human`, moves the card to the destination of choice N and
-stores the answer as relayed, with the token's name and the quote. It refuses a
-card with no open question. You can also answer in the browser.
+On Pomb, dev answers every open question on the card with choice N and the
+quote, in the order Pomb lists them. Before it writes anything, dev checks that
+the open questions offer the same menu, with the same choices in the same order,
+labels and columns. When they differ, or no question is open, dev refuses with
+exit 1, writes nothing, and names each open question in quotes.
+
+Pomb keeps `needs:human` and the column while another question stays open, and
+on the last open answer it removes the label and moves the card to the
+destination of choice N. Each answer is stored as relayed, with the token's name
+and the quote, and a later failure leaves the earlier answers recorded with
+Pomb's message. You can also answer in the browser.
 
 Until Pomb's `fff0e011` ships, `order` and `size` fail on such a card, whatever
 the rule says. `label --remove needs:human` stays allowed in any column.
@@ -1853,6 +1861,8 @@ Checks:
 `dev board answer CARD --choice N --quote TEXT` records the owner's answer,
 typed in this session, on a `needs:human` card.
 
+- On Pomb it answers through Pomb's answer API instead, as the `needs:human`
+  section above says. The steps below are the local board's.
 - It removes `needs:human` from the card's labels. The other labels and the
   column stay.
 - It then posts one decision note, `Owner's answer, typed in this session:
