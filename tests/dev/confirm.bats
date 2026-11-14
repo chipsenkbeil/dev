@@ -323,12 +323,12 @@ dash_holding_launcher() {
 
 @test "ctrl-c still stops a job whose launcher writes its pid late" {
     dash_holding_launcher
-    local HOLD_POLLS=1000
+    local HOLD_SPINS=10000000
     local inner="$BATS_TEST_TMPDIR/inner-late.sh" mark="$OUT.launched" hold="$BATS_TEST_TMPDIR/hold-late.sh" released="$OUT.released"
     {
         printf ': >"$LAUNCH_MARK"\n'
-        printf 'polls=0\n'
-        printf 'while [ -z "$hit" ] && [ "$polls" -lt %s ]; do sleep 0.01; polls=$((polls+1)); done\n' "$HOLD_POLLS"
+        printf 'n=0\n'
+        printf 'while [ -z "$hit" ] && [ "$n" -lt %s ]; do n=$((n+1)); done\n' "$HOLD_SPINS"
         printf '[ -z "$hit" ] || : >"$LAUNCH_RELEASED"\n'
     } >"$hold"
     {
