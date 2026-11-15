@@ -72,7 +72,7 @@ end
 ---@param install string how to install it, as the warning shows
 function M.need(binary, install)
     if not dev_os.which(binary) then
-        M.note("Tool " .. binary .. " not found. Install with: " .. install .. ".")
+        M.note("Tool " .. binary .. " not found. Install it with " .. install .. ".")
         os.exit(1)
     end
 end

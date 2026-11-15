@@ -45,7 +45,7 @@ end
 function M.require(root)
     local backend, err = M.backend(root)
     if backend == M.JJ and not dev_os.which("jj") then
-        return nil, "jj not found, install with: brew install jj"
+        return nil, "Tool jj not found. Install it with brew install jj."
     end
     return backend, err
 end

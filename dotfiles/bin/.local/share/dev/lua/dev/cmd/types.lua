@@ -168,7 +168,7 @@ local function rust_steps(root, verb_name, args)
                 argv = { "cargo", "+nightly", "fmt", "--check" },
                 probe = {
                     argv = { "cargo", "+nightly", "fmt", "--version" },
-                    warning = "Tool nightly rustfmt not found. Install with: rustup toolchain install nightly --component rustfmt.",
+                    warning = "Tool nightly rustfmt not found. Install it with rustup toolchain install nightly --component rustfmt.",
                 },
             },
             {
@@ -198,7 +198,7 @@ local function rust_steps(root, verb_name, args)
                 argv = concat({ "cargo", "nextest", "run", "--all-features" }, args),
                 probe = {
                     argv = { "cargo", "nextest", "--version" },
-                    warning = "Tool cargo-nextest not found. Install with: cargo install cargo-nextest --locked.",
+                    warning = "Tool cargo-nextest not found. Install it with cargo install cargo-nextest --locked.",
                 },
             },
             { argv = concat({ "cargo", "test", "--doc", "--all-features" }, args) },
@@ -216,7 +216,7 @@ local function rust_steps(root, verb_name, args)
                 cwd = root,
                 probe = {
                     argv = { "cargo", "deny", "--version" },
-                    warning = "Tool cargo-deny not found. Install with: cargo install cargo-deny --locked.",
+                    warning = "Tool cargo-deny not found. Install it with cargo install cargo-deny --locked.",
                 },
             }
         end
