@@ -129,7 +129,7 @@ local function other_home(backend, name)
         return nil, message
     end
     if not found then
-        return nil, "pomb has no board named " .. name .. "."
+        return nil, "Pomb has no board named " .. name .. "."
     end
     board.retarget(home, backend.column_map, backend.root, home:done_columns())
     return home
@@ -146,7 +146,7 @@ local function on_board(backend, args)
         return backend, args
     end
     if not args[3] then
-        return nil, nil, usage("--board needs a board name.")
+        return nil, nil, usage("The `--board` flag needs a board name.")
     end
     local home, why = other_home(backend, args[3])
     if not home then
@@ -176,7 +176,8 @@ local function children_refusal(backend, card, column, kids)
             return unqueued(
                 failure(
                     string.format(
-                        "%s is an epic and cannot enter %s, a %s column: %d of %d children are open.",
+                        "%s is an epic and cannot enter %s, a %s column. "
+                            .. "%d of %d children are open.",
                         card.id:sub(1, board.MIN_PREFIX),
                         row.name,
                         kind,
@@ -226,7 +227,9 @@ local function done_refusal(card, column)
     return unqueued(
         failure(
             string.format(
-                "%s cannot move to %s: %d of %d outcomes are unticked (%s). The reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it.",
+                "%s cannot move to %s: %d of %d outcomes are unticked (%s). "
+                    .. "The reviewer ticks them with `dev board outcome CARD --tick N --as NAME`, "
+                    .. "or `dev board discard CARD` drops it.",
                 id,
                 column,
                 #open,
@@ -255,17 +258,18 @@ local function tick_refused(card, flag)
     end
     if not ticker then
         return usage(
-            "ticking an outcome on a claimed card needs the ticker's name, with "
+            "Ticking an outcome on a claimed card needs the ticker's name. Pass it with `"
                 .. AS_FLAG
-                .. " NAME or DEV_AGENT."
+                .. " NAME`, or set DEV_AGENT."
         )
     end
     if ticker == card.claimant then
         return failure(
-            card.id:sub(1, board.MIN_PREFIX)
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
                 .. " is claimed by "
                 .. ticker
-                .. ", so its claimant cannot tick its outcomes."
+                .. ". Its claimant cannot tick its outcomes."
         )
     end
     return nil, ticker
@@ -295,11 +299,12 @@ local function claimant_refused(backend, card, opts)
     for _, name in ipairs(names) do
         if name == card.claimant or board.worked(past, name) then
             return failure(
-                card.id:sub(1, board.MIN_PREFIX)
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
                     .. (name == card.claimant and " is" or " was")
                     .. " claimed by "
                     .. name
-                    .. ", so "
+                    .. ". "
                     .. name
                     .. " cannot "
                     .. opts.what
@@ -326,9 +331,9 @@ local function delete_refusal(action)
     local name = os.getenv("DEV_AGENT") or ""
     if not is_lead(name) then
         return failure(
-            "only the lead "
+            "Only the lead "
                 .. (action or "deletes a card")
-                .. ", and DEV_AGENT "
+                .. ". DEV_AGENT "
                 .. name
                 .. " is not a lead name, whose role segment is lead. Ask the lead"
                 .. (action and "" or ", with the card and the reason")

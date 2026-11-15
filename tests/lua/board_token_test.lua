@@ -254,7 +254,7 @@ testing.test(
         testing.eq(fs.exists(home .. "/state/dev/tokens"), false)
         out, code = mint(root, home, { agent = "dotfiles/implementer/other/1" })
         testing.ok(code == 1, out)
-        testing.ok(out:find("only the lead mints a role token", 1, true), out)
+        testing.ok(out:find("Only the lead mints a role token", 1, true), out)
         out, code = dev(root, home, { "board", "token", "mint", "--role", "implementer" })
         testing.ok(code == 2, out)
     end
@@ -357,7 +357,7 @@ testing.test(
         testing.eq(read(root, "stdin"):find(RAW, 1, true), nil)
         out, code = revoke(root, home, { agent = "dotfiles/implementer/other/1" })
         testing.ok(code == 1, out)
-        testing.ok(out:find("only the lead revokes a role token", 1, true), out)
+        testing.ok(out:find("Only the lead revokes a role token", 1, true), out)
         out, code = dev(root, home, { "board", "token", "revoke" })
         testing.ok(code == 2, out)
     end

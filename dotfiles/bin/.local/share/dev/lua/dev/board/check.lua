@@ -108,7 +108,7 @@ local function bare_name(row)
         return nil
     end
     return string.format(
-        "The row %q gives %q before the double dash. Write dev --remote %s -- %s instead.",
+        "The row %q gives %q before the double dash. Write `dev --remote %s -- %s` instead.",
         row,
         extra,
         name,
@@ -130,7 +130,7 @@ function M.refusal(row)
     local bad = row:match(SHELL_CHARS)
     if bad then
         return string.format(
-            "the row %q holds %q, which only a shell reads, and a row runs as a plain command",
+            "The row %q holds %q, which only a shell reads. A row runs as a plain command.",
             row,
             bad == "\n" and "a line break" or bad
         )
@@ -138,7 +138,7 @@ function M.refusal(row)
     local first = row:match("%S+")
     if first and not first:find("/", 1, true) and first:find("%.[^.]+%.") then
         return string.format(
-            "the row %q starts with the dotted run %q, so write spaces between the words",
+            "The row %q starts with the dotted run %q. Write spaces between the words.",
             row,
             first
         )
@@ -163,7 +163,7 @@ function M.argv(row)
         argv[#argv + 1] = word
     end
     if #argv == 0 then
-        return nil, "a checks row is blank"
+        return nil, "A checks row is blank."
     end
     return argv
 end
@@ -176,7 +176,7 @@ local function jj_state(root)
     )
     local commit, change, conflict = out:match("^(%x+) (%a+) (%a+)\n?$")
     if code ~= 0 or not commit then
-        return nil, "jj could not name the working-copy commit of " .. root
+        return nil, "The `jj` command could not name the working-copy commit of " .. root .. "."
     end
     if conflict == "conflict" then
         return nil,
@@ -190,7 +190,7 @@ local function git_state(root)
     local status, code =
         dev_os.capture(vcs.with(base, "status", "--porcelain"), { stderr = "null" })
     if code ~= 0 then
-        return nil, "git could not read the status of " .. root
+        return nil, "The `git` command could not read the status of " .. root .. "."
     end
     local dirty = 0
     for _ in status:gmatch("[^\n]+") do
@@ -199,7 +199,8 @@ local function git_state(root)
     if dirty > 0 then
         return nil,
             string.format(
-                "the working copy is dirty (%d changed paths), so commit first and check that commit",
+                "The working copy is dirty (%d changed paths). "
+                    .. "Commit first, then check that commit.",
                 dirty
             )
     end
@@ -207,7 +208,7 @@ local function git_state(root)
     head, code = dev_os.capture(vcs.with(base, "rev-parse", "HEAD"), { stderr = "null" })
     head = head:match("^(%x+)\n?$")
     if code ~= 0 or not head then
-        return nil, "git has no commit at HEAD in " .. root
+        return nil, "The `git` command has no commit at HEAD in " .. root .. "."
     end
     return { commit = head, change = NO_CHANGE }
 end
@@ -349,9 +350,9 @@ function M.run(opts)
     if negated then
         passed = code == 1
         if code == 0 then
-            note = "a match was found"
+            note = "A match was found."
         elseif code ~= 1 and code ~= TIMEOUT_EXIT then
-            note = string.format("the command failed with exit %d, which is an error", code)
+            note = string.format("The command failed with exit %d, which is an error.", code)
         end
     end
     local run_id = M.run_id(output)
@@ -371,7 +372,7 @@ function M.run(opts)
     end
     if opts.expect_fail and not refused and M.never_started(opts.argv, code, run_id) then
         result = M.RESULT.ERROR
-        note = string.format("the row never started (exit %d), so its failure proves nothing", code)
+        note = string.format("The row never started (exit %d). Its failure proves nothing.", code)
         reason = reason or last_line(output)
     end
     return {

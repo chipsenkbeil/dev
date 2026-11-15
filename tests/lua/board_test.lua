@@ -1125,7 +1125,9 @@ testing.test("move to Done refuses a card with unticked outcomes and names them"
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works). The reviewer ticks them with dev board outcome CARD --tick N --as NAME, or dev board discard CARD drops it."
+        "11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works). "
+            .. "The reviewer ticks them with `dev board outcome CARD --tick N --as NAME`, "
+            .. "or `dev board discard CARD` drops it."
     )
     testing.eq(#backend.calls, 0)
 end)
@@ -1237,13 +1239,14 @@ testing.test("epic_move_refused", function()
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open."
+        "cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
     )
     result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Review, a WIP-limited column: 2 of 3 children are open."
+        "cccccccc is an epic and cannot enter Review, a WIP-limited column. "
+            .. "2 of 3 children are open."
     )
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
@@ -1275,7 +1278,7 @@ testing.test("an epic with no outcomes and an open child is refused", function()
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Done, a done column: 2 of 3 children are open."
+        "cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
     )
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
@@ -5477,7 +5480,7 @@ testing.test(
             { agent = "dotfiles/implementer/82f0e002/1" }
         )
         testing.eq(code, 1, out)
-        testing.ok(out:find("only the lead deletes an outcome", 1, true), out)
+        testing.ok(out:find("Only the lead deletes an outcome", 1, true), out)
         testing.eq(read(root, "calls"), "")
         out, code = dev(
             root,
@@ -5541,7 +5544,7 @@ testing.test("a worker's move of an epic into Done is refused before the move", 
         { agent = "dotfiles/implementer/82f0e002/1" }
     )
     testing.eq(code, 1, out)
-    testing.ok(out:find("only the lead closes an epic", 1, true), out)
+    testing.ok(out:find("Only the lead closes an epic", 1, true), out)
     testing.eq(read(root, "move_stdin"), "")
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)
 end)
@@ -9154,7 +9157,7 @@ testing.test("delete-runner-role refuses a runner name, with no call and no toke
             { agent = name }
         )
         testing.eq(code, 1, out)
-        testing.ok(out:find("only the lead deletes a card", 1, true), out)
+        testing.ok(out:find("Only the lead deletes a card", 1, true), out)
         testing.ok(out:find(name, 1, true), out)
         testing.eq(read(root, "calls"), "")
     end
