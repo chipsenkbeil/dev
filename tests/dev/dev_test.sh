@@ -545,7 +545,7 @@ if command -v jj >/dev/null 2>&1; then
         out="$(cd "$game" && "$DEV" lint 2>&1)"
         assert_eq "installed lint verb exits 1 on a violation" "$?" "1"
         assert_contains "installed lint verb names the ast-grep rule" "$out" "error[comment-period]"
-        assert_contains "installed lint verb lists the failed check" "$out" "FAILED: ast-grep scan"
+        assert_contains "installed lint verb lists the failed check" "$out" "These checks failed: ast-grep scan"
     else
         printf 'skip - installed lua lint verb on a love2d project (needs stylua, selene and ast-grep)\n'
     fi
