@@ -60,8 +60,13 @@ local function setup(kind)
 end
 
 testing.test("new in a jj project fetches the remote of record first", function()
+    -- Stub jj with one remote
     local root, path, env, log = setup("jj")
+
+    -- Create the workspace so the fetch of the remote of record runs first
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the path printed and the fetch logged before the workspace add
     testing.eq(code, 0)
     testing.eq(out, path .. "\n")
     testing.eq(
@@ -78,10 +83,15 @@ testing.test("new in a jj project fetches the remote of record first", function(
 end)
 
 testing.test("new in a jj project fetches the gerrit remote of record", function()
+    -- Make gerrit the remote of record
     local root, path, env, log = setup("jj")
     env.env.JJ_FORGE = "gerrit"
     env.env.REMOTES = "origin\ngerrit\n"
+
+    -- Create the workspace so the fetch targets the gerrit remote
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the fetch to name the gerrit remote
     testing.eq(code, 0)
     testing.eq(out, path .. "\n")
     testing.eq(
@@ -98,10 +108,15 @@ testing.test("new in a jj project fetches the gerrit remote of record", function
 end)
 
 testing.test("new in a jj project stops at a failed fetch with no workspace", function()
+    -- Make the fetch fail
     local root, path, env, log = setup("jj")
     env.env.FETCH_CODE = "1"
     env.env.FETCH_OUT = "error: could not connect\n"
+
+    -- Create the workspace while the fetch is set to fail
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the failure reported and no workspace folder left behind
     testing.eq(code, 1)
     testing.eq(out, "The fetch from origin failed: error: could not connect.\n")
     testing.eq(fs.read(log), "jj --color never -R " .. root .. " git fetch --remote origin\n")
@@ -110,9 +125,14 @@ testing.test("new in a jj project stops at a failed fetch with no workspace", fu
 end)
 
 testing.test("new in a jj project refuses a missing remote of record", function()
+    -- Leave the project with no remotes
     local root, path, env, log = setup("jj")
     env.env.REMOTES = ""
+
+    -- Create the workspace with no remote so the missing-remote check runs
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a refusal before jj runs or any folder appears
     testing.eq(code, 1)
     testing.eq(
         out,
@@ -123,9 +143,14 @@ testing.test("new in a jj project refuses a missing remote of record", function(
 end)
 
 testing.test("new in a git project adds a worktree on the fetched trunk", function()
+    -- Offer main as the only trunk branch
     local root, path, env, log = setup("git")
     env.env.REFS = "origin/HEAD\norigin/feat\norigin/main\n"
+
+    -- Create the workspace so the worktree branches from the offered main
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a fetch, then a worktree branched from origin/main
     testing.eq(code, 0)
     testing.eq(out, path .. "\n")
     testing.eq(
@@ -139,10 +164,15 @@ testing.test("new in a git project adds a worktree on the fetched trunk", functi
 end)
 
 testing.test("new in a git project stops at a failed fetch with no worktree", function()
+    -- Make the fetch fail
     local root, path, env, log = setup("git")
     env.env.FETCH_CODE = "1"
     env.env.FETCH_OUT = "fatal: could not connect\n"
+
+    -- Create the workspace while the git fetch is set to fail
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the failure reported and no worktree folder left behind
     testing.eq(code, 1)
     testing.eq(out, "The fetch from origin failed: fatal: could not connect.\n")
     testing.eq(fs.read(log), "git -C " .. root .. " fetch origin\n")
@@ -151,9 +181,14 @@ testing.test("new in a git project stops at a failed fetch with no worktree", fu
 end)
 
 testing.test("new in a git project refuses a remote with no trunk branch", function()
+    -- Offer only a branch that is not a trunk name
     local root, path, env, log = setup("git")
     env.env.REFS = "origin/dev\n"
+
+    -- Create the workspace against a remote that offers no trunk branch
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a refusal after the fetch and no worktree
     testing.eq(code, 1)
     testing.eq(out, "Origin has no master or main branch.\n")
     testing.eq(fs.read(log), "git -C " .. root .. " fetch origin\n")
@@ -161,9 +196,14 @@ testing.test("new in a git project refuses a remote with no trunk branch", funct
 end)
 
 testing.test("new in a git project refuses a missing remote of record", function()
+    -- Leave the project with no remotes
     local root, path, env, log = setup("git")
     env.env.REMOTES = ""
+
+    -- Create the workspace with no remote so the refusal fires before git runs
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a refusal before git runs or any folder appears
     testing.eq(code, 1)
     testing.eq(
         out,
@@ -174,38 +214,58 @@ testing.test("new in a git project refuses a missing remote of record", function
 end)
 
 testing.test("new outside version control makes a plain folder", function()
+    -- Stub both tools to fail so no version control is found
     local root, path, env = setup("none")
+
+    -- Create the workspace where no version control is found
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the path printed and a plain folder made
     testing.eq(code, 0)
     testing.eq(out, path .. "\n")
     testing.eq(fs.is_dir(path), true)
 end)
 
 testing.test("new outside a project refuses and makes no workspace", function()
+    -- Run from a folder that is no project
     local root, _, env = setup("none")
     local bare = assert(fs.realpath(support.tempdir()))
     env.cwd = bare
+
+    -- Create the workspace from a bare folder to check it is refused
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a refusal and no workspace root created
     testing.eq(code, 1)
     testing.eq(out, bare .. " is not inside a project.\n")
     testing.eq(fs.exists(env.env.DEV_WS_ROOT), false)
 end)
 
 testing.test("new refuses a path that exists", function()
+    -- Make the workspace folder before the command does
     local root, path, env, log = setup("jj")
     assert(fs.mkdir(path, { parents = true }))
+
+    -- Create the workspace over a folder that already exists
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a refusal before jj runs
     testing.eq(code, 1)
     testing.eq(out, path .. " already exists.\n")
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("DEV_WS_ROOT moves the root and the default is under HOME", function()
+    -- Blank the override and point HOME at a fresh folder
     local root, _, env = setup("none")
     local home = support.tempdir()
     env.env.DEV_WS_ROOT = ""
     env.env.HOME = home
+
+    -- Create the workspace with the root blanked to check the HOME default
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the workspace under HOME's default root
     testing.eq(code, 0)
     testing.eq(out, home .. "/.local/share/workspaces/" .. fs.basename(root) .. "/feat\n")
 end)
@@ -227,14 +287,21 @@ end)
 testing.test(
     "new from a workspace inside the root names the repo by the folder below the root",
     function()
+        -- Build a workspace folder under the root with its own dev and bin
         local root, _, env = setup("none")
         local base = assert(fs.realpath(support.tempdir())) .. "/ws"
         local inside = base .. "/proj/first"
         assert(fs.mkdir(inside .. "/.dev", { parents = true }))
         assert(fs.mkdir(inside .. "/bin"))
+
+        -- Point the root at it and the stubs onto PATH
         env.env.DEV_WS_ROOT = base
         env.env.PATH = root .. "/bin:" .. os.getenv("PATH")
+
+        -- Create the workspace from inside the root to check the repo name
         local out, code = support.dev(inside, { "ws", "new", "feat" }, env)
+
+        -- Expect the new folder beside the old one under the same repo
         testing.eq(code, 0)
         testing.eq(out, base .. "/proj/feat\n")
     end
@@ -277,25 +344,40 @@ local function rm_setup(kind)
 end
 
 testing.test("ls prints each workspace folder with its path", function()
+    -- Make one workspace, one other folder and one stray file
     local root, path, env = setup("none")
     assert(fs.mkdir(path, { parents = true }))
     assert(fs.mkdir(fs.dirname(path) .. "/other"))
     assert(fs.write(fs.dirname(path) .. "/stray", "x"))
+
+    -- List the workspaces so the stray file is checked for skipping
     local out, code = support.dev(root, { "ws", "ls" }, env)
+
+    -- Expect the two folders listed and the stray file skipped
     testing.eq(code, 0)
     testing.eq(out, "feat\t" .. path .. "\nother\t" .. fs.dirname(path) .. "/other\n")
 end)
 
 testing.test("ls prints nothing when the project has no workspaces", function()
+    -- Leave the workspace root empty
     local root, _, env = setup("none")
+
+    -- List the workspaces in an empty root to check nothing prints
     local out, code = support.dev(root, { "ws", "ls" }, env)
+
+    -- Expect no output
     testing.eq(code, 0)
     testing.eq(out, "")
 end)
 
 testing.test("ls takes no arguments", function()
+    -- Pass a stray argument
     local root, _, env = setup("none")
+
+    -- List with a stray argument to check the usage error names it
     local out, code = support.dev(root, { "ws", "ls", "x" }, env)
+
+    -- Expect a usage error naming it
     testing.eq(code, 2)
     testing.eq(out, "dev ws ls: takes no arguments, got x\n")
 end)
@@ -320,30 +402,45 @@ local function stamp_ago(days)
 end
 
 testing.test("rm moves a jj folder to the trash with its ignored files", function()
+    -- Add an ignored file to the workspace
     local root, path, env, log = rm_setup("jj")
     assert(fs.write(path .. "/.env", "secret"))
+
+    -- Remove the jj workspace so its ignored file moves to the trash
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the move reported and the workspace forgotten
     testing.eq(code, 0)
     local target = trashed(env, root, "feat")
     testing.eq(out, "Moved " .. path .. " to " .. target .. ".\n")
     testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget feat\n")
+
+    -- Expect the folder gone from its place with the ignored file in the trash
     testing.eq(fs.exists(path), false)
     testing.eq(fs.read(target .. "/.env"), "secret")
 end)
 
 testing.test("rm moves a git folder to the trash with its ignored files", function()
+    -- Add an ignored file to the worktree
     local root, path, env, log = rm_setup("git")
     assert(fs.write(path .. "/.env", "secret"))
+
+    -- Remove the git worktree so its ignored file moves to the trash
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the move reported and the worktree record pruned
     testing.eq(code, 0)
     local target = trashed(env, root, "feat")
     testing.eq(out, "Moved " .. path .. " to " .. target .. ".\n")
     testing.eq(fs.read(log), "git -C " .. root .. " worktree prune\n")
+
+    -- Expect the folder gone from its place with the ignored file in the trash
     testing.eq(fs.exists(path), false)
     testing.eq(fs.read(target .. "/.env"), "secret")
 end)
 
 testing.test("rm purges trash entries older than 14 days and keeps newer ones", function()
+    -- Fill the trash with an old, a recent and an unstamped entry
     local root, path, env = rm_setup("jj")
     local dir = trash_dir(env, root)
     local old = dir .. "/old-" .. stamp_ago(15)
@@ -353,32 +450,48 @@ testing.test("rm purges trash entries older than 14 days and keeps newer ones", 
         assert(fs.mkdir(entry, { parents = true }))
         assert(fs.write(entry .. "/file", "x"))
     end
+
+    -- Remove the folder so the trash entry past 14 days is purged
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the move and the purge of the old entry reported
     testing.eq(code, 0)
     local target = trashed(env, root, "feat")
     testing.eq(
         out,
         "Moved " .. path .. " to " .. target .. ".\nPurged " .. old .. " from the trash.\n"
     )
+
+    -- Expect only the old entry gone
     testing.eq(fs.exists(old), false)
     testing.eq(fs.exists(recent .. "/file"), true)
     testing.eq(fs.exists(unstamped .. "/file"), true)
 end)
 
 testing.test("rm puts a folder back when the forget fails", function()
+    -- Make jj fail on the forget
     local root, path, env = rm_setup("jj")
     env.env.FAIL = "1"
     stub(root, "jj", RM_JJ_STUB .. 'if [ -n "$FAIL" ]; then exit 3; fi\n')
+
+    -- Remove the folder while jj fails the forget so it is put back
     local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect jj's code, the folder back in place and the trash empty
     testing.eq(code, 3)
     testing.eq(fs.exists(path .. "/file"), true)
     testing.eq(#fs.list(trash_dir(env, root)), 0)
 end)
 
 testing.test("rm puts a folder back when the git prune fails", function()
+    -- Make git fail on the prune
     local root, path, env = rm_setup("git")
     env.env.FAIL = "1"
+
+    -- Remove the folder while git fails the prune so it is put back
     local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect git's code, the folder back in place and the trash empty
     testing.eq(code, 3)
     testing.eq(fs.exists(path .. "/file"), true)
     testing.eq(#fs.list(trash_dir(env, root)), 0)
@@ -393,9 +506,14 @@ local function worktrees(root, ...)
 end
 
 testing.test("rm refuses and says so when git worktree list fails", function()
+    -- Make the worktree list fail
     local root, path, env, log = rm_setup("git")
     env.env.LIST_FAIL = "1"
+
+    -- Remove the folder while the worktree list fails to check the refusal
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal naming git's code, with the folder kept and no git run
     testing.eq(code, 1)
     testing.eq(out, "The git worktree list command exited 128.\n")
     testing.eq(fs.exists(path .. "/file"), true)
@@ -403,9 +521,14 @@ testing.test("rm refuses and says so when git worktree list fails", function()
 end)
 
 testing.test("rm refuses a locked git worktree and leaves its folder", function()
+    -- Mark the worktree locked
     local root, path, env, log = rm_setup("git")
     env.env.WORKTREES = worktrees(root, path) .. "locked on a usb stick\n"
+
+    -- Remove the folder of a locked worktree to check it is refused
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal naming the unlock, with the folder kept and no git run
     testing.eq(code, 1)
     testing.eq(out, path .. " is a locked git worktree. Run git worktree unlock first.\n")
     testing.eq(fs.exists(path .. "/file"), true)
@@ -413,6 +536,7 @@ testing.test("rm refuses a locked git worktree and leaves its folder", function(
 end)
 
 testing.test("rm keeps the record of another git worktree whose folder is gone", function()
+    -- List a second worktree that git marks prunable
     local root, path, env, log = rm_setup("git")
     local gone = fs.dirname(path) .. "/gone1"
     env.env.WORKTREES = worktrees(root, path)
@@ -424,7 +548,11 @@ testing.test("rm keeps the record of another git worktree whose folder is gone",
             "prunable gitdir file points to non-existent location",
             "",
         }, "\n")
+
+    -- Remove the folder while a gone sibling's record is at risk
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal that names the other record
     testing.eq(code, 1)
     testing.eq(
         out,
@@ -432,11 +560,14 @@ testing.test("rm keeps the record of another git worktree whose folder is gone",
             .. gone
             .. ", which git marks prunable. Run git worktree prune first.\n"
     )
+
+    -- Expect the folder kept and no git run
     testing.eq(fs.exists(path .. "/file"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("rm ignores another git worktree that is locked and gone", function()
+    -- List a second worktree that is both locked and prunable
     local root, path, env, log = rm_setup("git")
     local gone = fs.dirname(path) .. "/gone1"
     env.env.WORKTREES = worktrees(root, path)
@@ -449,42 +580,63 @@ testing.test("rm ignores another git worktree that is locked and gone", function
             "prunable gitdir file points to non-existent location",
             "",
         }, "\n")
+
+    -- Remove the folder with a locked and gone sibling to check the prune runs
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the move to go through and the prune to run
     testing.eq(code, 0, out)
     testing.eq(out, "Moved " .. path .. " to " .. trashed(env, root, "feat") .. ".\n")
     testing.eq(fs.read(log), "git -C " .. root .. " worktree prune\n")
 end)
 
 testing.test("ls does not list the trash", function()
+    -- Move a workspace to the trash
     local root, path, env = rm_setup("none")
     local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
     testing.eq(code, 0)
     testing.eq(fs.exists(trashed(env, root, "feat")), true)
+
+    -- List the workspaces after a move to check the trash is left out
     local out = support.dev(root, { "ws", "ls" }, env)
+
+    -- Expect an empty list and the folder gone from its place
     testing.eq(out, "")
     testing.eq(fs.exists(path), false)
 end)
 
 testing.test("ws rm refuses a forgotten folder without --forgotten", function()
+    -- Make jj report no workspace for the folder
     local root, path, env, log = rm_setup("jj")
     env.env.WORKSPACES = "default"
     env.env.LOG_CODE = "1"
+
+    -- Remove the forgotten folder without the flag to check it is refused
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal that names the flag
     testing.eq(code, 1)
     testing.eq(
         out,
         path
             .. " is a jj folder jj no longer tracks. Run dev ws rm feat --forgotten to discard it.\n"
     )
+
+    -- Expect the folder kept and no jj run
     testing.eq(fs.exists(path .. "/file"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("ws rm --forgotten moves a forgotten folder to the trash", function()
+    -- Make jj report no workspace for the folder
     local root, path, env, log = rm_setup("jj")
     env.env.WORKSPACES = "default"
     env.env.LOG_CODE = "1"
+
+    -- Remove the forgotten folder with the flag so it moves to the trash
     local out, code = support.dev(root, { "ws", "rm", "feat", "--forgotten" }, env)
+
+    -- Expect the move reported, with no jj run and the folder gone from its place
     testing.eq(code, 0)
     testing.eq(out, "Moved " .. path .. " to " .. trashed(env, root, "feat") .. ".\n")
     testing.eq(fs.exists(log), false)
@@ -494,8 +646,13 @@ end)
 local NOT_FORGOTTEN = " is not a jj folder jj no longer lists. --forgotten does not apply.\n"
 
 testing.test("ws rm --forgotten refuses a folder jj still lists", function()
+    -- Leave the workspace listed in jj
     local root, path, env, log = rm_setup("jj")
+
+    -- Remove a folder jj still lists with the flag to check it is refused
     local out, code = support.dev(root, { "ws", "rm", "--forgotten", "feat" }, env)
+
+    -- Expect a refusal with the folder kept and no jj run
     testing.eq(code, 1)
     testing.eq(out, path .. NOT_FORGOTTEN)
     testing.eq(fs.exists(path .. "/file"), true)
@@ -503,8 +660,13 @@ testing.test("ws rm --forgotten refuses a folder jj still lists", function()
 end)
 
 testing.test("ws rm --forgotten refuses a git worktree", function()
+    -- Use a git worktree, which the flag never covers
     local root, path, env, log = rm_setup("git")
+
+    -- Remove a git worktree with the flag to check the flag never applies
     local out, code = support.dev(root, { "ws", "rm", "feat", "--forgotten" }, env)
+
+    -- Expect a refusal with the folder kept and no git run
     testing.eq(code, 1)
     testing.eq(out, path .. NOT_FORGOTTEN)
     testing.eq(fs.exists(path .. "/file"), true)
@@ -512,21 +674,33 @@ testing.test("ws rm --forgotten refuses a git worktree", function()
 end)
 
 testing.test("ws rm moves a stray file to the trash", function()
+    -- Drop a stray file beside the workspace
     local root, path, env, log = rm_setup("jj")
     local stray = fs.dirname(path) .. "/check.log"
     assert(fs.write(stray, "x"))
+
+    -- Remove the stray file beside the workspace to check it moves to the trash
     local out, code = support.dev(root, { "ws", "rm", "check.log" }, env)
+
+    -- Expect the file moved
     testing.eq(code, 0)
     testing.eq(out, "Moved " .. stray .. " to " .. trashed(env, root, "check.log") .. ".\n")
     testing.eq(fs.exists(stray), false)
+
+    -- Expect no jj run and the workspace untouched
     testing.eq(fs.exists(log), false)
     testing.eq(fs.is_dir(path), true)
 end)
 
 testing.test("ws rm still refuses a folder with uncommitted changes", function()
+    -- Make jj report changes
     local root, path, env, log = rm_setup("jj")
     env.env.DIRTY = "changes"
+
+    -- Remove the jj folder with changes to check it is refused
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal with the folder kept and no forget
     testing.eq(code, 1)
     testing.eq(out, path .. " holds changes not in a commit.\n")
     testing.eq(fs.exists(path .. "/file"), true)
@@ -534,8 +708,13 @@ testing.test("ws rm still refuses a folder with uncommitted changes", function()
 end)
 
 testing.test("rm moves a plain folder to the trash", function()
+    -- Use a plain folder under no version control
     local root, path, env, log = rm_setup("none")
+
+    -- Remove the plain folder so it moves to the trash with no vcs run
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the move reported, the folder gone from its place and no vcs run
     testing.eq(code, 0)
     testing.eq(out, "Moved " .. path .. " to " .. trashed(env, root, "feat") .. ".\n")
     testing.eq(fs.exists(path), false)
@@ -543,9 +722,14 @@ testing.test("rm moves a plain folder to the trash", function()
 end)
 
 testing.test("rm refuses a jj workspace with changes and leaves it in place", function()
+    -- Make jj report changes
     local root, path, env, log = rm_setup("jj")
     env.env.DIRTY = "changes"
+
+    -- Remove the jj workspace with changes to check it stays in place
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal with the folder kept and no forget
     testing.eq(code, 1)
     testing.eq(out, path .. " holds changes not in a commit.\n")
     testing.eq(fs.exists(path .. "/file"), true)
@@ -553,9 +737,14 @@ testing.test("rm refuses a jj workspace with changes and leaves it in place", fu
 end)
 
 testing.test("rm refuses a git worktree with changes and leaves it in place", function()
+    -- Make git report a modified file
     local root, path, env, log = rm_setup("git")
     env.env.DIRTY = " M file\n"
+
+    -- Remove the git worktree with a modified file to check it is refused
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal with the folder kept and no prune
     testing.eq(code, 1)
     testing.eq(out, path .. " holds changes not in a commit.\n")
     testing.eq(fs.exists(path .. "/file"), true)
@@ -563,9 +752,14 @@ testing.test("rm refuses a git worktree with changes and leaves it in place", fu
 end)
 
 testing.test("rm leaves a workspace whose state cannot be read", function()
+    -- Make the jj state query fail
     local root, path, env, log = rm_setup("jj")
     env.env.LOG_CODE = "1"
+
+    -- Remove the jj workspace whose state query fails to check it is kept
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal with the folder kept and no forget
     testing.eq(code, 1)
     testing.eq(out, "Cannot read the state of " .. path .. ".\n")
     testing.eq(fs.exists(path .. "/file"), true)
@@ -573,32 +767,47 @@ testing.test("rm leaves a workspace whose state cannot be read", function()
 end)
 
 testing.test("rm leaves the folder when the version control command fails", function()
+    -- Replace git with a stub that fails every command but the probes
     local root, path, env = rm_setup("git")
     stub(
         root,
         "git",
         '#!/bin/sh\ncase "$*" in *--git-common-dir*) echo .git; exit 0;; *--show-toplevel*) pwd; exit 0;; *status*) exit 0;; *worktree*list*) exit 0;; esac\nexit 3\n'
     )
+
+    -- Remove the folder while git fails every command but the probes
     local _, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect git's code and the folder kept
     testing.eq(code, 3)
     testing.eq(fs.exists(path .. "/file"), true)
 end)
 
 testing.test("rm refuses a missing workspace", function()
+    -- Delete the folder
     local root, path, env = rm_setup("none")
     assert(fs.remove(path, { recursive = true }))
+
+    -- Remove a folder that is already gone to check the refusal names it
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal naming the path
     testing.eq(code, 1)
     testing.eq(out, path .. " is not a workspace folder.\n")
 end)
 
 testing.test("rm refuses a link that points outside the root and deletes nothing", function()
+    -- Swap the folder for a link to a folder outside the root
     local root, path, env = rm_setup("none")
     local outside = assert(fs.realpath(support.tempdir()))
     assert(fs.write(outside .. "/precious", "x"))
     assert(fs.remove(path, { recursive = true }))
     assert(fs.symlink(outside, path))
+
+    -- Remove the link to a folder outside the root to check nothing is deleted
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal with the target and the link both intact
     testing.eq(code, 1)
     testing.eq(out, path .. " is a link, not removed.\n")
     testing.eq(fs.exists(outside .. "/precious"), true)
@@ -606,18 +815,26 @@ testing.test("rm refuses a link that points outside the root and deletes nothing
 end)
 
 testing.test("rm refuses a link inside the root as well", function()
+    -- Add a link to a real folder inside the root
     local root, path, env = rm_setup("none")
     local target = fs.dirname(path) .. "/real"
     assert(fs.mkdir(target))
     assert(fs.write(target .. "/keep", "x"))
     assert(fs.symlink(target, fs.dirname(path) .. "/alias"))
+
+    -- Remove the link inside the root to check the folder it points at is kept
     local _, code = support.dev(root, { "ws", "rm", "alias" }, env)
+
+    -- Expect a refusal with the target kept
     testing.eq(code, 1)
     testing.eq(fs.exists(target .. "/keep"), true)
 end)
 
 testing.test("rm refuses a NAME that is not one folder name", function()
+    -- Use a plain folder under no version control
     local root, path, env = rm_setup("none")
+
+    -- Try each bad NAME in turn to check each gets a usage error
     for _, case in ipairs({
         { { "ws", "rm" }, "dev ws rm: needs a NAME\n" },
         { { "ws", "rm", ".." }, "dev ws rm: NAME is one folder name, got ..\n" },
@@ -631,31 +848,45 @@ testing.test("rm refuses a NAME that is not one folder name", function()
         testing.eq(code, 2)
         testing.eq(out, case[2])
     end
+
+    -- Expect the folder kept
     testing.eq(fs.exists(path .. "/file"), true)
 end)
 
 testing.test("rm refuses the workspace it runs in", function()
+    -- Build a workspace folder under the root with its own dev and bin
     local root, _, env = setup("none")
     local base = assert(fs.realpath(support.tempdir())) .. "/ws"
     local inside = base .. "/proj/first"
     assert(fs.mkdir(inside .. "/.dev", { parents = true }))
     assert(fs.mkdir(inside .. "/bin"))
+
+    -- Point the root at it and the stubs onto PATH
     env.env.DEV_WS_ROOT = base
     env.env.PATH = root .. "/bin:" .. os.getenv("PATH")
+
+    -- Remove the workspace dev runs in to check it is refused
     local out, code = support.dev(inside, { "ws", "rm", "first" }, env)
+
+    -- Expect a refusal with the folder kept
     testing.eq(code, 1)
     testing.eq(out, inside .. " is the workspace dev runs in.\n")
     testing.eq(fs.is_dir(inside), true)
 end)
 
 testing.test("rm refuses a repo folder that links outside the root", function()
+    -- Swap the repo folder for a link to a folder outside the root
     local root, path, env = rm_setup("none")
     local outside = assert(fs.realpath(support.tempdir()))
     assert(fs.mkdir(outside .. "/feat"))
     assert(fs.write(outside .. "/feat/precious", "x"))
     assert(fs.remove(fs.dirname(path), { recursive = true }))
     assert(fs.symlink(outside, fs.dirname(path)))
+
+    -- Remove a folder whose repo links outside the root to check the target survives
     local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal with the outside file intact
     testing.eq(code, 1)
     testing.eq(out, path .. " is outside " .. env.env.DEV_WS_ROOT .. ".\n")
     testing.eq(fs.exists(outside .. "/feat/precious"), true)
@@ -763,10 +994,15 @@ local function folder(dir, name)
 end
 
 testing.test("prune forgets a jj workspace whose folder is gone", function()
+    -- List a workspace whose folder does not exist
     local root, dir, env, log = prune_setup("jj")
     env.env.WORKSPACES = "default\ngone1"
     env.env.ROOTS = "gone1 " .. dir .. "gone1"
+
+    -- Prune so the workspace whose folder is gone is forgotten
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the workspace reported forgotten
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -776,17 +1012,24 @@ testing.test("prune forgets a jj workspace whose folder is gone", function()
             "Pruned 1 workspace and 0 heads. Left 0 items alone."
         )
     )
+
+    -- Expect one forget run in jj
     testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget gone1\n")
 end)
 
 testing.test("prune forgets a jj workspace named for a done card", function()
+    -- Seed a board with one done and one open card and a folder for each
     local root, dir, env, log = prune_setup("jj")
     seed_board(root, env, { { id = DONE_ID, done = true }, { id = OPEN_ID } })
     local done = folder(dir, DONE_ID)
     local open = folder(dir, OPEN_ID)
     env.env.WORKSPACES = table.concat({ "default", DONE_ID, OPEN_ID }, "\n")
     env.env.ROOTS = table.concat({ DONE_ID .. " " .. done, OPEN_ID .. " " .. open }, "\n")
+
+    -- Prune so only the done card's workspace is forgotten and trashed
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect only the done card's workspace forgotten and trashed
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -802,17 +1045,24 @@ testing.test("prune forgets a jj workspace named for a done card", function()
         )
     )
     testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget " .. DONE_ID .. "\n")
+
+    -- Expect the done folder gone and the open one kept
     testing.eq(fs.exists(done), false)
     testing.eq(fs.exists(open .. "/file"), true)
 end)
 
 testing.test("prune abandons an empty jj head no workspace or bookmark holds", function()
+    -- List two empty heads and no workspace but default
     local root, _, env, log = prune_setup("jj")
     local first = ("a1"):rep(20)
     env.env.WORKSPACES = "default"
     env.env.ROOTS = ""
     env.env.EMPTY = lines(first .. "\t", "0123456789abcdef\tdeploy marker")
+
+    -- Prune so both empty heads that nothing holds are abandoned
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect both heads reported abandoned
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -823,16 +1073,23 @@ testing.test("prune abandons an empty jj head no workspace or bookmark holds", f
             "Pruned 0 workspaces and 2 heads. Left 0 items alone."
         )
     )
+
+    -- Expect one abandon run in jj naming both
     testing.eq(fs.read(log), "jj -R " .. root .. " abandon " .. first .. " 0123456789abcdef\n")
 end)
 
 testing.test("prune lists a non-empty jj head and a stale bookmark and changes nothing", function()
+    -- List a non-empty head and two bookmarks off trunk
     local root, _, env, log = prune_setup("jj")
     env.env.WORKSPACES = "default"
     env.env.ROOTS = ""
     env.env.STRAYS = ("c"):rep(40) .. "\tsome work\n"
     env.env.BOOKMARKS = lines("feat-x", "old")
+
+    -- Prune so the non-empty head and both bookmarks are left alone
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect all three items left alone
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -844,10 +1101,13 @@ testing.test("prune lists a non-empty jj head and a stale bookmark and changes n
             "Pruned 0 workspaces and 0 heads. Left 3 items alone."
         )
     )
+
+    -- Expect no jj run
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune never touches the default workspace or a dirty folder", function()
+    -- Seed a done card whose folder is dirty and a default workspace with a gone folder
     local root, dir, env, log = prune_setup("jj")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local dirty = folder(dir, DONE_ID)
@@ -855,7 +1115,11 @@ testing.test("prune never touches the default workspace or a dirty folder", func
     env.env.ROOTS =
         table.concat({ "default " .. dir .. "gone-default", DONE_ID .. " " .. dirty }, "\n")
     env.env.DIRTY = "changes"
+
+    -- Prune so the dirty folder is kept and the default is never named
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the dirty folder kept and the default workspace unmentioned
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -864,18 +1128,25 @@ testing.test("prune never touches the default workspace or a dirty folder", func
             "Pruned 0 workspaces and 0 heads. Left 1 item alone."
         )
     )
+
+    -- Expect the folder intact and no jj run
     testing.eq(fs.exists(dirty .. "/file"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune keeps a folder when jj refuses to snapshot a file", function()
+    -- Seed a done card and make jj warn that it refused a file
     local root, dir, env, log = prune_setup("jj")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local big = folder(dir, DONE_ID)
     env.env.WORKSPACES = table.concat({ "default", DONE_ID }, "\n")
     env.env.ROOTS = DONE_ID .. " " .. big
     env.env.WARN = "Warning: Refused to snapshot some files"
+
+    -- Prune so the folder jj refused to snapshot is kept
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the folder kept as holding changes
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -884,11 +1155,14 @@ testing.test("prune keeps a folder when jj refuses to snapshot a file", function
             "Pruned 0 workspaces and 0 heads. Left 1 item alone."
         )
     )
+
+    -- Expect the folder intact and no jj run
     testing.eq(fs.exists(big .. "/file"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune keeps an unreadable jj workspace and names its error", function()
+    -- Seed a done card and make the state query fail with a stale copy
     local root, dir, env, log = prune_setup("jj")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local broken = folder(dir, DONE_ID)
@@ -898,7 +1172,11 @@ testing.test("prune keeps an unreadable jj workspace and names its error", funct
         "Error: The working copy is stale",
         "Hint: Run `jj workspace update-stale` to update it",
     }, "\n")
+
+    -- Prune so the stale workspace is kept with jj's first error line
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the workspace kept with jj's first error line
     testing.eq(code, 0, out)
     local kept = "Kept workspace "
         .. DONE_ID
@@ -906,11 +1184,14 @@ testing.test("prune keeps an unreadable jj workspace and names its error", funct
         .. broken
         .. ": Error: The working copy is stale."
     testing.eq(out, lines(kept, "Pruned 0 workspaces and 0 heads. Left 1 item alone."))
+
+    -- Expect the folder intact and no jj run
     testing.eq(fs.exists(broken .. "/file"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune keeps a linked folder in a dry run and a real run", function()
+    -- Seed a done card whose folder is a link to a folder outside the root
     local root, dir, env, log = prune_setup("jj")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local target = assert(fs.realpath(support.tempdir()))
@@ -924,17 +1205,24 @@ testing.test("prune keeps a linked folder in a dry run and a real run", function
         .. dir
         .. DONE_ID
         .. " is a link, not removed."
+
+    -- Run a dry run and expect the link kept
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
     testing.eq(code, 0, out)
     testing.eq(out, lines(kept, "Would prune 0 workspaces and 0 heads. Left 1 item alone."))
+
+    -- Run a real run and expect the link kept again
     out, code = support.dev(root, { "ws", "prune" }, env)
     testing.eq(code, 0, out)
     testing.eq(out, lines(kept, "Pruned 0 workspaces and 0 heads. Left 1 item alone."))
+
+    -- Expect the target intact and no jj run
     testing.eq(fs.exists(target .. "/file"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune dry-run changes nothing", function()
+    -- Seed a gone workspace, a done card, an empty head and a stale bookmark
     local root, dir, env, log = prune_setup("jj")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = folder(dir, DONE_ID)
@@ -943,7 +1231,11 @@ testing.test("prune dry-run changes nothing", function()
     env.env.EMPTY = ("e"):rep(40) .. "\t\n"
     env.env.FREED_EMPTY = env.env.EMPTY
     env.env.BOOKMARKS = lines("old")
+
+    -- Dry-run the prune to see every action reported as a plan
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect every action worded as a plan
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -955,16 +1247,23 @@ testing.test("prune dry-run changes nothing", function()
             "Would prune 2 workspaces and 1 head. Left 1 item alone."
         )
     )
+
+    -- Expect no jj run and the done folder intact
     testing.eq(fs.exists(log), false)
     testing.eq(fs.exists(done .. "/file"), true)
 end)
 
 testing.test("prune dry-run abandons the empty head a forgotten jj workspace frees", function()
+    -- List a gone workspace whose forget would free an empty head
     local root, dir, env, log = prune_setup("jj")
     env.env.WORKSPACES = table.concat({ "default", "gone1" }, "\n")
     env.env.ROOTS = "gone1 " .. dir .. "gone1"
     env.env.FREED_EMPTY = ("f"):rep(40) .. "\t\n"
+
+    -- Dry-run the prune to see the abandon of the head the forget frees
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect both the forget and the abandon planned
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -975,15 +1274,22 @@ testing.test("prune dry-run abandons the empty head a forgotten jj workspace fre
             "Would prune 1 workspace and 1 head. Left 0 items alone."
         )
     )
+
+    -- Expect no jj run
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune dry-run lists the non-empty head a forgotten jj workspace frees", function()
+    -- List a gone workspace whose forget would free a non-empty head
     local root, dir, env, log = prune_setup("jj")
     env.env.WORKSPACES = table.concat({ "default", "gone1" }, "\n")
     env.env.ROOTS = "gone1 " .. dir .. "gone1"
     env.env.FREED_STRAYS = ("d"):rep(40) .. "\tchore: bump\n"
+
+    -- Dry-run the prune to see the non-empty head the forget frees left alone
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect the forget planned and the head left alone
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -994,17 +1300,24 @@ testing.test("prune dry-run lists the non-empty head a forgotten jj workspace fr
             "Would prune 1 workspace and 0 heads. Left 1 item alone."
         )
     )
+
+    -- Expect no jj run
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune dry-run holds the heads of a jj workspace it does not forget", function()
+    -- Keep the gone1 folder so jj still has the workspace, with heads it holds
     local root, dir, env, log = prune_setup("jj")
     local path = folder(dir, "gone1")
     env.env.WORKSPACES = table.concat({ "default", "gone1" }, "\n")
     env.env.ROOTS = "gone1 " .. path
     env.env.FREED_EMPTY = ("f"):rep(40) .. "\t\n"
     env.env.FREED_STRAYS = ("d"):rep(40) .. "\tchore: bump\n"
+
+    -- Dry-run the prune to check the heads held by a kept workspace are not planned
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect nothing planned for the held heads
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1013,10 +1326,13 @@ testing.test("prune dry-run holds the heads of a jj workspace it does not forget
             "Would prune 0 workspaces and 0 heads. Left 0 items alone."
         )
     )
+
+    -- Expect no jj run
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune removes git worktrees whose folder is gone or named for a done card", function()
+    -- Seed a done card with a worktree folder and list a second, gone worktree
     local root, dir, env, log = prune_setup("git")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = dir .. DONE_ID
@@ -1024,7 +1340,11 @@ testing.test("prune removes git worktrees whose folder is gone or named for a do
     assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
     local gone = dir .. "gone1"
     env.env.WORKTREES = worktrees(root, gone, done)
+
+    -- Prune so the gone worktree and the done one are both removed
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect both worktrees reported removed
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1041,6 +1361,8 @@ testing.test("prune removes git worktrees whose folder is gone or named for a do
             "Pruned 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
+
+    -- Expect one remove for the gone worktree, then a prune, and the done folder trashed
     testing.eq(
         fs.read(log),
         lines(
@@ -1052,6 +1374,7 @@ testing.test("prune removes git worktrees whose folder is gone or named for a do
 end)
 
 testing.test("prune keeps a dirty git worktree of a done card", function()
+    -- Seed a done card with a worktree folder and make git report changes
     local root, dir, env, log = prune_setup("git")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = dir .. DONE_ID
@@ -1059,7 +1382,11 @@ testing.test("prune keeps a dirty git worktree of a done card", function()
     assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
     env.env.WORKTREES = worktrees(root, done)
     env.env.DIRTY = " M file\n"
+
+    -- Prune so the dirty worktree of the done card is kept
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the worktree kept as holding changes
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1069,18 +1396,25 @@ testing.test("prune keeps a dirty git worktree of a done card", function()
             "Pruned 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
+
+    -- Expect the folder intact and no git run
     testing.eq(fs.exists(done .. "/.git"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune keeps a locked git worktree of a done card", function()
+    -- Seed a done card with a worktree folder and mark the worktree locked
     local root, dir, env, log = prune_setup("git")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = dir .. DONE_ID
     assert(fs.mkdir(done, { parents = true }))
     assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
     env.env.WORKTREES = worktrees(root, done) .. "locked\n"
+
+    -- Prune so the locked worktree of the done card is kept with its hint
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the worktree kept with the unlock hint
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1094,11 +1428,14 @@ testing.test("prune keeps a locked git worktree of a done card", function()
             "Pruned 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
+
+    -- Expect the folder intact and no git run
     testing.eq(fs.exists(done .. "/.git"), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune removes a gone worktree before a done one listed ahead of it", function()
+    -- List the done worktree first and let git drop the gone record after its remove
     local root, dir, env, log = prune_setup("git")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = dir .. DONE_ID
@@ -1107,7 +1444,11 @@ testing.test("prune removes a gone worktree before a done one listed ahead of it
     local gone = dir .. "gone1"
     env.env.WORKTREES = worktrees(root, done, gone) .. "prunable gone\n"
     env.env.AFTER = worktrees(root, done)
+
+    -- Prune with the done worktree listed first to check the gone one goes first
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the gone worktree reported first
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1124,6 +1465,8 @@ testing.test("prune removes a gone worktree before a done one listed ahead of it
             "Pruned 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
+
+    -- Expect the gone worktree removed before the final prune
     testing.eq(
         fs.read(log),
         lines(
@@ -1134,17 +1477,24 @@ testing.test("prune removes a gone worktree before a done one listed ahead of it
 end)
 
 testing.test("prune keeps the workspace it runs in", function()
+    -- Build a workspace folder named for a done card
     local root, _, env, log = prune_setup("jj")
     local base = assert(fs.realpath(support.tempdir())) .. "/ws"
     local inside = base .. "/proj/" .. DONE_ID
     assert(fs.mkdir(inside .. "/.dev", { parents = true }))
     assert(fs.mkdir(inside .. "/.jj"))
+
+    -- Point the root at it and seed the board inside it
     env.env.DEV_WS_ROOT = base
     env.env.PATH = root .. "/bin:" .. os.getenv("PATH")
     seed_board(inside, env, { { id = DONE_ID, done = true } })
     env.env.WORKSPACES = table.concat({ "default", DONE_ID }, "\n")
     env.env.ROOTS = DONE_ID .. " " .. inside
+
+    -- Prune from inside the workspace to check it is kept
     local out, code = support.dev(inside, { "ws", "prune" }, env)
+
+    -- Expect it kept as the workspace dev runs in
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1153,11 +1503,14 @@ testing.test("prune keeps the workspace it runs in", function()
             "Pruned 0 workspaces and 0 heads. Left 1 item alone."
         )
     )
+
+    -- Expect the folder intact and no jj run
     testing.eq(fs.is_dir(inside), true)
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune dry-run changes no git worktree", function()
+    -- Seed a done card with a worktree folder and list a second, gone worktree
     local root, dir, env, log = prune_setup("git")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = dir .. DONE_ID
@@ -1165,7 +1518,11 @@ testing.test("prune dry-run changes no git worktree", function()
     assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
     local gone = dir .. "gone1"
     env.env.WORKTREES = worktrees(root, gone, done)
+
+    -- Dry-run the prune to check no git worktree is changed
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect both removals worded as a plan
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1176,18 +1533,25 @@ testing.test("prune dry-run changes no git worktree", function()
             "Would prune 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
+
+    -- Expect no git run and the done folder intact
     testing.eq(fs.exists(log), false)
     testing.eq(fs.exists(done .. "/.git"), true)
 end)
 
 testing.test("prune dry-run keeps a locked git worktree of a done card", function()
+    -- Seed a done card with a worktree folder and mark the worktree locked
     local root, dir, env, log = prune_setup("git")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = dir .. DONE_ID
     assert(fs.mkdir(done, { parents = true }))
     assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
     env.env.WORKTREES = worktrees(root, done) .. "locked\n"
+
+    -- Dry-run the prune to check the locked done worktree is kept
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect the worktree kept with the unlock hint
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1201,12 +1565,15 @@ testing.test("prune dry-run keeps a locked git worktree of a done card", functio
             "Would prune 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
+
+    -- Expect no git run
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test(
     "prune dry-run keeps a done worktree beside a prunable sibling with a folder",
     function()
+        -- Seed a done card and list a sibling worktree that git marks prunable but has a folder
         local root, dir, env, log = prune_setup("git")
         seed_board(root, env, { { id = DONE_ID, done = true } })
         local done = dir .. DONE_ID
@@ -1215,7 +1582,11 @@ testing.test(
         local sibling = dir .. "sibling"
         assert(fs.mkdir(sibling, { parents = true }))
         env.env.WORKTREES = worktrees(root, done, sibling) .. "prunable gitdir file is missing\n"
+
+        -- Dry-run the prune to check the done worktree is kept beside its sibling
         local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+        -- Expect the done worktree kept because a prune would drop the sibling's record
         testing.eq(code, 0, out)
         testing.eq(
             out,
@@ -1229,11 +1600,14 @@ testing.test(
                 "Would prune 0 worktrees and 0 heads. Left 1 item alone."
             )
         )
+
+        -- Expect no git run
         testing.eq(fs.exists(log), false)
     end
 )
 
 testing.test("prune dry-run removes a done worktree beside a prunable gone one", function()
+    -- Seed a done card and list a prunable worktree whose folder is gone
     local root, dir, env, log = prune_setup("git")
     seed_board(root, env, { { id = DONE_ID, done = true } })
     local done = dir .. DONE_ID
@@ -1241,7 +1615,11 @@ testing.test("prune dry-run removes a done worktree beside a prunable gone one",
     assert(fs.write(done .. "/.git", "gitdir: elsewhere\n"))
     local gone = dir .. "gone1"
     env.env.WORKTREES = worktrees(root, done, gone) .. "prunable gone\n"
+
+    -- Dry-run the prune to see both git removals planned
     local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect both removals worded as a plan
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -1252,14 +1630,21 @@ testing.test("prune dry-run removes a done worktree beside a prunable gone one",
             "Would prune 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
+
+    -- Expect no git run
     testing.eq(fs.exists(log), false)
 end)
 
 testing.test("prune goes on after a failed removal and exits with its code", function()
+    -- Make every git removal fail on two gone worktrees
     local root, dir, env = prune_setup("git")
     env.env.FAIL = "1"
     env.env.WORKTREES = worktrees(root, dir .. "gone1", dir .. "gone2")
+
+    -- Prune with every git removal failing to check both are kept
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect git's code and both worktrees reported kept
     testing.eq(code, 3, out)
     testing.eq(
         out,
@@ -1274,12 +1659,17 @@ testing.test("prune goes on after a failed removal and exits with its code", fun
 end)
 
 testing.test("prune leaves the empty heads when the abandon fails", function()
+    -- List an empty head and make jj fail
     local root, _, env = prune_setup("jj")
     env.env.FAIL = "1"
     env.env.WORKSPACES = "default"
     env.env.ROOTS = ""
     env.env.EMPTY = ("d"):rep(40) .. "\t\n"
+
+    -- Prune with the abandon failing to check the empty head is left alone
     local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect jj's code and the heads reported left alone
     testing.eq(code, 3, out)
     testing.eq(
         out,
