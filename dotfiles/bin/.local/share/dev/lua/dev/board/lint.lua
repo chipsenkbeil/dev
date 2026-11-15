@@ -139,26 +139,20 @@ function M.card(card, opts)
     end
     if open then
         local worked = column == roles.ready or column == roles.progress or column == roles.review
-        if worked and #card.checks == 0 then
-            local found, why = children()
-            if not found then
-                return nil, why
-            end
-            if found.total == 0 then
-                add("no checks row")
-            end
-        end
-        if
-            (column == roles.ready or column == roles.progress)
+        local lacks_checks = worked and #card.checks == 0
+        local names_checks = (column == roles.ready or column == roles.progress)
             and #card.checks > 0
             and not card.outcomes_unreadable
             and card.kind ~= board.Kind.EPIC
-        then
+        if lacks_checks or names_checks then
             local found, why = children()
             if not found then
                 return nil, why
             end
-            if found.total == 0 then
+            if found.total == 0 and lacks_checks then
+                add("no checks row")
+            end
+            if found.total == 0 and names_checks then
                 for _, name in ipairs(board.unnamed_checks(card.outcomes, card.checks)) do
                     add("outcome names no deciding check: " .. name)
                 end
