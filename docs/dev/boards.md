@@ -1291,6 +1291,11 @@ The rules:
 - A Done epic that was not discarded has every child Done: `N of M children
   open`.
 - A Done card that was not discarded has every outcome ticked.
+- A Done card that was not discarded names no one as both its builder and a
+  reviewer: `built and reviewed by the same name: NAME`. The builders are the
+  names in the card's claim records, and the reviewers are the `by` names in its
+  review records. Every name in a claim record counts as a builder, whatever
+  role it worked in.
 
 A card whose outcomes Pomb sent in a shape dev cannot read is reported as
 `outcomes unreadable`, never as having no outcomes.
@@ -2156,6 +2161,10 @@ size, the v3 sections and the outcomes. It adds these:
   run label.
 - In Done: `N of M outcomes unticked` unless discarded, and `N of M children
   open` when the card has an open child.
+- In Done, unless discarded: `built and reviewed by the same name: NAMES`. It
+  reads `backend:comments` once, takes the names `board.claimants` finds in the
+  claim records, and lists each one that `dev.board.review.parse` also finds as
+  `by` in a review record, sorted.
 
 How it reads outcomes:
 

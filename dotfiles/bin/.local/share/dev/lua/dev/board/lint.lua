@@ -1,4 +1,5 @@
 local board = require("dev.board")
+local review = require("dev.board.review")
 
 ---The rules `dev board lint` holds every card to, with no read of the board of its own.
 ---@class dev.board.lint
@@ -72,6 +73,25 @@ local function unticked(card)
     end
     if open > 0 then
         return open .. " of " .. #card.outcomes .. " outcomes unticked"
+    end
+end
+
+---Name who both claimed a card and recorded a review on it.
+---@param comments dev.board.Comment[] the card's comments
+---@return string? rule the overlapping names, nil when no name played both roles
+local function overlap(comments)
+    local builders = board.claimants(comments)
+    local seen, names = {}, {}
+    for _, comment in ipairs(comments) do
+        local record = review.parse(comment.body)
+        if record and builders[record.by] and not seen[record.by] then
+            seen[record.by] = true
+            names[#names + 1] = record.by
+        end
+    end
+    table.sort(names)
+    if #names > 0 then
+        return "built and reviewed by the same name: " .. table.concat(names, ", ")
     end
 end
 
@@ -195,6 +215,16 @@ function M.card(card, opts)
         local unticked_rule = unticked(card)
         if unticked_rule then
             add(unticked_rule)
+        end
+    end
+    if card.done and not discarded then
+        local comments, why = facts.comments()
+        if not comments then
+            return nil, why
+        end
+        local shared = overlap(comments)
+        if shared then
+            add(shared)
         end
     end
     return rules, nil, owned

@@ -3,6 +3,7 @@ local board = require("dev.board")
 local cmd_board = require("dev.cmd.board")
 local fs = require("dev.fs")
 local json = require("dev.json")
+local review = require("dev.board.review")
 local support = require("support")
 
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
@@ -325,6 +326,16 @@ testing.test("lint fails when a card's comments cannot be read", function()
     testing.ok(result.message:find("pomb is down", 1, true), result.message)
 end)
 
+testing.test("lint fails when the comments of a Done card cannot be read", function()
+    local fake = backend({ card(1, support.COLUMN_NAME.DONE) })
+    function fake:comments()
+        return nil, "pomb is down"
+    end
+    local result = cmd_board.run("lint", {}, fake)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("pomb is down", 1, true), result.message)
+end)
+
 local function local_board(config)
     local root = support.sandbox({ [".dev/config.toml"] = config }, {})
     local home = support.tempdir()
@@ -480,4 +491,105 @@ testing.test("lint exits 1 when an owner finding sits beside an agent finding", 
         "00000001 Blocked lacks ## Out of scope (owner)",
         "00000002 Ready no checks row",
     })
+end)
+
+local function done_card_with(builder, reviewer, opts)
+    -- Default the optional fields
+    local merged = { column = support.COLUMN_NAME.DONE, labels = {}, records = {} }
+    for key, value in pairs(opts or {}) do
+        merged[key] = value
+    end
+    opts = merged
+
+    -- Add a card with one outcome
+    local dev, path = local_board(LOCAL)
+    local out, code = dev({
+        "board",
+        "add",
+        "Card",
+        "--size",
+        "1",
+        "--problem",
+        "x",
+        "--change",
+        "y",
+        "--out-of-scope",
+        "z",
+        "--done-when",
+        "a " .. board.JUDGEMENT,
+    })
+    testing.eq(code, 0, out)
+
+    -- Move the card to its column and tick its outcome when that column is Done
+    local doc = assert(json.decode(assert(fs.read(path))))
+    local target = doc.cards[1]
+    for _, column in ipairs(doc.columns) do
+        if column.name == opts.column then
+            target.column_id = column.id
+            target.outcomes[1].done = column.is_done
+        end
+    end
+    target.checks = { "dev test" }
+    target.labels = opts.labels
+
+    -- Write the claim and review records, then lint
+    local at = "2026-11-14T00:00:00Z"
+    local rev = { commit = "abc123", change = "xyz" }
+    target.comments = {
+        { id = "c1", who = "agent", at = at, body = board.claim_record(builder) },
+        {
+            id = "c2",
+            who = "agent",
+            at = at,
+            body = review.record(review.KIND.CODE, reviewer, rev, review.VERDICT.CLEAN),
+        },
+    }
+    for _, body in ipairs(opts.records) do
+        target.comments[#target.comments + 1] =
+            { id = "c" .. (#target.comments + 1), who = "agent", at = at, body = body }
+    end
+    assert(fs.write(path, assert(json.encode(doc))))
+    return dev({ "board", "lint" })
+end
+
+testing.test("lint lists each name that built and reviewed a Done card once, sorted", function()
+    local rev = { commit = "abc123", change = "xyz" }
+    local out, code = done_card_with("project-run/zzzz", "project-run/zzzz", {
+        records = {
+            board.claim_record("project-run/aaaa"),
+            review.record(review.KIND.CODE, "project-run/aaaa", rev, review.VERDICT.CLEAN),
+            review.record(review.KIND.CODE, "project-run/zzzz", rev, review.VERDICT.MINOR),
+        },
+    })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("same name: project%-run/aaaa, project%-run/zzzz\n"), out)
+end)
+
+testing.test("lint flags a Done card whose builder also reviewed it", function()
+    local out, code = done_card_with("project-run/aaaa", "project-run/aaaa")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Done +built and reviewed by the same name: project%-run/aaaa"), out)
+end)
+
+testing.test("lint leaves a card still in Review with the same builder and reviewer", function()
+    local out, code = done_card_with(
+        "project-run/aaaa",
+        "project-run/aaaa",
+        { column = support.COLUMN_NAME.REVIEW }
+    )
+    testing.eq(code, 0, out)
+    testing.eq(out, "no findings\n")
+end)
+
+testing.test("lint leaves a discarded Done card with the same builder and reviewer", function()
+    local out, code =
+        done_card_with("project-run/aaaa", "project-run/aaaa", { labels = { board.DISCARDED } })
+    testing.eq(code, 0, out)
+    testing.eq(out, "no findings\n")
+end)
+
+testing.test("lint passes a Done card whose builder and reviewers differ", function()
+    local out, code = done_card_with("project-run/aaaa", "dotfiles/code-examiner/aaaa")
+    testing.eq(code, 0, out)
+    testing.eq(out, "no findings\n")
 end)
