@@ -301,7 +301,7 @@ else
     out="$(style_lint "$rust" "$bare_path")"
     rc=$?
     assert_eq "a missing tool outside CI only warns" "$rc" "0"
-    assert_contains "the warning names the check a missing tool skips" "$out" "WARNING: cargo-sort not found, skipping the cargo sort check"
+    assert_contains "the note names the check a missing tool skips" "$out" "Tool cargo-sort not found. The cargo sort check is skipped."
     out="$(style_lint "$rust" "$bare_path" CI=1 NO_NIGHTLY=1)"
     assert_contains "a missing cargo-sort fails under CI" "$out" "cargo-sort not found, so the cargo sort check cannot run"
     assert_contains "a missing cargo-deny fails under CI" "$out" "cargo-deny not found, so the cargo deny check cannot run"
@@ -412,7 +412,7 @@ else
     rm "$lua/arms.sh"
 
     out="$(style_lint "$lua" "$bare_path")"
-    assert_contains "the lua warning names the check a missing tool skips" "$out" "WARNING: stylua not found, skipping the stylua check"
+    assert_contains "the lua note names the check a missing tool skips" "$out" "Tool stylua not found. The stylua check is skipped."
     out="$(style_lint "$lua" "$bare_path" CI=1)"
     assert_contains "a missing lua tool fails under CI" "$out" "stylua not found, so the stylua check cannot run"
     assert_contains "the lua CI failure lists each skipped check" "$out" "FAILED: stylua selene ast-grep"
