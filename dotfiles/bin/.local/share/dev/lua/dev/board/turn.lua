@@ -423,11 +423,15 @@ function M.take(backend, name, card, opts)
     end
     if own and own.hold then
         if store.stamp(store.now() - M.MAX_HOLD_SECONDS) >= own.taken then
+            local released, reason = M.release(backend, own)
+            local ending = released and "so it is given back and has to be asked for again"
+                or "and giving it back failed: " .. (reason or "unknown")
             return nil,
                 string.format(
-                    "the landing turn has been held since %s, the most it may be kept (%d seconds), so give it back and ask for it again",
+                    "the landing turn has been held since %s, the most it may be kept (%d seconds), %s",
                     own.taken,
-                    M.MAX_HOLD_SECONDS
+                    M.MAX_HOLD_SECONDS,
+                    ending
                 )
         end
         lease, hold = opts and opts.seconds or own.lease, true

@@ -2618,6 +2618,9 @@ Asking for the turn:
   asks for the turn. Only the first live ask in line may take it, except a
   caller that already owns the claim for that card, whose newest holder note is
   for it. That caller renews the claim under its live fence, whatever the line.
+- A caller that owns the claim and has kept it for `MAX_HOLD_SECONDS` is
+  refused, and `take` gives that claim back under its fence and writes the
+  `left` note, as `turn` does, so the next card in line does not wait on it.
 - A later asker is told whom the turn is next for.
 - An ask ends when its card takes the turn, writes a `dev-turn: left` note when
   its wait runs out, or passes its end time. The end time keeps a waiter that

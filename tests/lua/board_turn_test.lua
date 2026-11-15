@@ -717,8 +717,32 @@ testing.test(
         local again, message = turn.take(backend, "alpha", short, { hold = true, seconds = 600 })
         testing.eq(again, nil)
         testing.ok(message:find("the most it may be kept", 1, true), message)
+        testing.ok(message:find("given back", 1, true), message)
     end
 )
+
+testing.test("a capped own-claim take frees the turn and notes it left", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local card, fence = reclaimed(backend, "alpha", short)
+    local opts = { ttl = turn.MAX_HOLD_SECONDS * 2, fence = fence, lease = true }
+    assert(backend:claim(card.id, "alpha", opts))
+    local function lefts()
+        local count = 0
+        for _, comment in ipairs(assert(backend:comments(card.id))) do
+            if comment.body == "dev-turn: left holder=alpha card=" .. short then
+                count = count + 1
+            end
+        end
+        return count
+    end
+    local before = lefts()
+    advance(turn.MAX_HOLD_SECONDS + 1)
+    testing.eq(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }), nil)
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(lefts(), before + 1)
+    testing.eq(assert(turn.take(backend, "beta", "bbbb2222")).holder, "beta")
+end)
 
 testing.test("a release leaves the plain claim of a landing alone", function()
     local backend = backend_at(board_home())
