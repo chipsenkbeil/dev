@@ -869,13 +869,15 @@ testing.test(
         -- Take it again and expect the release sentence as the ending
         local take_opts = { hold = true, seconds = TURN_HOLD_SECONDS }
         local _, message = turn.take(backend, "alpha", short, take_opts)
-        testing.ok(
-            message:find(
-                "seconds). The landing turn could not be released. The claim is stuck.",
-                1,
-                true
-            ),
-            message
+        local taken = message:match("held since (%S+),")
+        testing.eq(
+            message,
+            string.format(
+                "The landing turn has been held since %s, the most it may be kept "
+                    .. "(%d seconds). The landing turn could not be released. The claim is stuck.",
+                taken,
+                turn.MAX_HOLD_SECONDS
+            )
         )
     end
 )
