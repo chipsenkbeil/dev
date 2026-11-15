@@ -669,10 +669,13 @@ testing.test("a leave keeps a live hold", function()
 end)
 
 local function reclaimed(backend, name, short)
+    -- Take a hold on a short lease and let the lease lapse
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, name, short, { hold = true, seconds = LEASE_SECONDS }))
     advance(PAST_LEASE_SECONDS)
     restore()
+
+    -- Claim the card again under the same name and drop the hold note
     local card = assert(open_turn_card(backend))
     local fence = assert(backend:claim(card.id, name, { ttl = TURN_HOLD_SECONDS, lease = true }))
     turn.leave(backend, name, short)
@@ -682,12 +685,18 @@ end
 testing.test("a holder whose live claim outran its hold note takes the turn again", function()
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
+
+    -- Reclaim the card and queue another asker
     local card, fence, first = reclaimed(backend, "alpha", short)
     assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = TURN_HOLD_SECONDS }))
+
+    -- Find the live claim for its own card only, with no hold note
     testing.eq(turn.held(backend, "alpha", short), nil)
     testing.eq(assert(turn.claimed(backend, "alpha", short)).fence, fence)
     testing.eq(turn.claimed(backend, "beta", "bbbb2222"), nil)
     testing.eq(turn.claimed(backend, "alpha", "bbbb2222"), nil)
+
+    -- Take the turn again under the live fence ahead of the queue
     local again = assert(turn.take(backend, "alpha", short))
     testing.eq(again.card, card.id)
     testing.eq(again.fence, fence)
@@ -713,10 +722,14 @@ testing.test(
     function()
         local backend = backend_at(board_home())
         local _, short = landing_card(backend)
+
+        -- Reclaim the card and keep its claim alive past the hold cap
         local card, fence = reclaimed(backend, "alpha", short)
         local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
         assert(backend:claim(card.id, "alpha", opts))
         advance(turn.MAX_HOLD_SECONDS + 1)
+
+        -- Take it again and expect a refusal that says it was given back
         local take_opts = { hold = true, seconds = TURN_HOLD_SECONDS }
         local again, message = turn.take(backend, "alpha", short, take_opts)
         testing.eq(again, nil)
@@ -728,9 +741,13 @@ testing.test(
 testing.test("a capped own-claim take frees the turn and notes it left", function()
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
+
+    -- Reclaim the card and keep its claim alive past the hold cap
     local card, fence = reclaimed(backend, "alpha", short)
     local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
     assert(backend:claim(card.id, "alpha", opts))
+
+    -- Count the left notes the holder wrote
     local function lefts()
         local count = 0
         for _, comment in ipairs(assert(backend:comments(card.id))) do
@@ -741,6 +758,8 @@ testing.test("a capped own-claim take frees the turn and notes it left", functio
         return count
     end
     local before = lefts()
+
+    -- Take it again past the cap and expect the turn freed with one more left note
     advance(turn.MAX_HOLD_SECONDS + 1)
     testing.eq(
         turn.take(backend, "alpha", short, { hold = true, seconds = TURN_HOLD_SECONDS }),
