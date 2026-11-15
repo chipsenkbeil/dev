@@ -15,7 +15,6 @@ local ctx = ...
 verb.no_args(ctx)
 
 local root = ctx.root
-local stdout = io.stdout
 local failed = false
 local dirty = {}
 
@@ -51,12 +50,12 @@ end
 local have_shfmt = dev_os.which("shfmt") ~= nil
 
 local function lint_shell(file)
-    stdout:write("> Linting ", file, "\n")
+    verb.say("> Linting " .. file)
     local head = checks.first_line(root, file)
     if head:find("bash", 1, true) then
         run_checked({ "shellcheck", "-x", "-P", "SCRIPTDIR", file })
     elseif head:find("zsh", 1, true) then
-        stdout:write("  skip (zsh)\n")
+        verb.say("  skip (zsh)")
         return
     else
         run_checked({ "shellcheck", "-x", "-P", "SCRIPTDIR", "-s", "sh", file })
@@ -82,7 +81,7 @@ local function lint_lua(files)
     for _, row in ipairs(LUA_TOOLS) do
         local tool, prefix = row[1], { row[1] }
         if dev_os.which(tool) then
-            stdout:write("> Linting lua with ", tool, "\n")
+            verb.say("> Linting lua with " .. tool)
             for _, word in ipairs(row[2]) do
                 prefix[#prefix + 1] = (word:gsub("^STYLE", style))
             end
@@ -91,7 +90,7 @@ local function lint_lua(files)
             missing(tool)
         end
     end
-    stdout:write("> Linting lua comments\n")
+    verb.say("> Linting lua comments")
     package.path = style .. "/../?.lua;" .. package.path
     local lintset = require("lintset")
     for _, file in ipairs(files) do
@@ -156,13 +155,13 @@ if #template_files > 0 then
     lint_templates(template_files)
 end
 
-stdout:write("> standalone shell\n")
+verb.say("> standalone shell")
 require("dev.standalone").warn(root, verb.note)
 
 if dev_os.which("ast-grep") then
     local sets = fs.join(root, checks.lint_dir, "..")
     for _, set in ipairs(RULE_TEST_SETS) do
-        stdout:write("> Testing ", set, " ast-grep rules\n")
+        verb.say("> Testing " .. set .. " ast-grep rules")
         run_checked({
             "ast-grep",
             "test",
