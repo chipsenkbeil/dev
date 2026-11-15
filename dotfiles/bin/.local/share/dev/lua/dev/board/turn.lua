@@ -83,6 +83,17 @@ local function record(body)
     }
 end
 
+---Turn the backend's `reason` into a sentence that follows another sentence.
+---@param reason string? the backend's message
+---@return string sentence a space and the reason as a capitalized sentence, empty when none
+local function sentence_after(reason)
+    if not reason or reason == "" then
+        return ""
+    end
+    local text = reason:sub(1, 1):upper() .. reason:sub(2)
+    return " " .. (text:find("[.!?]$") and text or text .. ".")
+end
+
 local function find(cards)
     local found
     for _, card in ipairs(cards) do
@@ -118,7 +129,7 @@ local function turn_card(backend)
     if card then
         return card
     end
-    return nil, message or "the landing turn card could not be read"
+    return nil, "The landing turn card could not be read." .. sentence_after(message)
 end
 
 ---Find the newest holder record `name` wrote.
@@ -215,7 +226,7 @@ end
 ---@return string text the holder and since when
 function M.describe(holder)
     return string.format(
-        "the landing turn is held by %s%s",
+        "The landing turn is held by %s%s.",
         holder.name,
         holder.since and (" since " .. holder.since) or ""
     )
@@ -292,7 +303,7 @@ local function rotate(backend, card, comments)
             )
     end
     if not moved then
-        return nil, "The full landing turn card could not be retired. " .. (message or "")
+        return nil, "The full landing turn card could not be retired." .. sentence_after(message)
     end
     local fresh_card
     fresh_card, message = turn_card(backend)
@@ -419,9 +430,10 @@ function M.take(backend, name, card, opts)
     local own = own_claim(holding, comments, name, card)
     if first and not own and not (first.name == name and first.card == card) then
         local holder = holder_of(backend, holding)
-        local ahead = "next for " .. first.name
+        local ahead = "next for " .. first.name .. "."
         return nil,
-            holder and (M.describe(holder) .. ", and it is " .. ahead) or ahead,
+            holder and (M.describe(holder) .. " It is " .. ahead)
+                or ("The landing turn is " .. ahead),
             place .. ":" .. (holder and holder.name or "")
     end
     if own and own.hold then
@@ -448,7 +460,7 @@ function M.take(backend, name, card, opts)
         canonical, message = lookup(backend)
         if not canonical then
             backend:release(holding.id, fence)
-            return nil, message or "the landing turn card could not be read"
+            return nil, "The landing turn card could not be read." .. sentence_after(message)
         end
         if canonical.id ~= holding.id then
             backend:release(holding.id, fence)
@@ -474,7 +486,7 @@ function M.take(backend, name, card, opts)
     noted, message = note_holder(backend, mine)
     if not noted then
         backend:release(holding.id, fence)
-        return nil, "the landing turn was taken but could not be noted: " .. message
+        return nil, "The landing turn was taken but could not be noted." .. sentence_after(message)
     end
     return mine
 end
@@ -562,7 +574,8 @@ function M.held(backend, name, card)
     if holding.claimant ~= name or holding.claim_fence ~= newest.fence then
         return nil,
             string.format(
-                "the landing turn held for %s ran out or was taken by another, so take it again with dev board turn %s",
+                "The landing turn held for %s ran out or was taken by another. "
+                    .. "Take it again with dev board turn %s.",
                 card,
                 card
             ),
@@ -589,7 +602,8 @@ function M.renew(backend, turn)
     if turn.hold and store.stamp(store.now() - M.MAX_HOLD_SECONDS) >= turn.taken then
         return nil,
             string.format(
-                "the landing turn has been held since %s, the most it may be kept (%d seconds), so it is given back and has to be asked for again",
+                "The landing turn has been held since %s, the most it may be kept (%d seconds). "
+                    .. "It is given back and has to be asked for again.",
                 turn.taken,
                 M.MAX_HOLD_SECONDS
             ),
@@ -601,11 +615,11 @@ function M.renew(backend, turn)
         { ttl = turn.lease, fence = turn.fence, lease = true }
     )
     if not fence then
-        return nil, "the landing turn was lost: " .. message
+        return nil, "The landing turn was lost." .. sentence_after(message)
     end
     if fence ~= turn.fence then
         backend:release(turn.card, fence)
-        return nil, "the landing turn ran out and was lost, so ask for it again"
+        return nil, "The landing turn ran out and was lost. Ask for it again."
     end
     return true
 end
@@ -644,7 +658,10 @@ function M.extend(backend, held, seconds)
     local noted
     noted, message = note_holder(backend, held)
     if not noted then
-        return nil, "the hold was renewed but its lease could not be noted: " .. message, nil, true
+        return nil,
+            "The hold was renewed but its lease could not be noted." .. sentence_after(message),
+            nil,
+            true
     end
     return true
 end

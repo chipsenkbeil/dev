@@ -2599,9 +2599,9 @@ The landing turn:
   longer than 900 seconds, and the renewal before the `jj land` puts it back to
   900 seconds.
 - When a holder dies, the lease ends and the next asker takes the turn. A holder
-  that comes back after that gets `the landing turn was lost` or
-  `the landing turn ran out`, writes nothing, lands nothing and has to ask
-  again.
+  that comes back after that gets `The landing turn was lost.` or
+  `The landing turn ran out and was lost.`, writes nothing, lands nothing and
+  has to ask again.
 - A holder whose newest hold note names an older fence than its live claim
   still owns the claim. `land` finds it with the claim's own fence and lands
   under it, and refuses only when the claim is gone or belongs to another name.
@@ -2615,7 +2615,7 @@ Asking for the turn:
 - A card in the wrong column, with an open outcome or claimed by another agent
   is refused before the turn is asked for.
 - `land` then asks for the turn for up to `--wait` seconds and, when it stays
-  taken, refuses with `the landing turn is held by NAME since STAMP`.
+  taken, refuses with `The landing turn is held by NAME since STAMP.`
 - Cards wait in the order they asked. A card with a wait writes a
   `dev-turn: ask` note with the time its wait ends, plus 10 seconds, before it
   asks for the turn. Only the first live ask in line may take it, except a
@@ -2787,7 +2787,7 @@ The command:
 - It takes the turn as `land` does, but fails fast. It asks once unless
   `--wait` gives seconds to keep asking (a whole number up to 86400), and when
   the turn stays taken it refuses with
-  `the landing turn is held by NAME since STAMP`.
+  `The landing turn is held by NAME since STAMP.`
 - A card in Done is refused, except to give a hold back.
 
 The hold:
@@ -2815,7 +2815,7 @@ Renewing:
   seconds and prints
   `renewed the landing turn held for <id prefix> for N more seconds`.
 - When the renewal succeeds and the note of the new lease fails, `turn` refuses
-  with `the hold was renewed but its lease could not be noted` and takes
+  with `The hold was renewed but its lease could not be noted.` and takes
   nothing new. The hold stays with its old lease note.
 - The hold may be kept without a break for 3600 seconds in all. After that,
   `turn` and `land` refuse, give the turn back and leave the holder to ask
@@ -2843,7 +2843,7 @@ Landing under a hold:
   fixes the cause and lands again.
 - When the hold ran out or another card took the turn, `land` writes nothing,
   lands nothing and refuses with
-  `the landing turn held for <id prefix> ran out or was taken by another`, and
+  `The landing turn held for <id prefix> ran out or was taken by another.`, and
   `turn CARD` takes it again.
 
 ### allow
