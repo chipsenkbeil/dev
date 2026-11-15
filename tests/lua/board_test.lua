@@ -2456,6 +2456,31 @@ testing.test(
     end
 )
 
+testing.test("epic_add_ready_bare", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("add", {
+        "Big",
+        "--epic",
+        "--column",
+        support.COLUMN.READY,
+        "--size",
+        "1",
+        "--problem",
+        "x",
+        "--change",
+        "y",
+        "--out-of-scope",
+        "z",
+        "--done-when",
+        "a bare outcome",
+        "--checks",
+        "dev test",
+    }, backend)
+    testing.eq(result.code, nil, result.message)
+    testing.eq(backend.opts.epic, true)
+    testing.eq(backend.calls[1][3], support.COLUMN_NAME.READY)
+end)
+
 testing.test("add --checks gives the card one row per command", function()
     local backend = fake(sample())
     local result = cmd_board.run("add", {
