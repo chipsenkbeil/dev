@@ -1828,10 +1828,10 @@ function Backend:wait(after, kinds, timeout)
     return { cursor = doc.cursor, events = events }
 end
 
-function Backend:claim(id, claimant, ttl, fence, opts)
+function Backend:claim(id, claimant, opts)
     local path = "/api/tasks/" .. id .. "/owner"
     local owner, message, status
-    local unfinished = board.open_children(opts and opts.epic)
+    local unfinished = board.open_children(opts.epic)
     if unfinished > 0 then
         return nil,
             string.format(
@@ -1840,9 +1840,9 @@ function Backend:claim(id, claimant, ttl, fence, opts)
                 opts.epic.total
             )
     end
-    local grab = { name = claimant, ttl_seconds = ttl, role = board.agent_role(claimant) }
-    if fence then
-        owner, message, status = self:__request("POST", path .. "/renew", grab, fence)
+    local grab = { name = claimant, ttl_seconds = opts.ttl, role = board.agent_role(claimant) }
+    if opts.fence then
+        owner, message, status = self:__request("POST", path .. "/renew", grab, opts.fence)
         if not owner and status ~= CONFLICT then
             return nil, message
         end

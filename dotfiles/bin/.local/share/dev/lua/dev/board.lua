@@ -6,6 +6,8 @@ local text = require("dev.text")
 local M = {}
 
 ---@class dev.board.ClaimOpts
+---@field ttl integer the seconds a Pomb grab or a lease claim lasts
+---@field fence integer? the caller's live fence, which renews the claim it names
 ---@field lease boolean? true when the claim lasts the ttl, false for the card-size minutes
 ---@field epic {done: integer, total: integer}? the card's children, which a Pomb grab refuses while open
 
@@ -167,9 +169,9 @@ local M = {}
 ---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the
 ---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
 ---   board with none, or nil and a message
----@field claim fun(self: dev.board.Backend, id: string, claimant: string, ttl: integer, fence:
----   integer?, opts: dev.board.ClaimOpts?): integer?, string? the fence of the owner grab, renewed
----   when the caller's live fence is given
+---@field claim fun(self: dev.board.Backend, id: string, claimant: string, opts:
+---   dev.board.ClaimOpts): integer?, string? the fence of the owner grab, renewed when the
+---   caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the
 ---   owner lease ended
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer,

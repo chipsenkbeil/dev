@@ -132,8 +132,11 @@ end
 local function claim_card(backend, card, name)
     local held = claims.read(card.id)
     local who = claimant(name)
-    local fence, message =
-        backend:claim(card.id, who, claims.TTL_SECONDS, held and held.fence, { epic = card.epic })
+    local fence, message = backend:claim(card.id, who, {
+        ttl = claims.TTL_SECONDS,
+        fence = held and held.fence,
+        epic = card.epic,
+    })
     if not fence then
         return failure(message)
     end

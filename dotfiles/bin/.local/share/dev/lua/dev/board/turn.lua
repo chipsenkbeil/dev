@@ -388,7 +388,7 @@ function M.take(backend, name, card, opts)
             place .. ":" .. (holder and holder.name or "")
     end
     local fence
-    fence, message = backend:claim(holding.id, name, lease, nil, { lease = true })
+    fence, message = backend:claim(holding.id, name, { ttl = lease, lease = true })
     if fence then
         local canonical
         canonical, message = fresh(backend)
@@ -541,8 +541,11 @@ function M.renew(backend, turn)
             ),
             true
     end
-    local fence, message =
-        backend:claim(turn.card, turn.holder, turn.lease, turn.fence, { lease = true })
+    local fence, message = backend:claim(
+        turn.card,
+        turn.holder,
+        { ttl = turn.lease, fence = turn.fence, lease = true }
+    )
     if not fence then
         return nil, "the landing turn was lost: " .. message
     end

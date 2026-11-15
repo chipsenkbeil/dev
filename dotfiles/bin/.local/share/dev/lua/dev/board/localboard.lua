@@ -1039,20 +1039,20 @@ function Backend:delete_outcome(id, outcome, fence)
     end)
 end
 
-function Backend:claim(id, claimant, ttl, fence, opts)
+function Backend:claim(id, claimant, opts)
     return self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
         if not card then
             return nil, "the board has no card " .. id
         end
         local held = live(card.claim)
-        if held and not (held.fence == fence and held.claimant == claimant) then
+        if held and not (held.fence == opts.fence and held.claimant == claimant) then
             return nil, id .. " is claimed by " .. held.claimant
         end
         local taken = held and held.fence or (card.last_fence or 0) + 1
         local size = card_view(doc, card).size
         local _, minutes = claims.cap(size)
-        local seconds = opts and opts.lease and ttl or minutes * SECONDS_PER_MINUTE
+        local seconds = opts.lease and opts.ttl or minutes * SECONDS_PER_MINUTE
         card.last_fence = taken
         card.claim = {
             claimant = claimant,

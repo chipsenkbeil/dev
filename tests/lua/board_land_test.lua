@@ -576,6 +576,27 @@ if has_jj then
         must(dev_os.run(argv, { stdout = "null", stderr = "null" }))
     end
 
+    local function push_trunk(project, files)
+        local other = support.tempdir() .. "/clone"
+        must(
+            dev_os.run(
+                { "git", "clone", "-q", "--branch", "master", project.bare, other },
+                { stdout = "null", stderr = "null" }
+            )
+        )
+        for path, body in pairs(files or {}) do
+            assert(fs.write(other .. "/" .. path, body), "write failed")
+            git(other, "add", path)
+        end
+        git(other, "commit", "-q", "--allow-empty", "-m", "moved")
+        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+    end
+
+    local function trunk_moves(project, files)
+        push_trunk(project, files)
+        jj(project.root, "git", "fetch", "--remote", "origin")
+    end
+
     local function jj_project(extra)
         local project = setup(extra)
         assert(fs.write(project.root .. "/bin/jj", LAND_STUB), "write failed")
@@ -758,7 +779,7 @@ if has_jj then
         local cards = assert(backend:cards())
         for _, card in ipairs(cards) do
             if card.id:sub(1, #id) == id then
-                assert(backend:claim(card.id, old, 3600, nil, { lease = true }))
+                assert(backend:claim(card.id, old, { ttl = 3600, lease = true }))
             end
         end
         restore()
@@ -1057,15 +1078,7 @@ if has_jj then
     testing.test("land rebases onto trunk under the turn when trunk has moved", function()
         local project = jj_project()
         local id = verified_card(project)
-        local other = support.tempdir() .. "/clone"
-        must(
-            dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", project.bare, other },
-                { stdout = "null", stderr = "null" }
-            )
-        )
-        git(other, "commit", "-q", "--allow-empty", "-m", "moved")
-        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        push_trunk(project)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(out:find("trunk has moved", 1, true), nil, out)
@@ -1104,15 +1117,7 @@ if has_jj then
         jj(project.root, "new", "-m", "feat: child")
         assert(fs.write(project.root .. "/child.txt", "two\n"), "write failed")
         local id = verified_card(project)
-        local other = support.tempdir() .. "/clone"
-        must(
-            dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", project.bare, other },
-                { stdout = "null", stderr = "null" }
-            )
-        )
-        git(other, "commit", "-q", "--allow-empty", "-m", "moved")
-        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        push_trunk(project)
         local before = head(project.root)
         refused(project, id, { "sits on an unlanded parent" })
         testing.eq(head(project.root), before)
@@ -1255,23 +1260,6 @@ if has_jj then
         )
         testing.eq(turn_holder(project.home), nil)
     end)
-
-    local function trunk_moves(project, files)
-        local other = support.tempdir() .. "/clone"
-        must(
-            dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", project.bare, other },
-                { stdout = "null", stderr = "null" }
-            )
-        )
-        for path, body in pairs(files) do
-            assert(fs.write(other .. "/" .. path, body), "write failed")
-            git(other, "add", path)
-        end
-        git(other, "commit", "-q", "-m", "moved")
-        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
-        jj(project.root, "git", "fetch", "--remote", "origin")
-    end
 
     local function rebase_onto_trunk(root)
         jj(root, "rebase", "-r", "@", "-d", "master")
@@ -2117,15 +2105,7 @@ if has_jj then
     testing.test("land refuses when the rebase onto trunk fails", function()
         local project = jj_project()
         local id = verified_card(project)
-        local other = support.tempdir() .. "/clone"
-        must(
-            dev_os.run(
-                { "git", "clone", "-q", "--branch", "master", project.bare, other },
-                { stdout = "null", stderr = "null" }
-            )
-        )
-        git(other, "commit", "-q", "--allow-empty", "-m", "moved")
-        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        push_trunk(project)
         local FAIL_AT = { REBASE = "rebase" }
         refused(project, id, { "the rebase onto trunk failed" }, { LOG_FAIL_AT = FAIL_AT.REBASE })
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
@@ -2311,7 +2291,7 @@ if has_jj then
             local backend, restore = board_at(project.home)
             for _, card in ipairs(assert(backend:cards())) do
                 if card.id:sub(1, #id) == id then
-                    assert(backend:claim(card.id, "dotfiles/lander", 3600, nil, { lease = true }))
+                    assert(backend:claim(card.id, "dotfiles/lander", { ttl = 3600, lease = true }))
                 end
             end
             restore()
