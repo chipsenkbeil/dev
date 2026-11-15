@@ -61,7 +61,7 @@ testing.test("parse reads a multi-line array as the one-line form", function()
 end)
 
 testing.test("parse reads a CRLF multi-line array", function()
-    local crlf = assert(toml.parse(table.concat({
+    local entries = {
         "[board.release]",
         "checks = [",
         '    "a",',
@@ -70,17 +70,9 @@ testing.test("parse reads a CRLF multi-line array", function()
         "]",
         "n = 1",
         "",
-    }, "\r\n")))
-    local lf = assert(toml.parse(table.concat({
-        "[board.release]",
-        "checks = [",
-        '    "a",',
-        "",
-        '    "b c"',
-        "]",
-        "n = 1",
-        "",
-    }, "\n")))
+    }
+    local crlf = assert(toml.parse(table.concat(entries, "\r\n")))
+    local lf = assert(toml.parse(table.concat(entries, "\n")))
     testing.eq(crlf, lf)
     testing.eq(crlf.board.release.checks, { "a", "b c" })
 end)
