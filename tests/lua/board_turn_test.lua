@@ -741,18 +741,13 @@ testing.test("turn names the live owner as its holder", function()
 end)
 
 local function turn_card(fence)
-    local card = '{"id":"'
-        .. ID_A
-        .. '","name":"landing turn","column_id":"'
-        .. ICEBOX_ID
-        .. '","position":1,"labels":[]'
-    if fence then
-        card = card
-            .. ',"owner":{"holder":{"kind":"agent","name":"alpha"},"lease_expires_at":null},'
-            .. '"claim_fence":'
-            .. fence
-    end
-    return card .. "}"
+    return support.pomb_export_task({
+        id = ID_A,
+        name = "landing turn",
+        column_id = ICEBOX_ID,
+        holder = fence and "alpha" or nil,
+        claim_fence = fence,
+    })
 end
 
 local function hold_record(fence)
@@ -781,7 +776,11 @@ local function pomb_root()
         ["detail.json"] = detail,
         ["colors.json"] = "[]",
         ["export.json"] = '{"tasks":[' .. card .. "]}",
-        ["task.json"] = card,
+        ["task.json"] = '{"id":"'
+            .. ID_A
+            .. '","name":"landing turn","column_id":"'
+            .. ICEBOX_ID
+            .. '","position":1,"labels":[]}',
         ["comments.json"] = "[]",
     }, {})
     assert(fs.write(root .. "/bin/curl", support.pomb_curl(ID_A, ID_B, ID_C)))

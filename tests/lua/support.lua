@@ -159,6 +159,39 @@ function M.dev_async(root, args, opts)
     }
 end
 
+---@class support.PombExportTask
+---@field id string task id
+---@field name string task name
+---@field column_id string id of the column the task sits in
+---@field holder? string name of the agent that owns the task
+---@field claim_fence? integer counter of the latest claim, 0 by default
+
+---Build one task of Pomb's export-data endpoint as the endpoint sends it.
+---
+---The owner carries only its holder and its lease, the time limit on the hold. The fence of the
+---latest claim, the counter a write must present to prove it still holds the task, rides on the
+---task as `claim_fence`, which is 0 for a task never claimed.
+---@param task support.PombExportTask the task to build
+---@return string json the task object
+function M.pomb_export_task(task)
+    local claim_fence = task.claim_fence or 0
+    local owner = "null"
+    if task.holder then
+        owner = '{"holder":{"kind":"agent","name":"' .. task.holder .. '"},"lease_expires_at":null}'
+    end
+    return '{"id":"'
+        .. task.id
+        .. '","name":"'
+        .. task.name
+        .. '","column_id":"'
+        .. task.column_id
+        .. '","position":1,"labels":[],"owner":'
+        .. owner
+        .. ',"claim_fence":'
+        .. claim_fence
+        .. "}"
+end
+
 ---The fields JSON of a Pomb board that defines the four card fields.
 M.FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
     .. '"options":[],"columns":[],"required":true},'
