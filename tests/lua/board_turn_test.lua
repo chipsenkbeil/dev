@@ -34,6 +34,7 @@ local function board_home()
         env = { HOME = home, XDG_STATE_HOME = home .. "/state" },
     })
     assert(code == 0, out)
+    support.drop_turn_card(home .. "/state/dev/boards/mine.json")
     return home
 end
 
@@ -170,6 +171,25 @@ testing.test("a holder that renews in time keeps the turn past its first lease",
     restore()
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
     testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a turn on an old board without the card creates it once", function()
+    -- Start from a board with no turn card
+    local backend = backend_at(board_home())
+    testing.eq(#assert(backend:cards()), 0)
+
+    -- Let two askers come, one takes the turn
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+
+    -- Count the open turn cards and name the holder
+    local open = 0
+    for _, card in ipairs(assert(backend:cards())) do
+        open = open + (card.name == turn.NAME and not card.done and 1 or 0)
+    end
+    testing.eq(open, 1)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    testing.eq(first.holder, "alpha")
 end)
 
 testing.test("two turn cards made by a race leave one turn on the lowest id", function()

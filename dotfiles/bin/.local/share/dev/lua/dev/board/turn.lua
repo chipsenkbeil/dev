@@ -125,7 +125,7 @@ local function turn_card(backend)
         return nil, message
     end
     local added
-    added, message = backend:add(M.NAME, backend.roles.icebox, {})
+    added, message = backend:add(M.NAME, backend.roles.icebox, { once = true })
     if not added then
         return nil, message
     end

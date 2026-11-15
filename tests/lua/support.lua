@@ -1,5 +1,7 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
+local json = require("dev.json")
+local board = require("dev.board")
 
 ---@class support
 local M = {}
@@ -9,6 +11,21 @@ local M = {}
 function M.absolute_path()
     local cwd = dev_os.capture({ "pwd" }):gsub("\n$", "")
     return ((";" .. package.path):gsub(";%./", ";" .. cwd .. "/"):sub(2))
+end
+
+---Remove the landing turn card `dev board init` made from a local board file, to leave a test
+---with only the cards it adds.
+---@param path string the local board file
+function M.drop_turn_card(path)
+    local doc = assert(json.decode(assert(fs.read(path))))
+    local kept = {}
+    for _, card in ipairs(doc.cards) do
+        if card.name ~= board.TURN_NAME then
+            kept[#kept + 1] = card
+        end
+    end
+    doc.cards = kept
+    assert(fs.write(path, json.encode(doc)))
 end
 
 ---Make a temporary directory.

@@ -80,7 +80,8 @@ local M = {}
 ---   dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human,
 ---   or nil and a message when it failed
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?):
----   dev.board.Card?, string? the new card
+---   dev.board.Card?, string?, boolean? the new card, or with `once` the open card of that name and
+---   true when one existed
 ---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card
 ---   entered its column, as an RFC 3339 stamp by card id, or nil and a message
 ---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?):
@@ -238,8 +239,12 @@ local M = {}
 ---@field outcomes string[]? the Done when outcomes to give it, one subtask each
 ---@field epic boolean? whether to create it as an epic
 ---@field lane string? the name of the lane to put it in
+---@field once boolean? whether to return the open card of that name instead of adding a second
 
 ---@class dev.board.Layout
+---@field add fun(self: dev.board.Layout, name: string, column: string, opts: dev.board.AddOpts?):
+---   dev.board.Card?, string?, boolean? a card added, or with `once` the open card of that name and
+---   true when one existed
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a
 ---   message
 ---@field create fun(self: dev.board.Layout): boolean?, string? the board made, with the name of the

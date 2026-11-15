@@ -1,6 +1,7 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local board = require("dev.board")
+local localboard = require("dev.board.localboard")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -49,6 +50,8 @@ local function local_board(project)
     local root, home = setup(project or '[board]\nbackend = "local"\nname = "mine"\n')
     local out, code = dev(root, home, { "board", "init" })
     testing.eq(code, 0, out)
+    local tracked = root .. "/.dev/board.json"
+    support.drop_turn_card(fs.exists(tracked) and tracked or home .. "/state/dev/boards/mine.json")
     return root, home
 end
 
@@ -2339,6 +2342,38 @@ testing.test("a local board keeps a card with no checks row out of Ready", funct
     testing.ok(out:find("--checks", 1, true), out)
     out = dev(root, home, { "board", "init" })
     testing.eq(out:find("checks field", 1, true), nil)
+end)
+
+testing.test("an add with once returns the open card of that name and adds none", function()
+    -- Open the board file as a backend
+    local _, home = local_board()
+    local icebox = support.COLUMN_NAME.ICEBOX
+    local backend = localboard.new({
+        name = "mine",
+        path = file_of(home),
+        private = true,
+    })
+
+    -- Add with once twice, which adds one card and then finds it
+    local first, _, existed = assert(backend:add(board.TURN_NAME, icebox, { once = true }))
+    testing.eq(existed, nil)
+    local again
+    again, _, existed = assert(backend:add(board.TURN_NAME, icebox, { once = true }))
+    testing.eq(again.id, first.id)
+    testing.eq(existed, true)
+    local function count()
+        local found = 0
+        for _, card in ipairs(document(file_of(home)).cards) do
+            found = found + (card.name == board.TURN_NAME and 1 or 0)
+        end
+        return found
+    end
+    testing.eq(count(), 1)
+
+    -- A plain add still makes a second card
+    local plain = assert(backend:add(board.TURN_NAME, icebox, {}))
+    testing.ok(plain.id ~= first.id)
+    testing.eq(count(), 2)
 end)
 
 testing.test("wait on a local board answers at once that there is nothing to wait on", function()

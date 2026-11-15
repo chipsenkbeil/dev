@@ -319,6 +319,8 @@ dev board init --admin
 
 What it lays out:
 
+- the `landing turn` card in the Icebox, made once, to spare each runner the
+  create at its first landing.
 - columns: Icebox, Backlog, Ready, In Progress, Review, Verify, Release,
   Blocked and Done, in that order, with Done counting as done.
   - A missing board is made from Pomb's `agent project` template, and the
@@ -2562,9 +2564,14 @@ The landing turn:
 
 - It keeps one landing at a time across runners, so trunk does not move under a
   landing.
-- It is the owner of a card named `landing turn`, which `land` creates in the
-  Icebox when the board has none. That keeps the holder on the board and not in
-  one session.
+- It is the owner of a card named `landing turn`, which `init` creates in the
+  Icebox, and `land` creates it there when an old board has none. That keeps the
+  holder on the board and not in one session.
+- Both create it only when no open card of that name exists. A local board
+  checks that under its file lock, so two runners cannot both add one. Pomb has
+  no atomic create, so `init` narrows the window there to first-time setup,
+  and two first inits started together can still make two. A process that
+  starts after a race left two takes the lowest id.
 - `next`, in any column, and the Icebox list of `stale` never list that card,
   so no agent is offered it. Its notes stay bounded by the rotation below.
 - On a Pomb board the turn grabs that owner with `POST /api/tasks/{id}/owner`

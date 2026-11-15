@@ -21,6 +21,14 @@ local STANDARD = {
 }
 
 local UNCHANGED = "agent roles unchanged\n"
+
+local function turn_row(column)
+    return string.format(
+        '{"id":"22222222-bbbb","name":"%s","column_id":"col-%s"}',
+        board.TURN_NAME,
+        column
+    )
+end
 local LANES_DIE = "dev: [board] lanes must be a list of lane names in .dev/config.toml"
 local STANDARD_ROLES = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 
@@ -193,6 +201,17 @@ local function fake_layout(opts)
         state.groups[#state.groups + 1] = { column_names = names, limit = limit }
         return true
     end
+    function layout:add(name, column, add_opts)
+        for _, card in ipairs(state.cards) do
+            if add_opts and add_opts.once and card.name == name then
+                return card, nil, true
+            end
+        end
+        write("add", name)
+        local card = { id = "card-" .. #state.cards, name = name, column = column }
+        state.cards[#state.cards + 1] = card
+        return card
+    end
     function layout:set_card(id, fields)
         write("set_card", id)
         for _, card in ipairs(state.cards) do
@@ -231,6 +250,25 @@ local function color(layout, value)
         end
     end
 end
+
+testing.test("a fresh board has one landing turn card after init", function()
+    local layout = fake_layout({ exists = false })
+    local _, message, lines = run(layout)
+    testing.eq(message, nil)
+    local said = 'created the "' .. board.TURN_NAME .. '" card'
+    testing.ok(table.concat(lines, "\n"):find(said, 1, true))
+    local function count()
+        local found = 0
+        for _, card in ipairs(layout.state.cards) do
+            found = found + (card.name == board.TURN_NAME and 1 or 0)
+        end
+        return found
+    end
+    testing.eq(count(), 1)
+    testing.eq(layout.state.cards[1].column, support.COLUMN_NAME.ICEBOX)
+    run(layout)
+    testing.eq(count(), 1)
+end)
 
 testing.test("a missing board ends in the standard state", function()
     local layout = fake_layout({ exists = false })
@@ -489,8 +527,10 @@ end
 local FIELDS =
     '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
 
-local EXPORT =
-    '{"tasks":[{"id":"11111111-aaaa","name":"Keep","column_id":"col-Ready","color_id":"blue-id"}]}'
+local EXPORT = '{"tasks":[{"id":"11111111-aaaa","name":"Keep","column_id":"col-Ready",'
+    .. '"color_id":"blue-id"},'
+    .. turn_row(support.COLUMN_NAME.ICEBOX)
+    .. "]}"
 
 local CURL = [[#!/bin/sh
 printf 'curl %s\n' "$*" >>"$ROOT/calls"
@@ -514,12 +554,21 @@ case "$last" in
 */api/templates) body=$(cat "$ROOT/templates.json") ;;
 */api/boards)
     case " $* " in
-    *" -X POST "*) body='{"id":"board-1"}' ;;
-    *) body=$(cat "$ROOT/boards.json") ;;
+    *" -X POST "*)
+        touch "$ROOT/created"
+        body='{"id":"board-1"}'
+        ;;
+    *)
+        body=$(cat "$ROOT/boards.json")
+        if [ -f "$ROOT/created" ]; then
+            body='[{"id":"board-1","name":"demo","archived":false}]'
+        fi
+        ;;
     esac
     ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
+*/api/tasks) body='{"id":"33333333-cccc"}' ;;
 */fields)
     case " $* " in
     *" -X POST "*) body='{"id":"field-1"}' ;;
@@ -800,6 +849,30 @@ local function calls_of(root)
     return (read(root, "calls"):gsub("\n%%", " %%"))
 end
 
+testing.test("init on Pomb posts a landing turn card only when no open one exists", function()
+    local function posts(export)
+        -- Run init against an export of cards
+        local root, home, tmp = sandbox()
+        assert(fs.write(root .. "/export.json", export))
+        local out, code = dev(root, home, tmp, { "board", "init" })
+        assert(code == 0, out)
+
+        -- Count the posts that make a task
+        local found = 0
+        for line in calls_of(root):gmatch("[^\n]+") do
+            if line:find("-X POST", 1, true) and line:find("pomb.example/api/tasks", 1, true) then
+                found = found + 1
+            end
+        end
+        return found
+    end
+    local open = turn_row(support.COLUMN_NAME.ICEBOX)
+    local done = turn_row(support.COLUMN_NAME.DONE)
+    testing.eq(posts('{"tasks":[' .. open .. "]}"), 0)
+    testing.eq(posts('{"tasks":[]}'), 1)
+    testing.eq(posts('{"tasks":[' .. done .. "]}"), 1)
+end)
+
 testing.test("init defines the checks field once with the dev definition", function()
     local root, home, tmp = sandbox({ fields = "[]" })
     local out, code = dev(root, home, tmp, { "board", "init" })
@@ -862,7 +935,10 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     assert(
         fs.write(
             root .. "/export.json",
-            '{"tasks":[{"id":"11111111-aaaa","name":"Keep it (blue)","column_id":"col-Ready","color_id":"yellow-id"}]}'
+            '{"tasks":[{"id":"11111111-aaaa","name":"Keep it (blue)","column_id":"col-Ready",'
+                .. '"color_id":"yellow-id"},'
+                .. turn_row(support.COLUMN_NAME.ICEBOX)
+                .. "]}"
         )
     )
     local out, code = dev(root, home, tmp, { "board", "init" })
@@ -950,7 +1026,7 @@ testing.test("init makes a missing board from the agent project template", funct
     local root, home, tmp = sandbox()
     assert(fs.write(root .. "/boards.json", "[]"))
     local out, code = dev(root, home, tmp, { "board", "init" })
-    testing.eq(code, 0)
+    assert(code == 0, out)
     local calls = calls_of(root)
     testing.ok(
         calls:find(

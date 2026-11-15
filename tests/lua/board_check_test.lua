@@ -42,6 +42,7 @@ end
 
 local function card_with(root, home, rows)
     must(dev(root, home, { "board", "init" }))
+    support.drop_turn_card(home .. "/state/dev/boards/mine.json")
     local out = dev(
         root,
         home,

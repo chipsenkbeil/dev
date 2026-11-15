@@ -389,6 +389,18 @@ local function strip_step(layout, state, say)
     return true
 end
 
+local function turn_step(layout, state, say)
+    local card, message, existed = layout:add(board.TURN_NAME, state.roles.icebox, { once = true })
+    if not card then
+        return nil, message
+    end
+    if not existed then
+        say("created the " .. quoted(board.TURN_NAME) .. " card")
+        state.changes = state.changes + 1
+    end
+    return true
+end
+
 local function lanes_step(layout, state, say)
     -- Index the lanes the board has and the lanes the config lists
     local have = {}
@@ -488,6 +500,7 @@ function M.run(layout, name, say, opts)
         enabled_step,
         default_step,
         limits_step,
+        turn_step,
         worn_step,
         lanes_step,
     }) do

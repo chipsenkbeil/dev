@@ -658,8 +658,23 @@ local function outcome_rows(names)
     return rows
 end
 
+local function open_named(doc, name)
+    for _, open in ipairs(doc.cards) do
+        local held = find_by_id(doc.columns, open.column_id)
+        if open.name == name and not (held and held.is_done) then
+            return open
+        end
+    end
+end
+
 function Backend:add(name, column, opts)
+    local existed = false
     local added, message = self:__update(function(doc)
+        local found = opts and opts.once and open_named(doc, name)
+        if found then
+            existed = true
+            return card_view(doc, found)
+        end
         local target = column_named(doc, column)
         if not target then
             return nil, "the board has no " .. column .. " column, run dev board init"
@@ -721,7 +736,7 @@ function Backend:add(name, column, opts)
         doc.cards[#doc.cards + 1] = card
         return card_view(doc, card)
     end)
-    return added, message
+    return added, message, existed or nil
 end
 
 function Backend:note(id, body, fence, opts)

@@ -988,10 +988,36 @@ function Backend:__color_id(color)
     return id
 end
 
+---@private
+---@param name string the name of the card
+---@return dev.board.Card? card the open card of that name, nil when there is none
+---@return string? message why the cards could not be read
+function Backend:__open_named(name)
+    local cards, message = self:cards()
+    if not cards then
+        return nil, message
+    end
+    for _, open in ipairs(cards) do
+        if open.name == name and not open.done then
+            return open
+        end
+    end
+end
+
 function Backend:add(name, column, opts)
     local ok, message = self:__load()
     if not ok then
         return nil, message
+    end
+    if opts and opts.once then
+        local open
+        open, message = self:__open_named(name)
+        if message then
+            return nil, message
+        end
+        if open then
+            return open, nil, true
+        end
     end
     local id = self:__column_id(column)
     if not id then
