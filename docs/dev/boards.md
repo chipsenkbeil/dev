@@ -2584,10 +2584,10 @@ The landing turn:
 - The holder writes a `dev-turn:` note on the turn card with its name, the card
   it lands and the time it took the turn.
 - The lease is 900 seconds, and `land` renews it before the `jj land`. When
-  the landing commit carries a check across trunk commits, `land` first renews
-  the lease for 3000 seconds. The lease is stretched for the recheck, which can
-  queue and run in ci for longer than 900 seconds. The renewal before the
-  `jj land` puts the lease back to 900 seconds.
+  the landing commit carries a check across trunk commits, `land` first
+  stretches it to 3000 seconds for the recheck, which can queue in ci for
+  longer than 900 seconds, and the renewal before the `jj land` puts it back to
+  900 seconds.
 - When a holder dies, the lease ends and the next asker takes the turn. A holder
   that comes back after that gets `the landing turn was lost` or
   `the landing turn ran out`, writes nothing, lands nothing and has to ask

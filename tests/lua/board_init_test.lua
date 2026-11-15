@@ -252,11 +252,14 @@ local function color(layout, value)
 end
 
 testing.test("a fresh board has one landing turn card after init", function()
+    -- Run init on a missing board and check the report names the turn card
     local layout = fake_layout({ exists = false })
     local _, message, lines = run(layout)
     testing.eq(message, nil)
     local said = 'created the "' .. board.TURN_NAME .. '" card'
     testing.ok(table.concat(lines, "\n"):find(said, 1, true))
+
+    -- Count the turn cards in the layout and check where the first one sits
     local function count()
         local found = 0
         for _, card in ipairs(layout.state.cards) do
@@ -266,6 +269,8 @@ testing.test("a fresh board has one landing turn card after init", function()
     end
     testing.eq(count(), 1)
     testing.eq(layout.state.cards[1].column, support.COLUMN_NAME.ICEBOX)
+
+    -- Run init again and expect still one turn card
     run(layout)
     testing.eq(count(), 1)
 end)

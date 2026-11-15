@@ -131,6 +131,28 @@ testing.test("init lays out the nine columns and the palette and is idempotent",
     testing.eq(out, "board mine already follows the standard, nothing to change\n")
 end)
 
+testing.test("a local init makes one landing turn card and a second init adds none", function()
+    -- Run init on a new local board
+    local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
+    local out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+
+    -- Count the landing turn cards in the board file
+    local function turn_cards()
+        local found = 0
+        for _, card in ipairs(document(file_of(home)).cards) do
+            found = found + (card.name == board.TURN_NAME and 1 or 0)
+        end
+        return found
+    end
+    testing.eq(turn_cards(), 1)
+
+    -- Run init again and expect still one turn card
+    out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(turn_cards(), 1)
+end)
+
 testing.test("the board file is private and writes leave no temporary file", function()
     local root, home = local_board()
     dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })

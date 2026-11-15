@@ -989,10 +989,11 @@ function Backend:__color_id(color)
     return id
 end
 
----@private
+---Find the open card named `name`.
 ---@param name string the name of the card
 ---@return dev.board.Card? card the open card of that name, nil when there is none
 ---@return string? message why the cards could not be read
+---@private
 function Backend:__open_named(name)
     local cards, message = self:cards()
     if not cards then
