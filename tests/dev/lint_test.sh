@@ -300,12 +300,12 @@ else
 
     out="$(style_lint "$rust" "$bare_path")"
     rc=$?
-    assert_eq "a missing tool outside CI only warns" "$rc" "0"
+    assert_eq "a missing tool outside CI only notes" "$rc" "0"
     assert_contains "the note names the check a missing tool skips" "$out" "Tool cargo-sort not found. The cargo sort check is skipped."
     out="$(style_lint "$rust" "$bare_path" CI=1 NO_NIGHTLY=1)"
-    assert_contains "a missing cargo-sort fails under CI" "$out" "cargo-sort not found, so the cargo sort check cannot run"
-    assert_contains "a missing cargo-deny fails under CI" "$out" "cargo-deny not found, so the cargo deny check cannot run"
-    assert_contains "a missing nightly rustfmt fails under CI" "$out" "nightly rustfmt not found, so the cargo fmt check cannot run"
+    assert_contains "a missing cargo-sort fails under CI" "$out" "Tool cargo-sort not found. The cargo sort check cannot run."
+    assert_contains "a missing cargo-deny fails under CI" "$out" "Tool cargo-deny not found. The cargo deny check cannot run."
+    assert_contains "a missing nightly rustfmt fails under CI" "$out" "Tool nightly rustfmt not found. The cargo fmt check cannot run."
     assert_contains "the CI failure lists each skipped check" "$out" "FAILED: cargo fmt ast-grep scan cargo sort cargo deny"
 
     printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\npublish = false\n' >"$rust/Cargo.toml"
@@ -414,7 +414,7 @@ else
     out="$(style_lint "$lua" "$bare_path")"
     assert_contains "the lua note names the check a missing tool skips" "$out" "Tool stylua not found. The stylua check is skipped."
     out="$(style_lint "$lua" "$bare_path" CI=1)"
-    assert_contains "a missing lua tool fails under CI" "$out" "stylua not found, so the stylua check cannot run"
+    assert_contains "a missing lua tool fails under CI" "$out" "Tool stylua not found. The stylua check cannot run."
     assert_contains "the lua CI failure lists each skipped check" "$out" "FAILED: stylua selene ast-grep"
 fi
 
