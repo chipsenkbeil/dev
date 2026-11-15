@@ -65,7 +65,7 @@ local function needs_admin(message)
 end
 
 local function advise(message)
-    local ADMIN_HINT = "; this token may not change this board, run dev board init --admin"
+    local ADMIN_HINT = ". This token may not change this board, so run `dev board init --admin`."
     if needs_admin(message) then
         return message .. ADMIN_HINT
     end
@@ -137,8 +137,8 @@ local function columns_step(layout, state, say)
     local blocked = present[state.roles.blocked:lower()]
     if blocked.is_blocked == nil then
         return nil,
-            "this Pomb cannot mark a Blocked column yet, and dev board ask needs it; "
-                .. "update Pomb and run dev board init again"
+            "This Pomb cannot mark a Blocked column yet, and `dev board ask` needs it. "
+                .. "Update Pomb and run `dev board init` again."
     end
     if not blocked.is_blocked then
         local ok, message, changed = layout:mark_blocked(blocked.id)
@@ -197,7 +197,7 @@ local function roles_step(layout, state, say)
             return true
         end
         if missing == "roles.grant" then
-            say("agent roles left for dev board init --admin")
+            say("The agent roles are left for `dev board init --admin`.")
             return true
         end
         return nil, message
@@ -304,8 +304,8 @@ local function limits_step(layout, state, say)
 end
 
 local function enabled_step(layout, state, say)
-    local LEFT_ENABLED = "left the colours enabled as they are, since this token may not change them; "
-        .. "run dev board init --admin"
+    local LEFT_ENABLED = "Left the colours enabled as they are, since this token may not change them. "
+        .. "Run `dev board init --admin`."
     local wanted = {}
     for _, swatch in ipairs(M.PALETTE) do
         wanted[swatch.value] = true

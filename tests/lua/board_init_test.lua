@@ -478,7 +478,7 @@ testing.test(
         end
         local changes, message, lines = run(layout)
         testing.eq(changes, nil)
-        testing.ok(message:find("run dev board init --admin", 1, true), message)
+        testing.ok(message:find("run `dev board init --admin`", 1, true), message)
         testing.eq(lines[2], "added column Icebox")
     end
 )
@@ -1156,7 +1156,7 @@ testing.test("a token that may not enable colours leaves them and carries on", f
     testing.ok(changes > 0)
     local left = 0
     for _, line in ipairs(lines) do
-        if line:find("run dev board init --admin", 1, true) then
+        if line:find("Run `dev board init --admin`", 1, true) then
             left = left + 1
         end
     end
@@ -1315,7 +1315,7 @@ testing.test(
                     .. "on every board; use a token that has it"
         end
         local _, message = run(layout)
-        testing.ok(message:find("run dev board init --admin", 1, true), message)
+        testing.ok(message:find("run `dev board init --admin`", 1, true), message)
         function layout:set_color()
             return nil,
                 "board unavailable: this token has the boards.write permission but is not assigned "
@@ -1518,7 +1518,7 @@ testing.test("init says to use --admin when Pomb refuses the limit group", funct
     end
     local changes, message = run(layout)
     testing.eq(changes, nil)
-    testing.ok(message:find("run dev board init --admin", 1, true), message)
+    testing.ok(message:find("run `dev board init --admin`", 1, true), message)
 end)
 
 testing.test("a layout with no limits gets no limit group", function()
@@ -1674,7 +1674,7 @@ testing.test("init-lead-without-roles-grant-creates-lanes", function()
     end
     testing.eq(
         out,
-        "agent roles left for dev board init --admin\n"
+        "The agent roles are left for `dev board init --admin`.\n"
             .. 'created lane "Parity"\ncreated lane "Fixes"\ncreated lane "Features"\n'
             .. "board demo: 3 changes\n"
     )
@@ -1693,7 +1693,7 @@ testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
     testing.ok(changes > 0)
     local said = 0
     for _, line in ipairs(lines) do
-        said = said + (line == "agent roles left for dev board init --admin" and 1 or 0)
+        said = said + (line == "The agent roles are left for `dev board init --admin`." and 1 or 0)
     end
     testing.eq(said, 1)
 end)
@@ -1714,7 +1714,7 @@ testing.test("init-lead-roles-read-fails-names-the-failure", function()
         out
     )
     testing.ok(out:find("settings.read", 1, true), out)
-    testing.eq(out:find("left for dev board init --admin", 1, true), nil, out)
+    testing.eq(out:find("left for `dev board init --admin`", 1, true), nil, out)
     testing.eq(roles_posts(root) ~= nil, true, calls_of(root))
 end)
 
@@ -1726,7 +1726,7 @@ testing.test("init-lead-roles-missing-after-a-read-still-names-the-admin-step", 
     })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
-    testing.ok(out:find("agent roles left for dev board init --admin\n", 1, true), out)
+    testing.ok(out:find("The agent roles are left for `dev board init --admin`.\n", 1, true), out)
     testing.eq(out:find("could not be read", 1, true), nil, out)
 end)
 
