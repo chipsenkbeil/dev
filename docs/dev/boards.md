@@ -3219,9 +3219,9 @@ A move into Done (`move CARD done`):
 - It is refused once the card is read, before the move is sent, while the card
   has an unticked outcome.
 - The refusal reads
-  `<id prefix> cannot move to Done: N of M outcomes are unticked (1. text, 2.
-  text). The reviewer ticks them with dev board outcome CARD --tick N --as NAME,
-  or dev board discard CARD drops it.`
+  `Card <id prefix> cannot move to Done: N of M outcomes are unticked (1.
+  text, 2. text). The reviewer ticks them with dev board outcome CARD --tick N
+  --as NAME, or dev board discard CARD drops it.`
   (exit 1, on both backends, each open outcome numbered as `show` numbers it).
   Both refusals name the board's own Done column, so a board that renames
   Done reads `cannot move to Shipped`.
@@ -3241,7 +3241,7 @@ An epic with an open child:
 - It is refused a move into a column whose settings make it WIP-limited or
   done, never one picked by its name.
 - The refusal reads
-  `<id prefix> is an epic and cannot enter COLUMN, a done column: N of M
+  `Card <id prefix> is an epic and cannot enter COLUMN, a done column: N of M
   children are open.`
   (or `a WIP-limited column`, exit 1, on both backends).
 - `Backend:columns` reports each column's `is_done` and `wip_limit`. A local

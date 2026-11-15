@@ -1125,7 +1125,7 @@ testing.test("move to Done refuses a card with unticked outcomes and names them"
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works). "
+        "Card 11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works). "
             .. "The reviewer ticks them with `dev board outcome CARD --tick N --as NAME`, "
             .. "or `dev board discard CARD` drops it."
     )
@@ -1239,13 +1239,13 @@ testing.test("epic_move_refused", function()
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
+        "Card cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
     )
     result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Review, a WIP-limited column. "
+        "Card cccccccc is an epic and cannot enter Review, a WIP-limited column. "
             .. "2 of 3 children are open."
     )
     for _, call in ipairs(backend.calls) do
@@ -1278,7 +1278,7 @@ testing.test("an epic with no outcomes and an open child is refused", function()
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
+        "Card cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
     )
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")

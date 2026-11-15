@@ -176,7 +176,7 @@ local function children_refusal(backend, card, column, kids)
             return unqueued(
                 failure(
                     string.format(
-                        "%s is an epic and cannot enter %s, a %s column. "
+                        "Card %s is an epic and cannot enter %s, a %s column. "
                             .. "%d of %d children are open.",
                         card.id:sub(1, board.MIN_PREFIX),
                         row.name,
@@ -227,7 +227,7 @@ local function done_refusal(card, column)
     return unqueued(
         failure(
             string.format(
-                "%s cannot move to %s: %d of %d outcomes are unticked (%s). "
+                "Card %s cannot move to %s: %d of %d outcomes are unticked (%s). "
                     .. "The reviewer ticks them with `dev board outcome CARD --tick N --as NAME`, "
                     .. "or `dev board discard CARD` drops it.",
                 id,
