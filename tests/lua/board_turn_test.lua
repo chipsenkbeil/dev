@@ -750,7 +750,16 @@ local function reclaimed(backend, name, short)
     return card, fence, first
 end
 
+local function over_cap_claim(backend, short)
+    -- Reclaim the card and keep its claim alive past the hold cap
+    local card, fence = reclaimed(backend, "alpha", short)
+    local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
+    assert(backend:claim(card.id, "alpha", opts))
+    return card
+end
+
 testing.test("a holder whose live claim outran its hold note takes the turn again", function()
+    -- Open a board and find its landing card
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
 
@@ -776,9 +785,12 @@ end)
 testing.test(
     "a holder whose live claim outran its hold note keeps the lease it asks for",
     function()
+        -- Open a board and reclaim its landing card
         local backend = backend_at(board_home())
         local _, short = landing_card(backend)
         reclaimed(backend, "alpha", short)
+
+        -- Take it again with a hold and expect the lease it asked for
         local opts = { hold = true, seconds = TURN_HOLD_SECONDS }
         local again = assert(turn.take(backend, "alpha", short, opts))
         testing.eq(again.lease, TURN_HOLD_SECONDS)
@@ -788,13 +800,12 @@ testing.test(
 testing.test(
     "a holder whose live claim outran its hold note is refused past the hold cap",
     function()
+        -- Open a board and find its landing card
         local backend = backend_at(board_home())
         local _, short = landing_card(backend)
 
         -- Reclaim the card and keep its claim alive past the hold cap
-        local card, fence = reclaimed(backend, "alpha", short)
-        local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
-        assert(backend:claim(card.id, "alpha", opts))
+        over_cap_claim(backend, short)
         advance(turn.MAX_HOLD_SECONDS + 1)
 
         -- Take it again and expect a refusal that says it was given back
@@ -807,13 +818,12 @@ testing.test(
 )
 
 testing.test("a capped own-claim take frees the turn and notes it left", function()
+    -- Open a board and find its landing card
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
 
     -- Reclaim the card and keep its claim alive past the hold cap
-    local card, fence = reclaimed(backend, "alpha", short)
-    local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
-    assert(backend:claim(card.id, "alpha", opts))
+    local card = over_cap_claim(backend, short)
 
     -- Count the left notes the holder wrote
     local function lefts()
@@ -851,9 +861,12 @@ testing.test("a release leaves the plain claim of a landing alone", function()
 end)
 
 testing.test("a holder whose live claim outran its hold note releases the claim", function()
+    -- Open a board and reclaim its landing card
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
     reclaimed(backend, "alpha", short)
+
+    -- Release it as its holder and expect the claim freed
     local result
     as_agent("alpha", function()
         result = cmd_board.run("turn", { short, "--release" }, backend)
