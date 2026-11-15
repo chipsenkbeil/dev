@@ -21,6 +21,32 @@ testing.test("parse reads escapes and keeps a # inside a string", function()
     testing.eq(toml.parse('s = "a\\tb\\n\\"c\\\\ # not"\r\n'), { s = 'a\tb\n"c\\ # not' })
 end)
 
+testing.test("parse reads a multi-line array as the one-line form", function()
+    local flat = assert(toml.parse('[board.release]\nchecks = ["a", "b c"]\nn = 1'))
+    local spread =
+        assert(toml.parse('[board.release]\nchecks = [\n    "a",\n\n    "b c"\n]\nn = 1'))
+    testing.eq(spread, flat)
+    testing.eq(spread.board.release.checks, { "a", "b c" })
+end)
+
+testing.test("parse accepts a trailing comma and comments inside a multi-line array", function()
+    local tree =
+        assert(toml.parse("xs = [ # open\n    1, # one\n    # between\n    2,\n] # end\ny = 3"))
+    testing.eq(tree, { xs = { 1, 2 }, y = 3 })
+end)
+
+testing.test("parse names the opening line of an unclosed array", function()
+    local tree, err = toml.parse("a = 1\nxs = [\n    1,\n    2,\n")
+    testing.eq(tree, nil)
+    testing.ok(err:find("array opened on line 2 is not closed", 1, true), err)
+end)
+
+testing.test("parse reads a key line inside an array as a bad value", function()
+    local tree, err = toml.parse("xs = [\n    1,\nb = 2\n]")
+    testing.eq(tree, nil)
+    testing.ok(err:find("^3: unsupported value b"), err)
+end)
+
 testing.test("parse accepts an empty document and comment lines", function()
     testing.eq(toml.parse("# c\n\n   # d\n"), {})
 end)
@@ -37,7 +63,6 @@ testing.test("parse names the line of each unsupported form", function()
         { "d = 2026-10-27", "^1: dates" },
         { "[[a]]", "^1: arrays of tables" },
         { "a.b = 1", "^1: dotted keys" },
-        { "a = [1,\n2]", "^1: multi%-line arrays" },
         { "a = [[1]]", "^1: nested arrays" },
         { "a = 'x'", "^1: literal strings" },
         { 'a = "\\u0041"', "^1: unsupported escape" },

@@ -3,8 +3,9 @@ local ESCAPES = { b = "\b", t = "\t", n = "\n", f = "\f", r = "\r", ['"'] = '"',
 ---Read the small part of TOML that dev's config files use.
 ---
 ---Tables and dotted table headers, bare and quoted keys, basic strings with
----the single-character escapes, integers, booleans, one-line arrays of
----scalars and comments. Anything else is an error that names its line.
+---the single-character escapes, integers, booleans, arrays of scalars
+---that may span lines, and comments. Anything else is an error that names its
+---line.
 ---@class dev.toml
 local M = {}
 
@@ -43,41 +44,57 @@ end
 
 local parse_value
 
-local function parse_array(line, pos)
+local function skip_gap(line, pos, reader, opened)
+    while true do
+        pos = skip_space(line, pos)
+        local char = line:sub(pos, pos)
+        if char ~= "" and char ~= "#" then
+            return line, pos
+        end
+        line = reader.next()
+        if not line then
+            fail("array opened on line " .. opened .. " is not closed")
+        end
+        pos = 1
+    end
+end
+
+local function parse_array(line, pos, reader)
     local items = {}
     arrays[items] = true
-    pos = skip_space(line, pos + 1)
+    local opened = reader.number
+    line, pos = skip_gap(line, pos + 1, reader, opened)
     while true do
         local char = line:sub(pos, pos)
         if char == "]" then
-            return items, pos + 1
-        elseif char == "" or char == "#" then
-            fail("multi-line arrays are not supported")
+            return items, pos + 1, line
         elseif char == "[" then
             fail("nested arrays are not supported")
         end
         local value
-        value, pos = parse_value(line, pos)
+        value, pos, line = parse_value(line, pos, reader)
         items[#items + 1] = value
-        pos = skip_space(line, pos)
+        line, pos = skip_gap(line, pos, reader, opened)
         char = line:sub(pos, pos)
         if char == "," then
-            pos = skip_space(line, pos + 1)
+            line, pos = skip_gap(line, pos + 1, reader, opened)
         elseif char ~= "]" then
             fail("expected , or ] in an array")
         end
     end
 end
 
-function parse_value(line, pos)
+function parse_value(line, pos, reader)
     local char = line:sub(pos, pos)
     if char == '"' then
         if line:sub(pos, pos + 2) == '"""' then
             fail("multi-line strings are not supported")
         end
-        return parse_string(line, pos)
+        local value
+        value, pos = parse_string(line, pos)
+        return value, pos, line
     elseif char == "[" then
-        return parse_array(line, pos)
+        return parse_array(line, pos, reader)
     elseif char == "{" then
         fail("inline tables are not supported")
     elseif char == "'" then
@@ -85,14 +102,14 @@ function parse_value(line, pos)
     end
     local word, stop = line:match("^([^%s,%]#]+)()", pos)
     if word == "true" then
-        return true, stop
+        return true, stop, line
     elseif word == "false" then
-        return false, stop
+        return false, stop, line
     elseif word and word:find("^[+-]?%d+$") then
         if #word > 18 then
             fail("integer " .. word .. " is too large")
         end
-        return tonumber(word), stop
+        return tonumber(word), stop, line
     elseif word and word:find("^%d") and word:find("[-:]") then
         fail("dates are not supported")
     end
@@ -152,7 +169,7 @@ local function open_table(root, explicit, line, pos)
     end
 end
 
-local function assign(current, line, pos)
+local function assign(current, line, pos, reader)
     local key
     key, pos = parse_key(line, pos)
     pos = skip_space(line, pos)
@@ -163,7 +180,7 @@ local function assign(current, line, pos)
     end
     pos = skip_space(line, pos + 1)
     local value
-    value, pos = parse_value(line, pos)
+    value, pos, line = parse_value(line, pos, reader)
     end_of_line(line, pos)
     if current[key] ~= nil then
         fail("key " .. key .. " defined twice")
@@ -179,10 +196,17 @@ function M.parse(text)
     local root = {}
     local current = root
     local explicit = {}
-    local number = 0
-    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
-        number = number + 1
-        line = line:gsub("\r$", "")
+    local lines = (text .. "\n"):gmatch("([^\n]*)\n")
+    local reader = { number = 0 }
+    function reader.next()
+        local line = lines()
+        if line then
+            reader.number = reader.number + 1
+            line = line:gsub("\r$", "")
+        end
+        return line
+    end
+    for line in reader.next do
         local ok, err = pcall(function()
             local pos = skip_space(line, 1)
             local char = line:sub(pos, pos)
@@ -191,14 +215,14 @@ function M.parse(text)
             elseif char == "[" then
                 current = open_table(root, explicit, line, pos + 1)
             else
-                assign(current, line, pos)
+                assign(current, line, pos, reader)
             end
         end)
         if not ok then
             if err:sub(1, #FAILURE) ~= FAILURE then
                 error(err, 0)
             end
-            return nil, number .. ": " .. err:sub(#FAILURE + 1)
+            return nil, reader.number .. ": " .. err:sub(#FAILURE + 1)
         end
     end
     return root

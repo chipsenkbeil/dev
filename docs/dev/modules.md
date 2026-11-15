@@ -187,8 +187,8 @@ card's bookmark.
   `dev.pipelines` reads the `.ci/jobs.lua` texts `init` writes from
   `dotfiles/bin/.local/share/dev/init/`.
 - `dev.toml`: a small TOML reader. It takes tables and dotted tables, basic
-  strings, integers, booleans, one-line arrays of scalars and comments, and
-  names the line of an error for anything else.
+  strings, integers, booleans, arrays of scalars that may span lines and
+  comments, and names the line of an error for anything else.
 - `dev.config`: `config.get(root, "a.b")` reads `~/.config/dev/config.toml`
   and then `<root>/.dev/config.toml` over it. `config.user("a.b")` reads the
   user file alone. `config.prefer_user(root, key)` reads the user file first
