@@ -16,6 +16,7 @@ local PAST_LEASE_SECONDS = 4
 local PAST_HOLD_SECONDS = 2
 local TURN_HOLD_SECONDS = 600
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+local ICEBOX_ID = "col-icebox"
 
 local clock
 
@@ -739,20 +740,42 @@ testing.test("turn names the live owner as its holder", function()
     testing.eq(assert(turn.take(backend, "beta", "bbbb2222")).holder, "beta")
 end)
 
+local function turn_card(fence)
+    local card = '{"id":"'
+        .. ID_A
+        .. '","name":"landing turn","column_id":"'
+        .. ICEBOX_ID
+        .. '","position":1,"labels":[]'
+    if fence then
+        card = card
+            .. ',"owner":{"holder":{"kind":"agent","name":"alpha"},"lease_expires_at":null},'
+            .. '"claim_fence":'
+            .. fence
+    end
+    return card .. "}"
+end
+
+local function hold_record(fence)
+    return '[{"id":"c1","body":"dev-turn: holder=alpha card=aaaa1111 '
+        .. "taken=2099-01-01T00:00:00Z fence="
+        .. fence
+        .. ' lease=600 hold=1","kind":"status"}]'
+end
+
 local function pomb_root()
     local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
     local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     local boards = '[{"id":"board-1","name":"dotfiles","archived":false}]'
     local detail = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
-        .. '{"id":"col-icebox","name":"'
+        .. '{"id":"'
+        .. ICEBOX_ID
+        .. '","name":"'
         .. support.COLUMN_NAME.ICEBOX
         .. '"},'
         .. '{"id":"col-done","name":"'
         .. support.COLUMN_NAME.DONE
         .. '","is_done":true}]}'
-    local card = '{"id":"'
-        .. ID_A
-        .. '","name":"landing turn","column_id":"col-icebox","position":1,"labels":[]}'
+    local card = turn_card()
     local root = support.sandbox({
         ["boards.json"] = boards,
         ["detail.json"] = detail,
@@ -797,30 +820,19 @@ local function call_to(root, route)
     return ""
 end
 
-testing.test("a Pomb hold is found by the owner fence and lost when the fence differs", function()
+testing.test("a Pomb hold is found by the claim fence and lost when the fence differs", function()
     -- Give the turn card a live owner with fence 7 and a hold record of fence 7
     local root = pomb_root()
-    local card = '{"id":"'
-        .. ID_A
-        .. '","name":"landing turn","column_id":"col-icebox","position":1,"labels":[],'
-        .. '"owner":{"holder":{"kind":"agent","name":"alpha"},"lease_expires_at":null},'
-        .. '"claim_fence":7}'
-    assert(fs.write(root .. "/export.json", '{"tasks":[' .. card .. "]}"))
-    local function record(fence)
-        return '[{"id":"c1","body":"dev-turn: holder=alpha card=aaaa1111 taken=2099-01-01T00:00:00Z'
-            .. " fence="
-            .. fence
-            .. ' lease=600 hold=1","kind":"status"}]'
-    end
+    assert(fs.write(root .. "/export.json", '{"tasks":[' .. turn_card(7) .. "]}"))
 
     -- Accept a record of the same fence as the live hold
-    assert(fs.write(root .. "/comments.json", record(7)))
+    assert(fs.write(root .. "/comments.json", hold_record(7)))
     on_pomb(root, function(backend)
         testing.eq(assert(turn.held(backend, "alpha", "aaaa1111")).fence, 7)
     end)
 
     -- Treat a record of an older fence as lost
-    assert(fs.write(root .. "/comments.json", record(6)))
+    assert(fs.write(root .. "/comments.json", hold_record(6)))
     on_pomb(root, function(backend)
         local found, _, lost = turn.held(backend, "alpha", "aaaa1111")
         testing.eq(found, nil)
@@ -832,23 +844,8 @@ testing.test("a Pomb turn taken with a hold is found as held from the export", f
     local root = pomb_root()
     on_pomb(root, function(backend)
         local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true }))
-        local card = '{"id":"'
-            .. ID_A
-            .. '","name":"landing turn","column_id":"col-icebox","position":1,"labels":[],'
-            .. '"owner":{"holder":{"kind":"agent","name":"alpha"},"lease_expires_at":null},'
-            .. '"claim_fence":'
-            .. taken.fence
-            .. "}"
-        assert(fs.write(root .. "/export.json", '{"tasks":[' .. card .. "]}"))
-        assert(
-            fs.write(
-                root .. "/comments.json",
-                '[{"id":"c1","body":"dev-turn: holder=alpha card=aaaa1111 taken=2099-01-01T00:00:00Z'
-                    .. " fence="
-                    .. taken.fence
-                    .. ' lease=600 hold=1","kind":"status"}]'
-            )
-        )
+        assert(fs.write(root .. "/export.json", '{"tasks":[' .. turn_card(taken.fence) .. "]}"))
+        assert(fs.write(root .. "/comments.json", hold_record(taken.fence)))
         local found, message = turn.held(backend, "alpha", "aaaa1111")
         testing.eq(message, nil)
         testing.eq(assert(found).fence, taken.fence)
