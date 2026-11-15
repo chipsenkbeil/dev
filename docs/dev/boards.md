@@ -1867,7 +1867,15 @@ Checks:
   Adding `needs:human` to a card outside Blocked and Icebox is refused with
   `<id prefix> is in <column>, and needs:human lives only in Blocked or Icebox;
   move it there first` (exit 1, on both backends and on a queued replay).
-- Removing `needs:human` is allowed in any column.
+- Removing `needs:human` is allowed in any column, and dev does not check which
+  of the two cases below applies.
+- An agent removes it after the owner answers in that agent's own session. It
+  records the answer with `dev board answer CARD --choice N --quote TEXT`, which
+  removes the label.
+- An agent also removes it after the owner moves the card out of Blocked or
+  Icebox. The first agent that finds the card in another column runs `dev board
+  label CARD --remove needs:human`. That agent then follows the new column's
+  meaning.
 
 ### escalate
 
