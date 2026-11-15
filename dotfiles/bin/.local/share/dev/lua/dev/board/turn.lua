@@ -156,21 +156,29 @@ local function taken_at(backend, card, name)
     return newest and newest.taken or false
 end
 
-local function own_claim(holding, comments, name, card)
-    if holding.claimant ~= name or type(holding.claim_fence) ~= "number" then
+---@class dev.board.turn.OwnClaimOpts
+---@field holding dev.board.Card the turn card
+---@field comments {body: string}[] the notes of the turn card, oldest first
+---@field name string the name that may hold the claim
+---@field card string the short id of the card the claim was taken for
+
+---@param opts dev.board.turn.OwnClaimOpts
+local function own_claim(opts)
+    local holding = opts.holding
+    if holding.claimant ~= opts.name or type(holding.claim_fence) ~= "number" then
         return nil
     end
-    local newest = newest_note(comments, name)
-    if not newest or newest.card ~= card then
+    local newest = newest_note(opts.comments, opts.name)
+    if not newest or newest.card ~= opts.card then
         return nil
     end
     return {
         card = holding.id,
         fence = holding.claim_fence,
-        holder = name,
+        holder = opts.name,
         lease = newest.lease,
         hold = newest.hold,
-        for_card = card,
+        for_card = opts.card,
         taken = newest.taken,
     }
 end
@@ -194,7 +202,7 @@ function M.claimed(backend, name, card)
     if not comments then
         return nil, message
     end
-    local own = own_claim(holding, comments, name, card)
+    local own = own_claim({ holding = holding, comments = comments, name = name, card = card })
     return own and own.hold and own or nil
 end
 
@@ -427,7 +435,7 @@ function M.take(backend, name, card, opts)
         end
     end
     local first = line[1]
-    local own = own_claim(holding, comments, name, card)
+    local own = own_claim({ holding = holding, comments = comments, name = name, card = card })
     if first and not own and not (first.name == name and first.card == card) then
         local holder = holder_of(backend, holding)
         local ahead = "next for " .. first.name .. "."
