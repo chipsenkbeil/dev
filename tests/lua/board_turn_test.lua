@@ -700,8 +700,9 @@ testing.test(
         local backend = backend_at(board_home())
         local _, short = landing_card(backend)
         reclaimed(backend, "alpha", short)
-        local again = assert(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }))
-        testing.eq(again.lease, 600)
+        local opts = { hold = true, seconds = TURN_HOLD_SECONDS }
+        local again = assert(turn.take(backend, "alpha", short, opts))
+        testing.eq(again.lease, TURN_HOLD_SECONDS)
     end
 )
 
@@ -714,7 +715,8 @@ testing.test(
         local opts = { ttl = turn.MAX_HOLD_SECONDS * 2, fence = fence, lease = true }
         assert(backend:claim(card.id, "alpha", opts))
         advance(turn.MAX_HOLD_SECONDS + 1)
-        local again, message = turn.take(backend, "alpha", short, { hold = true, seconds = 600 })
+        local take_opts = { hold = true, seconds = TURN_HOLD_SECONDS }
+        local again, message = turn.take(backend, "alpha", short, take_opts)
         testing.eq(again, nil)
         testing.ok(message:find("the most it may be kept", 1, true), message)
         testing.ok(message:find("given back", 1, true), message)
@@ -738,7 +740,10 @@ testing.test("a capped own-claim take frees the turn and notes it left", functio
     end
     local before = lefts()
     advance(turn.MAX_HOLD_SECONDS + 1)
-    testing.eq(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }), nil)
+    testing.eq(
+        turn.take(backend, "alpha", short, { hold = true, seconds = TURN_HOLD_SECONDS }),
+        nil
+    )
     testing.eq(turn.holder(backend), nil)
     testing.eq(lefts(), before + 1)
     testing.eq(assert(turn.take(backend, "beta", "bbbb2222")).holder, "beta")

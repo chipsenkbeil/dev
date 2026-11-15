@@ -121,26 +121,11 @@ local function turn_card(backend)
     return nil, message or "the landing turn card could not be read"
 end
 
-local function taken_at(backend, card, name)
-    local comments, message = backend:comments(card.id)
-    if not comments then
-        return nil, message
-    end
-    local newest
-    for _, comment in ipairs(comments) do
-        local held = record(comment.body)
-        if held and held.name == name then
-            newest = held.taken
-        end
-    end
-    return newest or false
-end
-
-local function own_claim(holding, comments, who)
-    local name, card = who.name, who.card
-    if holding.claimant ~= name or type(holding.claim_fence) ~= "number" then
-        return nil
-    end
+---Find the newest holder record `name` wrote.
+---@param comments {body: string}[] the notes of the turn card, oldest first
+---@param name string the name that took the turn
+---@return dev.board.turn.Record? newest the record, nil when `name` wrote none
+local function newest_note(comments, name)
     local newest
     for _, comment in ipairs(comments) do
         local held = record(comment.body)
@@ -148,6 +133,23 @@ local function own_claim(holding, comments, who)
             newest = held
         end
     end
+    return newest
+end
+
+local function taken_at(backend, card, name)
+    local comments, message = backend:comments(card.id)
+    if not comments then
+        return nil, message
+    end
+    local newest = newest_note(comments, name)
+    return newest and newest.taken or false
+end
+
+local function own_claim(holding, comments, name, card)
+    if holding.claimant ~= name or type(holding.claim_fence) ~= "number" then
+        return nil
+    end
+    local newest = newest_note(comments, name)
     if not newest or newest.card ~= card then
         return nil
     end
@@ -181,7 +183,7 @@ function M.claimed(backend, name, card)
     if not comments then
         return nil, message
     end
-    local own = own_claim(holding, comments, { name = name, card = card })
+    local own = own_claim(holding, comments, name, card)
     return own and own.hold and own or nil
 end
 
@@ -413,7 +415,7 @@ function M.take(backend, name, card, opts)
         end
     end
     local first = line[1]
-    local own = own_claim(holding, comments, { name = name, card = card })
+    local own = own_claim(holding, comments, name, card)
     if first and not own and not (first.name == name and first.card == card) then
         local holder = holder_of(backend, holding)
         local ahead = "next for " .. first.name
