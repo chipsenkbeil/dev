@@ -567,6 +567,41 @@ testing.test(
     end
 )
 
+testing.test("held, claimed and release failures are full sentences", function()
+    -- Hold the turn so the card and its notes exist
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    local cards = backend.cards
+    local comments = backend.comments
+
+    -- Fail the card listing and expect the read sentence from both
+    backend.cards = function()
+        return nil, "the board is down"
+    end
+    local _, message = turn.held(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The landing turn card could not be read. The board is down.")
+    _, message = turn.claimed(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The landing turn card could not be read. The board is down.")
+
+    -- Fail the notes listing and expect the notes sentence from both
+    backend.cards = cards
+    backend.comments = function()
+        return nil, "the notes are gone"
+    end
+    _, message = turn.held(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The notes of the landing turn card could not be read. The notes are gone.")
+    _, message = turn.claimed(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The notes of the landing turn card could not be read. The notes are gone.")
+
+    -- Fail the release and expect the release sentence
+    backend.comments = comments
+    backend.release = function()
+        return nil, "the claim is stuck"
+    end
+    _, message = turn.release(backend, first)
+    testing.eq(message, "The landing turn could not be released. The claim is stuck.")
+end)
+
 local function fill(backend, id)
     local notes = assert(backend:comments(id))
     for _ = #notes + 1, turn.MAX_NOTES do
@@ -814,6 +849,34 @@ testing.test(
         testing.eq(again, nil)
         testing.ok(message:find("the most it may be kept", 1, true), message)
         testing.ok(message:find("given back", 1, true), message)
+    end
+)
+
+testing.test(
+    "a refusal past the hold cap ends with the release sentence when giving back fails",
+    function()
+        -- Open a board and find its landing card
+        local backend = backend_at(board_home())
+        local _, short = landing_card(backend)
+
+        -- Reclaim the card past the hold cap and fail the release
+        over_cap_claim(backend, short)
+        advance(turn.MAX_HOLD_SECONDS + 1)
+        backend.release = function()
+            return nil, "the claim is stuck"
+        end
+
+        -- Take it again and expect the release sentence as the ending
+        local take_opts = { hold = true, seconds = TURN_HOLD_SECONDS }
+        local _, message = turn.take(backend, "alpha", short, take_opts)
+        testing.ok(
+            message:find(
+                "seconds). The landing turn could not be released. The claim is stuck.",
+                1,
+                true
+            ),
+            message
+        )
     end
 )
 

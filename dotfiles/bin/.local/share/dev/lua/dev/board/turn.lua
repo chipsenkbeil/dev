@@ -197,12 +197,14 @@ end
 function M.claimed(backend, name, card)
     local holding, message = lookup(backend)
     if not holding then
-        return nil, message
+        return nil,
+            message and ("The landing turn card could not be read." .. sentence_after(message))
     end
     local comments
     comments, message = backend:comments(holding.id)
     if not comments then
-        return nil, message
+        return nil,
+            "The notes of the landing turn card could not be read." .. sentence_after(message)
     end
     local own = own_claim({ holding = holding, comments = comments, name = name, card = card })
     return own and own.hold and own or nil
@@ -449,8 +451,7 @@ function M.take(backend, name, card, opts)
     if own and own.hold then
         if store.stamp(store.now() - M.MAX_HOLD_SECONDS) >= own.taken then
             local released, reason = M.release(backend, own)
-            local ending = released and "It is given back and has to be asked for again."
-                or "Giving it back failed: " .. (reason or "unknown") .. "."
+            local ending = released and "It is given back and has to be asked for again." or reason
             return nil,
                 string.format(
                     "The landing turn has been held since %s, the most it may be kept "
@@ -557,7 +558,7 @@ end
 function M.held(backend, name, card)
     local cards, message = backend:cards()
     if not cards then
-        return nil, message
+        return nil, "The landing turn card could not be read." .. sentence_after(message)
     end
     local holding = find(cards)
     if not holding then
@@ -566,7 +567,8 @@ function M.held(backend, name, card)
     local comments
     comments, message = backend:comments(holding.id)
     if not comments then
-        return nil, message
+        return nil,
+            "The notes of the landing turn card could not be read." .. sentence_after(message)
     end
     local newest
     for _, comment in ipairs(comments) do
@@ -687,7 +689,10 @@ function M.release(backend, turn)
     if released and turn.hold then
         M.leave(backend, turn.holder, turn.for_card)
     end
-    return released, message
+    if not released then
+        return nil, "The landing turn could not be released." .. sentence_after(message)
+    end
+    return released
 end
 
 return M
