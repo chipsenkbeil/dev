@@ -29,10 +29,25 @@ testing.test("parse reads a multi-line array as the one-line form", function()
     testing.eq(spread.board.release.checks, { "a", "b c" })
 end)
 
+testing.test("parse reads a CRLF multi-line array", function()
+    local crlf = assert(
+        toml.parse('[board.release]\r\nchecks = [\r\n    "a",\r\n\r\n    "b c"\r\n]\r\nn = 1\r\n')
+    )
+    local lf = assert(toml.parse('[board.release]\nchecks = [\n    "a",\n\n    "b c"\n]\nn = 1\n'))
+    testing.eq(crlf, lf)
+    testing.eq(crlf.board.release.checks, { "a", "b c" })
+end)
+
 testing.test("parse accepts a trailing comma and comments inside a multi-line array", function()
     local tree =
         assert(toml.parse("xs = [ # open\n    1, # one\n    # between\n    2,\n] # end\ny = 3"))
     testing.eq(tree, { xs = { 1, 2 }, y = 3 })
+end)
+
+testing.test("parse names the line two lines after a multi-line array closes", function()
+    local tree, err = toml.parse("xs = [\n    1,\n]\n\na 1")
+    testing.eq(tree, nil)
+    testing.ok(err:find("^5: expected = after the key", 1), err)
 end)
 
 testing.test("parse names the opening line of an unclosed array", function()
