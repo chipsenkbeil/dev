@@ -4613,7 +4613,9 @@ local COMMENTS = '[{"id":"aaaaaaaa-1111-4111-8111-111111111111","author":"api-to
     .. '"token_name":null,"created_at":"2026-10-27T10:00:00Z","body":"mine? no"}]'
 local TASK = '{"id":"'
     .. ID_A
-    .. '","name":"First","column_id":"col-ready","color_id":"yellow-id","labels":["docs"]}'
+    .. '","name":"First","column_id":"'
+    .. READY_COLUMN
+    .. '","color_id":"yellow-id","labels":["docs"]}'
 
 local CURL = support.pomb_curl(ID_A, ID_B, ID_C)
 
@@ -5503,7 +5505,9 @@ local function epic_sandbox(children_done, ticked)
         :gsub('"labels":%["docs"%]', '"kind":"epic","labels":["docs"]')
     local task = '{"id":"'
         .. ID_A
-        .. '","name":"First","column_id":"col-ready","color_id":"yellow-id","kind":"epic",'
+        .. '","name":"First","column_id":"'
+        .. READY_COLUMN
+        .. '","color_id":"yellow-id","kind":"epic",'
         .. '"children_total":2,"children_done":'
         .. children_done
         .. ',"labels":[]}'
@@ -5843,7 +5847,9 @@ end)
 
 local EPIC_TASK = '{"id":"'
     .. ID_A
-    .. '","name":"First","column_id":"col-ready","color_id":"yellow-id","labels":["docs"],"kind":"epic","children_total":3,"children_done":%d}'
+    .. '","name":"First","column_id":"'
+    .. READY_COLUMN
+    .. '","color_id":"yellow-id","labels":["docs"],"kind":"epic","children_total":3,"children_done":%d}'
 
 testing.test("epic_next_skips_open_child", function()
     local root, home = sandbox({ task = EPIC_TASK:format(1) })

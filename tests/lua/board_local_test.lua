@@ -3023,7 +3023,9 @@ local function sized_pomb()
             .. id
             .. '","name":"'
             .. name
-            .. '","column_id":"col-ready","color_id":"'
+            .. '","column_id":"'
+            .. READY_COLUMN
+            .. '","color_id":"'
             .. color_id
             .. '","labels":[]}'
     end
