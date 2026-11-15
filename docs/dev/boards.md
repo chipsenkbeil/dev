@@ -2802,7 +2802,7 @@ The hold:
 - A hold is the live one only when its note names the fence of the card's
   current claim. A record left by a lapsed hold counts as lost, even when the
   same name later took the turn for another card.
-- Success prints `holding the landing turn for <id prefix> for N seconds` and
+- Success prints `Holding the landing turn for <id prefix> for N seconds.` and
   the next steps: rebase, run `dev board land CARD` to land under the hold, and
   run `dev board turn CARD` again to renew it or add `--release` to give it
   back.

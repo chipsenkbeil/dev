@@ -2214,7 +2214,7 @@ if has_jj then
         local id = in_verify(project)
         local out, code = dev(project, { "board", "turn", id })
         testing.eq(code, 0, out)
-        testing.ok(out:find("holding the landing turn for " .. id, 1, true), out)
+        testing.ok(out:find("Holding the landing turn for " .. id, 1, true), out)
         approve(project, id)
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
         out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })

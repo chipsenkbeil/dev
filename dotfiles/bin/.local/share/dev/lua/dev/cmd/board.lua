@@ -2682,14 +2682,14 @@ function commands.land(backend, args)
     if lost then
         local claimed, claim_message = turn.claimed(backend, name, short)
         if claim_message then
-            return failure(short .. " cannot land: " .. claim_message)
+            return failure("Card " .. short .. " cannot land. " .. claim_message)
         end
         if claimed then
             hold, message = claimed, nil
         end
     end
     if message then
-        return failure(short .. " cannot land: " .. message)
+        return failure("Card " .. short .. " cannot land. " .. message)
     end
     if not hold then
         hold, message = wiring.await_turn({
@@ -2701,7 +2701,7 @@ function commands.land(backend, args)
         })
     end
     if not hold then
-        return failure(short .. " cannot land: " .. message)
+        return failure("Card " .. short .. " cannot land. " .. message)
     end
     local current
     current, message = find_card(backend, words[1])
@@ -3053,7 +3053,7 @@ function commands.turn(backend, args)
         hold = hold or claimed
         if not hold and message then
             turn.leave(backend, name, short)
-            return { output = "the landing turn held for " .. short .. " was already gone" }
+            return { output = "The landing turn held for " .. short .. " was already gone." }
         end
         if not hold then
             turn.leave(backend, name, short)
@@ -3061,7 +3061,7 @@ function commands.turn(backend, args)
         end
         local released, reason = turn.release(backend, hold)
         if not released then
-            return failure("the landing turn held for " .. short .. " was not released: " .. reason)
+            return failure("The landing turn held for " .. short .. " was not released. " .. reason)
         end
         return { output = "gave back the landing turn held for " .. short }
     end
@@ -3100,11 +3100,11 @@ function commands.turn(backend, args)
         take = { hold = true, seconds = seconds },
     })
     if not hold then
-        return failure(short .. " cannot take the landing turn: " .. message)
+        return failure("Card " .. short .. " cannot take the landing turn. " .. message)
     end
     return {
         output = string.format(
-            "holding the landing turn for %s for %d seconds: rebase, then dev board land %s, which lands under it; run dev board turn %s again to renew it, or add --release to give it back",
+            "Holding the landing turn for %s for %d seconds. Rebase, then run `dev board land %s`, which lands under it. Run `dev board turn %s` again to renew it, or add `--release` to give it back.",
             short,
             seconds,
             short,

@@ -370,7 +370,7 @@ local function land_held(opts)
         local stretched
         stretched, message = turn.stretch(backend, hold, turn.RECHECK_LEASE_SECONDS)
         if not stretched then
-            local lost = failure(short .. " cannot land: " .. message)
+            local lost = failure("Card " .. short .. " cannot land. " .. message)
             lost.lost = true
             return lost
         end
@@ -397,7 +397,7 @@ local function land_held(opts)
     local renewed
     renewed, message = turn.renew(backend, hold)
     if not renewed then
-        local lost = failure(short .. " cannot land: " .. message)
+        local lost = failure("Card " .. short .. " cannot land. " .. message)
         lost.lost = true
         return lost
     end
