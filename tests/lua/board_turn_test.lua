@@ -295,6 +295,46 @@ testing.test(
     end
 )
 
+testing.test("a stale hold record for another claim is treated as lost", function()
+    -- Take a hold, let it lapse, then take the turn again under the same name for another card
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = LEASE_SECONDS }))
+    advance(PAST_LEASE_SECONDS)
+    local second = assert(turn.take(backend, "alpha", "bbbb2222"))
+    restore()
+    testing.eq(second.holder, "alpha")
+
+    -- Check that the old record names an older fence than the live claim
+    local found, message, lost = turn.held(backend, "alpha", "aaaa1111")
+    testing.eq(found, nil)
+    testing.ok(message:find("ran out or was taken", 1, true), message)
+    testing.eq(lost, true)
+end)
+
+testing.test(
+    "a failed lease note after a renewal says so and does not fall through to a take",
+    function()
+        -- Take a hold
+        local backend = backend_at(board_home())
+        local first =
+            assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+
+        -- Fail every note from now on
+        backend.note = function()
+            return nil, "the board is down"
+        end
+
+        -- Renew the claim, fail the note and expect a stop
+        local ok, message, capped, kept = turn.extend(backend, first, 1200)
+        testing.eq(ok, nil)
+        testing.eq(capped, nil)
+        testing.eq(kept, true)
+        testing.ok(message:find("renewed but its lease could not be noted", 1, true), message)
+        testing.eq(assert(turn.holder(backend)).name, "alpha")
+    end
+)
+
 testing.test("renewing a hold keeps the lease it was taken with", function()
     local backend = backend_at(board_home())
     local restore = lease(1)
@@ -743,6 +783,36 @@ local function call_to(root, route)
     end
     return ""
 end
+
+testing.test("a Pomb hold is found by the owner fence and lost when the fence differs", function()
+    -- Give the turn card a live owner with fence 7 and a hold record of fence 7
+    local root = pomb_root()
+    local card = '{"id":"'
+        .. ID_A
+        .. '","name":"landing turn","column_id":"col-icebox","position":1,"labels":[],'
+        .. '"owner":{"holder":{"kind":"agent","name":"alpha"},"fence":7,"live":true}}'
+    assert(fs.write(root .. "/export.json", '{"tasks":[' .. card .. "]}"))
+    local function record(fence)
+        return '[{"id":"c1","body":"dev-turn: holder=alpha card=aaaa1111 taken=2099-01-01T00:00:00Z'
+            .. " fence="
+            .. fence
+            .. ' lease=600 hold=1","kind":"status"}]'
+    end
+
+    -- Accept a record of the same fence as the live hold
+    assert(fs.write(root .. "/comments.json", record(7)))
+    on_pomb(root, function(backend)
+        testing.eq(assert(turn.held(backend, "alpha", "aaaa1111")).fence, 7)
+    end)
+
+    -- Treat a record of an older fence as lost
+    assert(fs.write(root .. "/comments.json", record(6)))
+    on_pomb(root, function(backend)
+        local found, _, lost = turn.held(backend, "alpha", "aaaa1111")
+        testing.eq(found, nil)
+        testing.eq(lost, true)
+    end)
+end)
 
 testing.test("taking the turn on Pomb grabs the owner with the turn lease", function()
     local root = pomb_root()

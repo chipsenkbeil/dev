@@ -23,6 +23,7 @@ local M = {}
 ---@field labels string[] the card's labels
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds the card while its owner lease is live
+---@field claim_fence integer? the fence of that claim, nil when no claim is live
 ---@field kind string? `epic` for an epic, `task` otherwise
 ---@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not
 ---   one

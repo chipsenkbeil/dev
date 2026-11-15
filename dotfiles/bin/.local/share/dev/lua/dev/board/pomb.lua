@@ -752,6 +752,7 @@ function Backend:__card(task)
         outcomes = outcomes,
         outcomes_unreadable = not readable,
         claimant = holder(task),
+        claim_fence = holder(task) and present(task.owner.fence) or nil,
         id = task.id,
         name = task.name,
         column = self:__column_name(task.column_id),

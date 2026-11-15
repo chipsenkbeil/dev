@@ -505,7 +505,7 @@ function M.held(backend, name, card)
     if not newest or not newest.hold then
         return nil
     end
-    if holding.claimant ~= name then
+    if holding.claimant ~= name or holding.claim_fence ~= newest.fence then
         return nil,
             string.format(
                 "the landing turn held for %s ran out or was taken by another, so take it again with dev board turn %s",
@@ -580,6 +580,7 @@ end
 ---@return true? ok true while the hold is still this holder's
 ---@return string? message why the hold is lost, over its cap or the record not written
 ---@return boolean? capped true when the hold has been kept for `MAX_HOLD_SECONDS` already
+---@return boolean? renewed true when the claim was renewed but the lease could not be noted
 function M.extend(backend, held, seconds)
     held.lease = seconds
     local ok, message, capped = M.renew(backend, held)
@@ -589,7 +590,7 @@ function M.extend(backend, held, seconds)
     local noted
     noted, message = note_holder(backend, held)
     if not noted then
-        return nil, "the hold was renewed but its lease could not be noted: " .. message
+        return nil, "the hold was renewed but its lease could not be noted: " .. message, nil, true
     end
     return true
 end

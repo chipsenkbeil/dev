@@ -2779,6 +2779,9 @@ The hold:
 - The hold is recorded in the `dev-turn:` note with the fence and the lease, so
   a later command finds it from the board alone, on any machine under the same
   `DEV_AGENT`.
+- A hold is the live one only when its note names the fence of the card's
+  current claim. A record left by a lapsed hold counts as lost, even when the
+  same name later took the turn for another card.
 - Success prints `holding the landing turn for <id prefix> for N seconds` and
   the next steps: rebase, run `dev board land CARD` to land under the hold, and
   run `dev board turn CARD` again to renew it or add `--release` to give it
@@ -2791,6 +2794,9 @@ Renewing:
 - Running `turn CARD` again as the holder renews the lease for `--hold` more
   seconds and prints
   `renewed the landing turn held for <id prefix> for N more seconds`.
+- When the renewal succeeds and the note of the new lease fails, `turn` refuses
+  with `the hold was renewed but its lease could not be noted` and takes
+  nothing new. The hold stays with its old lease note.
 - The hold may be kept without a break for 3600 seconds in all. After that,
   `turn` and `land` refuse, give the turn back and leave the holder to ask
   again.

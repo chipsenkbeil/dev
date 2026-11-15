@@ -3052,10 +3052,13 @@ function commands.turn(backend, args)
         return failure(short .. " is done, so there is nothing to land")
     end
     if hold then
-        local renewed, capped
-        renewed, message, capped = turn.extend(backend, hold, seconds)
+        local renewed, capped, kept
+        renewed, message, capped, kept = turn.extend(backend, hold, seconds)
         if capped then
             turn.release(backend, hold)
+            return failure(message)
+        end
+        if kept then
             return failure(message)
         end
         if renewed then

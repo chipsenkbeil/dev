@@ -238,6 +238,7 @@ local function card_view(doc, card)
         files = board.names(card.files),
         outcomes = card.outcomes or {},
         claimant = claim and claim.claimant or nil,
+        claim_fence = claim and claim.fence or nil,
     }
 end
 
