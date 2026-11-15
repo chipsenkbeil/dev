@@ -216,7 +216,7 @@ testing.test("new needs one plain NAME", function()
         { { "ws", "new" }, "dev ws new: needs a NAME\n" },
         { { "ws", "new", "a", "b" }, "dev ws new: takes one NAME, got b\n" },
         { { "ws", "new", "a/b" }, "dev ws new: NAME is one folder name, got a/b\n" },
-        { { "ws", "new", "-x" }, "dev ws new: unknown flag -x\n" },
+        { { "ws", "new", "-x" }, "dev ws new: Unknown flag -x.\n" },
     }) do
         local out, code = support.dev(root, case[1], env)
         testing.eq(code, 2)
@@ -625,7 +625,7 @@ testing.test("rm refuses a NAME that is not one folder name", function()
         { { "ws", "rm", "../feat" }, "dev ws rm: NAME is one folder name, got ../feat\n" },
         { { "ws", "rm", "/etc" }, "dev ws rm: NAME is one folder name, got /etc\n" },
         { { "ws", "rm", "a", "b" }, "dev ws rm: takes one NAME, got b\n" },
-        { { "ws", "rm", "-x" }, "dev ws rm: unknown flag -x\n" },
+        { { "ws", "rm", "-x" }, "dev ws rm: Unknown flag -x.\n" },
     }) do
         local out, code = support.dev(root, case[1], env)
         testing.eq(code, 2)

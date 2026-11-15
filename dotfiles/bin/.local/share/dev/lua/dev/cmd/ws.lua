@@ -48,7 +48,7 @@ local function parse(ctx)
         verb.usage_error(ctx, "needs a NAME")
     end
     if name:sub(1, 1) == "-" then
-        verb.usage_error(ctx, "unknown flag " .. name)
+        verb.usage_error(ctx, "Unknown flag " .. name .. ".")
     end
     if ctx.args[2] ~= nil then
         verb.usage_error(ctx, "takes one NAME, got " .. ctx.args[2])

@@ -327,7 +327,7 @@ function M.parse(ctx, allowed)
         local arg = args[i]
         i = i + 1
         if #arg > 1 and arg:sub(1, 1) == "-" and not takes[arg] then
-            verb.usage_error(ctx, "unknown flag " .. arg)
+            verb.usage_error(ctx, "Unknown flag " .. arg .. ".")
         end
         if VALUE_FLAGS[arg] then
             if i > #args then

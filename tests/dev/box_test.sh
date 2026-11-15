@@ -248,7 +248,7 @@ assert_eq "create refuses the removed --profile" "$?" "2"
 out="$(box box create --project x 2>&1)"
 assert_eq "create refuses the removed --project" "$?" "2"
 out="$(box box create --nope 2>&1)"
-assert_contains "create names an unknown flag" "$out" "dev box create: unknown flag --nope"
+assert_contains "create names an unknown flag" "$out" "dev box create: Unknown flag --nope."
 
 # --- show, stop, resume, extend, delete ---
 

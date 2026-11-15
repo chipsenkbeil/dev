@@ -34,7 +34,7 @@ function M.no_args(ctx)
         return
     end
     if arg:sub(1, 1) == "-" then
-        M.usage_error(ctx, "unknown flag " .. arg)
+        M.usage_error(ctx, "Unknown flag " .. arg .. ".")
     end
     M.usage_error(ctx, "Unknown argument " .. arg .. ". This verb takes no positional arguments.")
 end

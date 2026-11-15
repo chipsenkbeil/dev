@@ -263,7 +263,7 @@ local function tail(list, from)
 end
 
 local UNDECLARED_HINT =
-    "; pass it after -- to reach the script, or add it to the script's # flags: line"
+    ". Pass it after -- to reach the script, or add it to the script's # flags: line."
 
 local function is_help(word)
     return word == "-h" or word == "--help"
@@ -334,7 +334,7 @@ local function refuse_undeclared(reg, ctx, rest, after)
         local word = rest[i]
         local flag = word:match("^(%-%-?[^=]*)")
         if flag and word ~= "-" and not is_help(flag) and not declared[flag] then
-            verb.usage_error(ctx, "unknown flag " .. flag .. UNDECLARED_HINT)
+            verb.usage_error(ctx, "Unknown flag " .. flag .. UNDECLARED_HINT)
         end
     end
 end

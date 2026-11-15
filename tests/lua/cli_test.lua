@@ -195,7 +195,7 @@ testing.test("a .lua verb that cannot be read is an error", function()
     testing.ok(out:find("dev locked: cannot read ", 1, true), out)
 end)
 
-local REFUSAL = "; pass it after -- to reach the script, or add it to the script's # flags: line\n"
+local REFUSAL = ". Pass it after -- to reach the script, or add it to the script's # flags: line.\n"
 
 local function marked(root)
     return fs.is_file(root .. "/marker")
@@ -220,7 +220,7 @@ testing.test("an undeclared flag is refused before a .sh verb runs", function()
     local root, env = undeclared_project()
     local out, code = dev(root, { "s", "--nope" }, env)
     testing.eq(code, 2)
-    testing.eq(out, "dev s: unknown flag --nope" .. REFUSAL)
+    testing.eq(out, "dev s: Unknown flag --nope" .. REFUSAL)
     testing.ok(not marked(root), "script ran")
 end)
 
@@ -228,7 +228,7 @@ testing.test("an undeclared flag is refused before a .lua verb runs", function()
     local root, env = undeclared_project()
     local out, code = dev(root, { "l", "a", "--nope=1" }, env)
     testing.eq(code, 2)
-    testing.eq(out, "dev l: unknown flag --nope" .. REFUSAL)
+    testing.eq(out, "dev l: Unknown flag --nope" .. REFUSAL)
     testing.ok(not marked(root), "script ran")
 end)
 
@@ -237,7 +237,7 @@ testing.test("an undeclared flag of a noun subcommand names both words", functio
     for _, sub in ipairs({ "x", "y" }) do
         local out, code = dev(root, { "n", sub, "-z" }, env)
         testing.eq(code, 2)
-        testing.eq(out, "dev n " .. sub .. ": unknown flag -z" .. REFUSAL)
+        testing.eq(out, "dev n " .. sub .. ": Unknown flag -z" .. REFUSAL)
         testing.ok(not marked(root), "script ran")
     end
 end)
@@ -254,7 +254,7 @@ testing.test("a separate value that starts with a dash is a flag, so it goes aft
     local root, env = undeclared_project()
     local out, code = dev(root, { "s", "--days", "-1" }, env)
     testing.eq(code, 2)
-    testing.eq(out, "dev s: unknown flag -1" .. REFUSAL)
+    testing.eq(out, "dev s: Unknown flag -1" .. REFUSAL)
     testing.eq(dev(root, { "s", "--days=-1" }, env), "sh --days=-1\n")
 end)
 
@@ -330,7 +330,7 @@ testing.test(
 testing.test("--remote is never an unknown flag", function()
     local root, env = undeclared_project()
     local out = dev(root, { "s", "--remote" }, env)
-    testing.ok(not out:find("unknown flag", 1, true), out)
+    testing.ok(not out:find("Unknown flag", 1, true), out)
 end)
 
 testing.test("root-tests and bootstrap-arch are unknown verbs", function()

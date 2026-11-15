@@ -38,8 +38,10 @@ local function bad_argument(ctx, reg, arg)
     if reg then
         help.bad_argument(ctx, reg, arg)
     end
-    local kind = arg:sub(1, 1) == "-" and "flag" or "argument"
-    usage_error(ctx, reg, "unknown " .. kind .. " " .. arg)
+    if arg:sub(1, 1) == "-" then
+        usage_error(ctx, reg, "Unknown flag " .. arg .. ".")
+    end
+    usage_error(ctx, reg, "unknown argument " .. arg)
 end
 
 local function fail(message)
@@ -144,7 +146,7 @@ local function parse_install(ctx, reg)
             end
             parsed.scope = scope
         elseif arg:sub(1, 1) == "-" then
-            usage_error(ctx, reg, "unknown flag " .. arg)
+            usage_error(ctx, reg, "Unknown flag " .. arg .. ".")
         else
             parsed.tools[#parsed.tools + 1] = arg
         end

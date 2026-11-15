@@ -149,7 +149,7 @@ assert_eq "root with no scope and a tool name exits 2" "$?" "2"
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" install --bogus 2>&1)"
     assert_eq "an unknown flag exits 2" "$?" "2"
-    assert_contains "an unknown flag is named" "$out" "unknown flag --bogus"
+    assert_contains "an unknown flag is named" "$out" "Unknown flag --bogus."
     out="$(tools "$proj" install --dry-run no-such-tool-zzz 2>&1)"
     assert_eq "an unknown tool exits 2" "$?" "2"
     assert_contains "an unknown tool is named" "$out" "unknown tool: no-such-tool-zzz"

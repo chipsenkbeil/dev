@@ -205,7 +205,7 @@ set -eo pipefail
 
 if [ "$#" -gt 0 ]; then
     case "$1" in
-    -*) printf 'dev list: unknown flag %s\n' "$1" >&2 ;;
+    -*) printf 'dev list: Unknown flag %s.\n' "$1" >&2 ;;
     *) printf 'dev list: Unknown argument %s. This verb takes no positional arguments.\n' "$1" >&2 ;;
     esac
     exit 2

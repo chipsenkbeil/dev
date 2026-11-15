@@ -580,7 +580,7 @@ function M.run(ctx, reg)
         print_topic(ctx, args[2], { no_pager = no_pager })
         return 0
     elseif first and first:sub(1, 1) == "-" then
-        fail("unknown flag " .. first)
+        fail("Unknown flag " .. first .. ".")
     end
     if #args == 0 then
         return M.overview(ctx, reg, { no_pager = no_pager })

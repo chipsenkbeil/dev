@@ -96,7 +96,7 @@ Built-in verbs check their own flags. With `--remote`, arguments typed with no
 The refusal exits 2 with this message:
 
 ```
-dev <verb>: unknown flag <flag>; pass it after -- to reach the script, or add it to the script's # flags: line
+dev <verb>: Unknown flag <flag>. Pass it after -- to reach the script, or add it to the script's # flags: line.
 ```
 
 ## Script headers

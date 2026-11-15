@@ -96,12 +96,12 @@ assert_line "a trailing slash path names the same suite as the plain path" "$out
 out="$(cd "$TMP" && "$DEV" test -x 2>&1)"
 rc=$?
 assert_eq "a dash flag is refused with exit 2" "$rc" "2"
-assert_line "a dash flag is refused with the unknown flag message" "$out" "dev test: unknown flag -x; pass it after -- to reach the script, or add it to the script's # flags: line"
+assert_line "a dash flag is refused with the unknown flag message" "$out" "dev test: Unknown flag -x. Pass it after -- to reach the script, or add it to the script's # flags: line."
 
 out="$(cd "$TMP" && "$DEV" test -- -x 2>&1)"
 rc=$?
 assert_eq "a dash flag after the double dash is refused with exit 2" "$rc" "2"
-assert_line "a dash flag after the double dash is refused by the verb" "$out" "dev test: unknown flag -x"
+assert_line "a dash flag after the double dash is refused by the verb" "$out" "dev test: Unknown flag -x."
 
 if [ "$extra" -eq 0 ]; then
     out="$(cd "$TMP" && "$DEV" test tests/neomutt/parse-check.sh 2>&1)"

@@ -15,7 +15,7 @@ local verb = require("dev.verb")
 local ctx = ...
 for _, arg in ipairs(ctx.args) do
     if arg:sub(1, 1) == "-" then
-        verb.usage_error(ctx, "unknown flag " .. arg)
+        verb.usage_error(ctx, "Unknown flag " .. arg .. ".")
     end
 end
 verb.need("bats", "brew install bats-core")
