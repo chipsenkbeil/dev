@@ -281,6 +281,13 @@ M.COLUMN_NAME = {
     VERIFY = "Verify",
 }
 
+---The id Pomb gives a column in the fixtures, from a column constant or display name.
+---@param column string the column constant or display name
+---@return string id the column id
+function M.column_id(column)
+    return "col-" .. column
+end
+
 ---Build the fake `curl` script that answers Pomb's routes from the files in `$ROOT`.
 ---@param first_id string id of the card the task routes answer for
 ---@param second_id string id of the card the second page of the card list holds

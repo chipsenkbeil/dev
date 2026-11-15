@@ -8,7 +8,7 @@ local support = require("support")
 local TOKEN = "pomb_SECRETtoken0123456789"
 local DEVICE_CODE = "DEVCODE-secret-9876"
 local ADMIN_TOKEN = "pomb_ADMINtoken0123456789"
-local READY_COLUMN = "col-" .. support.COLUMN_NAME.READY
+local READY_COLUMN = support.column_id(support.COLUMN_NAME.READY)
 local STANDARD = {
     support.COLUMN_NAME.ICEBOX,
     support.COLUMN_NAME.BACKLOG,
@@ -27,7 +27,7 @@ local function turn_row(column)
     return support.pomb_export_task({
         id = "22222222-bbbb",
         name = board.TURN_NAME,
-        column_id = "col-" .. column,
+        column_id = support.column_id(column),
     })
 end
 local LANES_DIE = "dev: [board] lanes must be a list of lane names in .dev/config.toml"
@@ -70,7 +70,7 @@ local function template_columns()
         support.COLUMN_NAME.DONE,
     }) do
         columns[index] = {
-            id = "col-" .. name,
+            id = support.column_id(name),
             name = name,
             is_done = name == support.COLUMN_NAME.DONE,
             is_blocked = name == support.COLUMN_NAME.BLOCKED,

@@ -7,7 +7,7 @@ local json = require("dev.json")
 local support = require("support")
 
 local COLUMN = support.COLUMN
-local READY_COLUMN = "col-" .. COLUMN.READY
+local READY_COLUMN = support.column_id(COLUMN.READY)
 
 local TOKEN = "pomb_SECRETtoken0123456789"
 local ID_A = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa"
