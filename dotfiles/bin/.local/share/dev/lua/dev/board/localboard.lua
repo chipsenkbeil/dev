@@ -50,7 +50,7 @@ function M.new(opts)
 end
 
 local function missing(path)
-    return "no local board at " .. path .. ", run dev board init"
+    return "No local board at " .. path .. ". Run `dev board init`."
 end
 
 function Backend:describe()
@@ -399,9 +399,11 @@ function Backend:link(id, kind, other)
             end
             if target.kind ~= board.Kind.EPIC then
                 return nil,
-                    target.id:sub(1, board.MIN_PREFIX)
-                        .. " is not an epic, make it one with dev board epic "
+                    "Card "
                         .. target.id:sub(1, board.MIN_PREFIX)
+                        .. " is not an epic. Make it one with `dev board epic "
+                        .. target.id:sub(1, board.MIN_PREFIX)
+                        .. "`."
             end
             if current then
                 return nil, "the card already has an epic"
@@ -630,7 +632,7 @@ function Backend:next(column, opts)
     end
     local target = column_named(doc, column)
     if not target then
-        return nil, "the board has no " .. column .. " column, run dev board init"
+        return nil, "The board has no " .. column .. " column. Run `dev board init`."
     end
     for _, card in ipairs(ordered(doc)) do
         if
@@ -678,7 +680,7 @@ function Backend:add(name, column, opts)
         end
         local target = column_named(doc, column)
         if not target then
-            return nil, "the board has no " .. column .. " column, run dev board init"
+            return nil, "The board has no " .. column .. " column. Run `dev board init`."
         end
         local lane
         if opts and opts.lane then
@@ -691,7 +693,7 @@ function Backend:add(name, column, opts)
         if opts and opts.color then
             local color = color_valued(doc, opts.color)
             if not color then
-                return nil, "the board has no " .. opts.color .. " colour, run dev board init"
+                return nil, "The board has no " .. opts.color .. " colour. Run `dev board init`."
             end
             color_id = color.id
         else
@@ -711,7 +713,8 @@ function Backend:add(name, column, opts)
                 then
                     return nil,
                         string.format(
-                            "%s already has the run card %s. Close it with dev board run --end first.",
+                            "The name %s already has the run card %s. "
+                                .. "Close it with `dev board run --end` first.",
                             name,
                             open.id:sub(1, board.MIN_PREFIX)
                         )
@@ -788,7 +791,7 @@ function Backend:escalate(id, tier, reason, fence)
 end
 
 function Backend:ask()
-    return nil, "a local board holds no structured questions; use dev board note"
+    return nil, "A local board holds no structured questions. Use `dev board note` instead."
 end
 
 function Backend:answer(id, choice, quote, fence)
@@ -889,7 +892,7 @@ function Backend:move(id, column, opts)
         end
         local target = column_named(doc, column)
         if not target then
-            return nil, "the board has no " .. column .. " column, run dev board init"
+            return nil, "The board has no " .. column .. " column. Run `dev board init`."
         end
         local lane
         if opts.lane then
@@ -931,7 +934,7 @@ function Backend:set_size(id, color, fence)
         end
         local found = color_valued(doc, color)
         if not found then
-            return nil, "the board has no " .. color .. " colour, run dev board init"
+            return nil, "The board has no " .. color .. " colour. Run `dev board init`."
         end
         card.color_id = found.id
         return true
