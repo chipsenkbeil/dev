@@ -6,6 +6,10 @@ local json = require("dev.json")
 local review = require("dev.board.review")
 local support = require("support")
 
+---Board column names the lint tests use
+local NAME = support.COLUMN_NAME
+---Review record revision the lint tests share
+local REV = { commit = "abc123", change = "xyz" }
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 
@@ -23,14 +27,14 @@ local function card(n, column, fields)
         id = string.format("%08d-aaaa-4aaa-8aaa-aaaaaaaaaaaa", n),
         name = "Card " .. n,
         column = column,
-        done = column == "Done",
+        done = column == NAME.DONE,
         size = "2 Pomodori",
         color = "green",
         labels = {},
         description = V2,
         claimant = "someone",
         checks = { "dev test" },
-        outcomes = outcomes(column == "Done" and 3 or 0),
+        outcomes = outcomes(column == NAME.DONE and 3 or 0),
     }
     for key, value in pairs(fields or {}) do
         made[key] = value or nil
@@ -43,7 +47,7 @@ local function backend(cards, held)
     local calls = {}
     local fake = { calls = calls }
     function fake:done_columns()
-        return { "Done" }
+        return { NAME.DONE }
     end
     function fake:cards()
         return cards
@@ -75,18 +79,18 @@ end
 testing.test("lint reports one line per rule a card breaks and exits 1", function()
     local words = string.rep(" word", 400)
     local cards = {
-        card(1, "Backlog", { color = false }),
-        card(2, "Backlog", { description = "## Problem\nwhy\n\n## Out of scope\nnone" }),
-        card(3, "Backlog"),
-        card(4, "Ready", { checks = {} }),
-        card(5, "Ready", { color = "red" }),
-        card(6, "Backlog", { description = V2 .. "\n" .. words }),
-        card(7, "Ready", { labels = { "needs:human" } }),
-        card(8, "Blocked"),
-        card(9, "In Progress", { claimant = false }),
-        card(10, "Done", { outcomes = outcomes(2) }),
-        card(11, "Done", { outcomes_unreadable = true, outcomes = {} }),
-        card(12, "Backlog", { labels = { "discarded" }, outcomes = {} }),
+        card(1, NAME.BACKLOG, { color = false }),
+        card(2, NAME.BACKLOG, { description = "## Problem\nwhy\n\n## Out of scope\nnone" }),
+        card(3, NAME.BACKLOG),
+        card(4, NAME.READY, { checks = {} }),
+        card(5, NAME.READY, { color = "red" }),
+        card(6, NAME.BACKLOG, { description = V2 .. "\n" .. words }),
+        card(7, NAME.READY, { labels = { "needs:human" } }),
+        card(8, NAME.BLOCKED),
+        card(9, NAME.PROGRESS, { claimant = false }),
+        card(10, NAME.DONE, { outcomes = outcomes(2) }),
+        card(11, NAME.DONE, { outcomes_unreadable = true, outcomes = {} }),
+        card(12, NAME.BACKLOG, { labels = { "discarded" }, outcomes = {} }),
     }
     cards[3].outcomes = {}
     local result = cmd_board.run("lint", {}, backend(cards))
@@ -116,11 +120,11 @@ testing.test(
         local scope_in_problem =
             "## Problem\nwhy\nOut of scope: docs\n\n## Change\nx\n\n## Out of scope\nn"
         local cards = {
-            card(1, "Backlog", { description = empty_change, outcomes = outcomes(0) }),
-            card(2, "Ready", { description = line_in_problem, outcomes = outcomes(0) }),
-            card(3, "Icebox", { description = empty_change, outcomes = {} }),
-            card(4, "Backlog", { description = scope_in_problem, outcomes = outcomes(0) }),
-            card(5, "Done", { description = empty_change }),
+            card(1, NAME.BACKLOG, { description = empty_change, outcomes = outcomes(0) }),
+            card(2, NAME.READY, { description = line_in_problem, outcomes = outcomes(0) }),
+            card(3, NAME.ICEBOX, { description = empty_change, outcomes = {} }),
+            card(4, NAME.BACKLOG, { description = scope_in_problem, outcomes = outcomes(0) }),
+            card(5, NAME.DONE, { description = empty_change }),
         }
         local result = cmd_board.run("lint", {}, backend(cards))
         testing.eq(result.code, 1)
@@ -136,11 +140,11 @@ testing.test(
 
 testing.test("lint holds an epic to 1 to 3 outcomes and to its children", function()
     local cards = {
-        card(1, "Backlog", { outcomes = {} }),
-        card(2, "Done", { outcomes = {} }),
-        card(3, "Done", { outcomes = {} }),
-        card(4, "Backlog", { outcomes = {} }),
-        card(5, "Backlog", {
+        card(1, NAME.BACKLOG, { outcomes = {} }),
+        card(2, NAME.DONE, { outcomes = {} }),
+        card(3, NAME.DONE, { outcomes = {} }),
+        card(4, NAME.BACKLOG, { outcomes = {} }),
+        card(5, NAME.BACKLOG, {
             outcomes = {
                 { id = "o1", name = "a" },
                 { id = "o2", name = "b" },
@@ -148,7 +152,7 @@ testing.test("lint holds an epic to 1 to 3 outcomes and to its children", functi
                 { id = "o4", name = "d" },
             },
         }),
-        card(6, "Backlog", { outcomes = outcomes(2) }),
+        card(6, NAME.BACKLOG, { outcomes = outcomes(2) }),
     }
     local held = {
         children = {
@@ -179,7 +183,7 @@ testing.test("lint holds an epic to 1 to 3 outcomes and to its children", functi
 end)
 
 testing.test("lint lets a Done epic with every child Done close without outcomes", function()
-    local cards = { card(1, support.COLUMN_NAME.DONE, { outcomes = {} }) }
+    local cards = { card(1, NAME.DONE, { outcomes = {} }) }
     local held = { children = { [cards[1].id] = 2 } }
     local fake = backend(cards, held)
     function fake:family(id)
@@ -191,8 +195,8 @@ end)
 
 testing.test("lint gives an epic no claimant exemption", function()
     local cards = {
-        card(1, "In Progress", { claimant = false, outcomes = outcomes(2) }),
-        card(2, "In Progress", { claimant = false, outcomes = outcomes(3) }),
+        card(1, NAME.PROGRESS, { claimant = false, outcomes = outcomes(2) }),
+        card(2, NAME.PROGRESS, { claimant = false, outcomes = outcomes(3) }),
     }
     local fake = backend(cards, { children = { [cards[1].id] = 2 } })
     testing.eq(findings(cmd_board.run("lint", {}, fake).output), {
@@ -203,8 +207,8 @@ end)
 
 testing.test("lint asks a card without children for a checks row and an epic for none", function()
     local cards = {
-        card(1, "In Progress", { outcomes = outcomes(2), checks = {} }),
-        card(2, "In Progress", { outcomes = outcomes(3), checks = {} }),
+        card(1, NAME.PROGRESS, { outcomes = outcomes(2), checks = {} }),
+        card(2, NAME.PROGRESS, { outcomes = outcomes(3), checks = {} }),
     }
     local fake = backend(cards, { children = { [cards[1].id] = 2 } })
     testing.eq(
@@ -219,20 +223,20 @@ testing.test(
         local named = { { id = "o1", name = "x " .. board.CHECK_OPEN .. "test)", done = false } }
         local bare = { { id = "o1", name = "bare", done = false } }
         local cards = {
-            card(1, support.COLUMN_NAME.READY, { outcomes = bare, claimant = false }),
-            card(2, support.COLUMN_NAME.READY, { outcomes = named, claimant = false }),
-            card(3, support.COLUMN_NAME.PROGRESS, { outcomes = bare }),
-            card(4, support.COLUMN_NAME.BACKLOG, { outcomes = bare }),
+            card(1, NAME.READY, { outcomes = bare, claimant = false }),
+            card(2, NAME.READY, { outcomes = named, claimant = false }),
+            card(3, NAME.PROGRESS, { outcomes = bare }),
+            card(4, NAME.BACKLOG, { outcomes = bare }),
         }
         testing.eq(findings(cmd_board.run("lint", {}, backend(cards)).output), {
-            "00000001 " .. support.COLUMN_NAME.READY .. " outcome names no deciding check: bare",
-            "00000003 " .. support.COLUMN_NAME.PROGRESS .. " outcome names no deciding check: bare",
+            "00000001 " .. NAME.READY .. " outcome names no deciding check: bare",
+            "00000003 " .. NAME.PROGRESS .. " outcome names no deciding check: bare",
         })
     end
 )
 
 testing.test("lint flags a Done card with outcomes and an open child", function()
-    local fake = backend({ card(1, "Done") })
+    local fake = backend({ card(1, NAME.DONE) })
     function fake:family()
         return { children = { done = 1, total = 2 } }
     end
@@ -243,7 +247,7 @@ testing.test("lint flags a Done card with outcomes and an open child", function(
 end)
 
 testing.test("lint fails when the children of a card cannot be read", function()
-    local fake = backend({ card(1, "Done") })
+    local fake = backend({ card(1, NAME.DONE) })
     function fake:family()
         return nil, "pomb is down"
     end
@@ -254,15 +258,15 @@ end)
 
 testing.test("lint passes a clean board with exit 0 and no code", function()
     local cards = {
-        card(1, "Icebox", { description = false, color = false, outcomes = {} }),
-        card(2, "Done", { description = V1, outcomes = {} }),
-        card(3, "Done", { labels = { "discarded" }, outcomes = outcomes(0) }),
-        card(4, "Done", { description = false, claimant = false }),
-        card(5, "Blocked", { labels = { "needs:human" } }),
-        card(6, "Blocked"),
-        card(7, "In Progress"),
-        card(8, "Ready", { checks = { "dev test" } }),
-        card(9, "Icebox", { labels = { "needs:human" } }),
+        card(1, NAME.ICEBOX, { description = false, color = false, outcomes = {} }),
+        card(2, NAME.DONE, { description = V1, outcomes = {} }),
+        card(3, NAME.DONE, { labels = { "discarded" }, outcomes = outcomes(0) }),
+        card(4, NAME.DONE, { description = false, claimant = false }),
+        card(5, NAME.BLOCKED, { labels = { "needs:human" } }),
+        card(6, NAME.BLOCKED),
+        card(7, NAME.PROGRESS),
+        card(8, NAME.READY, { checks = { "dev test" } }),
+        card(9, NAME.ICEBOX, { labels = { "needs:human" } }),
     }
     local held = {
         comments = { [cards[5].id] = { { kind = "question", body = "which?" } } },
@@ -277,10 +281,10 @@ end)
 
 testing.test("lint reads comments only for a Blocked card and writes nothing", function()
     local cards = {
-        card(1, "Ready"),
-        card(2, "Blocked"),
-        card(3, "In Progress", { claimant = false }),
-        card(4, "In Progress"),
+        card(1, NAME.READY),
+        card(2, NAME.BLOCKED),
+        card(3, NAME.PROGRESS, { claimant = false }),
+        card(4, NAME.PROGRESS),
     }
     local fake = backend(cards, { children = {} })
     cmd_board.run("lint", {}, fake)
@@ -294,30 +298,26 @@ end)
 
 testing.test("lint with a card reports only that card", function()
     local cards = {
-        card(1, support.COLUMN_NAME.READY, { checks = {} }),
-        card(2, support.COLUMN_NAME.READY),
-        card(3, support.COLUMN_NAME.READY, { checks = {} }),
+        card(1, NAME.READY, { checks = {} }),
+        card(2, NAME.READY),
+        card(3, NAME.READY, { checks = {} }),
     }
     local result = cmd_board.run("lint", { "00000002" }, backend(cards))
     testing.eq(result.output, "no findings")
     testing.eq(result.code, nil)
     result = cmd_board.run("lint", { "00000003", "--strict" }, backend(cards))
     testing.eq(result.code, 1)
-    testing.eq(
-        findings(result.output),
-        { "00000003 " .. support.COLUMN_NAME.READY .. " no checks row" }
-    )
+    testing.eq(findings(result.output), { "00000003 " .. NAME.READY .. " no checks row" })
 end)
 
 testing.test("lint with a card that matches none fails", function()
-    local result =
-        cmd_board.run("lint", { "00000009" }, backend({ card(1, support.COLUMN_NAME.READY) }))
+    local result = cmd_board.run("lint", { "00000009" }, backend({ card(1, NAME.READY) }))
     testing.eq(result.code, 1)
     testing.ok(result.message:find("No card starts with", 1, true), result.message)
 end)
 
 testing.test("lint fails when a card's comments cannot be read", function()
-    local fake = backend({ card(1, "Blocked") })
+    local fake = backend({ card(1, NAME.BLOCKED) })
     function fake:comments()
         return nil, "pomb is down"
     end
@@ -327,7 +327,7 @@ testing.test("lint fails when a card's comments cannot be read", function()
 end)
 
 testing.test("lint fails when the comments of a Done card cannot be read", function()
-    local fake = backend({ card(1, support.COLUMN_NAME.DONE) })
+    local fake = backend({ card(1, NAME.DONE) })
     function fake:comments()
         return nil, "pomb is down"
     end
@@ -423,9 +423,9 @@ testing.test(
     "strict adds the sections to a Done card and a discarded one, and nothing else",
     function()
         local cards = {
-            card(1, "Done", { description = false }),
-            card(2, "Done", { description = false, labels = { "discarded" }, outcomes = {} }),
-            card(3, "Icebox", { description = false }),
+            card(1, NAME.DONE, { description = false }),
+            card(2, NAME.DONE, { description = false, labels = { "discarded" }, outcomes = {} }),
+            card(3, NAME.ICEBOX, { description = false }),
         }
         testing.eq(cmd_board.run("lint", {}, backend(cards)).output, "no findings")
         local result = cmd_board.run("lint", { "--strict" }, backend(cards))
@@ -445,9 +445,9 @@ testing.test(
     "lint marks a finding only the owner can fix and exits 0 when only those are left",
     function()
         local cards = {
-            card(1, "Blocked", { labels = { "needs:human" }, description = "## Problem\nwhy" }),
-            card(2, "Icebox", { labels = { "needs:human" } }),
-            card(3, "Backlog"),
+            card(1, NAME.BLOCKED, { labels = { "needs:human" }, description = "## Problem\nwhy" }),
+            card(2, NAME.ICEBOX, { labels = { "needs:human" } }),
+            card(3, NAME.BACKLOG),
         }
         local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
         local result = cmd_board.run("lint", {}, backend(cards, held))
@@ -464,8 +464,8 @@ testing.test(
 testing.test(
     "lint exits 1 for a missing size or a misplaced label on a needs:human card",
     function()
-        local sizeless = card(1, "Blocked", { labels = { "needs:human" }, color = false })
-        local misplaced = card(2, "Ready", { labels = { "needs:human" } })
+        local sizeless = card(1, NAME.BLOCKED, { labels = { "needs:human" }, color = false })
+        local misplaced = card(2, NAME.READY, { labels = { "needs:human" } })
         local held = { comments = { [sizeless.id] = { { kind = "question", body = "which?" } } } }
         local result = cmd_board.run("lint", {}, backend({ sizeless }, held))
         testing.eq(result.code, 1)
@@ -481,8 +481,8 @@ testing.test(
 
 testing.test("lint exits 1 when an owner finding sits beside an agent finding", function()
     local cards = {
-        card(1, "Blocked", { labels = { "needs:human" }, description = "## Problem\nwhy" }),
-        card(2, "Ready", { checks = {} }),
+        card(1, NAME.BLOCKED, { labels = { "needs:human" }, description = "## Problem\nwhy" }),
+        card(2, NAME.READY, { checks = {} }),
     }
     local held = { comments = { [cards[1].id] = { { kind = "question", body = "which?" } } } }
     local result = cmd_board.run("lint", {}, backend(cards, held))
@@ -496,7 +496,7 @@ end)
 
 local function done_card_with(builder, reviewer, opts)
     -- Default the optional fields
-    local merged = { column = support.COLUMN_NAME.DONE, labels = {}, records = {} }
+    local merged = { column = NAME.DONE, labels = {}, records = {} }
     for key, value in pairs(opts or {}) do
         merged[key] = value
     end
@@ -535,14 +535,13 @@ local function done_card_with(builder, reviewer, opts)
 
     -- Write the claim and review records, then lint
     local at = "2026-11-14T00:00:00Z"
-    local rev = { commit = "abc123", change = "xyz" }
     target.comments = {
         { id = "c1", who = "agent", at = at, body = board.claim_record(builder) },
         {
             id = "c2",
             who = "agent",
             at = at,
-            body = review.record(review.KIND.CODE, reviewer, rev, review.VERDICT.CLEAN),
+            body = review.record(review.KIND.CODE, reviewer, REV, review.VERDICT.CLEAN),
         },
     }
     for _, body in ipairs(opts.records) do
@@ -554,12 +553,11 @@ local function done_card_with(builder, reviewer, opts)
 end
 
 testing.test("lint lists each name that built and reviewed a Done card once, sorted", function()
-    local rev = { commit = "abc123", change = "xyz" }
     local out, code = done_card_with("project-run/zzzz", "project-run/zzzz", {
         records = {
             board.claim_record("project-run/aaaa"),
-            review.record(review.KIND.CODE, "project-run/aaaa", rev, review.VERDICT.CLEAN),
-            review.record(review.KIND.CODE, "project-run/zzzz", rev, review.VERDICT.MINOR),
+            review.record(review.KIND.CODE, "project-run/aaaa", REV, review.VERDICT.CLEAN),
+            review.record(review.KIND.CODE, "project-run/zzzz", REV, review.VERDICT.MINOR),
         },
     })
     testing.eq(code, 1, out)
@@ -573,11 +571,8 @@ testing.test("lint flags a Done card whose builder also reviewed it", function()
 end)
 
 testing.test("lint leaves a card still in Review with the same builder and reviewer", function()
-    local out, code = done_card_with(
-        "project-run/aaaa",
-        "project-run/aaaa",
-        { column = support.COLUMN_NAME.REVIEW }
-    )
+    local out, code =
+        done_card_with("project-run/aaaa", "project-run/aaaa", { column = NAME.REVIEW })
     testing.eq(code, 0, out)
     testing.eq(out, "no findings\n")
 end)
