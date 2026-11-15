@@ -43,7 +43,13 @@ end
 
 local function missing(tool)
     verb.note(
-        "Tool " .. tool .. " not found. Skipping it. Install with: brew install " .. tool .. "."
+        "Tool "
+            .. tool
+            .. " not found. The "
+            .. tool
+            .. " check is skipped. Install it with brew install "
+            .. tool
+            .. "."
     )
 end
 

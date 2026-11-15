@@ -162,7 +162,7 @@ else
     assert_eq "the rust set passes a clean project" "$?" "0"
     assert_not_contains "the rust set warns about no tool when all are present" "$out" "WARNING"
     out="$(style_lint "$TMP" "$bare_path")"
-    assert_contains "dotfiles lint names a missing stylua in a sentence" "$out" "Tool stylua not found. Skipping it. Install with: brew install stylua."
+    assert_contains "dotfiles lint names a missing stylua in a sentence" "$out" "Tool stylua not found. The stylua check is skipped. Install it with brew install stylua."
 
     calls="$TMP/cargo-calls"
     : >"$calls"
