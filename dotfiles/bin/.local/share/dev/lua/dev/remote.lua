@@ -196,7 +196,9 @@ function M.ci_runner(run, opts)
         verb.die("dev: --remote needs a job name, not " .. table.concat(run.words, " "))
     end
     if not dev_os.which("ci") then
-        stderr:write("The ci client is not found. Install it with dev install from the ci repo.\n")
+        stderr:write(
+            "The ci client is not found. Install it with `dev install` from the ci repo.\n"
+        )
         return 1
     end
     if not M.has_job(run.root, job, pipeline) then
@@ -279,10 +281,11 @@ function M.run(ctx, words, args, detach)
     if ctx.dashed and #ctx.args > #args then
         verb.usage_error(
             ctx,
-            "--remote takes arguments on one side of -- only, run dev --remote "
+            "--remote takes arguments on one side of -- only. Run `dev --remote "
                 .. table.concat(words, " ")
                 .. " -- "
                 .. table.concat(ctx.args, " ")
+                .. "` instead."
         )
     end
     local run = {

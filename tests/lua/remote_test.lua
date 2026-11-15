@@ -166,7 +166,8 @@ testing.test(
         testing.eq(code, 2)
         testing.eq(
             out,
-            "dev test: --remote takes arguments on one side of -- only, run dev --remote test -- a b\n"
+            "dev test: --remote takes arguments on one side of -- only. "
+                .. "Run `dev --remote test -- a b` instead.\n"
         )
         testing.eq(log, "")
     end

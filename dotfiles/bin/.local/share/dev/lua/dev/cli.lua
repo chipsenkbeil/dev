@@ -25,7 +25,8 @@ local stderr = io.stderr
 local INTERPRETER = arg and arg[-1]
 local MAX_LEVEL = 2
 local INTERRUPTED = dev_os.SIGNAL_EXIT_BASE + 2
-local ROOT_REFUSAL = "dev: as root, dev runs only tools install and tools check\n"
+local ROOT_REFUSAL = "dev: As root, dev runs only `dev tools install` and "
+    .. "`dev tools check`.\n"
 local SHARE = project.share
 local VCS_HANDLERS = { push = push.run, pull = pull.run, sync = sync.run, follow = follow.run }
 local NOT_TAKEN = {
@@ -154,9 +155,9 @@ local function refuse_agent_local(project_root, words)
         stderr:write(
             "dev ",
             command,
-            ": DEV_AGENT is set, so it runs on ci; use dev --remote ",
+            ": DEV_AGENT is set, so it runs on ci. Use `dev --remote ",
             command,
-            "\n"
+            "` instead.\n"
         )
         os.exit(2)
     end

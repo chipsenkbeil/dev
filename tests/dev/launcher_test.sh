@@ -181,7 +181,7 @@ assert_eq "a user does run LUA_INIT" "$([ -e "$marker" ] && echo written || echo
 
 out="$(PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0 FAKE_OS=Linux "$DEV" help 2>&1)"
 assert_eq "a fake uid of 0 is refused with exit 2" "$?" "2"
-assert_contains "the fake root gets the root refusal" "$out" "as root, dev runs only tools install and tools check"
+assert_contains "the fake root gets the root refusal" "$out" "As root, dev runs only \`dev tools install\` and \`dev tools check\`."
 out="$(PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0 FAKE_OS=Darwin "$DEV" tools check 2>&1)"
 assert_contains "a fake OS of Darwin refuses root" "$out" "as root, dev runs only on Linux"
 
