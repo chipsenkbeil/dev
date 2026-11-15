@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SYSTEM_BIN_DIRS=(/usr/bin /usr/local/bin)
-root_refusal='dev: as root, dev runs only tools install and tools check'
+root_refusal="dev: As root, dev runs only \`dev tools install\` and \`dev tools check\`."
 
 args=()
 chdirs=()
@@ -158,7 +158,7 @@ if [ -z "$luajit" ]; then
             printf 'dev: as root, dev runs only on Linux\n' >&2
             exit 2
         fi
-        printf 'dev: dev tools needs luajit in /usr/bin or /usr/local/bin\n' >&2
+        printf "dev: \`dev tools\` needs luajit in /usr/bin or /usr/local/bin.\n" >&2
         exit 1
     fi
     printf '%s\n' "$root_refusal" >&2
@@ -170,7 +170,7 @@ if [ "$luajit" = luajit ] && ! command -v luajit >/dev/null 2>&1; then
         printf 'dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit\n' >&2
         exit 1
     fi
-    printf 'dev: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit\n' >&2
+    printf "dev: luajit not found. Run \`dev bootstrap\`, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit.\n" >&2
     exit 1
 fi
 

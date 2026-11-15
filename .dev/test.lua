@@ -172,7 +172,7 @@ local function scratch_dir()
         base = "/tmp"
     end
     local out, code = dev_os.capture({ "mktemp", "-d", base .. "/dt.XXXXXX" })
-    assert(code == 0, "dev test cannot make a scratch directory under " .. base)
+    assert(code == 0, "`dev test` cannot make a scratch directory under " .. base .. ".")
     return (out:gsub("\n$", ""))
 end
 
@@ -345,8 +345,8 @@ stdout:write(string.format("\n%d passed, %d failed, %d skipped\n", passed, faile
 stdout:flush()
 if dev_os.getuid() ~= 0 or dev_os.name() ~= "Linux" then
     verb.note(
-        "dev: the real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh "
-            .. "were skipped, run dev --remote test for them"
+        "dev: The real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh "
+            .. "were skipped. Run `dev --remote test` for them."
     )
 end
 return failed == 0 and 0 or 1

@@ -352,7 +352,7 @@ At uid 0 (`$EUID` or `id -u`), the launcher then does the following.
 A root caller without luajit and without those flags gets the root refusal
 (exit 2) for every command but `tools install` and `tools check`. Those print
 `dev: as root, dev runs only on Linux` (exit 2) off Linux and
-`dev: dev tools needs luajit in /usr/bin or /usr/local/bin` (exit 1) on it.
+``dev: `dev tools` needs luajit in /usr/bin or /usr/local/bin.`` (exit 1) on it.
 The launcher decides this in bash from the words after the `-v` and
 `--verbose` flags, before anything is read.
 
@@ -387,7 +387,7 @@ exits 1 with one of the two messages below. The second applies with `--remote`,
 `--detach` or an enabled `DEV_REMOTE`, and nothing runs.
 
 ```
-dev: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit
+dev: luajit not found. Run `dev bootstrap`, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit.
 ```
 
 ```

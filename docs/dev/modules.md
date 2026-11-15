@@ -372,8 +372,8 @@ These suites run one at a time beside the pool:
 
 `dev test` prints each suite's output whole with its `PASS`, `FAIL` or `SKIP`
 line in discovery order, then a summary line. When the uid is not 0 or the OS
-is not Linux it ends with `dev: the real-root cases of tests/dev/root_test.sh
-and tests/dev/tools_test.sh were skipped, run dev --remote test for them`.
+is not Linux it ends with ``dev: The real-root cases of tests/dev/root_test.sh
+and tests/dev/tools_test.sh were skipped. Run `dev --remote test` for them.``
 
 The real root group of the ci `test` job in `.ci/jobs.lua` runs both files as
 root, or for a named run (`dev --remote test PATH`) each file that a path
