@@ -132,16 +132,15 @@ end
 local function export(placed)
     local parts = {}
     for index, place in ipairs(placed) do
-        parts[#parts + 1] = string.format(
-            '{"id":"%s","name":"Card %s","column_id":"%s","position":%d,"color_id":"yellow-id",'
-                .. '"labels":[],"kind":"%s","description":"%s"}',
-            uuid(place[1]),
-            place[1],
-            place[2],
-            index,
-            place[3],
-            PLANNED
-        )
+        parts[#parts + 1] = support.pomb_export_task({
+            id = uuid(place[1]),
+            name = "Card " .. place[1],
+            column_id = place[2],
+            position = index,
+            color_id = "yellow-id",
+            kind = place[3],
+            description = PLANNED,
+        })
     end
     return '{"tasks":[' .. table.concat(parts, ",") .. "]}"
 end

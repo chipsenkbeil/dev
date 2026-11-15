@@ -1755,12 +1755,22 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","columns":['
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"blue-id","value":"blue","label":"3 Pomodori"},'
     .. '{"id":"white-id","value":"white","label":"Unsized"}]'
-local EXPORT = '{"tasks":[{"id":"'
-    .. ID_A
-    .. '","name":"First","column_id":"col-ready","position":1,"color_id":null,"labels":[]},'
-    .. '{"id":"'
-    .. ID_B
-    .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[]}]}'
+local EXPORT = '{"tasks":['
+    .. support.pomb_export_task({
+        id = ID_A,
+        name = "First",
+        column_id = "col-ready",
+        color_id = false,
+    })
+    .. ","
+    .. support.pomb_export_task({
+        id = ID_B,
+        name = "Second",
+        column_id = "col-ready",
+        position = 2,
+        color_id = false,
+    })
+    .. "]}"
 
 local PLANNED_EXPORT = (
     EXPORT:gsub(
@@ -1887,14 +1897,14 @@ end)
 
 testing.test("a queued discard replays its move without the outcome check", function()
     local root, home = pomb()
-    assert(
-        fs.write(
-            root .. "/export.json",
-            '{"tasks":[{"id":"'
-                .. ID_A
-                .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":[],"description":"## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone","subtasks":[{"id":"s1","name":"Never works","done":false}]}]}'
-        )
-    )
+    assert(fs.write(root .. "/export.json", '{"tasks":[' .. support.pomb_export_task({
+        id = ID_A,
+        name = "First",
+        column_id = "col-ready",
+        color_id = "yellow-id",
+        description = "## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
+        subtasks = '[{"id":"s1","name":"Never works","done":false}]',
+    }) .. "]}"))
     assert(
         fs.write(
             root .. "/bin/curl",

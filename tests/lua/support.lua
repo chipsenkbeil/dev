@@ -163,8 +163,17 @@ end
 ---@field id string task id
 ---@field name string task name
 ---@field column_id string id of the column the task sits in
+---@field swimlane_id? string id of the swimlane the task sits in, left out by default
 ---@field holder? string name of the agent that owns the task
+---@field lease_expires_at? string end of the owner's lease as a timestamp, null by default
 ---@field claim_fence? integer counter of the latest claim, 0 by default
+---@field position? integer place in the column, 1 by default
+---@field color_id? string|false id of the card's color, false for a null one, left out by default
+---@field labels? string[] label names, none by default
+---@field kind? string card kind such as "epic", left out by default
+---@field description? string description as JSON string content, left out by default
+---@field subtasks? string raw JSON of the subtasks value, left out by default
+---@field fields? string raw JSON object of the card's field values, left out by default
 
 ---Build one task of Pomb's export-data endpoint as the endpoint sends it.
 ---
@@ -175,9 +184,40 @@ end
 ---@return string json the task object
 function M.pomb_export_task(task)
     local claim_fence = task.claim_fence or 0
+    local position = task.position or 1
+    local task_labels = task.labels or {}
     local owner = "null"
     if task.holder then
-        owner = '{"holder":{"kind":"agent","name":"' .. task.holder .. '"},"lease_expires_at":null}'
+        local lease = task.lease_expires_at and ('"' .. task.lease_expires_at .. '"') or "null"
+        owner = '{"holder":{"kind":"agent","name":"'
+            .. task.holder
+            .. '"},"lease_expires_at":'
+            .. lease
+            .. "}"
+    end
+    local swimlane = task.swimlane_id and ('"swimlane_id":"' .. task.swimlane_id .. '",') or ""
+    local color = ""
+    if task.color_id == false then
+        color = '"color_id":null,'
+    elseif task.color_id then
+        color = '"color_id":"' .. task.color_id .. '",'
+    end
+    local labels = {}
+    for _, label in ipairs(task_labels) do
+        labels[#labels + 1] = '"' .. label .. '"'
+    end
+    local extra = ""
+    if task.kind then
+        extra = extra .. ',"kind":"' .. task.kind .. '"'
+    end
+    if task.description then
+        extra = extra .. ',"description":"' .. task.description .. '"'
+    end
+    if task.subtasks then
+        extra = extra .. ',"subtasks":' .. task.subtasks
+    end
+    if task.fields then
+        extra = extra .. ',"fields":' .. task.fields
     end
     return '{"id":"'
         .. task.id
@@ -185,7 +225,17 @@ function M.pomb_export_task(task)
         .. task.name
         .. '","column_id":"'
         .. task.column_id
-        .. '","position":1,"labels":[],"owner":'
+        .. '",'
+        .. swimlane
+        .. '"position":'
+        .. position
+        .. ","
+        .. color
+        .. '"labels":['
+        .. table.concat(labels, ",")
+        .. "]"
+        .. extra
+        .. ',"owner":'
         .. owner
         .. ',"claim_fence":'
         .. claim_fence

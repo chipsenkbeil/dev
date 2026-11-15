@@ -23,11 +23,11 @@ local STANDARD = {
 local UNCHANGED = "agent roles unchanged\n"
 
 local function turn_row(column)
-    return string.format(
-        '{"id":"22222222-bbbb","name":"%s","column_id":"col-%s"}',
-        board.TURN_NAME,
-        column
-    )
+    return support.pomb_export_task({
+        id = "22222222-bbbb",
+        name = board.TURN_NAME,
+        column_id = "col-" .. column,
+    })
 end
 local LANES_DIE = "dev: [board] lanes must be a list of lane names in .dev/config.toml"
 local STANDARD_ROLES = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
@@ -532,8 +532,14 @@ end
 local FIELDS =
     '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
 
-local EXPORT = '{"tasks":[{"id":"11111111-aaaa","name":"Keep","column_id":"col-Ready",'
-    .. '"color_id":"blue-id"},'
+local EXPORT = '{"tasks":['
+    .. support.pomb_export_task({
+        id = "11111111-aaaa",
+        name = "Keep",
+        column_id = "col-Ready",
+        color_id = "blue-id",
+    })
+    .. ","
     .. turn_row(support.COLUMN_NAME.ICEBOX)
     .. "]}"
 
@@ -937,15 +943,12 @@ testing.test("init sends the changes an old board needs as the API's own calls",
         )
     end
     assert(fs.write(root .. "/colors.json", "[" .. table.concat(stock, ",") .. "]"))
-    assert(
-        fs.write(
-            root .. "/export.json",
-            '{"tasks":[{"id":"11111111-aaaa","name":"Keep it (blue)","column_id":"col-Ready",'
-                .. '"color_id":"yellow-id"},'
-                .. turn_row(support.COLUMN_NAME.ICEBOX)
-                .. "]}"
-        )
-    )
+    assert(fs.write(root .. "/export.json", '{"tasks":[' .. support.pomb_export_task({
+        id = "11111111-aaaa",
+        name = "Keep it (blue)",
+        column_id = "col-Ready",
+        color_id = "yellow-id",
+    }) .. "," .. turn_row(support.COLUMN_NAME.ICEBOX) .. "]}"))
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0)
     local calls = calls_of(root)

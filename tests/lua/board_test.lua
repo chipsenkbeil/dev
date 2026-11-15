@@ -4565,20 +4565,40 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"green-id","value":"green","label":"Two"},{"id":"blue-id","value":"blue","label":"Three"},'
     .. '{"id":"red-id","value":"red","label":"More"},{"id":"white-id","value":"white","label":"Unsized"}]'
-local EXPORT = '{"tasks":['
-    .. '{"id":"'
-    .. ID_B
-    .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[]},'
-    .. '{"id":"'
-    .. ID_A
-    .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why it matters.","fields":{"dev.checks":[{"run":"dev test"},{"on":["local"],"run":"dev lint"}]}},'
-    .. '{"id":"'
-    .. ID_C
-    .. '","name":"Early","column_id":"col-backlog","position":1,"color_id":"white-id","labels":[]}]}'
+local FIRST_CARD = {
+    id = ID_A,
+    name = "First",
+    column_id = "col-ready",
+    color_id = "yellow-id",
+    labels = { "docs" },
+    description = "Why it matters.",
+    fields = '{"dev.checks":[{"run":"dev test"},{"on":["local"],"run":"dev lint"}]}',
+}
+local function export_with(first)
+    return '{"tasks":['
+        .. support.pomb_export_task({
+            id = ID_B,
+            name = "Second",
+            column_id = "col-ready",
+            position = 2,
+            color_id = false,
+        })
+        .. ","
+        .. support.pomb_export_task(setmetatable(first or {}, { __index = FIRST_CARD }))
+        .. ","
+        .. support.pomb_export_task({
+            id = ID_C,
+            name = "Early",
+            column_id = "col-backlog",
+            color_id = "white-id",
+        })
+        .. "]}"
+end
+local EXPORT = export_with()
 local PLANNED_TEXT =
     "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [%s] a"
-local PLANNED_EXPORT = (EXPORT:gsub("Why it matters%.", (PLANNED_TEXT:format(" ")), 1))
-local PLANNED_DONE_EXPORT = (EXPORT:gsub("Why it matters%.", (PLANNED_TEXT:format("x")), 1))
+local PLANNED_EXPORT = export_with({ description = PLANNED_TEXT:format(" ") })
+local PLANNED_DONE_EXPORT = export_with({ description = PLANNED_TEXT:format("x") })
 local COMMENTS = '[{"id":"aaaaaaaa-1111-4111-8111-111111111111","author":"api-token","actor_kind":"api_token",'
     .. '"token_name":"worker","created_at":"2026-10-27T09:30:12Z","body":"first\\nline"},'
     .. '{"id":"dddddddd-4444-4444-8444-444444444444","author":"x","actor_kind":"user",'
@@ -5198,13 +5218,24 @@ testing.test("an unreachable server reports the curl exit", function()
     )
 end)
 
-local SUBTASKS_EXPORT = '{"tasks":['
-    .. '{"id":"'
-    .. ID_A
-    .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"## Problem\\nWhy.\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",'
-    .. '"subtasks":[{"id":"sub-a","name":"A works","done":false},{"id":"sub-b","name":"B works","done":true}]}]}'
+local SUBTASKS_CARD = {
+    id = ID_A,
+    name = "First",
+    column_id = "col-ready",
+    color_id = "yellow-id",
+    labels = { "docs" },
+    description = "## Problem\\nWhy.\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
+    subtasks = '[{"id":"sub-a","name":"A works","done":false},'
+        .. '{"id":"sub-b","name":"B works","done":true}]',
+}
+local function subtasks_export(card)
+    return '{"tasks":['
+        .. support.pomb_export_task(setmetatable(card or {}, { __index = SUBTASKS_CARD }))
+        .. "]}"
+end
+local SUBTASKS_EXPORT = subtasks_export()
 
-local BACKLOG_EXPORT = (SUBTASKS_EXPORT:gsub("col%-ready", "col-backlog"))
+local BACKLOG_EXPORT = subtasks_export({ column_id = "col-backlog" })
 
 testing.test("outcome posts a subtask and patches the Nth by its id", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
@@ -5236,13 +5267,8 @@ testing.test("outcome posts a subtask and patches the Nth by its id", function()
 end)
 
 testing.test("a claimed card's tick needs a name other than the claimant's", function()
-    local claimed = (
-        SUBTASKS_EXPORT:gsub(
-            '"position":1,',
-            '"position":1,"owner":{"holder":{"kind":"agent","name":"project-run/a"},"lease_expires_at":"2999-01-01T00:00:00Z"},',
-            1
-        )
-    )
+    local claimed =
+        subtasks_export({ holder = "project-run/a", lease_expires_at = "2999-01-01T00:00:00Z" })
     local root, home = sandbox({ export = claimed })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
     testing.eq(code, 2, out)
@@ -5271,13 +5297,11 @@ testing.test("a claimed card's tick needs a name other than the claimant's", fun
 end)
 
 testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", function()
-    local claimed = (
-        BACKLOG_EXPORT:gsub(
-            '"position":1,',
-            '"position":1,"owner":{"holder":{"kind":"agent","name":"project-run/a"},"lease_expires_at":"2999-01-01T00:00:00Z"},',
-            1
-        )
-    )
+    local claimed = subtasks_export({
+        column_id = "col-backlog",
+        holder = "project-run/a",
+        lease_expires_at = "2999-01-01T00:00:00Z",
+    })
     local root, home = sandbox({ export = claimed, user = LEAD_USER })
     local own = { agent = "project-run/a" }
     local out, code = dev(root, home, {
@@ -5714,9 +5738,17 @@ testing.test(
 )
 
 testing.test("move to Done on a Pomb board refuses subtasks dev cannot read", function()
-    local export = '{"tasks":[{"id":"'
-        .. ID_A
-        .. '","name":"First","column_id":"col-ready","position":1,"color_id":"yellow-id","labels":["docs"],"description":"Why.","subtasks":"oops"}]}'
+    local export = '{"tasks":['
+        .. support.pomb_export_task({
+            id = ID_A,
+            name = "First",
+            column_id = "col-ready",
+            color_id = "yellow-id",
+            labels = { "docs" },
+            description = "Why.",
+            subtasks = '"oops"',
+        })
+        .. "]}"
     local root, home = sandbox({ export = export })
     local out, code = dev(root, home, { "board", "move", "11111111", support.COLUMN.DONE })
     testing.eq(code, 1, out)
@@ -6409,10 +6441,14 @@ testing.test(
 
 testing.test("show prints the allow, tests and files fields a Pomb card holds", function()
     local root, home = sandbox({
-        export = '{"tasks":[{"id":"'
-            .. ID_A
-            .. '","name":"First","column_id":"col-ready","position":1,"color_id":null,"labels":[],'
-            .. '"fields":{"dev.allow":["ci-edits"],"dev.tests":"one\\ntwo","dev.files":"src/a.rs"}}]}',
+        export = '{"tasks":[' .. support.pomb_export_task({
+            id = ID_A,
+            name = "First",
+            column_id = "col-ready",
+            color_id = false,
+            fields = '{"dev.allow":["ci-edits"],'
+                .. '"dev.tests":"one\\ntwo","dev.files":"src/a.rs"}',
+        }) .. "]}",
     })
     local out, code = dev(root, home, { "board", "show", "11111111-a" })
     testing.eq(code, 0, out)
@@ -7464,9 +7500,11 @@ testing.test("a move into progress that Pomb refuses releases the claim it just 
 end)
 
 testing.test("a move into progress of a card claimed elsewhere takes no claim", function()
-    local live =
-        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
-    local export = PLANNED_EXPORT:gsub('"labels":%["docs"%]', '"labels":["docs"],' .. live, 1)
+    local export = export_with({
+        description = PLANNED_TEXT:format(" "),
+        holder = "dev@box:42",
+        lease_expires_at = "2999-01-01T00:00:00Z",
+    })
     local root, home = sandbox({ export = export })
     refusing_moves(root)
     local out, code = dev(
@@ -7511,9 +7549,11 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
 end)
 
 testing.test("a release with no claim file sends the owner fence pomb reports", function()
-    local live =
-        '"owner":{"holder":{"kind":"agent","name":"r/old"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
-    local export = PLANNED_EXPORT:gsub('"labels":%["docs"%]', '"labels":["docs"],' .. live, 1)
+    local export = export_with({
+        description = PLANNED_TEXT:format(" "),
+        holder = "r/old",
+        lease_expires_at = "2999-01-01T00:00:00Z",
+    })
     local root, home = sandbox({ export = export })
     assert(fs.write(root .. "/owner_name", "r/old"))
     local out, code = dev(
@@ -7530,9 +7570,11 @@ testing.test("a release with no claim file sends the owner fence pomb reports", 
 end)
 
 testing.test("a release of an owner with no claim sends the owner fence", function()
-    local live =
-        '"owner":{"holder":{"kind":"agent","name":"r/old"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
-    local export = PLANNED_EXPORT:gsub('"labels":%["docs"%]', '"labels":["docs"],' .. live, 1)
+    local export = export_with({
+        description = PLANNED_TEXT:format(" "),
+        holder = "r/old",
+        lease_expires_at = "2999-01-01T00:00:00Z",
+    })
     local root, home = sandbox({ export = export })
     local task = (
         TASK:gsub(
@@ -7811,24 +7853,22 @@ end)
 
 testing.test("a lapsed owner lease counts as unowned in ls", function()
     local root, home = sandbox()
-    local live =
-        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
-    local dead =
-        '"owner":{"holder":{"kind":"agent","name":"dev@old:1"},"lease_expires_at":"2001-01-01T00:00:00Z"}'
-    assert(
-        fs.write(
-            root .. "/export.json",
-            '{"tasks":[{"id":"'
-                .. ID_A
-                .. '","name":"First","column_id":"col-ready","position":1,"color_id":null,"labels":[],'
-                .. live
-                .. '},{"id":"'
-                .. ID_B
-                .. '","name":"Second","column_id":"col-ready","position":2,"color_id":null,"labels":[],'
-                .. dead
-                .. "}]}"
-        )
-    )
+    assert(fs.write(root .. "/export.json", '{"tasks":[' .. support.pomb_export_task({
+        id = ID_A,
+        name = "First",
+        column_id = "col-ready",
+        color_id = false,
+        holder = "dev@box:42",
+        lease_expires_at = "2999-01-01T00:00:00Z",
+    }) .. "," .. support.pomb_export_task({
+        id = ID_B,
+        name = "Second",
+        column_id = "col-ready",
+        position = 2,
+        color_id = false,
+        holder = "dev@old:1",
+        lease_expires_at = "2001-01-01T00:00:00Z",
+    }) .. "]}"))
     local out = dev(root, home, { "board", "ls" })
     testing.eq(
         out,
@@ -7861,20 +7901,15 @@ testing.test("next skips live owned cards and takes lapsed ones", function()
 end)
 
 testing.test("a lapsed owner lease counts as unowned in lint", function()
-    local function in_progress(owner)
-        return (
-            EXPORT:gsub(
-                '"column_id":"col%-ready","position":1,"color_id":"yellow%-id","labels":%["docs"%]',
-                '"column_id":"col-progress","position":1,"color_id":"yellow-id","labels":["docs"],'
-                    .. owner,
-                1
-            )
-        )
+    local function in_progress(lease)
+        return export_with({
+            column_id = "col-progress",
+            holder = "dev@box:42",
+            lease_expires_at = lease,
+        })
     end
-    local live =
-        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2999-01-01T00:00:00Z"}'
-    local dead =
-        '"owner":{"holder":{"kind":"agent","name":"dev@box:42"},"lease_expires_at":"2001-01-01T00:00:00Z"}'
+    local live = "2999-01-01T00:00:00Z"
+    local dead = "2001-01-01T00:00:00Z"
     local root, home = sandbox({ export = in_progress(live) })
     local out = dev(root, home, { "board", "lint" })
     testing.eq(out:find("in progress with no claimant", 1, true), nil, out)
@@ -9704,15 +9739,15 @@ local LANES = '"swimlanes":[{"id":"lane-parity","name":"Parity"},'
 local function laned(lane_fields)
     local tasks = {}
     for _, task in ipairs(lane_fields) do
-        tasks[#tasks + 1] = string.format(
-            '{"id":"%s","name":"%s","column_id":"%s","swimlane_id":"%s","position":%d,'
-                .. '"color_id":null,"labels":[]}',
-            task.id,
-            task.name,
-            task.column or "col-ready",
-            task.lane,
-            task.position
-        )
+        local column_id = task.column or "col-ready"
+        tasks[#tasks + 1] = support.pomb_export_task({
+            id = task.id,
+            name = task.name,
+            column_id = column_id,
+            swimlane_id = task.lane,
+            position = task.position,
+            color_id = false,
+        })
     end
     return sandbox({
         detail = (DETAIL:gsub('"swimlanes":%[%]', LANES, 1)),
