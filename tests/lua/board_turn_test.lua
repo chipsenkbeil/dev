@@ -803,7 +803,8 @@ testing.test("a Pomb hold is found by the owner fence and lost when the fence di
     local card = '{"id":"'
         .. ID_A
         .. '","name":"landing turn","column_id":"col-icebox","position":1,"labels":[],'
-        .. '"owner":{"holder":{"kind":"agent","name":"alpha"},"fence":7,"live":true}}'
+        .. '"owner":{"holder":{"kind":"agent","name":"alpha"},"lease_expires_at":null},'
+        .. '"claim_fence":7}'
     assert(fs.write(root .. "/export.json", '{"tasks":[' .. card .. "]}"))
     local function record(fence)
         return '[{"id":"c1","body":"dev-turn: holder=alpha card=aaaa1111 taken=2099-01-01T00:00:00Z'
@@ -824,6 +825,33 @@ testing.test("a Pomb hold is found by the owner fence and lost when the fence di
         local found, _, lost = turn.held(backend, "alpha", "aaaa1111")
         testing.eq(found, nil)
         testing.eq(lost, true)
+    end)
+end)
+
+testing.test("a Pomb turn taken with a hold is found as held from the export", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true }))
+        local card = '{"id":"'
+            .. ID_A
+            .. '","name":"landing turn","column_id":"col-icebox","position":1,"labels":[],'
+            .. '"owner":{"holder":{"kind":"agent","name":"alpha"},"lease_expires_at":null},'
+            .. '"claim_fence":'
+            .. taken.fence
+            .. "}"
+        assert(fs.write(root .. "/export.json", '{"tasks":[' .. card .. "]}"))
+        assert(
+            fs.write(
+                root .. "/comments.json",
+                '[{"id":"c1","body":"dev-turn: holder=alpha card=aaaa1111 taken=2099-01-01T00:00:00Z'
+                    .. " fence="
+                    .. taken.fence
+                    .. ' lease=600 hold=1","kind":"status"}]'
+            )
+        )
+        local found, message = turn.held(backend, "alpha", "aaaa1111")
+        testing.eq(message, nil)
+        testing.eq(assert(found).fence, taken.fence)
     end)
 end)
 
