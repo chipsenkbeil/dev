@@ -2677,8 +2677,17 @@ function commands.land(backend, args)
                 .. (kept and wiring.kept_note(short) or "")
         )
     end
-    local hold
-    hold, message = turn.held(backend, name, short)
+    local hold, lost
+    hold, message, lost = turn.held(backend, name, short)
+    if lost then
+        local claimed, claim_message = turn.claimed(backend, name, short)
+        if claim_message then
+            return failure(short .. " cannot land: " .. claim_message)
+        end
+        if claimed then
+            hold, message = claimed, nil
+        end
+    end
     if message then
         return failure(short .. " cannot land: " .. message)
     end

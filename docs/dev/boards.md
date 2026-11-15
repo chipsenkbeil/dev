@@ -2602,6 +2602,9 @@ The landing turn:
   that comes back after that gets `the landing turn was lost` or
   `the landing turn ran out`, writes nothing, lands nothing and has to ask
   again.
+- A holder whose newest hold note names an older fence than its live claim
+  still owns the claim. `land` finds it with the claim's own fence and lands
+  under it, and refuses only when the claim is gone or belongs to another name.
 - `land` gives the turn back on every exit, a refusal included. A hold from
   `turn` stays through a refusal.
 - A raw `jj land` takes no turn, so the turn keeps only the landings made

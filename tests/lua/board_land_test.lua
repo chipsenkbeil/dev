@@ -2240,6 +2240,26 @@ if has_jj then
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
     end)
 
+    testing.test("land lands under a live claim whose hold note is stale", function()
+        local project = jj_project()
+        local id = in_verify(project)
+        approve(project, id)
+        must(dev(project, { "board", "turn", id, "--hold", "1" }))
+        dev_os.nap(PAST_HOLD_SECONDS)
+        local backend, restore = board_at(project.home)
+        local cards = assert(backend:cards())
+        for _, card in ipairs(cards) do
+            if card.name == turn.NAME then
+                assert(backend:claim(card.id, "dotfiles/lander", { ttl = 600, lease = true }))
+            end
+        end
+        restore()
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+        testing.eq(turn_holder(project.home), nil)
+    end)
+
     testing.test("land refuses a hold that ran out and lands nothing", function()
         local project = jj_project()
         local id = in_verify(project)
