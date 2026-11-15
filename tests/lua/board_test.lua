@@ -3625,6 +3625,27 @@ testing.test(
     end
 )
 
+testing.test("ask refuses a card that already carries needs:human and posts nothing", function()
+    local backend = fake(blocked_cards())
+    local result = cmd_board.run("ask", {
+        "11111111-a",
+        "--question",
+        "Which?",
+        "--choice",
+        "Ready=Ship it",
+        "--recommend",
+        "1",
+        "--why",
+        "w",
+    }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("dev board label 11111111 --remove needs:human", 1, true),
+        result.message
+    )
+    testing.eq(#backend.calls, 0)
+end)
+
 testing.test("answer refuses a card without needs:human and writes nothing", function()
     local cards = sample()
     local backend = fake(cards)

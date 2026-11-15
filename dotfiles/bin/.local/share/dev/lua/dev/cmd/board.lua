@@ -1828,6 +1828,21 @@ function commands.ask(backend, args)
     if not card then
         return err
     end
+    if index_of(card.labels, board.NEEDS_HUMAN) then
+        local short = card.id:sub(1, board.MIN_PREFIX)
+        local label = board.NEEDS_HUMAN
+        return failure(
+            "Card "
+                .. short
+                .. " already carries "
+                .. label
+                .. ", and ask adds that label itself. Run dev board label "
+                .. short
+                .. " --remove "
+                .. label
+                .. " and then ask again."
+        )
+    end
     local held = claims.read(card.id)
     local ok, message = backend:ask(card.id, question, held and held.fence)
     if not ok then

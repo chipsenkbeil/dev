@@ -673,6 +673,11 @@ Pomb moves the card to the column marked blocked, which `dev board init` sets,
 and adds `needs:human`. It refuses a part that is missing in its own words,
 which dev prints as they come (exit 1).
 
+`ask` adds `needs:human` itself, so an agent never labels the card first. A
+card that already carries the label is locked, and dev refuses the question
+before it posts anything. The refusal tells the agent to run `dev board label
+CARD --remove needs:human` and then ask again.
+
 Pomb refuses `note --kind question` without that shape, so `ask` is the only
 way to put a question to you. `add --label needs:human` still creates the card
 and its outcomes, then sets the label.
