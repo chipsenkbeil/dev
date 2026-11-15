@@ -1870,8 +1870,10 @@ Checks:
 - Removing `needs:human` is allowed in any column, and dev does not check which
   of the two cases below applies.
 - An agent removes it after the owner answers in that agent's own session. It
-  records the answer with `dev board answer CARD --choice N --quote TEXT`, which
-  removes the label.
+  records the answer with `dev board answer CARD --choice N --quote TEXT`. On
+  Pomb, a partial answer keeps `needs:human` while another question stays open.
+  On Pomb, the answer that settles the last open choice removes the label and
+  moves the card to the chosen column.
 - An agent also removes it after the owner moves the card out of Blocked or
   Icebox. The first agent that finds the card in another column runs `dev board
   label CARD --remove needs:human`. That agent then follows the new column's
