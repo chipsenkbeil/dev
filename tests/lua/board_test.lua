@@ -536,6 +536,7 @@ testing.test("ls refuses an unknown column and an unknown flag with a usage erro
     testing.ok(result.message:find("unknown column doing", 1, true), result.message)
     result = cmd_board.run("ls", { "--bogus" }, fake(sample()))
     testing.eq(result.code, 2)
+    testing.ok(result.message:find("Unknown flag --bogus.", 1, true), result.message)
     result = cmd_board.run("ls", { "--column" }, fake(sample()))
     testing.eq(result.code, 2)
 end)

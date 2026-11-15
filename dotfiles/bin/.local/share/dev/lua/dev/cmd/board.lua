@@ -166,7 +166,7 @@ local function parse(args, takes, many)
             end
             i = i + 1
         elseif #arg > 1 and arg:sub(1, 1) == "-" then
-            return nil, usage("unknown flag " .. arg)
+            return nil, usage("Unknown flag " .. arg .. ".")
         else
             positional[#positional + 1] = arg
         end
@@ -1820,7 +1820,7 @@ function commands.ask(backend, args)
         elseif fields[flag] then
             question[fields[flag]] = value
         else
-            return usage("unknown flag " .. flag)
+            return usage("Unknown flag " .. flag .. ".")
         end
         i = i + 2
     end
@@ -2310,7 +2310,7 @@ function commands.rename(backend, args)
     end
     for pos = 2, #args do
         if args[pos]:sub(1, 1) == "-" then
-            return usage("unknown flag " .. args[pos])
+            return usage("Unknown flag " .. args[pos] .. ".")
         end
     end
     local name = table.concat(args, " ", 2)

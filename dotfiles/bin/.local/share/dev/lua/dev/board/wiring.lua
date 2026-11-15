@@ -47,7 +47,7 @@ local function check_options(args)
             end
             opts.seconds = seconds
         elseif #arg > 1 and arg:sub(1, 1) == "-" then
-            return nil, usage("unknown flag " .. arg)
+            return nil, usage("Unknown flag " .. arg .. ".")
         else
             opts.words[#opts.words + 1] = arg
         end
