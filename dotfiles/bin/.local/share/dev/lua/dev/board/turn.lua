@@ -136,6 +136,55 @@ local function taken_at(backend, card, name)
     return newest or false
 end
 
+local function own_claim(holding, comments, who)
+    local name, card = who.name, who.card
+    if holding.claimant ~= name or type(holding.claim_fence) ~= "number" then
+        return nil
+    end
+    local newest
+    for _, comment in ipairs(comments) do
+        local held = record(comment.body)
+        if held and held.name == name then
+            newest = held
+        end
+    end
+    if not newest or newest.card ~= card then
+        return nil
+    end
+    return {
+        card = holding.id,
+        fence = holding.claim_fence,
+        holder = name,
+        lease = newest.lease,
+        hold = newest.hold,
+        for_card = card,
+        taken = newest.taken,
+    }
+end
+
+---Find the live hold `name` has on the turn card for `card`, whatever its notes say.
+---
+---The hold counts when its claimant is `name` and the newest holder note of `name` is a hold
+---for `card`, so a stale fence or a `left` note does not hide it.
+---@param backend dev.board.Backend the board backend
+---@param name string the name that holds
+---@param card string the short id of the card the claim was taken for
+---@return dev.board.turn.Turn? turn the claim under its live fence, nil when `name` has none
+---@return string? message why the board could not be read
+function M.claimed(backend, name, card)
+    local holding, message = lookup(backend)
+    if not holding then
+        return nil, message
+    end
+    local comments
+    comments, message = backend:comments(holding.id)
+    if not comments then
+        return nil, message
+    end
+    local own = own_claim(holding, comments, { name = name, card = card })
+    return own and own.hold and own or nil
+end
+
 local function holder_of(backend, card)
     if not card or not card.claimant then
         return nil
@@ -364,15 +413,28 @@ function M.take(backend, name, card, opts)
         end
     end
     local first = line[1]
-    if first and not (first.name == name and first.card == card) then
+    local own = own_claim(holding, comments, { name = name, card = card })
+    if first and not own and not (first.name == name and first.card == card) then
         local holder = holder_of(backend, holding)
         local ahead = "next for " .. first.name
         return nil,
             holder and (M.describe(holder) .. ", and it is " .. ahead) or ahead,
             place .. ":" .. (holder and holder.name or "")
     end
+    if own and own.hold then
+        if store.stamp(store.now() - M.MAX_HOLD_SECONDS) >= own.taken then
+            return nil,
+                string.format(
+                    "the landing turn has been held since %s, the most it may be kept (%d seconds), so give it back and ask for it again",
+                    own.taken,
+                    M.MAX_HOLD_SECONDS
+                )
+        end
+        lease, hold = opts and opts.seconds or own.lease, true
+    end
     local fence
-    fence, message = backend:claim(holding.id, name, { ttl = lease, lease = true })
+    fence, message =
+        backend:claim(holding.id, name, { ttl = lease, lease = true, fence = own and own.fence })
     if fence then
         local canonical
         canonical, message = lookup(backend)
@@ -398,7 +460,7 @@ function M.take(backend, name, card, opts)
         lease = lease,
         hold = hold,
         for_card = card,
-        taken = store.stamp(),
+        taken = own and own.hold and own.taken or store.stamp(),
     }
     local noted
     noted, message = note_holder(backend, mine)

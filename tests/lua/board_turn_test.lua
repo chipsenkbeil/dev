@@ -666,6 +666,86 @@ testing.test("a leave keeps a live hold", function()
     testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
 end)
 
+local function reclaimed(backend, name, short)
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, name, short, { hold = true, seconds = LEASE_SECONDS }))
+    advance(PAST_LEASE_SECONDS)
+    restore()
+    local card = assert(open_turn_card(backend))
+    local fence = assert(backend:claim(card.id, name, { ttl = TURN_HOLD_SECONDS, lease = true }))
+    turn.leave(backend, name, short)
+    return card, fence, first
+end
+
+testing.test("a holder whose live claim outran its hold note takes the turn again", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local card, fence, first = reclaimed(backend, "alpha", short)
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = TURN_HOLD_SECONDS }))
+    testing.eq(turn.held(backend, "alpha", short), nil)
+    testing.eq(assert(turn.claimed(backend, "alpha", short)).fence, fence)
+    testing.eq(turn.claimed(backend, "beta", "bbbb2222"), nil)
+    testing.eq(turn.claimed(backend, "alpha", "bbbb2222"), nil)
+    local again = assert(turn.take(backend, "alpha", short))
+    testing.eq(again.card, card.id)
+    testing.eq(again.fence, fence)
+    testing.eq(again.hold, true)
+    testing.eq(again.lease, first.lease)
+    testing.eq(again.taken, first.taken)
+end)
+
+testing.test(
+    "a holder whose live claim outran its hold note keeps the lease it asks for",
+    function()
+        local backend = backend_at(board_home())
+        local _, short = landing_card(backend)
+        reclaimed(backend, "alpha", short)
+        local again = assert(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }))
+        testing.eq(again.lease, 600)
+    end
+)
+
+testing.test(
+    "a holder whose live claim outran its hold note is refused past the hold cap",
+    function()
+        local backend = backend_at(board_home())
+        local _, short = landing_card(backend)
+        local card, fence = reclaimed(backend, "alpha", short)
+        local opts = { ttl = turn.MAX_HOLD_SECONDS * 2, fence = fence, lease = true }
+        assert(backend:claim(card.id, "alpha", opts))
+        advance(turn.MAX_HOLD_SECONDS + 1)
+        local again, message = turn.take(backend, "alpha", short, { hold = true, seconds = 600 })
+        testing.eq(again, nil)
+        testing.ok(message:find("the most it may be kept", 1, true), message)
+    end
+)
+
+testing.test("a release leaves the plain claim of a landing alone", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    assert(turn.take(backend, "alpha", short))
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--release" }, backend)
+    end)
+    testing.eq(result.code, 1)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a holder whose live claim outran its hold note releases the claim", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    reclaimed(backend, "alpha", short)
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--release" }, backend)
+    end)
+    testing.eq(result.code, nil)
+    testing.ok(result.output:find("gave back the landing turn", 1, true), result.output)
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(turn.claimed(backend, "alpha", short), nil)
+end)
+
 testing.test("a turn hold over 3600 is refused", function()
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)

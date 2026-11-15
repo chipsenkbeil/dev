@@ -3034,6 +3034,14 @@ function commands.turn(backend, args)
         if message and not lost then
             return failure(message)
         end
+        local claimed, claim_message
+        if not hold then
+            claimed, claim_message = turn.claimed(backend, name, short)
+        end
+        if claim_message then
+            return failure(claim_message)
+        end
+        hold = hold or claimed
         if not hold and message then
             turn.leave(backend, name, short)
             return { output = "the landing turn held for " .. short .. " was already gone" }

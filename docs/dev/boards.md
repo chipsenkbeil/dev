@@ -2615,7 +2615,9 @@ Asking for the turn:
   taken, refuses with `the landing turn is held by NAME since STAMP`.
 - Cards wait in the order they asked. A card with a wait writes a
   `dev-turn: ask` note with the time its wait ends, plus 10 seconds, before it
-  asks for the turn. Only the first live ask in line may take it.
+  asks for the turn. Only the first live ask in line may take it, except a
+  caller that already owns the claim for that card, whose newest holder note is
+  for it. That caller renews the claim under its live fence, whatever the line.
 - A later asker is told whom the turn is next for.
 - An ask ends when its card takes the turn, writes a `dev-turn: left` note when
   its wait runs out, or passes its end time. The end time keeps a waiter that
@@ -2821,6 +2823,9 @@ Giving it back:
   which drops a queued ask and creates the `landing turn` card when the board
   has none, and refuses.
 - A hold that ran out is cleared and reported as already gone.
+- A hold whose note names an older fence than the live claim is not found as a
+  hold, but while the caller owns that claim `--release` still frees it under
+  its live fence and prints the same line.
 
 Landing under a hold:
 
