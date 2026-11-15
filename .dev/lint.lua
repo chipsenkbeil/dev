@@ -81,14 +81,17 @@ local function lint_lua(files, templates)
     local formatted = checks.with_files(checks.with_files({}, files), templates)
     for _, row in ipairs(LUA_TOOLS) do
         local tool, prefix = row[1], { row[1] }
-        if dev_os.which(tool) then
-            verb.say("> Linting lua with " .. tool)
-            for _, word in ipairs(row[2]) do
-                prefix[#prefix + 1] = (word:gsub("^STYLE", style))
+        local targets = row[3] and formatted or files
+        if #targets > 0 then
+            if dev_os.which(tool) then
+                verb.say("> Linting lua with " .. tool)
+                for _, word in ipairs(row[2]) do
+                    prefix[#prefix + 1] = (word:gsub("^STYLE", style))
+                end
+                run_checked(checks.with_files(prefix, targets))
+            else
+                missing(tool)
             end
-            run_checked(checks.with_files(prefix, row[3] and formatted or files))
-        else
-            missing(tool)
         end
     end
     verb.say("> Linting lua comments")
@@ -137,9 +140,7 @@ if #dirty > 0 then
 end
 
 local lua_files = checks.lua_files(root)
-if #lua_files > 0 then
-    lint_lua(lua_files, checks.template_files(root))
-end
+lint_lua(lua_files, checks.template_files(root))
 
 verb.say("> standalone shell")
 require("dev.standalone").warn(root, verb.note)
