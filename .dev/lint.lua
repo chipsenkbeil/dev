@@ -1,8 +1,9 @@
 --[[
 Run the shell, bats and Lua checks over the repo.
 Shellcheck, shfmt and comment spacing cover the bash roots, and the bare-assertion check covers
-the bats files. Stylua, selene, ast-grep and the comment checks cover the Lua roots, .dev included,
-and the rule tests of the Lua and Rust lint sets run once.
+the bats files. Stylua, selene, ast-grep and the comment checks cover the Lua roots, .dev included.
+The style skill's lint templates get the formatter check too, and the rule tests of the Lua and
+Rust lint sets run once.
 Exit non-zero when any of them reports a finding.
 ]]
 local checks = require("dotfiles.checks")
@@ -111,6 +112,16 @@ local function lint_lua(files)
     end
 end
 
+local function lint_templates(files)
+    verb.say("> Linting lint templates with stylua")
+    if dev_os.which("stylua") then
+        local config = fs.join(root, checks.lint_dir, "stylua.toml")
+        run_checked(checks.with_files({ "stylua", "--config-path", config, "--check" }, files))
+    else
+        missing("stylua")
+    end
+end
+
 if not have_shfmt then
     missing("shfmt")
 end
@@ -138,6 +149,11 @@ end
 local lua_files = checks.lua_files(root)
 if #lua_files > 0 then
     lint_lua(lua_files)
+end
+
+local template_files = checks.template_files(root)
+if #template_files > 0 then
+    lint_templates(template_files)
 end
 
 stdout:write("> standalone shell\n")

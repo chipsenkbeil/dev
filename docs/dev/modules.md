@@ -313,11 +313,13 @@ This repo's own `dev lint`, `dev fmt` and `dev test` are `.dev/lint.lua`,
 - the bare-assertion check over the bats files
 - stylua, selene, ast-grep and the comment checks from the style skill's
   `lint/lua` set over the Lua roots
+- stylua over the style skill's lint templates, every Lua file under `lint/`,
+  with the same `lint/lua/stylua.toml` config
 - the rule tests of the Lua and Rust lint sets, once
 
 The Lua roots are the dev modules, `main.lua`, the guide and scribe modules,
-`tests/lua` and `.dev`. `dev fmt` runs stylua over the same files with the
-same config.
+`tests/lua` and `.dev`. `dev fmt` runs stylua over the same files and the lint
+templates with the same config, so a template that drifts is fixed by `dev fmt`.
 
 selene runs with `--no-exclude`. The set's `exclude = [".*/**"]` would hide
 `.dev` otherwise.

@@ -1,5 +1,5 @@
 --[[
-Format the Lua roots with stylua.
+Format the Lua roots and the style skill's lint templates.
 It uses the config that dev lint checks against.
 ]]
 local checks = require("dotfiles.checks")
@@ -11,6 +11,9 @@ local ctx = ...
 verb.no_args(ctx)
 
 local files = checks.lua_files(ctx.root)
+for _, file in ipairs(checks.template_files(ctx.root)) do
+    files[#files + 1] = file
+end
 if #files == 0 then
     return 0
 end
