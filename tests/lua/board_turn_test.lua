@@ -912,9 +912,12 @@ testing.test("a capped own-claim take frees the turn and notes it left", functio
 end)
 
 testing.test("a release leaves the plain claim of a landing alone", function()
+    -- Open a board and take the plain claim of its landing card
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
     assert(turn.take(backend, "alpha", short))
+
+    -- Release as the holder and expect the claim to stay
     local result
     as_agent("alpha", function()
         result = cmd_board.run("turn", { short, "--release" }, backend)
