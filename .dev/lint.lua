@@ -19,7 +19,7 @@ local failed = false
 local dirty = {}
 
 local LUA_TOOLS = {
-    { "stylua", { "--config-path", "STYLE/stylua.toml", "--check" } },
+    { "stylua", { "--config-path", "STYLE/stylua.toml", "--check" }, true },
     { "selene", { "--no-exclude", "--config", "STYLE/selene.toml" } },
     { "ast-grep", { "scan", "--config", "STYLE/ast-grep/sgconfig.yml" } },
 }
@@ -76,8 +76,9 @@ local function lint_shell(file)
     )
 end
 
-local function lint_lua(files)
+local function lint_lua(files, templates)
     local style = fs.join(root, checks.lint_dir)
+    local formatted = checks.with_files(checks.with_files({}, files), templates)
     for _, row in ipairs(LUA_TOOLS) do
         local tool, prefix = row[1], { row[1] }
         if dev_os.which(tool) then
@@ -85,7 +86,7 @@ local function lint_lua(files)
             for _, word in ipairs(row[2]) do
                 prefix[#prefix + 1] = (word:gsub("^STYLE", style))
             end
-            run_checked(checks.with_files(prefix, files))
+            run_checked(checks.with_files(prefix, row[3] and formatted or files))
         else
             missing(tool)
         end
@@ -108,16 +109,6 @@ local function lint_lua(files)
                     .. " consecutive comment lines, restructure the code or shrink the comment"
             )
         end
-    end
-end
-
-local function lint_templates(files)
-    verb.say("> Linting lint templates with stylua")
-    if dev_os.which("stylua") then
-        local config = fs.join(root, checks.lint_dir, "stylua.toml")
-        run_checked(checks.with_files({ "stylua", "--config-path", config, "--check" }, files))
-    else
-        missing("stylua")
     end
 end
 
@@ -147,12 +138,7 @@ end
 
 local lua_files = checks.lua_files(root)
 if #lua_files > 0 then
-    lint_lua(lua_files)
-end
-
-local template_files = checks.template_files(root)
-if #template_files > 0 then
-    lint_templates(template_files)
+    lint_lua(lua_files, checks.template_files(root))
 end
 
 verb.say("> standalone shell")
