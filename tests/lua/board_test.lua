@@ -6240,7 +6240,7 @@ testing.test("add --label needs:human names the card when its label is refused",
     assert(fs.write(root .. "/label_fail", ""))
     local out, code = add_locked(root, home)
     testing.eq(code, 1)
-    testing.ok(out:find("but its labels were not set, so run dev board label on it", 1, true), out)
+    testing.ok(out:find("but its labels were not set. Run `dev board label` on it.", 1, true), out)
 end)
 
 testing.test("a failed subtask and a refused label on add --label needs:human say both", function()
@@ -6250,7 +6250,7 @@ testing.test("a failed subtask and a refused label on add --label needs:human sa
     local out, code = add_locked(root, home)
     testing.eq(code, 1)
     testing.ok(out:find("outcome 1 of 1 was not", 1, true), out)
-    testing.ok(out:find("its labels were not set either", 1, true), out)
+    testing.ok(out:find("Its labels were not set either.", 1, true), out)
 end)
 
 testing.test("add --size and size reach pomb with the id of the colour, not its label", function()

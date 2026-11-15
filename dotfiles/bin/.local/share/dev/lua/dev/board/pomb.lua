@@ -16,7 +16,7 @@ local ISSUED_VARIABLE = "DEV_BOARD_TOKEN"
 local ISSUED_REFUSED = "the issued token in DEV_BOARD_TOKEN was refused by pomb"
 local FILE_REFUSED = "the role token file for DEV_AGENT was refused by pomb"
 local FILE_EXPIRED =
-    "the role token file for DEV_AGENT expired; mint it again with dev board token mint"
+    "The role token file for DEV_AGENT expired. Mint it again with `dev board token mint`."
 local AGENT_VARIABLE = "DEV_AGENT"
 local ROLES_LIST_PATH = "/api/v1/agent-roles"
 local CHILDREN_PATH = "/api/v1/auth/tokens/children"
@@ -67,8 +67,9 @@ local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NEEDS_LEAD =
     "pomb refused the delete: it needs subtasks.delete, which only the lead token holds. Set [board.pomb] lead_token in ~/.config/dev/config.toml"
-local NEEDS_LEAD_LANE =
-    "making a lane needs swimlanes.create, which only the lead token holds. Set [board.pomb] lead_token in ~/.config/dev/config.toml and run init without --admin"
+local NEEDS_LEAD_LANE = "Making a lane needs swimlanes.create, which only the lead token holds. "
+    .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml, "
+    .. "then run `dev board init` without `--admin`."
 local NOT_YOURS = "that comment is not yours to change"
 local LOCKED = "pomb locked this card while it is labelled "
     .. board.NEEDS_HUMAN
@@ -1072,9 +1073,9 @@ function Backend:add(name, column, opts)
         made, message =
             self:__request("POST", "/api/tasks/" .. task.id .. "/subtasks", { name = text })
         if not made then
-            local unlabelled = ""
+            local unlabelled = "."
             if locking and not self:set_labels(task.id, opts.labels) then
-                unlabelled = " (its labels were not set either, so run dev board label on it)"
+                unlabelled = ". Its labels were not set either. Run `dev board label` on it."
             end
             return nil,
                 task.id:sub(1, board.MIN_PREFIX)
@@ -1113,8 +1114,10 @@ function Backend:add(name, column, opts)
                 task.id:sub(1, board.MIN_PREFIX)
                     .. " was added to "
                     .. column
-                    .. " but its labels were not set, so run dev board label on it: "
+                    .. " but its labels were not set. Run `dev board label` on it. "
+                    .. "Pomb's error was "
                     .. message
+                    .. "."
         end
         task.labels = opts.labels
     end
