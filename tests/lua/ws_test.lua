@@ -619,7 +619,8 @@ testing.test("ws rm refuses a forgotten folder without --forgotten", function()
     testing.eq(
         out,
         path
-            .. " is a jj folder jj no longer tracks. Run dev ws rm feat --forgotten to discard it.\n"
+            .. " is a jj folder that jj no longer tracks. Run `dev ws rm feat "
+            .. "--forgotten` to discard it.\n"
     )
 
     -- Expect the folder kept and no jj run

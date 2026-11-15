@@ -483,9 +483,9 @@ function M.remove(root, name, opts)
     if gone and not opts.forgotten then
         return refused(
             path
-                .. " is a jj folder jj no longer tracks. Run dev ws rm "
+                .. " is a jj folder that jj no longer tracks. Run `dev ws rm "
                 .. name
-                .. " --forgotten to discard it."
+                .. " --forgotten` to discard it."
         )
     end
     if opts.forgotten and not gone then
