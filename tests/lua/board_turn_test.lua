@@ -15,6 +15,7 @@ local LEASE_SECONDS = 3
 local PAST_LEASE_SECONDS = 4
 local PAST_HOLD_SECONDS = 2
 local TURN_HOLD_SECONDS = 600
+local OVER_CAP_TTL_SECONDS = turn.MAX_HOLD_SECONDS * 2
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ICEBOX_ID = "col-icebox"
 
@@ -712,7 +713,7 @@ testing.test(
         local backend = backend_at(board_home())
         local _, short = landing_card(backend)
         local card, fence = reclaimed(backend, "alpha", short)
-        local opts = { ttl = turn.MAX_HOLD_SECONDS * 2, fence = fence, lease = true }
+        local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
         assert(backend:claim(card.id, "alpha", opts))
         advance(turn.MAX_HOLD_SECONDS + 1)
         local take_opts = { hold = true, seconds = TURN_HOLD_SECONDS }
@@ -727,7 +728,7 @@ testing.test("a capped own-claim take frees the turn and notes it left", functio
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
     local card, fence = reclaimed(backend, "alpha", short)
-    local opts = { ttl = turn.MAX_HOLD_SECONDS * 2, fence = fence, lease = true }
+    local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
     assert(backend:claim(card.id, "alpha", opts))
     local function lefts()
         local count = 0

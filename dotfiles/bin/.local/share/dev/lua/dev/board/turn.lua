@@ -400,7 +400,8 @@ end
 ---@return string? place a key for `Poll:pace` that changes with the line or the holder, nil when
 ---   this card takes the turn or the board could not be read
 function M.take(backend, name, card, opts)
-    local lease = opts and opts.seconds or M.LEASE_SECONDS
+    local seconds = opts and opts.seconds
+    local lease = seconds or M.LEASE_SECONDS
     local hold = opts and opts.hold or false
     local holding, comments, message = open_card(backend)
     if not holding then
@@ -426,17 +427,18 @@ function M.take(backend, name, card, opts)
     if own and own.hold then
         if store.stamp(store.now() - M.MAX_HOLD_SECONDS) >= own.taken then
             local released, reason = M.release(backend, own)
-            local ending = released and "so it is given back and has to be asked for again"
-                or "and giving it back failed: " .. (reason or "unknown")
+            local ending = released and "It is given back and has to be asked for again."
+                or "Giving it back failed: " .. (reason or "unknown") .. "."
             return nil,
                 string.format(
-                    "the landing turn has been held since %s, the most it may be kept (%d seconds), %s",
+                    "The landing turn has been held since %s, the most it may be kept "
+                        .. "(%d seconds). %s",
                     own.taken,
                     M.MAX_HOLD_SECONDS,
                     ending
                 )
         end
-        lease, hold = opts and opts.seconds or own.lease, true
+        lease, hold = seconds or own.lease, true
     end
     local fence
     fence, message =
