@@ -90,7 +90,9 @@ local function sentence_after(reason)
     if not reason or reason == "" then
         return ""
     end
-    local text = reason:sub(1, 1):upper() .. reason:sub(2)
+    local lead = reason:match("^%w+") or ""
+    local is_id = #lead >= 8 and lead:find("^%x+$") ~= nil
+    local text = is_id and reason or reason:sub(1, 1):upper() .. reason:sub(2)
     return " " .. (text:find("[.!?]$") and text or text .. ".")
 end
 
@@ -118,12 +120,12 @@ local function turn_card(backend)
         return card
     end
     if message then
-        return nil, message
+        return nil, "The landing turn card could not be read." .. sentence_after(message)
     end
     local added
     added, message = backend:add(M.NAME, backend.roles.icebox, { once = true })
     if not added then
-        return nil, message
+        return nil, "The landing turn card could not be added." .. sentence_after(message)
     end
     card, message = lookup(backend)
     if card then
@@ -478,7 +480,8 @@ function M.take(backend, name, card, opts)
     if not fence then
         local holder = holder_of(backend, lookup(backend) or holding)
         return nil,
-            holder and M.describe(holder) or message,
+            holder and M.describe(holder)
+                or ("The landing turn could not be taken." .. sentence_after(message)),
             place .. ":" .. (holder and holder.name or "")
     end
     local mine = {

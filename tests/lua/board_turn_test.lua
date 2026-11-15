@@ -499,6 +499,74 @@ testing.test("a claim lost after the turn card was read still names the holder",
     testing.ok(message:find("held by alpha", 1, true), message)
 end)
 
+testing.test("a failed holder note with no reason ends its sentence and adds nothing", function()
+    -- Fail every note without giving a reason
+    local backend = backend_at(board_home())
+    backend.note = function()
+        return nil, nil
+    end
+
+    -- Take the turn and expect the bare sentence
+    local taken, message = turn.take(backend, "alpha", "aaaa1111")
+    testing.eq(taken, nil)
+    testing.eq(message, "The landing turn was taken but could not be noted.")
+end)
+
+testing.test(
+    "a backend reason keeps a leading card id as written and capitalizes any other",
+    function()
+        -- Fail every note with a reason that starts with a card id
+        local backend = backend_at(board_home())
+        backend.note = function()
+            return nil, "6df0e018 is not writable"
+        end
+
+        -- Take the turn and expect the id untouched
+        local _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(
+            message,
+            "The landing turn was taken but could not be noted. 6df0e018 is not writable."
+        )
+
+        -- Fail with a plain lowercase reason and expect a capital
+        backend.note = function()
+            return nil, "the board is down"
+        end
+        _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn was taken but could not be noted. The board is down.")
+    end
+)
+
+testing.test(
+    "the turn card lookup failures and a take with no holder are full sentences",
+    function()
+        -- Fail the card listing and expect the read sentence
+        local backend = backend_at(board_home())
+        local cards = backend.cards
+        backend.cards = function()
+            return nil, "the board is down"
+        end
+        local _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn card could not be read. The board is down.")
+
+        -- Fail adding the turn card and expect the add sentence
+        backend.cards = cards
+        backend.add = function()
+            return nil, "the board is full"
+        end
+        _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn card could not be added. The board is full.")
+
+        -- Fail the claim with no holder to name and expect the take sentence
+        backend = backend_at(board_home())
+        backend.claim = function()
+            return nil, "the claim failed"
+        end
+        _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn could not be taken. The claim failed.")
+    end
+)
+
 local function fill(backend, id)
     local notes = assert(backend:comments(id))
     for _ = #notes + 1, turn.MAX_NOTES do
