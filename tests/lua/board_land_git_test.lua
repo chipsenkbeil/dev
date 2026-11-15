@@ -288,6 +288,24 @@ testing.test("git recheck skips rows when the parent is shared", function()
     testing.ok(problem and problem:find("recheck row failed", 1, true), tostring(problem))
 end)
 
+testing.test("a malformed recheck row prints its reason with one period", function()
+    local cases = {
+        { row = " ", reason = "A checks row is blank." },
+        { row = "a | b", reason = "A row runs as a plain command." },
+    }
+    for _, case in ipairs(cases) do
+        local problem = land.recheck_problem({
+            root = "unused",
+            commit = "unused",
+            card = "abc12345",
+            rows = { case.row },
+            note = function() end,
+        })
+        testing.ok(problem and problem:find(case.reason, 1, true), tostring(problem))
+        testing.ok(not problem:find("..", 1, true), tostring(problem))
+    end
+end)
+
 local function landing_env(fn)
     local self = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/bin/dev"
     local set = {

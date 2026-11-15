@@ -953,7 +953,7 @@ function M.recheck_problem(opts)
         end
         local argv, why = check.argv(row)
         if not argv then
-            return "[board.land] recheck row " .. i .. ": " .. why .. "."
+            return "[board.land] recheck row " .. i .. ": " .. why
         end
         argvs[i] = argv
     end
