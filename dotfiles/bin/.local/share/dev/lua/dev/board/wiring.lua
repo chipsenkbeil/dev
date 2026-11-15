@@ -509,11 +509,11 @@ end
 ---@param short string the card's short id
 ---@return string note the text to append to the refusal
 local function kept_note(short)
-    return "\n  (the landing turn you hold for "
+    return "\nThe landing turn you hold for "
         .. short
-        .. " stays held while its lease lasts, so fix this and land again, or give it back with dev board turn "
+        .. " stays held while its lease lasts. Fix this and land again, or give it back with `dev board turn "
         .. short
-        .. " --release)"
+        .. " --release`."
 end
 
 M.check_options = check_options

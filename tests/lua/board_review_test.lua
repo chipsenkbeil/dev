@@ -206,7 +206,7 @@ testing.test(
             testing.eq(code, 1, out)
             testing.ok(
                 out:find(
-                    "was claimed by dotfiles/builder, so dotfiles/builder cannot review its own change",
+                    "was claimed by dotfiles/builder. dotfiles/builder cannot review its own change",
                     1,
                     true
                 ),
@@ -346,7 +346,7 @@ testing.test("note cannot write, edit or delete the review prefix", function()
     local id = card_in(root, home)
     local out, code = dev(root, home, { "board", "note", id, "  DEV-REVIEW: kind=code" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("dev board review writes", 1, true), out)
+    testing.ok(out:find("`dev board review` writes", 1, true), out)
     must(dev(root, home, {
         "board",
         "review",
@@ -406,7 +406,7 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     testing.eq(result.output, nil)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("was NOT recorded", 1, true), result.message)
-    testing.ok(result.message:find("curl exit 28", 1, true), result.message)
+    testing.ok(result.message:find("Curl exit 28", 1, true), result.message)
 end)
 
 if has_jj then

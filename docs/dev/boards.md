@@ -242,8 +242,8 @@ Pomb answers 200 once the token is revoked. dev then deletes the file named
 by the hash of NAME and prints `revoked the role token of NAME`.
 
 A NAME that no live child holds, or a token that Pomb answers 404 for
-(already gone), leaves nothing to revoke. dev exits 0, prints `nothing was
-left to revoke for NAME` and deletes a stale file for NAME.
+(already gone), leaves nothing to revoke. dev exits 0, prints `Nothing was
+left to revoke for NAME.` and deletes a stale file for NAME.
 
 When Pomb refuses the revoke, dev prints the reason, exits 1 and keeps the
 file.
@@ -308,8 +308,8 @@ no dev call yet, and dev needs no token change for it.
 board is new or old. It adds what is missing, fixes what is wrong and never
 deletes anything, so running it twice is the same as running it once.
 
-It prints one line per change, and `board X already follows the standard,
-nothing to change` when there is none.
+It prints one line per change, and `Board X already follows the standard.
+Nothing changed.` when there is none.
 
 ```
 dev board init
@@ -897,7 +897,7 @@ whole value under the claim's fence and is queued while Pomb is unreachable.
 
 A board that lacks the field is refused before any write (exit 1), naming the
 field. The message reads
-`the board has no dev.allow field, so define it on the board first`.
+`The board has no dev.allow field. Define it on the board first.`
 `dev board init` defines none of them.
 
 - `allow CARD WORD...`: sets `dev.allow`, a multiselect, to the JSON array
@@ -1396,7 +1396,7 @@ hand-edited into invalid JSON, is never treated as empty and never overwritten.
 `dev board sync` exits 1 and prints:
 
 ```
-dev: <file>:<line>: <reason>; the queue is left in place
+dev: <file>:<line>: <reason>. The queue is left in place.
 ```
 
 Any other `dev board` command prints that line on standard error, skips the
@@ -1839,7 +1839,7 @@ Checks:
   `checks`.
 - A `--checks`, or a `--column ready`, on a Pomb board that has no checks field
   is a usage error saying
-  `the board has no checks field, so run dev board init to add it`.
+  ``The board has no checks field. Run `dev board init` to add it.``
 - A `--column ready` with no `--checks` is a usage error too:
   `a card needs a checks row before it enters Ready; pass --checks CMD`. It is
   checked after the heading check and before the backend adds anything.
@@ -1865,8 +1865,9 @@ Checks:
   command therefore replays.
 - `needs:lead` and `needs:human` are ordinary labels, with one exception.
   Adding `needs:human` to a card outside Blocked and Icebox is refused with
-  `<id prefix> is in <column>, and needs:human lives only in Blocked or Icebox;
-  move it there first` (exit 1, on both backends and on a queued replay).
+  `Card <id prefix> is in <column>, and needs:human lives only in Blocked or
+  Icebox. Move it there first.` (exit 1, on both backends and on a queued
+  replay).
 - Removing `needs:human` is allowed in any column, and dev does not check which
   of the two cases below applies.
 - An agent removes it after the owner answers in that agent's own session. It
@@ -1944,7 +1945,8 @@ typed in this session, on a `needs:human` card.
 - `KIND` is `blocked_by`, `blocks`, `related` or `parent`, else exit 2.
 - `parent` is held by the child and names the epic as `OTHER`, which must be an
   epic. dev refuses any other card before any request, with
-  `<id prefix> is not an epic, make it one with dev board epic <id prefix>`.
+  ``Card <id prefix> is not an epic. Make it one with `dev board epic <id
+  prefix>`.``
 - Epics nest to any depth and a card has one epic. Pomb answers a second epic
   or a cycle with a `400` (exit 1).
 - A local board refuses the same itself (`the card already has an epic`,
@@ -2299,7 +2301,7 @@ command and prints `set checks <id prefix>, N rows`, or `1 row` for one.
   2, so nobody clears the rows by accident and no subcommand clears them.
 - An unknown card is exit 1.
 - A Pomb board with no checks field is refused before any write (exit 1) with
-  `the board has no checks field, so run dev board init to add it`, as a move
+  ``The board has no checks field. Run `dev board init` to add it.``, as a move
   into Ready gives.
 - Sending the same rows twice changes nothing more, so `checks` is queued while
   Pomb is unreachable like `edit`, timeouts and 502, 503 and 504 included.
@@ -2470,7 +2472,7 @@ The result:
 - It prints `recorded KIND review by NAME on <id prefix> at commit <12
   characters>`.
 - Like `check`, it is never queued. If the comment cannot be written the
-  command exits 1 with `the review was NOT recorded`.
+  command exits 1 with `The review was NOT recorded on card <id prefix>.`
 - A timeout or gateway error may come after Pomb stored it, so read `notes`
   before repeating.
 - `note` refuses `dev-review:` and `dev-turn:` as it does `dev-check:`, and
@@ -2861,7 +2863,7 @@ the JSON array of the words and prints `set allow <id prefix>, <words>`.
 - No word, any other word, or `none` beside another word is exit 2. An unknown
   card is exit 1.
 - A Pomb board without the field is refused before any write with
-  `the board has no dev.allow field, so define it on the board first`
+  `The board has no dev.allow field. Define it on the board first.`
   (exit 1).
 - Sending the same value twice changes nothing more, so it is queued while Pomb
   is unreachable like `checks`.
@@ -2943,9 +2945,9 @@ Converting:
   description (`edit`) without that heading and those items. It prints
   `outcome <id prefix> converted N outcomes`.
 - A card that already has outcomes prints
-  `outcome <id prefix> left alone: it already has outcomes`.
+  `Outcomes of card <id prefix> are left alone. It already has outcomes.`
 - A card with no checklist prints
-  `outcome <id prefix> left alone: it has no Done when checklist`.
+  `Outcomes of card <id prefix> are left alone. It has no Done when checklist.`
 - Both are exit 0 with nothing changed, so a second run changes nothing.
 - A failure part way leaves the appended outcomes and the old description. The
   card then counts as converted until its outcomes are fixed by hand.
@@ -3034,7 +3036,8 @@ The sizes:
 - `1` is yellow, `2` is green, `3` is blue, `3+` is red and `unsized` is white.
 - Any other size word is exit 2 naming the five.
 - `unsized` on a card outside Icebox is exit 1 with
-  `<id prefix> is outside Icebox and keeps a size; move it to Icebox first`.
+  `Card <id prefix> is outside Icebox and keeps a size. Move it to Icebox
+  first.`
 
 The write:
 
@@ -3133,7 +3136,7 @@ The claim:
 - For any column but In Progress or Blocked, the move also stops the keep-alive
   loop and forgets the claim. Once the move has succeeded, it releases the
   claim on the backend with its fence.
-- A refused release prints `dev: moved, but the claim was not released:
+- A refused release prints `dev: Moved, but the claim was not released.
   <reason>` on stderr, and the move still succeeds.
 - A move into In Progress of a card nobody holds, on a machine with no claim on
   it, takes the claim first as `take` does, with `DEV_AGENT` as the name. An
@@ -3146,17 +3149,17 @@ The refusals run in this order:
 - When the column is Review, Verify, Release or not a column at all, the stage
   check runs before the card is read. A board that still has an In Review
   column and lacks a stage column fails with
-  `the board has an In Review column and no <name> column, so run dev board init
-  to move the board to the stage columns.`
+  ``The board has an In Review column and no <name> column. Run `dev board
+  init` to move the board to the stage columns.``
   (exit 1).
 - After the card is read, `move` refuses a card labelled `needs:human` that
   moves to a different column.
 - The Ready, planning, Done and epic rules follow, each described below.
 - A card leaving In Progress for Review, Ready or Blocked with a claimant and
   no note from that claimant after the claim is refused with
-  `<id prefix> has no note from its claimant NAME since the claim, so it cannot
-  leave In Progress; note what you built, tried and learned first: dev board
-  note <id prefix> TEXT`
+  ``Card <id prefix> has no note from its claimant NAME since the claim. It
+  cannot leave In Progress. Note what you built, tried and learned first with
+  `dev board note <id prefix> TEXT`.``
   (exit 1).
 - None of these refusals is queued.
 
@@ -3166,11 +3169,11 @@ A move into Ready:
   refused before the backend is called, on both backends, so a card is sized in
   planning and red never reaches Ready.
 - The refusal reads
-  `<id prefix> has no size and cannot enter Ready; size it with dev board size
-  CARD 1, 2 or 3`,
+  ``Card <id prefix> has no size. It cannot enter Ready. Size it with `dev board
+  size CARD 1`, `2` or `3`.``,
   or for red
-  `<id prefix> is red, more than 3 Pomodori, so split it and cannot enter Ready;
-  ...`
+  `Card <id prefix> is red, more than 3 Pomodori. Split it, since a red card
+  cannot enter Ready. ...`
   (exit 1).
 - A card whose description lacks one of the three v3 headings or text under
   one, or that has neither 3 to 7 outcomes (subtasks) nor a v1 checklist item,
@@ -3178,19 +3181,19 @@ A move into Ready:
 - The v1 fallback is a `- [ ]` or `- [x]` item under `## Done when`, and it
   holds while boards are converted.
 - The refusal reads
-  `<id prefix> is not in card format v3 and cannot enter Ready; it lacks <what>;
-  add outcomes with dev board outcome and fix the description with dev board
-  edit, where a v1 Done when checklist also counts`
+  ``Card <id prefix> is not in card format v3 and cannot enter Ready. It lacks
+  <what>. Add outcomes with `dev board outcome` and fix the description with
+  `dev board edit`, where a v1 Done when checklist also counts.``
   (exit 1, on both backends, size checked first).
 - `dev.board.missing(description, outcomes)` lists what is missing.
 - A card with no checks row and no children is refused after those, before the
   backend is called.
 - That refusal reads
-  `<id prefix> has no checks row and cannot enter Ready; give it one with dev
-  board checks CARD CMD`,
+  ``Card <id prefix> has no checks row and cannot enter Ready. Give it one with
+  `dev board checks CARD CMD`.``,
   or on a Pomb board with no checks field
-  `the board has no checks field, so run dev board init to add it` (exit 1, on
-  both backends, which `checks_field` tells apart).
+  ``The board has no checks field. Run `dev board init` to add it.`` (exit 1,
+  on both backends, which `checks_field` tells apart).
 - A local board always has the checks field.
 - An outcome that ends with neither `(check: ROW)` naming part of a checks row
   nor `(reviewer judgement)` is refused after the checks row, and the refusal
@@ -3206,8 +3209,8 @@ A move into any column but Icebox or Ready:
 - A card with no size, a description that lacks a v3 heading or text under
   Problem, or no outcome is refused before the backend is called.
 - The refusal reads
-  `<id prefix> is not planned and cannot enter <column>; it lacks <what>; fix it
-  with dev board size, edit and outcome`
+  ``Card <id prefix> is not planned and cannot enter <column>. It lacks <what>.
+  Fix it with `dev board size`, `dev board edit` and `dev board outcome`.``
   (exit 1, on both backends, `dev.board.unplanned`).
 - An unsized card with children is told only `a size` and never the missing
   outcomes, which the refusal names once the card is sized.
@@ -3219,9 +3222,9 @@ A move into Done (`move CARD done`):
 - It is refused once the card is read, before the move is sent, while the card
   has an unticked outcome.
 - The refusal reads
-  `Card <id prefix> cannot move to Done: N of M outcomes are unticked (1.
-  text, 2. text). The reviewer ticks them with dev board outcome CARD --tick N
-  --as NAME, or dev board discard CARD drops it.`
+  ``Card <id prefix> cannot move to Done. N of M outcomes are unticked (1.
+  text, 2. text). The reviewer ticks them with `dev board outcome CARD --tick N
+  --as NAME`, or `dev board discard CARD` drops it.``
   (exit 1, on both backends, each open outcome numbered as `show` numbers it).
   Both refusals name the board's own Done column, so a board that renames
   Done reads `cannot move to Shipped`.
@@ -3229,8 +3232,8 @@ A move into Done (`move CARD done`):
   way. That is a `subtasks` that is not a list, or an entry without a string
   name.
 - That refusal reads
-  `<id prefix> cannot move to Done: its outcomes cannot be read from Pomb, so
-  they cannot be checked.`
+  `Card <id prefix> cannot move to Done. Its outcomes cannot be read from Pomb.
+  They cannot be checked.`
 - A move to Ready refuses a card with outcomes dev cannot read the same way,
   naming Ready, and never reports its outcomes as missing.
 - A card with no outcomes, or with all of them ticked, moves as before.
@@ -3241,7 +3244,7 @@ An epic with an open child:
 - It is refused a move into a column whose settings make it WIP-limited or
   done, never one picked by its name.
 - The refusal reads
-  `Card <id prefix> is an epic and cannot enter COLUMN, a done column: N of M
+  `Card <id prefix> is an epic and cannot enter COLUMN, a done column. N of M
   children are open.`
   (or `a WIP-limited column`, exit 1, on both backends).
 - `Backend:columns` reports each column's `is_done` and `wip_limit`. A local
@@ -3323,7 +3326,8 @@ With no flag:
 - It prints the session's open run card (claiming it again when the claim
   lapsed), the cards the session holds and the top of `next`.
 - With no open run card it is exit 1 with
-  `start one with dev board run --orders TEXT`.
+  ``There is no open run card for NAME. Start one with `dev board run --orders
+  TEXT`.``
 
 With `--end`:
 
@@ -3360,8 +3364,8 @@ The output:
 - A local board needs no loop and prints `took <id prefix>, fence N, held for
   Mm`.
 - A blank line and the card as `show CARD` prints it follow.
-- When that read fails, `dev: took <id prefix>, but <reason>` goes to stderr
-  and the claim stays.
+- When that read fails, `dev: Took card <id prefix>, but its view failed.
+  <reason>` goes to stderr and the claim stays.
 
 A card another agent owns:
 
@@ -3478,7 +3482,7 @@ On a Pomb board:
 
 - It prints `synced <sub> <first argument>` per change.
 - It prints `dropped <sub> <first argument>: <reason>` for one Pomb refused.
-- It ends with `synced`, or `nothing queued` for an empty or missing queue.
+- It ends with `synced`, or `Nothing is queued.` for an empty or missing queue.
 - When Pomb is still unreachable, it prints `queued: N` and exits 1.
 
 On a local board:
@@ -3772,7 +3776,7 @@ malformed:
 
 - `queue.count` and `queue.list` answer `<path>:<line>: <reason>` (the line
   from the parse error's offset, or `<path>: entry N is not a queued command`).
-- `dev board sync` prints `dev: <that>; the queue is left in place` and exits
+- `dev board sync` prints `dev: <that>. The queue is left in place.` and exits
   1.
 - every other Pomb command (`status` included) prints the same line on
   standard error, replays nothing, runs normally and leaves the file
@@ -3932,10 +3936,10 @@ Each change prints one line:
   `agent roles unchanged` (not counted as a change)
 - `created limit group In Progress, Review and Verify at 4`
 
-The last line is `board X already follows the standard, nothing to change` or
-`board X: N changes`. A failure prints `dev: <message>` with exit 1 after the
+The last line is `Board X already follows the standard. Nothing changed.`
+or `board X: N changes`. A failure prints `dev: <message>` with exit 1 after the
 lines of the changes already made. A `403` adds
-`; this token may not change this board, run dev board init --admin`.
+``. This token may not change this board, so run `dev board init --admin`.``
 
 `tests/lua/board_init_test.lua` runs the algorithm against a stateful fake
 layout and the command against a fake `curl`.

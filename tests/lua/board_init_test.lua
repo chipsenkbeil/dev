@@ -689,7 +689,7 @@ testing.test("init on a board already at the standard says so and writes nothing
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0)
-    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
     testing.eq(writes(root), 0)
     testing.ok(read(root, "calls"):find("pass show secrets/lead/token/pomb", 1, true))
     testing.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
@@ -711,7 +711,7 @@ testing.test("init --admin pairs through pending, slow_down and success", functi
         "approve the admin sign-in at https://pomb.example/device\n"
             .. "code: ABCD-EFGH\n"
             .. UNCHANGED
-            .. "board demo already follows the standard, nothing to change\n"
+            .. "Board demo already follows the standard. Nothing changed.\n"
     )
     testing.eq(read(root, "polls"), "4\n")
     local calls = read(root, "calls")
@@ -793,7 +793,7 @@ testing.test("a project with no [board] section needs --name and then gets one",
         out,
         UNCHANGED
             .. "wrote [board] to .dev/config.toml\n"
-            .. "board demo already follows the standard, nothing to change\n"
+            .. "Board demo already follows the standard. Nothing changed.\n"
     )
     testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
     out, code = dev(root, home, tmp, { "board", "status" })
@@ -811,7 +811,7 @@ testing.test("a project with no .dev/config.toml takes --name and gets the file"
         out,
         UNCHANGED
             .. "wrote [board] to .dev/config.toml\n"
-            .. "board demo already follows the standard, nothing to change\n"
+            .. "Board demo already follows the standard. Nothing changed.\n"
     )
     testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
 end)
@@ -825,7 +825,7 @@ testing.test("a project with no .dev directory gets it and the file", function()
         out,
         UNCHANGED
             .. "wrote [board] to .dev/config.toml\n"
-            .. "board demo already follows the standard, nothing to change\n"
+            .. "Board demo already follows the standard. Nothing changed.\n"
     )
     testing.ok(fs.is_dir(root .. "/.dev"))
     testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
@@ -903,7 +903,7 @@ testing.test("init defines the checks field once with the dev definition", funct
     testing.eq(writes(root), 1)
     root, home, tmp = sandbox()
     out = dev(root, home, tmp, { "board", "init" })
-    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
     testing.eq(writes(root), 0)
 end)
 
@@ -1204,7 +1204,7 @@ testing.test("agent-roles-unchanged: a rerun prints unchanged and counts no chan
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
-    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
     testing.ok(calls_of(root):find("/api/v1/agent-roles/standard", 1, true), calls_of(root))
 end)
 
@@ -1467,7 +1467,7 @@ testing.test(
         local out, code = dev(root, home, tmp, { "board", "init" })
         testing.eq(code, 0, out)
         testing.eq(roles_posts(root), nil, calls_of(root))
-        testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+        testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
     end
 )
 
@@ -1599,7 +1599,7 @@ testing.test("init leaves the lanes that exist alone", function()
         '[{"id":"l1","name":"Parity"},{"id":"l2","name":"Fixes"},{"id":"l3","name":"Features"}]'
     )
     out = dev(root, home, tmp, { "board", "init" })
-    testing.eq(out, UNCHANGED .. "board demo already follows the standard, nothing to change\n")
+    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
     testing.eq(writes(root), 0)
 end)
 
@@ -1636,7 +1636,7 @@ testing.test("init warns when the first lane is not in the lanes list", function
     testing.eq(plain_code, 0, plain_out)
     testing.eq(
         plain_out,
-        UNCHANGED .. "board demo already follows the standard, nothing to change\n"
+        UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n"
     )
 end)
 

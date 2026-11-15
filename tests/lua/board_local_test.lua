@@ -128,7 +128,7 @@ testing.test("init lays out the nine columns and the palette and is idempotent",
     })
     out, code = dev(root, home, { "board", "init" })
     testing.eq(code, 0, out)
-    testing.eq(out, "board mine already follows the standard, nothing to change\n")
+    testing.eq(out, "Board mine already follows the standard. Nothing changed.\n")
 end)
 
 testing.test("a local init makes one landing turn card and a second init adds none", function()
@@ -867,7 +867,7 @@ testing.test(
         testing.eq(dev(root, home, { "board", "links", a }), "no links\n")
         out, code = dev(root, home, { "board", "unlink", a, "blocked_by", b })
         testing.eq(code, 1, out)
-        testing.ok(out:find("the card holds no blocked_by link to " .. b, 1, true), out)
+        testing.ok(out:find("The card holds no blocked_by link to " .. b, 1, true), out)
     end
 )
 
@@ -1206,7 +1206,7 @@ testing.test("a local board appends, rewords, ticks and unticks outcomes by numb
     testing.eq(rows[2].name, "B works")
     out, code = dev(root, home, { "board", "outcome", a, "--tick", "4" })
     testing.eq(code, 1)
-    testing.ok(out:find("the card has 3 outcomes, so there is no outcome 4", 1, true), out)
+    testing.ok(out:find("The card has 3 outcomes. There is no outcome 4.", 1, true), out)
 end)
 
 testing.test(
@@ -1240,7 +1240,7 @@ testing.test(
             { DEV_AGENT = "dotfiles/implementer/95f0e009/1" }
         )
         testing.eq(code, 1, out)
-        testing.ok(out:find("only the lead deletes an outcome", 1, true), out)
+        testing.ok(out:find("Only the lead deletes an outcome", 1, true), out)
         testing.eq(#document(file_of(home)).cards[1].outcomes, 3)
         out, code = dev(
             root,
@@ -1351,7 +1351,7 @@ testing.test("a local board converts a v1 checklist into outcomes and ticks", fu
     )
     out, code = dev(root, home, { "board", "outcome", a, "--convert" })
     testing.eq(code, 0, out)
-    testing.eq(out, "outcome " .. a .. " left alone: it already has outcomes\n")
+    testing.eq(out, "Outcomes of card " .. a .. " are left alone. It already has outcomes.\n")
     testing.eq(#document(file_of(home)).cards[1].outcomes, 3)
 end)
 
@@ -1362,7 +1362,7 @@ testing.test("outcome --convert leaves a card with no checklist alone", function
     )
     local out, code = dev(root, home, { "board", "outcome", a, "--convert" })
     testing.eq(code, 0, out)
-    testing.eq(out, "outcome " .. a .. " left alone: it has no Done when checklist\n")
+    testing.eq(out, "Outcomes of card " .. a .. " are left alone. It has no Done when checklist.\n")
     out, code = dev(root, home, { "board", "outcome", a, "--convert", "extra" })
     testing.eq(code, 2)
 end)
@@ -2203,7 +2203,7 @@ testing.test("sync replays the queue in order and empties it", function()
     local add = assert(log:find("POST [^\n]*/api/tasks\n", 1))
     testing.ok(move < note and note < add, log)
     out = pomb_dev(root, home, { "board", "sync" })
-    testing.eq(out, "nothing queued\n")
+    testing.eq(out, "Nothing is queued.\n")
 end)
 
 testing.test("a replay Pomb refuses is reported and dropped, the rest still go", function()
@@ -2271,7 +2271,7 @@ testing.test(
         testing.eq(code, 1)
         testing.ok(out:find(queue_path(home) .. ":2: ", 1, true), out)
         testing.ok(out:find("left in place", 1, true), out)
-        testing.ok(not out:find("nothing queued", 1, true), out)
+        testing.ok(not out:find("Nothing is queued", 1, true), out)
         testing.ok(assert(fs.read(queue_path(home))):find('"' .. COLUMN.REVIEW .. '"]}]', 1, true))
         testing.eq(calls(root), "")
     end
@@ -3151,7 +3151,7 @@ testing.test("local board keeps the epic kind and refuses a parent that is not a
     testing.eq(card_named(doc, "Plain").kind, "task")
     local out, code = dev(root, home, { "board", "link", child, "parent", plain })
     testing.eq(code, 1, out)
-    testing.ok(out:find("make it one with dev board epic " .. plain, 1, true), out)
+    testing.ok(out:find("Make it one with `dev board epic " .. plain, 1, true), out)
     out, code = dev(root, home, { "board", "epic", plain })
     testing.eq(out, "made " .. plain .. " an epic\n")
     testing.eq(code, 0)

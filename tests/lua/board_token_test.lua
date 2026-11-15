@@ -388,7 +388,7 @@ testing.test("token-revoke-none exits 0 for an unknown or already revoked name",
     listed(root, "dotfiles/reviewer/another/1")
     local out, code = revoke(root, home)
     testing.ok(code == 0, out)
-    testing.eq(out, "nothing was left to revoke for " .. NAME .. "\n")
+    testing.eq(out, "Nothing was left to revoke for " .. NAME .. ".\n")
     testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
     testing.eq(#token_files(dir), 0)
     root, home = minted()
@@ -397,7 +397,7 @@ testing.test("token-revoke-none exits 0 for an unknown or already revoked name",
     assert(fs.write(root .. "/revoke.json", '{"message":"no such child token"}'))
     out, code = revoke(root, home)
     testing.ok(code == 0, out)
-    testing.eq(out, "nothing was left to revoke for " .. NAME .. "\n")
+    testing.eq(out, "Nothing was left to revoke for " .. NAME .. ".\n")
     testing.eq(#token_files(home .. "/state/dev/tokens"), 0)
 end)
 

@@ -221,7 +221,7 @@ if dev_os.which("jj") then
         tick(root, home, id)
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 1, out)
-        testing.ok(out:find("no card moved", 1, true), out)
+        testing.ok(out:find("No card moved", 1, true), out)
         testing.ok(out:find("false", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
         testing.eq(#done_notes(select(2, state(home, id))), 0)

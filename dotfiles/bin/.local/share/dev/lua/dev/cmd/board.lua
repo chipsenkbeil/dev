@@ -32,6 +32,14 @@ local USAGE = guards.USAGE
 local FAILURE = guards.FAILURE
 local usage = guards.usage
 local failure = guards.failure
+
+local function sentence(text)
+    text = text:gsub("^%l", string.upper)
+    if not text:find("%.$") then
+        text = text .. "."
+    end
+    return text
+end
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
 local index_of = runner.index_of
@@ -56,17 +64,17 @@ local ID_ONLY_FLAG = "--id-only"
 local SWITCH = "switch"
 local MAX_WAIT_SECONDS = 86400
 local STRICT_FLAG = "--strict"
-local RESERVED_NOTE = "a note cannot begin with "
+local RESERVED_NOTE = "A note cannot begin with "
     .. board.CHECK_PREFIX
-    .. ", which dev board check writes, "
+    .. ", which `dev board check` writes, "
     .. board.REVIEW_PREFIX
-    .. ", which dev board review writes, or "
+    .. ", which `dev board review` writes, or "
     .. board.CLAIM_PREFIX
-    .. ", which taking a card writes"
+    .. ", which taking a card writes."
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
-local NO_BIN = "this board keeps no recycle bin, so dev cannot delete a card from it"
+local NO_BIN = "This board keeps no recycle bin. Dev cannot delete a card from it."
 local KIND_FLAG = "--kind"
 local BY_FLAG = "--by"
 local REV_FLAG = "--rev"
@@ -212,7 +220,7 @@ end
 
 ---Refusal messages for reserved card fields, by key
 local FIELD_REFUSALS = {
-    [board.CHECKS_FIELD] = "the board has no checks field, so run dev board init to add it",
+    [board.CHECKS_FIELD] = "The board has no checks field. Run `dev board init` to add it.",
 }
 
 ---Say why a card cannot take a custom field: the board does not define it.
@@ -227,7 +235,7 @@ local function named_field_problem(backend, key)
     end
     if not has then
         return FIELD_REFUSALS[key]
-            or "the board has no " .. key .. " field, so define it on the board first"
+            or "The board has no " .. key .. " field. Define it on the board first."
     end
 end
 
@@ -1099,7 +1107,12 @@ end
 local function claimed_view(backend, card, result)
     local view, err = card_view(backend, card)
     if not view then
-        verb.note("dev: took " .. card.id:sub(1, board.MIN_PREFIX) .. ", but " .. err.message)
+        verb.note(
+            "dev: Took card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. ", but its view failed. "
+                .. sentence(err.message)
+        )
         return result
     end
     result.output = result.output .. "\n\n" .. view
@@ -1220,9 +1233,9 @@ local function unnoted(backend, card, column)
         local short = card.id:sub(1, board.MIN_PREFIX)
         return failure(
             string.format(
-                "%s has no note from its claimant %s since the claim, "
-                    .. "so it cannot leave In Progress; "
-                    .. "note what you built, tried and learned first: dev board note %s TEXT",
+                "Card %s has no note from its claimant %s since the claim. "
+                    .. "It cannot leave In Progress. "
+                    .. "Note what you built, tried and learned first with `dev board note %s TEXT`.",
                 short,
                 card.claimant,
                 short
@@ -1306,13 +1319,14 @@ local function move_once(backend, args, opts)
     local children = kids and kids.total or 0
     local closing = to_done and board.children_closed(kids)
     if column == roles.ready and unready(card.color) then
-        local why = card.color == board.SIZES["3+"] and "is red, more than 3 Pomodori, so split it"
-            or "has no size"
+        local why = card.color == board.SIZES["3+"]
+                and " is red, more than 3 Pomodori. Split it, since a red card cannot enter Ready."
+            or " has no size. It cannot enter Ready."
         return failure(
-            card.id:sub(1, board.MIN_PREFIX)
-                .. " "
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
                 .. why
-                .. " and cannot enter Ready; size it with dev board size CARD 1, 2 or 3"
+                .. " Size it with `dev board size CARD 1`, `2` or `3`."
         )
     end
     local dropping_icebox = opts and opts.drop and card.column == roles.icebox
@@ -1329,12 +1343,13 @@ local function move_once(backend, args, opts)
         local missing = board.unplanned(facts)
         if #missing > 0 then
             return failure(
-                card.id:sub(1, board.MIN_PREFIX)
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
                     .. " is not planned and cannot enter "
                     .. column
-                    .. "; it lacks "
+                    .. ". It lacks "
                     .. table.concat(missing, ", ")
-                    .. "; fix it with dev board size, edit and outcome"
+                    .. ". Fix it with `dev board size`, `dev board edit` and `dev board outcome`."
             )
         end
     end
@@ -1352,10 +1367,11 @@ local function move_once(backend, args, opts)
         local missing = board.missing(card.description, #card.outcomes, children, epic)
         if #missing > 0 then
             return failure(
-                card.id:sub(1, board.MIN_PREFIX)
-                    .. " is not in card format v3 and cannot enter Ready; it lacks "
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " is not in card format v3 and cannot enter Ready. It lacks "
                     .. table.concat(missing, ", ")
-                    .. "; add outcomes with dev board outcome and fix the description with dev board edit, where a v1 Done when checklist also counts"
+                    .. ". Add outcomes with `dev board outcome` and fix the description with `dev board edit`, where a v1 Done when checklist also counts."
             )
         end
         if #card.checks == 0 and children == 0 then
@@ -1366,8 +1382,9 @@ local function move_once(backend, args, opts)
             return failure(
                 why
                     or (
-                        card.id:sub(1, board.MIN_PREFIX)
-                        .. " has no checks row and cannot enter Ready; give it one with dev board checks CARD CMD"
+                        "Card "
+                        .. card.id:sub(1, board.MIN_PREFIX)
+                        .. " has no checks row and cannot enter Ready. Give it one with `dev board checks CARD CMD`."
                     )
             )
         end
@@ -1375,7 +1392,8 @@ local function move_once(backend, args, opts)
             local unnamed = board.unnamed_checks(card.outcomes, card.checks)
             if #unnamed > 0 then
                 return failure(
-                    card.id:sub(1, board.MIN_PREFIX)
+                    "Card "
+                        .. card.id:sub(1, board.MIN_PREFIX)
                         .. " has an outcome that names no deciding check and cannot enter Ready. "
                         .. "These outcomes lack one: "
                         .. table.concat(unnamed, ", ")
@@ -1451,7 +1469,7 @@ local function move_once(backend, args, opts)
         claims.stop(card.id)
         local released, why = backend:release(card.id, held.fence)
         if not released then
-            verb.note("dev: moved, but the claim was not released: " .. why)
+            verb.note("dev: Moved, but the claim was not released. " .. sentence(why))
         end
     end
     local result = { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
@@ -1545,30 +1563,32 @@ function commands.order(backend, args)
             return failure(why)
         end
         if seen[card.id] then
-            return failure(card.id:sub(1, board.MIN_PREFIX) .. " is named twice")
+            return failure("Card " .. card.id:sub(1, board.MIN_PREFIX) .. " is named twice.")
         end
         if column and card.column ~= column then
             return failure(
-                "order takes cards of one column, but "
+                "Order takes cards of one column, but card "
                     .. card.id:sub(1, board.MIN_PREFIX)
                     .. " is in "
                     .. card.column
-                    .. " and "
+                    .. " and card "
                     .. named[1].id:sub(1, board.MIN_PREFIX)
                     .. " is in "
                     .. column
+                    .. "."
             )
         end
         if named[1] and card.lane ~= named[1].lane then
             return failure(
-                "order takes cards of one lane, but "
+                "Order takes cards of one lane, but card "
                     .. card.id:sub(1, board.MIN_PREFIX)
                     .. " is in lane "
                     .. (card.lane or "none")
-                    .. " and "
+                    .. " and card "
                     .. named[1].id:sub(1, board.MIN_PREFIX)
                     .. " is in lane "
                     .. (named[1].lane or "none")
+                    .. "."
             )
         end
         column = card.column
@@ -1639,10 +1659,11 @@ function commands.discard(backend, args)
     end
     if #missing > 0 then
         return failure(
-            card.id:sub(1, board.MIN_PREFIX)
-                .. " is not planned and cannot be discarded; it lacks "
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " is not planned and cannot be discarded. It lacks "
                 .. table.concat(missing, ", ")
-                .. "; fix it with dev board size and edit"
+                .. ". Fix it with `dev board size` and `dev board edit`."
         )
     end
     local steps = {}
@@ -1700,12 +1721,13 @@ function commands.size(backend, args)
     end
     if color == board.SIZES.unsized and card.column ~= backend.roles.icebox then
         return failure(
-            card.id:sub(1, board.MIN_PREFIX)
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
                 .. " is outside "
                 .. backend.roles.icebox
-                .. " and keeps a size; move it to "
+                .. " and keeps a size. Move it to "
                 .. backend.roles.icebox
-                .. " first"
+                .. " first."
         )
     end
     local held = claims.read(card.id)
@@ -1765,12 +1787,13 @@ function commands.label(backend, args)
             and card.column ~= backend.roles.icebox
         then
             return failure(
-                card.id:sub(1, board.MIN_PREFIX)
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
                     .. " is in "
                     .. card.column
                     .. ", and "
                     .. board.NEEDS_HUMAN
-                    .. " lives only in Blocked or Icebox; move it there first"
+                    .. " lives only in Blocked or Icebox. Move it there first."
             )
         end
         local denied = require("dev.standalone").label_problem(change.word)
@@ -1839,11 +1862,11 @@ function commands.ask(backend, args)
                 .. short
                 .. " already carries "
                 .. label
-                .. ", and ask adds that label itself. Run dev board label "
+                .. ". `dev board ask` adds that label itself. Run `dev board label "
                 .. short
                 .. " --remove "
                 .. label
-                .. " and then ask again."
+                .. "` and then ask again."
         )
     end
     local held = claims.read(card.id)
@@ -1855,7 +1878,7 @@ function commands.ask(backend, args)
         claims.stop(card.id)
         local released, why = backend:release(card.id, held.fence)
         if not released then
-            verb.note("dev: asked, but the claim was not released: " .. why)
+            verb.note("dev: Asked, but the claim was not released. " .. sentence(why))
         end
     end
     return { output = "asked " .. card.id:sub(1, board.MIN_PREFIX) }
@@ -1886,7 +1909,7 @@ function commands.answer(backend, args)
     local prefix = card.id:sub(1, board.MIN_PREFIX)
     if not index_of(card.labels, board.NEEDS_HUMAN) then
         return failure(
-            prefix .. " is not " .. board.NEEDS_HUMAN .. ", so nothing waits on an answer"
+            "Card " .. prefix .. " is not " .. board.NEEDS_HUMAN .. ". Nothing waits on an answer."
         )
     end
     local held = claims.read(card.id)
@@ -1925,7 +1948,11 @@ function commands.escalate(backend, args)
     local prefix = card.id:sub(1, board.MIN_PREFIX)
     if not index_of(card.labels, board.NEEDS_PLANNER) then
         return failure(
-            prefix .. " is not " .. board.NEEDS_PLANNER .. ", so there is nothing to escalate"
+            "Card "
+                .. prefix
+                .. " is not "
+                .. board.NEEDS_PLANNER
+                .. ". There is nothing to escalate."
         )
     end
     if board.reserved(why) then
@@ -1956,11 +1983,12 @@ local function outcome_number(word, count)
     if number > count then
         return nil,
             failure(
-                "the card has "
+                "The card has "
                     .. count
                     .. (count == 1 and " outcome" or " outcomes")
-                    .. ", so there is no outcome "
+                    .. ". There is no outcome "
                     .. number
+                    .. "."
             )
     end
     return number
@@ -1982,11 +2010,17 @@ local function convert_outcomes(backend, card, opts)
     local fence = opts.fence
     local prefix = card.id:sub(1, board.MIN_PREFIX)
     if #card.outcomes > 0 then
-        return { output = "outcome " .. prefix .. " left alone: it already has outcomes" }
+        return {
+            output = "Outcomes of card " .. prefix .. " are left alone. It already has outcomes.",
+        }
     end
     local items, rest = board.split_checklist(card.description)
     if not items then
-        return { output = "outcome " .. prefix .. " left alone: it has no Done when checklist" }
+        return {
+            output = "Outcomes of card "
+                .. prefix
+                .. " are left alone. It has no Done when checklist.",
+        }
     end
     local ticks = false
     for _, item in ipairs(items) do
@@ -2008,7 +2042,7 @@ local function convert_outcomes(backend, card, opts)
     end
     local fresh = board.resolve(cards, card.id)
     if not fresh or #fresh.outcomes ~= #items then
-        return failure("the outcomes were added but could not be read back to tick them")
+        return failure("The outcomes were added but could not be read back to tick them.")
     end
     for i, item in ipairs(items) do
         if item.done then
@@ -2150,7 +2184,7 @@ function commands.outcome(backend, args)
         local agent = os.getenv("DEV_AGENT") or ""
         if not guards.is_lead(agent) then
             return failure(
-                "only the lead deletes an outcome, and DEV_AGENT "
+                "Only the lead deletes an outcome. DEV_AGENT "
                     .. agent
                     .. " is not a lead name, whose role segment is lead. "
                     .. "Ask the lead, with the card, the number and the reason."
@@ -2223,14 +2257,15 @@ function commands.outcome(backend, args)
         if not ok then
             return unqueued(
                 failure(
-                    "outcome "
+                    "Outcome "
                         .. prefix
                         .. " "
                         .. number
-                        .. " was deleted but the note failed: "
-                        .. message
-                        .. ", and its text was: "
+                        .. " was deleted, but the note failed. "
+                        .. sentence(message)
+                        .. ' Its text was "'
                         .. deleted_text
+                        .. '".'
                 )
             )
         end
@@ -2258,16 +2293,17 @@ function commands.outcome(backend, args)
         if not ok then
             return unqueued(
                 failure(
-                    "outcome "
+                    "Outcome "
                         .. prefix
                         .. " "
                         .. number
-                        .. " was renamed but the note failed: "
-                        .. message
-                        .. ", and its old text was: "
+                        .. " was renamed, but the note failed. "
+                        .. sentence(message)
+                        .. ' Its old text was "'
                         .. old_text
-                        .. ", and its reason was: "
+                        .. '". Its reason was "'
                         .. reason
+                        .. '".'
                 )
             )
         end
@@ -2303,11 +2339,13 @@ function commands.edit(backend, args)
         local missing = board.backlog_missing(args[2])
         if #missing > 0 then
             return failure(
-                card.id:sub(1, board.MIN_PREFIX)
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
                     .. " is outside "
                     .. backend.roles.icebox
-                    .. " and keeps card format v3; that text lacks "
+                    .. " and keeps card format v3. That text lacks "
                     .. table.concat(missing, ", ")
+                    .. "."
             )
         end
     end
@@ -2445,18 +2483,20 @@ function commands.check(backend, args)
         return elsewhere
     end
     if #card.checks == 0 then
-        return failure(short .. " has no checks rows; set them with dev board checks")
+        return failure("Card " .. short .. " has no checks rows. Set them with `dev board checks`.")
     end
     local argvs = {}
     for i, run in ipairs(card.checks) do
         local argv, why = check.argv(run)
         if not argv then
-            return failure(short .. " checks row " .. i .. ": " .. why)
+            return failure(
+                "Row " .. i .. " of the checks of card " .. short .. " cannot run. " .. why
+            )
         end
         argvs[i] = argv
     end
     if not backend.root then
-        return failure("dev board check needs the project's root")
+        return failure("`dev board check` needs the project's root.")
     end
     local before, message = check.state(backend.root)
     if not before then
@@ -2522,20 +2562,20 @@ function commands.review(backend, args)
         if name == owner or claimed[name] then
             return failure(
                 string.format(
-                    "%s %s claimed by %s, so %s cannot review its own change",
+                    "Card %s %s claimed by %s. %s cannot review its own change.",
                     short,
                     name == owner and "is" or "was",
                     name,
                     name
                 )
-                    .. "; a reviewer other than "
+                    .. " A reviewer other than "
                     .. name
-                    .. " must record it"
+                    .. " must record it."
             )
         end
     end
     if not backend.root then
-        return failure("dev board review needs the project's root")
+        return failure("`dev board review` needs the project's root.")
     end
     local rev, message = review.resolve(backend.root, flags[REV_FLAG])
     if not rev then
@@ -2552,9 +2592,9 @@ function commands.review(backend, args)
     if not ok then
         return failure(
             string.format(
-                "the review was NOT recorded on %s (%s); the board may or may not hold it, so read dev board notes before repeating it",
+                "The review was NOT recorded on card %s. %s The board may or may not hold it. Read `dev board notes` before repeating it.",
                 short,
-                message
+                sentence(message)
             )
         )
     end
@@ -2585,7 +2625,7 @@ function M.clean_up(root, short)
         if deleted then
             add("Deleted " .. (kind == vcs.JJ and "bookmark " or "branch ") .. short)
         elseif deleted == nil then
-            add("Kept " .. short .. ": " .. why)
+            add("Kept " .. short .. ". " .. why)
         end
     end
     local main = root
@@ -2614,7 +2654,7 @@ function M.clean_up(root, short)
             delete_branch_from(main)
         end
     else
-        add("Kept the workspace: " .. result.message)
+        add("Kept the workspace. " .. sentence(result.message))
     end
     return "\n" .. table.concat(lines, "\n")
 end
@@ -2660,7 +2700,7 @@ function commands.land(backend, args)
         return held_back
     end
     if not backend.root then
-        return failure("dev board land needs the project's root")
+        return failure("`dev board land` needs the project's root.")
     end
     local list, message = backend:comments(card.id)
     if not list then
@@ -2671,8 +2711,9 @@ function commands.land(backend, args)
         local all = wiring.land_problems(backend, card, { name = name, comments = list })
         local kept = turn.held(backend, name, short)
         return failure(
-            short
-                .. " cannot land:\n  - "
+            "Card "
+                .. short
+                .. " cannot land for these reasons.\n  - "
                 .. table.concat(all, "\n  - ")
                 .. (kept and wiring.kept_note(short) or "")
         )
@@ -2761,16 +2802,17 @@ local function ship_runs(backend, args)
         return nil, usage("needs a release command after --, or checks rows under [board.release]")
     end
     if type(rows) ~= "table" or #rows == 0 then
-        return nil, failure("[board.release] checks must be a list of commands")
+        return nil, failure("The `[board.release]` checks must be a list of commands.")
     end
     local runs = {}
     for i, row in ipairs(rows) do
         if type(row) ~= "string" then
-            return nil, failure("[board.release] checks row " .. i .. " is not a string")
+            return nil, failure("Row " .. i .. " of the `[board.release]` checks is not a string.")
         end
         local argv, why = check.argv(row)
         if not argv then
-            return nil, failure("[board.release] checks row " .. i .. ": " .. why)
+            return nil,
+                failure("Row " .. i .. " of the `[board.release]` checks cannot run. " .. why)
         end
         runs[i] = { argv = argv, run = row }
     end
@@ -2796,7 +2838,7 @@ local function ship_ran(backend, runs)
         if rows[i].result ~= check.RESULT.PASS then
             return failure(
                 string.format(
-                    "the release command failed, so no card moved: %s\n%s",
+                    "The release command `%s` failed. No card moved.\n%s",
                     one.run,
                     table.concat(wiring.check_lines(rows), "\n")
                 )
@@ -2954,7 +2996,7 @@ function commands.ship(backend, args)
         return err
     end
     if not backend.root then
-        return failure("dev board ship needs the project's root")
+        return failure("`dev board ship` needs the project's root.")
     end
     local commit = land.fetched_commit(backend.root, rev)
     if not commit then
@@ -3057,7 +3099,7 @@ function commands.turn(backend, args)
         end
         if not hold then
             turn.leave(backend, name, short)
-            return failure(name .. " holds no landing turn for " .. short)
+            return failure("Agent " .. name .. " holds no landing turn for card " .. short .. ".")
         end
         local released, reason = turn.release(backend, hold)
         if not released then
@@ -3069,7 +3111,7 @@ function commands.turn(backend, args)
         return failure(message)
     end
     if card.done then
-        return failure(short .. " is done, so there is nothing to land")
+        return failure("Card " .. short .. " is done. There is nothing to land.")
     end
     if hold then
         local renewed, capped, kept
@@ -3246,10 +3288,13 @@ function commands.link(backend, args)
     if args[2] == board.LinkKind.PARENT and other.kind ~= board.Kind.EPIC then
         local prefix = other.id:sub(1, board.MIN_PREFIX)
         return failure(
-            shown
-                .. " is not an epic, make it one with dev board epic "
+            "Card "
+                .. shown
+                .. " is not an epic. Make it one with `dev board epic "
                 .. prefix
+                .. "`"
                 .. (shown == prefix and "" or " from the project that owns that board")
+                .. "."
         )
     end
     local ok, message = backend:link(card.id, args[2], other.id)
@@ -3338,8 +3383,9 @@ function commands.unlink(backend, args)
             }
         end
     end
-    local held = #list == 0 and "it holds no links" or "its links are\n" .. link_rows(list)
-    return failure("the card holds no " .. args[2] .. " link to " .. shown .. ", " .. held)
+    local held = #list == 0 and "It holds no links."
+        or "Its links are listed below.\n" .. link_rows(list)
+    return failure("The card holds no " .. args[2] .. " link to " .. shown .. ". " .. held)
 end
 
 function commands.attach(backend, args)
@@ -3348,7 +3394,7 @@ function commands.attach(backend, args)
     end
     for index = 2, #args do
         if not fs.is_file(args[index]) then
-            return failure(args[index] .. " is not a file")
+            return failure(args[index] .. " is not a file.")
         end
     end
     local card, err = find_card(backend, args[1])
@@ -3438,7 +3484,7 @@ function commands.detach(backend, args)
         end
     end
     if not match then
-        return failure("the card holds no attachment with the id " .. args[2])
+        return failure("The card holds no attachment with the id " .. args[2] .. ".")
     end
     local ok
     ok, message = backend:detach(card.id, match.id)
@@ -3466,7 +3512,7 @@ function commands.whoami(backend, args)
         return usage("unknown argument " .. args[1])
     end
     if not backend.whoami then
-        return failure("this board holds no credential, so there is nobody to show")
+        return failure("This board holds no credential. There is nobody to show.")
     end
     local who, message = backend:whoami()
     if not who then
@@ -3817,7 +3863,9 @@ function commands.stale(backend, args, now)
             else
                 local at = box.parse_time(stamp)
                 if not at then
-                    return failure("pomb sent a column time dev cannot read for " .. card.id)
+                    return failure(
+                        "Pomb sent a column time dev cannot read for card " .. card.id .. "."
+                    )
                 end
                 local days = math.floor((now - at) / box.SECONDS_PER_DAY)
                 if mine or days >= limit then
@@ -4042,11 +4090,7 @@ function commands.take(backend, args)
     if from then
         if card.claimant == nil then
             return failure(
-                "Card "
-                    .. short
-                    .. " has no claim, so "
-                    .. FROM_FLAG
-                    .. " has nothing to take over."
+                "Card " .. short .. " has no claim. " .. FROM_FLAG .. " has nothing to take over."
             )
         end
         if card.claimant ~= from then
@@ -4055,7 +4099,7 @@ function commands.take(backend, args)
             )
         end
         if from == (name or claimant()) then
-            return failure(from .. " already holds " .. short .. ".")
+            return failure(from .. " already holds card " .. short .. ".")
         end
     end
     local refused = runner.refusal(card, limit)
@@ -4098,7 +4142,10 @@ function commands.take(backend, args)
         )
         if not ok then
             verb.note(
-                "Took " .. short .. ", but the handoff note was not posted: " .. message .. "."
+                "Took card "
+                    .. short
+                    .. ", but the handoff note was not posted. "
+                    .. sentence(message)
             )
         end
     end
@@ -4115,7 +4162,7 @@ function commands.release(backend, args)
     end
     local held = claims.read(card.id)
     if not held then
-        return failure("no claim was taken for " .. args[1] .. " with dev board take")
+        return failure("No claim was taken for " .. args[1] .. " with `dev board take`.")
     end
     local ok, message = backend:release(card.id, held.fence)
     if not ok then
@@ -4199,7 +4246,7 @@ local function start_run(backend, name, orders)
     end
     local taken, fence = claim_card(backend, card, name)
     if not fence then
-        taken.message = taken.message .. "; dev board run claims the new run card again"
+        taken.message = sentence(taken.message) .. " `dev board run` claims the new run card again."
         return taken
     end
     local shown = M.run("show", { card.id }, backend)
@@ -4249,7 +4296,7 @@ local function resume_run(backend, opts)
 end
 
 function commands.run(backend, args)
-    local RUN_USAGE = "start one with dev board run --orders TEXT"
+    local RUN_USAGE = "Start one with `dev board run --orders TEXT`."
     local ending, rest = false, {}
     for _, arg in ipairs(args) do
         if arg == RUN_END_FLAG then
@@ -4295,15 +4342,15 @@ function commands.run(backend, args)
                 name
                     .. " already has the run card "
                     .. run.id:sub(1, board.MIN_PREFIX)
-                    .. "; close it with dev board run "
+                    .. ". Close it with `dev board run "
                     .. RUN_END_FLAG
-                    .. " first"
+                    .. "` first."
             )
         end
         return start_run(backend, name, flags[RUN_ORDERS_FLAG])
     end
     if not run then
-        return failure("no open run card for " .. name .. "; " .. RUN_USAGE)
+        return failure("There is no open run card for " .. name .. ". " .. RUN_USAGE)
     end
     if ending then
         local closed = M.run("discard", { run.id, "--reason", "the run ended" }, backend)
@@ -4532,7 +4579,7 @@ local function init_local(ctx, flags, admin)
     end
     print(
         changes == 0
-                and ("board " .. found.name .. " already follows the standard, nothing to change")
+                and ("Board " .. found.name .. " already follows the standard. Nothing changed.")
             or (
                 "board "
                 .. found.name
@@ -4612,7 +4659,7 @@ M.handlers["board init"] = function(ctx)
         print("wrote [board] to .dev/config.toml")
     end
     print(
-        changes == 0 and ("board " .. name .. " already follows the standard, nothing to change")
+        changes == 0 and ("Board " .. name .. " already follows the standard. Nothing changed.")
             or ("board " .. name .. ": " .. changes .. (changes == 1 and " change" or " changes"))
     )
     return 0
@@ -4729,7 +4776,7 @@ local function open_board(ctx)
         pending = queue.new(found.name)
         local waiting, why = pending:count()
         if not waiting then
-            stderr_line("dev: " .. why .. "; the queue is left in place")
+            stderr_line("dev: " .. why .. ". The queue is left in place.")
         elseif waiting > 0 then
             replay(backend, pending, stderr_news)
         end
@@ -4802,7 +4849,7 @@ M.handlers["board token revoke"] = function(ctx)
     end
     print(
         done.revoked and ("revoked the role token of " .. flags["--as"])
-            or ("nothing was left to revoke for " .. flags["--as"])
+            or ("Nothing was left to revoke for " .. flags["--as"] .. ".")
     )
     return 0
 end
@@ -4816,7 +4863,7 @@ M.handlers["board status"] = function(ctx)
         local pending = queue.new(found.name)
         local waiting, why = pending:count()
         if not waiting then
-            stderr_line("dev: " .. why .. "; the queue is left in place")
+            stderr_line("dev: " .. why .. ". The queue is left in place.")
         elseif waiting > 0 then
             local backend = M.open(found)
             if backend then
@@ -5154,7 +5201,7 @@ function M.wait(backend, args, opts)
             failures = 0
             limited = 0
             if type(reply.cursor) ~= "string" then
-                return flush(failure("pomb answered without a cursor"))
+                return flush(failure("Pomb answered without a cursor."))
             end
             local stage
             if WaitFor.STAGES[only] and #reply.events > 0 then
@@ -5268,10 +5315,10 @@ M.handlers["board sync"] = function(ctx)
     local pending = queue.new(found.name)
     local waiting, message = pending:count()
     if not waiting then
-        verb.die("dev: " .. message .. "; the queue is left in place")
+        verb.die("dev: " .. message .. ". The queue is left in place.")
     end
     if waiting == 0 then
-        print("nothing queued")
+        print("Nothing is queued.")
         return 0
     end
     local backend
@@ -5317,7 +5364,7 @@ local function ensure_board(ctx)
     end
     if not private_project(ctx.root) then
         verb.die(
-            "dev: this project has no board and is public or not known to be private, so ask the owner before it gets one; dev board init --name N makes it"
+            "dev: This project has no board and is public or not known to be private. Ask the owner before it gets one. `dev board init --name N` makes it."
         )
     end
     local name = fs.basename(ctx.root)
@@ -5413,9 +5460,9 @@ for sub in pairs(commands) do
                     if not ok then
                         verb.die(
                             "dev: "
-                                .. result.message
-                                .. "; and the change could not be queued: "
-                                .. why
+                                .. sentence(result.message)
+                                .. " The change could not be queued. "
+                                .. sentence(why)
                         )
                     end
                 end

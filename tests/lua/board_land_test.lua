@@ -486,7 +486,7 @@ testing.test("land refuses an agent name that is not one word", function()
     local id = new_card(project)
     local out, code = dev(project, { "board", "land", id }, { DEV_AGENT = "two words" })
     testing.eq(code, 2, out)
-    testing.ok(out:find("an agent name is one word of letters, digits and . - _ /", 1, true), out)
+    testing.ok(out:find("An agent name is one word of letters, digits and . - _ /", 1, true), out)
     testing.eq(landed_calls(project.log), "")
 end)
 
@@ -548,7 +548,7 @@ testing.test("land on a board with In Review and no Verify names dev board init"
     local result = land_as_lander(backend)
     testing.eq(result.code, 1)
     testing.ok(
-        result.message:find("run dev board init to move the board to the stage columns.", 1, true),
+        result.message:find("Run `dev board init` to move the board to the stage columns.", 1, true),
         result.message
     )
     testing.eq(backend.notes, {})
@@ -558,7 +558,7 @@ testing.test("land refuses a board with no project root", function()
     local backend = fake_backend(nil)
     local result = land_as_lander(backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, "dev board land needs the project's root")
+    testing.eq(result.message, "`dev board land` needs the project's root.")
     testing.eq(backend.notes, {})
 end)
 
@@ -974,7 +974,7 @@ if has_jj then
             })
             testing.eq(code, 1, out)
             testing.ok(
-                out:find("a reviewer other than dotfiles/builder must record it", 1, true),
+                out:find("A reviewer other than dotfiles/builder must record it", 1, true),
                 out
             )
         end
@@ -994,7 +994,7 @@ if has_jj then
             }, { DEV_AGENT = "dotfiles/builder" })
             testing.eq(code, 1, out)
             testing.ok(
-                out:find("a reviewer other than dotfiles/builder must record it", 1, true),
+                out:find("A reviewer other than dotfiles/builder must record it", 1, true),
                 out
             )
         end
@@ -1621,8 +1621,8 @@ if has_jj then
         trunk_moves(project, { ["shared.txt"] = "a\nb\nc\nd\ne\nf\nX\n" })
         rebase_onto_trunk(project.root)
         refused(project, id, {
-            "the working-copy commit has conflicts",
-            "run dev board check again",
+            "The working-copy commit has conflicts",
+            "run `dev board check` again",
         })
     end)
 
@@ -1969,8 +1969,8 @@ if has_jj then
         assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
         jj(project.root, "rebase", "-r", "@", "-d", first)
         refused(project, id, {
-            "the working-copy commit has conflicts",
-            "run dev board check again",
+            "The working-copy commit has conflicts",
+            "run `dev board check` again",
         })
     end)
 
@@ -2055,10 +2055,17 @@ if has_jj then
         local backend = fake_backend(project.root, { outcomes_unreadable = true })
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
-        testing.ok(result.message:find(CARD_PREFIX .. " cannot land:", 1, true), result.message)
         testing.ok(
             result.message:find(
-                "its outcomes cannot be read from Pomb, so they cannot be checked.",
+                "Card " .. CARD_PREFIX .. " cannot land for these reasons.",
+                1,
+                true
+            ),
+            result.message
+        )
+        testing.ok(
+            result.message:find(
+                "Its outcomes cannot be read from Pomb. They cannot be checked.",
                 1,
                 true
             ),
@@ -2074,7 +2081,7 @@ if has_jj then
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
         testing.ok(
-            result.message:find("cannot move to Shipped: its outcomes", 1, true),
+            result.message:find("cannot move to Shipped. Its outcomes", 1, true),
             result.message
         )
     end)
@@ -2088,7 +2095,7 @@ if has_jj then
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
         testing.ok(
-            result.message:find("cannot move to Shipped: 1 of 1 outcomes", 1, true),
+            result.message:find("cannot move to Shipped. 1 of 1 outcomes", 1, true),
             result.message
         )
     end)
@@ -2640,7 +2647,7 @@ if has_jj then
             DEV_WS_ROOT = base,
         })
         testing.eq(code, 0, out)
-        testing.ok(out:find("Kept the workspace: " .. path .. " holds changes", 1, true), out)
+        testing.ok(out:find("Kept the workspace. " .. path .. " holds changes", 1, true), out)
         testing.eq(out:find("Run the next command", 1, true), nil, out)
         testing.eq(fs.exists(path .. "/stray.txt"), true)
         testing.ok(
@@ -2676,7 +2683,7 @@ if has_jj then
         )
         testing.eq(code, 0, out)
         testing.ok(
-            out:find("Kept the workspace: " .. project.root .. " is outside " .. base, 1, true),
+            out:find("Kept the workspace. " .. project.root .. " is outside " .. base, 1, true),
             out
         )
         testing.eq(fs.exists(project.root), true)
@@ -2907,7 +2914,7 @@ testing.test("land.git.worktree.keeps.a.locked worktree and says why", function(
         git_at(main, "worktree", "lock", tree)
     end)
     local reason = path .. " is a locked git worktree. Run git worktree unlock first."
-    testing.ok(out:find("Kept the workspace: " .. reason, 1, true), out)
+    testing.ok(out:find("Kept the workspace. " .. reason, 1, true), out)
 end)
 
 testing.test("land.git.worktree.keeps.one.beside.a.prunable sibling and says why", function()
@@ -2917,8 +2924,8 @@ testing.test("land.git.worktree.keeps.one.beside.a.prunable sibling and says why
         git_at(main, "worktree", "add", "-q", "-b", "sibling", sibling, "work")
         assert(fs.remove(sibling, { recursive = true }))
     end)
-    local reason = "git worktree prune would also drop the record of "
+    local reason = "Git worktree prune would also drop the record of "
         .. sibling
         .. ", which git marks prunable. Run git worktree prune first."
-    testing.ok(out:find("Kept the workspace: " .. reason, 1, true), out)
+    testing.ok(out:find("Kept the workspace. " .. reason, 1, true), out)
 end)

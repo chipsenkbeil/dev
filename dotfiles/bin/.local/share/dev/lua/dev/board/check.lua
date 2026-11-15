@@ -180,7 +180,7 @@ local function jj_state(root)
     end
     if conflict == "conflict" then
         return nil,
-            "the working-copy commit has conflicts, so its checks mean nothing; resolve them, then run dev board check again"
+            "The working-copy commit has conflicts. Its checks mean nothing. Resolve them, then run `dev board check` again."
     end
     return { commit = commit, change = change }
 end

@@ -584,7 +584,7 @@ testing.test(
         local out, code = dev(root, home, { "board", "note", id, "dev-check:", "commit=x" })
         testing.eq(code, 1, out)
         testing.ok(
-            out:find("dev-check:", 1, true) and out:find("dev board check writes", 1, true),
+            out:find("dev-check:", 1, true) and out:find("`dev board check` writes", 1, true),
             out
         )
         testing.eq(#comments(home), 0)

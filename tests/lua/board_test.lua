@@ -1125,7 +1125,7 @@ testing.test("move to Done refuses a card with unticked outcomes and names them"
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "Card 11111111 cannot move to Done: 2 of 3 outcomes are unticked (2. B works, 3. C works). "
+        "Card 11111111 cannot move to Done. 2 of 3 outcomes are unticked (2. B works, 3. C works). "
             .. "The reviewer ticks them with `dev board outcome CARD --tick N --as NAME`, "
             .. "or `dev board discard CARD` drops it."
     )
@@ -1172,7 +1172,7 @@ testing.test("an unsized umbrella refusal names the size and not outcomes", func
     backend.kin = { children = card.epic }
     local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("it lacks a size;", 1, true), result.message)
+    testing.ok(result.message:find("It lacks a size.", 1, true), result.message)
     testing.ok(not result.message:find("outcomes", 1, true), result.message)
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
@@ -1186,7 +1186,7 @@ testing.test("an unsized card with no children still names size and outcomes", f
     local backend = fake({ card })
     local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("it lacks a size, Done when outcomes;", 1, true), result.message)
+    testing.ok(result.message:find("It lacks a size, Done when outcomes.", 1, true), result.message)
     testing.eq(#backend.calls, 0)
 end)
 
@@ -1393,7 +1393,7 @@ testing.test("move to Done refuses outcomes dev cannot read", function()
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
-        "11111111 cannot move to Done: its outcomes cannot be read from Pomb, so they cannot be checked."
+        "Card 11111111 cannot move to Done. Its outcomes cannot be read from Pomb. They cannot be checked."
     )
     testing.eq(#backend.calls, 0)
 end)
@@ -1414,9 +1414,9 @@ testing.test("move to Done names a renamed Done column for unreadable outcomes",
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "11111111 cannot move to "
+        "Card 11111111 cannot move to "
             .. SHIPPED
-            .. ": its outcomes cannot be read from Pomb, so they cannot be checked."
+            .. ". Its outcomes cannot be read from Pomb. They cannot be checked."
     )
     testing.eq(#backend.calls, 0)
 end)
@@ -1428,7 +1428,7 @@ testing.test("move to Done names a renamed Done column for unticked outcomes", f
     local result = cmd_board.run("move", { "11111111-a", SHIPPED }, backend)
     testing.eq(result.code, 1)
     testing.ok(
-        result.message:find("cannot move to " .. SHIPPED .. ": 1 of 1 outcomes", 1, true),
+        result.message:find("cannot move to " .. SHIPPED .. ". 1 of 1 outcomes", 1, true),
         result.message
     )
     testing.eq(#backend.calls, 0)
@@ -1442,7 +1442,7 @@ testing.test("move to Ready refuses outcomes dev cannot read", function()
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "11111111 cannot move to Ready: its outcomes cannot be read from Pomb, so they cannot be checked."
+        "Card 11111111 cannot move to Ready. Its outcomes cannot be read from Pomb. They cannot be checked."
     )
 end)
 
@@ -1650,7 +1650,7 @@ testing.test("link to BOARD:CARD resolves the card on the other board", function
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
-        "ci:dddddddd is not an epic, make it one with dev board epic dddddddd from the project that owns that board"
+        "Card ci:dddddddd is not an epic. Make it one with `dev board epic dddddddd` from the project that owns that board."
     )
     result = cmd_board.run("link", { "11111111-a", "related", "nope:dddddddd" }, backend)
     testing.eq(result.code, 1)
@@ -1701,13 +1701,13 @@ testing.test(
         testing.eq(result.code, 1)
         testing.eq(
             result.message,
-            "the card holds no blocks link to cccccccc, its links are\n"
+            "The card holds no blocks link to cccccccc. Its links are listed below.\n"
                 .. "blocked_by  cccccccc  -\nrelated     11111111  -"
         )
         testing.eq(backend.calls[3], { "links", ID_A })
         backend.held = {}
         result = cmd_board.run("unlink", { "11111111-a", "related", "cccccccc" }, backend)
-        testing.eq(result.message, "the card holds no related link to cccccccc, it holds no links")
+        testing.eq(result.message, "The card holds no related link to cccccccc. It holds no links.")
         testing.eq(cmd_board.run("unlink", { "11111111-a", "blocked_by" }, backend).code, 2)
         testing.eq(
             cmd_board.run("unlink", { "11111111-a", "depends", "cccccccc" }, backend).code,
@@ -1734,7 +1734,10 @@ testing.test("link refuses a parent that is not an epic before any request", fun
     local backend = fake(sample())
     local result = cmd_board.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, "11111111 is not an epic, make it one with dev board epic 11111111")
+    testing.eq(
+        result.message,
+        "Card 11111111 is not an epic. Make it one with `dev board epic 11111111`."
+    )
     testing.eq(backend.calls[1], nil)
     result = cmd_board.run("link", { "cccccccc", "related", "11111111-a" }, backend)
     testing.eq(result.output, "linked cccccccc related 11111111")
@@ -2914,7 +2917,7 @@ testing.test("outcome refuses an N past the last outcome and a bad N", function(
     local backend = fake({ card })
     local result = cmd_board.run("outcome", { "cccccccc", "--tick", "3" }, backend)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("the card has 2 outcomes, so there is no outcome 3", 1, true))
+    testing.ok(result.message:find("The card has 2 outcomes. There is no outcome 3.", 1, true))
     testing.eq(
         cmd_board.run("outcome", { "cccccccc", "--rename", "9", "x", "--reason", "y" }, backend).code,
         1
@@ -2969,7 +2972,7 @@ testing.test("outcome --rename names the old text and the reason when the note f
         cmd_board.run("outcome", { "cccccccc", "--rename", "2", "New", "--reason", "why" }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
-    testing.ok(result.message:find("was renamed but the note failed", 1, true), result.message)
+    testing.ok(result.message:find("was renamed, but the note failed", 1, true), result.message)
     testing.ok(
         result.message:find(old, 1, true) and result.message:find("why", 1, true),
         result.message
@@ -3070,7 +3073,7 @@ testing.test("outcome delete refuses a name that is not a lead", function()
                 cmd_board.run("outcome", { "cccccccc", "--delete", "1", "--reason", "x" }, backend)
             testing.eq(result.code, 1)
             testing.ok(
-                result.message:find("only the lead deletes an outcome", 1, true),
+                result.message:find("Only the lead deletes an outcome", 1, true),
                 result.message
             )
             testing.ok(result.message:find(name, 1, true), result.message)
@@ -3408,14 +3411,14 @@ testing.test(
             testing.eq(result.code, 1)
             testing.ok(
                 result.message:find(
-                    "is claimed by project-run/a, so project-run/a cannot review its own change",
+                    "is claimed by project-run/a. project-run/a cannot review its own change",
                     1,
                     true
                 ),
                 result.message
             )
             testing.ok(
-                result.message:find("; a reviewer other than project-run/a must record it", 1, true),
+                result.message:find(" A reviewer other than project-run/a must record it", 1, true),
                 result.message
             )
         end
@@ -5617,7 +5620,7 @@ testing.test("outcome past the last subtask exits 1 and changes nothing", functi
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
     testing.eq(code, 1)
-    testing.ok(out:find("the card has 2 outcomes, so there is no outcome 3", 1, true), out)
+    testing.ok(out:find("The card has 2 outcomes. There is no outcome 3.", 1, true), out)
     testing.eq(read(root, "calls"):find("-X PATCH", 1, true), nil)
 end)
 
@@ -6777,7 +6780,11 @@ testing.test(
         out, code = dev(root, home, { "board", "unlink", "11111111-a", "related", "cccccccc" })
         testing.eq(code, 1, out)
         testing.ok(
-            out:find("the card holds no related link to cccccccc, its links are", 1, true),
+            out:find(
+                "The card holds no related link to cccccccc. Its links are listed below.",
+                1,
+                true
+            ),
             out
         )
         local _, deletes_after = read(root, "calls"):gsub("%-X DELETE", "")
@@ -7235,7 +7242,7 @@ testing.test("release without a taken claim is a plain error", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 1)
-    testing.ok(out:find("no claim was taken", 1, true), out)
+    testing.ok(out:find("No claim was taken", 1, true), out)
     testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
 end)
 
@@ -7348,7 +7355,7 @@ testing.test("take keeps the claim and warns when the card cannot be read after 
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("took 11111111, fence 7", 1, true), out)
-    testing.ok(out:find("dev: took 11111111, but ", 1, true), out)
+    testing.ok(out:find("dev: Took card 11111111, but ", 1, true), out)
     testing.eq(fs.exists(state_file(home)), true)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
@@ -9295,7 +9302,7 @@ testing.test(
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find(
-                "run dev board init to move the board to the stage columns.",
+                "Run `dev board init` to move the board to the stage columns.",
                 1,
                 true
             ),
@@ -9304,7 +9311,7 @@ testing.test(
         testing.ok(result.message:find("no Review column", 1, true), result.message)
         result = cmd_board.run("move", { "cccccccc", "In Review" }, backend)
         testing.eq(result.code, 1)
-        testing.ok(result.message:find("run dev board init to move", 1, true), result.message)
+        testing.ok(result.message:find("Run `dev board init` to move", 1, true), result.message)
     end
 )
 
@@ -9324,7 +9331,7 @@ testing.test("wait on a board with In Review and no Review names dev board init"
     local result = cmd_board.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
     testing.eq(result.code, 1)
     testing.ok(
-        result.message:find("run dev board init to move the board to the stage columns.", 1, true),
+        result.message:find("Run `dev board init` to move the board to the stage columns.", 1, true),
         result.message
     )
 end)
@@ -9461,7 +9468,7 @@ testing.test(
         testing.ok(out:find("lacks the attachments.delete permission", 1, true), out)
         out, code = dev(root, home, { "board", "detach", "11111111-a", "ffff" })
         testing.eq(code, 1)
-        testing.ok(out:find("holds no attachment with the id ffff", 1, true), out)
+        testing.ok(out:find("holds no attachment with the id ffff.", 1, true), out)
     end
 )
 

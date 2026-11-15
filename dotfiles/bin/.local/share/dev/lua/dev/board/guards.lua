@@ -48,7 +48,7 @@ local function agent_name(flag)
     if #name > CLAIMANT_CHARS or not name:find("^[%w._/-]+$") then
         return nil,
             usage(
-                "an agent name is one word of letters, digits and . - _ / up to "
+                "An agent name is one word of letters, digits and . - _ / up to "
                     .. CLAIMANT_CHARS
                     .. " characters."
             )
@@ -76,9 +76,9 @@ local function stage_refusal(backend)
     for _, name in ipairs({ roles.review, roles.verify, roles.release }) do
         if not has[name:lower()] then
             return failure(
-                "the board has an In Review column and no "
+                "The board has an In Review column and no "
                     .. name
-                    .. " column, so run dev board init to move the board to the stage columns."
+                    .. " column. Run `dev board init` to move the board to the stage columns."
             )
         end
     end
@@ -197,10 +197,11 @@ end
 local function unreadable_refusal(card, column)
     if card.outcomes_unreadable then
         return failure(
-            card.id:sub(1, board.MIN_PREFIX)
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
                 .. " cannot move to "
                 .. column
-                .. ": its outcomes cannot be read from Pomb, so they cannot be checked."
+                .. ". Its outcomes cannot be read from Pomb. They cannot be checked."
         )
     end
 end
@@ -227,7 +228,7 @@ local function done_refusal(card, column)
     return unqueued(
         failure(
             string.format(
-                "Card %s cannot move to %s: %d of %d outcomes are unticked (%s). "
+                "Card %s cannot move to %s. %d of %d outcomes are unticked (%s). "
                     .. "The reviewer ticks them with `dev board outcome CARD --tick N --as NAME`, "
                     .. "or `dev board discard CARD` drops it.",
                 id,
