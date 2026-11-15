@@ -175,7 +175,7 @@ testing.test("land reads a short check record and refuses rows that changed", fu
     testing.eq(land.checks_problem({ pass }, STATE, rows), nil)
     local problem = land.checks_problem({ pass }, STATE, { "dev lint", "dev other" })
     testing.ok(problem:find("checks rows changed", 1, true), problem)
-    testing.ok(problem:find("Run dev board check again", 1, true), problem)
+    testing.ok(problem:find("Run `dev board check` again", 1, true), problem)
     local swapped = land.checks_problem({ pass }, STATE, { "dev test", "dev lint" })
     testing.ok(swapped:find("checks rows changed", 1, true), swapped)
 end)
@@ -186,7 +186,7 @@ testing.test("an old check record is refused with a rerun sentence", function()
     }
     local problem = land.checks_problem({ old }, STATE, { "dev lint" })
     testing.ok(problem:find("could not be read", 1, true), problem)
-    testing.ok(problem:find("run dev board check again", 1, true), problem)
+    testing.ok(problem:find("Run `dev board check` again.", 1, true), problem)
 end)
 
 testing.test("carry reads a short check record as the commit's own and does not carry", function()
@@ -222,7 +222,7 @@ testing.test("missing_reviews wants a code and a style review of the change", fu
     )
     local missing = land.missing_reviews({ reviewed("code", COMMIT) }, STATE)
     testing.eq(#missing, 1)
-    testing.ok(missing[1]:find("no style review", 1, true), missing[1])
+    testing.ok(missing[1]:find("No style review", 1, true), missing[1])
     testing.eq(#land.missing_reviews({}, STATE), 2)
     testing.eq(
         #land.missing_reviews(
@@ -275,20 +275,25 @@ testing.test("checks_problem counts only the newest passing run at the commit", 
     local rows = { "dev lint", "dev test" }
     local pass = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "pass - dev test" })
     testing.eq(land.checks_problem({ pass }, STATE, rows), nil)
-    testing.ok(land.checks_problem({ pass }, STATE, {}):find("no checks rows", 1, true))
-    testing.ok(land.checks_problem({}, STATE, rows):find("no run of dev board check", 1, true))
+    testing.ok(
+        land.checks_problem({ pass }, STATE, {}):find("The card has no checks rows", 1, true)
+    )
+    testing.ok(land.checks_problem({}, STATE, rows):find("No run of `dev board check`", 1, true))
     testing.ok(
         land.checks_problem(
             { checked(OTHER, check.MODE.RUN, { "pass - a", "pass - b" }) },
             STATE,
             rows
         )
-            :find("no run of dev board check", 1, true)
+            :find("No run of `dev board check`", 1, true)
     )
     local expect = checked(COMMIT, check.MODE.EXPECT_FAIL, { "fail - dev lint", "fail - dev test" })
     testing.ok(land.checks_problem({ expect }, STATE, rows):find("expect-fail", 1, true))
     local failed = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "fail - dev test" })
-    testing.ok(land.checks_problem({ pass, failed }, STATE, rows):find("2 fail dev test", 1, true))
+    testing.ok(
+        land.checks_problem({ pass, failed }, STATE, rows)
+            :find("Row 2, `dev test`, ended with fail.", 1, true)
+    )
     testing.eq(land.checks_problem({ failed, pass }, STATE, rows), nil)
     testing.ok(land.checks_problem({ pass }, STATE, { "dev lint" }):find("has 2 rows", 1, true))
     testing.ok(
@@ -311,11 +316,11 @@ testing.test("checks_problem says a record it cannot read is unreadable, not mis
     local problem = land.checks_problem({ unreadable }, STATE, rows)
     testing.ok(problem:find("could not be read", 1, true), problem)
     testing.ok(problem:find(land.short(COMMIT), 1, true), problem)
-    testing.ok(problem:find("run dev board check again", 1, true), problem)
+    testing.ok(problem:find("Run `dev board check` again.", 1, true), problem)
     testing.eq(check.unreadable(unreadable.body), COMMIT)
     local other = checked(OTHER, check.MODE.RUN, { "pass dev lint", "pass dev test" })
     testing.ok(
-        land.checks_problem({ other }, STATE, rows):find("no run of dev board check", 1, true)
+        land.checks_problem({ other }, STATE, rows):find("No run of `dev board check`", 1, true)
     )
     local pass = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "pass - dev test" })
     testing.eq(land.checks_problem({ unreadable, pass }, STATE, rows), nil)
@@ -339,7 +344,7 @@ testing.test("an unreadable expect-fail record never refuses a landing", functio
         land.checks_problem({ pass, unreadable }, STATE, rows):find("could not be read", 1, true)
     )
     testing.ok(
-        land.checks_problem({ skipped }, STATE, rows):find("no run of dev board check", 1, true)
+        land.checks_problem({ skipped }, STATE, rows):find("No run of `dev board check`", 1, true)
     )
 end)
 
@@ -676,7 +681,7 @@ if has_jj then
         refused(
             project,
             id,
-            { "jj could not read the workspace of" },
+            { "The `jj` command could not read the workspace of" },
             { LOG_FAIL_AT = "workspace" }
         )
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
@@ -926,9 +931,9 @@ if has_jj then
         refused(project, id, {
             "it is in Backlog, and only a card in Verify lands",
             "1 of 1 outcomes are unticked",
-            "no code review of change",
-            "no style review of change",
-            "no run of dev board check",
+            "No code review of change",
+            "No style review of change",
+            "No run of `dev board check`",
         })
     end)
 
@@ -1031,13 +1036,13 @@ if has_jj then
         local project = jj_project()
         local id = verified_card(project)
         assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
-        refused(project, id, { "no run of dev board check is recorded at commit" })
+        refused(project, id, { "No run of `dev board check` is recorded at commit" })
         must(dev(project, { "board", "checks", id, "false" }))
         local _, code = dev(project, { "board", "check", id })
         testing.eq(code, 1)
         refused(project, id, {
             "earlier commit than",
-            "did not pass every row (1 fail false)",
+            "did not pass every row. Row 1, `false`, ended with fail.",
         })
     end)
 
@@ -1049,7 +1054,7 @@ if has_jj then
         approve_reviews(project, id)
         must(dev(project, { "board", "check", id, "--expect-fail" }))
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        refused(project, id, { "no run of dev board check is recorded", "expect-fail" })
+        refused(project, id, { "No run of `dev board check` is recorded", "expect-fail" })
     end)
 
     testing.test("a change after the reviews needs a recheck at the landing commit", function()
@@ -1081,7 +1086,7 @@ if has_jj then
         push_trunk(project)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
-        testing.eq(out:find("trunk has moved", 1, true), nil, out)
+        testing.eq(out:find("Trunk has moved", 1, true), nil, out)
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         testing.eq(turn_holder(project.home), nil)
     end)
@@ -1253,7 +1258,7 @@ if has_jj then
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
-        testing.ok(out:find("no code review", 1, true), out)
+        testing.ok(out:find("No code review", 1, true), out)
         testing.ok(
             fs.read(project.home .. "/state/dev/boards/mine.json")
                 :find("dev-turn: holder=dotfiles/lander", 1, true)
@@ -1397,7 +1402,7 @@ if has_jj then
                 { LAND_TRUNK = LAND_TRUNK_KEEP }
             )
             testing.eq(code, 0, out)
-            testing.ok(not out:find("trunk has moved", 1, true), out)
+            testing.ok(not out:find("Trunk has moved", 1, true), out)
             testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
             testing.eq(turn_holder(project.home), nil)
         end
@@ -1502,7 +1507,7 @@ if has_jj then
         rebase_onto_trunk(project.root)
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
-        testing.ok(out:find("recheck row failed and nothing was pushed", 1, true), out)
+        testing.ok(out:find("recheck row failed. Nothing was pushed.", 1, true), out)
         testing.ok(out:find("fail - false", 1, true), out)
         testing.eq(fs.read(project.log), nil)
         testing.eq(column_of(project.home), board.DEFAULT_NAMES.verify)
@@ -1577,7 +1582,7 @@ if has_jj then
         trunk_moves(project, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(project.root)
         dev(project, { "board", "check", id, "--expect-fail" })
-        refused(project, id, { "no run of dev board check is recorded" })
+        refused(project, id, { "No run of `dev board check` is recorded" })
     end)
 
     testing.test("land does not carry over an unreadable record at the rebased commit", function()
@@ -1595,7 +1600,7 @@ if has_jj then
             end
         end
         restore()
-        refused(project, id, { "could not be read", "run dev board check again" })
+        refused(project, id, { "could not be read", "Run `dev board check` again." })
     end)
 
     testing.test("clean rebase carries the check", function()
@@ -1641,7 +1646,7 @@ if has_jj then
             rebase_onto_trunk(project.root)
             local out = refused(project, id, { "1 of 1 outcomes are unticked" })
             testing.eq(out:find("review of", 1, true), nil, out)
-            testing.eq(out:find("no run of dev board check", 1, true), nil, out)
+            testing.eq(out:find("No run of `dev board check`", 1, true), nil, out)
         end
     )
 
@@ -1653,7 +1658,7 @@ if has_jj then
         rebase_onto_trunk(project.root)
         local out = refused(project, id, { "only a card in" })
         testing.eq(out:find("earlier commit", 1, true), nil, out)
-        testing.eq(out:find("no run of dev board check", 1, true), nil, out)
+        testing.eq(out:find("No run of `dev board check`", 1, true), nil, out)
     end)
 
     testing.test("land carries over a rebase past a changed former shared path", function()
@@ -1674,7 +1679,7 @@ if has_jj then
         refused(
             project,
             id,
-            { "jj could not compare the checked commit" },
+            { "The `jj` command could not compare the checked commit" },
             { INTERDIFF_FAIL = "1" }
         )
     end)
@@ -1719,7 +1724,7 @@ if has_jj then
         restore()
         local before = #comments(project.home, id)
         refused(project, id, {
-            "the checked commit " .. trunk:sub(1, 12) .. " is not of change",
+            "The checked commit " .. trunk:sub(1, 12) .. " is not of change",
         })
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
         testing.eq(#comments(project.home, id), before)
@@ -1820,7 +1825,7 @@ if has_jj then
             must(dev(project, { "board", "check", id }))
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
             rebase_onto_trunk(project.root)
-            local out = refused(project, id, { "no run of dev board check" })
+            local out = refused(project, id, { "No run of `dev board check`" })
             testing.eq(out:find("carried over", 1, true), nil, out)
         end
     )
@@ -1844,7 +1849,7 @@ if has_jj then
         local out = refused(
             project,
             id,
-            { "jj could not compare the checked commit " .. newer:sub(1, 12) },
+            { "The `jj` command could not compare the checked commit " .. newer:sub(1, 12) },
             { INTERDIFF_FAIL_AT = newer }
         )
         testing.eq(out:find(older:sub(1, 12), 1, true), nil, out)
@@ -1861,7 +1866,7 @@ if has_jj then
             local out = refused(
                 project,
                 id,
-                { "jj could not read the checked commit " .. newer:sub(1, 12) },
+                { "The `jj` command could not read the checked commit " .. newer:sub(1, 12) },
                 { LOG_FAIL_AT = newer }
             )
             testing.eq(out:find(older:sub(1, 12), 1, true), nil, out)
@@ -1872,12 +1877,12 @@ if has_jj then
         {
             name = "parent",
             switch = "PARENT_FAIL_AT",
-            message = "jj could not read the parent of the checked commit ",
+            message = "The `jj` command could not read the parent of the checked commit ",
         },
         {
             name = "ancestor",
             switch = "ANCESTOR_FAIL_AT",
-            message = "jj could not read the ancestor of the checked commit ",
+            message = "The `jj` command could not read the ancestor of the checked commit ",
         },
     }
     for _, case in ipairs(failed_reads) do
@@ -1902,7 +1907,7 @@ if has_jj then
         refused(
             project,
             id,
-            { "jj could not compare the checked commit " .. older:sub(1, 12) },
+            { "The `jj` command could not compare the checked commit " .. older:sub(1, 12) },
             { INTERDIFF_FAIL_AT = older }
         )
     end)
@@ -1926,7 +1931,7 @@ if has_jj then
             local copy =
                 jj(project.root, "log", "-r", "children(@-) ~ @", "--no-graph", "-T", "change_id")
             jj(project.root, "edit", copy)
-            local out = refused(project, id, { "no code review of change" })
+            local out = refused(project, id, { "No code review of change" })
             testing.eq(out:find("carried over", 1, true), nil, out)
         end
     )
@@ -1956,7 +1961,7 @@ if has_jj then
             must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
             rebase_onto_trunk(project.root)
-            refused(project, id, { "no style review of change" })
+            refused(project, id, { "No style review of change" })
         end
     )
 
@@ -1986,7 +1991,7 @@ if has_jj then
         local project = jj_project()
         local id = verified_card(project)
         jj(project.root, "git", "remote", "set-url", "origin", project.root .. "/missing-remote")
-        refused(project, id, { "trunk cannot be compared", "the fetch from origin failed" })
+        refused(project, id, { "Trunk cannot be compared", "The fetch from origin failed" })
     end)
 
     testing.test("land retries a refused ssh signature once", function()
@@ -2007,12 +2012,11 @@ if has_jj then
         local project = jj_project()
         local id = review_ready(project)
         local count = support.tempdir() .. "/count.log"
-        refused(
-            project,
-            id,
-            { "the fetch from origin failed", "Touch the hardware key", "run land again." },
-            { FETCH_REFUSALS = "5", FETCH_COUNT = count }
-        )
+        refused(project, id, {
+            "The fetch from origin failed",
+            "Touch the hardware key",
+            "run `dev board land` again.",
+        }, { FETCH_REFUSALS = "5", FETCH_COUNT = count })
         testing.eq(fs.read(count), "2\n")
     end)
 
@@ -2020,9 +2024,9 @@ if has_jj then
         local project = jj_project()
         local id = review_ready(project)
         refused(project, id, {
-            "the fetch from origin failed",
+            "The fetch from origin failed",
             "The fetch ran past 1 seconds",
-            "touch it and run land again.",
+            "Touch it and run `dev board land` again.",
         }, { FETCH_HANG = "1", DEV_LAND_FETCH_SECONDS = "1" })
     end)
 
@@ -2103,9 +2107,14 @@ if has_jj then
     testing.test("land refuses a working copy that jj cannot read", function()
         local project = jj_project()
         local id = verified_card(project)
-        local out = refused(project, id, { "jj could not read the working-copy commit of" }, {
-            SHAPE_FAIL = "1",
-        })
+        local out = refused(
+            project,
+            id,
+            { "The `jj` command could not read the working-copy commit of" },
+            {
+                SHAPE_FAIL = "1",
+            }
+        )
         testing.ok(out:find(project.root, 1, true), out)
     end)
 
@@ -2114,7 +2123,7 @@ if has_jj then
         local id = verified_card(project)
         push_trunk(project)
         local FAIL_AT = { REBASE = "rebase" }
-        refused(project, id, { "the rebase onto trunk failed" }, { LOG_FAIL_AT = FAIL_AT.REBASE })
+        refused(project, id, { "The rebase onto trunk failed" }, { LOG_FAIL_AT = FAIL_AT.REBASE })
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
         testing.eq(turn_holder(project.home), nil)
     end)
@@ -2123,7 +2132,7 @@ if has_jj then
         local project = jj_project()
         local id = verified_card(project)
         refused(project, id, {
-            "trunk cannot be compared: the remote of record gerrit is not a remote of this project",
+            "Trunk cannot be compared. The remote of record gerrit is not a remote of this project",
         }, { JJ_FORGE = "gerrit" })
     end)
 
@@ -2301,7 +2310,7 @@ if has_jj then
         must(dev(project, { "board", "turn", id }))
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
-        testing.ok(out:find("no code review", 1, true), out)
+        testing.ok(out:find("No code review", 1, true), out)
         testing.ok(out:find("turn you hold for " .. id .. " stays held", 1, true), out)
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
         out, code = dev(project, { "board", "turn", id, "--release" })
@@ -2530,8 +2539,8 @@ if has_jj then
         trunk_moves(project, { ["lib/extra.txt"] = "extra\n" })
         rebased_and_checked(project, id)
         refused(project, id, {
-            "the code review is of an earlier commit",
-            "the style review is of an earlier commit",
+            "The code review is of an earlier commit",
+            "The style review is of an earlier commit",
         })
     end)
 
@@ -2553,7 +2562,7 @@ if has_jj then
         }))
         trunk_moves(project, { ["lib/extra.txt"] = "extra\n" })
         rebased_and_checked(project, id)
-        refused(project, id, { "the code review by rev2", "says needs-work" })
+        refused(project, id, { "The code review by rev2", "says needs-work" })
     end)
 
     local function central_project(extra)
@@ -2859,7 +2868,7 @@ testing.test("land.git.refused names a failed fetch or rebase and keeps the card
     git_at(project.root, "remote", "set-url", "origin", project.bare .. "/missing")
     out, code = git_dev(project, { "board", "land", id })
     testing.eq(code, 1, out)
-    testing.ok(out:find("the fetch from origin failed", 1, true), out)
+    testing.ok(out:find("The fetch from origin failed", 1, true), out)
     testing.eq(git_remote_master(project), trunk)
     testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
 end)

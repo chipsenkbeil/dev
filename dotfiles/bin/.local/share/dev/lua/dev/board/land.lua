@@ -29,6 +29,21 @@ function M.short(commit)
     return commit:sub(1, COMMIT_CHARS)
 end
 
+local function sentence(text)
+    text = text:gsub("^%l", string.upper)
+    if not text:find("%.$") then
+        text = text .. "."
+    end
+    return text
+end
+
+local function tool_name(root)
+    if vcs.backend(root) == vcs.GIT then
+        return vcs.LABEL[vcs.GIT]
+    end
+    return "The `jj` command"
+end
+
 local function jj(root, ...)
     return vcs.with(vcs.base(root, vcs.JJ, { quiet = true }), ...)
 end
@@ -123,7 +138,7 @@ local function worktree_problem(root, short)
     local where = branch_code == 0 and ("the branch " .. branch) or "a detached HEAD"
     return string.format(
         "This is the worktree on %s, not the one named for %s. "
-            .. "Run dev ws new %s and work from there.",
+            .. "Run `dev ws new %s` and work from there.",
         where,
         short,
         short
@@ -146,7 +161,7 @@ function M.workspace_problem(root, short)
     local out, code =
         dev_os.capture(jj(root, "workspace", "list", "-T", WORKSPACE_TEMPLATE), { stderr = "null" })
     if code ~= 0 then
-        return "jj could not read the workspace of " .. root
+        return "The `jj` command could not read the workspace of " .. root .. "."
     end
     local names = {}
     for name in out:gmatch("[^\n]+") do
@@ -156,7 +171,8 @@ function M.workspace_problem(root, short)
         names[#names + 1] = name
     end
     return string.format(
-        "this is the workspace %s, not the one named for %s, so run dev ws new %s and work from there",
+        "This is the workspace %s, not the one named for %s. "
+            .. "Run `dev ws new %s` and work from there.",
         table.concat(names, ", "),
         short,
         short
@@ -203,13 +219,13 @@ function M.state(root)
     )
     local shape, naming = out:match("^(%a+) (%a+)\n?$")
     if code ~= 0 or not shape then
-        return nil, "jj could not read the working-copy commit of " .. root
+        return nil, "The `jj` command could not read the working-copy commit of " .. root .. "."
     end
     if shape == "empty" then
-        return nil, "the working-copy commit is empty, so there is no change to land"
+        return nil, "The working-copy commit is empty. There is no change to land."
     end
     if naming == "bare" then
-        return nil, "the working-copy commit has no description"
+        return nil, "The working-copy commit has no description."
     end
     return state
 end
@@ -254,14 +270,15 @@ function M.missing_reviews(comments, state, root)
         if not has_here(kind) then
             if not has_any(kind) then
                 missing[#missing + 1] = string.format(
-                    "no %s review of change %s; record one with dev board review --kind %s",
+                    "No %s review of change %s. Record one with `dev board review --kind %s`.",
                     kind,
                     state.change,
                     kind
                 )
             elseif not rechecked then
                 missing[#missing + 1] = string.format(
-                    "the %s review is of an earlier commit than %s; record a recheck with dev board review --kind recheck --rev @",
+                    "The %s review is of an earlier commit than %s. "
+                        .. "Record a recheck with `dev board review --kind recheck --rev @`.",
                     kind,
                     M.short(state.commit)
                 )
@@ -290,7 +307,7 @@ function M.refused_reviews(comments, state, root)
         local record = latest[kind]
         if record and record.verdict == review.VERDICT.NEEDS_WORK then
             refused[#refused + 1] = string.format(
-                "the %s review by %s at commit %s says needs-work; fix it and record a new review",
+                "The %s review by %s at commit %s says needs-work. Fix it and record a new review.",
                 kind,
                 record.by,
                 M.short(state.commit)
@@ -309,7 +326,7 @@ end
 ---@return string? problem what is missing, nil when every row passed
 function M.checks_problem(comments, state, rows)
     if #rows == 0 then
-        return "the card has no checks rows, so nothing proves the change"
+        return "The card has no checks rows. Nothing proves the change."
     end
     local latest, unreadable
     for _, comment in ipairs(comments) do
@@ -325,19 +342,22 @@ function M.checks_problem(comments, state, rows)
     end
     if not latest and unreadable then
         return string.format(
-            "a check record exists at commit %s but could not be read, so it proves nothing; run dev board check again",
+            "A check record exists at commit %s but could not be read. "
+                .. "It proves nothing. Run `dev board check` again.",
             M.short(state.commit)
         )
     end
     if not latest then
         return string.format(
-            "no run of dev board check is recorded at commit %s; run it on this commit (a --expect-fail record does not count)",
+            "No run of `dev board check` is recorded at commit %s. "
+                .. "Run it on this commit. A `--expect-fail` record does not count.",
             M.short(state.commit)
         )
     end
     if #latest.rows ~= #rows then
         return string.format(
-            "the newest check run at commit %s has %d rows and the card has %d; run dev board check again",
+            "The newest check run at commit %s has %d rows and the card has %d. "
+                .. "Run `dev board check` again.",
             M.short(state.commit),
             #latest.rows,
             #rows
@@ -346,21 +366,21 @@ function M.checks_problem(comments, state, rows)
     if latest.sum ~= check.fingerprint(rows) then
         return string.format(
             "The checks rows changed since the newest check run at commit %s. "
-                .. "Run dev board check again.",
+                .. "Run `dev board check` again.",
             M.short(state.commit)
         )
     end
     local bad = {}
     for i, row in ipairs(latest.rows) do
         if row.result ~= check.RESULT.PASS then
-            bad[#bad + 1] = string.format("%d %s %s", i, row.result, rows[i])
+            bad[#bad + 1] = string.format("Row %d, `%s`, ended with %s.", i, rows[i], row.result)
         end
     end
     if #bad > 0 then
         return string.format(
-            "the newest check run at commit %s did not pass every row (%s)",
+            "The newest check run at commit %s did not pass every row. %s",
             M.short(state.commit),
-            table.concat(bad, "; ")
+            table.concat(bad, " ")
         )
     end
 end
@@ -390,13 +410,13 @@ local function fetch(root, remote)
         end
     end
     if code == FETCH_TIMEOUT_CODE then
-        local hint = "The fetch ran past %d seconds. The hardware key may be waiting for a touch, "
-            .. "so touch it and run land again.\n%s"
+        local hint = "The fetch ran past %d seconds. The hardware key may be waiting for a touch. "
+            .. "Touch it and run `dev board land` again.\n%s"
         return string.format(hint, seconds, out), code
     end
     if code ~= 0 and refused then
         local hint = "The ssh agent refused the signature twice. "
-            .. "Touch the hardware key and run land again.\n"
+            .. "Touch the hardware key and run `dev board land` again.\n"
         return hint .. out, code
     end
     return out, code
@@ -450,12 +470,12 @@ end
 function M.trunk_problem(root)
     local found, why = forge.resolve(root)
     if not found then
-        return "trunk cannot be compared: " .. why
+        return "Trunk cannot be compared. " .. sentence(why)
     end
     local out, code = fetch(root, found.remote)
     if code ~= 0 then
         return string.format(
-            "trunk cannot be compared, the fetch from %s failed: %s",
+            "The fetch from %s failed. Trunk cannot be compared.\n%s",
             found.remote,
             out
         )
@@ -467,12 +487,13 @@ function M.trunk_problem(root)
         end
         if not on_trunk then
             return "Trunk has moved since the change was built. Rebase it onto the remote trunk, "
-                .. "then record the reviews and run dev board check again."
+                .. "then record the reviews and run `dev board check` again."
         end
         return nil
     end
     if not parent_on_trunk(root) then
-        return "trunk has moved since the change was built, so rebase it onto trunk(), then record the reviews and run dev board check again"
+        return "Trunk has moved since the change was built. "
+            .. "Rebase it onto `trunk()`, then record the reviews and run `dev board check` again."
     end
 end
 
@@ -491,13 +512,13 @@ local function git_rebase(root, remote)
     end
     local stacked = git_out(root, "rev-list", "--count", ref .. "..HEAD~1")
     if not stacked or stacked:match("^0%s*$") == nil then
-        return nil, "The change sits on an unlanded parent, so land the parent first."
+        return nil, "The change sits on an unlanded parent. Land the parent first."
     end
     local out, code =
         dev_os.capture(vcs.with(vcs.base(root, vcs.GIT), "rebase", ref), { stderr = "stdout" })
     if code ~= 0 then
         dev_os.capture(vcs.with(vcs.base(root, vcs.GIT), "rebase", "--abort"), { stderr = "null" })
-        return nil, "The rebase onto trunk failed: " .. out
+        return nil, "The rebase onto trunk failed. " .. out
     end
     return true
 end
@@ -510,13 +531,13 @@ function M.rebase(root)
     local UNLANDED = "::@- ~ ::trunk()"
     local found, why = forge.resolve(root)
     if not found then
-        return nil, "trunk cannot be compared: " .. why
+        return nil, "Trunk cannot be compared. " .. sentence(why)
     end
     local out, code = fetch(root, found.remote)
     if code ~= 0 then
         return nil,
             string.format(
-                "trunk cannot be compared, the fetch from %s failed: %s",
+                "The fetch from %s failed. Trunk cannot be compared.\n%s",
                 found.remote,
                 out
             )
@@ -540,7 +561,7 @@ function M.rebase(root)
         { stderr = "null" }
     )
     if stacked ~= "" then
-        return nil, "the change sits on an unlanded parent, so land the parent first"
+        return nil, "The change sits on an unlanded parent. Land the parent first."
     end
     local bare = jj_out(
         root,
@@ -552,7 +573,7 @@ function M.rebase(root)
         COMMIT_TEMPLATE
     )
     if bare == nil then
-        return nil, "jj could not read the empty parents of the change."
+        return nil, "The `jj` command could not read the empty parents of the change."
     end
     local ids = {}
     for id in bare:gmatch("%x+") do
@@ -567,7 +588,7 @@ function M.rebase(root)
     out, code =
         dev_os.capture(jj(root, "rebase", "-r", "@", "-d", "trunk()"), { stderr = "stdout" })
     if code ~= 0 then
-        return nil, "the rebase onto trunk failed: " .. out
+        return nil, "The rebase onto trunk failed. " .. out
     end
     return true
 end
@@ -637,7 +658,7 @@ local function git_carry_problem(root, state, commit)
     end
     if not identical(root, commit, state) then
         return string.format(
-            "This commit differs from the checked commit %s. Run dev board check again.",
+            "This commit differs from the checked commit %s. Run `dev board check` again.",
             label
         )
     end
@@ -650,11 +671,11 @@ local function carry_problem(root, state, commit)
     local label = M.short(commit)
     local change = jj_out(root, "log", "-r", commit, "--no-graph", "-T", 'change_id ++ "\\n"')
     if change == nil then
-        return string.format("jj could not read the checked commit %s", label), true
+        return string.format("The `jj` command could not read the checked commit %s.", label), true
     end
     if change ~= state.change .. "\n" then
         return string.format(
-            "the checked commit %s is not of change %s in this repo",
+            "The checked commit %s is not of change %s in this repo.",
             label,
             state.change
         )
@@ -662,27 +683,38 @@ local function carry_problem(root, state, commit)
     local base_rev = base_revset(commit)
     local base = jj_out(root, "log", "-r", base_rev, "--no-graph", "-T", COMMIT_TEMPLATE)
     if base == nil then
-        return string.format("jj could not read the parent of the checked commit %s.", label), true
+        return string.format(
+            "The `jj` command could not read the parent of the checked commit %s.",
+            label
+        ),
+            true
     end
     local ancestor = count_lines(base) == 1
         and jj_out(root, "log", "-r", base_rev .. " & ::@-", "--no-graph", "-T", COMMIT_TEMPLATE)
     if ancestor == nil then
-        return string.format("jj could not read the ancestor of the checked commit %s", label), true
+        return string.format(
+            "The `jj` command could not read the ancestor of the checked commit %s.",
+            label
+        ),
+            true
     end
     if ancestor ~= base then
         return string.format(
-            "the checked commit %s does not sit on a single ancestor of trunk",
+            "The checked commit %s does not sit on a single ancestor of trunk.",
             label
         )
     end
     local differs = interdiff(root, commit)
     if differs == nil then
-        return string.format("jj could not compare the checked commit %s with this one", label),
+        return string.format(
+            "The `jj` command could not compare the checked commit %s with this one.",
+            label
+        ),
             true
     end
     if differs ~= "" then
         return string.format(
-            "this commit differs from the checked commit %s; run dev board check again",
+            "This commit differs from the checked commit %s. Run `dev board check` again.",
             label
         )
     end
@@ -801,7 +833,7 @@ function M.template_problem(root, touched)
         )
     end
     if not listed then
-        return vcs.LABEL[backend] .. " could not list the lint-set template files."
+        return tool_name(root) .. " could not list the lint-set template files."
     end
     local modules = {}
     for path in listed:gmatch("[^\n]+") do
@@ -891,7 +923,7 @@ function M.trunk_config(root)
     if vcs.backend(root) == vcs.GIT then
         local found, why = forge.resolve(root)
         if not found then
-            return nil, "Trunk cannot be read. " .. why
+            return nil, "Trunk cannot be read. " .. sentence(why)
         end
         local ref, ref_why = vcs.remote_trunk(root, found.remote)
         if not ref then
@@ -912,14 +944,14 @@ function M.trunk_config(root)
     end
     local listed = jj_out(root, "file", "list", "-r", TRUNK_REVSET, CONFIG_PATH)
     if listed == nil then
-        return nil, "jj could not list " .. CONFIG_PATH .. " at trunk."
+        return nil, "The `jj` command could not list " .. CONFIG_PATH .. " at trunk."
     end
     if listed == "" then
         return ""
     end
     local text = jj_out(root, "file", "show", "-r", TRUNK_REVSET, CONFIG_PATH)
     if text == nil then
-        return nil, "jj could not read " .. CONFIG_PATH .. " at trunk."
+        return nil, "The `jj` command could not read " .. CONFIG_PATH .. " at trunk."
     end
     return text
 end
@@ -953,7 +985,7 @@ function M.recheck_problem(opts)
         end
         local argv, why = check.argv(row)
         if not argv then
-            return "[board.land] recheck row " .. i .. ": " .. why
+            return "[board.land] recheck row " .. i .. " cannot be run. " .. sentence(why)
         end
         argvs[i] = argv
     end
@@ -982,7 +1014,7 @@ function M.recheck_problem(opts)
     if direct == nil then
         return string.format(
             "%s could not read the parent of the checked commit %s.",
-            vcs.LABEL[vcs.backend(opts.root) or vcs.JJ],
+            tool_name(opts.root),
             M.short(opts.commit)
         )
     end
@@ -991,7 +1023,7 @@ function M.recheck_problem(opts)
     end
     local ran = {}
     for i, argv in ipairs(argvs) do
-        opts.note(string.format("Rechecking %d of %d: %s.", i, #argvs, rows[i]))
+        opts.note(string.format("Rechecking row %d of %d with `%s`.", i, #argvs, rows[i]))
         ran[i] = check.run({
             root = opts.root,
             run = rows[i],
@@ -1005,7 +1037,7 @@ function M.recheck_problem(opts)
         if ran[i].result ~= check.RESULT.PASS then
             return string.format(
                 "Trunk moved since the check at %s. "
-                    .. "The recheck row failed and nothing was pushed: %s\n%s",
+                    .. "The recheck row failed. Nothing was pushed.\n%s\n%s",
                 M.short(opts.commit),
                 check.line(i, ran[i]),
                 ran[i].tail

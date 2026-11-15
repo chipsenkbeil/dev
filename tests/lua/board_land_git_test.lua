@@ -396,7 +396,7 @@ testing.test("land.git.rebase names a failed fetch", function()
         git(root, "remote", "set-url", "origin", root .. "/missing")
         local moved, why = land.rebase(root)
         testing.eq(moved, nil)
-        testing.ok(why:find("the fetch from origin failed", 1, true), tostring(why))
+        testing.ok(why:find("The fetch from origin failed", 1, true), tostring(why))
     end)
 end)
 

@@ -78,7 +78,7 @@ directory's name. The `local` backend keeps the board in a file (see Local
 boards below).
 
 `dev board status` prints the backend and the board. Without a `[board]`
-section it prints `no board for this project` and exits 1, and every other
+section it prints `dev: no board for this project` and exits 1, and every other
 subcommand says the same and exits 1.
 
 The server and the token live once in the user file
@@ -144,7 +144,8 @@ the `pass` token. The refusal says:
 - `the issued token in DEV_BOARD_TOKEN was refused by pomb` for the variable.
 - `the role token file for DEV_AGENT was refused by pomb` for the file.
 
-An expired file is refused the same way, with `mint it again`.
+An expired file is refused the same way, with ``The role token file for
+DEV_AGENT expired. Mint it again with `dev board token mint`.``
 
 ### Role tokens: token-mint
 
@@ -218,8 +219,9 @@ for itself, and dispatch's own re-mint is a separate matter.
 token first. When the card is an epic and the column is the Done column, dev
 opens the board again with `[board.pomb] lead_token`, as `delete` does, and
 sends the move with it, and never queues it when Pomb is unreachable. Pomb grants `epics.manage` to the `lead` preset alone.
-A `DEV_AGENT` that is not a lead is refused with "only the lead closes an
-epic" before the move goes out, and an unset `lead_token` exits 1 naming
+A `DEV_AGENT` that is not a lead is refused with `dev: Only the lead closes an
+epic. DEV_AGENT NAME is not a lead name, whose role segment is lead. Ask the
+lead.` before the move goes out, and an unset `lead_token` exits 1 naming
 `epics.manage`. The move still refuses a child that is open and an outcome
 that is unticked, and names the count and the outcomes.
 
@@ -366,12 +368,13 @@ What it lays out:
   - The post needs `roles.grant` and a board the token holds.
     The lead token can run init once the roles exist, as the post is then
     skipped. A `permission_denied` is shown with the missing permission, and an
-    `exceeds_grant` as `the token does not hold board X`, with nothing
-    created.
-  - When the refused permission is `roles.grant`, `init` prints `agent roles
-    left for dev board init --admin`, counts no change and goes on to the
-    later steps, the lane step included. Any other refusal still stops the
-    run.
+    `exceeds_grant` as `board unavailable: the token (role R) does not hold
+    board X (ID), so it cannot be granted the standard roles; add the board to
+    the token`, with nothing created.
+  - When the refused permission is `roles.grant`, `init` prints ``The agent
+    roles are left for `dev board init --admin`.``, counts no change and goes
+    on to the later steps, the lane step included. Any other refusal still
+    stops the run.
   - A local board has no roles, so it says nothing.
 - role refusals: a refusal reads the token's `role_name` from
   `GET /api/v1/auth/whoami`, once, and only then.
@@ -390,8 +393,9 @@ What it lays out:
   - A card that already wears a disabled colour keeps it and is reported on
     every run, one line each.
   - Pomb lets only an admin token change this. With the lead token a 403
-    prints `left the colours enabled as they are...`, and the rest of the run
-    still happens. Run `dev board init --admin` to switch the colours.
+    prints ``Left the colours enabled as they are, since this token may not
+    change them. Run `dev board init --admin`.``, and the rest of the run
+    still happens.
 - size words off card names: a trailing `(yellow)`, `(green)`, `(blue)`,
   `(red)` or `(red, split)` comes off the name.
   - If the card is still white, has no colour, or has the colour that was the
@@ -439,9 +443,10 @@ dev prints two messages for the new refusal:
   sign-in does not change the assignment.
 
 A board missing from `GET /api/boards` on a token assigned only some boards
-is reported as `pomb lists no board named X for this token, which is assigned
-only to ...`. On a token that sees every board it stays `pomb has no board
-named X`.
+is reported as `board unavailable: pomb lists no board named X for this token,
+which is assigned only to NAMES; if the board exists, add it to the token`. On a
+token that sees every board it stays `board unavailable: pomb has no board named
+X`.
 
 `init --admin` accepts the sign-in in either case:
 
@@ -996,8 +1001,9 @@ Any other word is a usage error (exit 2) that lists the five. The colour is
 found by its value in the board's palette, never by its label, so it works
 before and after `dev board init` names the labels.
 
-A board missing the colour fails with
-`board unavailable: the board has no yellow colour`.
+A Pomb board missing the colour fails with
+`board unavailable: the board has no yellow colour`, and a local board with
+``The board has no yellow colour. Run `dev board init`.``
 
 `outcome CARD TEXT` appends a Done when outcome to a card that already exists
 (`POST /api/tasks/{id}/subtasks`) and prints `outcome <id prefix> N added`.
@@ -1527,8 +1533,9 @@ dev board move 8af0e001 progress
 
 `move` refuses to take a claimed card out of In Progress to Review, Ready or
 Blocked (exit 1) until its claimant has left a note after claiming it. The
-refusal says the note holds what was built, tried and learned. The claim writes
-a `dev-claim: by=NAME` comment.
+refusal reads ``Card ID has no note from its claimant NAME since the claim. It
+cannot leave In Progress. Note what you built, tried and learned first with
+`dev board note ID TEXT`.`` The claim writes a `dev-claim: by=NAME` comment.
 
 dev finds the note by who posted it, never by its text or `--as` label. The note
 is any later comment posted by the same Pomb token as the latest such record for
@@ -1685,8 +1692,9 @@ line.
 - A token issued as no role shows `none` for `role`, `label` and `issuer`.
 - `issuer` is the name of the lead token that issued it, as it was then.
 - The token is never printed.
-- A 401 reads as every other refusal does, with `mint it again` for an expired
-  role token.
+- A 401 reads as every other refusal does, with ``The role token file for
+  DEV_AGENT expired. Mint it again with `dev board token mint`.`` for an
+  expired role token.
 - A local board holds no credential, so it is exit 1.
 - An extra word is exit 2.
 - The drift of a role token from its template is not listed, as Pomb's whoami
@@ -2394,8 +2402,9 @@ dev-check: commit=<full commit id> change=<change id, - in git> mode=run rows=2 
 A row's line holds its index, result and ci run id and no command text, so
 the record stays under Pomb's 5000-byte comment cap up to about 300 rows.
 `sum` is a hash of the card's checks rows in order, and land refuses a record
-whose `sum` differs from the card's rows with `run dev board check again`. A
-reason line is cut to 120 bytes and dropped once the comment nears 4800 bytes.
+whose `sum` differs from the card's rows with ``The checks rows changed since
+the newest check run at commit <12 characters>. Run `dev board check` again.``
+A reason line is cut to 120 bytes and dropped once the comment nears 4800 bytes.
 A record from before this form has no `rows` or `sum`, reads as unreadable and
 is refused the same way.
 
@@ -2418,7 +2427,9 @@ The result and the exit code:
 When the comment cannot be written:
 
 - If Pomb is unreachable, a timeout occurs or a fence is refused, the command
-  exits 1 with `the result was NOT recorded` and the row lines. It never prints
+  exits 1 with `the result was NOT recorded on ID (REASON); the board may or
+  may not hold it, so read dev board notes before trusting or repeating it` and
+  the row lines. It never prints
   `recorded` then, and it is never queued, as a replay would rerun the rows.
 - A timeout or gateway error may come after Pomb stored the comment, so read
   `notes` before repeating a long run.
@@ -2472,7 +2483,9 @@ The result:
 - It prints `recorded KIND review by NAME on <id prefix> at commit <12
   characters>`.
 - Like `check`, it is never queued. If the comment cannot be written the
-  command exits 1 with `The review was NOT recorded on card <id prefix>.`
+  command exits 1 with ``The review was NOT recorded on card <id prefix>.
+  REASON. The board may or may not hold it. Read `dev board notes` before
+  repeating it.``
 - A timeout or gateway error may come after Pomb stored it, so read `notes`
   before repeating.
 - `note` refuses `dev-review:` and `dev-turn:` as it does `dev-check:`, and
@@ -2555,7 +2568,7 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   Each fetch stops after 120 seconds, or after `DEV_LAND_FETCH_SECONDS`
   when that is set, and one fetch that fails with `agent refused operation`
   is retried once. A second refusal or a timeout refuses with a message that
-  tells the person to touch the hardware key and run `land` again.
+  tells the person to touch the hardware key and run `dev board land` again.
 
 `land` rebases the change onto trunk itself while it holds the turn, so the
 last condition holds unless the rebase failed. The conditions on the reviews and
@@ -2602,8 +2615,8 @@ The landing turn:
   900 seconds.
 - When a holder dies, the lease ends and the next asker takes the turn. A holder
   that comes back after that gets `The landing turn was lost.` or
-  `The landing turn ran out and was lost.`, writes nothing, lands nothing and
-  has to ask again.
+  `The landing turn ran out and was lost. Ask for it again.`, writes nothing,
+  lands nothing and has to ask again.
 - A holder whose newest hold note names an older fence than its live claim
   still owns the claim. `land` finds it with the claim's own fence and lands
   under it, and refuses only when the claim is gone or belongs to another name.
@@ -2743,8 +2756,9 @@ The result:
   `landed <id prefix> at commit <12 characters> and moved it to Done`
   (or Release). Both name the commit on trunk.
 - If the fetch or the read fails after the land (which does not undo it), the
-  note reads `Landed change <id>, run by NAME.` and says that the commit named
-  is from before the land and may differ from the one on trunk.
+  note reads `Landed change <id>, run by NAME. Trunk could not be read after
+  the land, so <12 characters> is the commit from before it and may differ from
+  the one on trunk.`
 - The success line says the same, and the card still moves.
 
 Cleanup:
@@ -2804,10 +2818,10 @@ The hold:
 - A hold is the live one only when its note names the fence of the card's
   current claim. A record left by a lapsed hold counts as lost, even when the
   same name later took the turn for another card.
-- Success prints `Holding the landing turn for <id prefix> for N seconds.` and
-  the next steps: rebase, run `dev board land CARD` to land under the hold, and
-  run `dev board turn CARD` again to renew it or add `--release` to give it
-  back.
+- Success prints ``Holding the landing turn for <id prefix> for N seconds.
+  Rebase, then run `dev board land <id prefix>`, which lands under it. Run `dev
+  board turn <id prefix>` again to renew it, or add `--release` to give it
+  back.``
 - A hold that lapsed frees the turn to the next asker, so taking it again starts
   a new window.
 
@@ -2845,8 +2859,8 @@ Landing under a hold:
   fixes the cause and lands again.
 - When the hold ran out or another card took the turn, `land` writes nothing,
   lands nothing and refuses with
-  `The landing turn held for <id prefix> ran out or was taken by another.`, and
-  `turn CARD` takes it again.
+  `The landing turn held for <id prefix> ran out or was taken by another. Take
+  it again with dev board turn <id prefix>.`, and `turn CARD` takes it again.
 
 ### allow
 
@@ -3172,8 +3186,8 @@ A move into Ready:
   ``Card <id prefix> has no size. It cannot enter Ready. Size it with `dev board
   size CARD 1`, `2` or `3`.``,
   or for red
-  `Card <id prefix> is red, more than 3 Pomodori. Split it, since a red card
-  cannot enter Ready. ...`
+  ``Card <id prefix> is red, more than 3 Pomodori. Split it, since a red card
+  cannot enter Ready. Size it with `dev board size CARD 1`, `2` or `3`.``
   (exit 1).
 - A card whose description lacks one of the three v3 headings or text under
   one, or that has neither 3 to 7 outcomes (subtasks) nor a v1 checklist item,
@@ -3699,7 +3713,8 @@ Where it lives:
 - default: `<state home>/dev/boards/<name>.json` (`$XDG_STATE_HOME` when
   absolute, else `~/.local/state`) at mode 600 in a mode 700 directory. The
   name is restricted to letters, digits, dots, dashes and underscores (else
-  `dev: a local board's name must be letters, digits...`, exit 1).
+  `dev: a local board's name must be letters, digits, dots, dashes and
+  underscores to name its file, or set [board] path`, exit 1).
 - tracked: `<root>/<path>` at the default mode when
   `[board] path = ".dev/board.json"` is set. The path must be relative, start
   with a letter, digit, dot or underscore and hold no `..` or `//` (else exit
@@ -3781,8 +3796,9 @@ malformed:
 - every other Pomb command (`status` included) prints the same line on
   standard error, replays nothing, runs normally and leaves the file
   untouched, so a bad queue never blocks a read.
-- a write that would have been queued fails with `could not be queued`
-  (`push` refuses a malformed file), and nothing overwrites the file.
+- a write that would have been queued fails with `dev: REASON. The change could
+  not be queued. WHY.` (`push` refuses a malformed file), and nothing
+  overwrites the file.
 
 `tests/lua/board_local_test.lua` covers the local backend on a temporary state
 directory, a tracked path, six processes writing at once and the queue.
@@ -3917,9 +3933,9 @@ Details by step:
   `card <id prefix> wears the disabled colour orange, left as it is`, on every
   run, with the card's colour untouched.
 - admin-only colours: Pomb keeps `enabled` admin-only. A 403 on it prints one
-  line, `left the colours enabled as they are, since this token may not change
-  them`, then a semicolon and `run dev board init --admin`. The run carries on
-  instead of exiting 1.
+  line, ``Left the colours enabled as they are, since this token may not change
+  them. Run `dev board init --admin`.`` The run carries on instead of exiting
+  1.
 
 Labels are plain strings on cards in Pomb, so `needs:lead` and `needs:human`
 need no creation.
@@ -3987,9 +4003,10 @@ clauses joined by a semicolon or a plain `but`:
   assigned to board <id>`, a semicolon and `add the board to the token`. No
   hint applies.
 
-A board absent from `/api/boards` reads
-`pomb lists no board named X for this token, which is assigned only to ...`
-when `whoami` returns a `boards` list, else `pomb has no board named X`.
+A board absent from `/api/boards` reads `board unavailable: pomb lists no board
+named X for this token, which is assigned only to NAMES; if the board exists,
+add it to the token` when `whoami` returns a `boards` list, else `board
+unavailable: pomb has no board named X`.
 
 ### Reading the token
 
@@ -3999,7 +4016,7 @@ On a miss in the Keychain, `board/passlock.sh` reads the token with
 - environment: `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`.
 - stdin: none, so a locked store fails at once with
   `board unavailable: pass is locked or has no entry <entry>`. A timeout says
-  `pass timed out`.
+  `board unavailable: pass timed out`.
 - a token with any character outside `A-Za-z0-9._~+/=-` is refused without
   being shown.
 
