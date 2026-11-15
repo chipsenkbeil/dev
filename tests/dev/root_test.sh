@@ -72,7 +72,7 @@ dev() {
     (cd "$dir" && PATH="$STUBS:$PATH" "$DEV" "$@")
 }
 
-MSG="As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+ROOT_REFUSAL="As root, dev runs only \`dev tools install\` and \`dev tools check\`."
 MANIFEST='name binary pacman
 zzz-tool zzz-tool-not-here zzz-tool'
 
@@ -98,7 +98,7 @@ for verb in push lint fetch init foo test tools "tools frobnicate" help -h --hel
     out="$(dev "$proj/a" $verb 2>&1)"
     status=$?
     assert_eq "root dev '$verb' exits 2" "$status" "2"
-    assert_contains "root dev '$verb' says what root may run" "$out" "$MSG"
+    assert_contains "root dev '$verb' says what root may run" "$out" "$ROOT_REFUSAL"
     assert_not_contains "root dev '$verb' prints no outside file" "$out" "SECRET-MARKER"
     assert_not_contains "root dev '$verb' runs no project script" "$out" "foo ran"
     assert_eq "root dev '$verb' runs no jj or git" "$(cat "$VCSLOG")" ""
@@ -121,10 +121,10 @@ if [ "$REAL_ROOT" = 1 ]; then
     printf 'return function() io.open("%s", "w"):close() return 0 end\n' "$TMP/remote-marker" >"$proj/.dev/__remote.lua"
     out="$(cd "$proj/a" && "$TMP/lc/bin/dev" --remote tools install --dry-run 2>&1)"
     assert_eq "root without luajit, dev --remote tools install exits 2" "$?" "2"
-    assert_eq "root without luajit, dev --remote says what root may run" "$out" "dev: $MSG"
+    assert_eq "root without luajit, dev --remote says what root may run" "$out" "dev: $ROOT_REFUSAL"
     out="$(cd "$proj/a" && DEV_REMOTE=1 "$TMP/lc/bin/dev" tools check 2>&1)"
     assert_eq "root without luajit, DEV_REMOTE=1 tools check exits 2" "$?" "2"
-    assert_eq "root without luajit, DEV_REMOTE=1 says what root may run" "$out" "dev: $MSG"
+    assert_eq "root without luajit, DEV_REMOTE=1 says what root may run" "$out" "dev: $ROOT_REFUSAL"
     out="$(cd "$proj/a" && "$TMP/lc/bin/dev" tools check 2>&1)"
     assert_eq "root without luajit, tools check exits 1" "$?" "1"
     assert_eq "root without luajit, tools check says it needs luajit" "$out" "dev: \`dev tools\` needs luajit in /usr/bin or /usr/local/bin."
@@ -383,7 +383,7 @@ else
     printf 'SKIP user-only - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
     out="$(FAKE_UID=1000 FAKE_OS=Darwin dev "$proj/a" foo 2>&1)"
     assert_eq "at real root the seam is inert and a fake user is refused" "$?" "2"
-    assert_contains "at real root a fake user uid still gets the root refusal" "$out" "$MSG"
+    assert_contains "at real root a fake user uid still gets the root refusal" "$out" "$ROOT_REFUSAL"
     assert_not_contains "at real root the fake user runs no project script" "$out" "foo ran"
 fi
 

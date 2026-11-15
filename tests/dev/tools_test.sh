@@ -15,6 +15,7 @@ trap 'rm -rf "$TMP"' EXIT
 STUBS="$TMP/stubs"
 export LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=1000 FAKE_OS=Linux
 export CALLS="$TMP/calls" RECORD="$TMP/record"
+ROOT_REFUSAL="As root, dev runs only \`dev tools install\` and \`dev tools check\`."
 if [ "$EUID" -eq 0 ]; then REAL_ROOT=1; else REAL_ROOT=0; fi
 
 skip_user() {
@@ -306,12 +307,12 @@ fi
 if [ "$REAL_ROOT" = 1 ]; then
     out="$(FAKE_UID=1000 FAKE_OS=Darwin tools "$proj" extra 2>&1)"
     assert_eq "at real root the seam is inert and a project subcommand is refused" "$?" "2"
-    assert_contains "at real root a fake user uid still gets the root refusal" "$out" "As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+    assert_contains "at real root a fake user uid still gets the root refusal" "$out" "$ROOT_REFUSAL"
     assert_not_contains "at real root the fake user runs nothing" "$out" "extra ran"
 fi
 out="$(FAKE_UID=0 tools "$proj" extra 2>&1)"
 assert_eq "dev refuses a project tools subcommand as root" "$?" "2"
-assert_contains "the root refusal says what root may run" "$out" "As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+assert_contains "the root refusal says what root may run" "$out" "$ROOT_REFUSAL"
 assert_not_contains "the root refusal runs nothing" "$out" "extra ran"
 printf '#!/bin/sh\necho flat ran\n' >"$proj/.dev/verify-prod.sh"
 chmod +x "$proj/.dev/verify-prod.sh"
@@ -322,7 +323,7 @@ else
 fi
 out="$(cd "$proj" && FAKE_UID=0 PATH="$STUBS:$PATH" "$DEV" verify-prod 2>&1)"
 assert_eq "dev refuses a flat project verb as root" "$?" "2"
-assert_contains "the flat refusal says what root may run" "$out" "As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+assert_contains "the flat refusal says what root may run" "$out" "$ROOT_REFUSAL"
 out="$(FAKE_UID=0 tools "$proj" check 2>&1)"
 assert_not_contains "the built-in tools check ignores .dev/tools.sh" "$out" "FLAT OVERRIDE"
 rm -f "$proj/.dev/tools.sh" "$proj/.dev/tools/install.sh"

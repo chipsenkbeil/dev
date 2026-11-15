@@ -155,9 +155,9 @@ local function refuse_agent_local(project_root, words)
         stderr:write(
             "dev ",
             command,
-            ": DEV_AGENT is set, so it runs on ci. Use `dev --remote ",
+            ": DEV_AGENT is set. Use `dev --remote ",
             command,
-            "` instead.\n"
+            "` instead, which runs it on ci.\n"
         )
         os.exit(2)
     end

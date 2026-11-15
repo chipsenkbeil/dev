@@ -17,6 +17,7 @@ NOLUA="$TMP/nolua"
 ROOTID="$TMP/rootid"
 RECORDER="$TMP/recorder"
 FAKE_DOTFILES="$TMP/dotfiles"
+ROOT_REFUSAL="As root, dev runs only \`dev tools install\` and \`dev tools check\`."
 mkdir -p "$NOLUA" "$ROOTID" "$RECORDER" "$FAKE_DOTFILES"
 for tool in bash env id realpath dirname uname cat awk sed grep tr cut sort head tail paste wc basename stat date mktemp rm; do
     found="$(command -v "$tool")" && ln -s "$found" "$NOLUA/$tool"
@@ -90,7 +91,7 @@ assert_contains "bootstrap passes its arguments on" "$out" "args: --dry-run"
 
 out="$(PATH="$ROOTID:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run 2>&1)"
 assert_eq "root is refused bootstrap with exit 2" "$?" "2"
-assert_eq "root gets the refusal line" "$out" "dev: As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+assert_eq "root gets the refusal line" "$out" "dev: $ROOT_REFUSAL"
 
 for name in BASH_ENV ENV LUA_PATH LUA_CPATH LUA_INIT LUA_PATH_5_1 LUA_CPATH_5_1 LUA_INIT_5_1 LUA_PATH_5_2 LUA_CPATH_5_2 LUA_INIT_5_2 DEV_UID DEV_OS; do
     rm -f "$ENV_OUT"
@@ -107,7 +108,7 @@ assert_eq "the launcher hands luajit main.lua and the arguments" "$(cat "$ARGS_O
 rm -f "$ENV_OUT"
 out="$(PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" lint 2>&1)"
 assert_eq "root without a system luajit refuses a verb with exit 2" "$?" "2"
-assert_eq "root without a system luajit gets the root refusal" "$out" "dev: As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+assert_eq "root without a system luajit gets the root refusal" "$out" "dev: $ROOT_REFUSAL"
 assert_eq "root never runs a luajit found on PATH" "$([ -e "$ENV_OUT" ] && echo ran || echo absent)" "absent"
 out="$(DEV_UID=1000 PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" lint 2>&1)"
 assert_eq "root without a system luajit ignores an inherited DEV_UID" "$?" "2"
@@ -181,7 +182,7 @@ assert_eq "a user does run LUA_INIT" "$([ -e "$marker" ] && echo written || echo
 
 out="$(PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0 FAKE_OS=Linux "$DEV" help 2>&1)"
 assert_eq "a fake uid of 0 is refused with exit 2" "$?" "2"
-assert_contains "the fake root gets the root refusal" "$out" "As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+assert_contains "the fake root gets the root refusal" "$out" "$ROOT_REFUSAL"
 out="$(PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0 FAKE_OS=Darwin "$DEV" tools check 2>&1)"
 assert_contains "a fake OS of Darwin refuses root" "$out" "as root, dev runs only on Linux"
 
@@ -279,7 +280,7 @@ assert_eq "-C beside bootstrap exits 0" "$?" "0"
 assert_contains "-C beside bootstrap passes the rest of the arguments on" "$out" "args: --dry-run"
 out="$(PATH="$ROOTID:$NOLUA" DOTFILES="$C_DOTFILES" "$DEV" -C "$TMP" bootstrap --dry-run 2>&1)"
 assert_eq "root with -C beside bootstrap is refused with exit 2" "$?" "2"
-assert_eq "root with -C beside bootstrap gets the refusal line" "$out" "dev: As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+assert_eq "root with -C beside bootstrap gets the refusal line" "$out" "dev: $ROOT_REFUSAL"
 
 NOJIT="$CIBIN:$NOLUA"
 remote_missing='dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
@@ -298,12 +299,12 @@ for words in "--remote tools install" "lint --detach"; do
     # shellcheck disable=SC2086
     out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" "$LC_NONE" $words 2>&1)"
     assert_eq "root without luajit, dev $words exits 2" "$?" "2"
-    assert_eq "root without luajit, dev $words gets the root refusal" "$out" "dev: As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+    assert_eq "root without luajit, dev $words gets the root refusal" "$out" "dev: $ROOT_REFUSAL"
     ran_nothing "root without luajit, dev $words"
 done
 out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" DEV_REMOTE=1 "$LC_NONE" tools check 2>&1)"
 assert_eq "root without luajit, DEV_REMOTE=1 exits 2" "$?" "2"
-assert_eq "root without luajit, DEV_REMOTE=1 gets the root refusal" "$out" "dev: As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+assert_eq "root without luajit, DEV_REMOTE=1 gets the root refusal" "$out" "dev: $ROOT_REFUSAL"
 ran_nothing "root without luajit, DEV_REMOTE"
 
 if [ "$fails" -gt 0 ]; then
