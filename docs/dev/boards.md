@@ -2642,8 +2642,10 @@ Polling while it waits:
   sees the same place in line and holder, up to 30 seconds.
 - A change in either starts over at 5 seconds.
 - Each sleep is shortened by up to 20% at random.
-- Each poll reads the turn card, its comments and the waiting card. A `land`
-  poll also reads the card list, to find a hold of its own.
+- Each poll reads the waiting card, lists the cards to find the lowest-id turn
+  card, then reads that card's comments. A poll that reaches the claim and
+  loses it lists the cards again, and a `land` poll lists them once more, to
+  find a hold of its own.
 - A waiter whose card has moved to Done writes its `left` note and stops with
   `<id prefix> is done, so there is nothing to wait for`.
 

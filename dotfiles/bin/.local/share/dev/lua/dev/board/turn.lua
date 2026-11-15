@@ -93,27 +93,12 @@ local function find(cards)
     return found
 end
 
-local turn_card_ids = setmetatable({}, { __mode = "k" })
-
-local function fresh(backend)
+local function lookup(backend)
     local cards, message = backend:cards()
     if not cards then
         return nil, message
     end
-    local card = find(cards)
-    turn_card_ids[backend] = card and card.id
-    return card
-end
-
-local function lookup(backend)
-    local id = turn_card_ids[backend]
-    if id then
-        local card = backend:card(id)
-        if card and card.name == M.NAME and not card.done then
-            return card
-        end
-    end
-    return fresh(backend)
+    return find(cards)
 end
 
 local function turn_card(backend)
@@ -129,7 +114,7 @@ local function turn_card(backend)
     if not added then
         return nil, message
     end
-    card, message = fresh(backend)
+    card, message = lookup(backend)
     if card then
         return card
     end
@@ -258,7 +243,6 @@ local function rotate(backend, card, comments)
     if not moved then
         return nil, "The full landing turn card could not be retired. " .. (message or "")
     end
-    turn_card_ids[backend] = nil
     local fresh_card
     fresh_card, message = turn_card(backend)
     if not fresh_card then
@@ -391,7 +375,7 @@ function M.take(backend, name, card, opts)
     fence, message = backend:claim(holding.id, name, { ttl = lease, lease = true })
     if fence then
         local canonical
-        canonical, message = fresh(backend)
+        canonical, message = lookup(backend)
         if not canonical then
             backend:release(holding.id, fence)
             return nil, message or "the landing turn card could not be read"

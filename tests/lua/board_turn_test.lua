@@ -380,7 +380,7 @@ testing.test("extending a hold records the new lease for the next command", func
 end)
 
 testing.test(
-    "a waiting poll reads the turn card and its comments and never the card list",
+    "a waiting poll lists the cards twice per call and never reads a single card",
     function()
         local backend = backend_at(board_home())
         assert(turn.take(backend, "alpha", "aaaa1111"))
@@ -401,8 +401,8 @@ testing.test(
             testing.ok(message:find("held by alpha", 1, true), message)
             testing.eq(place, first)
         end
-        testing.eq(listed, 0)
-        testing.eq(single, 6)
+        testing.eq(listed, 6)
+        testing.eq(single, 0)
     end
 )
 
@@ -440,18 +440,29 @@ testing.test("jitter only shortens a sleep and never below its share", function(
 end)
 
 testing.test(
-    "a poll falls back to the card list when the cached turn card cannot be read",
+    "a lookup resolves a lower-id duplicate turn card created after the first read",
     function()
+        local LOWER_ID = "00000000-0000-4000-8000-000000000000"
         local backend = backend_at(board_home())
         assert(turn.take(backend, "alpha", "aaaa1111"))
-        local card = backend.card
-        function backend:card()
-            return nil, "board unavailable: card timed out"
+        local cards, comments = backend.cards, backend.comments
+        function backend:cards()
+            local listed, message = cards(self)
+            if not listed then
+                return nil, message
+            end
+            listed[#listed + 1] = { id = LOWER_ID, name = turn.NAME, claimant = "zed" }
+            return listed
         end
-        local taken, message = turn.take(backend, "beta", "bbbb2222")
-        backend.card = card
-        testing.eq(taken, nil)
-        testing.ok(message:find("held by alpha", 1, true), message)
+        function backend:comments(id)
+            if id == LOWER_ID then
+                return {}
+            end
+            return comments(self, id)
+        end
+        local holder = turn.holder(backend)
+        backend.cards, backend.comments = cards, comments
+        testing.eq(holder.name, "zed")
     end
 )
 
@@ -467,18 +478,20 @@ end)
 testing.test("a claim lost after the turn card was read still names the holder", function()
     local backend = backend_at(board_home())
     assert(turn.take(backend, "alpha", "aaaa1111"))
-    local card = backend.card
+    local cards = backend.cards
     local reads = 0
-    function backend:card(id)
+    function backend:cards()
         reads = reads + 1
-        local read, message = card(self, id)
-        if read and reads == 1 then
-            read.claimant = nil
+        local listed, message = cards(self)
+        if listed and reads == 1 then
+            for _, read in ipairs(listed) do
+                read.claimant = nil
+            end
         end
-        return read, message
+        return listed, message
     end
     local taken, message = turn.take(backend, "beta", "bbbb2222")
-    backend.card = card
+    backend.cards = cards
     testing.eq(taken, nil)
     testing.ok(message:find("held by alpha", 1, true), message)
 end)
