@@ -8,6 +8,7 @@ local support = require("support")
 local TOKEN = "pomb_SECRETtoken0123456789"
 local DEVICE_CODE = "DEVCODE-secret-9876"
 local ADMIN_TOKEN = "pomb_ADMINtoken0123456789"
+local READY_COLUMN = "col-" .. support.COLUMN_NAME.READY
 local STANDARD = {
     support.COLUMN_NAME.ICEBOX,
     support.COLUMN_NAME.BACKLOG,
@@ -536,7 +537,7 @@ local EXPORT = '{"tasks":['
     .. support.pomb_export_task({
         id = "11111111-aaaa",
         name = "Keep",
-        column_id = "col-Ready",
+        column_id = READY_COLUMN,
         color_id = "blue-id",
     })
     .. ","
@@ -946,7 +947,7 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     assert(fs.write(root .. "/export.json", '{"tasks":[' .. support.pomb_export_task({
         id = "11111111-aaaa",
         name = "Keep it (blue)",
-        column_id = "col-Ready",
+        column_id = READY_COLUMN,
         color_id = "yellow-id",
     }) .. "," .. turn_row(support.COLUMN_NAME.ICEBOX) .. "]}"))
     local out, code = dev(root, home, tmp, { "board", "init" })

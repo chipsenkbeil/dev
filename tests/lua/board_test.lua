@@ -22,7 +22,9 @@ local LINK_A = "link: https://pomb.example/t/" .. ID_A
 local LEAD = "dotfiles/lead/1"
 local PROGRESS_COLUMN = "col-progress"
 local READY_COLUMN = "col-ready"
+local BACKLOG_COLUMN = "col-" .. support.COLUMN.BACKLOG
 local ICEBOX_COLUMN = "col-icebox"
+local LIVE_LEASE = "2999-01-01T00:00:00Z"
 local PROGRESS_NAME = support.COLUMN_NAME.PROGRESS
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
@@ -4574,18 +4576,18 @@ local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
 local FIRST_CARD = {
     id = ID_A,
     name = "First",
-    column_id = "col-ready",
+    column_id = READY_COLUMN,
     color_id = "yellow-id",
     labels = { "docs" },
     description = "Why it matters.",
     fields = '{"dev.checks":[{"run":"dev test"},{"on":["local"],"run":"dev lint"}]}',
 }
-local function export_with(first)
+local function export_with_first_card(first)
     return '{"tasks":['
         .. support.pomb_export_task({
             id = ID_B,
             name = "Second",
-            column_id = "col-ready",
+            column_id = READY_COLUMN,
             position = 2,
             color_id = false,
         })
@@ -4595,16 +4597,16 @@ local function export_with(first)
         .. support.pomb_export_task({
             id = ID_C,
             name = "Early",
-            column_id = "col-backlog",
+            column_id = BACKLOG_COLUMN,
             color_id = "white-id",
         })
         .. "]}"
 end
-local EXPORT = export_with()
+local EXPORT = export_with_first_card()
 local PLANNED_TEXT =
     "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [%s] a"
-local PLANNED_EXPORT = export_with({ description = PLANNED_TEXT:format(" ") })
-local PLANNED_DONE_EXPORT = export_with({ description = PLANNED_TEXT:format("x") })
+local PLANNED_EXPORT = export_with_first_card({ description = PLANNED_TEXT:format(" ") })
+local PLANNED_DONE_EXPORT = export_with_first_card({ description = PLANNED_TEXT:format("x") })
 local COMMENTS = '[{"id":"aaaaaaaa-1111-4111-8111-111111111111","author":"api-token","actor_kind":"api_token",'
     .. '"token_name":"worker","created_at":"2026-10-27T09:30:12Z","body":"first\\nline"},'
     .. '{"id":"dddddddd-4444-4444-8444-444444444444","author":"x","actor_kind":"user",'
@@ -5227,21 +5229,21 @@ end)
 local SUBTASKS_CARD = {
     id = ID_A,
     name = "First",
-    column_id = "col-ready",
+    column_id = READY_COLUMN,
     color_id = "yellow-id",
     labels = { "docs" },
     description = "## Problem\\nWhy.\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
     subtasks = '[{"id":"sub-a","name":"A works","done":false},'
         .. '{"id":"sub-b","name":"B works","done":true}]',
 }
-local function subtasks_export(card)
+local function export_with_subtasks_card(card)
     return '{"tasks":['
         .. support.pomb_export_task(setmetatable(card or {}, { __index = SUBTASKS_CARD }))
         .. "]}"
 end
-local SUBTASKS_EXPORT = subtasks_export()
+local SUBTASKS_EXPORT = export_with_subtasks_card()
 
-local BACKLOG_EXPORT = subtasks_export({ column_id = "col-backlog" })
+local BACKLOG_EXPORT = export_with_subtasks_card({ column_id = BACKLOG_COLUMN })
 
 testing.test("outcome posts a subtask and patches the Nth by its id", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
@@ -5274,7 +5276,7 @@ end)
 
 testing.test("a claimed card's tick needs a name other than the claimant's", function()
     local claimed =
-        subtasks_export({ holder = "project-run/a", lease_expires_at = "2999-01-01T00:00:00Z" })
+        export_with_subtasks_card({ holder = "project-run/a", lease_expires_at = LIVE_LEASE })
     local root, home = sandbox({ export = claimed })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
     testing.eq(code, 2, out)
@@ -5303,10 +5305,10 @@ testing.test("a claimed card's tick needs a name other than the claimant's", fun
 end)
 
 testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", function()
-    local claimed = subtasks_export({
-        column_id = "col-backlog",
+    local claimed = export_with_subtasks_card({
+        column_id = BACKLOG_COLUMN,
         holder = "project-run/a",
-        lease_expires_at = "2999-01-01T00:00:00Z",
+        lease_expires_at = LIVE_LEASE,
     })
     local root, home = sandbox({ export = claimed, user = LEAD_USER })
     local own = { agent = "project-run/a" }
@@ -5748,7 +5750,7 @@ testing.test("move to Done on a Pomb board refuses subtasks dev cannot read", fu
         .. support.pomb_export_task({
             id = ID_A,
             name = "First",
-            column_id = "col-ready",
+            column_id = READY_COLUMN,
             color_id = "yellow-id",
             labels = { "docs" },
             description = "Why.",
@@ -6450,7 +6452,7 @@ testing.test("show prints the allow, tests and files fields a Pomb card holds", 
         export = '{"tasks":[' .. support.pomb_export_task({
             id = ID_A,
             name = "First",
-            column_id = "col-ready",
+            column_id = READY_COLUMN,
             color_id = false,
             fields = '{"dev.allow":["ci-edits"],'
                 .. '"dev.tests":"one\\ntwo","dev.files":"src/a.rs"}',
@@ -7510,10 +7512,10 @@ testing.test("a move into progress that Pomb refuses releases the claim it just 
 end)
 
 testing.test("a move into progress of a card claimed elsewhere takes no claim", function()
-    local export = export_with({
+    local export = export_with_first_card({
         description = PLANNED_TEXT:format(" "),
         holder = "dev@box:42",
-        lease_expires_at = "2999-01-01T00:00:00Z",
+        lease_expires_at = LIVE_LEASE,
     })
     local root, home = sandbox({ export = export })
     refusing_moves(root)
@@ -7559,10 +7561,10 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
 end)
 
 testing.test("a release with no claim file sends the owner fence pomb reports", function()
-    local export = export_with({
+    local export = export_with_first_card({
         description = PLANNED_TEXT:format(" "),
         holder = "r/old",
-        lease_expires_at = "2999-01-01T00:00:00Z",
+        lease_expires_at = LIVE_LEASE,
     })
     local root, home = sandbox({ export = export })
     assert(fs.write(root .. "/owner_name", "r/old"))
@@ -7580,10 +7582,10 @@ testing.test("a release with no claim file sends the owner fence pomb reports", 
 end)
 
 testing.test("a release of an owner with no claim sends the owner fence", function()
-    local export = export_with({
+    local export = export_with_first_card({
         description = PLANNED_TEXT:format(" "),
         holder = "r/old",
-        lease_expires_at = "2999-01-01T00:00:00Z",
+        lease_expires_at = LIVE_LEASE,
     })
     local root, home = sandbox({ export = export })
     local task = (
@@ -7866,14 +7868,14 @@ testing.test("a lapsed owner lease counts as unowned in ls", function()
     assert(fs.write(root .. "/export.json", '{"tasks":[' .. support.pomb_export_task({
         id = ID_A,
         name = "First",
-        column_id = "col-ready",
+        column_id = READY_COLUMN,
         color_id = false,
         holder = "dev@box:42",
-        lease_expires_at = "2999-01-01T00:00:00Z",
+        lease_expires_at = LIVE_LEASE,
     }) .. "," .. support.pomb_export_task({
         id = ID_B,
         name = "Second",
-        column_id = "col-ready",
+        column_id = READY_COLUMN,
         position = 2,
         color_id = false,
         holder = "dev@old:1",
@@ -7912,13 +7914,13 @@ end)
 
 testing.test("a lapsed owner lease counts as unowned in lint", function()
     local function in_progress(lease)
-        return export_with({
-            column_id = "col-progress",
+        return export_with_first_card({
+            column_id = PROGRESS_COLUMN,
             holder = "dev@box:42",
             lease_expires_at = lease,
         })
     end
-    local live = "2999-01-01T00:00:00Z"
+    local live = LIVE_LEASE
     local dead = "2001-01-01T00:00:00Z"
     local root, home = sandbox({ export = in_progress(live) })
     local out = dev(root, home, { "board", "lint" })
@@ -9749,7 +9751,7 @@ local LANES = '"swimlanes":[{"id":"lane-parity","name":"Parity"},'
 local function laned(lane_fields)
     local tasks = {}
     for _, task in ipairs(lane_fields) do
-        local column_id = task.column or "col-ready"
+        local column_id = task.column or READY_COLUMN
         tasks[#tasks + 1] = support.pomb_export_task({
             id = task.id,
             name = task.name,
@@ -9787,7 +9789,7 @@ testing.test("pomb puts column order before lane order", function()
     local root, home = laned({
         { id = ID_A, name = "Alpha", lane = "lane-fixes", position = 1 },
         { id = ID_B, name = "Bravo", lane = "lane-parity", position = 3 },
-        { id = ID_C, name = "Charlie", lane = "lane-fixes", position = 2, column = "col-backlog" },
+        { id = ID_C, name = "Charlie", lane = "lane-fixes", position = 2, column = BACKLOG_COLUMN },
     })
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 0, out)

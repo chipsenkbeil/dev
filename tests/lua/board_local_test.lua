@@ -7,6 +7,7 @@ local json = require("dev.json")
 local support = require("support")
 
 local COLUMN = support.COLUMN
+local READY_COLUMN = "col-" .. COLUMN.READY
 
 local TOKEN = "pomb_SECRETtoken0123456789"
 local ID_A = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa"
@@ -1759,14 +1760,14 @@ local EXPORT = '{"tasks":['
     .. support.pomb_export_task({
         id = ID_A,
         name = "First",
-        column_id = "col-ready",
+        column_id = READY_COLUMN,
         color_id = false,
     })
     .. ","
     .. support.pomb_export_task({
         id = ID_B,
         name = "Second",
-        column_id = "col-ready",
+        column_id = READY_COLUMN,
         position = 2,
         color_id = false,
     })
@@ -1900,7 +1901,7 @@ testing.test("a queued discard replays its move without the outcome check", func
     assert(fs.write(root .. "/export.json", '{"tasks":[' .. support.pomb_export_task({
         id = ID_A,
         name = "First",
-        column_id = "col-ready",
+        column_id = READY_COLUMN,
         color_id = "yellow-id",
         description = "## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
         subtasks = '[{"id":"s1","name":"Never works","done":false}]',
