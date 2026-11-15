@@ -1654,8 +1654,18 @@ testing.test("link to BOARD:CARD resolves the card on the other board", function
     testing.ok(result.message:find("no board named nope", 1, true), result.message)
     result = cmd_board.run("link", { "11111111-a", "related", "ci:eeeeeeee" }, backend)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("No card starts with eeeeeeee", 1, true), result.message)
+    testing.eq(result.message, "No card starts with eeeeeeee.")
     testing.eq(#backend.calls, 5)
+end)
+
+testing.test("link names the BOARD:PREFIX form when a bare prefix matches no card", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("link", { "11111111-a", "blocked_by", "eeeeeeee" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "No card starts with eeeeeeee. For a card on another board, give BOARD:PREFIX."
+    )
 end)
 
 testing.test("links lists each link with the kind, the id prefix and the board", function()

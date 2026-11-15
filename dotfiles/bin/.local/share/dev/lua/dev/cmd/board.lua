@@ -282,6 +282,9 @@ local function other_card(backend, word)
     end
     local other, err = find_card(home, word)
     if not other then
+        if not other_name and err.message:find("^No card starts with") then
+            err = failure(err.message .. " For a card on another board, give BOARD:PREFIX.")
+        end
         return nil, nil, err
     end
     return other, (other_name and other_name .. ":" or "") .. other.id:sub(1, board.MIN_PREFIX)
