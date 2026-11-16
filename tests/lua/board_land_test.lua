@@ -104,6 +104,11 @@ local KIND_DONE = "done"
 local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
 local PAST_HOLD_SECONDS = 2.2
+local ASK_TIMEOUT_SECONDS = 30
+local ASK_POLL_SECONDS = 0.2
+local LOST_HOLD_SECONDS = "1"
+local SHORT_WAIT_SECONDS = "1"
+local LONG_WAIT_SECONDS = "60"
 local HELD_LEASE_SECONDS = 600
 local TURN_CAP_SECONDS = 1
 local PAST_CAP_SECONDS = 2
@@ -2370,6 +2375,114 @@ if has_jj then
         testing.ok(out:find("ran out or was taken by another", 1, true), out)
         testing.eq(landed_calls(project.log), "")
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/other")
+    end)
+
+    local function lost_hold_taken_by_other(project, id)
+        must(dev(project, { "board", "turn", id, "--hold", LOST_HOLD_SECONDS }))
+        dev_os.nap(PAST_HOLD_SECONDS)
+        must(dev(project, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
+    end
+
+    local function land_waiting(project, id, seconds)
+        local backend, restore = board_at(project.home)
+        backend.root = project.root
+        local previous = os.getenv("DEV_AGENT") or ""
+        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
+        local ok, result = pcall(cmd_board.run, "land", { id, "--wait", seconds }, backend)
+        ffi.C.setenv("DEV_AGENT", previous, 1)
+        restore()
+        assert(ok, result)
+        return result
+    end
+
+    testing.test("land --wait waits out another holder after its own hold ran out", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        lost_hold_taken_by_other(project, id)
+        local nap, now = dev_os.nap, store.now
+        local clock = now()
+        local naps = 0
+        store.now = function()
+            return clock
+        end
+        dev_os.nap = function(secs)
+            naps = naps + 1
+            clock = clock + math.ceil(secs)
+        end
+        local result = land_waiting(project, id, SHORT_WAIT_SECONDS)
+        dev_os.nap = nap
+        store.now = now
+        testing.eq(result.code, 1, result.message)
+        testing.ok(result.message:find("held by dotfiles/other since", 1, true), result.message)
+        testing.eq(result.message:find("ran out or was taken", 1, true), nil)
+        testing.ok(naps > 0, "the wait never slept")
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/other")
+    end)
+
+    testing.test("land --wait takes the turn once the other holder lets go", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        lost_hold_taken_by_other(project, id)
+        local nap = dev_os.nap
+        dev_os.nap = function()
+            dev_os.nap = nap
+            local other = { DEV_AGENT = "dotfiles/other" }
+            must(dev(project, { "board", "turn", id, "--release" }, other))
+            must(dev(project, { "board", "move", id, support.COLUMN.BLOCKED }))
+        end
+        local result = land_waiting(project, id, LONG_WAIT_SECONDS)
+        dev_os.nap = nap
+        testing.eq(result.code, 1, result.message)
+        testing.ok(result.message:find("cannot land", 1, true), result.message)
+        testing.eq(result.message:find("ran out or was taken", 1, true), nil)
+        testing.eq(turn_holder(project.home), nil)
+    end)
+
+    local function lander_asked(home)
+        local backend, restore = board_at(home)
+        local found = false
+        for _ = 1, ASK_TIMEOUT_SECONDS / ASK_POLL_SECONDS do
+            for _, card in ipairs(assert(backend:cards())) do
+                if card.name == turn.NAME then
+                    for _, note in ipairs(assert(backend:comments(card.id))) do
+                        found = found or note.body:find("ask holder=dotfiles/lander", 1, true)
+                    end
+                end
+            end
+            if found then
+                break
+            end
+            dev_os.nap(ASK_POLL_SECONDS)
+        end
+        restore()
+        return found
+    end
+
+    testing.test("land --wait lands once the other holder gives the turn back", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        lost_hold_taken_by_other(project, id)
+        local argv = { "board", "land", id, "--wait", LONG_WAIT_SECONDS }
+        local running = support.dev_async(project.root, argv, {
+            env = {
+                HOME = project.home,
+                XDG_STATE_HOME = project.home .. "/state",
+                JJ_USER = "t",
+                JJ_EMAIL = "t@example.com",
+                DEV_AGENT = "dotfiles/lander",
+                LAND_LOG = project.log,
+                LAND_MSG = "stub land",
+                LAND_TRUNK = LAND_TRUNK_KEEP,
+                REAL_JJ = dev_os.which("jj"),
+            },
+        })
+        testing.ok(lander_asked(project.home), "the land never joined the line")
+        testing.eq(running.finished(), false)
+        must(dev(project, { "board", "turn", id, "--release" }, { DEV_AGENT = "dotfiles/other" }))
+        local output, status = running.wait()
+        testing.eq(status, 0, output)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+        testing.eq(turn_holder(project.home), nil)
     end)
 
     testing.test("a refused landing keeps the hold until it is released", function()

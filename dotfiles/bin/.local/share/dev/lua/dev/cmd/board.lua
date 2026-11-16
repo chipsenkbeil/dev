@@ -2800,6 +2800,9 @@ function commands.land(backend, args)
             hold, message = claimed, nil
         end
     end
+    if lost and wait > 0 and not hold then
+        message = nil
+    end
     if message then
         return failure("Card " .. short .. " cannot land. " .. message)
     end
