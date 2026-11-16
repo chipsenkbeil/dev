@@ -99,7 +99,7 @@ local function fetch_trunk(ctx)
     return nil
 end
 
----@class dev.cmd.ws.PlanOpts
+---@class dev.cmd.ws.plan.Opts
 ---@field start string? nil when unset, the git start point of the worktree
 
 local function plan(root, name, path, opts)
@@ -275,14 +275,14 @@ local function forgotten(root, name)
     return true
 end
 
----@class dev.cmd.ws.RemoveOpts
+---@class dev.cmd.ws.remove.Opts
 ---@field inside boolean? false when unset, skips only the refusal of the workspace dev runs in
 ---@field forgotten boolean? false when unset, removes a jj folder that jj does not list and refuses
 ---   any other
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
 ---@field missing string? nil when unset, the recorded folder that is already gone
 
----@class dev.cmd.ws.DetachOpts
+---@class dev.cmd.ws.detach.Opts
 ---@field backend dev.vcs.Backend? the backend that forgets or removes, nil to do nothing
 ---@field path string the folder the workspace had
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
@@ -361,13 +361,13 @@ local function purge(dir)
     return purged
 end
 
----@class dev.cmd.ws.BlockerOpts
+---@class dev.cmd.ws.prune_blocker.Opts
 ---@field gone table<string, boolean>? paths of other worktrees whose prunable records may drop
 
 ---Name what would stop `git worktree prune` from dropping only the given worktrees.
 ---@param anchor string the project's main folder, where git runs
 ---@param paths string[] the worktree paths the prune is meant to drop
----@param opts dev.cmd.ws.BlockerOpts the records that may drop with them
+---@param opts dev.cmd.ws.prune_blocker.Opts the records that may drop with them
 ---@return string? message the reason, nil when nothing blocks
 local function prune_blocker(anchor, paths, opts)
     local argv = vcs.with(vcs.base(anchor, vcs.GIT), "worktree", "list", "--porcelain")
@@ -394,7 +394,7 @@ local function prune_blocker(anchor, paths, opts)
     end
 end
 
----@class dev.cmd.ws.TrashOpts
+---@class dev.cmd.ws.move_to_trash.Opts
 ---@field trash string the trash folder of the project
 ---@field backend dev.vcs.Backend? the backend that forgets or prunes, nil to do nothing
 ---@field path string the folder the workspace has
@@ -403,7 +403,7 @@ end
 ---Move a workspace folder to the trash and detach its record.
 ---@param anchor string
 ---@param name string
----@param opts dev.cmd.ws.TrashOpts
+---@param opts dev.cmd.ws.move_to_trash.Opts
 ---@return dev.cmd.ws.RemoveResult
 local function move_to_trash(anchor, name, opts)
     local target = fs.join(opts.trash, name .. "-" .. os.date(STAMP_FORMAT))
@@ -449,7 +449,7 @@ end
 ---forgotten or the git worktree record is removed and nothing is moved.
 ---@param root string absolute path of the project root dev runs in
 ---@param name string the workspace folder's name
----@param opts dev.cmd.ws.RemoveOpts? what to skip and show
+---@param opts dev.cmd.ws.remove.Opts? what to skip and show
 ---@return dev.cmd.ws.RemoveResult result
 function M.remove(root, name, opts)
     local TRASH_DIR = ".trash"

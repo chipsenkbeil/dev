@@ -9,7 +9,7 @@ local M = {}
 ---@field out string? text written to standard output
 ---@field err string? text written to standard error
 
----@class dev.testenv.VerbOpts
+---@class dev.testenv.verb.Opts
 ---@field env table<string, string> more environment variables
 
 ---Make a temporary directory for one test.
@@ -73,7 +73,7 @@ end
 ---Run the dev launcher in `root` with `root/bin` first on PATH.
 ---@param root string project directory
 ---@param words string[] command line after `dev`
----@param opts dev.testenv.VerbOpts? more environment, none when nil
+---@param opts dev.testenv.verb.Opts? more environment, none when nil
 ---@return string out standard output
 ---@return integer? code dev's exit code
 ---@return string err standard error alone

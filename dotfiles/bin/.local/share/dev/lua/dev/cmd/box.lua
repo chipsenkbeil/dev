@@ -117,7 +117,7 @@ local State, Exit = M.State, M.Exit
 ---@field no_archive boolean whether `--no-archive` was given
 ---@field pos string[] the positional arguments
 
----@class dev.cmd.box.CreateOpts
+---@class dev.cmd.box.create.Opts
 ---@field target string? the target to create on, ci's default when nil
 ---@field shape string? the shape to create, ci's default when nil
 ---@field arch string? the architecture to create on, ci's default (x86_64) when nil
@@ -400,7 +400,7 @@ function M.one_name(ctx, parsed)
     return parsed.pos[1]
 end
 
----@class dev.cmd.box.CallOpts
+---@class dev.cmd.box.call.Opts
 ---@field label string? what a spinner says on a terminal while ci runs, none by default
 
 ---Read the box that a `ci box` document reports as retagged.
@@ -442,7 +442,7 @@ end
 ---standard error, or its output when it is no error document.
 ---@param sub string the subcommand's name, for the messages
 ---@param args string[] the arguments after `ci box`
----@param opts dev.cmd.box.CallOpts? `label`
+---@param opts dev.cmd.box.call.Opts? `label`
 ---@return dev.cmd.box.Doc doc the decoded `ok` document
 ---@return string raw ci's output exactly as it printed it
 function M.call(sub, args, opts)
@@ -514,7 +514,7 @@ end
 ---Run `ci box` for a subcommand that answers with one box.
 ---@param sub string the subcommand's name, for the messages
 ---@param args string[] the arguments after `ci box`
----@param opts dev.cmd.box.CallOpts? `label`
+---@param opts dev.cmd.box.call.Opts? `label`
 ---@return dev.cmd.box.Box box the box in ci's document
 function M.one(sub, args, opts)
     local found = M.call(sub, args, opts).box
@@ -605,7 +605,7 @@ function M.created_line(box)
 end
 
 ---Create a box and print its summary.
----@param opts dev.cmd.box.CreateOpts what to create
+---@param opts dev.cmd.box.create.Opts what to create
 ---@return dev.cmd.box.Box box the created box
 function M.create(opts)
     local args = { "create" }
@@ -774,14 +774,14 @@ end
 local LS_HEADERS =
     { "NAME", "TARGET", "STATE", "ACTIVITY", "WHO", "SHAPE", "PROJECTS", "TIME LEFT" }
 
----@class dev.cmd.box.RowOpts
+---@class dev.cmd.box.ls_row.Opts
 ---@field screen dev.ui.Context drawing settings
 ---@field now integer the current time in seconds since the epoch
 ---@field user string? the user who runs dev
 
 ---The cells of a box's row in `ls`.
 ---@param box dev.cmd.box.Box the box as ci gives it
----@param opts dev.cmd.box.RowOpts how to draw the row
+---@param opts dev.cmd.box.ls_row.Opts how to draw the row
 ---@return string[] cells name, target, state, activity, who, shape, projects and time left
 local function ls_row(box, opts)
     local screen, now, user = opts.screen, opts.now, opts.user
@@ -841,7 +841,7 @@ M.handlers["box ls"] = function(ctx)
     return 0
 end
 
----@class dev.cmd.box.NothingFitsOpts
+---@class dev.cmd.box.nothing_fits.Opts
 ---@field what string what found no room, such as `no target`
 ---@field machines string[] the machines whose running boxes could be stopped
 
@@ -1049,7 +1049,7 @@ M.handlers["box targets"] = function(ctx)
 end
 
 ---Stop with a message that names the boxes whose machines are full.
----@param opts dev.cmd.box.NothingFitsOpts what found no room, and the machines to look at
+---@param opts dev.cmd.box.nothing_fits.Opts what found no room, and the machines to look at
 local function nothing_fits(opts)
     local running = {}
     for _, listed in ipairs(M.call("create", { "ls", "--json" }).boxes or {}) do
@@ -1313,7 +1313,7 @@ local function tmux_text(found)
     return table.concat(items, ", ")
 end
 
----@class dev.cmd.box.PickOpts
+---@class dev.cmd.box.pick_name.Opts
 ---@field sub string the subcommand's name, for ci's messages
 ---@field title string the picker's title
 ---@field keep fun(box: dev.cmd.box.Box): boolean whether the verb can act on a box
@@ -1325,7 +1325,7 @@ end
 ---Take the box from the arguments, or pick one on a terminal.
 ---@param ctx dev.Ctx the subcommand's context
 ---@param parsed dev.cmd.box.Args the parsed arguments
----@param opts dev.cmd.box.PickOpts how to pick
+---@param opts dev.cmd.box.pick_name.Opts how to pick
 ---@return string name the box name
 ---@return dev.cmd.box.Box[]? boxes the list ci gave when dev asked for it
 local function pick_name(ctx, parsed, opts)

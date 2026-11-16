@@ -35,11 +35,11 @@ local HELPERS = {
     },
 }
 
----@class dev.help.VerbOpts
+---@class dev.help.verb.Opts
 ---@field words string[] one word for a verb, two for a subcommand
 ---@field short boolean? true for the usage and flags `dev <verb> -h` shows
 
----@class dev.help.NounOpts
+---@class dev.help.noun.Opts
 ---@field stderr boolean? print on standard error, for a usage error
 
 ---@class dev.help
@@ -187,7 +187,7 @@ local function project_type(ctx)
     return project.detect_type(ctx.root) or project.Kind.NONE
 end
 
----@class dev.help.ListOpts
+---@class dev.help.verb_rows.Opts
 ---@field all boolean? whether the hidden verbs and dev's helpers are listed too
 
 local function verb_rows(reg, opts)
@@ -398,7 +398,7 @@ end
 ---An unknown name is a usage error of `dev help`, exit 2.
 ---@param ctx dev.Ctx the context of the command
 ---@param reg dev.Registry the project's registry
----@param opts dev.help.VerbOpts which verb, and whether to print the short form
+---@param opts dev.help.verb.Opts which verb, and whether to print the short form
 ---@return integer code 0
 function M.verb(ctx, reg, opts)
     io.write(verb_text(ctx, reg, screen(), opts))
@@ -521,7 +521,7 @@ end
 ---Print a noun's description and its subcommands.
 ---@param reg dev.Registry the project's registry
 ---@param noun string|string[] the noun's words, or its name when it is one word
----@param opts dev.help.NounOpts? where to print
+---@param opts dev.help.noun.Opts? where to print
 ---@return integer code 0
 function M.noun(reg, noun, opts)
     local c = screen()

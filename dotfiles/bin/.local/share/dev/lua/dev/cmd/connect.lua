@@ -23,7 +23,7 @@ local NO_CONNECT = 2
 ---   `box connect`
 local M = { handlers = {} }
 
----@class dev.cmd.connect.AttachOpts
+---@class dev.cmd.connect.attach.Opts
 ---@field ssh boolean whether to go through `ci ssh` instead of `et`
 
 ---Say why connecting stops, in the voice of `dev box connect`.
@@ -119,7 +119,7 @@ end
 
 ---Attach to a running box, over `et` or over `ci ssh`.
 ---@param found dev.cmd.box.Box the box to attach to
----@param opts dev.cmd.connect.AttachOpts how to attach
+---@param opts dev.cmd.connect.attach.Opts how to attach
 ---@return integer code the exit code of a hand-off that could not start
 local function attach(found, opts)
     local name = found.name
@@ -200,7 +200,7 @@ end
 ---@field user string? the login name
 ---@field state string? what ci says it is doing
 
----@class dev.cmd.connect.ConnectablesOpts
+---@class dev.cmd.connect.connectables.Opts
 ---@field strict boolean whether a failure must end the run
 
 ---Print what ci said when `ci ssh config` or `ci ssh ls` failed, as one line.
@@ -265,7 +265,7 @@ end
 ---A ci with no `ssh config` exits 2, which shows boxes only, with one note.
 ---Any other failure prints ci's message as one line, then ends the run with
 ---ci's code when `strict` is set and lists boxes only otherwise.
----@param opts dev.cmd.connect.ConnectablesOpts how to treat a failure
+---@param opts dev.cmd.connect.connectables.Opts how to treat a failure
 ---@return dev.cmd.connect.Connectable[] found the connectables, in ci's order
 local function connectables(opts)
     local raw, code = capture_ci({ "ci", "ssh", "config" })
