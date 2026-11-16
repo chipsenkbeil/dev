@@ -7,6 +7,7 @@ local verb = require("dev.verb")
 
 ---@class dev.cmd.ws
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `ws` subcommands
+---@field Refusal table<string, dev.cmd.ws.Refusal> the reasons a removal stops
 local M = { handlers = {} }
 
 local EMPTY_HEADS = "heads(mutable()) & empty()"
@@ -28,6 +29,113 @@ local function sentence(text)
         text = text .. "."
     end
     return text
+end
+
+---@enum dev.cmd.ws.Refusal
+local Refusal = {
+    NO_VCS = "no_vcs",
+    STILL_THERE = "still_there",
+    NOT_FORGETTABLE = "not_forgettable",
+    COMMAND_FAILED = "command_failed",
+    OUTSIDE = "outside",
+    NOT_WORKSPACE = "not_workspace",
+    LINK = "link",
+    RUNNING_HERE = "running_here",
+    UNTRACKED = "untracked",
+    NOT_FORGOTTEN = "not_forgotten",
+    DIRTY = "dirty",
+    UNREADABLE = "unreadable",
+    LOCKED = "locked",
+    PRUNE_DROPS = "prune_drops",
+    LIST_FAILED = "list_failed",
+    FILESYSTEM = "filesystem",
+    KEPT = "kept",
+}
+M.Refusal = Refusal
+
+---@class dev.cmd.ws.Reason
+---@field reason dev.cmd.ws.Refusal why the workspace stayed
+---@field path string? the folder the reason is about
+---@field name string? the workspace's name
+---@field base string? the central workspaces root, for an outside folder
+---@field command string? the vcs command that failed
+---@field code integer? the exit code of a failed jj or git, which dev passes on as its own
+---@field detail string? the line, error or exit status the reason carries
+---@field stayed string? the folder a failed move back left in the trash, with `detail` its error
+
+---The sentence writer of each refusal.
+local DESCRIPTIONS = {
+    [Refusal.NO_VCS] = function(why)
+        return why.path .. " is neither a jj nor a git project"
+    end,
+    [Refusal.STILL_THERE] = function(why)
+        return why.path .. " still exists"
+    end,
+    [Refusal.NOT_FORGETTABLE] = function(why)
+        return why.name .. " is not a jj workspace that can be forgotten"
+    end,
+    [Refusal.COMMAND_FAILED] = function(why)
+        local text = "the " .. why.command .. " command exited " .. why.code
+        if why.stayed then
+            text = text .. ". The folder stayed at " .. why.stayed .. ": " .. why.detail
+        end
+        return text
+    end,
+    [Refusal.OUTSIDE] = function(why)
+        return why.path .. " is outside " .. why.base
+    end,
+    [Refusal.NOT_WORKSPACE] = function(why)
+        return why.path .. " is not a workspace folder"
+    end,
+    [Refusal.LINK] = function(why)
+        return why.path .. " is a link, not removed"
+    end,
+    [Refusal.RUNNING_HERE] = function(why)
+        return why.path .. " is the workspace dev runs in"
+    end,
+    [Refusal.UNTRACKED] = function(why)
+        return why.path
+            .. " is a jj folder that jj no longer tracks. Run `dev ws rm "
+            .. why.name
+            .. " --forgotten` to discard it."
+    end,
+    [Refusal.NOT_FORGOTTEN] = function(why)
+        return why.path .. " is not a jj folder jj no longer lists. --forgotten does not apply."
+    end,
+    [Refusal.DIRTY] = function(why)
+        return why.path .. " holds changes not in a commit"
+    end,
+    [Refusal.UNREADABLE] = function(why)
+        local text = "cannot read the state of " .. why.path
+        if why.detail then
+            text = text .. ": " .. why.detail
+        end
+        return text
+    end,
+    [Refusal.LOCKED] = function(why)
+        return why.path .. " is a locked git worktree. Run git worktree unlock first."
+    end,
+    [Refusal.PRUNE_DROPS] = function(why)
+        return "git worktree prune would also drop the record of "
+            .. why.path
+            .. ", which git marks prunable. Run git worktree prune first."
+    end,
+    [Refusal.LIST_FAILED] = function(why)
+        return "the git worktree list command exited " .. why.detail
+    end,
+    [Refusal.FILESYSTEM] = function(why)
+        return why.detail
+    end,
+    [Refusal.KEPT] = function(why)
+        return why.detail
+    end,
+}
+
+---Write what stopped a workspace removal as sentences.
+---@param why dev.cmd.ws.Reason the refusal, a `RemoveResult` included
+---@return string text the full sentences a person reads
+function M.describe(why)
+    return sentence(DESCRIPTIONS[why.reason](why))
 end
 
 local function workspace_root()
@@ -205,7 +313,7 @@ end
 ---@param backend dev.vcs.Backend? the backend of the workspace folder
 ---@param path string the workspace folder
 ---@return boolean clean whether the folder holds nothing outside a commit
----@return string? why what was found or why it could not be read
+---@return dev.cmd.ws.Reason? why what was found or why it could not be read
 function M.__clean(backend, path)
     if backend == nil then
         return true
@@ -226,15 +334,10 @@ function M.__clean(backend, path)
     end
     local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
-        local why = "cannot read the state of " .. path
-        local line = first_line(out)
-        if line then
-            why = why .. ": " .. line
-        end
-        return false, why
+        return false, { reason = Refusal.UNREADABLE, path = path, detail = first_line(out) }
     end
     if out ~= "" then
-        return false, path .. " holds changes not in a commit"
+        return false, { reason = Refusal.DIRTY, path = path }
     end
     return true
 end
@@ -358,6 +461,12 @@ end
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
 ---@field moved boolean? false when unset, true when the folder is already in the trash
 
+---Forget the workspace or prune the worktree record.
+---@param root string the folder the vcs runs in
+---@param name string the workspace's name
+---@param opts dev.cmd.ws.detach.Opts what to detach and show
+---@return boolean ok whether the record is gone
+---@return dev.cmd.ws.Reason? why what stopped it, nil when it is gone
 local function detach(root, name, opts)
     local argv
     if opts.backend == vcs.JJ then
@@ -373,41 +482,40 @@ local function detach(root, name, opts)
         end
         local code = dev_os.run(argv) or 1
         if code ~= 0 then
-            return false, "the " .. argv[1] .. " command exited " .. code, code
+            return false, { reason = Refusal.COMMAND_FAILED, command = argv[1], code = code }
         end
     end
     return true
 end
 
----@class dev.cmd.ws.RemoveResult
+---@class dev.cmd.ws.RemoveResult: dev.cmd.ws.Reason
 ---@field ok boolean whether the workspace is gone
----@field message string the move, or what kept the workspace
----@field code integer? the exit code of a failed jj or git, nil when a check refused
+---@field message string? the move, set when the workspace is gone
 ---@field purged string[] one sentence for each trash entry purged
 
 ---Build the result of a removal that stopped.
----@param message string
----@param code integer?
+---@param why dev.cmd.ws.Reason
 ---@return dev.cmd.ws.RemoveResult
-local function refused(message, code)
-    return { ok = false, message = message, code = code, purged = {} }
+local function refused(why)
+    why.ok = false
+    why.purged = {}
+    return why
 end
 
 local function remove_missing(root, name, opts)
     local backend = vcs.backend(root)
     if backend ~= vcs.JJ and backend ~= vcs.GIT then
-        return refused(root .. " is neither a jj nor a git project")
+        return refused({ reason = Refusal.NO_VCS, path = root })
     end
     if fs.exists(opts.missing) then
-        return refused(opts.missing .. " still exists")
+        return refused({ reason = Refusal.STILL_THERE, path = opts.missing })
     end
     if backend == vcs.JJ and (name == "default" or forgotten(root, name)) then
-        return refused(name .. " is not a jj workspace that can be forgotten")
+        return refused({ reason = Refusal.NOT_FORGETTABLE, name = name })
     end
-    local ok, message, code =
-        detach(root, name, { backend = backend, path = opts.missing, show = opts.show })
+    local ok, why = detach(root, name, { backend = backend, path = opts.missing, show = opts.show })
     if not ok then
-        return refused(message, code)
+        return refused(why)
     end
     return { ok = true, message = "forgot " .. name, purged = {} }
 end
@@ -438,18 +546,18 @@ end
 ---@param anchor string the project's main folder, where git runs
 ---@param paths string[] the worktree paths the prune is meant to drop
 ---@param opts dev.cmd.ws.prune_blocker.Opts the records that may drop with them
----@return string? message the reason, nil when nothing blocks
+---@return dev.cmd.ws.Reason? why the reason, nil when nothing blocks
 local function prune_blocker(anchor, paths, opts)
     local argv = vcs.with(vcs.base(anchor, vcs.GIT), "worktree", "list", "--porcelain")
     local out, code = dev_os.capture(argv, { stderr = "null" })
     if code ~= 0 then
-        return "the git worktree list command exited " .. code
+        return { reason = Refusal.LIST_FAILED, detail = tostring(code) }
     end
     for block in (out .. "\n"):gmatch("(.-)\n\n") do
         local path = block:match("^worktree ([^\n]+)")
         if path and (path == paths[1] or path == paths[2]) then
             if block:find("\nlocked") then
-                return path .. " is a locked git worktree. Run git worktree unlock first."
+                return { reason = Refusal.LOCKED, path = path }
             end
         elseif
             path
@@ -457,9 +565,7 @@ local function prune_blocker(anchor, paths, opts)
             and block:find("\nprunable")
             and not block:find("\nlocked")
         then
-            return "git worktree prune would also drop the record of "
-                .. path
-                .. ", which git marks prunable. Run git worktree prune first."
+            return { reason = Refusal.PRUNE_DROPS, path = path }
         end
     end
 end
@@ -479,13 +585,13 @@ local function move_to_trash(anchor, name, opts)
     local target = fs.join(opts.trash, name .. "-" .. os.date(STAMP_FORMAT))
     local made, why = fs.mkdir(opts.trash, { parents = true })
     if not made then
-        return refused(why)
+        return refused({ reason = Refusal.FILESYSTEM, detail = why })
     end
     local moved, err = fs.move(opts.path, target)
     if not moved then
-        return refused(err)
+        return refused({ reason = Refusal.FILESYSTEM, detail = err })
     end
-    local ok, message, code = detach(anchor, name, {
+    local ok, stopped = detach(anchor, name, {
         backend = opts.backend,
         path = opts.path,
         show = opts.show,
@@ -494,9 +600,10 @@ local function move_to_trash(anchor, name, opts)
     if not ok then
         local back, back_err = fs.move(target, opts.path)
         if not back then
-            message = message .. ". The folder stayed at " .. target .. ": " .. back_err
+            stopped.stayed = target
+            stopped.detail = back_err
         end
-        return refused(message, code)
+        return refused(stopped)
     end
     return {
         ok = true,
@@ -513,7 +620,7 @@ end
 ---A locked git worktree, or one whose project has another worktree with a gone
 ---folder, is refused before the move. The prune would skip the locked one or
 ---drop the other record.
----Trash entries whose stamp is over 14 days old are then purged. A message
+---Trash entries whose stamp is over 14 days old are then purged. A `reason`
 ---names what stopped the removal, and `code` is set when jj or git itself failed.
 ---With `opts.missing` the folder is already gone, so the jj workspace is
 ---forgotten or the git worktree record is removed and nothing is moved.
@@ -535,33 +642,26 @@ function M.remove(root, name, opts)
     local stray = fs.is_file(path)
     if not fs.is_dir(path) and not stray then
         if opts.inside and real_base and real_root and not under(real_root, real_base) then
-            return refused(root .. " is outside " .. base)
+            return refused({ reason = Refusal.OUTSIDE, path = root, base = base })
         end
-        return refused(path .. " is not a workspace folder")
+        return refused({ reason = Refusal.NOT_WORKSPACE, path = path })
     end
     if fs.is_link(path) or real == nil or real_base == nil then
-        return refused(path .. " is a link, not removed")
+        return refused({ reason = Refusal.LINK, path = path })
     end
     if not under(real, real_base) then
-        return refused(path .. " is outside " .. base)
+        return refused({ reason = Refusal.OUTSIDE, path = path, base = base })
     end
     if real == real_root and not opts.inside then
-        return refused(path .. " is the workspace dev runs in")
+        return refused({ reason = Refusal.RUNNING_HERE, path = path })
     end
     local backend = not stray and vcs.backend(path) or nil
     local gone = backend == vcs.JJ and forgotten(root, name)
     if gone and not opts.forgotten then
-        return refused(
-            path
-                .. " is a jj folder that jj no longer tracks. Run `dev ws rm "
-                .. name
-                .. " --forgotten` to discard it."
-        )
+        return refused({ reason = Refusal.UNTRACKED, path = path, name = name })
     end
     if opts.forgotten and not gone then
-        return refused(
-            path .. " is not a jj folder jj no longer lists. --forgotten does not apply."
-        )
+        return refused({ reason = Refusal.NOT_FORGOTTEN, path = path })
     end
     if not gone then
         local clean, why = M.__clean(backend, path)
@@ -621,7 +721,7 @@ M.handlers["ws rm"] = function(ctx)
         if result.code then
             return result.code
         end
-        verb.die(sentence(result.message))
+        verb.die(M.describe(result))
     end
     print(result.message)
     for _, line in ipairs(result.purged) do
@@ -739,22 +839,22 @@ local function prune_workspaces(ctx, steps, opts)
         end
     end
     for _, step in ipairs(steps) do
-        local ok, message, purged
+        local ok, message, purged, why
         if step.kind == Step.KEEP then
-            ok, message = false, step.note
+            ok, why = false, { reason = Refusal.KEPT, detail = step.note }
         elseif opts.dry then
             ok = true
             if step.kind == Step.DONE and fs.is_link(step.path) then
-                ok, message = false, step.path .. " is a link, not removed"
+                ok, why = false, { reason = Refusal.LINK, path = step.path }
             elseif step.kind == Step.DONE then
-                ok, message = M.__clean(opts.backend, step.path)
+                ok, why = M.__clean(opts.backend, step.path)
                 if ok and opts.backend == vcs.GIT then
-                    message = prune_blocker(
+                    why = prune_blocker(
                         ctx.root,
                         { step.path, fs.realpath(step.path) },
                         { gone = gone }
                     )
-                    ok = message == nil
+                    ok = why == nil
                 end
             end
         else
@@ -764,7 +864,7 @@ local function prune_workspaces(ctx, steps, opts)
                     verb.show(ctx, argv)
                 end,
             })
-            ok, message, purged = result.ok, result.message, result.purged
+            ok, message, purged, why = result.ok, result.message, result.purged, result
             failure = failure or result.code
         end
         if ok then
@@ -782,7 +882,7 @@ local function prune_workspaces(ctx, steps, opts)
             end
         else
             kept = kept + 1
-            verb.say(string.format("Kept %s %s. %s", label, step.name, sentence(message)))
+            verb.say(string.format("Kept %s %s. %s", label, step.name, M.describe(why)))
         end
     end
     return pruned, kept, failure, freed

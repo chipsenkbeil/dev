@@ -1880,6 +1880,33 @@ local function finds_the_sleep(find)
     testing.eq(found, { { pid = pid, command = "sleep" } })
 end
 
+testing.test("describe writes a sentence for every refusal", function()
+    local why = {
+        path = "/w/card",
+        name = "card",
+        base = "/w",
+        command = "jj",
+        code = 3,
+        detail = "no such file",
+    }
+    local seen = 0
+    for _, reason in pairs(cmd_ws.Refusal) do
+        why.reason = reason
+        local text = cmd_ws.describe(why)
+        testing.ok(text:find("^[%u/]") and text:find("%.$"), reason .. ": " .. text)
+        seen = seen + 1
+    end
+    testing.eq(seen, 17)
+    testing.eq(
+        cmd_ws.describe({ reason = cmd_ws.Refusal.LINK, path = "/w/card" }),
+        "/w/card is a link, not removed."
+    )
+    testing.eq(
+        cmd_ws.describe({ reason = cmd_ws.Refusal.COMMAND_FAILED, command = "git", code = 3 }),
+        "The git command exited 3."
+    )
+end)
+
 if fs.is_dir("/proc/self") then
     testing.test("the proc lookup finds a process by its working directory", function()
         finds_the_sleep(cmd_ws.__processes_proc)

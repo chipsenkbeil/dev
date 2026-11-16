@@ -2704,7 +2704,7 @@ function M.clean_up(root, short)
             delete_branch_from(main)
         end
     else
-        add("Kept the workspace. " .. sentence(result.message))
+        add("Kept the workspace. " .. ws.describe(result))
     end
     return "\n" .. table.concat(lines, "\n")
 end
