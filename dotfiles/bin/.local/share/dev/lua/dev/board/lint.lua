@@ -20,6 +20,9 @@ M.MAX_WORDS = 400
 ---@field children fun(): {done: integer, total: integer, epic: boolean?}?, string? the card's
 ---   children, total 0 when it has none, and whether it is an epic
 
+---The actor kind a comment from a token carries.
+local AGENT = "agent"
+
 local function word_count(description)
     local count = 0
     if not description then
@@ -34,6 +37,19 @@ end
 local function asks(comments)
     for _, comment in ipairs(comments) do
         if comment.kind == board.NoteKind.QUESTION or comment.kind == board.NoteKind.BLOCKED then
+            return true
+        end
+    end
+    return false
+end
+
+---Tell whether an agent left a question that nobody has answered.
+---@param comments dev.board.Comment[] the card's comments
+---@return boolean asked
+local function agent_asked(comments)
+    for _, comment in ipairs(comments) do
+        local question = comment.question
+        if comment.actor == AGENT and question and not question.answer then
             return true
         end
     end
@@ -183,6 +199,21 @@ function M.card(card, opts)
     end
     if human and column ~= roles.blocked and column ~= roles.icebox then
         add(board.NEEDS_HUMAN .. " outside " .. roles.blocked .. " and " .. roles.icebox, true)
+    end
+    local unsized = board.has_color(card, board.SIZES.unsized)
+    if human and (unsized or column ~= roles.blocked) then
+        local list, why = facts.comments()
+        if not list then
+            return nil, why
+        end
+        if agent_asked(list) then
+            if unsized then
+                add("agent question on an unsized card", true)
+            end
+            if column ~= roles.blocked then
+                add("agent question outside " .. roles.blocked, true)
+            end
+        end
     end
     if column == roles.blocked then
         local rule, why = blocked_rule(facts)

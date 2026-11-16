@@ -1886,6 +1886,24 @@ function commands.ask(backend, args)
                 .. "` and then ask again."
         )
     end
+    local missing = board.unplanned({
+        color = card.color,
+        description = card.description,
+        outcomes = #card.outcomes,
+        need_outcomes = not card.outcomes_unreadable,
+        children = 0,
+    })
+    if #missing > 0 then
+        return failure(
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " is not planned, and a question locks it against the edits that would plan it."
+                .. " It lacks "
+                .. table.concat(missing, ", ")
+                .. ". Fix it with `dev board size`, `dev board edit` and `dev board outcome`,"
+                .. " then ask again."
+        )
+    end
     local held = claims.read(card.id)
     local ok, message = backend:ask(card.id, question, held and held.fence)
     if not ok then

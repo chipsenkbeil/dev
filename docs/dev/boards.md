@@ -697,6 +697,13 @@ card that already carries the label is locked, and dev refuses the question
 before it posts anything. The refusal tells the agent to run `dev board label
 CARD --remove needs:human` and then ask again.
 
+`ask` also refuses a card that `board.unplanned` finds lacking a size, a v3
+section, a filled Change, Out of scope or Problem, or a Done when outcome (exit
+1). The refusal names what is missing. Pomb locks a card once it carries
+`needs:human`, and the lock refuses the edits that would plan it, so a question
+on an unplanned card leaves you a question nobody can act on. Plan the card
+with `dev board size`, `dev board edit` and `dev board outcome`, then ask.
+
 Pomb refuses `note --kind question` without that shape, so `ask` is the only
 way to put a question to you. `add --label needs:human` still creates the card
 and its outcomes, then sets the label.
@@ -2168,7 +2175,8 @@ one line per broken rule. With `CARD`, it resolves the prefix with
 
 - Each line holds the id prefix, column and rule, aligned, in board order.
 - A finding on a `needs:human` card ends in `(owner)`, unless it is
-  `lacks a size` or `needs:human outside ...`, which `dev.board.lint.card`
+  `lacks a size`, `needs:human outside ...` or `agent question ...`, which
+  `dev.board.lint.card`
   reports as agent findings (its third return value holds the indexes of the
   owner's).
 - It exits 1 only when a finding without the mark is left.
@@ -2193,6 +2201,11 @@ size, the v3 sections and the outcomes. It adds these:
   judgement)`, as `dev.board.unnamed_checks` lists them.
 - In Ready: `red card in Ready`.
 - Anywhere: `needs:human outside Blocked and Icebox`.
+- On a `needs:human` card that is unsized or outside Blocked, with an open
+  question from an agent (a comment whose `actor` is `agent` and whose question
+  has no answer): `agent question on an unsized card` and `agent question
+  outside Blocked`. It reads `backend:comments` for such a card. Both are agent
+  findings, and an owner's idea with no question stays free-form.
 - In Blocked: `blocked with no question or blocked note and no blocker`. It
   reads `backend:comments` for a `question` or `blocked` kind and then
   `backend:links` for `blocked_by`.

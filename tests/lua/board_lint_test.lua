@@ -493,6 +493,53 @@ testing.test(
     end
 )
 
+testing.test(
+    "lint lists an agent-asked needs:human card that is unsized or outside Blocked",
+    function()
+        local asked = { kind = "question", actor = "agent", question = { text = "which?" } }
+        local sizeless = card(1, NAME.BLOCKED, { labels = { "needs:human" }, color = false })
+        local misplaced = card(2, NAME.READY, { labels = { "needs:human" } })
+        local both = card(3, NAME.ICEBOX, { labels = { "needs:human" }, color = false })
+        local held = {
+            comments = {
+                [sizeless.id] = { asked },
+                [misplaced.id] = { asked },
+                [both.id] = { asked },
+            },
+        }
+        local result = cmd_board.run("lint", {}, backend({ sizeless, misplaced, both }, held))
+        testing.eq(result.code, 1)
+        testing.eq(findings(result.output), {
+            "00000001 Blocked lacks a size",
+            "00000001 Blocked agent question on an unsized card",
+            "00000002 Ready needs:human outside Blocked and Icebox",
+            "00000002 Ready agent question outside Blocked",
+            "00000003 Icebox agent question on an unsized card",
+            "00000003 Icebox agent question outside Blocked",
+        })
+    end
+)
+
+testing.test("lint leaves an owner idea, an answered question and a planned ask alone", function()
+    local owner = { actor = "human", question = { text = "which?" } }
+    local answered = { actor = "agent", question = { text = "which?", answer = { choice = 1 } } }
+    local asked = { kind = "question", actor = "agent", question = { text = "which?" } }
+    local cards = {
+        card(1, NAME.ICEBOX, { labels = { "needs:human" }, color = false, description = false }),
+        card(2, NAME.ICEBOX, { labels = { "needs:human" }, color = false }),
+        card(3, NAME.BLOCKED, { labels = { "needs:human" } }),
+    }
+    local held = {
+        comments = {
+            [cards[1].id] = {},
+            [cards[2].id] = { owner, answered },
+            [cards[3].id] = { asked },
+        },
+    }
+    local result = cmd_board.run("lint", {}, backend(cards, held))
+    testing.eq(result.output, "No findings.")
+end)
+
 testing.test("lint exits 1 when an owner finding sits beside an agent finding", function()
     local cards = {
         card(1, NAME.BLOCKED, { labels = { "needs:human" }, description = "## Problem\nwhy" }),

@@ -3849,7 +3849,9 @@ end)
 testing.test(
     "ask sends the parts it was given and lets the backend refuse a missing one",
     function()
-        local backend = fake(sample())
+        local cards = sample()
+        cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
+        local backend = fake(cards)
         local result = cmd_board.run("ask", {
             "11111111-a",
             "--question",
@@ -3915,6 +3917,55 @@ testing.test("ask refuses a card that already carries needs:human and posts noth
         result.message
     )
     testing.eq(#backend.calls, 0)
+end)
+
+testing.test("ask posts the question on a planned Backlog card", function()
+    local cards = sample()
+    cards[2].size = "2 Pomodori"
+    cards[2].color = "green"
+    cards[2].description = V2
+    cards[2].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
+    local backend = fake(cards)
+    local result = cmd_board.run("ask", {
+        "11111111-b",
+        "--question",
+        "Which?",
+        "--choice",
+        "Ready=Ship it",
+        "--recommend",
+        "1",
+        "--why",
+        "w",
+    }, backend)
+    testing.eq(result.output, "asked 11111111")
+    testing.eq(backend.calls[1][1], "ask")
+    testing.eq(backend.calls[1][2], ID_B)
+end)
+
+testing.test("ask refuses an unplanned card, naming what it lacks, and posts nothing", function()
+    for _, case in ipairs({
+        { id = "11111111-b", lacks = { "a size", "## Problem" } },
+        { id = "11111111-a", lacks = { "Done when outcomes" } },
+    }) do
+        local backend = fake(sample())
+        local result = cmd_board.run("ask", {
+            case.id,
+            "--question",
+            "Which?",
+            "--choice",
+            "Ready=Ship it",
+            "--recommend",
+            "1",
+            "--why",
+            "w",
+        }, backend)
+        testing.eq(result.code, 1, case.id)
+        testing.ok(result.message:find("is not planned", 1, true), result.message)
+        for _, item in ipairs(case.lacks) do
+            testing.ok(result.message:find(item, 1, true), result.message)
+        end
+        testing.eq(#backend.calls, 0)
+    end
 end)
 
 testing.test("answer refuses a card without needs:human and writes nothing", function()
@@ -6822,7 +6873,7 @@ local function owner_card_sandbox()
 end
 
 testing.test("ask posts a structured question", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(root, home, {
         "board",
         "ask",
@@ -6853,7 +6904,7 @@ testing.test("ask posts a structured question", function()
 end)
 
 testing.test("ask prints the refusal as worded", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
     local out, code = dev(root, home, {
         "board",
@@ -6873,7 +6924,7 @@ testing.test("ask prints the refusal as worded", function()
 end)
 
 testing.test("ask names a choice whose column the board lacks and posts nothing", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(root, home, {
         "board",
         "ask",
