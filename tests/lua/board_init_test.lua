@@ -236,13 +236,17 @@ local function names(columns)
 end
 
 local function run(layout)
-    local lines = {}
+    local lines, warnings = {}, {}
     local changes, message = init.run(layout, "demo", function(line)
         if line ~= "agent roles unchanged" then
             lines[#lines + 1] = line
         end
-    end)
-    return changes, message, lines
+    end, {
+        warn = function(line)
+            warnings[#warnings + 1] = line
+        end,
+    })
+    return changes, message, lines, warnings
 end
 
 local function color(layout, value)
@@ -387,23 +391,21 @@ testing.test("a column init does not recognise is reported and kept where it was
     local columns = template_columns()
     table.insert(columns, 3, { id = "col-odd", name = "Someday", is_done = false })
     local layout = fake_layout({ columns = columns })
-    local _, message, lines = run(layout)
+    local _, message, lines, warnings = run(layout)
     testing.eq(message, nil)
-    local kept = 0
+    testing.eq(warnings, { 'kept column "Someday", which is not part of the standard board' })
     for _, line in ipairs(lines) do
-        if line == 'kept column "Someday", which is not part of the standard board' then
-            kept = kept + 1
-        end
+        testing.eq(line:find("kept column", 1, true), nil, line)
     end
-    testing.eq(kept, 1)
     testing.eq(layout.state.columns[#layout.state.columns].name, "Someday")
     testing.eq(layout.state.columns[#layout.state.columns].id, "col-odd")
     for _, write in ipairs(layout.state.writes) do
         testing.ok(write[1] ~= "rename")
     end
-    local _, _, second = run(layout)
-    testing.eq(#second, 1)
-    testing.ok(second[1]:find("kept column", 1, true))
+    local _, _, second, second_warnings = run(layout)
+    testing.eq(second, {})
+    testing.eq(#second_warnings, 1)
+    testing.ok(second_warnings[1]:find("kept column", 1, true))
     testing.eq(#layout.state.writes > 0, true)
 end)
 
@@ -430,7 +432,7 @@ testing.test(
                 { id = "ffffffff-1", name = "(blue)", color_id = nil },
             },
         })
-        local _, message, lines = run(layout)
+        local _, message, lines, warnings = run(layout)
         testing.eq(message, nil)
         local cards = layout.state.cards
         testing.eq(cards[1].name, "Plain card")
@@ -453,7 +455,8 @@ testing.test(
                 or joined:find('renamed card dddddddd to "Chosen"$'),
             joined
         )
-        testing.ok(joined:find("kept card ffffffff", 1, true), joined)
+        testing.eq(joined:find("kept card", 1, true), nil, joined)
+        testing.ok(table.concat(warnings, "\n"):find("kept card ffffffff", 1, true), warnings[1])
         local again = run(layout)
         testing.eq(again, 0)
     end
@@ -656,6 +659,19 @@ end
 
 local function dev(root, home, tmp, args)
     return support.dev(root, args, {
+        env = {
+            HOME = home,
+            ROOT = root,
+            TMPDIR = tmp,
+            XDG_STATE_HOME = home .. "/state",
+            DEV_PASS_LOCK = tmp .. "/pass.lock",
+        },
+    })
+end
+
+local function dev_split(root, home, tmp, args)
+    return support.dev(root, args, {
+        split = true,
         env = {
             HOME = home,
             ROOT = root,
@@ -1136,13 +1152,15 @@ testing.test("a card wearing a disabled colour is reported on every run and left
         columns = template_columns(),
         cards = { { id = "aaaaaaaa-1", name = "Odd", color_id = "orange-id" } },
     })
-    local _, _, lines = run(layout)
+    local _, _, lines, warnings = run(layout)
     local report = "card aaaaaaaa wears the disabled colour orange, left as it is"
-    testing.eq(lines[#lines], report)
+    testing.eq(warnings, { report })
+    testing.eq(lines[#lines] ~= report, true)
     testing.eq(layout.state.cards[1].color_id, "orange-id")
-    local changes, _, second = run(layout)
+    local changes, _, second, second_warnings = run(layout)
     testing.eq(changes, 0)
-    testing.eq(second, { report })
+    testing.eq(second, {})
+    testing.eq(second_warnings, { report })
 end)
 
 testing.test("a token that may not enable colours leaves them and carries on", function()
@@ -1154,16 +1172,14 @@ testing.test("a token that may not enable colours leaves them and carries on", f
         end
         return set_color(self, id, fields)
     end
-    local changes, message, lines = run(layout)
+    local changes, message, lines, warnings = run(layout)
     testing.eq(message, nil)
     testing.ok(changes > 0)
-    local left = 0
+    testing.eq(#warnings, 1)
+    testing.ok(warnings[1]:find("Run `dev board init --admin`", 1, true), warnings[1])
     for _, line in ipairs(lines) do
-        if line:find("Run `dev board init --admin`", 1, true) then
-            left = left + 1
-        end
+        testing.eq(line:find("Run `dev board init --admin`", 1, true), nil, line)
     end
-    testing.eq(left, 1)
     testing.eq(color(layout, "orange").enabled, true)
     testing.eq(color(layout, "white").is_default, true)
 end)
@@ -1610,25 +1626,35 @@ testing.test("init warns when the first lane is not in the lanes list", function
     -- Expect the warning after the new lanes on a Pomb board with an unlisted first lane
     local root, home, tmp = sandbox({ project = LANES_PROJECT })
     with_lanes(root, '[{"id":"l1","name":"Default"}]')
-    local out, code = dev(root, home, tmp, { "board", "init" })
+    local out, code, errors = dev_split(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
     testing.eq(out, UNCHANGED .. table.concat({
         'created lane "Parity"',
         'created lane "Fixes"',
         'created lane "Features"',
-        'The first lane "Default" is not in the [board] lanes list. '
-            .. "Cards filed without --lane land in it. "
-            .. "Delete or reorder it in the Pomb UI.",
         "board demo: 3 changes",
         "",
     }, "\n"))
+    testing.eq(
+        errors,
+        'The first lane "Default" is not in the [board] lanes list. '
+            .. "Cards filed without --lane land in it. "
+            .. "Delete or reorder it in the Pomb UI.\n"
+    )
 
     -- Expect no warning from a local board, even with an unlisted first lane
-    local lines = {}
+    local lines, warnings = {}, {}
     local layout = fake_layout({ columns = template_columns(), lanes = { "Default", "Parity" } })
     init.run(layout, "demo", function(line)
         lines[#lines + 1] = line
-    end, { lanes = { "Parity" }, warn_first_lane = false })
+    end, {
+        lanes = { "Parity" },
+        warn_first_lane = false,
+        warn = function(line)
+            warnings[#warnings + 1] = line
+        end,
+    })
+    testing.eq(warnings, {})
     for _, line in ipairs(lines) do
         testing.eq(line:find("first lane", 1, true), nil, line)
     end
@@ -1669,7 +1695,7 @@ end)
 
 testing.test("init-lead-without-roles-grant-creates-lanes", function()
     local root, home, tmp = sandbox({ project = LANES_PROJECT, roles = NO_ROLES_GRANT })
-    local out, code = dev(root, home, tmp, { "board", "init" })
+    local out, code, errors = dev_split(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
     local calls = calls_of(root)
     for _, lane in ipairs({ "Parity", "Fixes", "Features" }) do
@@ -1679,10 +1705,15 @@ testing.test("init-lead-without-roles-grant-creates-lanes", function()
     end
     testing.eq(
         out,
-        "The agent roles are left for `dev board init --admin`.\n"
-            .. 'created lane "Parity"\ncreated lane "Fixes"\ncreated lane "Features"\n'
-            .. "board demo: 3 changes\n"
+        table.concat({
+            'created lane "Parity"',
+            'created lane "Fixes"',
+            'created lane "Features"',
+            "board demo: 3 changes",
+            "",
+        }, "\n")
     )
+    testing.eq(errors, "The agent roles are left for `dev board init --admin`.\n")
 end)
 
 testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
@@ -1693,14 +1724,10 @@ testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
                 .. "on every board; use a token that has it",
             "roles.grant"
     end
-    local changes, message, lines = run(layout)
+    local changes, message, _, warnings = run(layout)
     testing.eq(message, nil)
     testing.ok(changes > 0)
-    local said = 0
-    for _, line in ipairs(lines) do
-        said = said + (line == "The agent roles are left for `dev board init --admin`." and 1 or 0)
-    end
-    testing.eq(said, 1)
+    testing.eq(warnings, { "The agent roles are left for `dev board init --admin`." })
 end)
 
 testing.test("init-lead-roles-read-fails-names-the-failure", function()

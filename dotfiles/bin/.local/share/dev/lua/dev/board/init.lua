@@ -1,4 +1,5 @@
 local board = require("dev.board")
+local verb = require("dev.verb")
 
 ---The standard board: the nine columns, the size palette and names without
 ---size words, laid out one step at a time. Each step adds or fixes what is
@@ -159,7 +160,7 @@ local function columns_step(layout, state, say)
     for _, column in ipairs(state.columns) do
         if not used[column.id] then
             want[#want + 1] = column
-            say(
+            state.warn(
                 "kept column " .. quoted(column.name) .. ", which is not part of the standard board"
             )
         end
@@ -193,11 +194,11 @@ local function roles_step(layout, state, say)
     local created, message, missing = layout:add_roles()
     if created == nil then
         if missing == "roles.unreadable" then
-            say("agent roles not checked, the roles list could not be read: " .. message)
+            state.warn("agent roles not checked, the roles list could not be read: " .. message)
             return true
         end
         if missing == "roles.grant" then
-            say("The agent roles are left for `dev board init --admin`.")
+            state.warn("The agent roles are left for `dev board init --admin`.")
             return true
         end
         return nil, message
@@ -316,7 +317,7 @@ local function enabled_step(layout, state, say)
                 local ok, message = layout:set_color(color.id, { enabled = enable })
                 if not ok then
                     if needs_admin(message) then
-                        say(LEFT_ENABLED)
+                        state.warn(LEFT_ENABLED)
                         return true
                     end
                     return nil, message
@@ -330,7 +331,7 @@ local function enabled_step(layout, state, say)
     return true
 end
 
-local function worn_step(_, state, say)
+local function worn_step(_, state)
     local off = {}
     for _, color in ipairs(state.colors) do
         if color.enabled == false then
@@ -340,7 +341,7 @@ local function worn_step(_, state, say)
     for _, card in ipairs(state.cards) do
         local value = card.color_id and off[card.color_id]
         if value then
-            say(
+            state.warn(
                 "card "
                     .. card.id:sub(1, board.MIN_PREFIX)
                     .. " wears the disabled colour "
@@ -357,7 +358,7 @@ local function strip_step(layout, state, say)
     for _, card in ipairs(state.cards) do
         local stripped, value = M.split_size(card.name)
         if stripped and stripped == "" then
-            say(
+            state.warn(
                 "kept card "
                     .. card.id:sub(1, board.MIN_PREFIX)
                     .. ", whose name is only a size word"
@@ -433,7 +434,7 @@ local function lanes_step(layout, state, say)
         and #state.wanted_lanes > 0
         and not listed[first:lower()]
     then
-        say(
+        state.warn(
             "The first lane "
                 .. quoted(first)
                 .. " is not in the [board] lanes list. "
@@ -448,6 +449,7 @@ end
 ---@field roles? dev.board.Roles the column set to lay out, the standard names when nil
 ---@field lanes? string[] the lanes the board config lists, an empty list when nil
 ---@field warn_first_lane? boolean whether to warn when the first lane is unlisted, false when nil
+---@field warn? fun(line: string) prints one warning line, standard error when nil
 
 ---Bring a board to the standard, saying each change as it is made.
 ---
@@ -465,6 +467,7 @@ function M.run(layout, name, say, opts)
         roles = opts.roles or board.roles(),
         wanted_lanes = opts.lanes or {},
         warn_first_lane = opts.warn_first_lane or false,
+        warn = opts.warn or verb.note,
     }
     local found, message = layout:find()
     if found == nil then

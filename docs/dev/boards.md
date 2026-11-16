@@ -313,6 +313,12 @@ deletes anything, so running it twice is the same as running it once.
 It prints one line per change, and `Board X already follows the standard.
 Nothing changed.` when there is none.
 
+Every warning goes to standard error, like an error, and standard output keeps
+the change lines that another tool may read. The warnings are the `kept
+column`, `kept card` and `wears the disabled colour` lines, the two lines that
+leave the agent roles (`not checked` and `left for --admin`), the line that
+leaves the colours enabled and the line that names an unlisted first lane.
+
 ```
 dev board init
 dev board init --name ci
