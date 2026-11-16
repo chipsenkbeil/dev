@@ -1258,6 +1258,31 @@ if has_jj then
         release_turn(project.home, held)
     end)
 
+    testing.test("land with no wait refuses at once and names the holder", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        local held = hold_turn(project.home, "other", "cccc3333")
+        local backend, restore = board_at(project.home)
+        backend.root = project.root
+        local nap = dev_os.nap
+        local naps = 0
+        dev_os.nap = function()
+            naps = naps + 1
+        end
+        local previous = os.getenv("DEV_AGENT") or ""
+        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
+        local ok, result = pcall(cmd_board.run, "land", { id }, backend)
+        ffi.C.setenv("DEV_AGENT", previous, 1)
+        dev_os.nap = nap
+        restore()
+        assert(ok, result)
+        testing.eq(result.code, 1, result.message)
+        testing.ok(result.message:find("held by other since", 1, true), result.message)
+        testing.eq(naps, 0)
+        testing.eq(assert(turn_holder(project.home)).name, "other")
+        release_turn(project.home, held)
+    end)
+
     testing.test("land gives the turn back when it refuses", function()
         local project = jj_project()
         local id = new_card(project)

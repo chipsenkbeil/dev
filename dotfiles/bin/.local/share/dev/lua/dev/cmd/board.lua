@@ -2699,8 +2699,7 @@ function commands.land(backend, args)
     if #words ~= 1 then
         return usage("needs a card")
     end
-    local DEFAULT_WAIT_SECONDS = 60
-    local wait = DEFAULT_WAIT_SECONDS
+    local wait = 0
     if flags[WAIT_FLAG] then
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
         if not wait or wait > MAX_WAIT_SECONDS then

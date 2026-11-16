@@ -2540,8 +2540,9 @@ The command:
   parent, and pushes the commit to the trunk branch as a fast-forward. A failed
   fetch, rebase or push leaves the card where it is and names the step. A
   conflicted rebase is aborted and leaves the branch as it was.
-- `--wait` is a whole number of seconds up to 86400 (60 by default), otherwise
-  exit 2.
+- `--wait` is a whole number of seconds up to 86400 and is off by default, so a
+  land that finds the turn held refuses at once and names the holder. With it,
+  the land waits up to that many seconds for the turn. Anything else exits 2.
 - It is never queued.
 
 The conditions:
@@ -2643,8 +2644,8 @@ Asking for the turn:
 
 - A card in the wrong column, with an open outcome or claimed by another agent
   is refused before the turn is asked for.
-- `land` then asks for the turn for up to `--wait` seconds and, when it stays
-  taken, refuses with `The landing turn is held by NAME since STAMP.`
+- `land` then asks for the turn for up to `--wait` seconds, none by default, and
+  when it stays taken, refuses with `The landing turn is held by NAME since STAMP.`
 - Cards wait in the order they asked. A card with a wait writes a
   `dev-turn: ask` note with the time its wait ends, plus 10 seconds, before it
   asks for the turn. Only the first live ask in line may take it, except a
