@@ -473,50 +473,14 @@ testing.test("without_sigpipe turns a write to a closed pipe into a failed write
     testing.eq(ok, false)
 end)
 
-testing.test("capture_timed cleans up when its process is terminated", function()
-    local tmp = assert(fs.mktemp({ dir = true }))
-    local snippet = ("package.path = %q; "):format(package.path)
-        .. 'require("dev.os").capture_timed({ "sh", "-c", "sleep 3773 & sleep 3774; wait" }, 600)'
-    local pid = dev_os.capture({
-        "sh",
-        "-c",
-        [[TMPDIR="$2" luajit -e "$1" </dev/null >/dev/null 2>&1 & echo $!]],
-        "sh",
-        snippet,
-        tmp,
-    })
-    pid = pid:gsub("%s+$", "")
-    local function sleeping()
-        local out = dev_os.capture({ "sh", "-c", "ps -axo args=" })
-        return ("\n" .. out):find("\nsleep 3773\n", 1, true) ~= nil
-    end
-    local function stray()
-        return dev_os.capture({ "sh", "-c", "ps -axo args= | grep -x 'sleep 377[34]' || true" })
-    end
-    for _ = 1, 50 do
-        if sleeping() then
-            break
-        end
-        dev_os.run({ "sleep", "0.1" })
-    end
-    testing.ok(sleeping(), "the command should be running")
-    dev_os.run({ "kill", "-TERM", pid })
-    for _ = 1, 50 do
-        if not sleeping() then
-            break
-        end
-        dev_os.run({ "sleep", "0.1" })
-    end
-    local left = stray()
-    local dirs = dev_os.capture({ "ls", tmp })
-    fs.remove(tmp, { recursive = true })
-    testing.eq(left, "")
-    testing.eq(dirs, "")
-end)
+local CAPTURE_TIMED_LIMIT_SECS = 600
 
 local function launch_capture_timed(command, tmp)
     local snippet = ("package.path = %q; "):format(package.path)
-        .. ("require('dev.os').capture_timed({ 'sh', '-c', %q }, 600)"):format(command)
+        .. ("require('dev.os').capture_timed({ 'sh', '-c', %q }, %d)"):format(
+            command,
+            CAPTURE_TIMED_LIMIT_SECS
+        )
     local pid = dev_os.capture({
         "sh",
         "-c",
@@ -546,25 +510,37 @@ local function wait_until(predicate)
     return predicate()
 end
 
-testing.test("capture_timed cleans up when its process is killed", function()
+local function dir_empty(dir)
+    return dev_os.capture({ "ls", dir }) == ""
+end
+
+local function cleans_up_after(signal, first, second)
     local tmp = assert(fs.mktemp({ dir = true }))
-    local pid = launch_capture_timed("sleep 3777 & sleep 3778; wait", tmp)
+    local pid = launch_capture_timed(("sleep %d & sleep %d; wait"):format(first, second), tmp)
     testing.ok(
         wait_until(function()
-            return process_listed("sleep 3777")
+            return process_listed("sleep " .. first)
         end),
         "the command should be running"
     )
-    dev_os.run({ "kill", "-KILL", pid })
+    dev_os.run({ "kill", signal, pid })
     local gone = wait_until(function()
-        return not process_listed("sleep 3777") and not process_listed("sleep 3778")
+        return not process_listed("sleep " .. first) and not process_listed("sleep " .. second)
     end)
     local removed = wait_until(function()
-        return dev_os.capture({ "ls", tmp }) == ""
+        return dir_empty(tmp)
     end)
     fs.remove(tmp, { recursive = true })
     testing.ok(gone, "the command and its children should be killed")
     testing.ok(removed, "the temporary directory should be removed")
+end
+
+testing.test("capture_timed cleans up when its process is terminated", function()
+    cleans_up_after("-TERM", 3773, 3774)
+end)
+
+testing.test("capture_timed cleans up when its process is killed", function()
+    cleans_up_after("-KILL", 3777, 3778)
 end)
 
 local function children_of(marker)
