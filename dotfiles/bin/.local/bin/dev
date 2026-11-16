@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SYSTEM_BIN_DIRS=(/usr/bin /usr/local/bin)
-root_refusal="dev: As root, dev runs only \`dev tools install\` and \`dev tools check\`."
+root_refusal="As root, dev runs only \`dev tools install\` and \`dev tools check\`."
 
 args=()
 chdirs=()
@@ -23,7 +23,7 @@ while [ "$#" -gt 0 ]; do
         ;;
     -C)
         if [ "$#" -lt 2 ] || [ -z "$2" ]; then
-            printf 'dev: -C needs a directory\n' >&2
+            printf "The flag \`-C\` needs a directory.\n" >&2
             exit 2
         fi
         chdirs+=("$2")
@@ -70,7 +70,7 @@ for dir in ${chdirs[@]+"${chdirs[@]}"}; do
     *) target=./$dir ;;
     esac
     cd -P -- "$target" 2>/dev/null || {
-        printf 'dev: -C cannot enter %s\n' "$dir" >&2
+        printf "The flag \`-C\` cannot enter %s.\n" "$dir" >&2
         exit 2
     }
 done
@@ -155,10 +155,10 @@ if [ -z "$luajit" ]; then
     done
     if [ "${words[0]:-}" = tools ] && { [ "${words[1]:-}" = install ] || [ "${words[1]:-}" = check ]; }; then
         if [ "$(uname)" != Linux ]; then
-            printf 'dev: as root, dev runs only on Linux\n' >&2
+            printf 'As root, dev runs only on Linux.\n' >&2
             exit 2
         fi
-        printf "dev: \`dev tools\` needs luajit in /usr/bin or /usr/local/bin.\n" >&2
+        printf "The command \`dev tools\` needs luajit in /usr/bin or /usr/local/bin.\n" >&2
         exit 1
     fi
     printf '%s\n' "$root_refusal" >&2
@@ -167,10 +167,10 @@ fi
 
 if [ "$luajit" = luajit ] && ! command -v luajit >/dev/null 2>&1; then
     if [ "$remote_flag" -eq 1 ]; then
-        printf 'dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit\n' >&2
+        printf "The flag \`--remote\` needs luajit. Install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`.\n" >&2
         exit 1
     fi
-    printf "dev: luajit not found. Run \`dev bootstrap\`, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit.\n" >&2
+    printf "Luajit is not found. Run \`dev bootstrap\`, or install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`.\n" >&2
     exit 1
 fi
 

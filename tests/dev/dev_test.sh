@@ -945,11 +945,11 @@ cirun "$cip" --remote lint -- -C x >/dev/null 2>&1
 assert_eq "-C after -- reaches the job as an argument" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--] [-C] [x]"
 out="$(cirun "$cip" --remote -C "$TMP/no-such-dir" lint 2>&1)"
 assert_eq "-C with a missing directory exits 2" "$?" "2"
-assert_contains "-C with a missing directory names it" "$out" "dev: -C cannot enter $TMP/no-such-dir"
+assert_contains "-C with a missing directory names it" "$out" "The flag \`-C\` cannot enter $TMP/no-such-dir."
 assert_eq "-C with a missing directory runs nothing" "$(log)" ""
 out="$(cirun "$cip" --remote lint -C 2>&1)"
 assert_eq "-C with no directory exits 2" "$?" "2"
-assert_contains "-C with no directory says so" "$out" "dev: -C needs a directory"
+assert_contains "-C with no directory says so" "$out" "The flag \`-C\` needs a directory."
 cirun "$cip" lint --remote >/dev/null 2>&1
 assert_contains "--remote works after the verb" "$(log)" "[--follow] [--job] [lint]"
 DEV_REMOTE=1 cirun "$cip" test >/dev/null 2>&1

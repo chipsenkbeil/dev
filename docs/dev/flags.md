@@ -334,9 +334,9 @@ completion recognize this repo by that path.
 
 Before anything else, the launcher takes each `-C DIR` pair out of the
 arguments before a `--`. A missing or empty word exits 2 with
-`dev: -C needs a directory`. Once the launcher has found itself, it enters the
-directories in turn, and one it cannot enter exits 2 with
-`dev: -C cannot enter <DIR>`.
+``The flag `-C` needs a directory.`` Once the launcher has found itself, it
+enters the directories in turn, and one it cannot enter exits 2 with
+``The flag `-C` cannot enter <DIR>.``
 
 At uid 0 (`$EUID` or `id -u`), the launcher then does the following.
 
@@ -351,8 +351,9 @@ At uid 0 (`$EUID` or `id -u`), the launcher then does the following.
 
 A root caller without luajit and without those flags gets the root refusal
 (exit 2) for every command but `tools install` and `tools check`. Those print
-`dev: as root, dev runs only on Linux` (exit 2) off Linux and
-``dev: `dev tools` needs luajit in /usr/bin or /usr/local/bin.`` (exit 1) on it.
+`As root, dev runs only on Linux.` (exit 2) off Linux and
+``The command `dev tools` needs luajit in /usr/bin or /usr/local/bin.`` (exit 1)
+on it.
 The launcher decides this in bash from the words after the `-v` and
 `--verbose` flags, before anything is read.
 
@@ -387,11 +388,11 @@ exits 1 with one of the two messages below. The second applies with `--remote`,
 `--detach` or an enabled `DEV_REMOTE`, and nothing runs.
 
 ```
-dev: luajit not found. Run `dev bootstrap`, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit.
+Luajit is not found. Run `dev bootstrap`, or install it with `brew install luajit`, `pacman -S luajit`, `dnf install luajit` or `apt install luajit`.
 ```
 
 ```
-dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit
+The flag `--remote` needs luajit. Install it with `brew install luajit`, `pacman -S luajit`, `dnf install luajit` or `apt install luajit`.
 ```
 
 ## The dispatcher

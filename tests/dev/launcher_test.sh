@@ -71,7 +71,7 @@ ln -s "$REAL_LUAJIT" "$TMP/realjit/luajit"
 LC_REAL="$(system_launcher real "$TMP/realjit")"
 LC_NONE="$(system_launcher none "$TMP/nowhere")"
 
-missing="dev: luajit not found. Run \`dev bootstrap\`, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit."
+missing="Luajit is not found. Run \`dev bootstrap\`, or install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`."
 out="$(PATH="$NOLUA" "$DEV" lint 2>&1)"
 assert_eq "no luajit exits 1" "$?" "1"
 assert_eq "no luajit prints the one line" "$out" "$missing"
@@ -91,7 +91,7 @@ assert_contains "bootstrap passes its arguments on" "$out" "args: --dry-run"
 
 out="$(PATH="$ROOTID:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run 2>&1)"
 assert_eq "root is refused bootstrap with exit 2" "$?" "2"
-assert_eq "root gets the refusal line" "$out" "dev: $ROOT_REFUSAL"
+assert_eq "root gets the refusal line" "$out" "$ROOT_REFUSAL"
 
 for name in BASH_ENV ENV LUA_PATH LUA_CPATH LUA_INIT LUA_PATH_5_1 LUA_CPATH_5_1 LUA_INIT_5_1 LUA_PATH_5_2 LUA_CPATH_5_2 LUA_INIT_5_2 DEV_UID DEV_OS; do
     rm -f "$ENV_OUT"
@@ -108,7 +108,7 @@ assert_eq "the launcher hands luajit main.lua and the arguments" "$(cat "$ARGS_O
 rm -f "$ENV_OUT"
 out="$(PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" lint 2>&1)"
 assert_eq "root without a system luajit refuses a verb with exit 2" "$?" "2"
-assert_eq "root without a system luajit gets the root refusal" "$out" "dev: $ROOT_REFUSAL"
+assert_eq "root without a system luajit gets the root refusal" "$out" "$ROOT_REFUSAL"
 assert_eq "root never runs a luajit found on PATH" "$([ -e "$ENV_OUT" ] && echo ran || echo absent)" "absent"
 out="$(DEV_UID=1000 PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_NONE" lint 2>&1)"
 assert_eq "root without a system luajit ignores an inherited DEV_UID" "$?" "2"
@@ -255,10 +255,10 @@ assert_eq "a -C before the verb guide is taken out" "${out#* }" "guide how"
 
 out="$(cd "$TMP" && PATH="$NOLUA" "$DEV" -C nope lint 2>&1)"
 assert_eq "-C with a relative directory it cannot enter exits 2" "$?" "2"
-assert_eq "-C names a relative directory as it was given" "$out" "dev: -C cannot enter nope"
+assert_eq "-C names a relative directory as it was given" "$out" "The flag \`-C\` cannot enter nope."
 out="$(PATH="$NOLUA" "$DEV" -C "" lint 2>&1)"
 assert_eq "-C with an empty word exits 2" "$?" "2"
-assert_eq "-C with an empty word says it needs a directory" "$out" "dev: -C needs a directory"
+assert_eq "-C with an empty word says it needs a directory" "$out" "The flag \`-C\` needs a directory."
 
 rm -f "$ENV_OUT"
 PATH="$RECORDER:$NOLUA" "$DEV" --agent dotfiles/implementer/x lint >/dev/null 2>&1
@@ -280,10 +280,10 @@ assert_eq "-C beside bootstrap exits 0" "$?" "0"
 assert_contains "-C beside bootstrap passes the rest of the arguments on" "$out" "args: --dry-run"
 out="$(PATH="$ROOTID:$NOLUA" DOTFILES="$C_DOTFILES" "$DEV" -C "$TMP" bootstrap --dry-run 2>&1)"
 assert_eq "root with -C beside bootstrap is refused with exit 2" "$?" "2"
-assert_eq "root with -C beside bootstrap gets the refusal line" "$out" "dev: $ROOT_REFUSAL"
+assert_eq "root with -C beside bootstrap gets the refusal line" "$out" "$ROOT_REFUSAL"
 
 NOJIT="$CIBIN:$NOLUA"
-remote_missing='dev: --remote needs luajit. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
+remote_missing="The flag \`--remote\` needs luajit. Install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`."
 out="$(cd "$PROJ" && PATH="$NOJIT" "$DEV" lint --remote 2>&1)"
 assert_eq "no luajit, dev lint --remote exits 1" "$?" "1"
 assert_eq "no luajit, dev lint --remote says --remote needs luajit" "$out" "$remote_missing"
@@ -299,12 +299,12 @@ for words in "--remote tools install" "lint --detach"; do
     # shellcheck disable=SC2086
     out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" "$LC_NONE" $words 2>&1)"
     assert_eq "root without luajit, dev $words exits 2" "$?" "2"
-    assert_eq "root without luajit, dev $words gets the root refusal" "$out" "dev: $ROOT_REFUSAL"
+    assert_eq "root without luajit, dev $words gets the root refusal" "$out" "$ROOT_REFUSAL"
     ran_nothing "root without luajit, dev $words"
 done
 out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" DEV_REMOTE=1 "$LC_NONE" tools check 2>&1)"
 assert_eq "root without luajit, DEV_REMOTE=1 exits 2" "$?" "2"
-assert_eq "root without luajit, DEV_REMOTE=1 gets the root refusal" "$out" "dev: $ROOT_REFUSAL"
+assert_eq "root without luajit, DEV_REMOTE=1 gets the root refusal" "$out" "$ROOT_REFUSAL"
 ran_nothing "root without luajit, DEV_REMOTE"
 
 if [ "$fails" -gt 0 ]; then
