@@ -46,13 +46,19 @@ local function holding(cards, card, columns)
     return held
 end
 
----Say why `card` may not enter `target`, when a Pomb limit forbids it.
+---Say why `card` may not enter `target`, when a Pomb limit forbids it. A card that carries the
+---trunk-blocker label is never refused.
 ---
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card the caller is about to move
 ---@param target string the column it moves to
 ---@return string? message the refusal naming the cards, or the read failure, nil when the move fits
 function M.refusal(backend, card, target)
+    -- A trunk-blocker card skips every limit, so it is never refused
+    if board.labelled(card, board.TRUNK_BLOCKER) then
+        return nil
+    end
+
     -- A limit that cannot be read must stop the move, since a guess could overfill a column
     local limits, message = backend:limits()
     if not limits then

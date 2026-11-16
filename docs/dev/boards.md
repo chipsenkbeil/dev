@@ -1752,6 +1752,12 @@ this project's board, from a fresh `GET /api/boards/{id}`.
 - A local board is exit 1.
 - A second word is exit 2.
 
+A card with the `trunk-blocker` label skips these limits. `take` and `move` do
+not refuse it at a column or group limit, and `move` adds `force: true` to the
+Pomb move request, which makes Pomb skip the limits too. A move of any other
+card sends no `force`. Only a card whose change unblocks every landing carries
+the label, and the owner's standing exemption decides which one that is.
+
 ### add
 
 `dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD]

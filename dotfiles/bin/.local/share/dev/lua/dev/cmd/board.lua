@@ -1473,8 +1473,11 @@ local function move_once(backend, args, opts)
         started = true
         held = { fence = fence }
     end
-    local ok, message, at_limit =
-        backend:move(card.id, column, { fence = held and held.fence, lane = lane })
+    local ok, message, at_limit = backend:move(card.id, column, {
+        fence = held and held.fence,
+        lane = lane,
+        force = board.labelled(card, board.TRUNK_BLOCKER) or nil,
+    })
     if not ok then
         if started then
             claims.stop(card.id)

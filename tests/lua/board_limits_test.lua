@@ -1,4 +1,5 @@
 local testing = require("dev.testing")
+local board = require("dev.board")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
@@ -139,6 +140,7 @@ local function export(placed)
             position = index,
             color_id = "yellow-id",
             kind = place[3],
+            labels = place[4],
             description = PLANNED,
         })
     end
@@ -282,6 +284,52 @@ testing.test("move refuses a card entering a full group and names the cards", fu
     testing.eq(code, 3, out)
     testing.eq(out, IN_FLIGHT)
     testing.eq(read(box, "calls"):find("/move", 1, true), nil)
+end)
+
+local function flight_with(labels)
+    return {
+        { "a", ID.PROGRESS, TASK },
+        { "b", ID.REVIEW, TASK },
+        { "c", ID.VERIFY, TASK },
+        { "d", ID.READY, TASK, labels },
+    }
+end
+
+testing.test("take and move accept a trunk-blocker card at the group limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export(flight_with({ board.TRUNK_BLOCKER })),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 0, out)
+    testing.ok(out:find("took dddddddd", 1, true), out)
+    out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
+    testing.eq(code, 0, out)
+    testing.ok(read(box, "calls"):find('"force":true', 1, true), read(box, "calls"))
+end)
+
+testing.test("a card with another label is still refused at the group limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export(flight_with({ "docs" })),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 1, out)
+    testing.eq(out, IN_FLIGHT)
+    out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
+    testing.eq(code, 3, out)
+    testing.eq(read(box, "calls"):find("/move", 1, true), nil)
+end)
+
+testing.test("a plain move sends no force", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
+    local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
+    testing.eq(code, 0, out)
+    local calls = read(box, "calls")
+    testing.ok(calls:find('"column_id":"' .. ID.PROGRESS .. '"', 1, true), calls)
+    testing.eq(calls:find("force", 1, true), nil)
 end)
 
 testing.test("move refuses a card entering a full column", function()

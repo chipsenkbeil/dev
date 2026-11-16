@@ -204,6 +204,7 @@ local M = {}
 ---@field fence integer? the claim fence the move is checked against
 ---@field position integer? the zero-based place in the column and lane, the top when nil
 ---@field lane string? the name of the lane to move the card to, its own lane when nil
+---@field force boolean? whether Pomb skips the column and group limits, true for a trunk-blocker
 
 ---@class dev.board.Comment
 ---@field id string the comment's full id
@@ -335,6 +336,9 @@ M.DISCARDED = "discarded"
 
 ---The label of a run card, which holds a session's orders and never comes up as the next card.
 M.RUN = "run"
+
+---The label of a card whose change unblocks every landing, which skips the in-flight limits.
+M.TRUNK_BLOCKER = "trunk-blocker"
 
 ---The names in a multiline text field, one per line.
 ---@param value string|string[]|nil the field's value

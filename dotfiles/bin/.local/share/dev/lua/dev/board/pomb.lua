@@ -1369,7 +1369,7 @@ function Backend:move(id, column, opts)
         return nil, unavailable("the board has no " .. column .. " column")
     end
     opts = opts or {}
-    local body = { column_id = target, position = opts.position or TOP }
+    local body = { column_id = target, position = opts.position or TOP, force = opts.force }
     if opts.lane then
         body.swimlane_id = self:__lane_id(opts.lane)
         if not body.swimlane_id then
