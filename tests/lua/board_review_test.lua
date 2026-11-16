@@ -36,11 +36,21 @@ end
 local function card_in(root, home)
     must(dev(root, home, { "board", "init" }))
     support.drop_turn_card(home .. "/state/dev/boards/mine.json")
-    local out = dev(
-        root,
-        home,
-        { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    local out = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     return assert(out:match("added (%x+)"), out)
 end
 

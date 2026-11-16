@@ -28,6 +28,7 @@ local LIVE_LEASE = "2999-01-01T00:00:00Z"
 local PROGRESS_NAME = support.COLUMN_NAME.PROGRESS
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
+local COMPOSED = "## Problem\nx\n\n## Change\nx\n\n## Out of scope\ny\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
 local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
     .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
@@ -348,7 +349,19 @@ testing.test("a renamed board runs through the column map", function()
     )
     testing.eq(cmd_board.run("ls", { "--column", "doing" }, backend).code, 2)
     testing.eq(
-        cmd_board.run("add", { "C", "--problem", "x", "--size", "1", "--done-when", "a" }, backend).output,
+        cmd_board.run("add", {
+            "C",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        }, backend).output,
         "added cccccccc Inbox"
     )
 end)
@@ -545,15 +558,25 @@ end)
 
 testing.test("add defaults to Backlog and joins the words of the name", function()
     local backend = fake(sample())
-    local result = cmd_board.run(
-        "add",
-        { "A", "new", "card", "--problem", "x", "--size", "1", "--done-when", "a" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "A",
+        "new",
+        "card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
     testing.eq(
         backend.calls[1],
-        { "add", "A new card", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" }
+        { "add", "A new card", support.COLUMN_NAME.BACKLOG, COMPOSED, "yellow" }
     )
     result = cmd_board.run("add", {
         "X",
@@ -588,15 +611,25 @@ testing.test("add --board files on the named board and leaves this one alone", f
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
-    local result = cmd_board.run(
-        "add",
-        { "Far", "--board", "ci", "--problem", "x", "--size", "1", "--done-when", "a" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "Far",
+        "--board",
+        "ci",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
     testing.eq(backend.calls[1], { "other_board", "ci" })
     testing.eq(#backend.calls, 1)
-    testing.eq(sibling.calls[1], { "add", "Far", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
+    testing.eq(sibling.calls[1], { "add", "Far", support.COLUMN_NAME.BACKLOG, COMPOSED, "yellow" })
 end)
 
 testing.test("add --board refuses a board that is not there", function()
@@ -621,6 +654,10 @@ testing.test("add --blocked-by links the new card to each blocker", function()
         "X",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -642,6 +679,10 @@ testing.test("add --from links the new card as related to the card it came from"
         "X",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -656,22 +697,42 @@ end)
 
 testing.test("add --from refuses an unknown card before it adds", function()
     local backend = fake(sample())
-    local result = cmd_board.run(
-        "add",
-        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--from", "deadbeef" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--from",
+        "deadbeef",
+    }, backend)
     testing.eq(result.code, 1)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("add --blocked-by refuses an unknown blocker before it adds", function()
     local backend = fake(sample())
-    local result = cmd_board.run(
-        "add",
-        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--blocked-by", "deadbeef" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--blocked-by",
+        "deadbeef",
+    }, backend)
     testing.eq(result.code, 1)
     testing.eq(#backend.calls, 0)
 end)
@@ -686,6 +747,10 @@ testing.test("add --board with --blocked-by looks the blocker up on the named bo
         "ci",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -702,11 +767,21 @@ testing.test("add names the card when its blocked-by link fails", function()
     function backend:link()
         return nil, "pomb refused"
     end
-    local result = cmd_board.run(
-        "add",
-        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--blocked-by", "11111111-a" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--blocked-by",
+        "11111111-a",
+    }, backend)
     testing.eq(result.code, 1)
     testing.ok(
         result.message:find("cccccccc was added to Backlog but its blocked_by link", 1, true),
@@ -720,11 +795,21 @@ testing.test("add names the card when its from link fails", function()
     function backend:link()
         return nil, "pomb refused"
     end
-    local result = cmd_board.run(
-        "add",
-        { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--from", "11111111-a" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--from",
+        "11111111-a",
+    }, backend)
     testing.eq(result.code, 1)
     testing.ok(
         result.message:find("cccccccc was added to Backlog but its related link", 1, true),
@@ -743,6 +828,10 @@ testing.test("add --board with --from looks the card up on the named board", fun
         "ci",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -774,6 +863,10 @@ testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD",
         "X",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -786,7 +879,7 @@ testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD",
         "ci:dddddddd",
     }, backend)
     testing.eq(backend.calls[1], { "other_board", "ci" })
-    testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "yellow" })
+    testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, COMPOSED, "yellow" })
     testing.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_A })
     testing.eq(backend.calls[4], { "link", ID_C, "blocked_by", far })
     testing.eq(#backend.calls, 4)
@@ -795,10 +888,22 @@ end)
 testing.test("add --size passes the colour its size word names", function()
     local backend = fake(sample())
     for word, color in pairs({ ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }) do
-        cmd_board.run("add", { "X", "--problem", "x", "--size", word, "--done-when", "a" }, backend)
+        cmd_board.run("add", {
+            "X",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            word,
+            "--done-when",
+            "a",
+        }, backend)
         testing.eq(
             backend.calls[#backend.calls],
-            { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, color }
+            { "add", "X", support.COLUMN_NAME.BACKLOG, COMPOSED, color }
         )
     end
     local calls = #backend.calls
@@ -886,6 +991,10 @@ testing.test("add --label may repeat and drops a duplicate", function()
         "X",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "2",
         "--done-when",
@@ -899,12 +1008,24 @@ testing.test("add --label may repeat and drops a duplicate", function()
     }, backend)
     testing.eq(
         backend.calls[1],
-        { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "green", { "a", "needs:lead" } }
+        { "add", "X", support.COLUMN_NAME.BACKLOG, COMPOSED, "green", { "a", "needs:lead" } }
     )
-    cmd_board.run("add", { "X", "--problem", "x", "--size", "2", "--done-when", "a" }, backend)
+    cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "2",
+        "--done-when",
+        "a",
+    }, backend)
     testing.eq(
         backend.calls[2],
-        { "add", "X", support.COLUMN_NAME.BACKLOG, SCAFFOLD, "green", nil }
+        { "add", "X", support.COLUMN_NAME.BACKLOG, COMPOSED, "green", nil }
     )
 end)
 
@@ -1760,14 +1881,35 @@ end)
 
 testing.test("add --epic creates an epic through the backend", function()
     local backend = fake(sample())
-    local result = cmd_board.run(
-        "add",
-        { "Big", "--epic", "--problem", "x", "--size", "1", "--done-when", "a" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "Big",
+        "--epic",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
     testing.eq(result.code, nil, result.message)
     testing.eq(backend.opts.epic, true)
-    cmd_board.run("add", { "Small", "--problem", "x", "--size", "1", "--done-when", "a" }, backend)
+    cmd_board.run("add", {
+        "Small",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
     testing.eq(backend.opts.epic, nil)
 end)
 
@@ -2143,6 +2285,10 @@ testing.test(
                 support.COLUMN.BACKLOG,
                 "--problem",
                 "x",
+                "--change",
+                "x",
+                "--out-of-scope",
+                "y",
                 "--size",
                 "1",
                 "--done-when",
@@ -2201,22 +2347,24 @@ testing.test(
     "add scaffolds the v3 headings, fills Problem and keeps a text that has them",
     function()
         local backend = fake(sample())
-        cmd_board.run(
+        local result = cmd_board.run(
             "add",
             { "X", "--description", "It breaks.", "--size", "1", "--done-when", "a" },
             backend
         )
-        testing.eq(backend.calls[1][4], "## Problem\nIt breaks.\n\n## Change\n\n## Out of scope\n")
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("text under ## Change", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
         cmd_board.run("add", { "X", "--description", V1, "--size", "1" }, backend)
-        testing.eq(backend.calls[2][4], V1)
+        testing.eq(backend.calls[1][4], V1)
         cmd_board.run(
             "add",
             { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
             backend
         )
-        testing.eq(backend.calls[3], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
+        testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
         cmd_board.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend)
-        testing.eq(backend.calls[4], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
+        testing.eq(backend.calls[3], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
     end
 )
 
@@ -2242,12 +2390,20 @@ testing.test(
             backend.calls[1][4],
             "## Problem\nIt breaks.\n\n## Change\n- fix it\n\n## Out of scope\nnothing\n"
         )
-        cmd_board.run(
-            "add",
-            { "X", "--problem", "  only  ", "--size", "1", "--done-when", "a" },
-            backend
-        )
-        testing.eq(backend.calls[2][4], "## Problem\nonly\n\n## Change\n\n## Out of scope\n")
+        cmd_board.run("add", {
+            "X",
+            "--problem",
+            "  only  ",
+            "--change",
+            " x ",
+            "--out-of-scope",
+            " y ",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        }, backend)
+        testing.eq(backend.calls[2][4], "## Problem\nonly\n\n## Change\nx\n\n## Out of scope\ny\n")
     end
 )
 
@@ -2273,6 +2429,8 @@ testing.test("add keeps each repeated --change as its own line, in order", funct
         "- two",
         "--change",
         "- three",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -2281,7 +2439,7 @@ testing.test("add keeps each repeated --change as its own line, in order", funct
     testing.eq(result.output, "added cccccccc Backlog")
     testing.eq(
         backend.calls[1][4],
-        "## Problem\np\n\n## Change\n- one\n- two\n- three\n\n## Out of scope\n"
+        "## Problem\np\n\n## Change\n- one\n- two\n- three\n\n## Out of scope\ny\n"
     )
 end)
 
@@ -2433,6 +2591,56 @@ testing.test(
     end
 )
 
+---Card descriptions with an empty section or a misplaced line, each with the refusal text it draws
+local SHAPE_CASES = {
+    { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", "text under ## Change" },
+    { "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn", "a Problem free of" },
+    { "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn", "a Problem free of" },
+}
+
+testing.test("move into In Progress refuses an empty section or a misplaced line", function()
+    for _, case in ipairs(SHAPE_CASES) do
+        local card = colored("green")
+        card.description = case[1]
+        card.outcomes = { { id = "s1", name = "a " .. board.JUDGEMENT } }
+        local backend = fake({ card })
+        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find(case[2], 1, true), result.message)
+        testing.eq(#backend.calls, 0)
+    end
+end)
+
+testing.test("add to Backlog refuses an empty section or a misplaced line", function()
+    for _, case in ipairs({
+        { { "--problem", "x", "--change", "c" }, "text under ## Out of scope" },
+        { { "--problem", "x", "--out-of-scope", "n" }, "text under ## Change" },
+        { { "--description", SHAPE_CASES[2][1] }, "a Problem free of" },
+    }) do
+        local args = { "X", "--column", support.COLUMN.BACKLOG, "--size", "1", "--done-when", "a" }
+        for _, word in ipairs(case[1]) do
+            args[#args + 1] = word
+        end
+        local backend = fake(sample())
+        local result = cmd_board.run("add", args, backend)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find(case[2], 1, true), result.message)
+        testing.eq(#backend.calls, 0)
+    end
+end)
+
+testing.test("discard drops a card with an empty section or a misplaced line", function()
+    for _, case in ipairs(SHAPE_CASES) do
+        local card = colored("green")
+        card.description = case[1]
+        local backend = fake({ card })
+        local result = cmd_board.run("discard", { "cccccccc" }, backend)
+        testing.eq(result.message, nil)
+        testing.eq(result.output, "discarded cccccccc")
+        testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
+    end
+end)
+
 testing.test(
     "move to Backlog refuses a card without a Problem and names what is missing",
     function()
@@ -2448,7 +2656,7 @@ testing.test(
         result = cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card }))
         testing.eq(result.code, 1)
         testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
-        card.description = SCAFFOLD
+        card.description = COMPOSED
         card.outcomes = { { id = "s1", name = "a", done = false } }
         testing.eq(
             cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card })).code,
@@ -2506,6 +2714,10 @@ testing.test("add --checks gives the card one row per command", function()
         "X",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -2536,11 +2748,21 @@ testing.test(
         testing.eq(result.code, 2)
         testing.ok(result.message:find("no checks field", 1, true), result.message)
         testing.ok(result.message:find("dev board init", 1, true), result.message)
-        result = cmd_board.run(
-            "add",
-            { "X", "--problem", "x", "--size", "1", "--done-when", "a", "--checks", "dev test" },
-            backend
-        )
+        result = cmd_board.run("add", {
+            "X",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+            "--checks",
+            "dev test",
+        }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("no checks field", 1, true), result.message)
         testing.eq(#backend.calls, 0)
@@ -2768,11 +2990,21 @@ end)
 
 testing.test("add --done-when hands the outcomes to the backend and checks them", function()
     local backend = fake(sample())
-    local result = cmd_board.run(
-        "add",
-        { "X", "--problem", "x", "--size", "1", "--done-when", "A works", "--done-when", "B works" },
-        backend
-    )
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "A works",
+        "--done-when",
+        "B works",
+    }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
     testing.eq(backend.opts.outcomes, { "A works", "B works" })
     testing.eq(cmd_board.run("add", { "X", "--problem", "x", "--done-when", " " }, backend).code, 2)
@@ -2808,11 +3040,19 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
     testing.ok(result.message:find("These outcomes lack one: c", 1, true), result.message)
     ready[#ready] = "c " .. board.CHECK_OPEN .. "dev test)"
     testing.eq(cmd_board.run("add", ready, backend).code, nil)
-    result = cmd_board.run(
-        "add",
-        { "X", "--problem", "x", "--size", "1", "--done-when", "see src/a.lua" },
-        backend
-    )
+    result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "see src/a.lua",
+    }, backend)
     testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
 end)
 
@@ -3550,6 +3790,10 @@ testing.test("add refuses the standalone-ok label for an agent", function()
             "C",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -3795,7 +4039,19 @@ local function hosted(backend)
 end
 
 local function new_card_args()
-    return { "A", "--problem", "x", "--size", "1", "--done-when", "a" }
+    return {
+        "A",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }
 end
 
 testing.test("next prints the card link on a board with a host", function()
@@ -6093,6 +6349,10 @@ testing.test("add --done-when posts one subtask per outcome after the card", fun
         "New",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -6129,6 +6389,10 @@ testing.test(
             "New",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -6200,6 +6464,10 @@ testing.test("add --label needs:human reaches pomb after the card and its outcom
         "New",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -6230,6 +6498,10 @@ testing.test("a failed subtask on add --label needs:human still labels the card"
         "New",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -6251,6 +6523,10 @@ local function add_locked(root, home)
         "New",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -6282,11 +6558,21 @@ end)
 
 testing.test("add --size and size reach pomb with the id of the colour, not its label", function()
     local root, home = sandbox()
-    local out, code = dev(
-        root,
-        home,
-        { "board", "add", "New", "--problem", "x", "--size", "3+", "--done-when", "a" }
-    )
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "New",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "3+",
+        "--done-when",
+        "a",
+    })
     testing.eq(code, 0)
     testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
@@ -6338,6 +6624,10 @@ testing.test("add --label and label reach pomb as the whole list", function()
         "New",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -6937,7 +7227,7 @@ testing.test("prose warnings reach standard error and the write still happens", 
                 "add",
                 "Fresh",
                 "--description",
-                "look in src/a.lua",
+                "## Problem\nlook in src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
                 "--size",
                 "1",
                 "--done-when",
@@ -7000,11 +7290,21 @@ end)
 testing.test("a nonexistent column on the board is reported", function()
     local root, home = sandbox()
     assert(fs.write(root .. "/detail.json", '{"id":"board-1","name":"dotfiles","columns":[]}'))
-    local out, code = dev(
-        root,
-        home,
-        { "board", "add", "x", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "x",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     testing.eq(code, 1)
     testing.ok(out:find("the board has no Backlog column", 1, true), out)
 end)
@@ -8203,6 +8503,10 @@ testing.test(
             "New",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -8279,11 +8583,15 @@ testing.test("add, note and edit report prose warnings and still write", functio
     testing.eq(#backend.calls, 1)
     result = cmd_board.run("note", { "cccccccc", "all", "clear" }, backend)
     testing.eq(#result.warnings, 0)
-    result = cmd_board.run(
-        "add",
-        { "X", "--description", "in src/a.lua", "--size", "1", "--done-when", "a" },
-        backend
-    )
+    result = cmd_board.run("add", {
+        "X",
+        "--description",
+        "## Problem\nin src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
     testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
     result = cmd_board.run("add", { "X", "--description", V1, "--size", "1" }, backend)
     testing.eq(result.warnings, {})
@@ -9612,7 +9920,8 @@ testing.test(
     end
 )
 
-local PLAIN_ADD = { "--problem", "x", "--size", "1", "--done-when", "a" }
+local PLAIN_ADD =
+    { "--problem", "x", "--change", "x", "--out-of-scope", "y", "--size", "1", "--done-when", "a" }
 
 local function add_args(name, extra)
     local args = { "board", "add", name }
@@ -9965,7 +10274,21 @@ end)
 
 testing.test("add with a lane puts the card in that lane", function()
     local root, home = laned(LANED_TASKS)
-    local args = { "board", "add", "New", "--size", "1", "--problem", "x", "--done-when", "a" }
+    local args = {
+        "board",
+        "add",
+        "New",
+        "--size",
+        "1",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--done-when",
+        "a",
+    }
     local out, code = dev(root, home, args)
     testing.eq(code, 0, out)
     testing.ok(not read(root, "calls"):find("swimlane_id", 1, true), read(root, "calls"))

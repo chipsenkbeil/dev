@@ -148,11 +148,6 @@ function M.card(card, opts)
         for _, item in ipairs(missing) do
             add("lacks " .. item, item == "a size")
         end
-        if sectioned then
-            for _, shape in ipairs(board.shapes(card.description)) do
-                add("lacks " .. shape)
-            end
-        end
         if card.outcomes_unreadable then
             add("outcomes unreadable")
         end

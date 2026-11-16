@@ -1288,12 +1288,14 @@ way.
 The rules:
 
 - Outside Icebox: a size, the three v3 headings with text under Problem, and a
-  Done when outcome. This is `dev.board.unplanned`, the check `move` makes,
-  which keeps a move and lint in agreement.
+  Done when outcome. This is `dev.board.unplanned`, the check `move` and `add`
+  make, which keeps a move, an add and lint in agreement.
 - Where a card's sections are checked (outside Icebox and not Done, or every
-  Done card under `--strict`), lint also reports the shapes of
+  Done card under `--strict`), `dev.board.unplanned` also reports the shapes of
   `dev.board.shapes`, which `move CARD ready` shares: no text under Change or
-  Out of scope, and no `Change:` or `Out of scope:` line under Problem.
+  Out of scope, and no `Change:` or `Out of scope:` line under Problem. So a
+  move into In Progress, Review, Blocked or Done and an add to Backlog refuse
+  them too, and lint reports each once. `dev board discard` skips the shapes.
 - A Done card gets the size and outcome checks only, and a Done card labelled
   `discarded` needs no outcome.
 - An epic, a card with children, needs 1 to 3 outcomes. A Done epic with every
@@ -3236,7 +3238,9 @@ A move into Ready:
 A move into any column but Icebox or Ready:
 
 - A card with no size, a description that lacks a v3 heading or text under
-  Problem, or no outcome is refused before the backend is called.
+  Problem, with an empty Change or Out of scope section or a `Change:` or
+  `Out of scope:` line under Problem, or no outcome is refused before the
+  backend is called. A discard skips the empty section and the line.
 - The refusal reads
   ``Card <id prefix> is not planned and cannot enter <column>. It lacks <what>.
   Fix it with `dev board size`, `dev board edit` and `dev board outcome`.``

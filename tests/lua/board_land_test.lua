@@ -421,6 +421,10 @@ local function new_card(project)
         "Card",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -2195,10 +2199,21 @@ if has_jj then
     testing.test("a landed card whose move to Done fails is named and exits non-zero", function()
         local project = jj_project()
         local id = new_card(project)
-        local out = dev(
-            project,
-            { "board", "add", "Child", "--problem", "x", "--size", "1", "--done-when", "x" }
-        )
+        local out = dev(project, {
+            "board",
+            "add",
+            "Child",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "x",
+        })
         local child = assert(out:match("added (%x+)"), out)
         must(dev(project, { "board", "epic", id }))
         must(dev(project, { "board", "link", child, "parent", id }))
@@ -2504,6 +2519,10 @@ if has_jj then
             "Other",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",

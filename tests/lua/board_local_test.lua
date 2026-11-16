@@ -156,7 +156,21 @@ end)
 
 testing.test("the board file is private and writes leave no temporary file", function()
     local root, home = local_board()
-    dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
+    dev(root, home, {
+        "board",
+        "add",
+        "One",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     testing.eq(mode(file_of(home)), "600")
     testing.eq(mode(home .. "/state/dev/boards"), "700")
     local names = fs.list(home .. "/state/dev/boards")
@@ -229,11 +243,21 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
     testing.eq(code, 0, out)
     local a = prefix_of(out)
     testing.ok(out:find("Ready", 1, true), out)
-    out = dev(
-        root,
-        home,
-        { "board", "add", "Second", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    out = dev(root, home, {
+        "board",
+        "add",
+        "Second",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     local b = prefix_of(out)
     out = dev(root, home, { "board", "ls" })
     testing.eq(
@@ -364,6 +388,10 @@ testing.test("next --column blocked returns the top unclaimed needs:lead card on
             "1",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--done-when",
             "a",
             "--label",
@@ -389,15 +417,21 @@ end)
 
 testing.test("rename sets a local card's title and refuses a blank one", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     local out, code = dev(root, home, { "board", "rename", a, "Better", "title" })
     testing.eq(code, 0, out)
     testing.eq(out, "renamed " .. a .. "\n")
@@ -409,15 +443,21 @@ end)
 
 testing.test("discard notes the reason, labels the card and moves it to Done", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     local out, code = dev(root, home, { "board", "discard", a, "--reason", "Not needed" })
     testing.eq(code, 0, out)
     testing.eq(out, "discarded " .. a .. "\n")
@@ -439,6 +479,10 @@ testing.test("discard refuses a needs:human card and writes nothing", function()
         COLUMN.BLOCKED,
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -509,6 +553,10 @@ testing.test("discard refuses an unplanned card outside Icebox even with a reaso
         COLUMN.BACKLOG,
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -536,6 +584,10 @@ testing.test(
             "Card",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -555,6 +607,10 @@ testing.test(
             "Dropped",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -636,15 +692,21 @@ end)
 
 testing.test("notes, edit and delete work on a local board and refuse another author's", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     local out = dev(root, home, { "board", "note", a, "first", "thought" })
     testing.eq(out, "noted " .. a .. "\n")
     dev(root, home, { "board", "note", a, "second" })
@@ -667,15 +729,21 @@ end)
 
 testing.test("note --kind and --as are stored on a local comment and notes prints them", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     dev(root, home, { "board", "note", a, "--kind", "decision", "--as", "reviewer", "ship", "it" })
     dev(root, home, { "board", "note", a, "plain" })
     local out = dev(root, home, { "board", "notes", a })
@@ -694,15 +762,21 @@ end)
 
 testing.test("local escalate swaps the label in one write", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     dev(root, home, { "board", "label", a, "+docs", "+needs:planner" })
     local out, code = dev(root, home, { "board", "escalate", a, "pick", "one" })
     testing.eq(code, 0, out)
@@ -769,33 +843,51 @@ testing.test(
     "links lists a card's own links and the reverse side of links other cards hold",
     function()
         local root, home = local_board()
-        local a = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
-        local b = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
-        local c = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
+        local a = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "A",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
+        local b = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "B",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
+        local c = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "C",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
         dev(root, home, { "board", "link", a, "blocked_by", b })
         dev(root, home, { "board", "link", a, "related", c })
         local out, code = dev(root, home, { "board", "links", a })
@@ -808,15 +900,21 @@ testing.test(
         dev(root, home, { "board", "link", c, "related", a })
         out = dev(root, home, { "board", "links", c })
         testing.eq(out, "related  " .. a .. "  -\n")
-        local d = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "D", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
+        local d = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "D",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
         out = dev(root, home, { "board", "links", d })
         testing.eq(out, "No links.\n")
         out, code = dev(root, home, { "board", "links", "deadbeef" })
@@ -828,33 +926,51 @@ testing.test(
     "unlink removes a link from the card that holds it, and refuses one it lacks",
     function()
         local root, home = local_board()
-        local a = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
-        local b = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
-        local c = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
+        local a = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "A",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
+        local b = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "B",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
+        local c = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "C",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
         dev(root, home, { "board", "link", a, "blocked_by", b })
         dev(root, home, { "board", "link", a, "related", c })
         local out, code = dev(root, home, { "board", "unlink", a, "related", c })
@@ -876,33 +992,51 @@ testing.test(
     "link refuses itself, a cycle, another board and a bad kind on a local board",
     function()
         local root, home = local_board()
-        local a = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
-        local b = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "B", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
-        local c = prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", "C", "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
+        local a = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "A",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
+        local b = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "B",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
+        local c = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "C",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
         local out, code = dev(root, home, { "board", "link", a, "related", a })
         testing.eq(code, 1, out)
         testing.ok(out:find("itself", 1, true), out)
@@ -929,15 +1063,21 @@ testing.test(
 testing.test("a local board refuses what the needs:human and epic rules forbid", function()
     local root, home = local_board()
     local function add(name)
-        return prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
     end
     local card, child = add("Card"), add("Child")
     local epic = prefix_of((dev(root, home, {
@@ -979,15 +1119,21 @@ end)
 testing.test("link parent sets one epic and show and links report it", function()
     local root, home = local_board()
     local function add(name)
-        return prefix_of(
-            (
-                dev(
-                    root,
-                    home,
-                    { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "a" }
-                )
-            )
-        )
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })))
     end
     local epic, one, two, other = add("Epic"), add("One"), add("Two"), add("Other")
     dev(root, home, { "board", "epic", epic })
@@ -1150,6 +1296,10 @@ testing.test("a local board keeps --done-when outcomes on the card and shows the
         "Card",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -1177,6 +1327,10 @@ testing.test("a local board appends, rewords, ticks and unticks outcomes by numb
         "Card",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -1220,6 +1374,10 @@ testing.test(
             "Card",
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -1269,6 +1427,10 @@ testing.test("outcome delete on a local board needs no lead token", function()
         "Card",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -1376,6 +1538,10 @@ testing.test("a local board ticks an outcome while this machine holds the claim"
         "Card",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -1586,15 +1752,21 @@ end)
 
 testing.test("a stale fence is refused once another process holds the claim", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     dev(root, home, { "board", "take", a })
     local doc = document(file_of(home))
     doc.cards[1].claim.fence = 9
@@ -1631,11 +1803,21 @@ end)
 
 testing.test("a tracked path keeps the board in the project, readable by everyone", function()
     local root, home = local_board('[board]\nbackend = "local"\npath = ".dev/board.json"\n')
-    local out = dev(
-        root,
-        home,
-        { "board", "add", "Tracked", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    local out = dev(root, home, {
+        "board",
+        "add",
+        "Tracked",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     prefix_of(out)
     testing.ok(fs.exists(root .. "/.dev/board.json"))
     testing.eq(fs.exists(home .. "/state/dev/boards/mine.json"), false)
@@ -1693,7 +1875,7 @@ end)
 testing.test("six processes writing at once lose no card", function()
     local root, home = local_board()
     local script = string.format(
-        'for i in 1 2 3 4 5 6; do luajit %s board add "card $i" --problem x --size 1 --done-when a & done; wait',
+        'for i in 1 2 3 4 5 6; do luajit %s board add "card $i" --problem x --change x --out-of-scope y --size 1 --done-when a & done; wait',
         dev_os.quote(MAIN)
     )
     local out, code = dev_os.capture({ "sh", "-c", script }, {
@@ -1867,6 +2049,10 @@ testing.test("writes while Pomb is unreachable are queued and the queue is priva
         "Later",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "2",
         "--done-when",
@@ -1946,11 +2132,21 @@ testing.test("after a gateway error only a change that is safe to repeat is queu
     testing.eq(code, 0)
     out, code = pomb_dev(root, home, { "board", "note", ID_A:sub(1, 8), "once" })
     testing.eq(code, 1, out)
-    out, code = pomb_dev(
-        root,
-        home,
-        { "board", "add", "Once", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    out, code = pomb_dev(root, home, {
+        "board",
+        "add",
+        "Once",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     testing.eq(code, 1, out)
     testing.eq(#document(queue_path(home)), 1)
 end)
@@ -1961,7 +2157,21 @@ testing.test("a hand-edited board file keeps its other keys and gets its name ba
     doc.name = nil
     doc.note = "kept"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
-    dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
+    dev(root, home, {
+        "board",
+        "add",
+        "One",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     doc = document(file_of(home))
     testing.eq(doc.note, "kept")
     testing.eq(doc.name, "mine")
@@ -1969,7 +2179,21 @@ end)
 
 testing.test("a tracked board leaves no lock file in the project", function()
     local root, home = local_board('[board]\nbackend = "local"\npath = ".dev/board.json"\n')
-    dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
+    dev(root, home, {
+        "board",
+        "add",
+        "One",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     testing.eq(fs.list(root .. "/.dev"), { "board.json", "config.toml" })
 end)
 
@@ -2191,11 +2415,21 @@ testing.test("sync replays the queue in order and empties it", function()
     assert(fs.write(root .. "/down", ""))
     pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.REVIEW })
     pomb_dev(root, home, { "board", "note", ID_B:sub(1, 8), "hello" })
-    pomb_dev(
-        root,
-        home,
-        { "board", "add", "Later", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    pomb_dev(root, home, {
+        "board",
+        "add",
+        "Later",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     assert(fs.remove(root .. "/down"))
     local out, code = pomb_dev(root, home, { "board", "sync" })
     testing.eq(code, 0, out)
@@ -2316,7 +2550,21 @@ end)
 
 testing.test("a local board never queues", function()
     local root, home = local_board()
-    dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
+    dev(root, home, {
+        "board",
+        "add",
+        "One",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     testing.eq(fs.exists(home .. "/state/dev/boards/mine.queue"), false)
 end)
 
@@ -2328,6 +2576,10 @@ testing.test("a local board stores checks on the card and show lists them", func
         "Card",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -2440,11 +2692,21 @@ testing.test("a local board with renamed columns works through the project map",
         "Shipped",
     })
     testing.eq(doc.columns[9].is_done, true)
-    local out = dev(
-        root,
-        home,
-        { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    local out = dev(root, home, {
+        "board",
+        "add",
+        "One",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     testing.ok(out:find(" Inbox\n", 1, true), out)
     local id = prefix_of(out)
     tick_first(root, home, id)
@@ -2469,20 +2731,36 @@ testing.test(
         local doc = document(file_of(home))
         doc.columns[#doc.columns + 1] = { id = "col-archive", name = "Archive", is_done = true }
         assert(fs.write(file_of(home), json.encode(doc)))
-        local first = prefix_of(
-            dev(
-                root,
-                home,
-                { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-        local second = prefix_of(
-            dev(
-                root,
-                home,
-                { "board", "add", "Two", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
+        local first = prefix_of(dev(root, home, {
+            "board",
+            "add",
+            "One",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        }))
+        local second = prefix_of(dev(root, home, {
+            "board",
+            "add",
+            "Two",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        }))
         tick_first(root, home, first)
         testing.eq(
             dev(root, home, { "board", "move", first, COLUMN.DONE }),
@@ -2493,13 +2771,21 @@ testing.test(
             "moved " .. second .. " to Archive\n"
         )
         testing.eq(dev(root, home, { "board", "ls" }), "No cards.\n")
-        local third = prefix_of(
-            dev(
-                root,
-                home,
-                { "board", "add", "Three", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
+        local third = prefix_of(dev(root, home, {
+            "board",
+            "add",
+            "Three",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        }))
         local out = dev(root, home, { "board", "discard", third })
         testing.eq(out, "discarded " .. third .. "\n")
         out = dev(root, home, { "board", "ls", "--column", COLUMN.DONE })
@@ -2570,7 +2856,7 @@ testing.test(
         testing.ok(out:find("cannot enter Backlog", 1, true), out)
         testing.ok(out:find("## Problem", 1, true), out)
         local file = root .. "/plan.md"
-        assert(fs.write(file, "## Problem\nwhy\n\n## Change\n\n## Out of scope\n"))
+        assert(fs.write(file, "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n"))
         out, code = dev(root, home, { "board", "edit", a, "--file", file })
         testing.eq(code, 0, out)
         out, code = dev(root, home, { "board", "move", a, COLUMN.BACKLOG })
@@ -2594,6 +2880,8 @@ testing.test(
             "board",
             "add",
             "Thin",
+            "--column",
+            COLUMN.ICEBOX,
             "--problem",
             "why",
             "--size",
@@ -2626,11 +2914,21 @@ testing.test(
         local root, home = local_board()
         local ids = {}
         for _, name in ipairs({ "One", "Two", "Three", "Four" }) do
-            local out, code = dev(
-                root,
-                home,
-                { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
+            local out, code = dev(root, home, {
+                "board",
+                "add",
+                name,
+                "--problem",
+                "x",
+                "--change",
+                "x",
+                "--out-of-scope",
+                "y",
+                "--size",
+                "1",
+                "--done-when",
+                "a",
+            })
             testing.eq(code, 0, out)
             table.insert(ids, 1, (prefix_of(out)))
         end
@@ -2663,17 +2961,37 @@ testing.test(
     "order refuses cards of two columns before any move and frees a needs:human card",
     function()
         local root, home = local_board()
-        local out = dev(
-            root,
-            home,
-            { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" }
-        )
+        local out = dev(root, home, {
+            "board",
+            "add",
+            "One",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })
         local one = prefix_of(out)
-        out = dev(
-            root,
-            home,
-            { "board", "add", "Two", "--problem", "x", "--size", "1", "--done-when", "a" }
-        )
+        out = dev(root, home, {
+            "board",
+            "add",
+            "Two",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })
         local two = prefix_of(out)
         dev(root, home, { "board", "move", two, COLUMN.ICEBOX })
         local before = dev(root, home, { "board", "ls" })
@@ -2695,16 +3013,36 @@ testing.test(
 
 testing.test("a move into an empty column leaves ls ordered by column", function()
     local root, home = local_board()
-    dev(root, home, { "board", "add", "One", "--problem", "x", "--size", "1", "--done-when", "a" })
-    local two = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Two", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    dev(root, home, {
+        "board",
+        "add",
+        "One",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
+    local two = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Two",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     dev(root, home, { "board", "move", two, COLUMN.ICEBOX })
     local out = dev(root, home, { "board", "ls" })
     testing.ok(out:find("Two", 1, true) < out:find("One", 1, true), out)
@@ -2754,11 +3092,21 @@ testing.test("run gives each session its own card and next never returns one", f
     dev(root, home, { "board", "note", id, "built, tried, learned" }, one)
     out, code = dev(root, home, { "board", "move", id, COLUMN.READY }, one)
     testing.eq(code, 0, out)
-    dev(
-        root,
-        home,
-        { "board", "add", "Plain", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    dev(root, home, {
+        "board",
+        "add",
+        "Plain",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     out = dev(root, home, { "board", "next" })
     testing.ok(not out:find("run s/", 1, true), out)
     out, code = dev(root, home, { "board", "run", "--end" }, one)
@@ -2797,7 +3145,7 @@ testing.test(
             "Fresh",
             "--id-only",
             "--description",
-            "look in src/a.lua",
+            "## Problem\nlook in src/a.lua\n\n## Change\nx\n\n## Out of scope\ny\n",
             "--size",
             "1",
             "--done-when",
@@ -2814,6 +3162,10 @@ testing.test(
             "1",
             "--problem",
             "why",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--done-when",
             "a",
         })
@@ -2834,6 +3186,10 @@ testing.test(
             "1",
             "--problem",
             "why",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--done-when",
             "a",
         })))
@@ -2845,6 +3201,10 @@ testing.test(
             "1",
             "--problem",
             "why",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--done-when",
             "a",
             "--blocked-by",
@@ -2862,6 +3222,10 @@ testing.test(
             "1",
             "--problem",
             "why",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--done-when",
             "a",
             "--from",
@@ -2909,6 +3273,10 @@ testing.test("add --id-only is refused while Pomb is unreachable and never queue
         "--id-only",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "2",
         "--done-when",
@@ -2985,6 +3353,10 @@ testing.test("add takes --id-only as a value when a flag is waiting for one", fu
         "1",
         "--problem",
         "--id-only",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--done-when",
         "a",
     })
@@ -3177,6 +3549,10 @@ testing.test("epic_local_move", function()
             name,
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -3259,6 +3635,10 @@ testing.test("local board keeps the epic kind and refuses a parent that is not a
             name,
             "--problem",
             "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
             "--size",
             "1",
             "--done-when",
@@ -3296,6 +3676,10 @@ testing.test("add --epic creates an epic on Pomb with kind epic", function()
         "--epic",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -3333,6 +3717,10 @@ testing.test("a childless epic enters Ready with 1 to 3 outcomes like any epic",
         "--epic",
         "--problem",
         "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
         "--size",
         "1",
         "--done-when",
@@ -3381,15 +3769,21 @@ end)
 
 testing.test("attach, attachments and detach refuse plainly on a local board", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "A", "--problem", "x", "--size", "1", "--done-when", "a" }
-            )
-        )
-    )
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "A",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
     local file = support.tempdir() .. "/shot.png"
     assert(fs.write(file, "x"))
     for _, args in ipairs({
@@ -3407,11 +3801,21 @@ local function laned_board()
     local root, home = local_board()
     local ids = {}
     for _, name in ipairs({ "Alpha", "Bravo", "Charlie" }) do
-        local out = dev(
-            root,
-            home,
-            { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "a" }
-        )
+        local out = dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+        })
         ids[name] = prefix_of(out)
     end
     local doc = document(file_of(home))
@@ -3468,7 +3872,21 @@ end)
 
 testing.test("local add with a lane puts the card in that lane", function()
     local root, home = laned_board()
-    local args = { "board", "add", "Delta", "--problem", "x", "--size", "1", "--done-when", "a" }
+    local args = {
+        "board",
+        "add",
+        "Delta",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }
     local out, code = dev(root, home, args)
     testing.eq(code, 0, out)
     table.insert(args, "--lane")

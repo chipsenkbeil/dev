@@ -1002,6 +1002,8 @@ end
 ---@field children integer how many children it has, 0 for a card that is no epic
 ---@field epic boolean? whether it is an epic even with no children
 ---@field sections boolean? whether the v3 sections are checked, true when nil
+---@field shapes boolean? whether an empty section and a misplaced line are checked with the
+---   sections, true when nil
 
 ---The refusal for an epic whose outcome count is out of range.
 ---@param outcomes integer how many outcomes the epic has
@@ -1015,7 +1017,8 @@ local function epic_outcomes(outcomes)
 end
 
 ---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v3 section with text under
----Problem, and, when asked, at least one Done when outcome. A v1 `## Done when` checklist item
+---Problem, no empty Change or Out of scope section and no misplaced line under Problem, and, when
+---asked, at least one Done when outcome. A v1 `## Done when` checklist item
 ---counts as an outcome. An epic, a card with children, needs 1 to 3 outcomes as its final
 ---check, unless it is closing with every child Done.
 ---@param card dev.board.Unplanned the card's size, description and outcome facts
@@ -1029,6 +1032,11 @@ function M.unplanned(card)
     if card.sections ~= false then
         for _, item in ipairs(M.backlog_missing(description)) do
             missing[#missing + 1] = item
+        end
+        if card.shapes ~= false then
+            for _, shape in ipairs(M.shapes(description)) do
+                missing[#missing + 1] = shape
+            end
         end
     end
     if card.need_outcomes then

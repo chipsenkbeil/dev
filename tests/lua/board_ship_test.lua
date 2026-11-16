@@ -76,7 +76,19 @@ local function push_commit(root, name)
 end
 
 local function release_card(root, home, name, outcomes, landed)
-    local argv = { "board", "add", name, "--problem", "x", "--size", "1" }
+    local argv = {
+        "board",
+        "add",
+        name,
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+    }
     for _, outcome in ipairs(outcomes) do
         argv[#argv + 1] = "--done-when"
         argv[#argv + 1] = outcome
@@ -442,11 +454,21 @@ local function git_push_commit(root, name)
 end
 
 local function git_release_card(root, home, name, landed)
-    local out = dev(
-        root,
-        home,
-        { "board", "add", name, "--problem", "x", "--size", "1", "--done-when", "It works" }
-    )
+    local out = dev(root, home, {
+        "board",
+        "add",
+        name,
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "It works",
+    })
     local id = assert(out:match("added (%x+)"), out)
     must(dev(root, home, { "board", "move", id, support.COLUMN.RELEASE }))
     land_note(root, home, id, landed)

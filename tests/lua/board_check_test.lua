@@ -43,11 +43,21 @@ end
 local function card_with(root, home, rows)
     must(dev(root, home, { "board", "init" }))
     support.drop_turn_card(home .. "/state/dev/boards/mine.json")
-    local out = dev(
-        root,
-        home,
-        { "board", "add", "Card", "--problem", "x", "--size", "1", "--done-when", "a" }
-    )
+    local out = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
     local id = assert(out:match("added (%x+)"), out)
     local args = { "board", "checks", id }
     for _, row in ipairs(rows) do

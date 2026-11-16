@@ -1354,6 +1354,7 @@ local function move_once(backend, args, opts)
             closing = closing,
             children = children,
             epic = epic,
+            shapes = not (opts and opts.drop),
         }
         local missing = board.unplanned(facts)
         if #missing > 0 then
@@ -1670,6 +1671,7 @@ function commands.discard(backend, args)
             outcomes = #card.outcomes,
             need_outcomes = false,
             children = 0,
+            shapes = false,
         })
     end
     if #missing > 0 then
