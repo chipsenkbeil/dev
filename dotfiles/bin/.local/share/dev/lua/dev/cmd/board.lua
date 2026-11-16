@@ -2581,6 +2581,21 @@ function commands.review(backend, args)
     if not rev then
         return failure(message)
     end
+    local recorded
+    for _, comment in ipairs(past) do
+        local record = review.parse(comment.body) or check.parse(comment.body)
+        recorded = record and record.change or recorded
+    end
+    if recorded and recorded ~= rev.change then
+        return failure(
+            string.format(
+                "Card %s records change %s but this commit is change %s. Run `dev board review` from the change's workspace.",
+                short,
+                recorded,
+                rev.change
+            )
+        )
+    end
     local held = claims.read(card.id)
     local ok
     ok, message = backend:note(

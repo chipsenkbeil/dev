@@ -471,4 +471,71 @@ if has_jj then
             testing.eq(#comments(home), 1)
         end
     )
+
+    testing.test("in jj review refuses another change than the recorded one", function()
+        -- Make two changes and record a first review of the older one
+        local root, home = setup()
+        must(
+            dev_os.run(
+                { "jj", "git", "init", root },
+                { stdout = "null", stderr = "null", env = IDENT }
+            )
+        )
+        jj(root, "commit", "-m", "base")
+        local id = card_in(root, home)
+        local function change_of(rev)
+            local out = jj(root, "log", "-r", rev, "--no-graph", "-T", "change_id")
+            return out:match("^(%a+)")
+        end
+        local function review(rev)
+            return dev(root, home, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                "code",
+                "--by",
+                "r",
+                "--rev",
+                rev,
+                "--verdict",
+                "clean",
+            })
+        end
+        local out, code = review("@-")
+        testing.eq(code, 0, out)
+
+        -- Review the other change and expect a refusal that names both
+        out, code = review("@")
+        testing.eq(code, 1, out)
+        testing.ok(out:find(change_of("@-"), 1, true), out)
+        testing.ok(out:find(change_of("@"), 1, true), out)
+        testing.ok(out:find("from the change's workspace", 1, true), out)
+        testing.eq(#comments(home), 1)
+
+        -- Review the recorded change again and expect it to record
+        out, code = review("@-")
+        testing.eq(code, 0, out)
+        testing.eq(#comments(home), 2)
+
+        -- Add a newer check record for the other change and expect it to rule
+        local file = home .. "/state/dev/boards/mine.json"
+        local doc = assert(json.decode(assert(fs.read(file))))
+        local record = {}
+        for key, value in pairs(doc.cards[1].comments[1]) do
+            record[key] = value
+        end
+        record.body = string.format(
+            "dev-check: commit=%s change=%s mode=run rows=1 sum=ab5ba36a\n1 pass 28c702",
+            string.rep("a", 40),
+            change_of("@")
+        )
+        table.insert(doc.cards[1].comments, record)
+        assert(fs.write(file, assert(json.encode(doc))))
+        out, code = review("@-")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("is change " .. change_of("@-"), 1, true), out)
+        out, code = review("@")
+        testing.eq(code, 0, out)
+    end)
 end
