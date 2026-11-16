@@ -586,7 +586,7 @@ local function children_of(marker)
             found[#found + 1] = row.args
         end
     end
-    return found
+    return found, next(owners) ~= nil
 end
 
 testing.test("capture_timed starts no process while its command runs", function()
@@ -599,11 +599,13 @@ testing.test("capture_timed starts no process while its command runs", function(
         "the command should be running"
     )
     local WATCH_POLLS = 15
-    local polled = false
+    local polled, saw_owner = false, false
     for _ = 1, WATCH_POLLS do
-        if #children_of("sleep 3779") > 0 then
+        local found, owned = children_of("sleep 3779")
+        if #found > 0 then
             polled = true
         end
+        saw_owner = saw_owner or owned
         dev_os.run({ "sleep", WAIT_POLL_SECS })
     end
     dev_os.run({ "kill", "-KILL", pid }, { stderr = "null" })
@@ -611,7 +613,60 @@ testing.test("capture_timed starts no process while its command runs", function(
         return not process_listed("sleep 3779")
     end)
     fs.remove(tmp, { recursive = true })
+    testing.ok(saw_owner, "the probe should see the command's owner row")
     testing.eq(polled, false)
+end)
+
+local function capture_timed_in(tmp, body, bin)
+    local snippet = ("package.path = %q; local dev_os = require('dev.os'); "):format(package.path)
+        .. body
+    local env = { TMPDIR = tmp }
+    if bin then
+        env.PATH = bin .. ":" .. os.getenv("PATH")
+    end
+    return dev_os.capture({ "luajit", "-e", snippet }, { env = env })
+end
+
+local function timed_dirs_gone(tmp)
+    return wait_until(function()
+        return dev_os.capture({ "ls", tmp }) == ""
+    end)
+end
+
+testing.test("capture_timed leaves no temporary directory after a normal return", function()
+    -- Give the run a private temporary directory so only its own directories show
+    local tmp = assert(fs.mktemp({ dir = true }))
+
+    -- Run a command that returns normally
+    local out = capture_timed_in(tmp, "io.write((dev_os.capture_timed({ 'echo', 'done' }, 10)))")
+    local gone = timed_dirs_gone(tmp)
+    fs.remove(tmp, { recursive = true })
+
+    -- Check the output and that the directory is gone
+    testing.eq(out, "done\n")
+    testing.ok(gone, "the temporary directory should be removed")
+end)
+
+testing.test("capture_timed errors and removes its directory when the launch fails", function()
+    -- Give the run a private temporary directory and a mv that fails, so no pids file appears
+    local tmp = assert(fs.mktemp({ dir = true }))
+    local root = support.sandbox({ ["bin/mv"] = "#!/bin/sh\nexit 1\n" }, {})
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/mv" }) == 0, "chmod failed")
+
+    -- Launch the command and catch the error
+    local out = capture_timed_in(
+        tmp,
+        "local ok, err = pcall(dev_os.capture_timed, { 'true' }, 10); "
+            .. "io.write(tostring(ok), ' ', err)",
+        root .. "/bin"
+    )
+    local gone = timed_dirs_gone(tmp)
+    fs.remove(tmp, { recursive = true })
+
+    -- Check the launch error and that no directory is left
+    testing.ok(out:find("false", 1, true) == 1, out)
+    testing.ok(out:find("capture_timed could not start true", 1, true), out)
+    testing.ok(gone, "the temporary directory should be removed")
 end)
 
 testing.test("capture_timed with no seconds sets no limit and runs to completion", function()
