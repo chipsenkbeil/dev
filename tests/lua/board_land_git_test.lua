@@ -114,7 +114,8 @@ testing.test("git reviews carry across an unchanged patch", function()
     for i = 1, 30 do
         numbers[i] = "line " .. i
     end
-    local body = table.concat(numbers, "\n") .. "\n"
+    numbers[#numbers + 1] = ""
+    local body = table.concat(numbers, "\n")
     local root = repo({ ["f.txt"] = body })
     git(root, "checkout", "-q", "-b", "work")
     write(root, "f.txt", (body:gsub("line 15\n", "line fifteen\n")))
@@ -169,7 +170,8 @@ local NUMBERED = {}
 for i = 1, 30 do
     NUMBERED[i] = "line " .. i
 end
-local BODY = table.concat(NUMBERED, "\n") .. "\n"
+NUMBERED[#NUMBERED + 1] = ""
+local BODY = table.concat(NUMBERED, "\n")
 
 local function with_origin(files)
     local root = repo(files)

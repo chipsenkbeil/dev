@@ -2,7 +2,9 @@ local testing = require("dev.testing")
 local header = require("dev.header")
 
 local function sh(...)
-    return table.concat({ "#!/usr/bin/env bash", ... }, "\n") .. "\n"
+    local entries = { "#!/usr/bin/env bash", ... }
+    entries[#entries + 1] = ""
+    return table.concat(entries, "\n")
 end
 
 testing.test("the description is the first comment line after the shebang", function()
@@ -92,17 +94,22 @@ testing.test(
 )
 
 testing.test("a Lua header is one leading block comment holding the same lines", function()
-    local h = header.parse(table.concat({
-        "--[[",
-        "Run the thing.",
-        "group: Share it",
-        "hidden",
-        "flags: --x, -h --y",
-        "KEY=value sets it",
-        "]]",
-        "local x = 1",
-        "-- flags: --nope",
-    }, "\n") .. "\n", "lua", "/p/.dev/t.lua")
+    local h = header.parse(
+        table.concat({
+            "--[[",
+            "Run the thing.",
+            "group: Share it",
+            "hidden",
+            "flags: --x, -h --y",
+            "KEY=value sets it",
+            "]]",
+            "local x = 1",
+            "-- flags: --nope",
+            "",
+        }, "\n"),
+        "lua",
+        "/p/.dev/t.lua"
+    )
     testing.eq(h.desc, "Run the thing.")
     testing.eq(h.group, "Share it")
     testing.eq(h.hidden, true)

@@ -984,7 +984,9 @@ local function prune_setup(kind)
 end
 
 local function lines(...)
-    return table.concat({ ... }, "\n") .. "\n"
+    local entries = { ... }
+    entries[#entries + 1] = ""
+    return table.concat(entries, "\n")
 end
 
 local function folder(dir, name)

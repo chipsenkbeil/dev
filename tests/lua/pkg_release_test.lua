@@ -74,7 +74,8 @@ local function pins(dir, rows)
     for _, row in ipairs(rows) do
         lines[#lines + 1] = table.concat(row, " ")
     end
-    assert(fs.write(dir .. "/releases.tsv", table.concat(lines, "\n") .. "\n"))
+    lines[#lines + 1] = ""
+    assert(fs.write(dir .. "/releases.tsv", table.concat(lines, "\n")))
 end
 
 local function pin_asset(dir, name, path)

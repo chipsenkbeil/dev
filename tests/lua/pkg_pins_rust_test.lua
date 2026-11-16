@@ -361,7 +361,8 @@ local function rust_group_sandbox()
             name,
         }, " ")
     end
-    assert(fs.write(dir .. "/releases.tsv", table.concat(pins, "\n") .. "\n"))
+    pins[#pins + 1] = ""
+    assert(fs.write(dir .. "/releases.tsv", table.concat(pins, "\n")))
     assert(fs.write(dir .. "/tools.tsv", assert(fs.read(REPO .. "/.dev/tools.tsv"))))
     return dir
 end

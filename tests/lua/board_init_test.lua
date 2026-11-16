@@ -1619,7 +1619,8 @@ testing.test("init warns when the first lane is not in the lanes list", function
             .. "Cards filed without --lane land in it. "
             .. "Delete or reorder it in the Pomb UI.",
         "board demo: 3 changes",
-    }, "\n") .. "\n")
+        "",
+    }, "\n"))
 
     -- Expect no warning from a local board, even with an unlisted first lane
     local lines = {}
@@ -1651,7 +1652,8 @@ testing.test("init stays silent when the first lane is listed", function()
         'created lane "Fixes"',
         'created lane "Features"',
         "board demo: 2 changes",
-    }, "\n") .. "\n")
+        "",
+    }, "\n"))
 end)
 
 testing.test("a worker token is refused a lane", function()
