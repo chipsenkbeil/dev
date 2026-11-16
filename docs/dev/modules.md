@@ -58,7 +58,9 @@ machine-local, so `--remote` refuses it.
 The path of a workspace is `DEV_WS_ROOT`, else `~/.local/share/workspaces`,
 then the project folder's name, then NAME. A path that exists is refused with
 exit 1. A project inside the central root is named by its folder just below
-the root, so a workspace makes siblings.
+the root, so a workspace makes siblings. Any other folder is named by its main
+repo's folder, so a secondary jj workspace or a git worktree outside the root
+shares the main checkout's name.
 
 `ws new NAME` refuses with exit 1 and makes nothing when the project root
 holds no `.jj`, `.git` or `.dev`, which is a folder outside any project.

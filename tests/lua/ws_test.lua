@@ -21,7 +21,7 @@ mkdir -p "$(eval echo \$$#)"
 local GIT_STUB = [[#!/bin/sh
 case "$*" in
     *"--show-toplevel"*) pwd; exit 0 ;;
-    *"--git-common-dir"*) echo .git; exit 0 ;;
+    *"--git-common-dir"*) echo "${COMMON_DIR:-$(pwd)/.git}"; exit 0 ;;
     *" remote") printf '%s' "$REMOTES"; exit 0 ;;
     *"config --get"*) exit 1 ;;
     *" fetch "*) echo "git $*" >> "$LOG"; printf '%s' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;
@@ -319,7 +319,7 @@ echo "jj $*" >> "$LOG"
 local RM_GIT_STUB = [[#!/bin/sh
 case "$*" in
     *"--show-toplevel"*) pwd; exit 0 ;;
-    *"--git-common-dir"*) echo .git; exit 0 ;;
+    *"--git-common-dir"*) echo "${COMMON_DIR:-$(pwd)/.git}"; exit 0 ;;
     *"worktree list"*) if [ -n "$LIST_FAIL" ]; then exit 128; fi; printf '%s' "$WORKTREES"; exit 0 ;;
     *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
 esac
@@ -342,6 +342,63 @@ local function rm_setup(kind)
     env.env.WORKSPACES = "default\nfeat"
     return root, path, env, log
 end
+
+local function outside_caller(root, kind)
+    local caller = root .. "-lead"
+    if kind == "jj" then
+        assert(fs.mkdir(root .. "/.jj/repo", { parents = true }))
+        assert(fs.mkdir(caller .. "/.jj", { parents = true }))
+        assert(fs.write(caller .. "/.jj/repo", "../../" .. fs.basename(root) .. "/.jj/repo\n"))
+    else
+        assert(fs.mkdir(caller, { parents = true }))
+        assert(fs.write(caller .. "/.git", "gitdir: elsewhere\n"))
+    end
+    return caller
+end
+
+testing.test("new from a secondary jj workspace outside the root names the main folder", function()
+    -- Call from a secondary workspace that sits outside the central root
+    local root, path, env = setup("jj")
+    env.cwd = outside_caller(root, "jj")
+
+    -- Create the workspace so the repo name comes from the main folder
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the new folder under the main folder's name, not the caller's
+    testing.eq(code, 0, out)
+    testing.eq(out, path .. "\n")
+end)
+
+testing.test("new from a git worktree outside the root names the main checkout", function()
+    -- Call from a worktree that sits outside the central root
+    local root, path, env = setup("git")
+    env.env.REFS = "origin/main\n"
+    env.env.COMMON_DIR = root .. "/.git"
+    env.cwd = outside_caller(root, "git")
+
+    -- Create the workspace so the repo name comes from the main checkout
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the new folder under the main checkout's name, not the worktree's
+    testing.eq(code, 0, out)
+    testing.eq(out, path .. "\n")
+end)
+
+testing.test("ls and rm from a secondary jj workspace find the main folder's workspaces", function()
+    -- Call from a secondary workspace outside the root, with one workspace made
+    local root, path, env = rm_setup("jj")
+    env.cwd = outside_caller(root, "jj")
+
+    -- List the workspaces and expect the one under the main folder
+    local out, code = support.dev(root, { "ws", "ls" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(out, "feat\t" .. path .. "\n")
+
+    -- Remove it and expect the folder gone from the main folder
+    out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), false)
+end)
 
 testing.test("ls prints each workspace folder with its path", function()
     -- Make one workspace, one other folder and one stray file
@@ -773,7 +830,7 @@ testing.test("rm leaves the folder when the version control command fails", func
     stub(
         root,
         "git",
-        '#!/bin/sh\ncase "$*" in *--git-common-dir*) echo .git; exit 0;; *--show-toplevel*) pwd; exit 0;; *status*) exit 0;; *worktree*list*) exit 0;; esac\nexit 3\n'
+        '#!/bin/sh\ncase "$*" in *--git-common-dir*) echo "$(pwd)/.git"; exit 0;; *--show-toplevel*) pwd; exit 0;; *status*) exit 0;; *worktree*list*) exit 0;; esac\nexit 3\n'
     )
 
     -- Remove the folder while git fails every command but the probes
@@ -921,7 +978,7 @@ if [ -n "$FAIL" ]; then exit 3; fi
 local PRUNE_GIT_STUB = [[#!/bin/sh
 case "$*" in
     *"--show-toplevel"*) pwd; exit 0 ;;
-    *"--git-common-dir"*) echo .git; exit 0 ;;
+    *"--git-common-dir"*) echo "$(pwd)/.git"; exit 0 ;;
     *"worktree list"*)
         if [ -n "$AFTER" ] && grep -q "worktree remove" "$LOG" 2>/dev/null; then
             printf '%s' "$AFTER"; exit 0

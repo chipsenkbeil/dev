@@ -39,7 +39,7 @@ end
 
 local function repo_name(base, root)
     local inside = root:match("^" .. base:gsub("%p", "%%%0") .. "/([^/]+)")
-    return inside or fs.basename(root)
+    return inside or fs.basename(vcs.main_root(root, vcs.backend(root)))
 end
 
 local function parse(ctx)
