@@ -17,6 +17,7 @@ local MAX_USER = 32
 local MAX_HOST = 253
 local MAX_NAME = 40
 local NO_CONNECT = 2
+local OLD_CI_MESSAGE = "no box config"
 
 ---@class dev.cmd.connect
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of `connect` and
@@ -262,17 +263,20 @@ end
 
 ---Write ci's ssh_config and list the hosts of `ci ssh ls`, apart from boxes and sessions.
 ---
----A ci with no `ssh config` exits 2, which shows boxes only, with one note.
+---A ci with no `ssh config` exits 2, which shows boxes only, with one note. An
+---older ci that reads `config` as a box name exits 1 with `no box config`,
+---which counts the same.
 ---Any other failure prints ci's message as one line, then ends the run with
 ---ci's code when `strict` is set and lists boxes only otherwise.
 ---@param opts dev.cmd.connect.connectables.Opts how to treat a failure
 ---@return dev.cmd.connect.Connectable[] found the connectables, in ci's order
 local function connectables(opts)
     local raw, code = capture_ci({ "ci", "ssh", "config" })
+    local old_ci = code == 1 and raw:find(OLD_CI_MESSAGE, 1, true) ~= nil
     if code == 0 then
         raw, code = capture_ci({ "ci", "ssh", "ls", "--json" })
     end
-    if code == NO_CONNECT then
+    if code == NO_CONNECT or old_ci then
         verb.note("dev connect: this ci has no ssh command, listing boxes only")
         return {}
     end

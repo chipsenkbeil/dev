@@ -129,6 +129,20 @@ testing.test("a ci without ssh config lists boxes only, with one note", function
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("an older ci that reads config as a box name lists boxes only", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.config.err", "error: no box config\n"))
+    assert(fs.write(root .. "/ssh.config.rc", "1\n"))
+    local out, code =
+        support.dev(root, { "connect", "--ssh" }, env({ FAKE_TTY = "1", FAKE_PICK = "b1" }))
+    testing.eq(code, 0)
+    local note = "this ci has no ssh command, listing boxes only"
+    local _, count = out:gsub(note, "")
+    testing.eq(count, 1)
+    testing.eq(out:find("no box config", 1, true), nil)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("a ci with ssh config but no ssh ls lists boxes only, with one note", function()
     local root = sandbox()
     assert(fs.write(root .. "/ssh.ls.rc", "2\n"))
