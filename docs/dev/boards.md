@@ -1766,8 +1766,10 @@ Progress, Review and Verify columns on this project's board.
 - It reads the board, then sends `PATCH /api/boards/{id}/limit-groups/{group}`
   with the group's own `column_ids` and the new `limit`, as Pomb replaces both.
 - Pomb needs `columns.edit` on the board. A lead token holds it and a worker
-  token does not, so a 403 prints a sentence that names the lead token and is
-  exit 1.
+  token does not, so `--set` needs a lead name for `DEV_AGENT` and the
+  `lead_token` setting of `[board.pomb]`. Any other name is refused as exit 1
+  before a request goes out. A 403 still prints a sentence that names the lead
+  token and is exit 1.
 - A board with no group that holds the three columns is exit 1.
 - A local board has no limit group and is exit 1 with a sentence.
 - On success it prints `Set the limit of In Progress, Review and Verify to N.`

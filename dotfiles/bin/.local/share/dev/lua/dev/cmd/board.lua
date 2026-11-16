@@ -5579,6 +5579,12 @@ for sub in pairs(commands) do
             and settings(ctx).backend == board.Backend.POMB
         then
             backend = open_lead(ctx, "deletes an outcome", "subtasks.delete")
+        elseif
+            sub == "limits"
+            and index_of(args, SET_FLAG)
+            and settings(ctx).backend == board.Backend.POMB
+        then
+            backend = open_lead(ctx, "sets a limit", "columns.edit")
         else
             backend, pending = open_board(ctx)
             if

@@ -5,6 +5,8 @@ local fs = require("dev.fs")
 local support = require("support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
+local LEAD = "dotfiles/lead"
+local LEAD_SECRET = "pomb_LEADtoken9876543210"
 local COLUMN = support.COLUMN
 local POMB = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'
 local NEW = "dotfiles/implementer"
@@ -100,6 +102,12 @@ esac
 printf '%s\n%s' "$body" "$status"
 ]]
 
+local PASS = string.format(
+    '#!/bin/sh\ncase "$*" in *Lead*) echo "%s" ;; *) echo "%s" ;; esac\n',
+    LEAD_SECRET,
+    TOKEN
+)
+
 local function executable(path, body)
     assert(fs.write(path, body))
     assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
@@ -164,6 +172,7 @@ local function sandbox(opts)
         fs.write(
             home .. "/.config/dev/config.toml",
             '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
+                .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
         )
     )
     for name, body in pairs({
@@ -179,7 +188,7 @@ local function sandbox(opts)
     executable(root .. "/bin/curl", CURL)
     executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
     executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. dev_os.which("sleep") .. " 0.2\n")
-    executable(root .. "/bin/pass", '#!/bin/sh\necho "' .. TOKEN .. '"\n')
+    executable(root .. "/bin/pass", PASS)
     return { root = root, home = home }
 end
 
@@ -439,7 +448,7 @@ testing.test("limits --set patches the group with its columns and the new limit"
         detail = detail({}, { groups = GROUP .. UNITS }),
         export = export({}),
     })
-    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
     testing.eq(code, 0, out)
     testing.eq(
         out,
@@ -467,18 +476,18 @@ testing.test("limits --set names the lead token when Pomb answers 403", function
         export = export({}),
     })
     assert(fs.write(box.root .. "/limit_refusal", "x"))
-    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
     testing.eq(code, 1, out)
     testing.ok(out:find("use a lead token, which holds columns.edit.", 1, true), out)
 end)
 
 testing.test("limits --set refuses a board with no group and a bad number", function()
     local box = sandbox({ project = POMB, detail = detail({}), export = export({}) })
-    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
     testing.eq(code, 1, out)
     testing.ok(out:find("has no limit group that holds", 1, true), out)
     for _, bad in ipairs({ "0", "x", "2.5" }) do
-        out, code = dev(box, { "board", "limits", "--set", bad }, "")
+        out, code = dev(box, { "board", "limits", "--set", bad }, LEAD)
         testing.eq(code, 2, out)
         testing.ok(out:find("needs a whole number", 1, true), out)
     end
@@ -486,9 +495,32 @@ end)
 
 testing.test("limits --set refuses a board name beside it", function()
     local box = sandbox({ project = POMB, detail = detail({}), export = export({}) })
-    local out, code = dev(box, { "board", "limits", "other", "--set", "6" }, "")
+    local out, code = dev(box, { "board", "limits", "other", "--set", "6" }, LEAD)
     testing.eq(code, 2, out)
     testing.ok(out:find("--set changes only this project's board", 1, true), out)
+end)
+
+testing.test("limits --set under a lead name sends the lead token", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
+    testing.eq(code, 0, out)
+    testing.ok(read(box, "stdin"):find(LEAD_SECRET, 1, true), read(box, "stdin"))
+end)
+
+testing.test("limits --set under a non-lead name is refused before any request", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, NEW)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Only the lead sets a limit.", 1, true), out)
+    testing.eq(fs.read(box.root .. "/calls"), nil)
 end)
 
 testing.test("limits --set refuses a local board with a sentence", function()
