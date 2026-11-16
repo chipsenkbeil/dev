@@ -23,10 +23,10 @@ local MOVED_A = "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked
 local MOVED_B = "moved 11111111 out of " .. board.DEFAULT_NAMES.icebox
 local TRIMMED_NOTICE = "\nevents were trimmed, check the board"
 local LEAD = "dotfiles/lead/1"
-local PROGRESS_COLUMN = support.column_id(support.COLUMN.PROGRESS)
-local READY_COLUMN = support.column_id(support.COLUMN.READY)
-local BACKLOG_COLUMN = support.column_id(support.COLUMN.BACKLOG)
-local ICEBOX_COLUMN = support.column_id(support.COLUMN.ICEBOX)
+local PROGRESS_COLUMN = support.column_id(support.Column.PROGRESS)
+local READY_COLUMN = support.column_id(support.Column.READY)
+local BACKLOG_COLUMN = support.column_id(support.Column.BACKLOG)
+local ICEBOX_COLUMN = support.column_id(support.Column.ICEBOX)
 local LIVE_LEASE = "2999-01-01T00:00:00Z"
 local PROGRESS_NAME = support.COLUMN_NAME.PROGRESS
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
@@ -297,14 +297,14 @@ end
 
 testing.test("column takes the names and the short forms in any case", function()
     local roles = board.roles()
-    testing.eq(roles:column(support.COLUMN.READY), support.COLUMN_NAME.READY)
+    testing.eq(roles:column(support.Column.READY), support.COLUMN_NAME.READY)
     testing.eq(roles:column("PROGRESS"), support.COLUMN_NAME.PROGRESS)
-    testing.eq(roles:column(support.COLUMN.REVIEW), support.COLUMN_NAME.REVIEW)
+    testing.eq(roles:column(support.Column.REVIEW), support.COLUMN_NAME.REVIEW)
     for _, short in ipairs({
-        support.COLUMN.BLOCKED,
-        support.COLUMN.DONE,
-        support.COLUMN.BACKLOG,
-        support.COLUMN.ICEBOX,
+        support.Column.BLOCKED,
+        support.Column.DONE,
+        support.Column.BACKLOG,
+        support.Column.ICEBOX,
     }) do
         testing.eq(roles:column(short):lower(), short)
     end
@@ -316,10 +316,10 @@ testing.test("roles take the mapped names, the role words and the finished colum
         { ready = "Next", progress = "Doing", done = "Shipped" },
         { "Old", "Shipped" }
     )
-    testing.eq(roles:column(support.COLUMN.READY), "Next")
+    testing.eq(roles:column(support.Column.READY), "Next")
     testing.eq(roles:column("PROGRESS"), "Doing")
     testing.eq(roles:column("in progress"), nil)
-    testing.eq(roles:column(support.COLUMN.DONE), "Shipped")
+    testing.eq(roles:column(support.Column.DONE), "Shipped")
     testing.eq(roles:column("old"), "Old")
     testing.eq(roles.list, {
         support.COLUMN_NAME.ICEBOX,
@@ -343,11 +343,11 @@ testing.test("a renamed board runs through the column map", function()
     }, nil, { "Shipped" })
     backend.column_map = { backlog = "Inbox", ready = "Next", done = "Shipped" }
     testing.eq(
-        cmd_board.run("ls", { "--column", support.COLUMN.READY }, backend).output,
+        cmd_board.run("ls", { "--column", support.Column.READY }, backend).output,
         "11111111  Next  1 Pomodoro  -  A"
     )
     testing.eq(
-        cmd_board.run("ls", { "--column", support.COLUMN.BACKLOG }, backend).output,
+        cmd_board.run("ls", { "--column", support.Column.BACKLOG }, backend).output,
         "11111111  Inbox  unsized  -  B"
     )
     testing.eq(cmd_board.run("ls", { "--column", "doing" }, backend).code, 2)
@@ -424,7 +424,7 @@ testing.test("ls hides Done and aligns the columns", function()
 end)
 
 testing.test("ls filters by column and label", function()
-    local result = cmd_board.run("ls", { "--column", support.COLUMN.DONE }, fake(sample()))
+    local result = cmd_board.run("ls", { "--column", support.Column.DONE }, fake(sample()))
     testing.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
     result = cmd_board.run("ls", { "--label", "docs" }, fake(sample()))
     testing.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
@@ -506,10 +506,10 @@ testing.test("ls --group lists the cards under a heading and count per column", 
     testing.eq(lines[7], "Blocked  1 card")
     testing.eq(lines[#lines], "Done is left out unless --column done")
     local filtered =
-        strip(coloured(progress_sample(), { "--group", "--column", support.COLUMN.BLOCKED }).output)
+        strip(coloured(progress_sample(), { "--group", "--column", support.Column.BLOCKED }).output)
     testing.ok(filtered:find("Done is left out unless --column done", 1, true), filtered)
     testing.eq(
-        coloured(sample(), { "--group", "--column", support.COLUMN.DONE }).output:find(
+        coloured(sample(), { "--group", "--column", support.Column.DONE }).output:find(
             "left out",
             1,
             true
@@ -527,8 +527,8 @@ testing.test("ls filters by column, label and size in both layouts", function()
             end
             return strip(coloured(progress_sample(), args).output)
         end
-        testing.ok(run("--column", support.COLUMN.BLOCKED):find("Fix lint", 1, true))
-        testing.eq(run("--column", support.COLUMN.BLOCKED):find("Write docs", 1, true), nil)
+        testing.ok(run("--column", support.Column.BLOCKED):find("Fix lint", 1, true))
+        testing.eq(run("--column", support.Column.BLOCKED):find("Write docs", 1, true), nil)
         testing.ok(run("--label", "docs"):find("Write docs", 1, true))
         testing.eq(run("--label", "docs"):find("Fix lint", 1, true), nil)
         testing.ok(run("--size", "1"):find("Write docs", 1, true))
@@ -584,7 +584,7 @@ testing.test("add defaults to Backlog and joins the words of the name", function
     result = cmd_board.run("add", {
         "X",
         "--column",
-        support.COLUMN.READY,
+        support.Column.READY,
         "--description",
         V1,
         "--size",
@@ -920,7 +920,7 @@ testing.test("add --size passes the colour its size word names", function()
     testing.eq(#backend.calls, calls)
     cmd_board.run(
         "add",
-        { "X", "--column", support.COLUMN.ICEBOX, "--size", "UNSIZED", "--description", "loose" },
+        { "X", "--column", support.Column.ICEBOX, "--size", "UNSIZED", "--description", "loose" },
         backend
     )
     testing.eq(
@@ -981,7 +981,7 @@ testing.test("ls --size keeps the cards of one colour and counts no colour as un
     cards[2].color = nil
     result = cmd_board.run("ls", { "--size", "unsized" }, fake(cards))
     testing.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
-    result = cmd_board.run("ls", { "--size", "3", "--column", support.COLUMN.DONE }, fake(cards))
+    result = cmd_board.run("ls", { "--size", "3", "--column", support.Column.DONE }, fake(cards))
     testing.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
     result = cmd_board.run("ls", { "--size", "2" }, fake(cards))
     testing.eq(result.output, "No cards.")
@@ -1246,7 +1246,7 @@ testing.test("move to Done refuses a card with unticked outcomes and names them"
         { id = "s3", name = "C works", done = false },
     }
     local backend = fake(cards)
-    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
     testing.eq(
@@ -1263,7 +1263,7 @@ testing.test("move to Done takes a planned card whose outcomes are all ticked", 
     cards[1].outcomes = { { id = "s1", name = "A works", done = true } }
     local backend = fake(cards)
     testing.eq(
-        cmd_board.run("move", { "11111111-a", support.COLUMN.DONE }, backend).output,
+        cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend).output,
         "moved 11111111 to Done"
     )
     testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
@@ -1271,12 +1271,12 @@ end)
 
 testing.test("move refuses an unsized card into every column but Icebox", function()
     for _, column in ipairs({
-        support.COLUMN.BACKLOG,
-        support.COLUMN.READY,
-        support.COLUMN.PROGRESS,
-        support.COLUMN.REVIEW,
-        support.COLUMN.BLOCKED,
-        support.COLUMN.DONE,
+        support.Column.BACKLOG,
+        support.Column.READY,
+        support.Column.PROGRESS,
+        support.Column.REVIEW,
+        support.Column.BLOCKED,
+        support.Column.DONE,
     }) do
         local backend = fake(sample())
         local result = cmd_board.run("move", { "cccccccc", column }, backend)
@@ -1285,7 +1285,7 @@ testing.test("move refuses an unsized card into every column but Icebox", functi
         testing.eq(#backend.calls, 0, column)
     end
     local backend = fake(sample())
-    testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)
     testing.eq(backend.calls, { { "move", ID_C, support.COLUMN_NAME.ICEBOX } })
 end)
 
@@ -1296,7 +1296,7 @@ testing.test("an unsized umbrella refusal names the size and not outcomes", func
     card.epic = { done = 0, total = 2 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("It lacks a size.", 1, true), result.message)
     testing.ok(not result.message:find("outcomes", 1, true), result.message)
@@ -1310,7 +1310,7 @@ testing.test("an unsized card with no children still names size and outcomes", f
     card.color = nil
     card.size = "unsized"
     local backend = fake({ card })
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("It lacks a size, Done when outcomes.", 1, true), result.message)
     testing.eq(#backend.calls, 0)
@@ -1318,11 +1318,11 @@ end)
 
 testing.test("move refuses a sized card that lacks a section or outcomes outside Icebox", function()
     for _, column in ipairs({
-        support.COLUMN.BACKLOG,
-        support.COLUMN.PROGRESS,
-        support.COLUMN.REVIEW,
-        support.COLUMN.BLOCKED,
-        support.COLUMN.DONE,
+        support.Column.BACKLOG,
+        support.Column.PROGRESS,
+        support.Column.REVIEW,
+        support.Column.BLOCKED,
+        support.Column.DONE,
     }) do
         local card = planned()
         card.description = "loose idea"
@@ -1347,7 +1347,7 @@ testing.test("an epic moves to Done once every child is Done and its outcome is 
     card.outcomes = { { id = "s1", name = "a", done = true } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.output, "moved cccccccc to Done")
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
 end)
@@ -1360,14 +1360,14 @@ testing.test("epic_move_refused", function()
     local backend = fake({ card })
     backend.kin = { children = card.epic }
     backend.limited = { support.COLUMN_NAME.REVIEW }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
     testing.eq(
         result.message,
         "Card cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
     )
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+    result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
@@ -1377,7 +1377,7 @@ testing.test("epic_move_refused", function()
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
     end
-    testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+    testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, nil)
 end)
 
 testing.test("an epic with every child Done closes without outcomes", function()
@@ -1385,7 +1385,7 @@ testing.test("an epic with every child Done closes without outcomes", function()
     card.epic = { done = 3, total = 3 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.output, "moved cccccccc to Done")
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
 end)
@@ -1396,11 +1396,11 @@ testing.test("an epic with no outcomes and an open child is refused", function()
     card.epic = { done = 1, total = 3 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
     card.outcomes = { { id = "s1", name = "a", done = true } }
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
@@ -1417,7 +1417,7 @@ testing.test("an epic with no children needs outcomes to close", function()
     card.epic = { done = 0, total = 0 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
     for _, call in ipairs(backend.calls) do
@@ -1436,7 +1436,7 @@ testing.test("an epic with every child Done still needs 3 or fewer outcomes to c
     }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.ok(
         result.message:find("1 to 3 Done when outcomes for an epic, not 4", 1, true),
@@ -1464,13 +1464,13 @@ testing.test(
         card.epic = { done = 0, total = 2 }
         local backend = fake({ card })
         backend.kin = { children = card.epic }
-        testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
+        testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, 1)
         card.outcomes = { { id = "s1", name = "a", done = false } }
-        testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+        testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, nil)
         card.column = support.COLUMN_NAME.VERIFY
-        testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, nil)
+        testing.eq(cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend).code, nil)
         backend = fake({ planned() })
-        testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, 1)
+        testing.eq(cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend).code, 1)
     end
 )
 
@@ -1481,11 +1481,11 @@ testing.test("an unsized epic is refused and a red one is allowed", function()
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
+    testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, 1)
     card.color = "red"
     backend = fake({ card })
     backend.kin = { children = card.epic }
-    testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+    testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, nil)
 end)
 
 testing.test(
@@ -1515,7 +1515,7 @@ testing.test("move to Done refuses outcomes dev cannot read", function()
     local cards = sample()
     cards[1].outcomes_unreadable = true
     local backend = fake(cards)
-    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
     testing.eq(
@@ -1565,7 +1565,7 @@ testing.test("move to Ready refuses outcomes dev cannot read", function()
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.BACKLOG
     cards[1].outcomes_unreadable = true
-    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.READY }, fake(cards))
+    local result = cmd_board.run("move", { "11111111-a", support.Column.READY }, fake(cards))
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
@@ -1578,7 +1578,7 @@ testing.test("move to Ready with unreadable outcomes sends no move", function()
     cards[1].column = support.COLUMN_NAME.BACKLOG
     cards[1].outcomes_unreadable = true
     local backend = fake(cards)
-    cmd_board.run("move", { "11111111-a", support.COLUMN.READY }, backend)
+    cmd_board.run("move", { "11111111-a", support.Column.READY }, backend)
     testing.eq(#backend.calls, 0)
 end)
 
@@ -1586,7 +1586,7 @@ testing.test("move to Ready still counts outcomes dev can read", function()
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.BACKLOG
     cards[1].outcomes = { { id = "s1", name = "a", done = false } }
-    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.READY }, fake(cards))
+    local result = cmd_board.run("move", { "11111111-a", support.Column.READY }, fake(cards))
     testing.eq(result.code, 1)
     testing.ok(result.message:find("3 to 7 Done when outcomes, not 1", 1, true), result.message)
 end)
@@ -1596,7 +1596,7 @@ testing.test("move to a working column does not demand outcomes dev cannot read"
     cards[1].outcomes_unreadable = true
     cards[1].column = support.COLUMN_NAME.VERIFY
     local backend = fake(cards)
-    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.REVIEW }, backend)
+    local result = cmd_board.run("move", { "11111111-a", support.Column.REVIEW }, backend)
     testing.eq(result.code, nil)
 end)
 
@@ -1606,10 +1606,10 @@ testing.test("move to Done is never queued when the card cannot be read", functi
     backend.cards = function()
         return nil, message
     end
-    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.DONE }, backend)
+    local result = cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend)
     testing.eq(result.message, message)
     testing.eq(result.unqueued, true)
-    result = cmd_board.run("move", { "11111111-a", support.COLUMN.REVIEW }, backend)
+    result = cmd_board.run("move", { "11111111-a", support.Column.REVIEW }, backend)
     testing.eq(result.message, message)
     testing.eq(result.unqueued, nil)
 end)
@@ -1957,10 +1957,10 @@ testing.test("note and move resolve the card by prefix", function()
     local result = cmd_board.run("note", { "cccccccc", "landed", "as", "abc" }, backend)
     testing.eq(result.output, "noted cccccccc")
     testing.eq(backend.calls[1], { "note", ID_C, "landed as abc", {} })
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.BLOCKED }, backend)
+    result = cmd_board.run("move", { "cccccccc", support.Column.BLOCKED }, backend)
     testing.eq(result.output, "moved cccccccc to Blocked")
     testing.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.BLOCKED })
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+    result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
     testing.eq(backend.calls[3], { "move", ID_C, support.COLUMN_NAME.REVIEW })
 end)
 
@@ -2265,7 +2265,7 @@ testing.test("move and note refuse before the backend is called", function()
     local backend = fake(sample())
     local result = cmd_board.run("move", { "cccccccc", "doing" }, backend)
     testing.eq(result.code, 2)
-    result = cmd_board.run("move", { "deadbeef", support.COLUMN.READY }, backend)
+    result = cmd_board.run("move", { "deadbeef", support.Column.READY }, backend)
     testing.eq(result.code, 1)
     result = cmd_board.run("note", { "cccccccc" }, backend)
     testing.eq(result.code, 2)
@@ -2277,9 +2277,9 @@ testing.test(
     function()
         local backend = fake(sample())
         for _, args in ipairs({
-            { "X", "--column", support.COLUMN.READY },
-            { "X", "--column", support.COLUMN.READY, "--size", "unsized" },
-            { "X", "--column", support.COLUMN.READY, "--size", "3+" },
+            { "X", "--column", support.Column.READY },
+            { "X", "--column", support.Column.READY, "--size", "unsized" },
+            { "X", "--column", support.Column.READY, "--size", "3+" },
         }) do
             testing.eq(cmd_board.run("add", args, backend).code, 2)
         end
@@ -2288,7 +2288,7 @@ testing.test(
             cmd_board.run("add", {
                 "X",
                 "--column",
-                support.COLUMN.BACKLOG,
+                support.Column.BACKLOG,
                 "--problem",
                 "x",
                 "--change",
@@ -2305,7 +2305,7 @@ testing.test(
         local full = {
             "X",
             "--column",
-            support.COLUMN.READY,
+            support.Column.READY,
             "--size",
             "3",
             "--description",
@@ -2336,7 +2336,7 @@ testing.test(
     function()
         for _, color in ipairs({ "white", "red" }) do
             local backend = fake({ colored(color) })
-            local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+            local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find("dev board size", 1, true), result.message)
             testing.eq(#backend.calls, 0)
@@ -2365,11 +2365,11 @@ testing.test(
         testing.eq(backend.calls[1][4], V1)
         cmd_board.run(
             "add",
-            { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
+            { "X", "--column", support.Column.ICEBOX, "--description", "loose" },
             backend
         )
         testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
-        cmd_board.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend)
+        cmd_board.run("add", { "X", "--column", support.Column.ICEBOX }, backend)
         testing.eq(backend.calls[3], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
     end
 )
@@ -2471,7 +2471,7 @@ testing.test(
         testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
         result = cmd_board.run(
             "add",
-            { "X", "--column", support.COLUMN.BACKLOG, "--out-of-scope", "n" },
+            { "X", "--column", support.Column.BACKLOG, "--out-of-scope", "n" },
             backend
         )
         testing.eq(result.code, 2)
@@ -2484,11 +2484,11 @@ testing.test(
     function()
         local backend = fake(sample())
         for _, column in ipairs({
-            support.COLUMN.BACKLOG,
-            support.COLUMN.PROGRESS,
-            support.COLUMN.REVIEW,
-            support.COLUMN.BLOCKED,
-            support.COLUMN.DONE,
+            support.Column.BACKLOG,
+            support.Column.PROGRESS,
+            support.Column.REVIEW,
+            support.Column.BLOCKED,
+            support.Column.DONE,
         }) do
             local cases = {
                 { { "--problem", "x", "--done-when", "a" }, "a size" },
@@ -2512,12 +2512,12 @@ testing.test(
 
 testing.test("add into Icebox stays free-form", function()
     local backend = fake(sample())
-    testing.eq(cmd_board.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(cmd_board.run("add", { "X", "--column", support.Column.ICEBOX }, backend).code, nil)
     testing.eq(backend.calls[1], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
     testing.eq(
         cmd_board.run(
             "add",
-            { "X", "--column", support.COLUMN.ICEBOX, "--description", "loose" },
+            { "X", "--column", support.Column.ICEBOX, "--description", "loose" },
             backend
         ).code,
         nil
@@ -2584,7 +2584,7 @@ testing.test(
             card.outcomes =
                 { { id = "s1", name = "a" }, { id = "s2", name = "b" }, { id = "s3", name = "c" } }
             local backend = fake({ card })
-            local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+            local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find(case[2], 1, true), result.message)
             testing.eq(#backend.calls, 0)
@@ -2597,7 +2597,7 @@ testing.test(
             { id = "s3", name = "c " .. board.JUDGEMENT },
         }
         testing.eq(
-            cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
+            cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card })).code,
             nil
         )
     end
@@ -2616,7 +2616,7 @@ testing.test("move into In Progress refuses an empty section or a misplaced line
         card.description = case[1]
         card.outcomes = { { id = "s1", name = "a " .. board.JUDGEMENT } }
         local backend = fake({ card })
-        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.PROGRESS }, backend)
+        local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find(case[2], 1, true), result.message)
         testing.eq(#backend.calls, 0)
@@ -2629,7 +2629,7 @@ testing.test("add to Backlog refuses an empty section or a misplaced line", func
         { { "--problem", "x", "--out-of-scope", "n" }, board.TEXT_UNDER .. "Change" },
         { { "--description", SHAPE_CASES[2][1] }, board.MISPLACED },
     }) do
-        local args = { "X", "--column", support.COLUMN.BACKLOG, "--size", "1", "--done-when", "a" }
+        local args = { "X", "--column", support.Column.BACKLOG, "--size", "1", "--done-when", "a" }
         for _, word in ipairs(case[1]) do
             args[#args + 1] = word
         end
@@ -2659,19 +2659,19 @@ testing.test(
         local card = colored("green")
         card.description = "loose idea"
         local backend = fake({ card })
-        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
+        local result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("cannot enter Backlog", 1, true), result.message)
         testing.ok(result.message:find("## Problem", 1, true), result.message)
         testing.eq(#backend.calls, 0)
         card.description = SCAFFOLD:gsub("x\n", "")
-        result = cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card }))
+        result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, fake({ card }))
         testing.eq(result.code, 1)
         testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
         card.description = COMPOSED
         card.outcomes = { { id = "s1", name = "a", done = false } }
         testing.eq(
-            cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, fake({ card })).code,
+            cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, fake({ card })).code,
             nil
         )
     end
@@ -2683,13 +2683,13 @@ testing.test(
         local backend = fake(sample())
         local result = cmd_board.run(
             "add",
-            { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", "why" },
+            { "X", "--column", support.Column.READY, "--size", "1", "--description", "why" },
             backend
         )
         testing.eq(result.code, 2)
         testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
         result =
-            cmd_board.run("add", { "X", "--column", support.COLUMN.READY, "--size", "1" }, backend)
+            cmd_board.run("add", { "X", "--column", support.Column.READY, "--size", "1" }, backend)
         testing.eq(result.code, 2)
         testing.eq(#backend.calls, 0)
     end
@@ -2701,7 +2701,7 @@ testing.test("epic_add_ready_bare", function()
         "Big",
         "--epic",
         "--column",
-        support.COLUMN.READY,
+        support.Column.READY,
         "--size",
         "1",
         "--problem",
@@ -2750,7 +2750,7 @@ testing.test(
     "add to Ready without a checks row names the missing row, or the missing field",
     function()
         local backend = fake(sample())
-        local args = { "X", "--column", support.COLUMN.READY, "--size", "1", "--description", V1 }
+        local args = { "X", "--column", support.Column.READY, "--size", "1", "--description", V1 }
         local result = cmd_board.run("add", args, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("checks row", 1, true), result.message)
@@ -2779,7 +2779,7 @@ testing.test(
         testing.ok(result.message:find("no checks field", 1, true), result.message)
         testing.eq(#backend.calls, 0)
         testing.eq(
-            cmd_board.run("add", { "X", "--column", support.COLUMN.ICEBOX }, backend).code,
+            cmd_board.run("add", { "X", "--column", support.Column.ICEBOX }, backend).code,
             nil
         )
     end
@@ -2789,16 +2789,16 @@ testing.test("move to Ready counts a card with no checks row as missing them", f
     local card = colored("green")
     card.checks = {}
     local backend = fake({ card })
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("has no checks row", 1, true), result.message)
     backend.nofield = true
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+    result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("no checks field", 1, true), result.message)
     testing.ok(result.message:find("dev board init", 1, true), result.message)
     testing.eq(#backend.calls, 0)
-    testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)
 end)
 
 testing.test("move to Ready refuses an outcome that names no deciding check", function()
@@ -2812,7 +2812,7 @@ testing.test("move to Ready refuses an outcome that names no deciding check", fu
         { id = "s5", name = "E blank " .. board.CHECK_OPEN .. "  )", done = false },
         { id = "s6", name = "F parens " .. board.CHECK_OPEN .. "dev (x) y)", done = false },
     }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card }))
+    local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
     testing.eq(result.code, 1)
     testing.ok(result.message:find("names no deciding check", 1, true), result.message)
     testing.ok(result.message:find("C works, D works", 1, true), result.message)
@@ -2823,7 +2823,7 @@ testing.test("move to Ready refuses an outcome that names no deciding check", fu
     testing.eq(result.message:find("A is refused", 1, true), nil)
     testing.eq(result.message:find("F parens", 1, true), nil)
     card.outcomes = { card.outcomes[1], card.outcomes[2], card.outcomes[6] }
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card }))
+    result = cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
     testing.eq(result.code, nil)
 end)
 
@@ -2834,7 +2834,7 @@ testing.test("move to Ready lets a card with children in without a checks row", 
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.output, "moved cccccccc to Ready")
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.READY })
 end)
@@ -2891,7 +2891,7 @@ testing.test("move to Ready refuses a card missing a heading or a Done when item
         local card = colored("green")
         card.description = case[1]
         local backend = fake({ card })
-        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+        local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find(case[2], 1, true), result.message)
         testing.eq(#backend.calls, 0)
@@ -2899,7 +2899,7 @@ testing.test("move to Ready refuses a card missing a heading or a Done when item
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
     testing.eq(
-        cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
+        cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card })).code,
         nil
     )
 end)
@@ -2924,7 +2924,7 @@ testing.test(
             card.description = V2
             card.outcomes = outcomes(count, 0, " " .. board.JUDGEMENT)
             testing.eq(
-                cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
+                cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card })).code,
                 nil
             )
         end
@@ -2933,7 +2933,7 @@ testing.test(
             card.description = V2
             card.outcomes = outcomes(count)
             local backend = fake({ card })
-            local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+            local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find("card format v3", 1, true), result.message)
             testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
@@ -2942,7 +2942,7 @@ testing.test(
         local card = colored("green")
         card.outcomes = {}
         testing.eq(
-            cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, fake({ card })).code,
+            cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card })).code,
             nil
         )
     end
@@ -2956,7 +2956,7 @@ testing.test("an epic with 1 to 3 outcomes enters Ready", function()
         card.outcomes = outcomes(count)
         local backend = fake({ card })
         testing.eq(
-            cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend).code,
+            cmd_board.run("move", { "cccccccc", support.Column.READY }, backend).code,
             nil,
             count
         )
@@ -2971,7 +2971,7 @@ testing.test("an epic with no outcomes or more than 3 is refused with the epic r
         card.epic = { done = 2, total = 2 }
         card.outcomes = outcomes(count)
         local backend = fake({ card })
-        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+        local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find("1 to 3 Done when outcomes for an epic", 1, true),
@@ -2992,7 +2992,7 @@ testing.test("a card without children is still held to 3 to 7 outcomes at Ready"
         card.description = V2
         card.outcomes = outcomes(count)
         local backend = fake({ card })
-        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+        local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
         testing.eq(result.message:find("epic", 1, true), nil, result.message)
@@ -3030,7 +3030,7 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
     local ready = {
         "X",
         "--column",
-        support.COLUMN.READY,
+        support.Column.READY,
         "--size",
         "1",
         "--description",
@@ -3774,25 +3774,25 @@ testing.test("move into Icebox never checks the description", function()
     local card = colored("white")
     card.description = nil
     local backend = fake({ card })
-    testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)
 end)
 
 testing.test("move to Ready takes a sized card, and other columns take a planned one", function()
     for _, color in ipairs({ "yellow", "green", "blue" }) do
         local backend = fake({ colored(color) })
         testing.eq(
-            cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend).output,
+            cmd_board.run("move", { "cccccccc", support.Column.READY }, backend).output,
             "moved cccccccc to Ready"
         )
     end
     for _, column in ipairs({
-        support.COLUMN.BACKLOG,
-        support.COLUMN.REVIEW,
-        support.COLUMN.BLOCKED,
-        support.COLUMN.DONE,
+        support.Column.BACKLOG,
+        support.Column.REVIEW,
+        support.Column.BLOCKED,
+        support.Column.DONE,
     }) do
         local card = colored("green")
-        if column == support.COLUMN.REVIEW then
+        if column == support.Column.REVIEW then
             card.column = support.COLUMN_NAME.VERIFY
         end
         local backend = fake({ card })
@@ -3800,7 +3800,7 @@ testing.test("move to Ready takes a sized card, and other columns take a planned
         testing.eq(#backend.calls, 1)
     end
     local backend = fake({ colored("white") })
-    testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.ICEBOX }, backend).code, nil)
+    testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)
     testing.eq(#backend.calls, 1)
 end)
 
@@ -3810,7 +3810,7 @@ testing.test(
         local cards = sample()
         cards[1].labels = { "needs:human" }
         local backend = fake(cards)
-        local result = cmd_board.run("move", { "11111111-a", support.COLUMN.BACKLOG }, backend)
+        local result = cmd_board.run("move", { "11111111-a", support.Column.BACKLOG }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("needs:human", 1, true), result.message)
         result = cmd_board.run("edit", { "11111111-a", "text" }, backend)
@@ -4050,10 +4050,10 @@ testing.test("a needs:human card moves within its own column and not out of it",
     cards[1].labels = { "needs:human" }
     cards[1].column = support.COLUMN_NAME.ICEBOX
     local backend = fake(cards)
-    local result = cmd_board.run("move", { "11111111-a", support.COLUMN.ICEBOX }, backend)
+    local result = cmd_board.run("move", { "11111111-a", support.Column.ICEBOX }, backend)
     testing.eq(result.output, "moved 11111111 to Icebox")
     testing.eq(backend.calls, { { "move", ID_A, support.COLUMN_NAME.ICEBOX } })
-    result = cmd_board.run("move", { "11111111-a", support.COLUMN.BACKLOG }, backend)
+    result = cmd_board.run("move", { "11111111-a", support.Column.BACKLOG }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("needs:human", 1, true), result.message)
     testing.eq(#backend.calls, 1)
@@ -4127,9 +4127,9 @@ end)
 testing.test("move to Ready allows an epic and a card without children", function()
     local backend = fake({ colored("green") })
     backend.kin = { children = { done = 0, total = 2 } }
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.READY }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.output, "moved cccccccc to Ready")
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
+    result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend)
     testing.eq(result.output, "moved cccccccc to Backlog")
 end)
 
@@ -4254,12 +4254,12 @@ end)
 
 testing.test("next --column takes Backlog or Icebox and refuses other columns", function()
     local backend = fake(sample())
-    testing.eq(cmd_board.run("next", { "--column", support.COLUMN.BACKLOG }, backend).message, nil)
-    testing.eq(cmd_board.run("next", { "--column", support.COLUMN.DONE }, backend).code, 2)
+    testing.eq(cmd_board.run("next", { "--column", support.Column.BACKLOG }, backend).message, nil)
+    testing.eq(cmd_board.run("next", { "--column", support.Column.DONE }, backend).code, 2)
     testing.eq(cmd_board.run("next", { "--column" }, backend).code, 2)
     testing.eq(cmd_board.run("next", { "extra" }, backend).code, 2)
     testing.eq(
-        cmd_board.run("next", { "--column", support.COLUMN.BACKLOG }, fake({})).output,
+        cmd_board.run("next", { "--column", support.Column.BACKLOG }, fake({})).output,
         "No cards in Backlog."
     )
 end)
@@ -4274,7 +4274,7 @@ testing.test("next --column takes the Review, Verify and Release stage columns",
         testing.eq(result.output, "No cards in " .. column .. ".")
         testing.eq(backend.calls[#backend.calls], { "next", column, nil })
     end
-    testing.eq(cmd_board.run("next", { "--column", support.COLUMN.PROGRESS }, fake({})).code, 2)
+    testing.eq(cmd_board.run("next", { "--column", support.Column.PROGRESS }, fake({})).code, 2)
 end)
 
 local NOW = assert(box.parse_time("2026-10-27T12:00:00Z"))
@@ -4661,12 +4661,12 @@ end)
 
 testing.test("next --column blocked asks the backend for a needs:lead card", function()
     local backend = fake(sample())
-    cmd_board.run("next", { "--column", support.COLUMN.BLOCKED }, backend)
+    cmd_board.run("next", { "--column", support.Column.BLOCKED }, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
     backend = fake(sample())
     cmd_board.run("next", {}, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.READY, nil })
-    testing.eq(cmd_board.run("next", { "--column", support.COLUMN.DONE }, fake(sample())).code, 2)
+    testing.eq(cmd_board.run("next", { "--column", support.Column.DONE }, fake(sample())).code, 2)
 end)
 
 testing.test("next --column blocked skips a needs:human card and a claimed one", function()
@@ -4679,12 +4679,12 @@ testing.test("next --column blocked skips a needs:human card and a claimed one",
         support.COLUMN_NAME.BLOCKED,
     }, { 0, 0, 0, 0, 0 }, { { "needs:lead", "needs:human" }, lead, lead, lead, lead })
     cards[2].claimant = "someone"
-    local result = cmd_board.run("next", { "--column", support.COLUMN.BLOCKED }, fake(cards))
+    local result = cmd_board.run("next", { "--column", support.Column.BLOCKED }, fake(cards))
     testing.ok(result.output:find("00000003", 1, true), result.output)
     cards[3].claimant = "someone"
     cards[5].labels = {}
     testing.eq(
-        cmd_board.run("next", { "--column", support.COLUMN.BLOCKED }, fake(cards)).output,
+        cmd_board.run("next", { "--column", support.Column.BLOCKED }, fake(cards)).output,
         "No cards in Blocked."
     )
 end)
@@ -4772,14 +4772,14 @@ end)
 
 testing.test("next --column blocked --for planner asks for a needs:planner card", function()
     local backend = fake(sample())
-    cmd_board.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "planner" }, backend)
+    cmd_board.run("next", { "--column", support.Column.BLOCKED, "--for", "planner" }, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:planner" })
     backend = fake(sample())
-    cmd_board.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "lead" }, backend)
+    cmd_board.run("next", { "--column", support.Column.BLOCKED, "--for", "lead" }, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
     testing.eq(cmd_board.run("next", { "--for", "planner" }, fake(sample())).code, 2)
     testing.eq(
-        cmd_board.run("next", { "--column", support.COLUMN.BLOCKED, "--for", "x" }, fake(sample())).code,
+        cmd_board.run("next", { "--column", support.Column.BLOCKED, "--for", "x" }, fake(sample())).code,
         2
     )
 end)
@@ -5187,7 +5187,7 @@ testing.test("the token reaches curl on stdin and nowhere else", function()
     testing.eq(out:find(TOKEN, 1, true), nil)
     testing.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
     testing.ok(read(root, "calls"):find("-K -", 1, true), read(root, "calls"))
-    out = dev(root, home, { "-v", "board", "move", "11111111-a", support.COLUMN.DONE })
+    out = dev(root, home, { "-v", "board", "move", "11111111-a", support.Column.DONE })
     testing.eq(out:find(TOKEN, 1, true), nil)
 end)
 
@@ -5926,7 +5926,7 @@ testing.test("the lead closes an epic with the lead token", function()
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111", support.COLUMN.DONE },
+        { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
     testing.eq(code, 0, out)
@@ -5944,7 +5944,7 @@ testing.test("a worker's move of an epic into Done is refused before the move", 
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111", support.COLUMN.DONE },
+        { "board", "move", "11111111", support.Column.DONE },
         { agent = "dotfiles/implementer/82f0e002/1" }
     )
     testing.eq(code, 1, out)
@@ -5958,7 +5958,7 @@ testing.test("the lead's close of an epic names the open children and unticked o
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111", support.COLUMN.DONE },
+        { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
     testing.eq(code, 1, out)
@@ -5968,7 +5968,7 @@ testing.test("the lead's close of an epic names the open children and unticked o
     out, code = dev(
         root,
         home,
-        { "board", "move", "11111111", support.COLUMN.DONE },
+        { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
     testing.eq(code, 1, out)
@@ -5987,7 +5987,7 @@ testing.test("the lead's close of an epic with no lead token set names epics.man
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111", support.COLUMN.DONE },
+        { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
     testing.eq(code, 1, out)
@@ -6010,7 +6010,7 @@ testing.test("the lead's close of an epic is not queued when Pomb is unreachable
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111", support.COLUMN.DONE },
+        { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
     testing.eq(code, 1, out)
@@ -6134,7 +6134,7 @@ testing.test(
     "move to Done on a Pomb board names the open outcomes, and discard still closes it",
     function()
         local root, home = sandbox({ export = SUBTASKS_EXPORT })
-        local out, code = dev(root, home, { "board", "move", "11111111", support.COLUMN.DONE })
+        local out, code = dev(root, home, { "board", "move", "11111111", support.Column.DONE })
         testing.eq(code, 1, out)
         testing.ok(out:find("1 of 2 outcomes are unticked (1. A works)", 1, true), out)
         testing.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
@@ -6157,7 +6157,7 @@ testing.test("move to Done on a Pomb board refuses subtasks dev cannot read", fu
         })
         .. "]}"
     local root, home = sandbox({ export = export })
-    local out, code = dev(root, home, { "board", "move", "11111111", support.COLUMN.DONE })
+    local out, code = dev(root, home, { "board", "move", "11111111", support.Column.DONE })
     testing.eq(code, 1, out)
     testing.ok(out:find("cannot be read from Pomb", 1, true), out)
     testing.ok(not read(root, "calls"):find("/move", 1, true), read(root, "calls"))
@@ -6202,7 +6202,7 @@ testing.test("a renamed Pomb board is read through the column map and is_done", 
         read(root, "calls"):find("ready=true&column_id=col-ready", 1, true),
         read(root, "calls")
     )
-    out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
+    out, code = dev(root, home, { "board", "ls", "--column", support.Column.READY })
     testing.eq(code, 0, out)
     testing.ok(out:find("Next", 1, true), out)
     out, code = dev(root, home, { "board", "ls", "--column", "old" })
@@ -6250,7 +6250,7 @@ testing.test("epic_next_skips_open_child", function()
     local root, home = sandbox({ task = EPIC_TASK:format(1) })
     for _, args in ipairs({
         { "board", "next" },
-        { "board", "next", "--column", support.COLUMN.REVIEW },
+        { "board", "next", "--column", support.Column.REVIEW },
     }) do
         local out, code = dev(root, home, args)
         testing.eq(code, 0, out)
@@ -6289,14 +6289,14 @@ testing.test("epic_move_refused_by_settings", function()
     local root, home =
         sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail, user = LEAD_USER })
     two_tokens(root)
-    for _, column in ipairs({ support.COLUMN.BACKLOG, support.COLUMN.DONE }) do
+    for _, column in ipairs({ support.Column.BACKLOG, support.Column.DONE }) do
         local out, code = dev(root, home, { "board", "move", "11111111-a", column })
         testing.eq(code, 1, out)
         testing.ok(out:find("is an epic and cannot enter", 1, true), out)
         testing.ok(out:find("2 of 3 children are open.", 1, true), out)
     end
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
     testing.eq(code, 0, out)
     testing.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
@@ -6316,7 +6316,7 @@ testing.test("epic_move_pomb_refusal", function()
             .. text
             .. "\"}'; status=409 ;;\n*/owner/release) body= ;;"
     )
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
     testing.eq(code, 1, out)
     testing.ok(out:find(text, 1, true), out)
 end)
@@ -6325,7 +6325,7 @@ testing.test("an epic closes when the task read shows every child Done", functio
     local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(3), user = LEAD_USER })
     two_tokens(root)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
     testing.eq(code, 0, out)
     testing.ok(
         read(root, "calls"):find("/api/tasks/" .. ID_A .. "/move", 1, true),
@@ -6337,7 +6337,7 @@ testing.test("an epic with an open child in the task read is refused", function(
     local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), user = LEAD_USER })
     two_tokens(root)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
     testing.eq(code, 1, out)
     testing.ok(out:find("is an epic and cannot enter", 1, true), out)
     testing.ok(out:find("2 of 3 children are open.", 1, true), out)
@@ -6352,7 +6352,7 @@ testing.test("epic_reopen_out_of_done", function()
     )
     local task = EPIC_TASK:format(1):gsub("col%-ready", "col-done", 1)
     local root, home = sandbox({ export = export, task = task })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BACKLOG })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BACKLOG })
     testing.eq(code, 0, out)
     local calls = read(root, "calls")
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
@@ -6363,7 +6363,7 @@ testing.test("next skips a card held by a blocker that is not in Done", function
     local root, home = sandbox({
         links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]',
     })
-    local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
+    local out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
     testing.ok(code == 0, out)
     testing.eq(out, "No cards in Backlog.\n")
     out, code = dev(root, home, { "board", "next" })
@@ -6406,7 +6406,7 @@ testing.test("next offers a Ready card whose blocker on another board is Done", 
     testing.ok(code == 0, out)
     testing.ok(out:find("First", 1, true), out)
     testing.ok(read(root, "calls"):find("&ready=true", 1, true), read(root, "calls"))
-    out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
+    out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
     testing.ok(code == 0, out)
     testing.ok(out:find("First", 1, true), out)
 end)
@@ -6415,7 +6415,7 @@ testing.test("next skips a backlog card whose blocker on another board cannot be
     local root, home = far_sandbox("far-done")
     assert(fs.write(root .. "/far.json", '{"message":"gone"}'))
     assert(fs.write(root .. "/far_gone", ""))
-    local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
+    local out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
     testing.ok(code == 0, out)
     testing.eq(out, "No cards in Backlog.\n")
 end)
@@ -6429,7 +6429,7 @@ end)
 
 testing.test("next skips a backlog card whose blocker on another board is open", function()
     local root, home = far_sandbox("far-ready")
-    local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
+    local out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
     testing.ok(code == 0, out)
     testing.eq(out, "No cards in Backlog.\n")
 end)
@@ -6441,7 +6441,7 @@ testing.test("add posts the card to the named column", function()
         "add",
         "New card",
         "--column",
-        support.COLUMN.READY,
+        support.Column.READY,
         "--description",
         V1,
         "--size",
@@ -6543,7 +6543,7 @@ testing.test(
             "add",
             "New",
             "--column",
-            support.COLUMN.READY,
+            support.Column.READY,
             "--size",
             "1",
             "--description",
@@ -6596,7 +6596,7 @@ testing.test("add --label needs:human reaches pomb after the card and its outcom
         "--done-when",
         "A",
         "--column",
-        support.COLUMN.BLOCKED,
+        support.Column.BLOCKED,
         "--label",
         "needs:human",
     })
@@ -6630,7 +6630,7 @@ testing.test("a failed subtask on add --label needs:human still labels the card"
         "--done-when",
         "A",
         "--column",
-        support.COLUMN.BLOCKED,
+        support.Column.BLOCKED,
         "--label",
         "needs:human",
     })
@@ -6655,7 +6655,7 @@ local function add_locked(root, home)
         "--done-when",
         "A",
         "--column",
-        support.COLUMN.BLOCKED,
+        support.Column.BLOCKED,
         "--label",
         "needs:human",
     })
@@ -6918,7 +6918,7 @@ testing.test("note posts a comment of kind agent and move goes to the top of the
     calls = read(root, "calls")
     testing.ok(calls:find('"kind":"decision"', 1, true), calls)
     testing.ok(calls:find('"author":"reviewer"', 1, true), calls)
-    out = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
+    out = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
     testing.eq(out, "moved 11111111 to Review\n")
     calls = read(root, "calls")
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
@@ -7721,7 +7721,7 @@ testing.test("move out of progress stops the loop and sends the fence", function
     end))
     local pid = loop_pid(home)
     assert(fs.write(root .. "/export.json", WORKING_EXPORT))
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
     testing.eq(code, 0)
     testing.eq(out, "moved 11111111 to Review\n")
     local moved = read(root, "calls"):match("[^\n]*/move\n?")
@@ -7739,7 +7739,7 @@ end)
 testing.test("move into progress does not release the claim", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
+    dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
     testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
@@ -7760,11 +7760,11 @@ testing.test(
     function()
         local root, home = sandbox({ export = PLANNED_EXPORT })
         local out, code =
-            dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
+            dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
         testing.eq(code, 0, out)
         testing.ok(out:find("^moved 11111111 to In Progress\n\n11111111  In Progress  "), out)
         testing.ok(out:find("mine? no", 1, true), out)
-        out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
+        out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
         testing.eq(code, 0, out)
         testing.eq(out, "moved 11111111 to In Progress\n")
         dev(root, home, { "board", "release", "11111111-a" })
@@ -7776,7 +7776,7 @@ testing.test("move into progress posts the claim then the move to In Progress", 
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "r/one" }
     )
     testing.eq(code, 0, out)
@@ -7872,7 +7872,7 @@ testing.test("DEV_AGENT shape refuses move into progress of an unclaimed card", 
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "builder" }
     )
     testing.eq(code, 2, out)
@@ -7886,7 +7886,7 @@ testing.test("an old-shape claimant still moves and lands its claimed card", fun
     card.claimant = old
     local backend = fake({ card })
     as_agent(old, function()
-        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend)
+        local result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend)
         testing.eq(result.code, nil, result.message)
         testing.eq(result.output, "moved cccccccc to Backlog")
     end)
@@ -7899,7 +7899,7 @@ testing.test(
         local out, code = dev(
             root,
             home,
-            { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+            { "board", "move", "11111111-a", support.Column.PROGRESS },
             { agent = "r/one" }
         )
         testing.eq(code, 0, out)
@@ -7919,7 +7919,7 @@ testing.test("epic_done_children_claim", function()
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "r/one" }
     )
     testing.eq(code, 0, out)
@@ -7942,7 +7942,7 @@ testing.test("a move into progress that Pomb refuses releases the claim it just 
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "r/one" }
     )
     testing.eq(code, 1)
@@ -7968,7 +7968,7 @@ testing.test("a move into progress of a card claimed elsewhere takes no claim", 
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "r/one" }
     )
     testing.eq(code, 1)
@@ -7983,7 +7983,7 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "r/one" }
     )
     testing.eq(code, 0, out)
@@ -7996,7 +7996,7 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
     end))
     local pid = loop_pid(home)
     assert(fs.write(root .. "/export.json", WORKING_EXPORT))
-    out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW }, {
+    out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW }, {
         agent = "r/one",
     })
     testing.eq(code, 0, out)
@@ -8063,7 +8063,7 @@ testing.test("a refused move into progress frees the owner", function()
     local out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.PROGRESS },
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "r/one" }
     )
     testing.eq(code, 1, out)
@@ -8121,7 +8121,7 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
         return heartbeats(kept_root) >= 1
     end))
     local before = heartbeats(kept_root)
-    out, code = dev(kept_root, kept_home, { "board", "move", "11111111-a", support.COLUMN.BLOCKED })
+    out, code = dev(kept_root, kept_home, { "board", "move", "11111111-a", support.Column.BLOCKED })
     testing.eq(code, 0, out)
     testing.eq(read(kept_root, "calls"):find("/owner/release", 1, true), nil)
     testing.eq(fs.exists(state_file(kept_home)), true)
@@ -8139,7 +8139,7 @@ testing.test("a move out of blocked ends the owner lease", function()
     end))
     assert(fs.write(root .. "/freeze", ""))
     local pid = loop_pid(home)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BLOCKED })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BLOCKED })
     testing.eq(code, 0, out)
     testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
     testing.eq(fs.exists(state_file(home)), true)
@@ -8147,7 +8147,7 @@ testing.test("a move out of blocked ends the owner lease", function()
     testing.ok(wait_until(function()
         return heartbeats(root) > before
     end))
-    out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BACKLOG })
+    out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BACKLOG })
     testing.eq(code, 0, out)
     local released = read(root, "calls"):match("[^\n]*/owner/release\n?")
     testing.ok(released, "no owner release in calls")
@@ -8162,7 +8162,7 @@ end)
 testing.test("take of a card a live owner holds names the owner and the lease end", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BLOCKED })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BLOCKED })
     testing.eq(out, "moved 11111111 to Blocked\n")
     testing.eq(code, 0)
     assert(fs.write(root .. "/hb_status", "409"))
@@ -8181,7 +8181,7 @@ testing.test("move to ready takes an epic like any card", function()
         export = export,
         task = EPIC_TASK:format(3),
     })
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.READY })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.READY })
     testing.eq(code, 0, out)
     testing.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
@@ -8214,7 +8214,7 @@ testing.test("a release the server refuses after a move warns and the move succe
     local root, home = sandbox({ export = PLANNED_DONE_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/owner/release) body=; status=503 ;;")
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.DONE })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
     testing.eq(code, 0)
     testing.ok(out:find("moved 11111111 to Done", 1, true), out)
     testing.ok(out:find("the claim was not released", 1, true), out)
@@ -8224,7 +8224,7 @@ end)
 testing.test("move into progress keeps the loop and the state", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    dev(root, home, { "board", "move", "11111111-a", support.COLUMN.PROGRESS })
+    dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
     testing.eq(fs.exists(state_file(home)), true)
     local seen = heartbeats(root)
     testing.ok(wait_until(function()
@@ -8441,7 +8441,7 @@ end
 
 testing.test("the pomb card read returns the name, done flag and claimant of one task", function()
     local pattern = READY_COLUMN:gsub("%p", "%%%0")
-    local done = TASK:gsub(pattern, support.column_id(support.COLUMN.DONE), 1)
+    local done = TASK:gsub(pattern, support.column_id(support.Column.DONE), 1)
     local root, home = sandbox({ export = '{"tasks":[]}', task = done })
     assert(fs.write(root .. "/owner_name", "dev@box:42"))
     local card = card_read(root, home, ID_A)
@@ -9983,7 +9983,7 @@ testing.test(
     function()
         local backend = fake({ planned() })
         backend.limited = { "In Review" }
-        local result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+        local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find(
@@ -10185,7 +10185,7 @@ end
 local function backlog_names(root, home)
     local names = {}
     for line in
-        dev(root, home, { "board", "ls", "--column", support.COLUMN.BACKLOG }):gmatch("[^\n]+")
+        dev(root, home, { "board", "ls", "--column", support.Column.BACKLOG }):gmatch("[^\n]+")
     do
         names[#names + 1] = line:match("(%S+)$")
     end
@@ -10199,7 +10199,7 @@ local function pomb_placed(extra)
         "add",
         "New",
         "--column",
-        support.COLUMN.READY,
+        support.Column.READY,
         "--size",
         "1",
         "--description",
@@ -10258,7 +10258,7 @@ testing.test("add refuses two placement flags and a CARD in another column", fun
     out, code = dev(root, home, add_args("Bad", { "--before", ids.One, "--after", ids.Two }))
     testing.eq(code, 2, out)
     out, code =
-        dev(root, home, add_args("Bad", { "--column", support.COLUMN.ICEBOX, "--after", ids.One }))
+        dev(root, home, add_args("Bad", { "--column", support.Column.ICEBOX, "--after", ids.One }))
     testing.eq(code, 2, out)
     testing.ok(
         out:find(support.COLUMN_NAME.BACKLOG, 1, true)
@@ -10327,7 +10327,7 @@ end
 
 testing.test("move names the full column with its count and limit", function()
     local backend = crowded(1)
-    local result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+    local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
     testing.eq(result.code, 3)
     testing.eq(
         result.message,
@@ -10343,7 +10343,7 @@ testing.test("move names the full column with its count and limit", function()
     function backend:move()
         return nil, "no room", "full"
     end
-    result = cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend)
+    result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
     testing.eq(result.code, 3)
     testing.eq(result.message, "Pomb refused the move: no room")
 end)
@@ -10351,7 +10351,7 @@ end)
 testing.test("move wait retries a full column until room frees", function()
     local backend = crowded(2)
     local naps = {}
-    local args = { "cccccccc", support.COLUMN.REVIEW, "--wait", "60" }
+    local args = { "cccccccc", support.Column.REVIEW, "--wait", "60" }
     local result = cmd_board.move(backend, args, ticking(naps))
     testing.eq(result.code, nil)
     testing.eq(result.output, "moved cccccccc to " .. support.COLUMN_NAME.REVIEW)
@@ -10366,7 +10366,7 @@ end)
 testing.test("move wait gives up at its timeout with the full status", function()
     local backend = crowded(100)
     local naps = {}
-    local args = { "cccccccc", support.COLUMN.REVIEW, "--wait", "40" }
+    local args = { "cccccccc", support.Column.REVIEW, "--wait", "40" }
     local result = cmd_board.move(backend, args, ticking(naps))
     testing.eq(result.code, 3)
     testing.eq(naps, { 15, 15, 10 })
@@ -10460,7 +10460,7 @@ local LANED_TASKS = {
 
 testing.test("pomb orders cards by lane then position", function()
     local root, home = laned(LANED_TASKS)
-    local out, code = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
+    local out, code = dev(root, home, { "board", "ls", "--column", support.Column.READY })
     testing.eq(code, 0, out)
     local rows = {}
     local pattern = support.COLUMN_NAME.READY .. "%s+(%S+)%s+%S+%s+%S+%s+(%S+)"
@@ -10491,7 +10491,7 @@ testing.test("pomb sorts a card in an unknown lane last with no lane name", func
         tasks[#tasks + 1] = task
     end
     local root, home = laned(tasks)
-    local out = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
+    local out = dev(root, home, { "board", "ls", "--column", support.Column.READY })
     local rows = {}
     local pattern = support.COLUMN_NAME.READY .. "%s+(%S+)%s+%S+%s+%S+%s+(%S+)"
     for lane, name in out:gmatch(pattern) do
@@ -10505,7 +10505,7 @@ testing.test("ls and show print the lane of a card", function()
     local out = dev(root, home, { "board", "show", "11111111-a" })
     testing.ok(out:find(support.COLUMN_NAME.READY .. "  Fixes  ", 1, true), out)
     root, home = sandbox()
-    out = dev(root, home, { "board", "ls", "--column", support.COLUMN.READY })
+    out = dev(root, home, { "board", "ls", "--column", support.Column.READY })
     testing.ok(not out:find("Fixes", 1, true), out)
     testing.ok(not out:find("Parity", 1, true), out)
 end)
@@ -10539,14 +10539,14 @@ end)
 
 testing.test("move keeps the lane unless a lane is given", function()
     local root, home = laned(LANED_TASKS)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.ICEBOX })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.ICEBOX })
     testing.eq(code, 0, out)
     testing.ok(read(root, "calls"):find("/api/tasks/" .. ID_A .. "/move", 1, true), out)
     testing.ok(not read(root, "calls"):find("swimlane_id", 1, true), read(root, "calls"))
     out, code = dev(
         root,
         home,
-        { "board", "move", "11111111-a", support.COLUMN.ICEBOX, "--lane", "Parity" }
+        { "board", "move", "11111111-a", support.Column.ICEBOX, "--lane", "Parity" }
     )
     testing.eq(code, 0, out)
     testing.ok(
@@ -10558,7 +10558,7 @@ end)
 testing.test("ls and next with a lane list only that lane", function()
     local root, home = laned(LANED_TASKS)
     local out, code =
-        dev(root, home, { "board", "ls", "--column", support.COLUMN.READY, "--lane", "parity" })
+        dev(root, home, { "board", "ls", "--column", support.Column.READY, "--lane", "parity" })
     testing.eq(code, 0, out)
     testing.ok(out:find("Charlie", 1, true) and out:find("Bravo", 1, true), out)
     testing.ok(not out:find("Alpha", 1, true), out)
@@ -10572,7 +10572,7 @@ testing.test("a lane the board lacks is refused", function()
     for _, args in ipairs({
         { "board", "ls", "--lane", "Features" },
         { "board", "next", "--lane", "Features" },
-        { "board", "move", "11111111-a", support.COLUMN.ICEBOX, "--lane", "Features" },
+        { "board", "move", "11111111-a", support.Column.ICEBOX, "--lane", "Features" },
         { "board", "add", "New", "--lane", "Features" },
     }) do
         local out, code = dev(root, home, args)

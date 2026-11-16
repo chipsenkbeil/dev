@@ -68,7 +68,7 @@ local function check_lines(rows)
     local lines = {}
     for i, row in ipairs(rows) do
         lines[#lines + 1] = check.line(i, row)
-        if row.result ~= check.RESULT.PASS and row.tail ~= "" then
+        if row.result ~= check.Result.PASS and row.tail ~= "" then
             for line in row.tail:gmatch("[^\n]+") do
                 lines[#lines + 1] = "    " .. line
             end

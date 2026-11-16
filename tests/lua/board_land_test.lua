@@ -164,7 +164,7 @@ testing.test("check.parse reads what check.record wrote and nothing else", funct
     local record = check.parse(check.record(STATE, rows, true))
     testing.eq(record.commit, COMMIT)
     testing.eq(record.change, "chg")
-    testing.eq(record.mode, check.MODE.EXPECT_FAIL)
+    testing.eq(record.mode, check.Mode.EXPECT_FAIL)
     testing.eq(record.rows, {
         { run_id = "8cb600", result = "pass" },
         { run_id = "-", result = "fail" },
@@ -180,7 +180,7 @@ end)
 
 testing.test("land reads a short check record and refuses rows that changed", function()
     local rows = { "dev lint", "dev test" }
-    local pass = checked(COMMIT, check.MODE.RUN, { "pass 8cb600 dev lint", "pass 1f2e3d dev test" })
+    local pass = checked(COMMIT, check.Mode.RUN, { "pass 8cb600 dev lint", "pass 1f2e3d dev test" })
     testing.eq(land.checks_problem({ pass }, STATE, rows), nil)
     local problem = land.checks_problem({ pass }, STATE, { "dev lint", "dev other" })
     testing.ok(problem:find("checks rows changed", 1, true), problem)
@@ -199,7 +199,7 @@ testing.test("an old check record is refused with a rerun sentence", function()
 end)
 
 testing.test("carry reads a short check record as the commit's own and does not carry", function()
-    local pass = checked(COMMIT, check.MODE.RUN, { "pass 8cb600 dev lint" })
+    local pass = checked(COMMIT, check.Mode.RUN, { "pass 8cb600 dev lint" })
     local opts = {
         root = "/nonexistent",
         comments = { pass, reviewed("code", COMMIT), reviewed("style", COMMIT) },
@@ -282,7 +282,7 @@ end)
 
 testing.test("checks_problem counts only the newest passing run at the commit", function()
     local rows = { "dev lint", "dev test" }
-    local pass = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "pass - dev test" })
+    local pass = checked(COMMIT, check.Mode.RUN, { "pass - dev lint", "pass - dev test" })
     testing.eq(land.checks_problem({ pass }, STATE, rows), nil)
     testing.ok(
         land.checks_problem({ pass }, STATE, {}):find("The card has no checks rows", 1, true)
@@ -290,15 +290,15 @@ testing.test("checks_problem counts only the newest passing run at the commit", 
     testing.ok(land.checks_problem({}, STATE, rows):find("No run of `dev board check`", 1, true))
     testing.ok(
         land.checks_problem(
-            { checked(OTHER, check.MODE.RUN, { "pass - a", "pass - b" }) },
+            { checked(OTHER, check.Mode.RUN, { "pass - a", "pass - b" }) },
             STATE,
             rows
         )
             :find("No run of `dev board check`", 1, true)
     )
-    local expect = checked(COMMIT, check.MODE.EXPECT_FAIL, { "fail - dev lint", "fail - dev test" })
+    local expect = checked(COMMIT, check.Mode.EXPECT_FAIL, { "fail - dev lint", "fail - dev test" })
     testing.ok(land.checks_problem({ expect }, STATE, rows):find("expect-fail", 1, true))
-    local failed = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "fail - dev test" })
+    local failed = checked(COMMIT, check.Mode.RUN, { "pass - dev lint", "fail - dev test" })
     testing.ok(
         land.checks_problem({ pass, failed }, STATE, rows)
             :find("Row 2, `dev test`, ended with fail.", 1, true)
@@ -311,7 +311,7 @@ testing.test("checks_problem counts only the newest passing run at the commit", 
     )
     testing.ok(
         land.checks_problem(
-            { checked(COMMIT, check.MODE.RUN, { "timeout - dev lint" }) },
+            { checked(COMMIT, check.Mode.RUN, { "timeout - dev lint" }) },
             STATE,
             { "dev lint" }
         )
@@ -321,17 +321,17 @@ end)
 testing.test("checks_problem says a record it cannot read is unreadable, not missing", function()
     local rows = { "dev lint", "dev test" }
     local unreadable =
-        { body = checked(COMMIT, check.MODE.RUN, { "pass dev lint", "pass dev test" }).body }
+        { body = checked(COMMIT, check.Mode.RUN, { "pass dev lint", "pass dev test" }).body }
     local problem = land.checks_problem({ unreadable }, STATE, rows)
     testing.ok(problem:find("could not be read", 1, true), problem)
     testing.ok(problem:find(land.short(COMMIT), 1, true), problem)
     testing.ok(problem:find("Run `dev board check` again.", 1, true), problem)
     testing.eq(check.unreadable(unreadable.body), COMMIT)
-    local other = checked(OTHER, check.MODE.RUN, { "pass dev lint", "pass dev test" })
+    local other = checked(OTHER, check.Mode.RUN, { "pass dev lint", "pass dev test" })
     testing.ok(
         land.checks_problem({ other }, STATE, rows):find("No run of `dev board check`", 1, true)
     )
-    local pass = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "pass - dev test" })
+    local pass = checked(COMMIT, check.Mode.RUN, { "pass - dev lint", "pass - dev test" })
     testing.eq(land.checks_problem({ unreadable, pass }, STATE, rows), nil)
     testing.ok(
         land.checks_problem({ pass, unreadable }, STATE, rows):find("could not be read", 1, true)
@@ -342,13 +342,13 @@ end)
 
 testing.test("an unreadable expect-fail record never refuses a landing", function()
     local rows = { "dev lint", "dev test" }
-    local pass = checked(COMMIT, check.MODE.RUN, { "pass - dev lint", "pass - dev test" })
-    local skipped = checked(COMMIT, check.MODE.EXPECT_FAIL, { "fail dev lint", "fail dev test" })
+    local pass = checked(COMMIT, check.Mode.RUN, { "pass - dev lint", "pass - dev test" })
+    local skipped = checked(COMMIT, check.Mode.EXPECT_FAIL, { "fail dev lint", "fail dev test" })
     testing.eq(check.unreadable(skipped.body), COMMIT)
-    testing.eq(select(2, check.unreadable(skipped.body)), check.MODE.EXPECT_FAIL)
+    testing.eq(select(2, check.unreadable(skipped.body)), check.Mode.EXPECT_FAIL)
     testing.eq(land.checks_problem({ pass, skipped }, STATE, rows), nil)
     testing.eq(land.checks_problem({ skipped, pass }, STATE, rows), nil)
-    local unreadable = checked(COMMIT, check.MODE.RUN, { "pass dev lint", "pass dev test" })
+    local unreadable = checked(COMMIT, check.Mode.RUN, { "pass dev lint", "pass dev test" })
     testing.ok(
         land.checks_problem({ pass, unreadable }, STATE, rows):find("could not be read", 1, true)
     )
@@ -468,14 +468,14 @@ local function to_review(project, id, extra)
     for name, value in pairs(extra or {}) do
         env[name] = value
     end
-    must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, env))
+    must(dev(project, { "board", "move", id, support.Column.PROGRESS }, env))
     must(dev(project, { "board", "note", id, "built, tried, learned" }, env))
-    must(dev(project, { "board", "move", id, support.COLUMN.REVIEW }, env))
+    must(dev(project, { "board", "move", id, support.Column.REVIEW }, env))
 end
 
 local function to_verify(project, id, extra)
     to_review(project, id, extra)
-    must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }, extra))
+    must(dev(project, { "board", "move", id, support.Column.VERIFY }, extra))
 end
 
 local function approve(project, id)
@@ -861,13 +861,13 @@ if has_jj then
     testing.test("a card in Release moves to Done once every outcome is ticked", function()
         local project = jj_project()
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.RELEASE }))
-        local out, code = dev(project, { "board", "move", id, support.COLUMN.DONE })
+        must(dev(project, { "board", "move", id, support.Column.RELEASE }))
+        local out, code = dev(project, { "board", "move", id, support.Column.DONE })
         testing.eq(code, 1, out)
         testing.ok(out:find("1 of 1 outcomes are unticked", 1, true), out)
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-        must(dev(project, { "board", "move", id, support.COLUMN.DONE }))
+        must(dev(project, { "board", "move", id, support.Column.DONE }))
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
 
@@ -1798,7 +1798,7 @@ if has_jj then
     testing.test("land names the column beside the carry after an accepted rebase", function()
         local project = jj_project()
         local id = review_ready(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }))
+        must(dev(project, { "board", "move", id, support.Column.PROGRESS }))
         trunk_moves(project, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(project.root)
         local out = refused(project, id, { "only a card in" })
@@ -1854,9 +1854,9 @@ if has_jj then
         local change = jj(project.root, "log", "-r", "@", "--no-graph", "-T", "change_id")
         local at = { commit = trunk, change = change }
         local records = {
-            check.record(at, { { result = check.RESULT.PASS, run_id = "-", run = "true" } }, false),
-            review.record(review.KIND.CODE, "rev", at, review.VERDICT.CLEAN),
-            review.record(review.KIND.STYLE, "rev", at, review.VERDICT.CLEAN),
+            check.record(at, { { result = check.Result.PASS, run_id = "-", run = "true" } }, false),
+            review.record(review.Kind.CODE, "rev", at, review.Verdict.CLEAN),
+            review.record(review.Kind.STYLE, "rev", at, review.Verdict.CLEAN),
         }
         local backend, restore = board_at(project.home)
         for _, card in ipairs(assert(backend:cards())) do
@@ -2127,7 +2127,7 @@ if has_jj then
     testing.test("land refuses a card labelled needs:human", function()
         local project = jj_project()
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.BLOCKED }))
+        must(dev(project, { "board", "move", id, support.Column.BLOCKED }))
         must(dev(project, { "board", "label", id, "needs:human" }))
         refused(project, id, { "is labelled needs:human", "waits on the owner" })
     end)
@@ -2521,7 +2521,7 @@ if has_jj then
             dev_os.nap = nap
             local other = { DEV_AGENT = "dotfiles/other" }
             must(dev(project, { "board", "turn", id, "--release" }, other))
-            must(dev(project, { "board", "move", id, support.COLUMN.BLOCKED }))
+            must(dev(project, { "board", "move", id, support.Column.BLOCKED }))
         end
         local result = land_waiting(project, id, LONG_WAIT_SECONDS)
         dev_os.nap = nap
@@ -2544,7 +2544,7 @@ if has_jj then
         local project = jj_project()
         local id = new_card(project)
         local builder = { DEV_AGENT = "dotfiles/builder" }
-        must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, builder))
+        must(dev(project, { "board", "move", id, support.Column.PROGRESS }, builder))
         local short = shortened_claim(project, id)
         local fence = claim_of(project.home, id).fence
         local out, code = dev(project, { "board", "check", id }, builder)
@@ -2559,7 +2559,7 @@ if has_jj then
         local project = jj_project()
         local id = new_card(project)
         local builder = { DEV_AGENT = "dotfiles/builder" }
-        must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, builder))
+        must(dev(project, { "board", "move", id, support.Column.PROGRESS }, builder))
         local short = shortened_claim(project, id)
         local out, code = dev(project, { "board", "check", id }, { DEV_AGENT = "dotfiles/other" })
         testing.eq(code, 0, out)
@@ -2747,7 +2747,7 @@ if has_jj then
             dev_os.nap = nap
             release_turn(project.home, held)
             must(dev(project, { "board", "turn", id, "--hold", "60" }))
-            must(dev(project, { "board", "move", id, support.COLUMN.BLOCKED }))
+            must(dev(project, { "board", "move", id, support.Column.BLOCKED }))
         end
         local previous = os.getenv("DEV_AGENT") or ""
         ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
@@ -3160,10 +3160,10 @@ end
 local function git_approve(project)
     local id = project.id
     local builder = { DEV_AGENT = "dotfiles/builder" }
-    must(git_dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, builder))
+    must(git_dev(project, { "board", "move", id, support.Column.PROGRESS }, builder))
     must(git_dev(project, { "board", "note", id, "built, tried, learned" }, builder))
-    must(git_dev(project, { "board", "move", id, support.COLUMN.REVIEW }, builder))
-    must(git_dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+    must(git_dev(project, { "board", "move", id, support.Column.REVIEW }, builder))
+    must(git_dev(project, { "board", "move", id, support.Column.VERIFY }))
     for _, kind in ipairs({ "code", "style" }) do
         must(git_dev(project, {
             "board",

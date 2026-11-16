@@ -264,9 +264,9 @@ function M.missing_reviews(comments, state, root)
     local function has_here(kind)
         return has_kind(kind, same)
     end
-    local rechecked = has_here(review.KIND.RECHECK)
+    local rechecked = has_here(review.Kind.RECHECK)
     local missing = {}
-    for _, kind in ipairs({ review.KIND.CODE, review.KIND.STYLE }) do
+    for _, kind in ipairs({ review.Kind.CODE, review.Kind.STYLE }) do
         if not has_here(kind) then
             if not has_any(kind) then
                 missing[#missing + 1] = string.format(
@@ -305,7 +305,7 @@ function M.refused_reviews(comments, state, root)
     local refused = {}
     for _, kind in ipairs(review.KINDS) do
         local record = latest[kind]
-        if record and record.verdict == review.VERDICT.NEEDS_WORK then
+        if record and record.verdict == review.Verdict.NEEDS_WORK then
             refused[#refused + 1] = string.format(
                 "The %s review by %s at commit %s says needs-work. Fix it and record a new review.",
                 kind,
@@ -331,11 +331,11 @@ function M.checks_problem(comments, state, rows)
     local latest, unreadable
     for _, comment in ipairs(comments) do
         local record = check.parse(comment.body)
-        if record and record.commit == state.commit and record.mode == check.MODE.RUN then
+        if record and record.commit == state.commit and record.mode == check.Mode.RUN then
             latest, unreadable = record, false
         elseif not record then
             local commit, mode = check.unreadable(comment.body)
-            if commit == state.commit and mode ~= check.MODE.EXPECT_FAIL then
+            if commit == state.commit and mode ~= check.Mode.EXPECT_FAIL then
                 latest, unreadable = nil, true
             end
         end
@@ -372,7 +372,7 @@ function M.checks_problem(comments, state, rows)
     end
     local bad = {}
     for i, row in ipairs(latest.rows) do
-        if row.result ~= check.RESULT.PASS then
+        if row.result ~= check.Result.PASS then
             bad[#bad + 1] = string.format("Row %d, `%s`, ended with %s.", i, rows[i], row.result)
         end
     end
@@ -607,7 +607,7 @@ local function checked_commits(root, comments, state, rows)
         local record = check.parse(comments[i].body)
         if
             record
-            and record.mode == check.MODE.RUN
+            and record.mode == check.Mode.RUN
             and record.change == state.change
             and record.commit ~= state.commit
             and not seen[record.commit]
@@ -1035,7 +1035,7 @@ function M.recheck_problem(opts)
                 [dev_remote.CARD_ENV] = opts.card,
             },
         })
-        if ran[i].result ~= check.RESULT.PASS then
+        if ran[i].result ~= check.Result.PASS then
             return string.format(
                 "Trunk moved since the check at %s. "
                     .. "The recheck row failed. Nothing was pushed.\n%s\n%s",

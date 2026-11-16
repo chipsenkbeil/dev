@@ -7,7 +7,7 @@ local support = require("support")
 local TOKEN = "pomb_SECRETtoken0123456789"
 local LEAD = "dotfiles/lead"
 local LEAD_SECRET = "pomb_LEADtoken9876543210"
-local COLUMN = support.COLUMN
+local Column = support.Column
 local POMB = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'
 local NEW = "dotfiles/implementer"
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
@@ -261,7 +261,7 @@ testing.test("an hours limit never refuses a take or move", function()
     testing.eq(code, 0, out)
     testing.ok(out:find("took dddddddd", 1, true), out)
     dev(box, { "board", "release", "dddddddd" }, "")
-    out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, "")
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, "")
     testing.eq(code, 0, out)
     testing.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
 end)
@@ -296,7 +296,7 @@ testing.test("move refuses a card entering a full group and names the cards", fu
         detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
         export = export(FLIGHT),
     })
-    local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.REVIEW }, "")
     testing.eq(code, 3, out)
     testing.eq(out, IN_FLIGHT)
     testing.eq(read(box, "calls"):find("/move", 1, true), nil)
@@ -320,7 +320,7 @@ testing.test("take and move accept a trunk-blocker card at the group limit", fun
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
     testing.eq(code, 0, out)
     testing.ok(out:find("took dddddddd", 1, true), out)
-    out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 0, out)
     testing.ok(read(box, "calls"):find('"force":true', 1, true), read(box, "calls"))
 end)
@@ -334,14 +334,14 @@ testing.test("a card with another label is still refused at the group limit", fu
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
     testing.eq(code, 1, out)
     testing.eq(out, IN_FLIGHT)
-    out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 3, out)
     testing.eq(read(box, "calls"):find("/move", 1, true), nil)
 end)
 
 testing.test("a plain move sends no force", function()
     local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
-    local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 0, out)
     local calls = read(box, "calls")
     testing.ok(calls:find('"column_id":"' .. ID.PROGRESS .. '"', 1, true), calls)
@@ -354,7 +354,7 @@ testing.test("move refuses a card entering a full column", function()
         detail = detail({ [NAME.REVIEW] = 1 }, { groups = GROUP .. '"limit":4,"count":3}]' }),
         export = export(FLIGHT),
     })
-    local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.REVIEW }, "")
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.REVIEW }, "")
     testing.eq(code, 3, out)
     testing.eq(
         out,
@@ -369,7 +369,7 @@ testing.test("a move inside the group is not counted", function()
         detail = detail({}, { groups = GROUP .. '"limit":2,"count":3}]' }),
         export = export(FLIGHT),
     })
-    local out, code = dev(box, { "board", "move", "bbbbbbbb", COLUMN.VERIFY }, "")
+    local out, code = dev(box, { "board", "move", "bbbbbbbb", Column.VERIFY }, "")
     testing.eq(code, 0, out)
     testing.eq(out, "moved bbbbbbbb to Verify\n")
     testing.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
@@ -378,7 +378,7 @@ end)
 testing.test("a 409 wip_limit_reached becomes the refusal and move releases the claim", function()
     local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
     assert(fs.write(box.root .. "/move_refusal", LIMIT_BODY))
-    local out, code = dev(box, { "board", "move", "dddddddd", COLUMN.PROGRESS }, NEW)
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 3, out)
     testing.eq(out, "dev: Pomb refused the move: " .. LIMIT_TEXT .. "\n")
     local calls = read(box, "calls")
@@ -401,7 +401,7 @@ testing.test("a local board is uncapped", function()
             "add",
             "Card" .. index,
             "--column",
-            COLUMN.READY,
+            Column.READY,
             "--size",
             "1",
             "--description",
@@ -411,7 +411,7 @@ testing.test("a local board is uncapped", function()
         }, "")
         testing.eq(code, 0, out)
         local id = assert(out:match("added (%x+)"), out)
-        out, code = dev(box, { "board", "move", id, COLUMN.PROGRESS }, NEW .. "/" .. index)
+        out, code = dev(box, { "board", "move", id, Column.PROGRESS }, NEW .. "/" .. index)
         testing.eq(code, 0, out)
     end
 end)

@@ -89,10 +89,12 @@ local DOUBLE_DASH = "--"
 local STATE_SECONDS = 20
 
 ---How a checks row ended.
-M.RESULT = { PASS = "pass", FAIL = "fail", TIMEOUT = "timeout", ERROR = "error" }
+---@enum dev.board.check.Result
+M.Result = { PASS = "pass", FAIL = "fail", TIMEOUT = "timeout", ERROR = "error" }
 
 ---What a run was meant to show, as the record names it.
-M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
+---@enum dev.board.check.Mode
+M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 
 ---@class dev.board.check.State
 ---@field commit string the full commit id the result belongs to
@@ -101,7 +103,7 @@ M.MODE = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@class dev.board.check.Row
 ---@field run string the row's command as the card holds it
 ---@field run_id string the ci run id the row printed, `-` when it printed none
----@field result string one of `RESULT`, where a timeout also covers a row killed from outside and an error is a row that never started under `--expect-fail`
+---@field result string one of `Result`, where a timeout also covers a row killed from outside and an error is a row that never started under `--expect-fail`
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
 ---@field reason string? the last line a failed row printed when it printed no run id
@@ -492,24 +494,24 @@ function M.run(opts)
             refused = drain_cap_refusal(output)
         end
     end
-    local result = passed and not refused and M.RESULT.PASS or M.RESULT.FAIL
+    local result = passed and not refused and M.Result.PASS or M.Result.FAIL
     if code == TIMEOUT_EXIT then
-        result = M.RESULT.TIMEOUT
+        result = M.Result.TIMEOUT
     end
-    if result == M.RESULT.FAIL and not run_id and not negated then
+    if result == M.Result.FAIL and not run_id and not negated then
         reason = last_line(output)
     end
-    if result == M.RESULT.TIMEOUT and run_id then
+    if result == M.Result.TIMEOUT and run_id then
         reason = timeout_reason(run_id)
         note = note or (reason:sub(1, 1):upper() .. reason:sub(2) .. ".")
     end
     if opts.argv[1] == RG_COMMAND and code == RG_USAGE_EXIT then
-        result = M.RESULT.ERROR
+        result = M.Result.ERROR
         note = "The row is an error, not a fail: rg exited 2, so it could not search."
         reason = reason or last_line(output)
     end
     if opts.expect_fail and not refused and M.never_started(opts.argv, code, run_id) then
-        result = M.RESULT.ERROR
+        result = M.Result.ERROR
         note = string.format("The row never started (exit %d). Its failure proves nothing.", code)
         reason = reason or last_line(output)
     end
@@ -554,9 +556,9 @@ end
 function M.summarize(rows, expect_fail)
     local passed, errors = 0, 0
     for _, row in ipairs(rows) do
-        if row.result == M.RESULT.PASS then
+        if row.result == M.Result.PASS then
             passed = passed + 1
-        elseif row.result == M.RESULT.ERROR then
+        elseif row.result == M.Result.ERROR then
             errors = errors + 1
         end
     end
@@ -602,7 +604,7 @@ function M.record(state, rows, expect_fail)
         board.CHECK_PREFIX,
         state.commit,
         state.change,
-        expect_fail and M.MODE.EXPECT_FAIL or M.MODE.RUN,
+        expect_fail and M.Mode.EXPECT_FAIL or M.Mode.RUN,
         #rows,
         M.fingerprint(commands)
     )
@@ -627,7 +629,7 @@ end
 ---@class dev.board.check.Record
 ---@field commit string the full commit id the rows ran on
 ---@field change string the change id, `-` in a git project
----@field mode string one of `MODE`
+---@field mode string one of `Mode`
 ---@field sum string the fingerprint of the checks rows the run used
 ---@field rows dev.board.check.RecordRow[] the rows in the order they ran
 

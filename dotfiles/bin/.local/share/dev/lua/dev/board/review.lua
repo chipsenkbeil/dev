@@ -6,19 +6,21 @@ local vcs = require("dev.vcs")
 local M = {}
 
 ---The names of the review kinds.
-M.KIND = { CODE = "code", STYLE = "style", RECHECK = "recheck" }
+---@enum dev.board.review.Kind
+M.Kind = { CODE = "code", STYLE = "style", RECHECK = "recheck" }
 
 ---The review kinds `review --kind` accepts, in the order help lists them.
-M.KINDS = { M.KIND.CODE, M.KIND.STYLE, M.KIND.RECHECK }
+M.KINDS = { M.Kind.CODE, M.Kind.STYLE, M.Kind.RECHECK }
 
 ---The names of the verdicts `review --verdict` accepts.
-M.VERDICT = { CLEAN = "clean", MINOR = "minor", NEEDS_WORK = "needs-work" }
+---@enum dev.board.review.Verdict
+M.Verdict = { CLEAN = "clean", MINOR = "minor", NEEDS_WORK = "needs-work" }
 
 ---The flag that carries the verdict.
 M.VERDICT_FLAG = "--verdict"
 
 ---The verdicts in the order help lists them.
-M.VERDICTS = { M.VERDICT.CLEAN, M.VERDICT.MINOR, M.VERDICT.NEEDS_WORK }
+M.VERDICTS = { M.Verdict.CLEAN, M.Verdict.MINOR, M.Verdict.NEEDS_WORK }
 
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ "\\n"'
 local NO_CHANGE = "-"

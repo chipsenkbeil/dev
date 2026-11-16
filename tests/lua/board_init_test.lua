@@ -345,7 +345,7 @@ testing.test("an old board keeps its cards and gains what is missing", function(
     local layout = fake_layout({
         columns = {
             { id = "col-Done", name = support.COLUMN_NAME.DONE, is_done = true },
-            { id = "col-Ready", name = support.COLUMN.READY, is_done = false },
+            { id = "col-Ready", name = support.Column.READY, is_done = false },
             { id = "col-Backlog", name = support.COLUMN_NAME.BACKLOG, is_done = false },
         },
     })
@@ -354,7 +354,7 @@ testing.test("an old board keeps its cards and gains what is missing", function(
     testing.eq(names(layout.state.columns), {
         support.COLUMN_NAME.ICEBOX,
         support.COLUMN_NAME.BACKLOG,
-        support.COLUMN.READY,
+        support.Column.READY,
         support.COLUMN_NAME.PROGRESS,
         support.COLUMN_NAME.REVIEW,
         support.COLUMN_NAME.VERIFY,

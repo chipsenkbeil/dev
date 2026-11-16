@@ -253,8 +253,8 @@ M.FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
     .. '"options":[],"columns":[],"required":false}]'
 
 ---The board column names, by constant.
----@type table<string, string>
-M.COLUMN = {
+---@enum support.Column
+M.Column = {
     BACKLOG = "backlog",
     BLOCKED = "blocked",
     DONE = "done",

@@ -602,7 +602,7 @@ local function done_card_with(builder, reviewer, opts)
             id = "c2",
             who = "agent",
             at = at,
-            body = review.record(review.KIND.CODE, reviewer, REV, review.VERDICT.CLEAN),
+            body = review.record(review.Kind.CODE, reviewer, REV, review.Verdict.CLEAN),
         },
     }
     for _, body in ipairs(opts.records) do
@@ -617,8 +617,8 @@ testing.test("lint lists each name that built and reviewed a Done card once, sor
     local out, code = done_card_with("project-run/zzzz", "project-run/zzzz", {
         records = {
             board.claim_record("project-run/aaaa"),
-            review.record(review.KIND.CODE, "project-run/aaaa", REV, review.VERDICT.CLEAN),
-            review.record(review.KIND.CODE, "project-run/zzzz", REV, review.VERDICT.MINOR),
+            review.record(review.Kind.CODE, "project-run/aaaa", REV, review.Verdict.CLEAN),
+            review.record(review.Kind.CODE, "project-run/zzzz", REV, review.Verdict.MINOR),
         },
     })
     testing.eq(code, 1, out)

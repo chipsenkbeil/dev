@@ -185,7 +185,7 @@ local function with_origin(files)
 end
 
 local function checked_record(commit)
-    local rows = { { result = check.RESULT.PASS, run_id = "-", run = "dev lint" } }
+    local rows = { { result = check.Result.PASS, run_id = "-", run = "dev lint" } }
     return { body = check.record({ commit = commit, change = "-" }, rows, false) }
 end
 

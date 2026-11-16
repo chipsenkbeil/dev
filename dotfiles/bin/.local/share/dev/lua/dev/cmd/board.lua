@@ -2975,7 +2975,7 @@ local function ship_ran(backend, runs)
             seconds = check.DEFAULT_SECONDS,
             env = { [remote.VERB_ENV] = remote.VERB.RELEASE },
         })
-        if rows[i].result ~= check.RESULT.PASS then
+        if rows[i].result ~= check.Result.PASS then
             return failure(
                 string.format(
                     "The release command `%s` failed. No card moved.\n%s",
