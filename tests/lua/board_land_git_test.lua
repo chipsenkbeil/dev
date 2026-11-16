@@ -7,6 +7,7 @@ local check = require("dev.board.check")
 local land = require("dev.board.land")
 local support = require("support")
 local templates = require("dev.templates")
+local vcs = require("dev.vcs")
 
 local MODULE = "dotfiles/bin/.local/share/dev/lua/dev/fs.lua"
 
@@ -422,3 +423,32 @@ testing.test("land.git.run pushes HEAD to trunk and refuses a rejected push", fu
         testing.eq(land.trunk_commit(root, "-"), nil)
     end)
 end)
+
+if dev_os.which("jj") then
+    testing.test("a git worktree of a colocated repo reads revisions as git", function()
+        landing_env(function()
+            -- Make a colocated jj and git repo with a pushed trunk
+            local root = with_origin({ ["f.txt"] = BODY })
+            local init = { stdout = "null", stderr = "null" }
+            local code = dev_os.run({ "jj", "git", "init", "--colocate", root }, init)
+            testing.eq(code, 0)
+            local pushed = remote_main(root)
+
+            -- Add a git worktree that holds one commit past trunk
+            local worktree = assert(fs.realpath(support.tempdir())) .. "/wt"
+            git(root, "worktree", "add", "-q", "-b", "wt", worktree)
+            write(worktree, "w.txt", "w\n")
+            git(worktree, "add", "-A")
+            git(worktree, "commit", "-q", "-m", "feat: work")
+
+            -- Expect the worktree root to read as git, not as the jj project
+            testing.eq(vcs.backend(root), vcs.JJ)
+            testing.eq(vcs.backend(worktree), vcs.GIT)
+
+            -- Expect the pushed SHA to resolve and the ancestor check to answer from the worktree
+            testing.eq(land.fetched_commit(worktree, pushed), pushed)
+            testing.eq(land.holds(worktree, pushed, "HEAD"), true)
+            testing.eq(land.holds(worktree, head(worktree), pushed), false)
+        end)
+    end)
+end
