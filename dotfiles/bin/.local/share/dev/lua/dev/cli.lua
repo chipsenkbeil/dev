@@ -25,8 +25,7 @@ local stderr = io.stderr
 local INTERPRETER = arg and arg[-1]
 local MAX_LEVEL = 2
 local INTERRUPTED = dev_os.SIGNAL_EXIT_BASE + 2
-local ROOT_REFUSAL = "dev: As root, dev runs only `dev tools install` and "
-    .. "`dev tools check`.\n"
+local ROOT_REFUSAL = "As root, dev runs only `dev tools install` and `dev tools check`.\n"
 local SHARE = project.share
 local VCS_HANDLERS = { push = push.run, pull = pull.run, sync = sync.run, follow = follow.run }
 local NOT_TAKEN = {
@@ -131,7 +130,11 @@ local function remote_default(project_root, words)
     end
     local setting = config.prefer_user(project_root, "remote.default")
     if setting ~= nil and setting ~= "remote" and setting ~= "local" then
-        verb.die('dev: remote.default must be "remote" or "local", got ' .. tostring(setting))
+        verb.die(
+            'The `remote.default` setting must be "remote" or "local", not '
+                .. tostring(setting)
+                .. "."
+        )
     end
     return setting ~= "local" and remote.has_default_job(project_root, words)
 end
@@ -172,7 +175,7 @@ local function root_gate(args)
         os.exit(2)
     end
     if dev_os.name() ~= "Linux" then
-        stderr:write("dev: as root, dev runs only on Linux\n")
+        stderr:write("As root, dev runs only on Linux.\n")
         os.exit(2)
     end
 end
@@ -180,7 +183,7 @@ end
 local function exec_or_exit(argv, opts)
     dev_os.defaults.show = false
     local _, message = dev_os.exec(argv, opts)
-    stderr:write("dev: cannot run ", argv[1], ": ", message, "\n")
+    stderr:write("The command `", argv[1], "` could not run: ", message, ".\n")
     os.exit(dev_os.EXEC_FAILED)
 end
 
@@ -191,7 +194,7 @@ local function apply_level(level)
             dev_os.defaults.env.BASH_ENV = trace
             dev_os.defaults.env.PS4 = project.PS4
         else
-            stderr:write("dev: trace file ", trace, " is missing, showing commands only\n")
+            stderr:write("The trace file ", trace, " is missing. Showing commands only.\n")
             level = 1
         end
     end
@@ -372,11 +375,11 @@ end
 function M.main(argv)
     local parsed = parse(argv)
     if parsed.conflict then
-        stderr:write("dev: --local and --remote cannot be used together\n")
+        stderr:write("The flags `--local` and `--remote` cannot be used together.\n")
         os.exit(2)
     end
     if parsed.detach and not parsed.remote then
-        stderr:write("dev: --detach needs --remote\n")
+        stderr:write("The flag `--detach` needs `--remote`.\n")
         os.exit(2)
     end
     root_gate(parsed.args)

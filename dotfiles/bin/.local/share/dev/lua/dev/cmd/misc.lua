@@ -9,7 +9,7 @@ local M = {}
 
 local function exec(argv, opts)
     local _, message = dev_os.exec(argv, opts)
-    verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
+    verb.note("The command `" .. argv[1] .. "` could not run: " .. message .. ".")
     return dev_os.EXEC_FAILED
 end
 
@@ -17,7 +17,7 @@ end
 ---@param _ dev.Ctx the verb's context
 ---@return integer code 1
 function M.deploy(_)
-    verb.note("dev: deploy has no built-in, add .dev/deploy.sh")
+    verb.note("Deploy has no built-in. Add `.dev/deploy.sh`.")
     return 1
 end
 

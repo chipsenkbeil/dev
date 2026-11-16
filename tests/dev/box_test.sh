@@ -463,7 +463,7 @@ out="$(DEV_AGENT=dotfiles/runner/x box box create 2>&1 >/dev/null)"
 assert_eq "ci's progress lines reach stderr" "$out" "ci: cloning myproject"
 out="$(cd "$NOPROJ" && PATH="$BASE_PATH" "$DEV" box ls 2>&1)"
 assert_eq "a missing ci is an error" "$?" "1"
-assert_contains "the missing ci is named" "$out" "ci not found"
+assert_contains "the missing ci is named" "$out" "The ci client is not found on PATH"
 
 # --- connect ---
 

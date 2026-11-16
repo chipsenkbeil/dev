@@ -142,7 +142,7 @@ fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(FAKE_OS=Darwin dev "$proj/a" tools check 2>&1)"
     assert_eq "root on another OS exits 2" "$?" "2"
-    assert_contains "root on another OS says Linux only" "$out" "dev: as root, dev runs only on Linux"
+    assert_contains "root on another OS says Linux only" "$out" "As root, dev runs only on Linux."
     assert_eq "root on another OS runs no jj or git" "$(cat "$VCSLOG")" ""
 else
     printf 'SKIP user-only - runs on another OS through FAKE_OS, which a real uid 0 never loads\n'

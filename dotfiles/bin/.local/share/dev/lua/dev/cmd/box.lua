@@ -13,7 +13,8 @@ local MAX_NAME = 40
 local SECONDS_PER_MINUTE = 60
 local SECONDS_PER_HOUR = 3600
 local SECONDS_PER_DAY = 86400
-local MISSING_CI = "dev: ci not found on PATH, dev box runs ci box (install it from the ci repo)"
+local MISSING_CI =
+    "The ci client is not found on PATH. `dev box` runs `ci box`, so install it from the ci repo."
 local VALUE_FLAGS = {
     ["--target"] = true,
     ["--shape"] = true,
@@ -462,7 +463,7 @@ function M.call(sub, args, opts)
         os.exit(code or Exit.FAILED)
     end
     if type(doc) ~= "table" or doc.ok ~= true then
-        verb.die("dev: ci box " .. args[1] .. " printed no ok document")
+        verb.die("The command `ci box " .. args[1] .. "` printed no ok document.")
     end
     return doc, raw
 end
@@ -504,7 +505,7 @@ function M.fleet(sub, opts)
     end
     for i = 1, 2 do
         if type(docs[i]) ~= "table" or docs[i].ok ~= true then
-            verb.die("dev: ci fleet targets --box printed no ok document")
+            verb.die("The command `ci fleet targets --box` printed no ok document.")
         end
     end
     return docs[1], docs[2], raw
@@ -518,7 +519,7 @@ end
 function M.one(sub, args, opts)
     local found = M.call(sub, args, opts).box
     if type(found) ~= "table" then
-        verb.die("dev: ci box " .. args[1] .. " printed no box")
+        verb.die("The command `ci box " .. args[1] .. "` printed no box.")
     end
     return found
 end
@@ -1401,7 +1402,7 @@ M.handlers["box show"] = function(ctx)
     end
     local found = doc.box
     if type(found) ~= "table" then
-        verb.die("dev: ci box show printed no box")
+        verb.die("The command `ci box show` printed no box.")
     end
     local lines = {
         "name: " .. interp(found.name),
@@ -1496,7 +1497,7 @@ M.handlers["box retag"] = function(ctx)
     local doc = M.call("retag", { "retag", name, "--target", parsed.target, "--json" })
     local first = first_retagged(doc)
     if first == nil then
-        verb.die("dev: ci box retag printed no box")
+        verb.die("The command `ci box retag` printed no box.")
     end
     print("retagged " .. interp(name) .. " to " .. interp(parsed.target))
     return 0

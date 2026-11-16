@@ -125,11 +125,11 @@ testing.test("the root gate refuses a verb other than tools install and check", 
     }
     local out, code = dev(root, { "v" }, env)
     testing.eq(code, 2)
-    testing.eq(out, "dev: As root, dev runs only `dev tools install` and `dev tools check`.\n")
+    testing.eq(out, "As root, dev runs only `dev tools install` and `dev tools check`.\n")
     env.FAKE_OS = "Darwin"
     out, code = dev(root, { "tools", "check" }, env)
     testing.eq(code, 2)
-    testing.eq(out, "dev: as root, dev runs only on Linux\n")
+    testing.eq(out, "As root, dev runs only on Linux.\n")
 end)
 
 testing.test(

@@ -25,8 +25,8 @@ local MACHINE_VERBS = {
 local MACHINE_NOUNS =
     { tools = true, box = true, board = true, ws = true, pi = true, antinote = true }
 local JOB_NAME = "^[A-Za-z0-9_.-]+$"
-local LOCAL_HINT = "rerun, or pass --local to run it here"
-local AGENT_HINT = "an agent runs it on ci, so fix ci and rerun"
+local LOCAL_HINT = "Rerun it, or pass `--local` to run it here."
+local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."
 
 ---@class dev.remote.Run
 ---@field words string[] the command words, a noun and its subcommand as two
@@ -79,7 +79,7 @@ function M.has_default_job(root, words, hint)
         return false
     end
     if not dev_os.which("ci") then
-        stderr:write("dev: ci is not on PATH, ", hint, "\n")
+        stderr:write("The ci client is not on PATH. ", hint, "\n")
         os.exit(1)
     end
     return M.has_job(root, job, nil, hint)
@@ -116,9 +116,9 @@ function M.has_job(root, job, pipeline, hint)
     if code ~= 0 or type(doc) ~= "table" or type(doc.jobs) ~= "table" then
         detail = detail:gsub("%s+$", "")
         stderr:write(
-            "dev: ci run --list failed",
-            detail ~= "" and (": " .. detail) or "",
-            hint and ("; " .. hint) or "",
+            "The command `ci run --list` failed.",
+            detail ~= "" and (" The error was: " .. detail .. ".") or "",
+            hint and (" " .. hint) or "",
             "\n"
         )
         os.exit(code ~= 0 and code or 1)
@@ -193,7 +193,9 @@ function M.ci_runner(run, opts)
     local pipeline = opts.pipeline
     local job = table.concat(run.words, ".")
     if not job:find(JOB_NAME) then
-        verb.die("dev: --remote needs a job name, not " .. table.concat(run.words, " "))
+        verb.die(
+            "The flag `--remote` needs a job name, not " .. table.concat(run.words, " ") .. "."
+        )
     end
     if not dev_os.which("ci") then
         stderr:write(
@@ -203,11 +205,11 @@ function M.ci_runner(run, opts)
     end
     if not M.has_job(run.root, job, pipeline) then
         verb.die(
-            "dev: no job named "
+            "No job named "
                 .. job
-                .. " in the project's "
+                .. " exists in the project's "
                 .. (pipeline and ("pipeline " .. pipeline) or "default pipeline (.ci/jobs.lua)")
-                .. ", add one to run it with --remote"
+                .. ". Add one to run it with `--remote`."
         )
     end
     local argv = { "ci", "-C", run.root, "run" }
@@ -230,7 +232,7 @@ function M.ci_runner(run, opts)
     local env = name and { DEV_AGENT = name } or nil
     local code = dev_os.run(argv, { env = env })
     if code == nil then
-        verb.die("dev: cannot run ci")
+        verb.die("The command `ci` could not run.")
     end
     return code
 end
@@ -238,7 +240,7 @@ end
 local function file_runner(path, run)
     local source, reason = fs.read(path)
     if not source then
-        verb.die("dev: cannot read " .. path .. ": " .. tostring(reason))
+        verb.die("The file " .. path .. " cannot be read: " .. tostring(reason) .. ".")
     end
     local chunk, message = load(source, "=" .. path)
     local ok, runner = false, message
@@ -246,20 +248,20 @@ local function file_runner(path, run)
         ok, runner = pcall(chunk)
     end
     if not ok then
-        verb.die("dev: " .. tostring(runner))
+        verb.die(tostring(runner))
     end
     if type(runner) ~= "function" then
-        verb.die("dev: " .. path .. " must return a function")
+        verb.die("The file " .. path .. " must return a function.")
     end
     local done, code = pcall(runner, run)
     if not done then
-        verb.die("dev: " .. tostring(code))
+        verb.die(tostring(code))
     end
     if code == nil then
         return 0
     end
     if type(code) ~= "number" or code % 1 ~= 0 then
-        verb.die("dev: " .. path .. " returned " .. tostring(code) .. ", not an exit code")
+        verb.die("The file " .. path .. " returned " .. tostring(code) .. ", not an exit code.")
     end
     return code % 256
 end

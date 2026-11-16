@@ -132,7 +132,7 @@ testing.test("--detach without --remote is a usage error", function()
     local root, base = setup()
     local out, code, log = dev(root, base, { "--detach", "test" })
     testing.eq(code, 2)
-    testing.eq(out, "dev: --detach needs --remote\n")
+    testing.eq(out, "The flag `--detach` needs `--remote`.\n")
     testing.eq(log, "")
 end)
 
@@ -177,7 +177,10 @@ testing.test("a verb with no job exits 1 and runs nothing", function()
     local root, base = setup()
     local out, code, log = dev(root, base, { "--remote", "build" })
     testing.eq(code, 1)
-    testing.ok(out:find("no job named build in the project's default pipeline", 1, true), out)
+    testing.ok(
+        out:find("No job named build exists in the project's default pipeline", 1, true),
+        out
+    )
     testing.eq(log, "")
 end)
 
@@ -218,7 +221,7 @@ testing.test("with no setting a command with a job runs on ci and --local keeps 
     testing.eq(log, "")
     local out, code2 = dev(root, base, { "test", "--local", "--remote" })
     testing.eq(code2, 2)
-    testing.eq(out, "dev: --local and --remote cannot be used together\n")
+    testing.eq(out, "The flags `--local` and `--remote` cannot be used together.\n")
 end)
 
 testing.test("remote.default local runs here and --remote still goes to ci", function()
@@ -245,7 +248,10 @@ testing.test("a bad remote.default is one line and exit 1", function()
     write_config(base, 'default = "far"')
     local out, code = dev(root, base, { "test" })
     testing.eq(code, 1)
-    testing.ok(out:find('remote.default must be "remote" or "local", got far', 1, true), out)
+    testing.ok(
+        out:find('The `remote.default` setting must be "remote" or "local", not far.', 1, true),
+        out
+    )
 end)
 
 testing.test("CI=true or a box marker runs here, whatever the flags and default", function()
@@ -281,7 +287,7 @@ testing.test("without ci on PATH the default fails with the --local hint", funct
     local env = { PATH = base .. "/lj:/usr/bin:/bin" }
     local out, code = dev(root, base, { "hello" }, env)
     testing.eq(code, 1)
-    testing.eq(out, "dev: ci is not on PATH, rerun, or pass --local to run it here\n")
+    testing.eq(out, "The ci client is not on PATH. Rerun it, or pass `--local` to run it here.\n")
     out, code = dev(root, base, { "test", "--remote" }, env)
     testing.eq(code, 1)
     testing.ok(out:find("The ci client is not found", 1, true), out)
@@ -306,7 +312,7 @@ testing.test(
         testing.eq(code, 9)
         testing.eq(
             out,
-            "dev: ci run --list failed: hub unreachable; rerun, or pass --local to run it here\n"
+            "The command `ci run --list` failed. The error was: hub unreachable. Rerun it, or pass `--local` to run it here.\n"
         )
         testing.eq(log, "")
         out, code = dev(root, base, { "hello", "--local" }, { CI_STUB_JOBS = "fail" })
@@ -348,11 +354,11 @@ testing.test(
         local root, base = setup({ ["__remote.lua"] = "return 3\n" })
         local out, code = dev(root, base, { "--remote", "test" })
         testing.eq(code, 1)
-        testing.ok(out:find("must return a function", 1, true), out)
+        testing.ok(out:find(" must return a function.", 1, true), out)
         write_exec(root .. "/.dev/__remote.lua", "return function() error('nope', 0) end\n")
         out, code = dev(root, base, { "--remote", "test" })
         testing.eq(code, 1)
-        testing.eq(out, "dev: nope\n")
+        testing.eq(out, "nope\n")
     end
 )
 
@@ -362,17 +368,17 @@ testing.test(
         local root, base = setup()
         local out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = "fail" })
         testing.eq(code, 9)
-        testing.eq(out, "dev: ci run --list failed: hub unreachable\n")
+        testing.eq(out, "The command `ci run --list` failed. The error was: hub unreachable.\n")
         testing.eq(log, "")
         out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = "bad" })
         testing.eq(code, 1)
-        testing.ok(out:find("dev: ci run --list failed", 1, true), out)
-        testing.ok(not out:find("no job named", 1, true), out)
+        testing.ok(out:find("The command `ci run --list` failed.", 1, true), out)
+        testing.ok(not out:find("No job named", 1, true), out)
         testing.eq(log, "")
         for _, mode in ipairs({ "empty", "array" }) do
             out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = mode })
             testing.eq(code, 1)
-            testing.eq(out, "dev: ci run --list failed\n")
+            testing.eq(out, "The command `ci run --list` failed.\n")
             testing.eq(log, "")
         end
     end
@@ -387,7 +393,7 @@ testing.test("an unreadable __remote.lua ends with one line and exit 1", functio
         return
     end
     testing.eq(code, 1)
-    testing.ok(out:find("dev: cannot read " .. root .. "/.dev/__remote.lua", 1, true), out)
+    testing.ok(out:find("The file " .. root .. "/.dev/__remote.lua cannot be read", 1, true), out)
     testing.ok(not out:find("traceback", 1, true), out)
 end)
 
@@ -399,11 +405,11 @@ testing.test("a __remote.lua that returns a non-integer ends with one line and e
         testing.eq(code, 1)
         testing.eq(
             out,
-            "dev: "
+            "The file "
                 .. root
                 .. "/.dev/__remote.lua returned "
                 .. value:gsub('"', "")
-                .. ", not an exit code\n"
+                .. ", not an exit code.\n"
         )
     end
 end)
@@ -485,7 +491,7 @@ testing.test("the project's __remote.lua keeps the default runner's job-not-foun
     local root, base = setup({ ["__remote.lua"] = override })
     local out, code, log = dev(root, base, { "--remote", "lint" })
     testing.eq(code, 1)
-    testing.ok(out:find("dev: no job named lint in the project's default pipeline", 1, true), out)
+    testing.ok(out:find("No job named lint exists in the project's default pipeline", 1, true), out)
     testing.eq(log, "")
 end)
 

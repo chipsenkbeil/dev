@@ -184,7 +184,7 @@ out="$(PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" LUA_INIT="@$REPO/tests/lua/fake_
 assert_eq "a fake uid of 0 is refused with exit 2" "$?" "2"
 assert_contains "the fake root gets the root refusal" "$out" "$ROOT_REFUSAL"
 out="$(PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0 FAKE_OS=Darwin "$DEV" tools check 2>&1)"
-assert_contains "a fake OS of Darwin refuses root" "$out" "as root, dev runs only on Linux"
+assert_contains "a fake OS of Darwin refuses root" "$out" "As root, dev runs only on Linux."
 
 out="$(DEV_UID=0 DEV_OS=Plan9 PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" bash -c 'cd "$1" && "$2" help' _ "$REPO" "$DEV" 2>&1)"
 assert_eq "main.lua replaces a DEV_UID and DEV_OS from the caller" "$?" "0"
@@ -238,7 +238,7 @@ ran_nothing() {
 rm -f "$CILOG" "$BOOT_MARK" "$TMP/widget-marker"
 out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=1 "$DEV" bootstrap 2>&1)"
 assert_eq "DEV_REMOTE=1 dev bootstrap goes through main.lua and finds no job" "$?" "1"
-assert_contains "DEV_REMOTE=1 dev bootstrap names the missing job" "$out" "dev: no job named bootstrap"
+assert_contains "DEV_REMOTE=1 dev bootstrap names the missing job" "$out" "No job named bootstrap exists"
 assert_eq "DEV_REMOTE=1 dev bootstrap did not run bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "absent"
 assert_eq "DEV_REMOTE=1 dev bootstrap ran no ci job" "$(grep -c -- "--job" "$CILOG")" "0"
 rm -f "$CILOG"

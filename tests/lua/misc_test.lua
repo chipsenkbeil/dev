@@ -57,7 +57,7 @@ testing.test("deploy says there is no built-in and exits 1", function()
     local root = support.sandbox({}, {})
     local out, code = support.dev(root, { "deploy" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: deploy has no built-in, add .dev/deploy.sh\n")
+    testing.eq(out, "Deploy has no built-in. Add `.dev/deploy.sh`.\n")
     fs.remove(root, { recursive = true })
 end)
 

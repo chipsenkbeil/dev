@@ -36,7 +36,7 @@ off, a number counts up to 2, and any other word means 1.
 it.
 
 When the trace file `xtrace.bash` is missing, `-vv` prints
-`dev: trace file <path> is missing, showing commands only` and falls back to
+`The trace file <path> is missing. Showing commands only.` and falls back to
 `-v`.
 
 These lines show each global flag at work:
@@ -211,8 +211,8 @@ A command with a ci job runs remote by default. The config files hold
 sets it) or `"local"`. `dev.config`'s `prefer_user` reads it, so the user file
 beats the project file and a host picks its own default.
 
-Any other value is `dev: remote.default must be "remote" or "local", got X`
-(exit 1).
+Any other value is ``The `remote.default` setting must be "remote" or
+"local", not X.`` (exit 1).
 
 The default applies only to a command whose job `ci run --list --json` lists in
 the default pipeline. It never applies to a machine-local verb (listed below)
@@ -222,8 +222,8 @@ here with no message.
 
 A missing `ci` on PATH, or a `ci run --list` that exits non-zero or answers
 badly, fails the command with ci's error (exit code kept) and the hint
-`rerun, or pass --local to run it here`. A ci deploy never moves every run
-onto the laptop.
+``Rerun it, or pass `--local` to run it here.`` A ci deploy never moves every
+run onto the laptop.
 
 Both the default and an explicit `--remote` pass every argument to the job.
 
@@ -246,7 +246,7 @@ inside a ci job or a dev box. See the `remote` topic.
 A command line with both `--local` and `--remote` exits 2 with this message:
 
 ```
-dev: --local and --remote cannot be used together
+The flags `--local` and `--remote` cannot be used together.
 ```
 
 ## The remote runner

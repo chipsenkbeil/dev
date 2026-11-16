@@ -80,7 +80,7 @@ default.
 The default fails instead of running here, to keep a ci deploy from moving
 every run onto the laptop. A missing `ci` on PATH, or a `ci run --list` that
 exits non-zero, fails with ci's error and exit code and the hint
-`rerun, or pass --local to run it here`.
+``Rerun it, or pass `--local` to run it here.``
 
 Local is automatic only for `CI=true`, the box marker, `--local`,
 `default = "local"` and `DEV_REMOTE=0`.
@@ -107,8 +107,9 @@ the project's default pipeline (`.ci/jobs.lua`).
 `<noun>.<sub>.<sub2>`, with a dot between every word.
 
 dev checks `ci run --list --json` first. A verb with no such job exits 1 with
-`no job named <job> in the project's default pipeline (.ci/jobs.lua), add one to
-run it with --remote`, and nothing runs. It never falls back to a local run.
+``No job named <job> exists in the project's default pipeline (.ci/jobs.lua).
+Add one to run it with `--remote`.``, and nothing runs. It never falls back to a
+local run.
 
 A missing `ci` on PATH prints a warning with the install hint and exits 1.
 
@@ -137,7 +138,7 @@ inside a ci job or dev box (`CI=true` or the box marker). An unset or empty
 `DEV_AGENT` changes nothing.
 
 When ci cannot be asked, the refusal fails with ci's error and the hint
-`an agent runs it on ci, so fix ci and rerun`.
+`An agent runs it on ci, so fix ci and rerun.`
 
 ### The run label
 
@@ -191,8 +192,8 @@ end
 - `run.verbose`: the level of `-v` (0, 1 or 2)
 
 The returned integer is dev's exit code modulo 256, and nothing means 0. Any
-other return value ends the run with `dev: <path> returned <value>, not an exit
-code` and exit 1. A Lua error is printed as `dev: <message>` with exit 1.
+other return value ends the run with `The file <path> returned <value>, not an
+exit code.` and exit 1. A Lua error is printed as `<message>` with exit 1.
 
 ### Reusing the default runner
 
