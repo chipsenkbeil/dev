@@ -461,6 +461,27 @@ end
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
 ---@field moved boolean? false when unset, true when the folder is already in the trash
 
+---Prune the git worktree record a jj workspace leaves in a colocated repo.
+---
+---The record stays once the folder has moved, and `jj workspace add` with the same
+---name then fails. The prune is best effort, as the workspace is already forgotten. It
+---also drops any other record whose folder is gone.
+---@param root string the folder jj runs in
+---@param show fun(argv: string[])? nil when unset, called with the command before it runs
+local function drop_git_record(root, show)
+    local ask = vcs.with(vcs.base(root, vcs.JJ), "git", "root")
+    local dir, code = dev_os.capture(ask, { stderr = "null" })
+    dir = dir:gsub("%s+$", "")
+    if code ~= 0 or not dir:find("/%.git$") then
+        return
+    end
+    local argv = { "git", "--git-dir", dir, "worktree", "prune" }
+    if show then
+        show(argv)
+    end
+    dev_os.run(argv)
+end
+
 ---Forget the workspace or prune the worktree record.
 ---@param root string the folder the vcs runs in
 ---@param name string the workspace's name
@@ -484,6 +505,9 @@ local function detach(root, name, opts)
         if code ~= 0 then
             return false, { reason = Refusal.COMMAND_FAILED, command = argv[1], code = code }
         end
+    end
+    if opts.backend == vcs.JJ then
+        drop_git_record(root, opts.show)
     end
     return true
 end

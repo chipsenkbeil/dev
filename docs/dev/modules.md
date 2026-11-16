@@ -95,7 +95,9 @@ status --porcelain` is not empty.
 It deletes nothing it can rename instead. It first moves the folder (ignored
 files included) to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the stamp reads
 `YYYYMMDDTHHMMSSZ`, and then runs `jj workspace forget NAME` or `git worktree
-prune` from the project's main folder. A plain folder is only moved.
+prune` from the project's main folder. After a forget in a colocated repo it
+also runs `git worktree prune`, which drops the git record jj leaves, and
+ignores a failure there. A plain folder is only moved.
 
 The move comes first, so a move that fails leaves the folder and the workspace
 as they were, and a forget or prune that fails moves the folder back. A target

@@ -385,6 +385,7 @@ if [ "$1" = "--no-pager" ]; then shift; fi
 case "$*" in
     root) pwd; exit 0 ;;
     *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
+    *" git root") printf '%s' "$GIT_ROOT"; exit 0 ;;
     *" log "*) printf '%s' "$DIRTY"; exit "${LOG_CODE:-0}" ;;
 esac
 echo "jj $*" >> "$LOG"
@@ -548,6 +549,58 @@ testing.test("rm moves a jj folder to the trash with its ignored files", functio
     -- Expect the folder gone from its place with the ignored file in the trash
     testing.eq(fs.exists(path), false)
     testing.eq(fs.read(target .. "/.env"), "secret")
+end)
+
+testing.test("rm of a colocated jj workspace prunes the git record", function()
+    -- Colocate the jj repo with git and give git a stub that logs
+    local root, path, env, log = rm_setup("jj")
+    stub(root, "git", RM_GIT_STUB)
+    env.env.GIT_ROOT = root .. "/.git"
+
+    -- Remove the workspace so the git worktree record must go with it
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the workspace forgotten and then the git record pruned
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), false)
+    testing.eq(
+        fs.read(log),
+        "jj -R "
+            .. root
+            .. " workspace forget feat\ngit --git-dir "
+            .. root
+            .. "/.git worktree prune\n"
+    )
+end)
+
+testing.test("rm of a jj workspace that is not colocated runs no git", function()
+    -- Point jj's git root at the store inside .jj
+    local root, path, env, log = rm_setup("jj")
+    stub(root, "git", RM_GIT_STUB)
+    env.env.GIT_ROOT = root .. "/.jj/repo/store/git"
+
+    -- Remove the workspace
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect only the forget in the log
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), false)
+    testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget feat\n")
+end)
+
+testing.test("rm succeeds when the git prune of a colocated repo fails", function()
+    -- Make the git stub fail every command
+    local root, path, env = rm_setup("jj")
+    stub(root, "git", RM_GIT_STUB)
+    env.env.GIT_ROOT = root .. "/.git"
+    env.env.FAIL = "1"
+
+    -- Remove the workspace with the prune failing
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the removal to finish all the same
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), false)
 end)
 
 testing.test("rm moves a git folder to the trash with its ignored files", function()
@@ -1028,6 +1081,7 @@ if [ "$1" = "--no-pager" ]; then shift; fi
 case "$*" in
     root) pwd; exit 0 ;;
     *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
+    *" git root") exit 0 ;;
     *"workspace root --name "*)
         for last; do :; done
         printf '%s\n' "$ROOTS" | while read -r name path; do
