@@ -764,22 +764,32 @@ testing.test("random_bytes returns the count asked for and entropy stays in rang
     end
 end)
 
+local function set_io_open(replacement)
+    -- Swap io.open to make the random device unreadable
+    -- selene: allow(incorrect_standard_library_use)
+    io.open = replacement
+end
+
 testing.test("random_bytes gives nil and a message when the device cannot be read", function()
     local open = io.open
-    rawset(io, "open", function()
-        return nil, "no such device"
+    local bytes, message, short, short_message
+    local ok, failure = pcall(function()
+        set_io_open(function()
+            return nil, "no such device"
+        end)
+        bytes, message = dev_os.random_bytes(RANDOM_COUNTS[1])
+        set_io_open(function()
+            return {
+                read = function()
+                    return "x"
+                end,
+                close = function() end,
+            }
+        end)
+        short, short_message = dev_os.random_bytes(RANDOM_COUNTS[2])
     end)
-    local bytes, message = dev_os.random_bytes(RANDOM_COUNTS[1])
-    rawset(io, "open", function()
-        return {
-            read = function()
-                return "x"
-            end,
-            close = function() end,
-        }
-    end)
-    local short, short_message = dev_os.random_bytes(RANDOM_COUNTS[2])
-    rawset(io, "open", open)
+    set_io_open(open)
+    assert(ok, failure)
     testing.eq(bytes, nil)
     testing.eq(message, "no such device")
     testing.eq(short, nil)
