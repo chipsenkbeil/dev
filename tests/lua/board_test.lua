@@ -5028,7 +5028,12 @@ local function sandbox(opts)
     end
     executable(root .. "/bin/curl", CURL)
     executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
-    executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. dev_os.which("sleep") .. " 0.2\n")
+    executable(
+        root .. "/bin/sleep",
+        '#!/bin/sh\nnap=0.2\n[ -e "$ROOT/freeze" ] && nap=1\nexec '
+            .. dev_os.which("sleep")
+            .. ' "$nap"\n'
+    )
     executable(
         root .. "/bin/pass",
         '#!/bin/sh\nprintf "pass %s opts=%s\\n" "$*" "$PASSWORD_STORE_GPG_OPTS" >>"$ROOT/calls"\n'
@@ -8114,6 +8119,7 @@ testing.test("a move out of blocked ends the owner lease", function()
     testing.ok(wait_until(function()
         return heartbeats(root) >= 1
     end))
+    assert(fs.write(root .. "/freeze", ""))
     local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BLOCKED })
     testing.eq(code, 0, out)
@@ -8126,6 +8132,7 @@ testing.test("a move out of blocked ends the owner lease", function()
     out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.BACKLOG })
     testing.eq(code, 0, out)
     local released = read(root, "calls"):match("[^\n]*/owner/release\n?")
+    testing.ok(released, "no owner release in calls")
     testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
     testing.eq(fs.exists(state_file(home)), false)
