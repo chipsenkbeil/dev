@@ -47,7 +47,7 @@ local LEFT_PATTERN = "^dev%-turn: left holder=(%S+) card=(%S+)$"
 ---A source of numbers in [0, 1).
 ---@alias dev.board.turn.Random fun(): number
 
----@class dev.board.turn.PollOpts
+---@class dev.board.turn.poller.Opts
 ---@field random dev.board.turn.Random? `M.entropy` when nil
 
 ---@class dev.board.turn.Poll
@@ -161,13 +161,13 @@ local function taken_at(backend, card, name)
     return newest and newest.taken or false
 end
 
----@class dev.board.turn.OwnClaimOpts
+---@class dev.board.turn.own_claim.Opts
 ---@field holding dev.board.Card the turn card
 ---@field comments {body: string}[] the notes of the turn card, oldest first
 ---@field name string the name that may hold the claim
 ---@field card string the short id of the card the claim was taken for
 
----@param opts dev.board.turn.OwnClaimOpts
+---@param opts dev.board.turn.own_claim.Opts
 local function own_claim(opts)
     local holding = opts.holding
     if holding.claimant ~= opts.name or type(holding.claim_fence) ~= "number" then
@@ -359,14 +359,14 @@ local function open_card(backend)
     return holding, comments
 end
 
----@class dev.board.turn.AskOpts
+---@class dev.board.turn.ask.Opts
 ---@field name string the name that waits
 ---@field card string the short id of the card that wants to land
 ---@field seconds integer how long the wait lasts
 
 ---Join the line for the turn.
 ---@param backend dev.board.Backend the board backend
----@param opts dev.board.turn.AskOpts the asker and how long it waits
+---@param opts dev.board.turn.ask.Opts the asker and how long it waits
 ---@return true? ok true once the ask is on the board
 ---@return string? message why it could not be written
 function M.ask(backend, opts)
@@ -412,7 +412,7 @@ local function note_holder(backend, held)
     )
 end
 
----@class dev.board.turn.TakeOpts
+---@class dev.board.turn.take.Opts
 ---@field hold boolean? whether to keep the turn across a check, which needs `seconds`
 ---@field seconds integer? the lease of a hold, `LEASE_SECONDS` when nil
 
@@ -420,7 +420,7 @@ end
 ---@param backend dev.board.Backend the board backend
 ---@param name string the name that asks
 ---@param card string the short id of the card that wants to land
----@param opts dev.board.turn.TakeOpts? a hold and how long its lease lasts
+---@param opts dev.board.turn.take.Opts? a hold and how long its lease lasts
 ---@return dev.board.turn.Turn? turn the turn, nil when it is not free
 ---@return string? message who holds it, or why the board failed
 ---@return string? place a key for `Poll:pace` that changes with the line or the holder, nil when
@@ -521,7 +521,7 @@ function M.entropy()
 end
 
 ---Start pacing the polls of one waiter.
----@param opts dev.board.turn.PollOpts? the source of jitter
+---@param opts dev.board.turn.poller.Opts? the source of jitter
 ---@return dev.board.turn.Poll poll the state `Poll:pace` advances
 function M.poller(opts)
     local random = opts and opts.random or M.entropy

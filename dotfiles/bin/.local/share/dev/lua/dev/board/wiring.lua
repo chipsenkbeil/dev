@@ -81,7 +81,7 @@ end
 ---@field seconds integer the longest each row may run
 ---@field words string[] the words that are not flags
 
----@class dev.board.wiring.CheckRowsOpts
+---@class dev.board.wiring.check_rows.Opts
 ---@field backend dev.board.Backend the board backend
 ---@field card dev.board.Card the card whose rows run
 ---@field before dev.board.check.State the commit the rows run on
@@ -89,7 +89,7 @@ end
 ---@field options dev.board.wiring.CheckFlags the parsed flags
 
 ---Run the card's rows and record the result.
----@param opts dev.board.wiring.CheckRowsOpts the card, its commit and the commands
+---@param opts dev.board.wiring.check_rows.Opts the card, its commit and the commands
 ---@return dev.cmd.board.Result result the check's outcome
 local function check_rows(opts)
     local backend, card, before, argvs, flags =
@@ -282,16 +282,16 @@ local function land_problems(backend, card, who)
     return problems, state, carried
 end
 
----@class dev.board.wiring.TurnOpts
+---@class dev.board.wiring.await_turn.Opts
 ---@field backend dev.board.Backend the board backend
 ---@field name string the caller's agent name
 ---@field id string the full id of the card that lands
 ---@field short string the short id of the card that lands
 ---@field wait integer the seconds to keep asking
----@field take dev.board.turn.TakeOpts? a hold and the lease it asks for
+---@field take dev.board.turn.take.Opts? a hold and the lease it asks for
 
 ---Ask for the landing turn until it is free or the wait ends.
----@param opts dev.board.wiring.TurnOpts the board, the asker and the wait
+---@param opts dev.board.wiring.await_turn.Opts the board, the asker and the wait
 ---@return dev.board.turn.Turn? hold the turn, nil when it stayed taken
 ---@return string? message why it was not taken
 local function await_turn(opts)
@@ -329,7 +329,7 @@ local function await_turn(opts)
     end
 end
 
----@class dev.board.wiring.HeldOpts
+---@class dev.board.wiring.land_held.Opts
 ---@field backend dev.board.Backend the board backend
 ---@field card dev.board.Card the card that lands
 ---@field name string the caller's agent name
@@ -338,7 +338,7 @@ end
 ---@field clean_up fun(root: string, short: string): string removes the card's bookmark and workspace
 
 ---Land the card while the turn is held.
----@param opts dev.board.wiring.HeldOpts the card and the turn in hand
+---@param opts dev.board.wiring.land_held.Opts the card and the turn in hand
 ---@return dev.cmd.board.Result result the landing's outcome
 local function land_held(opts)
     local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold

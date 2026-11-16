@@ -956,7 +956,7 @@ function M.trunk_config(root)
     return text
 end
 
----@class dev.board.land.RecheckOpts
+---@class dev.board.land.recheck_problem.Opts
 ---@field root string the project root, a jj project
 ---@field commit string the checked commit the landing commit carries from
 ---@field card string the short id of the card that lands
@@ -967,7 +967,8 @@ end
 ---
 ---The carry crosses trunk commits when the checked commit's parent is not the landing commit's
 ---parent. A row fails the landing when it does not pass, and the first failure stops the run.
----@param opts dev.board.land.RecheckOpts the project, the carried commit and the configured rows
+---@param opts dev.board.land.recheck_problem.Opts the project, the carried commit and the
+---   configured rows
 ---@return string? problem the refusal naming the failing row and its run id, nil when none ran or
 ---   every row passed
 function M.recheck_problem(opts)

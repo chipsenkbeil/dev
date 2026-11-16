@@ -134,7 +134,7 @@ end
 ---@field root string? the project's root, which a tracked path is under
 ---@field columns table<string, string>? the `[board.columns]` map, keyed by role
 
----@class dev.cmd.board.OpenOpts
+---@class dev.cmd.board.open.Opts
 ---@field token_key string? the `[board.pomb]` key that names the token, `token` when nil
 
 ---@class dev.cmd.board.Result
@@ -1480,7 +1480,7 @@ local function move_once(backend, args, opts)
     return result
 end
 
----@class dev.cmd.board.MoveOpts
+---@class dev.cmd.board.move.Opts
 ---@field drop boolean? skips the outcome check, and the planning check from Icebox
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `os.time` when nil
@@ -1488,7 +1488,7 @@ end
 ---Move a card, and with `--wait SECONDS` try again while its column is full.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card, the column and the flags
----@param opts dev.cmd.board.MoveOpts? the options of `move_once` and the clock
+---@param opts dev.cmd.board.move.Opts? the options of `move_once` and the clock
 ---@return dev.cmd.board.Result result the result of the last try
 local function move_card(backend, args, opts)
     local flags = parse(args, MOVE_FLAGS)
@@ -1519,7 +1519,7 @@ end
 ---Move a card, retrying a full column until room frees when `--wait` is given.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the arguments after `move`
----@param opts dev.cmd.board.MoveOpts? how to sleep and tell time
+---@param opts dev.cmd.board.move.Opts? how to sleep and tell time
 ---@return dev.cmd.board.Result result the result of the last try
 function M.move(backend, args, opts)
     backend.roles = backend.roles or board.roles(backend.column_map, backend:done_columns() or {})
@@ -4415,7 +4415,7 @@ end
 
 ---Build the backend a project's board uses.
 ---@param settings dev.cmd.board.Settings the board's backend and name
----@param opts dev.cmd.board.OpenOpts? the token key to read, token when nil
+---@param opts dev.cmd.board.open.Opts? the token key to read, token when nil
 ---@return dev.board.Backend? backend the backend
 ---@return string? message why there is none
 function M.open(settings, opts)
@@ -5113,7 +5113,7 @@ local function wait_line(event, opts)
     end
 end
 
----@class dev.cmd.board.WaitOpts
+---@class dev.cmd.board.wait.Opts
 ---@field stem string the path the cursor files start with, one per `--for` mode
 ---@field nap fun(seconds: number)? sleeps between retries, `dev.os.nap` when nil
 ---@field random (fun(): number)? a number in [0, 1) that spreads the pause, entropy from the system
@@ -5133,7 +5133,7 @@ end
 ---error.
 ---@param backend dev.board.Backend the Pomb board
 ---@param args string[] the arguments after `wait`
----@param opts dev.cmd.board.WaitOpts where the cursor lives and how to sleep
+---@param opts dev.cmd.board.wait.Opts where the cursor lives and how to sleep
 ---@return dev.cmd.board.Result result the lines for the matching events, or a message and the exit
 ---   code
 function M.wait(backend, args, opts)

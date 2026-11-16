@@ -5,7 +5,7 @@ local text = require("dev.text")
 ---@class dev.board
 local M = {}
 
----@class dev.board.ClaimOpts
+---@class dev.board.claim.Opts
 ---@field ttl integer the seconds a Pomb grab or a lease claim lasts
 ---@field fence integer? the caller's live fence, which renews the claim it names
 ---@field lease boolean? true when the claim lasts the ttl, false for the card-size minutes
@@ -77,10 +77,10 @@ local M = {}
 ---   order, empty on a board with fewer than two lanes, or nil and a message
 ---@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board
 ---   defines the custom field with that key, or nil and a message
----@field next fun(self: dev.board.Backend, column: string, opts: dev.board.NextOpts?):
+---@field next fun(self: dev.board.Backend, column: string, opts: dev.board.next.Opts?):
 ---   dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human,
 ---   or nil and a message when it failed
----@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.AddOpts?):
+---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.add.Opts?):
 ---   dev.board.Card?, string?, boolean? the new card, or with `once` the open card of that name and
 ---   true when one existed
 ---@field entered fun(self: dev.board.Backend): table<string, string>?, string? the time each card
@@ -114,8 +114,8 @@ local M = {}
 ---   with that key replaced whole by the value, where json.null clears it, checked against the
 ---   claim's fence when one is given
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts:
----   dev.board.NoteOpts?): boolean?, string? a comment added to the card, of kind agent unless opts
----   names one, checked against the claim's fence when one is given
+---   dev.board.note.Opts?): boolean?, string? a comment added to the card, of kind agent unless
+---   opts names one, checked against the claim's fence when one is given
 ---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?):
 ---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
 ---   needs:human, or nil and Pomb's refusal
@@ -165,14 +165,14 @@ local M = {}
 ---   with none and the board's current cursor. On an expired cursor it returns nil, a message and
 ---   the oldest cursor that still resumes, when Pomb holds too many open waits for the token it
 ---   returns nil, a message, nil and true, and on any other failure nil and a message
----@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.MoveOpts?):
+---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.move.Opts?):
 ---   boolean?, string?, string? the card moved to a column, or nil, a message and `full` when Pomb
 ---   refuses it at a limit
 ---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the
 ---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
 ---   board with none, or nil and a message
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string, opts:
----   dev.board.ClaimOpts): integer?, string? the fence of the owner grab, renewed when the
+---   dev.board.claim.Opts): integer?, string? the fence of the owner grab, renewed when the
 ---   caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the
 ---   owner lease ended
@@ -196,11 +196,11 @@ local M = {}
 ---@field children {done: integer, total: integer}? how many of the card's children are done, nil
 ---   when it has none
 
----@class dev.board.NoteOpts
+---@class dev.board.note.Opts
 ---@field kind string? the comment's kind, lowercase
 ---@field author string? the label the comment is written under
 
----@class dev.board.MoveOpts
+---@class dev.board.move.Opts
 ---@field fence integer? the claim fence the move is checked against
 ---@field position integer? the zero-based place in the column and lane, the top when nil
 ---@field lane string? the name of the lane to move the card to, its own lane when nil
@@ -227,12 +227,12 @@ local M = {}
 ---@field recommended integer? the number of the recommended choice
 ---@field why string? why the agent cannot decide alone
 
----@class dev.board.NextOpts
+---@class dev.board.next.Opts
 ---@field label string? the label the card must carry
 ---@field max_size integer? the most Pomodori the card may be, nil for any size
 ---@field lane string? the name of the lane the card must sit in
 
----@class dev.board.AddOpts
+---@class dev.board.add.Opts
 ---@field description string? the card's description
 ---@field color string? the standard value of the palette colour to give it
 ---@field labels string[]? the labels to give it
@@ -243,7 +243,7 @@ local M = {}
 ---@field once boolean? whether to return the open card of that name instead of adding a second
 
 ---@class dev.board.Layout
----@field add fun(self: dev.board.Layout, name: string, column: string, opts: dev.board.AddOpts?):
+---@field add fun(self: dev.board.Layout, name: string, column: string, opts: dev.board.add.Opts?):
 ---   dev.board.Card?, string?, boolean? a card added, or with `once` the open card of that name and
 ---   true when one existed
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a

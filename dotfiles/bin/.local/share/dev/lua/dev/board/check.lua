@@ -270,7 +270,7 @@ local function tail_of(output)
     return table.concat(lines, "\n", first)
 end
 
----@class dev.board.check.RunOpts
+---@class dev.board.check.run.Opts
 ---@field root string the project root the row runs in
 ---@field run string the row
 ---@field argv string[] the row's words from `argv`, without a leading `! `
@@ -319,7 +319,7 @@ function M.never_started(argv, code, run_id)
 end
 
 ---Run one checks row to its end or its time limit.
----@param opts dev.board.check.RunOpts the row and where it runs
+---@param opts dev.board.check.run.Opts the row and where it runs
 ---@return dev.board.check.Row row how it ended
 function M.run(opts)
     local pending, announced = "", false

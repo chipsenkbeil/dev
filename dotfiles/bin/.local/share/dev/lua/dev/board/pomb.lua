@@ -923,7 +923,7 @@ end
 ---@private
 ---@param id string the column's id
 ---@param filter string the query filters to add
----@param opts dev.board.NextOpts? the options `next` was given
+---@param opts dev.board.next.Opts? the options `next` was given
 ---@return dev.board.Card? card the first card that may be taken
 ---@return dev.cmd.board.Result|string? message why the board could not be read
 function Backend:__next_in(id, filter, opts)
