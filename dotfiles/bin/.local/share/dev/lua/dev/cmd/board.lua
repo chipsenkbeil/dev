@@ -2131,6 +2131,20 @@ local function with_env_ticker(args)
 end
 
 local function misplaced_outcome_form(args)
+    local first = args[2]
+    if first:sub(1, 2) == "--" then
+        local flag, value = first:match("^(%-%-[^=]+)=(.*)$")
+        if flag then
+            return "The outcome text starts with "
+                .. first
+                .. ". Write the flag as "
+                .. flag
+                .. " "
+                .. value
+                .. "."
+        end
+        return "The outcome text starts with " .. first .. ", which is not an outcome flag."
+    end
     local number
     for i = 2, #args do
         local word = args[i]

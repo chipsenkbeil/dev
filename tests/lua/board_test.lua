@@ -3165,6 +3165,33 @@ testing.test(
     end
 )
 
+testing.test("outcome refuses an append whose first word starts with --", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3)
+    local backend = fake({ card })
+    local result = cmd_board.run("outcome", { "cccccccc", "--as", "dotfiles/verifier/x" }, backend)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("starts with --as", 1, true), result.message)
+    result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--untick=1", "--as", "dotfiles/verifier/x" },
+        backend
+    )
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("--untick 1", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("outcome appends text that holds -- after its first word", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3)
+    local backend = fake({ card })
+    local result =
+        cmd_board.run("outcome", { "cccccccc", "Pass", "--", "as", "a", "word" }, backend)
+    testing.eq(result.output, "outcome cccccccc 4 added")
+    testing.eq(backend.calls[1], { "add_outcome", ID_C, "Pass -- as a word", nil })
+end)
+
 testing.test("outcome refuses an N past the last outcome and a bad N", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
