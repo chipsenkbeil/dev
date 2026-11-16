@@ -415,6 +415,52 @@ testing.test("next --column blocked returns the top unclaimed needs:lead card on
     testing.eq(out, "No cards in Blocked.\n")
 end)
 
+testing.test("next --column verify and review skip a claimed card", function()
+    local root, home = local_board()
+    for _, column in ipairs({ COLUMN.VERIFY, COLUMN.REVIEW }) do
+        -- Put a claimed and an unclaimed card in the stage column
+        local function staged(name)
+            local out, code = dev(root, home, {
+                "board",
+                "add",
+                name,
+                "--column",
+                column,
+                "--size",
+                "1",
+                "--problem",
+                "x",
+                "--change",
+                "x",
+                "--out-of-scope",
+                "y",
+                "--done-when",
+                "a",
+                "--checks",
+                "dev test",
+            })
+            testing.eq(code, 0, out)
+            return prefix_of(out)
+        end
+        local claimed = staged("Claimed " .. column)
+        local free = staged("Free " .. column)
+        local out, code = dev(root, home, { "board", "take", claimed })
+        testing.eq(code, 0, out)
+
+        -- Expect next to name only the unclaimed card
+        out, code = dev(root, home, { "board", "next", "--column", column })
+        testing.eq(code, 0, out)
+        testing.ok(out:find(free, 1, true) and out:find("Free " .. column, 1, true), out)
+        testing.eq(out:find(claimed, 1, true), nil)
+
+        -- Claim the last one and expect the column to read as empty
+        out, code = dev(root, home, { "board", "take", free })
+        testing.eq(code, 0, out)
+        out = dev(root, home, { "board", "next", "--column", column })
+        testing.eq(out, "No cards in " .. support.COLUMN_NAME[column:upper()] .. ".\n")
+    end
+end)
+
 testing.test("rename sets a local card's title and refuses a blank one", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
