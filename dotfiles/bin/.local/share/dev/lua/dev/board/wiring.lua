@@ -116,7 +116,7 @@ local function check_rows(opts)
         if rows[i].refused then
             return failure(
                 string.format(
-                    "The ci hub refused row %d (%s). Nothing was recorded on %s. The hub said: %s",
+                    "The ci hub refused row %d (%s). Nothing was recorded on card %s. The hub said: %s",
                     i,
                     card.checks[i],
                     short,
@@ -130,7 +130,7 @@ local function check_rows(opts)
     if not after or after.commit ~= before.commit then
         return failure(
             string.format(
-                "the working copy changed while the checks ran (commit %s, then %s), so the result belongs to no commit and was NOT recorded on %s\n%s",
+                "The working copy changed while the checks ran, from commit %s to commit %s. The result belongs to no commit, so it was NOT recorded on card %s.\n%s",
                 land.short(before.commit),
                 after and land.short(after.commit) or "unknown",
                 short,
@@ -149,9 +149,9 @@ local function check_rows(opts)
     if not ok then
         return failure(
             string.format(
-                "the result was NOT recorded on %s (%s); the board may or may not hold it, so read dev board notes before trusting or repeating it\n%s",
+                "The result was NOT recorded on card %s. %s The board may or may not hold it. Read `dev board notes` before trusting or repeating it.\n%s",
                 short,
-                message,
+                dev_text.sentence(message),
                 table.concat(lines, "\n")
             )
         )
@@ -166,11 +166,12 @@ local function check_rows(opts)
     )
     if flags.expect_fail and passed > 0 then
         verdict = verdict
-            .. "; with --expect-fail every row should fail, so the passing ones prove nothing"
+            .. ". With --expect-fail every row should fail, so the passing ones prove nothing."
     end
     if flags.expect_fail and errors > 0 then
         verdict = verdict
-            .. ". With --expect-fail a row that never started proves nothing. Fix the row."
+            .. (passed > 0 and " " or ". ")
+            .. "With --expect-fail a row that never started proves nothing. Fix the row."
     end
     lines[#lines + 1] = verdict
     if not good then
@@ -192,17 +193,18 @@ local function card_problems(backend, card, who)
     local problems = {}
     local roles = backend.roles
     if card.column ~= roles.verify then
-        problems[#problems + 1] = "it is in "
+        problems[#problems + 1] = "It is in "
             .. card.column
             .. ", and only a card in "
             .. roles.verify
-            .. " lands"
+            .. " lands."
     end
     if card.claimant and card.claimant ~= who.name then
-        problems[#problems + 1] = "it is claimed by "
+        problems[#problems + 1] = "It is claimed by "
             .. card.claimant
             .. ", and only that claimant lands it, not "
             .. who.name
+            .. "."
     end
     local open = guards.done_refusal(card, roles:done_column())
     if open then
@@ -417,12 +419,13 @@ local function land_held(opts)
     local landed, output = land.run(backend.root)
     if not landed then
         return failure(
-            short
+            "Card "
+                .. short
                 .. " stays in "
                 .. card.column
-                .. ", "
+                .. ". `"
                 .. (in_git and "git push" or "jj land")
-                .. " failed:\n"
+                .. "` failed with this output.\n"
                 .. output:gsub("\n$", "")
         )
     end
@@ -473,10 +476,10 @@ local function land_held(opts)
     if not noted then
         local refused = failure(
             string.format(
-                "landed commit %s, but the done note was NOT written on %s (%s) and the card was not moved; write the note and move it to %s by hand",
+                "Landed commit %s. The done note was NOT written on card %s, and the card was not moved. %s Write the note and move the card to %s by hand.",
                 commit,
                 short,
-                message,
+                dev_text.sentence(message),
                 target
             )
         )
@@ -487,11 +490,11 @@ local function land_held(opts)
     if moved.code then
         local refused = failure(
             string.format(
-                "landed commit %s and noted it on %s, but the move to %s failed: %s",
+                "Landed commit %s and noted it on card %s. The move to %s failed. %s",
                 commit,
                 short,
                 target,
-                moved.message
+                dev_text.sentence(moved.message)
             )
         )
         refused.landed = true
@@ -502,7 +505,7 @@ local function land_held(opts)
         claims.stop(card.id)
         local released, stuck = backend:release(card.id, held and held.fence)
         if not released then
-            verb.note("dev: landed, but the claim was not released: " .. stuck)
+            verb.note("dev: Landed, but the claim was not released. " .. dev_text.sentence(stuck))
         end
     end
     return {

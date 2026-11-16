@@ -805,7 +805,7 @@ if has_jj then
         local id = new_card(project)
         must(dev(project, { "board", "move", id, support.COLUMN.REVIEW }))
         approve(project, id)
-        refused(project, id, { "it is in Review, and only a card in Verify lands" })
+        refused(project, id, { "It is in Review, and only a card in Verify lands." })
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.REVIEW)
     end)
 
@@ -932,7 +932,7 @@ if has_jj then
         local project = jj_project()
         local id = new_card(project)
         refused(project, id, {
-            "it is in Backlog, and only a card in Verify lands",
+            "It is in Backlog, and only a card in Verify lands.",
             "1 of 1 outcomes are unticked",
             "No code review of change",
             "No style review of change",
@@ -1564,7 +1564,7 @@ if has_jj then
             LAND_MSG = "push rejected: trunk moved",
         })
         testing.eq(code, 1, out)
-        testing.ok(out:find("jj land failed", 1, true), out)
+        testing.ok(out:find("`jj land` failed with this output.", 1, true), out)
         testing.ok(out:find("push rejected: trunk moved", 1, true), out)
         testing.eq(column_of(project.home), support.COLUMN_NAME.VERIFY)
     end)
@@ -2156,13 +2156,13 @@ if has_jj then
             )
             testing.ok(
                 out:find(
-                    "landed commit " .. commit:sub(1, 12) .. ", but the done note was NOT written",
+                    "Landed commit " .. commit:sub(1, 12) .. ". The done note was NOT written",
                     1,
                     true
                 ),
                 out
             )
-            testing.ok(out:find("the card was not moved", 1, true), out)
+            testing.ok(out:find("and the card was not moved.", 1, true), out)
         end
     )
 
@@ -2212,10 +2212,14 @@ if has_jj then
         testing.eq(code, 1, out)
         testing.ok(landed_calls(project.log):find("land --yes", 1, true), landed_calls(project.log))
         testing.ok(
-            out:find("landed commit " .. commit:sub(1, 12) .. " and noted it on " .. id, 1, true),
+            out:find(
+                "Landed commit " .. commit:sub(1, 12) .. " and noted it on card " .. id,
+                1,
+                true
+            ),
             out
         )
-        testing.ok(out:find("but the move to Done failed", 1, true), out)
+        testing.ok(out:find("The move to Done failed.", 1, true), out)
         testing.ok(out:find("1 of 1 children are open.", 1, true), out)
         local list = comments(project.home, id)
         testing.eq(list[#list].kind, KIND_DONE)

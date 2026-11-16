@@ -2382,7 +2382,7 @@ command.
   that names the `ci fleet drain off` command, for the whole hub or for one
   target. When a row that printed no run id exits nonzero with that line, a
   negated row included, dev stops at that row, records no comment, prints
-  `The ci hub refused row N (ROW). Nothing was recorded on CARD. The hub said: `
+  `The ci hub refused row N (ROW). Nothing was recorded on card CARD. The hub said: `
   and the refusal line, and exits 1. A negated row the hub refused is a fail
   wherever a row runs. Rows that already ran are not recorded either, and
   dev does not wait or retry.
@@ -2427,9 +2427,9 @@ The result and the exit code:
 When the comment cannot be written:
 
 - If Pomb is unreachable, a timeout occurs or a fence is refused, the command
-  exits 1 with `the result was NOT recorded on ID (REASON); the board may or
-  may not hold it, so read dev board notes before trusting or repeating it` and
-  the row lines. It never prints
+  exits 1 with ``The result was NOT recorded on card ID. REASON. The board may
+  or may not hold it. Read `dev board notes` before trusting or repeating it.``
+  and the row lines. It never prints
   `recorded` then, and it is never queued, as a replay would rerun the rows.
 - A timeout or gateway error may come after Pomb stored the comment, so read
   `notes` before repeating a long run.

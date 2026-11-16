@@ -627,7 +627,7 @@ testing.test("a result that cannot be written is never reported as recorded", fu
     testing.eq(result.output, nil)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("was NOT recorded", 1, true), result.message)
-    testing.ok(result.message:find("curl exit 28", 1, true), result.message)
+    testing.ok(result.message:find("Curl exit 28.", 1, true), result.message)
     testing.ok(result.message:find("1 pass - true", 1, true), result.message)
     testing.eq(result.unqueued, nil)
 end)
