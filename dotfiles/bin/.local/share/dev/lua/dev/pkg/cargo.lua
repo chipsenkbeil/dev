@@ -55,7 +55,7 @@ end
 
 ---Install a crate with cargo-binstall when there is one, else `cargo install --locked`.
 ---@param row dev.pkg.Row the tool
----@param opts dev.pkg.DriverOpts the flags
+---@param opts dev.pkg.lib.install.Opts the flags
 ---@return integer code 0 on success
 function M.install(row, opts)
     if not opts.force then

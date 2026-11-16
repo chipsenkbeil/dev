@@ -321,7 +321,7 @@ local function deny_text(root, content)
     return head .. DENY_MARKER .. "\n" .. strip(tail)
 end
 
----@class dev.templates.RenderOpts
+---@class dev.templates.render.Opts
 ---@field kind string the project type
 ---@field dest string the path in the project
 ---@field src string the template's path
@@ -329,7 +329,7 @@ end
 
 ---Make the project's copy of a template.
 ---@param root string the project root
----@param opts dev.templates.RenderOpts which template to render
+---@param opts dev.templates.render.Opts which template to render
 ---@return string? text the file's content
 ---@return string? message why it could not be read
 function M.render(root, opts)
@@ -363,7 +363,7 @@ end
 
 ---Write the project's copy of a template.
 ---@param root string the project root
----@param opts dev.templates.RenderOpts which template to write
+---@param opts dev.templates.render.Opts which template to write
 ---@return true? ok true on success
 ---@return string? message why it failed
 function M.install(root, opts)

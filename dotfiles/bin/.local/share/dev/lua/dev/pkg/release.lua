@@ -327,7 +327,7 @@ end
 ---untouched, and an archive is chosen by the url's suffix. Every word reaches a command as one
 ---argument.
 ---@param row dev.pkg.Row the tool, with the pin's name as its package
----@param opts dev.pkg.DriverOpts the flags and the pins file
+---@param opts dev.pkg.lib.install.Opts the flags and the pins file
 ---@return integer code 0 on success
 function M.install(row, opts)
     local dir = bin_dir()

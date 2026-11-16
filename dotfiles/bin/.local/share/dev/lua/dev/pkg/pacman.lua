@@ -21,7 +21,7 @@ wait "$pid"]]
 local M = {}
 
 ---@class dev.pkg.pacman.Build
----@field opts dev.pkg.DriverOpts the flags
+---@field opts dev.pkg.lib.install.Opts the flags
 ---@field tmp string the directory the AUR repo is cloned into
 
 local function build_user()
@@ -155,7 +155,7 @@ end
 
 ---Install a tool with pacman, or from the AUR with makepkg for an `aur:` cell.
 ---@param row dev.pkg.Row the tool
----@param opts dev.pkg.DriverOpts the flags
+---@param opts dev.pkg.lib.install.Opts the flags
 ---@return integer code 0 on success
 function M.install(row, opts)
     local needed = { "--needed" }

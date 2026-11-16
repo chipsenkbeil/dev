@@ -430,7 +430,7 @@ function M.uses_less(pager)
 end
 
 ---@class dev.help.PagePlan
----@field page dev.ui.PageOpts the options for `dev.ui.page`
+---@field page dev.ui.page.Opts the options for `dev.ui.page`
 ---@field hint boolean whether a paged text ends in the filter hint
 
 ---Decide how a text is paged.

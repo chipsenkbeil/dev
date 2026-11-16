@@ -55,7 +55,7 @@ end
 ---
 ---A `.lua` source runs under luajit and any other under bash, with no input and no output.
 ---@param package string the cell's script path and arguments
----@param opts dev.pkg.DriverOpts the interpreter and module directory
+---@param opts dev.pkg.lib.install.Opts the interpreter and module directory
 ---@return boolean present whether the script exited 0
 function M.probe(package, opts)
     local cell = split(package)
@@ -115,7 +115,7 @@ end
 ---under bash. A URL is downloaded to a temp file first, never piped to a shell. The arguments
 ---split on blanks and are never glob-expanded.
 ---@param row dev.pkg.Row the tool, with the source and arguments as its package
----@param opts dev.pkg.DriverOpts the flags
+---@param opts dev.pkg.lib.install.Opts the flags
 ---@return integer code 0 on success
 function M.install(row, opts)
     if not opts.force and lib.skip_on_path(row) then

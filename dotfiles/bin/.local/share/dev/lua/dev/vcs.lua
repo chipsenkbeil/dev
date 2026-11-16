@@ -3,7 +3,7 @@ local fs = require("dev.fs")
 
 ---@alias dev.vcs.Backend "jj"|"git"
 
----@class dev.vcs.BaseOpts
+---@class dev.vcs.base.Opts
 ---@field quiet boolean? add `--color never` for jj
 
 ---@class dev.vcs
@@ -65,7 +65,7 @@ end
 ---The argv prefix that runs jj or git on a project.
 ---@param root string absolute path of the project root
 ---@param backend dev.vcs.Backend the project's backend
----@param opts dev.vcs.BaseOpts? how to run it
+---@param opts dev.vcs.base.Opts? how to run it
 ---@return string[] argv the command words before the subcommand
 function M.base(root, backend, opts)
     if backend == M.JJ then

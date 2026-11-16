@@ -467,7 +467,7 @@ function M.capture_input(argv, input, opts)
     return text:sub(1, split - 1), tonumber(text:sub(split + 1))
 end
 
----@class dev.os.TimedOpts
+---@class dev.os.capture_timed.Opts
 ---@field env table<string,string>? variables set for the command, over `os.defaults.env`
 ---@field unset string[]? variables removed from the command's environment, besides
 ---   `os.defaults.unset`
@@ -526,7 +526,7 @@ end
 ---temporary directory removed.
 ---@param argv string[] command and its arguments, with at least one word
 ---@param secs number seconds the command may run, 0 or less for no limit
----@param opts dev.os.TimedOpts? environment, directory, input and stream options
+---@param opts dev.os.capture_timed.Opts? environment, directory, input and stream options
 ---@return string output what the command wrote to standard output, and standard error with `merge`
 ---@return integer code exit status, 124 when the limit hit or the command was killed
 function M.capture_timed(argv, secs, opts)

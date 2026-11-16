@@ -184,13 +184,13 @@ function M.run_label(root, env, opts)
     return label(root, verb_name, env.DEV_CI_CARD)
 end
 
----@class dev.remote.CiOpts
+---@class dev.remote.ci_runner.Opts
 ---@field verbosity integer 1 or more prints the ci command first
 ---@field pipeline? string a pipeline under `.ci/` to run the job from, else the default one
 
 ---Run a job on ci and return its exit code.
 ---@param run dev.remote.Run
----@param opts dev.remote.CiOpts
+---@param opts dev.remote.ci_runner.Opts
 ---@return integer code
 function M.ci_runner(run, opts)
     local pipeline = opts.pipeline

@@ -13,7 +13,7 @@
 ---@field binary string the row's binary column
 ---@field cell string the row's cell for one manager
 
----@class dev.pkg.SelectOpts
+---@class dev.pkg.manifest.select.Opts
 ---@field column integer the manager's column from `column`
 ---@field group string? keep only the rows listing this group, every row when nil or empty
 
@@ -195,7 +195,7 @@ end
 ---A variable takes the environment's value, else its `# @env` default, else the
 ---call fails before any row is returned.
 ---@param rows dev.pkg.Rows rows from `parse`
----@param opts dev.pkg.SelectOpts the manager's column and the group to keep
+---@param opts dev.pkg.manifest.select.Opts the manager's column and the group to keep
 ---@return dev.pkg.Selected[]? selected one entry per kept row, nil when a variable is undefined
 ---@return string? err the message naming the variable and the row
 function M.select(rows, opts)

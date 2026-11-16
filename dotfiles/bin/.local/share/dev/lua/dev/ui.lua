@@ -81,7 +81,7 @@ local stderr = io.stderr
 local Context = {}
 Context.__index = Context
 
----@class dev.ui.ContextOpts
+---@class dev.ui.context.Opts
 ---@field color boolean? color for both streams, instead of asking the environment
 ---@field interactive boolean? whether a user is at the terminal, instead of asking the terminal
 ---@field width integer? columns a line may fill, instead of asking the terminal
@@ -91,7 +91,7 @@ Context.__index = Context
 ---@field size (fun(): integer, integer)? terminal size, defaulting to `dev.term.size`
 
 ---Read the terminal and the environment once into a context.
----@param opts dev.ui.ContextOpts? overrides for what would be read
+---@param opts dev.ui.context.Opts? overrides for what would be read
 ---@return dev.ui.Context ctx the settings every drawing function takes
 function M.context(opts)
     opts = opts or {}
@@ -183,7 +183,7 @@ end
 ---@field text string text shown in the cell
 ---@field style string[]? style names from `Style` to paint the text with
 
----@class dev.ui.TableOpts
+---@class dev.ui.table.Opts
 ---@field bold_column integer? index of the column to draw bold
 
 ---Lay out `rows` under `headers` with every column padded to its widest cell.
@@ -192,7 +192,7 @@ end
 ---@param ctx dev.ui.Context drawing settings
 ---@param headers string[] column titles
 ---@param rows (string|dev.ui.StyledCell)[][] one list of cells per row
----@param opts dev.ui.TableOpts? how to draw the table
+---@param opts dev.ui.table.Opts? how to draw the table
 ---@return string[] lines the header line, then one line per row
 function M.table(ctx, headers, rows, opts)
     local bold_column = opts and opts.bold_column
@@ -230,14 +230,14 @@ function M.table(ctx, headers, rows, opts)
     return lines
 end
 
----@class dev.ui.BarOpts
+---@class dev.ui.bar.Opts
 ---@field used number amount filled
 ---@field total number amount that fills the bar
 ---@field width integer cells the bar spans
 
 ---Draw a bar of `opts.width` cells that is `opts.used` of `opts.total` full.
 ---@param ctx dev.ui.Context drawing settings
----@param opts dev.ui.BarOpts how full the bar is and how wide
+---@param opts dev.ui.bar.Opts how full the bar is and how wide
 ---@return string bar the painted bar, or an empty string when the context is not interactive
 function M.bar(ctx, opts)
     if not ctx.interactive then
@@ -250,14 +250,14 @@ function M.bar(ctx, opts)
         .. M.paint(ctx, string.rep("░", width - filled), Style.DIM)
 end
 
----@class dev.ui.RequireTerminalOpts
+---@class dev.ui.require_terminal.Opts
 ---@field command string name of the command that needs the terminal
 ---@field missing string what the user did not give
 ---@field hint string how to give it without a terminal
 
 ---Exit with status 2 and a message on standard error unless a user is at the terminal.
 ---@param ctx dev.ui.Context drawing settings
----@param opts dev.ui.RequireTerminalOpts what to say when there is no terminal
+---@param opts dev.ui.require_terminal.Opts what to say when there is no terminal
 function M.require_terminal(ctx, opts)
     if ctx.interactive then
         return
@@ -317,7 +317,7 @@ function M.confirm(ctx, question, consequence)
     return answer == "y" or answer == "yes"
 end
 
----@class dev.ui.SpinnerLineOpts
+---@class dev.ui.spinner_line.Opts
 ---@field frame integer which frame of the spinner to draw, counting from 1
 ---@field label string what is running
 ---@field detail string extra dim text after the label, or an empty string
@@ -325,7 +325,7 @@ end
 
 ---Draw one line of the spinner: glyph, label, detail and elapsed time.
 ---@param ctx dev.ui.Context drawing settings
----@param opts dev.ui.SpinnerLineOpts what the line shows
+---@param opts dev.ui.spinner_line.Opts what the line shows
 ---@return string line the painted line
 function M.spinner_line(ctx, opts)
     local glyph = FRAMES[(opts.frame - 1) % #FRAMES + 1]
@@ -488,7 +488,7 @@ local function report(err, label, code, captured)
     end
 end
 
----@class dev.ui.SpinOpts
+---@class dev.ui.spin.Opts
 ---@field capture boolean? keep standard output apart and return it, showing only standard error on
 ---   failure
 
@@ -501,7 +501,7 @@ end
 ---@param ctx dev.ui.Context drawing settings
 ---@param label string what is running
 ---@param argv string[] command and its arguments, with at least one word
----@param opts dev.ui.SpinOpts? `capture`
+---@param opts dev.ui.spin.Opts? `capture`
 ---@return integer code exit status of the command, or 130 when the user interrupted it
 ---@return string? output standard output of the command, only with `opts.capture`
 function M.spin(ctx, label, argv, opts)
@@ -556,7 +556,7 @@ function M.spin(ctx, label, argv, opts)
     return code
 end
 
----@class dev.ui.PageOpts
+---@class dev.ui.page.Opts
 ---@field pager string? shell command that reads the text, defaulting to `$PAGER`, else `less -R`
 ---@field allowed boolean? false to print directly, true by default
 ---@field interactive boolean? whether standard output is a terminal, instead of asking the terminal
@@ -568,7 +568,7 @@ end
 ---It does when paging is allowed, standard output is a terminal and the text
 ---has more lines than the screen has rows.
 ---@param content string the text to show
----@param opts dev.ui.PageOpts? `allowed`, `interactive` and `rows`, each read from the terminal
+---@param opts dev.ui.page.Opts? `allowed`, `interactive` and `rows`, each read from the terminal
 ---   when nil
 ---@return boolean page true when the pager should show the text
 function M.should_page(content, opts)
@@ -594,7 +594,7 @@ end
 ---A pager that quits early is not an error.
 ---A pager that is missing or exits non-zero gets one warning line and the text printed directly.
 ---@param content string the text to show
----@param opts dev.ui.PageOpts? the pager command, and the settings `should_page` reads
+---@param opts dev.ui.page.Opts? the pager command, and the settings `should_page` reads
 ---@return boolean paged true when the pager showed the text
 function M.page(content, opts)
     opts = opts or {}

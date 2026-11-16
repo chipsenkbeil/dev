@@ -21,7 +21,7 @@ local UNAVAILABLE_CELL = "-"
 ---@field channel string the cell's channel
 ---@field repo string the cell's repo
 
----@class dev.pkg.DriverOpts
+---@class dev.pkg.lib.install.Opts
 ---@field dry_run boolean whether to print the commands without running them
 ---@field force boolean whether to reinstall what is present
 ---@field log_file string the file the commands' output is appended to, empty for the terminal

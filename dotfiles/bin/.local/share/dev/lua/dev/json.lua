@@ -39,7 +39,7 @@ function M.present(value)
     return value
 end
 
----@class dev.json.EncodeOpts
+---@class dev.json.encode.Opts
 ---@field order? string[] keys that come first, in this order, at every level
 
 local function utf8_char(cp)
@@ -354,7 +354,7 @@ end
 ---A table with keys 1..n only is an array, an empty one included. Any other
 ---table is an object, as is one passed through `json.object`.
 ---@param value any strings, numbers, booleans, `json.null` and tables of them
----@param opts? dev.json.EncodeOpts
+---@param opts? dev.json.encode.Opts
 ---@return string|nil text the document; nil on failure
 ---@return string|nil err what could not be encoded
 function M.encode(value, opts)
