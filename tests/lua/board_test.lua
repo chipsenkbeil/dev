@@ -7952,6 +7952,43 @@ testing.test("a lapsed owner lease counts as unowned in lint", function()
     testing.ok(out:find("in progress with no claimant", 1, true), out)
 end)
 
+local function claimants_at(root, home, now)
+    local script = string.format(
+        "package.path = %q; local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+            .. "require('dev.board.store').now = function() return %d end; "
+            .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
+            .. "local held = 'nobody'; "
+            .. "for _, card in ipairs(assert(b:cards())) do held = card.claimant or held end; "
+            .. "print(json.encode({claimant = held}))",
+        support.absolute_path(),
+        now
+    )
+    local out, code = dev_os.capture({ "luajit", "-e", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            HOME = home,
+            ROOT = root,
+            DEV_PASS_LOCK = root .. "/pass.lock",
+        },
+        stderr = "stdout",
+    })
+    testing.eq(code, 0, out)
+    return assert(json.decode(out), out).claimant
+end
+
+testing.test("a pomb claim holds until store.now passes its lease", function()
+    local root, home = sandbox({
+        export = export_with_first_card({
+            column_id = PROGRESS_COLUMN,
+            holder = "dev@box:42",
+            lease_expires_at = "2026-01-01T00:00:00Z",
+        }),
+    })
+    local lease = assert(box.parse_time("2026-01-01T00:00:00Z"))
+    testing.eq(claimants_at(root, home, lease - 3600), "dev@box:42")
+    testing.eq(claimants_at(root, home, lease + 3600), "nobody")
+end)
+
 testing.test("ls adds no holder column while nobody holds a claim", function()
     local cards = sample()
     local result = cmd_board.run("ls", {}, fake(cards))

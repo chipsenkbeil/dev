@@ -1498,7 +1498,7 @@ end
 ---@class dev.cmd.board.move.Opts
 ---@field drop boolean? skips the outcome check, and the planning check from Icebox
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
----@field now (fun(): integer)? the clock in seconds since the epoch, `os.time` when nil
+---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
 
 ---Move a card, and with `--wait SECONDS` try again while its column is full.
 ---@param backend dev.board.Backend the board
@@ -1515,7 +1515,7 @@ local function move_card(backend, args, opts)
         end
     end
     local nap = opts and opts.nap or dev_os.nap
-    local clock = opts and opts.now or os.time
+    local clock = opts and opts.now or store.now
     local deadline = clock() + wait
     while true do
         local result = move_once(backend, args, opts)
@@ -3807,7 +3807,7 @@ function commands.stale(backend, args, now)
     if not entered then
         return failure(message)
     end
-    now = now or os.time()
+    now = now or store.now()
     local roles = backend.roles
     local found, owner, moved, undated, unsized, commented = {}, {}, {}, {}, {}, {}
     local lead, planner, nobody = {}, {}, {}
@@ -5150,7 +5150,7 @@ end
 ---   when nil
 ---@field notice fun(line: string)? prints the one line about too many open waits, standard error
 ---   when nil
----@field now (fun(): integer)? the clock in seconds since the epoch, `os.time` when nil
+---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
 
 ---Hold until the board changes in a way the caller asked for.
 ---
@@ -5192,7 +5192,7 @@ function M.wait(backend, args, opts)
     local notice = opts.notice or stderr_line
     local limited = 0
     local told = false
-    local clock = opts.now or os.time
+    local clock = opts.now or store.now
     local started = clock()
     local held, touched, last = {}, {}, nil
     local sat

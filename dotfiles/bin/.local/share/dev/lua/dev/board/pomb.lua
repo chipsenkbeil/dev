@@ -5,6 +5,7 @@ local claims = require("dev.board.claims")
 local dev_os = require("dev.os")
 local json = require("dev.json")
 local project = require("dev.project")
+local store = require("dev.board.store")
 local tokenfile = require("dev.board.tokenfile")
 
 local present = json.present
@@ -679,7 +680,10 @@ local function holder(task)
         return nil
     end
     local expires = present(owner.lease_expires_at)
-    if type(expires) == "string" and expires:sub(1, STAMP_CHARS) <= os.date(UTC_STAMP) then
+    if
+        type(expires) == "string"
+        and expires:sub(1, STAMP_CHARS) <= os.date(UTC_STAMP, store.now())
+    then
         return nil
     end
     return name
