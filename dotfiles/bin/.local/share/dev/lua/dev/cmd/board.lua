@@ -802,7 +802,7 @@ function commands.add(backend, args)
     if refused then
         return refused
     end
-    if origin then
+    if origin and not seen[origin.id] then
         local ok, why = backend:link(card.id, board.LinkKind.RELATED, origin.id)
         if not ok then
             return {

@@ -2822,6 +2822,66 @@ testing.test(
 )
 
 testing.test(
+    "add links a card once when --blocked-by and --from name it and relates it for --from alone",
+    function()
+        -- Add a base card and two cards that name it by its prefix
+        local root, home = local_board()
+        local base = prefix_of((dev(root, home, {
+            "board",
+            "add",
+            "Base",
+            "--size",
+            "1",
+            "--problem",
+            "why",
+            "--done-when",
+            "a",
+        })))
+        local both, code = dev(root, home, {
+            "board",
+            "add",
+            "Both",
+            "--size",
+            "1",
+            "--problem",
+            "why",
+            "--done-when",
+            "a",
+            "--blocked-by",
+            base,
+            "--from",
+            base,
+        })
+        testing.eq(code, 0, both)
+        local plain
+        plain, code = dev(root, home, {
+            "board",
+            "add",
+            "Plain",
+            "--size",
+            "1",
+            "--problem",
+            "why",
+            "--done-when",
+            "a",
+            "--from",
+            base,
+        })
+        testing.eq(code, 0, plain)
+
+        -- Expect one blocked_by link on the first and one related link on the second
+        local kinds = {}
+        for _, card in ipairs(document(file_of(home)).cards) do
+            kinds[card.name] = card.links
+        end
+        testing.eq(#kinds.Both, 1)
+        testing.eq(kinds.Both[1].kind, "blocked_by")
+        testing.eq(#kinds.Plain, 1)
+        testing.eq(kinds.Plain[1].kind, "related")
+    end
+)
+
+testing.test(
     "a failed add --id-only prints nothing on standard output and exits non-zero",
     function()
         local root, home = local_board()
