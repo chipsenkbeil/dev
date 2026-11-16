@@ -8349,6 +8349,54 @@ testing.test("a pomb claim holds until store.now passes its lease", function()
     testing.eq(claimants_at(root, home, lease + 3600), "nobody")
 end)
 
+local function card_read(root, home, id)
+    local script = string.format(
+        "package.path = %q; local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+            .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
+            .. "local card, message = b:card(%q); "
+            .. "print(json.encode({name = card and card.name, done = card and card.done, "
+            .. "claimant = card and card.claimant, found = card ~= nil, message = message}))",
+        support.absolute_path(),
+        id
+    )
+    local out, code = dev_os.capture({ "luajit", "-e", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            HOME = home,
+            ROOT = root,
+            DEV_PASS_LOCK = root .. "/pass.lock",
+        },
+        stderr = "stdout",
+    })
+    testing.eq(code, 0, out)
+    return assert(json.decode(out), out)
+end
+
+testing.test("the pomb card read returns the name, done flag and claimant of one task", function()
+    local pattern = READY_COLUMN:gsub("%p", "%%%0")
+    local done = TASK:gsub(pattern, support.column_id(support.COLUMN.DONE), 1)
+    local root, home = sandbox({ export = '{"tasks":[]}', task = done })
+    assert(fs.write(root .. "/owner_name", "dev@box:42"))
+    local card = card_read(root, home, ID_A)
+    testing.eq(card.name, "First")
+    testing.eq(card.done, true)
+    testing.eq(card.claimant, "dev@box:42")
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
+    testing.eq(calls:find("export-data", 1, true), nil)
+end)
+
+testing.test("the pomb card read of a missing task returns nil and names the task", function()
+    local root, home = sandbox({ export = '{"tasks":[]}' })
+    assert(fs.write(root .. "/far.json", '{"message":"task ' .. ID_D .. ' not found"}'))
+    assert(fs.write(root .. "/far_gone", ""))
+    local card = card_read(root, home, ID_D)
+    testing.eq(card.found, false)
+    testing.ok(card.message:find("404", 1, true), card.message)
+    testing.ok(card.message:find(ID_D, 1, true), card.message)
+    testing.eq(read(root, "calls"):find("export-data", 1, true), nil)
+end)
+
 testing.test("ls adds no holder column while nobody holds a claim", function()
     local cards = sample()
     local result = cmd_board.run("ls", {}, fake(cards))
