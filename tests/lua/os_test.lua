@@ -2,6 +2,7 @@ local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
+local turn = require("dev.board.turn")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
@@ -748,4 +749,39 @@ return 0
     testing.eq(code, 0)
     testing.eq(ran(root), "third\nfirst\n")
     fs.remove(root, { recursive = true })
+end)
+
+local RANDOM_COUNTS = { 1, 4, 16 }
+local ENTROPY_DRAWS = 1000
+
+testing.test("random_bytes returns the count asked for and entropy stays in range", function()
+    for _, count in ipairs(RANDOM_COUNTS) do
+        testing.eq(#assert(dev_os.random_bytes(count)), count)
+    end
+    for _ = 1, ENTROPY_DRAWS do
+        local fraction = turn.entropy()
+        testing.ok(fraction >= 0 and fraction < 1, tostring(fraction))
+    end
+end)
+
+testing.test("random_bytes gives nil and a message when the device cannot be read", function()
+    local open = io.open
+    rawset(io, "open", function()
+        return nil, "no such device"
+    end)
+    local bytes, message = dev_os.random_bytes(RANDOM_COUNTS[1])
+    rawset(io, "open", function()
+        return {
+            read = function()
+                return "x"
+            end,
+            close = function() end,
+        }
+    end)
+    local short, short_message = dev_os.random_bytes(RANDOM_COUNTS[2])
+    rawset(io, "open", open)
+    testing.eq(bytes, nil)
+    testing.eq(message, "no such device")
+    testing.eq(short, nil)
+    testing.ok(short_message:find("too few bytes", 1, true), short_message)
 end)

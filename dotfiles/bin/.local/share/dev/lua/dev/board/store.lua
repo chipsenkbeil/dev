@@ -36,9 +36,7 @@ end
 ---Make a random id, the shape of a version 4 UUID.
 ---@return string id the id, in lower case hex
 function M.id()
-    local file = assert(io.open("/dev/urandom", "rb"))
-    local bytes = assert(file:read(ID_BYTES))
-    file:close()
+    local bytes = assert(dev_os.random_bytes(ID_BYTES))
     local hex = bytes:gsub(".", function(char)
         return string.format("%02x", char:byte())
     end)

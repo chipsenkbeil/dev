@@ -1,5 +1,8 @@
 local board = require("dev.board")
+local dev_os = require("dev.os")
 local store = require("dev.board.store")
+
+local ENTROPY_BYTES = 4
 
 ---The landing turn, the claim on a card named `landing turn`.
 ---@class dev.board.turn
@@ -509,11 +512,9 @@ Poll.__index = Poll
 ---Draw a number in [0, 1) from the system's random bytes.
 ---@return number fraction the number drawn
 function M.entropy()
-    local file = assert(io.open("/dev/urandom", "rb"))
-    local bytes = file:read(4)
-    file:close()
+    local bytes = assert(dev_os.random_bytes(ENTROPY_BYTES))
     local n = 0
-    for i = 1, 4 do
+    for i = 1, ENTROPY_BYTES do
         n = n * 256 + bytes:byte(i)
     end
     return n / 4294967296

@@ -489,6 +489,25 @@ function M.nap(secs)
     nap(secs)
 end
 
+local RANDOM_DEVICE = "/dev/urandom"
+
+---Read random bytes from the system's random device.
+---@param count integer how many bytes to read
+---@return string? bytes exactly `count` bytes, nil when the device cannot be read
+---@return string? message why the read failed
+function M.random_bytes(count)
+    local file, message = io.open(RANDOM_DEVICE, "rb")
+    if not file then
+        return nil, message
+    end
+    local bytes = file:read(count)
+    file:close()
+    if not bytes or #bytes < count then
+        return nil, "The random device " .. RANDOM_DEVICE .. " returned too few bytes."
+    end
+    return bytes
+end
+
 local function signal_group(signal, pid)
     M.run({ "sh", "-c", "kill -" .. signal .. ' -- "-$1"', "sh", pid }, { stderr = "null" })
 end
