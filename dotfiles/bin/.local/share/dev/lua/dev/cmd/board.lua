@@ -2560,6 +2560,7 @@ function commands.check(backend, args)
         return failure(message)
     end
     return wiring.check_rows({
+        name = agent_name(),
         backend = backend,
         card = card,
         before = before,

@@ -1584,6 +1584,13 @@ The loop stops in four cases:
 A crashed agent therefore loses its claim within 15 minutes of the loop's end. A
 network failure does not stop the loop.
 
+`check` renews the claimant's claim and restarts the loop before each row to
+keep a long ci run inside the loop's cap, and `land` does the same before its
+checks and again after its recheck. Only a caller that holds the card's claim
+state and is its claimant renews anything. A renewal that fails prints a note
+and the command goes on. It leaves the old claim and loop as they were and
+never releases the claim.
+
 A `move` out of In Progress to any column but Blocked also releases the claim
 once the move has succeeded. A refused release prints a warning and leaves the
 move done.

@@ -115,4 +115,17 @@ function M.stop(card)
     return state
 end
 
+---Keep a card's state with a new loop and stop the loop it had.
+---@param state dev.board.claims.State the state with the new loop's pid
+---@param old_pid integer? the pid of the loop to stop
+---@return true? ok true on success
+---@return string? message why the state could not be written
+function M.replace(state, old_pid)
+    local ok, message = M.write(state)
+    if ok and old_pid and old_pid > 0 and old_pid ~= state.pid and alive(old_pid) then
+        dev_os.run({ "kill", tostring(old_pid) }, { stderr = "null" })
+    end
+    return ok, message
+end
+
 return M

@@ -104,6 +104,7 @@ local KIND_DONE = "done"
 local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
 local PAST_HOLD_SECONDS = 2.2
+local SHORT_CLAIM_SECONDS = 60
 local ASK_TIMEOUT_SECONDS = 30
 local ASK_POLL_SECONDS = 0.2
 local LOST_HOLD_SECONDS = "1"
@@ -2436,6 +2437,60 @@ if has_jj then
         testing.ok(result.message:find("cannot land", 1, true), result.message)
         testing.eq(result.message:find("ran out or was taken", 1, true), nil)
         testing.eq(turn_holder(project.home), nil)
+    end)
+
+    local function shortened_claim(project, id)
+        local doc = board_doc(project.home)
+        local short = store.stamp(store.now() + SHORT_CLAIM_SECONDS)
+        board_card(doc, id).claim.expires_at = short
+        local path = project.home .. "/state/dev/boards/mine.json"
+        assert(fs.write(path, json.encode(doc)), "write failed")
+        return short
+    end
+
+    testing.test("a check by the claimant renews its claim", function()
+        local project = jj_project()
+        local id = new_card(project)
+        local builder = { DEV_AGENT = "dotfiles/builder" }
+        must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, builder))
+        local short = shortened_claim(project, id)
+        local fence = claim_of(project.home, id).fence
+        local out, code = dev(project, { "board", "check", id }, builder)
+        testing.eq(code, 0, out)
+        testing.eq(out:find("not renewed", 1, true), nil, out)
+        local claim = claim_of(project.home, id)
+        testing.eq(claim.fence, fence)
+        testing.ok(claim.expires_at > short, claim.expires_at)
+    end)
+
+    testing.test("a check by another name renews no claim", function()
+        local project = jj_project()
+        local id = new_card(project)
+        local builder = { DEV_AGENT = "dotfiles/builder" }
+        must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, builder))
+        local short = shortened_claim(project, id)
+        local out, code = dev(project, { "board", "check", id }, { DEV_AGENT = "dotfiles/other" })
+        testing.eq(code, 0, out)
+        testing.eq(claim_of(project.home, id).expires_at, short)
+    end)
+
+    testing.test("a check on a card with no claim takes none", function()
+        local project = jj_project()
+        local id = new_card(project)
+        local out, code = dev(project, { "board", "check", id }, { DEV_AGENT = "dotfiles/builder" })
+        testing.eq(code, 0, out)
+        testing.eq(claim_of(project.home, id), nil)
+    end)
+
+    testing.test("a land by the claimant renews its claim", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        must(dev(project, { "board", "take", id }))
+        local short = shortened_claim(project, id)
+        local out, code = dev(project, { "board", "land", id }, { LAND_CODE = "1" })
+        testing.eq(code, 1, out)
+        testing.eq(out:find("not renewed", 1, true), nil, out)
+        testing.ok(claim_of(project.home, id).expires_at > short, out)
     end)
 
     local function lander_asked(home)

@@ -8,6 +8,7 @@ local guards = require("dev.board.guards")
 local land = require("dev.board.land")
 local remote = require("dev.remote")
 local render = require("dev.board.render")
+local runner = require("dev.board.runner")
 local standalone = require("dev.standalone")
 local store = require("dev.board.store")
 local turn = require("dev.board.turn")
@@ -81,7 +82,19 @@ end
 ---@field seconds integer the longest each row may run
 ---@field words string[] the words that are not flags
 
+---Renew the caller's claim on a card, and say so when it could not be.
+---@param backend dev.board.Backend the board backend
+---@param card dev.board.Card the card whose claim to renew
+---@param name string? the caller's agent name
+local function renew_claim(backend, card, name)
+    local why = runner.renew_claim(backend, card, name)
+    if why then
+        verb.note("The claim was not renewed. " .. dev_text.sentence(why))
+    end
+end
+
 ---@class dev.board.wiring.check_rows.Opts
+---@field name string? the caller's agent name
 ---@field backend dev.board.Backend the board backend
 ---@field card dev.board.Card the card whose rows run
 ---@field before dev.board.check.State the commit the rows run on
@@ -98,6 +111,7 @@ local function check_rows(opts)
     local message
     local rows = {}
     for i, argv in ipairs(argvs) do
+        renew_claim(backend, card, opts.name)
         verb.note(string.format("running %d of %d: %s", i, #argvs, card.checks[i]))
         rows[i] = check.run({
             root = backend.root,
@@ -344,6 +358,7 @@ local function land_held(opts)
     local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold
     local short = card.id:sub(1, board.MIN_PREFIX)
     local message
+    renew_claim(backend, card, name)
     local current = card_problems(backend, card, { name = name, comments = {} })
     if #current > 0 then
         return failure(
@@ -403,6 +418,7 @@ local function land_held(opts)
             rows = config.get_text(backend.root, "board.land.recheck", trunk_text),
             note = verb.note,
         })
+    renew_claim(backend, card, name)
     if unchecked then
         return failure(
             "Card " .. short .. " cannot land for these reasons.\n  - " .. unchecked .. rebase_note

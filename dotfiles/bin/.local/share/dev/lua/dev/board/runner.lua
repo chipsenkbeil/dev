@@ -205,6 +205,49 @@ local function claim_card(backend, card, name)
         fence
 end
 
+---Renew the caller's claim on a card and restart its keepalive loop.
+---
+---A caller that holds no claim state for the card, or whose name is not the card's claimant,
+---renews nothing.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card whose claim to renew
+---@param name string? the agent name, nil to name the host and session
+---@return string? message why the claim could not be renewed, nil when it was or nothing applied
+local function renew_claim(backend, card, name)
+    local held = claims.read(card.id)
+    local who = claimant(name)
+    if not held or card.claimant ~= who then
+        return nil
+    end
+    local fence, message = backend:claim(card.id, who, {
+        ttl = claims.TTL_SECONDS,
+        fence = held.fence,
+        epic = card.epic,
+    })
+    if not fence then
+        return message
+    end
+    local ticks = claims.cap(card.size)
+    local ok
+    ok, message = claims.write({ card = card.id, fence = fence, pid = held.pid })
+    if not ok then
+        return message
+    end
+    local pid
+    pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id), who)
+    if not pid then
+        return message
+    end
+    ok, message = claims.replace({ card = card.id, fence = fence, pid = pid }, held.pid)
+    if not ok then
+        if pid > 0 then
+            dev_os.run({ "kill", tostring(pid) }, { stderr = "null" })
+        end
+        return message
+    end
+    return nil
+end
+
 M.full = full
 M.index_of = index_of
 M.owner_holds = owner_holds
@@ -214,5 +257,6 @@ M.refusal = refusal
 M.claimant = claimant
 M.limited = limited
 M.claim_card = claim_card
+M.renew_claim = renew_claim
 
 return M
