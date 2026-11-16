@@ -208,6 +208,63 @@ local function fetch_trunk(ctx)
     return nil
 end
 
+---Find the git folder a jj project is colocated with.
+---@param root string the folder jj runs in
+---@return string? dir nil when the project is not colocated with git
+local function colocated_git_dir(root)
+    local ask = vcs.with(vcs.base(root, vcs.JJ), "git", "root")
+    local dir, code = dev_os.capture(ask, { stderr = "null" })
+    dir = dir:gsub("%s+$", "")
+    if code ~= 0 or not dir:find("/%.git$") then
+        return nil
+    end
+    return dir
+end
+
+---Prune the stale git worktree record of a workspace path about to be made again.
+---
+---The prune drops every prunable record, so another gone record refuses it.
+---@param root string the folder jj runs in
+---@param path string the workspace folder about to be made
+---@param show fun(argv: string[])? nil when unset, called with the command before it runs
+---@return string? failure nil when nothing stopped it, else a sentence
+local function drop_own_record(root, path, show)
+    local dir = colocated_git_dir(root)
+    if dir == nil then
+        return nil
+    end
+    local list = { "git", "--git-dir", dir, "worktree", "list", "--porcelain" }
+    local out, code = dev_os.capture(list, { stderr = "null" })
+    if code ~= 0 then
+        return nil
+    end
+    local mine, other = false, nil
+    for block in (out .. "\n"):gmatch("(.-)\n\n") do
+        local at = block:match("^worktree ([^\n]+)")
+        if at and block:find("\nprunable") and not block:find("\nlocked") then
+            if at == path then
+                mine = true
+            else
+                other = other or at
+            end
+        end
+    end
+    if not mine then
+        return nil
+    end
+    if other then
+        return M.describe({ reason = Refusal.PRUNE_DROPS, path = other })
+    end
+    local argv = { "git", "--git-dir", dir, "worktree", "prune" }
+    if show then
+        show(argv)
+    end
+    if (dev_os.run(argv) or 1) ~= 0 then
+        return sentence("git worktree prune failed")
+    end
+    return nil
+end
+
 ---@class dev.cmd.ws.plan.Opts
 ---@field start string? nil when unset, the git start point of the worktree
 
@@ -280,6 +337,12 @@ M.handlers["ws new"] = function(ctx)
         local refreshed = dev_os.run(refresh) or 1
         if refreshed ~= 0 then
             return refreshed
+        end
+        local stuck = drop_own_record(ctx.root, path, function(shown)
+            verb.show(ctx, shown)
+        end)
+        if stuck then
+            verb.die(stuck)
         end
     end
     local argv = plan(ctx.root, name, path, { start = start })
@@ -484,10 +547,8 @@ end
 ---@param root string the folder jj runs in
 ---@param show fun(argv: string[])? nil when unset, called with the command before it runs
 local function drop_git_record(root, show)
-    local ask = vcs.with(vcs.base(root, vcs.JJ), "git", "root")
-    local dir, code = dev_os.capture(ask, { stderr = "null" })
-    dir = dir:gsub("%s+$", "")
-    if code ~= 0 or not dir:find("/%.git$") then
+    local dir = colocated_git_dir(root)
+    if dir == nil then
         return
     end
     local argv = { "git", "--git-dir", dir, "worktree", "prune" }

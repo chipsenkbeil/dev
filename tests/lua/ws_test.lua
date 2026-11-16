@@ -15,7 +15,7 @@ local JJ_STUB = [[#!/bin/sh
 if [ "$1" = "--no-pager" ]; then shift; fi
 if [ "$1" = root ]; then pwd; exit 0; fi
 case "$*" in
-    *" git root") echo .git; exit 0 ;;
+    *" git root") echo "${GIT_ROOT:-.git}"; exit 0 ;;
     *" git remote list") printf '%s' "$REMOTES"; exit 0 ;;
     *" git fetch "*) echo "jj $*" >> "$LOG"; printf '%s' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;
     *" workspace update-stale") echo "jj $*" >> "$LOG"; exit 0 ;;
@@ -326,6 +326,76 @@ testing.test("new refuses a path that exists", function()
     testing.eq(code, 1)
     testing.eq(out, path .. " already exists.\n")
     testing.eq(fs.exists(log), false)
+end)
+
+local LIST_GIT_STUB = [[#!/bin/sh
+case "$*" in
+    *"worktree list"*) printf '%s' "$WORKTREES"; exit 0 ;;
+esac
+echo "git $*" >> "$LOG"
+]]
+
+local function record(path, note)
+    return table.concat({
+        "worktree " .. path,
+        "HEAD x",
+        "branch refs/heads/x",
+        note,
+        "",
+        "",
+    }, "\n")
+end
+
+local function stale_setup(others)
+    local root, path, env, log = setup("jj")
+    stub(root, "git", LIST_GIT_STUB)
+    env.env.GIT_ROOT = root .. "/.git"
+    env.env.WORKTREES = "worktree " .. root .. "\nHEAD x\n\n" .. record(path, "prunable gone")
+    for _, other in ipairs(others) do
+        env.env.WORKTREES = env.env.WORKTREES .. record(other, "prunable gone")
+    end
+    return root, path, env, log
+end
+
+testing.test("new prunes the stale git record of its own path", function()
+    -- Leave the git record of a removed workspace behind
+    local root, path, env, log = stale_setup({})
+
+    -- Make the workspace again
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect the prune before the workspace add
+    testing.eq(code, 0, out)
+    local prune = "git --git-dir " .. root .. "/.git worktree prune\n"
+    local add = "jj -R " .. root .. " workspace add --name feat -r trunk() " .. path .. "\n"
+    testing.ok(fs.read(log):find(prune .. add, 1, true) ~= nil, fs.read(log))
+end)
+
+testing.test("new keeps the record of another removed workspace", function()
+    -- Leave a second gone record beside the one for the path
+    local root, path, env, log = stale_setup({ "/gone/other" })
+
+    -- Make the workspace again
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a refusal naming the other record and no prune or add
+    testing.eq(code, 1)
+    testing.ok(out:find("/gone/other", 1, true) ~= nil, out)
+    testing.ok(fs.read(log):find("worktree prune", 1, true) == nil, fs.read(log))
+    testing.eq(fs.exists(path), false)
+end)
+
+testing.test("new runs no prune when git holds no record of its path", function()
+    -- List only a live worktree
+    local root, _, env, log = stale_setup({})
+    env.env.WORKTREES = "worktree " .. root .. "\nHEAD x\n\n"
+
+    -- Make the workspace
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect no prune
+    testing.eq(code, 0, out)
+    testing.ok(fs.read(log):find("worktree prune", 1, true) == nil, fs.read(log))
 end)
 
 testing.test("DEV_WS_ROOT moves the root and the default is under HOME", function()

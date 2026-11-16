@@ -71,8 +71,11 @@ Otherwise it works by project kind:
   adds nothing. The fetch, the remote listing and the `jj git root` read run
   with `--ignore-working-copy`, so a stale calling workspace does not stop
   them. The calling workspace then runs
-  `jj workspace update-stale`, which changes nothing in a fresh one, and the
-  project gets `jj workspace add --name NAME -r trunk()`.
+  `jj workspace update-stale`, which changes nothing in a fresh one. In a
+  colocated project, a prunable git worktree record for the path of NAME is
+  pruned first, but when another prunable record would drop with it the verb
+  exits 1 and names it. The project then gets
+  `jj workspace add --name NAME -r trunk()`.
 - A git project fetches its remote of record the same way (`git fetch
   NAME`), and a failed fetch exits 1 and adds nothing. It then gets
   `git worktree add --no-track -b NAME PATH REMOTE/TRUNK`, where TRUNK is the
