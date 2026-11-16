@@ -669,9 +669,14 @@ local function read(root, name)
     return fs.read(root .. "/" .. name) or ""
 end
 
+local function calls_of(root)
+    local joined = read(root, "calls"):gsub("\nretry%-after:%%header{retry%-after}", "")
+    return (joined:gsub("\n%%", " %%"))
+end
+
 local function writes(root)
     local count = 0
-    for line in read(root, "calls"):gsub("\n%%", " %%"):gmatch("[^\n]+") do
+    for line in calls_of(root):gmatch("[^\n]+") do
         if
             line:find("-X PATCH", 1, true)
             or (
@@ -856,10 +861,6 @@ testing.test("init refuses an unknown flag and a stray argument", function()
     _, code = dev(root, home, tmp, { "board", "init", "extra" })
     testing.eq(code, 2)
 end)
-
-local function calls_of(root)
-    return (read(root, "calls"):gsub("\n%%", " %%"))
-end
 
 testing.test("init on Pomb posts a landing turn card only when no open one exists", function()
     local function posts(export)

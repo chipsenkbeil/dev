@@ -3689,8 +3689,11 @@ Failures:
   on standard error once per call, resets the failure count and retries with a
   pause of 30, 60, 120, 240 and then 300 seconds, each cut by up to a quarter
   with a random fraction. A reply starts the pause over.
-- a 429 with another code is a plain refusal. Any other refusal exits 1 at
-  once.
+- a 429 with another code is a rate limit. Every Pomb request waits the
+  `Retry-After` seconds, or the `retry_after` of the body, or one second, each
+  wait cut at 5 seconds, and sends again up to 3 times within 10 seconds of
+  waiting. A 429 that outlasts them is a plain refusal. Any other refusal
+  exits 1 at once.
 
 `wait` is not in the queue rules, and a reply with no matching event loops
 again. `tests/lua/board_test.lua` covers it with a fake backend and stub

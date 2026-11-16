@@ -8381,6 +8381,85 @@ testing.test(
     end
 )
 
+local RATE_LIMITED_CURL = [[#!/bin/sh
+printf 'curl\n' >>"$ROOT/calls"
+cat >/dev/null
+n=$(cat "$ROOT/count" 2>/dev/null || echo 0)
+n=$((n + 1))
+echo "$n" >"$ROOT/count"
+if [ "$n" -le "$LIMITED" ]; then
+    printf '%s\nretry-after:%s\n429' "$BODY" "$HINT"
+else
+    printf '{"name":"x"}\n200'
+fi
+]]
+
+local function rate_limited(limited, hint, body)
+    local root, home = sandbox()
+    executable(root .. "/bin/curl", RATE_LIMITED_CURL)
+    local script = string.format(
+        "package.path = %q; local dev_os = require('dev.os'); local naps = {}; "
+            .. "dev_os.nap = function(seconds) naps[#naps + 1] = seconds end; "
+            .. "local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+            .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
+            .. "local got, message = b:whoami(); "
+            .. "print(json.encode({name = got and got.name, message = message, naps = naps}))",
+        support.absolute_path()
+    )
+    local out, code = dev_os.capture({ "luajit", "-e", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            HOME = home,
+            ROOT = root,
+            LIMITED = tostring(limited),
+            HINT = hint,
+            BODY = body or '{"code":"rate_limited","message":"slow down"}',
+            DEV_PASS_LOCK = root .. "/pass.lock",
+        },
+        stderr = "stdout",
+    })
+    testing.eq(code, 0, out)
+    local result = assert(require("dev.json").decode(out), out)
+    result.calls = select(2, read(root, "calls"):gsub("curl\n", ""))
+    return result
+end
+
+testing.test("a 429 followed by success completes the call after the hinted wait", function()
+    local result = rate_limited(1, "2")
+    testing.eq(result.name, "x")
+    testing.eq(result.naps, { 2 })
+    testing.eq(result.calls, 2)
+end)
+
+testing.test("a 429 past the retry cap fails with the rate limit message", function()
+    local result = rate_limited(9, "1")
+    testing.eq(result.name, nil)
+    testing.eq(result.message, "board unavailable: pomb answered 429: slow down")
+    testing.eq(result.naps, { 1, 1, 1 })
+    testing.eq(result.calls, 4)
+end)
+
+testing.test(
+    "a 429 wait follows the Retry-After hint, then the body hint, then one second",
+    function()
+        testing.eq(rate_limited(1, "3").naps, { 3 })
+        testing.eq(rate_limited(1, "", '{"code":"rate_limited","retry_after":2}').naps, { 2 })
+        testing.eq(rate_limited(1, "").naps, { 1 })
+    end
+)
+
+testing.test("a 429 wait is capped for each try and in total", function()
+    local result = rate_limited(9, "99")
+    testing.eq(result.naps, { 5, 5 })
+    testing.eq(result.calls, 3)
+end)
+
+testing.test("a 429 for too many waits is never retried", function()
+    local result = rate_limited(9, "1", '{"code":"too_many_waits","message":"end one"}')
+    testing.eq(result.naps, {})
+    testing.eq(result.calls, 1)
+end)
+
 local function waiter(replies)
     local seen = { afters = {}, kinds = {}, timeouts = {}, naps = {}, notices = {} }
     local backend = {}

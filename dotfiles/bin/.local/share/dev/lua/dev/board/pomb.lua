@@ -34,6 +34,10 @@ local GONE = 410
 local CURSOR_EXPIRED = "cursor_expired"
 local TOO_MANY_REQUESTS = 429
 local TOO_MANY_WAITS = "too_many_waits"
+local RATE_RETRIES = 3
+local RATE_DEFAULT_SECONDS = 1
+local RATE_PAUSE_SECONDS = 5
+local RATE_TOTAL_SECONDS = 10
 local TIMED_OUT = 124
 local TOKEN_PATTERN = "^[%w%._~%+/=-]+$"
 local ENTRY_PATTERN = "^[%w_./][%w_. /-]*$"
@@ -109,6 +113,7 @@ local M = {}
 ---@field private __secret string? the token, nil until the first request
 ---@field private __healed boolean? nil until a refused Keychain token is replaced
 ---@field private __filed boolean? true when the token came from the role token file
+---@field private __limited {tries: integer, waited: number}? retries used and seconds waited
 ---@field private __reread boolean? true once an expired file token has been looked up again
 ---@field private __detail dev.board.pomb.Detail? the board with its columns
 ---@field private __colors table<string, string>? palette labels by colour id
@@ -370,7 +375,7 @@ function Backend:__request(method, path, body, fence, seconds, file)
         "-X",
         method,
         "-w",
-        "\n%{http_code}",
+        "\nretry-after:%header{retry-after}\n%{http_code}",
     }
     if file then
         argv[#argv + 1] = "-F"
@@ -394,9 +399,13 @@ function Backend:__request(method, path, body, fence, seconds, file)
         { unset = CHILD_UNSET, stderr = "null" }
     )
     if code ~= 0 then
+        self.__limited = nil
         return nil, unavailable("cannot reach " .. self.__opts.url .. " (curl exit " .. code .. ")")
     end
-    local text, status = out:match("^(.*)\n(%d+)$")
+    local text, hint, status = out:match("^(.*)\nretry%-after:([^\n]*)\n(%d+)$")
+    if not text then
+        text, status = out:match("^(.*)\n(%d+)$")
+    end
     local doc
     if text == "" then
         doc = true
@@ -405,7 +414,20 @@ function Backend:__request(method, path, body, fence, seconds, file)
     end
     status = tonumber(status)
     if not status or doc == nil then
+        self.__limited = nil
         return nil, unavailable("pomb sent an answer dev cannot read")
+    end
+    if status ~= TOO_MANY_REQUESTS then
+        self.__limited = nil
+    end
+    local waits = type(doc) == "table" and doc.code == TOO_MANY_WAITS
+    if status == TOO_MANY_REQUESTS and not waits then
+        local pause =
+            self:__cooldown(tonumber(hint) or type(doc) == "table" and tonumber(doc.retry_after))
+        if pause then
+            dev_os.nap(pause)
+            return self:__request(method, path, body, fence, seconds, file)
+        end
     end
     local expired = status == UNAUTHORIZED and type(doc) == "table" and doc.code == TOKEN_EXPIRED
     if expired and self.__filed and not self.__reread then
@@ -451,6 +473,21 @@ function Backend:__request(method, path, body, fence, seconds, file)
         return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail)), status, doc
     end
     return doc
+end
+
+---Pick how long to wait before sending a request again after a 429.
+---@private
+---@param hint number? the seconds Pomb asked for, nil when it gave none
+---@return number? seconds the wait, nil when the retries or the total wait are used up
+function Backend:__cooldown(hint)
+    local spent = self.__limited or { tries = 0, waited = 0 }
+    local pause = math.min(math.max(hint or RATE_DEFAULT_SECONDS, 0), RATE_PAUSE_SECONDS)
+    if spent.tries >= RATE_RETRIES or spent.waited + pause > RATE_TOTAL_SECONDS then
+        self.__limited = nil
+        return nil
+    end
+    self.__limited = { tries = spent.tries + 1, waited = spent.waited + pause }
+    return pause
 end
 
 ---Read the token's role name from whoami, once, and only for a refusal.
