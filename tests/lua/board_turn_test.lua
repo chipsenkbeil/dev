@@ -945,6 +945,24 @@ testing.test("a holder whose live claim outran its hold note releases the claim"
     testing.eq(turn.claimed(backend, "alpha", short), nil)
 end)
 
+testing.test("a failed release through the turn verb prints one sentence", function()
+    -- Open a board, reclaim its landing card and fail the release
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    reclaimed(backend, "alpha", short)
+    backend.release = function()
+        return nil, "the claim is stuck"
+    end
+
+    -- Release as the holder and expect the release sentence alone
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--release" }, backend)
+    end)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "The landing turn could not be released. The claim is stuck.")
+end)
+
 testing.test("a turn hold over 3600 is refused", function()
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)

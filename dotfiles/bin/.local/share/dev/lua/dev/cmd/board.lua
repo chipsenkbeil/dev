@@ -3108,7 +3108,7 @@ function commands.turn(backend, args)
         end
         local released, reason = turn.release(backend, hold)
         if not released then
-            return failure("The landing turn held for " .. short .. " was not released. " .. reason)
+            return failure(reason)
         end
         return { output = "Gave back the landing turn held for " .. short .. "." }
     end
