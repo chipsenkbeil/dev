@@ -104,6 +104,9 @@ local KIND_DONE = "done"
 local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
 local PAST_HOLD_SECONDS = 2.2
+local HELD_LEASE_SECONDS = 600
+local TURN_CAP_SECONDS = 1
+local PAST_CAP_SECONDS = 2
 local CHECK_WAIT_SECONDS = 60
 local CHECK_STOP_SECONDS = 300
 local SHARED = "a\nb\nc\nd\ne\nf\ng\n"
@@ -2441,6 +2444,51 @@ if has_jj then
         local out, code = dev(project, { "board", "turn", id, "--release" })
         testing.eq(code, 0, out)
         testing.eq(turn_holder(project.home), nil)
+    end)
+
+    testing.test("turn refuses a hold kept past its cap and frees the turn", function()
+        local project = jj_project()
+        local id = in_verify(project)
+        must(dev(project, { "board", "turn", id, "--hold", tostring(HELD_LEASE_SECONDS) }))
+        local backend, restore = board_at(project.home)
+        backend.root = project.root
+        local now, cap = store.now, turn.MAX_HOLD_SECONDS
+        local later = now() + PAST_CAP_SECONDS
+        store.now = function()
+            return later
+        end
+        turn.MAX_HOLD_SECONDS = TURN_CAP_SECONDS
+        local previous = os.getenv("DEV_AGENT") or ""
+        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
+        local ok, result =
+            pcall(cmd_board.run, "turn", { id, "--hold", tostring(TURN_CAP_SECONDS) }, backend)
+        ffi.C.setenv("DEV_AGENT", previous, 1)
+        turn.MAX_HOLD_SECONDS = cap
+        store.now = now
+        restore()
+        assert(ok, result)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("the most it may be kept", 1, true), result.message)
+        testing.eq(turn_holder(project.home), nil)
+        local out, code = dev(project, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" })
+        testing.eq(code, 0, out)
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/other")
+    end)
+
+    testing.test("a failed jj land under a hold keeps the hold with the kept line", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        must(dev(project, { "board", "turn", id }))
+        local out, code = dev(
+            project,
+            { "board", "land", id },
+            { LAND_CODE = "1", LAND_MSG = "boom" }
+        )
+        testing.eq(code, 1, out)
+        testing.ok(out:find("boom", 1, true), out)
+        testing.ok(out:find("turn you hold for " .. id .. " stays held", 1, true), out)
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
     end)
 
     testing.test("another check does not block a land", function()
