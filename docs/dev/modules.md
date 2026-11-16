@@ -68,7 +68,11 @@ Otherwise it works by project kind:
 
 - A jj project first fetches its remote of record (`forge.resolve`, then
   `jj git fetch --remote NAME`). A failed fetch exits 1 with its output and
-  adds nothing. It then gets `jj workspace add --name NAME -r trunk()`.
+  adds nothing. The fetch, the remote listing and the `jj git root` read run
+  with `--ignore-working-copy`, so a stale calling workspace does not stop
+  them. The calling workspace then runs
+  `jj workspace update-stale`, which changes nothing in a fresh one, and the
+  project gets `jj workspace add --name NAME -r trunk()`.
 - A git project fetches its remote of record the same way (`git fetch
   NAME`), and a failed fetch exits 1 and adds nothing. It then gets
   `git worktree add --no-track -b NAME PATH REMOTE/TRUNK`, where TRUNK is the

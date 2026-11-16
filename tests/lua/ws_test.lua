@@ -6,6 +6,7 @@ local support = require("support")
 
 local DONE_ID = "aaaaaaaa"
 local OPEN_ID = "bbbbbbbb"
+local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
 local JJ_STUB = [[#!/bin/sh
 if [ "$1" = "--no-pager" ]; then shift; fi
@@ -14,6 +15,7 @@ case "$*" in
     *" git root") echo .git; exit 0 ;;
     *" git remote list") printf '%s' "$REMOTES"; exit 0 ;;
     *" git fetch "*) echo "jj $*" >> "$LOG"; printf '%s' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;
+    *" workspace update-stale") echo "jj $*" >> "$LOG"; exit 0 ;;
 esac
 echo "jj $*" >> "$LOG"
 mkdir -p "$(eval echo \$$#)"
@@ -73,7 +75,10 @@ testing.test("new in a jj project fetches the remote of record first", function(
         fs.read(log),
         "jj --color never -R "
             .. root
-            .. " git fetch --remote origin\n"
+            .. " --ignore-working-copy git fetch --remote origin\n"
+            .. "jj -R "
+            .. root
+            .. " workspace update-stale\n"
             .. "jj -R "
             .. root
             .. " workspace add --name feat -r trunk() "
@@ -98,7 +103,10 @@ testing.test("new in a jj project fetches the gerrit remote of record", function
         fs.read(log),
         "jj --color never -R "
             .. root
-            .. " git fetch --remote gerrit\n"
+            .. " --ignore-working-copy git fetch --remote gerrit\n"
+            .. "jj -R "
+            .. root
+            .. " workspace update-stale\n"
             .. "jj -R "
             .. root
             .. " workspace add --name feat -r trunk() "
@@ -119,10 +127,72 @@ testing.test("new in a jj project stops at a failed fetch with no workspace", fu
     -- Expect the failure reported and no workspace folder left behind
     testing.eq(code, 1)
     testing.eq(out, "The fetch from origin failed: error: could not connect.\n")
-    testing.eq(fs.read(log), "jj --color never -R " .. root .. " git fetch --remote origin\n")
+    testing.eq(
+        fs.read(log),
+        "jj --color never -R " .. root .. " --ignore-working-copy git fetch --remote origin\n"
+    )
     testing.eq(fs.exists(path), false)
     testing.eq(fs.exists(fs.dirname(path)), false)
 end)
+
+local function real_jj(root, ...)
+    return dev_os.capture(
+        { "jj", "--no-pager", "--color", "never", "-R", root, ... },
+        { stderr = "stdout", env = IDENT }
+    )
+end
+
+if dev_os.which("jj") then
+    testing.test("new from a stale jj workspace makes the workspace and exits 0", function()
+        -- Make a real jj project with an empty remote
+        local root = support.sandbox({}, {})
+        local bare = support.tempdir()
+        local bare_init = dev_os.run({ "git", "init", "--bare", "-q", bare }, { stdout = "null" })
+        assert(bare_init == 0, "git init failed")
+        local init = { stdout = "null", stderr = "null", env = IDENT }
+        assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj git init failed")
+        real_jj(root, "git", "remote", "add", "origin", bare)
+
+        -- Track a file, add a second workspace and note the operation before the project moves on
+        assert(fs.write(root .. "/first", "1"))
+        local _, code = real_jj(root, "status")
+        testing.eq(code, 0)
+        local other = support.tempdir() .. "/other"
+        _, code = real_jj(root, "workspace", "add", other)
+        testing.eq(code, 0)
+        local before =
+            real_jj(root, "--ignore-working-copy", "op", "log", "--no-graph", "-n", "1", "-T", "id")
+
+        -- Move the project on with a second tracked file, then restore the earlier operation
+        _, code = real_jj(root, "new")
+        testing.eq(code, 0)
+        assert(fs.write(root .. "/second", "2"))
+        _, code = real_jj(root, "status")
+        testing.eq(code, 0)
+        _, code = real_jj(other, "--ignore-working-copy", "op", "restore", before)
+        testing.eq(code, 0)
+        local status, status_code = real_jj(root, "status")
+        testing.eq(status_code, 1, status)
+        testing.ok(status:find("The working copy is stale", 1, true) ~= nil, status)
+
+        -- Create the workspace from the stale project
+        local ws = support.tempdir()
+        local env = {
+            env = {
+                DEV_WS_ROOT = ws,
+                JJ_FORGE = "",
+                JJ_USER = IDENT.JJ_USER,
+                JJ_EMAIL = IDENT.JJ_EMAIL,
+            },
+        }
+        local out, new_code = support.dev(root, { "ws", "new", "feat" }, env)
+
+        -- Expect the workspace made at its path and exit 0
+        local path = ws .. "/" .. fs.basename(root) .. "/feat"
+        testing.eq(new_code, 0, out)
+        testing.ok(fs.exists(path .. "/.jj"), out)
+    end)
+end
 
 testing.test("new in a jj project refuses a missing remote of record", function()
     -- Leave the project with no remotes

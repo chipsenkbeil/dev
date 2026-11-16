@@ -10,6 +10,7 @@ local verb = require("dev.verb")
 local M = { handlers = {} }
 
 local EMPTY_HEADS = "heads(mutable()) & empty()"
+local IGNORE_WORKING_COPY = "--ignore-working-copy"
 local STRAY_HEADS = "heads(mutable()) ~ empty()"
 local HELD_BY_REF = " ~ bookmarks() ~ remote_bookmarks() ~ tags()"
 local STALE_BOOKMARKS = "bookmarks() ~ ::trunk()"
@@ -78,7 +79,7 @@ local function fetch_trunk(ctx)
     end
     local argv = vcs.base(ctx.root, backend, { quiet = true })
     if backend == vcs.JJ then
-        argv = vcs.with(argv, "git", "fetch", "--remote", found.remote)
+        argv = vcs.with(argv, IGNORE_WORKING_COPY, "git", "fetch", "--remote", found.remote)
     else
         argv = vcs.with(argv, "fetch", found.remote)
     end
@@ -164,6 +165,14 @@ M.handlers["ws new"] = function(ctx)
     local made, why = fs.mkdir(fs.dirname(path), { parents = true })
     if not made then
         verb.die(sentence(why))
+    end
+    if vcs.backend(ctx.root) == vcs.JJ then
+        local refresh = vcs.with(vcs.base(ctx.root, vcs.JJ), "workspace", "update-stale")
+        verb.show(ctx, refresh)
+        local refreshed = dev_os.run(refresh) or 1
+        if refreshed ~= 0 then
+            return refreshed
+        end
     end
     local argv = plan(ctx.root, name, path, { start = start })
     if argv == nil then

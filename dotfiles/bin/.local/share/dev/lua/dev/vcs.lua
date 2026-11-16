@@ -12,6 +12,8 @@ local fs = require("dev.fs")
 ---@field LABEL table<dev.vcs.Backend, string> the backend's name at the start of a message
 local M = { JJ = "jj", GIT = "git", LABEL = { jj = "jj", git = "Git" } }
 
+local IGNORE_WORKING_COPY = "--ignore-working-copy"
+
 local function lines_of(text)
     local out = {}
     for line in text:gmatch("[^\n]+") do
@@ -83,7 +85,8 @@ end
 ---@return string[] names the remotes, empty when the listing fails
 function M.remotes(root, backend)
     local base = M.base(root, backend, { quiet = true })
-    local argv = backend == M.JJ and M.with(base, "git", "remote", "list") or M.with(base, "remote")
+    local argv = backend == M.JJ and M.with(base, IGNORE_WORKING_COPY, "git", "remote", "list")
+        or M.with(base, "remote")
     local out, code = dev_os.capture(argv)
     if code ~= 0 then
         return {}
@@ -211,7 +214,8 @@ end
 function M.config(root, backend, key)
     local argv
     if backend == M.JJ then
-        local dir = dev_os.capture(M.with(M.base(root, backend), "git", "root"))
+        local dir =
+            dev_os.capture(M.with(M.base(root, backend), IGNORE_WORKING_COPY, "git", "root"))
         argv = { "git", "--git-dir=" .. dir:gsub("\n$", ""), "config", "--get", key }
     else
         argv = { "git", "-C", root, "config", "--get", key }
