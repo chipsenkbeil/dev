@@ -129,12 +129,15 @@ testing.test(
         local result = cmd_board.run("lint", {}, backend(cards))
         testing.eq(result.code, 1)
         testing.eq(findings(result.output), {
-            "00000001 Backlog lacks text under ## Change",
-            "00000002 Ready lacks a Problem free of Change: and Out of scope: lines",
-            "00000004 Backlog lacks a Problem free of Change: and Out of scope: lines",
+            "00000001 Backlog lacks " .. board.TEXT_UNDER .. "Change",
+            "00000002 Ready lacks " .. board.MISPLACED,
+            "00000004 Backlog lacks " .. board.MISPLACED,
         })
         result = cmd_board.run("lint", { "--strict" }, backend({ cards[5] }))
-        testing.eq(findings(result.output), { "00000005 Done lacks text under ## Change" })
+        testing.eq(
+            findings(result.output),
+            { "00000005 Done lacks " .. board.TEXT_UNDER .. "Change" }
+        )
     end
 )
 

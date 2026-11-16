@@ -2356,7 +2356,7 @@ testing.test(
             backend
         )
         testing.eq(result.code, 2)
-        testing.ok(result.message:find("text under ## Change", 1, true), result.message)
+        testing.ok(result.message:find(board.TEXT_UNDER .. "Change", 1, true), result.message)
         testing.eq(#backend.calls, 0)
         cmd_board.run("add", { "X", "--description", V1, "--size", "1" }, backend)
         testing.eq(backend.calls[1][4], V1)
@@ -2532,10 +2532,10 @@ testing.test("missing and backlog_missing count a heading with text, not an empt
     testing.eq(board.backlog_missing(nil), { "## Problem", "## Change", "## Out of scope" })
     testing.eq(board.missing(V1, 0, 0), {})
     testing.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3, 0), {
-        "text under ## Change",
+        board.TEXT_UNDER .. "Change",
     })
     testing.eq(board.missing("## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", 3, 0), {
-        "text under ## Out of scope",
+        board.TEXT_UNDER .. "Out of scope",
     })
     testing.eq(board.missing(V2, 3, 0), {})
 end)
@@ -2545,11 +2545,11 @@ testing.test(
     function()
         testing.eq(board.shapes(V2), {})
         testing.eq(board.shapes("## Problem\nx\n\n## Change\n\n## Out of scope\n"), {
-            "text under ## Change",
-            "text under ## Out of scope",
+            board.TEXT_UNDER .. "Change",
+            board.TEXT_UNDER .. "Out of scope",
         })
         testing.eq(board.shapes("## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn"), {
-            "a Problem free of Change: and Out of scope: lines",
+            board.MISPLACED,
         })
         testing.eq(board.shapes("## Problem\nChanged: y\n\n## Change\nc\n\n## Out of scope\nn"), {})
     end
@@ -2559,15 +2559,21 @@ testing.test(
     "move to Ready refuses an empty Change or Out of scope and accepts all three",
     function()
         for _, case in ipairs({
-            { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", "text under ## Change" },
-            { "## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", "text under ## Out of scope" },
+            {
+                "## Problem\nx\n\n## Change\n\n## Out of scope\nn",
+                board.TEXT_UNDER .. "Change",
+            },
+            {
+                "## Problem\nx\n\n## Change\ny\n\n## Out of scope\n",
+                board.TEXT_UNDER .. "Out of scope",
+            },
             {
                 "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn",
-                "a Problem free of Change: and Out of scope: lines",
+                board.MISPLACED,
             },
             {
                 "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn",
-                "a Problem free of Change: and Out of scope: lines",
+                board.MISPLACED,
             },
         }) do
             local card = colored("green")
@@ -2596,9 +2602,9 @@ testing.test(
 
 ---Card descriptions with an empty section or a misplaced line, each with the refusal text it draws
 local SHAPE_CASES = {
-    { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", "text under ## Change" },
-    { "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn", "a Problem free of" },
-    { "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn", "a Problem free of" },
+    { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", board.TEXT_UNDER .. "Change" },
+    { "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn", board.MISPLACED },
+    { "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn", board.MISPLACED },
 }
 
 testing.test("move into In Progress refuses an empty section or a misplaced line", function()
@@ -2616,9 +2622,9 @@ end)
 
 testing.test("add to Backlog refuses an empty section or a misplaced line", function()
     for _, case in ipairs({
-        { { "--problem", "x", "--change", "c" }, "text under ## Out of scope" },
-        { { "--problem", "x", "--out-of-scope", "n" }, "text under ## Change" },
-        { { "--description", SHAPE_CASES[2][1] }, "a Problem free of" },
+        { { "--problem", "x", "--change", "c" }, board.TEXT_UNDER .. "Out of scope" },
+        { { "--problem", "x", "--out-of-scope", "n" }, board.TEXT_UNDER .. "Change" },
+        { { "--description", SHAPE_CASES[2][1] }, board.MISPLACED },
     }) do
         local args = { "X", "--column", support.COLUMN.BACKLOG, "--size", "1", "--done-when", "a" }
         for _, word in ipairs(case[1]) do

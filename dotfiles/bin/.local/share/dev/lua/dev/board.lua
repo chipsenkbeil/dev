@@ -771,6 +771,15 @@ local CHANGE = M.HEADINGS[2]
 local OUT_OF_SCOPE = M.HEADINGS[3]
 local DONE_WHEN = "Done when"
 
+---The start of a refusal for a section with no text.
+M.TEXT_UNDER = "text under ## "
+
+---The refusal for a Problem that holds a Change or Out of scope line.
+M.MISPLACED = "a " .. PROBLEM .. " free of " .. CHANGE .. ": and " .. OUT_OF_SCOPE .. ": lines"
+
+---The line patterns that mark a Change or Out of scope line misplaced in a Problem.
+local MISPLACED_LINES = { "^%s*" .. CHANGE .. ":", "^%s*" .. OUT_OF_SCOPE .. ":" }
+
 local function lines_of(description)
     return ((description or "") .. "\n"):gmatch("(.-)\n")
 end
@@ -946,7 +955,7 @@ function M.backlog_missing(description)
     end
     local problem = M.HEADINGS[1]
     if seen[problem] and not filled[problem] then
-        missing[#missing + 1] = "text under ## " .. problem
+        missing[#missing + 1] = M.TEXT_UNDER .. problem
     end
     return missing
 end
@@ -960,7 +969,7 @@ function M.shapes(description)
     local shapes = {}
     for _, heading in ipairs({ CHANGE, OUT_OF_SCOPE }) do
         if seen[heading] and not filled[heading] then
-            shapes[#shapes + 1] = "text under ## " .. heading
+            shapes[#shapes + 1] = M.TEXT_UNDER .. heading
         end
     end
     local current, misplaced = nil, false
@@ -968,14 +977,14 @@ function M.shapes(description)
         local name = heading_of(line)
         if name then
             current = name
-        elseif
-            current == PROBLEM and (line:find("^%s*Change:") or line:find("^%s*Out of scope:"))
-        then
-            misplaced = true
+        elseif current == PROBLEM then
+            for _, pattern in ipairs(MISPLACED_LINES) do
+                misplaced = misplaced or line:find(pattern) ~= nil
+            end
         end
     end
     if misplaced then
-        shapes[#shapes + 1] = "a Problem free of Change: and Out of scope: lines"
+        shapes[#shapes + 1] = M.MISPLACED
     end
     return shapes
 end
@@ -1125,7 +1134,7 @@ function M.missing(description, outcomes, children, epic)
         if not seen[heading] then
             missing[#missing + 1] = "## " .. heading
         elseif heading == PROBLEM and not filled[heading] then
-            missing[#missing + 1] = "text under ## " .. heading
+            missing[#missing + 1] = M.TEXT_UNDER .. heading
         end
     end
     for _, shape in ipairs(M.shapes(description)) do
