@@ -37,7 +37,7 @@ end
 
 ---Install a tool with dnf, enabling its COPR first for a `copr:` cell.
 ---@param row dev.pkg.Row the tool
----@param opts dev.pkg.lib.install.Opts the flags
+---@param opts dev.pkg.driver.install.Opts the flags
 ---@return integer code 0 on success
 function M.install(row, opts)
     local verb = Verb.INSTALL
