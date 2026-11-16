@@ -3913,7 +3913,7 @@ function commands.stale(backend, args, now)
     table.sort(planner, oldest)
     table.sort(nobody, oldest)
     local listed = {}
-    for _, list in ipairs({ found, moved }) do
+    for _, list in ipairs({ found, moved, lead, planner }) do
         for _, item in ipairs(list) do
             listed[item.id] = true
         end

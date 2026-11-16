@@ -4321,6 +4321,22 @@ testing.test("next --column blocked skips a needs:human card and a claimed one",
     )
 end)
 
+testing.test("stale lists a needs:lead card with an owner comment once", function()
+    -- Age a Blocked needs:lead card and let the owner comment last
+    local cards, times = aged({ support.COLUMN_NAME.BLOCKED }, { 0 }, { { "needs:lead" } })
+    times[cards[1].id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", NOW - 3 * box.SECONDS_PER_HOUR)
+    local backend = fake(cards, times)
+    function backend:comments()
+        return { { actor = "human", at = "2026-01-01T00:00:00Z", body = "yes" } }
+    end
+
+    -- Expect the lead list alone and no owner-comment list
+    testing.eq(
+        cmd_board.run("stale", {}, backend, NOW).output,
+        "No stale cards.\n\nfor a lead (needs:lead):\n00000001  Blocked  3h  unsized  Card 1"
+    )
+end)
+
 testing.test("stale lists a Blocked needs:planner card apart from the lead ones", function()
     local planner = { "needs:planner" }
     local cards, times = aged({
