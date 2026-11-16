@@ -1,6 +1,7 @@
 local bit = require("bit")
 local board = require("dev.board")
 local dev_os = require("dev.os")
+local json = require("dev.json")
 local registry = require("dev.registry")
 local vcs = require("dev.vcs")
 
@@ -42,6 +43,7 @@ local REMOTE_FLAG = "--remote"
 local CI_COMMAND = "ci"
 local DEV_COMMAND = "dev"
 local DOUBLE_DASH = "--"
+local STATE_SECONDS = 20
 
 ---How a checks row ended.
 M.RESULT = { PASS = "pass", FAIL = "fail", TIMEOUT = "timeout", ERROR = "error" }
@@ -318,6 +320,19 @@ function M.never_started(argv, code, run_id)
     return is_remote(argv)
 end
 
+---Say what state the ci run of a row that hit its limit was in.
+---@param run_id string the ci run id the row printed
+---@return string reason one sentence for the record, short enough to keep
+local function timeout_reason(run_id)
+    local out, code = dev_os.capture_timed({ CI_COMMAND, "ps", run_id, "--json" }, STATE_SECONDS)
+    local doc = code == 0 and json.decode(out) or nil
+    local status = type(doc) == "table" and doc.status or nil
+    if type(status) ~= "string" then
+        return "the ci run state could not be read at the limit"
+    end
+    return "the ci run was " .. status .. " at the limit and may still finish"
+end
+
 ---Run one checks row to its end or its time limit.
 ---@param opts dev.board.check.run.Opts the row and where it runs
 ---@return dev.board.check.Row row how it ended
@@ -369,6 +384,10 @@ function M.run(opts)
     end
     if result == M.RESULT.FAIL and not run_id and not negated then
         reason = last_line(output)
+    end
+    if result == M.RESULT.TIMEOUT and run_id then
+        reason = timeout_reason(run_id)
+        note = note or (reason:sub(1, 1):upper() .. reason:sub(2) .. ".")
     end
     if opts.expect_fail and not refused and M.never_started(opts.argv, code, run_id) then
         result = M.RESULT.ERROR

@@ -510,6 +510,35 @@ testing.test("check ends a row at the time limit and records a timeout", functio
     testing.eq(code, 2, out)
 end)
 
+local function fake_ci(body)
+    local bin = support.tempdir() .. "/bin"
+    assert(fs.mkdir(bin, { parents = true }), "mkdir failed")
+    assert(fs.write(bin .. "/ci", "#!/bin/sh\n" .. body .. "\n"), "write failed")
+    must(dev_os.run({ "chmod", "755", bin .. "/ci" }))
+    return { PATH = bin .. ":" .. os.getenv("PATH") }
+end
+
+local function slow_row(ci_body)
+    local root, home = git_root({ ["slow.sh"] = "echo run 8cb600\nsleep 30\n" })
+    local id = card_with(root, home, { "sh slow.sh" })
+    local env = fake_ci(ci_body)
+    local out, code = dev(root, home, { "board", "check", id, "--timeout", "2" }, nil, env)
+    testing.eq(code, 1, out)
+    return comments(home)[1].body, out
+end
+
+testing.test("a timeout row records the state of its ci run", function()
+    local body, out = slow_row([[echo '{"status":"running"}']])
+    local reason = "the ci run was running at the limit and may still finish"
+    testing.ok(body:find("1 timeout 8cb600\n  " .. reason, 1, true), body)
+    testing.ok(out:find("The ci run was running at the limit", 1, true), out)
+end)
+
+testing.test("a timeout row says when the ci state is unreadable", function()
+    local body = slow_row("exit 1")
+    testing.ok(body:find("the ci run state could not be read at the limit", 1, true), body)
+end)
+
 testing.test("the default row limit is two hours and within the most --timeout accepts", function()
     testing.eq(check.DEFAULT_SECONDS, 7200)
     testing.ok(check.DEFAULT_SECONDS <= check.MAX_SECONDS)

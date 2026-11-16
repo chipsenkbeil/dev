@@ -2382,6 +2382,10 @@ How a row runs:
   long queue.
 - A row that outlasts it is killed and recorded as `timeout`, as is a row that
   exits 124 or is killed from outside.
+- When a timed-out row printed a ci run id, dev reads the run's state with
+  `ci ps RUN --json`. The record puts one reason line under the row, for
+  example `the ci run was running at the limit and may still finish`, or says
+  the state could not be read. The run keeps going, so read it before a rerun.
 - A card with no rows is exit 1.
 
 The result belongs to one commit:
