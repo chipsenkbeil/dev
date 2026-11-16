@@ -718,7 +718,7 @@ if has_jj then
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
         out, code = dev(project, { "board", "turn", id, "--release" })
         testing.eq(code, 0, out)
-        testing.ok(out:find("gave back the landing turn held for " .. id, 1, true), out)
+        testing.ok(out:find("Gave back the landing turn held for " .. id .. ".", 1, true), out)
         testing.eq(turn_holder(project.home), nil)
     end)
 
@@ -2252,7 +2252,14 @@ if has_jj then
         testing.ok(out:find("held by dotfiles/lander since 20", 1, true), out)
         out, code = dev(project, { "board", "turn", id, "--hold", "120" })
         testing.eq(code, 0, out)
-        testing.ok(out:find("renewed the landing turn held for " .. id, 1, true), out)
+        testing.ok(
+            out:find(
+                "Renewed the landing turn held for " .. id .. " for 120 more seconds.",
+                1,
+                true
+            ),
+            out
+        )
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
     end)
 

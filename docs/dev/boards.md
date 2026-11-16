@@ -2680,7 +2680,7 @@ Polling while it waits:
   loses it lists the cards again, and a `land` poll lists them once more, to
   find a hold of its own.
 - A waiter whose card has moved to Done writes its `left` note and stops with
-  `<id prefix> is done, so there is nothing to wait for`.
+  `Card <id prefix> is done. There is nothing to wait for.`
 
 Carrying a check and reviews across a rebase:
 
@@ -2829,7 +2829,7 @@ Renewing:
 
 - Running `turn CARD` again as the holder renews the lease for `--hold` more
   seconds and prints
-  `renewed the landing turn held for <id prefix> for N more seconds`.
+  `Renewed the landing turn held for <id prefix> for N more seconds.`
 - When the renewal succeeds and the note of the new lease fails, `turn` refuses
   with `The hold was renewed but its lease could not be noted.` and takes
   nothing new. The hold stays with its old lease note.
@@ -2840,7 +2840,7 @@ Renewing:
 Giving it back:
 
 - `--release` gives the hold back, writes a `left` note and prints
-  `gave back the landing turn held for <id prefix>`.
+  `Gave back the landing turn held for <id prefix>.`
 - When the caller holds none for the card, it still writes the `left` note,
   which drops a queued ask and creates the `landing turn` card when the board
   has none, and refuses.

@@ -164,7 +164,7 @@ local function parse(args, takes, many)
             flags[arg] = true
         elseif takes[arg] then
             if i > #args then
-                return nil, usage(arg .. " needs a value")
+                return nil, usage(arg .. " needs a value.")
             end
             if many and many[arg] then
                 flags[arg] = flags[arg] or {}
@@ -3045,21 +3045,26 @@ function commands.turn(backend, args)
         return words
     end
     if #words ~= 1 then
-        return usage("needs a card")
+        return usage("Name the one card to take the landing turn for.")
     end
     local seconds, wait = turn.HOLD_SECONDS, 0
     if flags[HOLD_FLAG] then
         seconds = flags[HOLD_FLAG]:match("^%d+$") and tonumber(flags[HOLD_FLAG])
         if not seconds or seconds < 1 or seconds > turn.MAX_HOLD_SECONDS then
             return usage(
-                HOLD_FLAG .. " needs a whole number of seconds up to " .. turn.MAX_HOLD_SECONDS
+                HOLD_FLAG
+                    .. " needs a whole number of seconds up to "
+                    .. turn.MAX_HOLD_SECONDS
+                    .. "."
             )
         end
     end
     if flags[WAIT_FLAG] then
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
         if not wait or wait > MAX_WAIT_SECONDS then
-            return usage(WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS)
+            return usage(
+                WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS .. "."
+            )
         end
     end
     local name, why = agent_name()
@@ -3067,7 +3072,7 @@ function commands.turn(backend, args)
         return why
     end
     if not name then
-        return usage("needs DEV_AGENT, the name that holds the turn")
+        return usage("Set `DEV_AGENT` to the name that holds the turn.")
     end
     local card, err = find_card(backend, words[1])
     if not card then
@@ -3105,7 +3110,7 @@ function commands.turn(backend, args)
         if not released then
             return failure("The landing turn held for " .. short .. " was not released. " .. reason)
         end
-        return { output = "gave back the landing turn held for " .. short }
+        return { output = "Gave back the landing turn held for " .. short .. "." }
     end
     if message and not lost then
         return failure(message)
@@ -3126,7 +3131,7 @@ function commands.turn(backend, args)
         if renewed then
             return {
                 output = string.format(
-                    "renewed the landing turn held for %s for %d more seconds",
+                    "Renewed the landing turn held for %s for %d more seconds.",
                     short,
                     seconds
                 ),

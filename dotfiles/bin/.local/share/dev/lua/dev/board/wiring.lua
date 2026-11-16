@@ -3,6 +3,7 @@ local check = require("dev.board.check")
 local claims = require("dev.board.claims")
 local config = require("dev.config")
 local dev_os = require("dev.os")
+local dev_text = require("dev.text")
 local guards = require("dev.board.guards")
 local land = require("dev.board.land")
 local remote = require("dev.remote")
@@ -306,7 +307,7 @@ local function await_turn(opts)
             local current = opts.backend:card(opts.id)
             if current and current.done then
                 turn.leave(opts.backend, opts.name, opts.short)
-                return nil, opts.short .. " is done, so there is nothing to wait for"
+                return nil, "Card " .. opts.short .. " is done. There is nothing to wait for."
             end
         end
         local hold, message, place = turn.take(opts.backend, opts.name, opts.short, opts.take)
@@ -343,27 +344,36 @@ local function land_held(opts)
     local message
     local current = card_problems(backend, card, { name = name, comments = {} })
     if #current > 0 then
-        return failure(short .. " cannot land:\n  - " .. table.concat(current, "\n  - "))
+        return failure(
+            "Card "
+                .. short
+                .. " cannot land for these reasons.\n  - "
+                .. table.concat(current, "\n  - ")
+        )
     end
     local state_ok, bad = land.state(backend.root)
     if not state_ok then
-        return failure(short .. " cannot land:\n  - " .. bad)
+        return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
     end
     local rebased, why = land.rebase(backend.root)
     if rebased == nil then
-        return failure(short .. " cannot land: " .. why)
+        return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
     end
     local fresh
     fresh, message = backend:comments(card.id)
     if not fresh then
         return failure(message)
     end
-    local rebase_note = rebased and "\n  (the change was rebased onto trunk under the landing turn)"
+    local rebase_note = rebased and "\nThe change was rebased onto trunk under the landing turn."
         or ""
     local problems, state, carried = land_problems(backend, card, { name = name, comments = fresh })
     if #problems > 0 then
         return failure(
-            short .. " cannot land:\n  - " .. table.concat(problems, "\n  - ") .. rebase_note
+            "Card "
+                .. short
+                .. " cannot land for these reasons.\n  - "
+                .. table.concat(problems, "\n  - ")
+                .. rebase_note
         )
     end
     if carried then
@@ -380,7 +390,7 @@ local function land_held(opts)
         local read_why
         trunk_text, read_why = land.trunk_config(backend.root)
         if not trunk_text then
-            return failure(short .. " cannot land: " .. read_why)
+            return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(read_why))
         end
     end
     local unchecked = carried
@@ -392,7 +402,9 @@ local function land_held(opts)
             note = verb.note,
         })
     if unchecked then
-        return failure(short .. " cannot land:\n  - " .. unchecked .. rebase_note)
+        return failure(
+            "Card " .. short .. " cannot land for these reasons.\n  - " .. unchecked .. rebase_note
+        )
     end
     local renewed
     renewed, message = turn.renew(backend, hold)

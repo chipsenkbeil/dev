@@ -940,7 +940,7 @@ testing.test("a holder whose live claim outran its hold note releases the claim"
         result = cmd_board.run("turn", { short, "--release" }, backend)
     end)
     testing.eq(result.code, nil)
-    testing.ok(result.output:find("gave back the landing turn", 1, true), result.output)
+    testing.ok(result.output:find("Gave back the landing turn", 1, true), result.output)
     testing.eq(turn.holder(backend), nil)
     testing.eq(turn.claimed(backend, "alpha", short), nil)
 end)
