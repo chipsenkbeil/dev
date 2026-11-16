@@ -132,6 +132,13 @@ A plain file directly under ROOT/<repo> is moved under the same guards, and
 returns the purge lines as a fourth value, so `dev board land` adds them to
 its cleanup lines.
 
+Before the move, `opts.warn` gets one line for each process whose working
+directory is the folder or under it, `Process PID (COMMAND) is still inside
+PATH.`, and `ws rm` writes it to standard error. The removal goes on and no
+process is killed. `ws.__processes_proc` finds them on Linux from the
+`/proc/PID/cwd` links, and `ws.__processes_lsof` on macOS from `lsof -a -d cwd
+-F pcn`.
+
 `ws.remove` also takes `opts.missing`, the folder jj or git recorded. A folder
 that is gone skips every folder check, and the call only forgets the jj
 workspace or removes the git worktree record, never the default workspace.

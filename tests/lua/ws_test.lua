@@ -3,9 +3,12 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
+local cmd_ws = require("dev.cmd.ws")
 
 local DONE_ID = "aaaaaaaa"
 local OPEN_ID = "bbbbbbbb"
+local SLEEP_POLLS = 100
+local SLEEP_POLL_SECONDS = 0.05
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
 local JJ_STUB = [[#!/bin/sh
@@ -1810,3 +1813,81 @@ testing.test("prune leaves the empty heads when the abandon fails", function()
         )
     )
 end)
+
+local function start_sleep(dir)
+    local out = dev_os.capture(
+        { "sh", "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!" },
+        { cwd = dir }
+    )
+    local pid = out:gsub("%s", "")
+
+    -- Wait until the forked shell has become the sleep
+    for _ = 1, SLEEP_POLLS do
+        local comm = dev_os.capture({ "ps", "-o", "comm=", "-p", pid }, { stderr = "null" })
+        if comm:find("sleep%s*$") then
+            break
+        end
+        dev_os.nap(SLEEP_POLL_SECONDS)
+    end
+    return pid
+end
+
+local function alive(pid)
+    return dev_os.run({ "kill", "-0", pid }, { stderr = "null" }) == 0
+end
+
+local function stop(pid)
+    dev_os.run({ "kill", pid }, { stderr = "null" })
+end
+
+testing.test("rm prints the pid and command of a process inside the workspace", function()
+    -- Start a sleep in the workspace folder
+    local root, path, env = rm_setup("jj")
+    env.split = true
+    local pid = start_sleep(path)
+
+    -- Remove the workspace while the sleep runs
+    local out, code, errors = support.dev(root, { "ws", "rm", "feat" }, env)
+    local running = alive(pid)
+    stop(pid)
+
+    -- Expect the warning, the removal and the sleep still running
+    testing.eq(code, 0, out)
+    testing.eq(errors, "Process " .. pid .. " (sleep) is still inside " .. path .. ".\n")
+    testing.eq(fs.exists(path), false)
+    testing.eq(running, true)
+end)
+
+testing.test("rm prints no process line when no process is inside the workspace", function()
+    -- Remove a workspace nothing runs in
+    local root, _, env = rm_setup("jj")
+    env.split = true
+    local out, code, errors = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect no warning on standard error
+    testing.eq(code, 0, out)
+    testing.eq(errors, "")
+end)
+
+local function finds_the_sleep(find)
+    -- Start a sleep in a folder and look it up there
+    local dir = assert(fs.realpath(support.tempdir()), "tempdir has no real path")
+    local pid = start_sleep(dir)
+    local found = find(dir)
+    stop(pid)
+
+    -- Expect the sleep listed once
+    testing.eq(found, { { pid = pid, command = "sleep" } })
+end
+
+if fs.is_dir("/proc/self") then
+    testing.test("the proc lookup finds a process by its working directory", function()
+        finds_the_sleep(cmd_ws.__processes_proc)
+    end)
+end
+
+if dev_os.which("lsof") then
+    testing.test("the lsof lookup finds a process by its working directory", function()
+        finds_the_sleep(cmd_ws.__processes_lsof)
+    end)
+end

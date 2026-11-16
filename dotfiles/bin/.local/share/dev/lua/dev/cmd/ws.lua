@@ -284,11 +284,72 @@ local function forgotten(root, name)
     return true
 end
 
+---@class dev.cmd.ws.Process
+---@field pid string the process id
+---@field command string the process's command name
+
+---Find the processes on Linux whose working directory is `dir` or under it.
+---@private
+---@param dir string the real path of the folder
+---@return dev.cmd.ws.Process[] found the processes, in the order `find` lists them
+function M.__processes_proc(dir)
+    local argv = {
+        "find",
+        "/proc",
+        "-mindepth",
+        "2",
+        "-maxdepth",
+        "2",
+        "-name",
+        "cwd",
+        "-printf",
+        "%h\\t%l\\n",
+    }
+    local out = dev_os.capture(argv, { stderr = "null" })
+    local found = {}
+    for pid, cwd in out:gmatch("/proc/(%d+)\t([^\n]*)\n") do
+        if cwd == dir or under(cwd, dir) then
+            local comm = fs.read("/proc/" .. pid .. "/comm") or ""
+            found[#found + 1] = { pid = pid, command = (comm:gsub("\n$", "")) }
+        end
+    end
+    return found
+end
+
+---Find the processes on macOS whose working directory is `dir` or under it.
+---@private
+---@param dir string the real path of the folder
+---@return dev.cmd.ws.Process[] found the processes, in the order `lsof` lists them
+function M.__processes_lsof(dir)
+    local out = dev_os.capture({ "lsof", "-a", "-d", "cwd", "-F", "pcn" }, { stderr = "null" })
+    local found = {}
+    local pid, command
+    for kind, value in out:gmatch("(%a)([^\n]*)\n") do
+        if kind == "p" then
+            pid = value
+        elseif kind == "c" then
+            command = value
+        elseif kind == "n" and (value == dir or under(value, dir)) then
+            found[#found + 1] = { pid = pid, command = command }
+        end
+    end
+    return found
+end
+
+local function processes_inside(dir)
+    if fs.is_dir("/proc/self") then
+        return M.__processes_proc(dir)
+    end
+    return M.__processes_lsof(dir)
+end
+
 ---@class dev.cmd.ws.remove.Opts
 ---@field inside boolean? false when unset, skips only the refusal of the workspace dev runs in
 ---@field forgotten boolean? false when unset, removes a jj folder that jj does not list and refuses
 ---   any other
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
+---@field warn fun(line: string)? nil when unset, called with a line for each process inside the
+---   folder before it moves
 ---@field missing string? nil when unset, the recorded folder that is already gone
 
 ---@class dev.cmd.ws.detach.Opts
@@ -515,6 +576,12 @@ function M.remove(root, name, opts)
             return refused(blocked)
         end
     end
+    if opts.warn then
+        for _, found in ipairs(processes_inside(real)) do
+            local line = "Process %s (%s) is still inside %s."
+            opts.warn(line:format(found.pid, found.command, path))
+        end
+    end
     return move_to_trash(anchor, name, {
         trash = fs.join(base, TRASH_DIR, repo_name(base, root)),
         backend = not gone and backend or nil,
@@ -548,6 +615,7 @@ M.handlers["ws rm"] = function(ctx)
         show = function(argv)
             verb.show(ctx, argv)
         end,
+        warn = verb.note,
     })
     if not result.ok then
         if result.code then
