@@ -159,21 +159,24 @@ local function label(root, verb_name, card)
     return name
 end
 
+---@class dev.remote.LabelOpts
+---@field tty boolean whether stdin is a terminal
+
 ---Choose the `DEV_AGENT` label for a run dev starts on ci.
 ---
 ---A caller's non-empty `DEV_AGENT` wins, a bare run from a terminal carries none,
 ---and any other run is labelled by its verb and card.
 ---@param root string the project root
 ---@param env table<string, string?> `DEV_AGENT`, `DEV_CI_VERB` and `DEV_CI_CARD`
----@param tty boolean whether stdin is a terminal
+---@param opts dev.remote.LabelOpts
 ---@return string? name the label to set, or nil to set none
-function M.run_label(root, env, tty)
+function M.run_label(root, env, opts)
     if env.DEV_AGENT ~= nil and env.DEV_AGENT ~= "" then
         return nil
     end
     local verb_name = env.DEV_CI_VERB
     if verb_name == nil or verb_name == "" then
-        if tty then
+        if opts.tty then
             return nil
         end
         verb_name = M.VERB.REMOTE
@@ -228,7 +231,7 @@ function M.ci_runner(run, opts)
         DEV_AGENT = os.getenv("DEV_AGENT"),
         DEV_CI_VERB = os.getenv(M.VERB_ENV),
         DEV_CI_CARD = os.getenv(M.CARD_ENV),
-    }, dev_os.isatty(0))
+    }, { tty = dev_os.isatty(0) })
     local env = name and { DEV_AGENT = name } or nil
     local code = dev_os.run(argv, { env = env })
     if code == nil then

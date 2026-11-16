@@ -598,9 +598,10 @@ testing.test("run label is unset for a bare run in a terminal", function()
     local remote = require("dev.remote")
     local root = setup()
     with_empty_home(function()
-        testing.eq(remote.run_label(root, {}, true), nil)
-        testing.eq(remote.run_label(root, { DEV_AGENT = "", DEV_CI_VERB = "" }, true), nil)
-        testing.eq(remote.run_label(root, { DEV_CI_CARD = "d9f0e004" }, true), nil)
+        local terminal = { tty = true }
+        testing.eq(remote.run_label(root, {}, terminal), nil)
+        testing.eq(remote.run_label(root, { DEV_AGENT = "", DEV_CI_VERB = "" }, terminal), nil)
+        testing.eq(remote.run_label(root, { DEV_CI_CARD = "d9f0e004" }, terminal), nil)
     end)
 end)
 
@@ -609,13 +610,14 @@ testing.test("run label keeps check and release labels in a terminal", function(
     local root = setup()
     with_empty_home(function()
         local check = { DEV_CI_VERB = remote.VERB.CHECK, DEV_CI_CARD = "d9f0e004" }
-        testing.eq(remote.run_label(root, check, true), "p/check/d9f0e004")
+        local terminal, piped = { tty = true }, { tty = false }
+        testing.eq(remote.run_label(root, check, terminal), "p/check/d9f0e004")
         local release = "release"
-        testing.eq(remote.run_label(root, { DEV_CI_VERB = release }, true), "p/" .. release)
-        testing.eq(remote.run_label(root, {}, false), "p/remote")
+        testing.eq(remote.run_label(root, { DEV_CI_VERB = release }, terminal), "p/" .. release)
+        testing.eq(remote.run_label(root, {}, piped), "p/remote")
         local agent = { DEV_AGENT = "dotfiles/implementer/x/1" }
-        testing.eq(remote.run_label(root, agent, false), nil)
-        testing.eq(remote.run_label(root, agent, true), nil)
+        testing.eq(remote.run_label(root, agent, piped), nil)
+        testing.eq(remote.run_label(root, agent, terminal), nil)
     end)
 end)
 
