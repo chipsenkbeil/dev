@@ -509,7 +509,12 @@ local function link_blockers(backend, card, blockers)
     return nil
 end
 
-function commands.add(backend, args)
+---Add a card, and record in `held` whether the parsed flags hold the --id-only switch.
+---@param backend dev.board.Backend the board to add the card to
+---@param args string[] the arguments after `add`
+---@param held { id_only: boolean? } receives `id_only`, true when the switch is set
+---@return dev.cmd.board.Result result the outcome of the add
+local function add_card(backend, args, held)
     local flags, words = parse(args, {
         ["--column"] = true,
         ["--description"] = true,
@@ -544,6 +549,7 @@ function commands.add(backend, args)
     if #words == 0 then
         return usage("needs a card name")
     end
+    held.id_only = flags[ID_ONLY_FLAG]
     if flags["--board"] then
         local home, why = guards.other_home(backend, flags["--board"])
         if not home then
@@ -846,6 +852,15 @@ function commands.add(backend, args)
                 .. link_suffix(backend, card),
         warnings = board.prose_warnings(prose),
     }
+end
+
+function commands.add(backend, args)
+    local held = {}
+    local result = add_card(backend, args, held)
+    if held.id_only and result.message then
+        return unqueued(result)
+    end
+    return result
 end
 
 local function find_comment(backend, card, word)
@@ -5477,7 +5492,6 @@ for sub in pairs(commands) do
                 and QUEUE_RULES[sub]
                 and not result.unqueued
                 and not note
-                and not (sub == "add" and index_of(args, ID_ONLY_FLAG))
                 and not (sub == "outcome" and (args[2] == CONVERT_FLAG or args[2] == DELETE_FLAG))
             then
                 queued = { { sub = sub, args = args } }

@@ -2917,6 +2917,61 @@ testing.test("add --id-only is refused while Pomb is unreachable and never queue
     testing.ok(code ~= 0, out)
     testing.eq(out:find(QUEUED, 1, true), nil)
     testing.eq(fs.exists(queue_path(home)), false)
+    out, code = pomb_dev(root, home, {
+        "board",
+        "add",
+        "Later",
+        "--id-only",
+        "--blocked-by",
+        "deadbeef",
+        "--problem",
+        "x",
+        "--size",
+        "2",
+        "--done-when",
+        "a",
+    })
+    testing.ok(code ~= 0, out)
+    testing.eq(out:find(QUEUED, 1, true), nil)
+    testing.eq(fs.exists(queue_path(home)), false)
+    out, code = pomb_dev(root, home, {
+        "board",
+        "add",
+        "Later",
+        "--id-only",
+        "--lane",
+        "side",
+        "--checks",
+        "dev test",
+        "--problem",
+        "x",
+        "--size",
+        "2",
+        "--done-when",
+        "a",
+    })
+    testing.ok(code ~= 0, out)
+    testing.eq(out:find(QUEUED, 1, true), nil)
+    testing.eq(fs.exists(queue_path(home)), false)
+end)
+
+testing.test("an add whose problem is --id-only is queued while Pomb is down", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/down", ""))
+    local out, code = pomb_dev(root, home, {
+        "board",
+        "add",
+        "Later",
+        "--problem",
+        "--id-only",
+        "--size",
+        "2",
+        "--done-when",
+        "a",
+    })
+    testing.eq(code, 0, out)
+    testing.ok(out:find(QUEUED, 1, true), out)
+    testing.eq(fs.exists(queue_path(home)), true)
 end)
 
 testing.test("add takes --id-only as a value when a flag is waiting for one", function()
