@@ -68,7 +68,7 @@ function M.sandbox(files, tools)
     return root
 end
 
----@class support.DevOpts
+---@class support.dev.Opts
 ---@field cwd string? where to run, the project root when nil
 ---@field code string? the exit code the stubs return
 ---@field env table<string, string>? more environment variables
@@ -91,7 +91,7 @@ end
 ---Run `dev` on a project with its `bin` first on PATH.
 ---@param root string the project root from `sandbox`
 ---@param args string[] the command line after `dev`
----@param opts support.DevOpts? where to run and what to set
+---@param opts support.dev.Opts? where to run and what to set
 ---@return string output standard output, with standard error merged in unless `opts.split` is set
 ---@return integer? code dev's exit code
 ---@return string? errors standard error alone, only when `opts.split` is set
@@ -124,7 +124,7 @@ end
 ---Start `dev` on a project in the background.
 ---@param root string the project root from `sandbox`
 ---@param args string[] the command line after `dev`
----@param opts support.DevOpts? where to run and what to set
+---@param opts support.dev.Opts? where to run and what to set
 ---@return support.Running running the handle of the started command
 function M.dev_async(root, args, opts)
     local argv, run = invocation(root, args, opts or {})

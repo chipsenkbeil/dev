@@ -159,7 +159,7 @@ local function label(root, verb_name, card)
     return name
 end
 
----@class dev.remote.LabelOpts
+---@class dev.remote.run_label.Opts
 ---@field tty boolean whether stdin is a terminal
 
 ---Choose the `DEV_AGENT` label for a run dev starts on ci.
@@ -168,7 +168,7 @@ end
 ---and any other run is labelled by its verb and card.
 ---@param root string the project root
 ---@param env table<string, string?> `DEV_AGENT`, `DEV_CI_VERB` and `DEV_CI_CARD`
----@param opts dev.remote.LabelOpts
+---@param opts dev.remote.run_label.Opts
 ---@return string? name the label to set, or nil to set none
 function M.run_label(root, env, opts)
     if env.DEV_AGENT ~= nil and env.DEV_AGENT ~= "" then
