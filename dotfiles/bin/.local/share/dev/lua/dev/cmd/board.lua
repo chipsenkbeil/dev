@@ -60,6 +60,7 @@ local LEAD_HOURS = 1
 local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local WAIT_FLAG = "--wait"
+local SET_FLAG = "--set"
 local ID_ONLY_FLAG = "--id-only"
 local SWITCH = "switch"
 local MAX_WAIT_SECONDS = 86400
@@ -3635,7 +3636,46 @@ function commands.columns(backend, args)
     return { output = table.concat(lines, "\n") }
 end
 
+local function set_limit(backend, value, words)
+    local limit = value:match("^%d+$") and tonumber(value)
+    if not limit or limit < 1 then
+        return usage("--set needs a whole number of at least 1")
+    end
+    if #words > 0 then
+        return usage("--set changes only this project's board")
+    end
+    local roles = backend.roles
+    local columns = { roles.progress, roles.review, roles.verify }
+    local done, message = backend:set_limit_group(columns, limit)
+    if not done then
+        if message:find("pomb answered 403", 1, true) then
+            return failure(
+                "Pomb refused the change. This token may not edit the board, "
+                    .. "so use a lead token, which holds columns.edit."
+            )
+        end
+        return failure(message)
+    end
+    return {
+        output = string.format(
+            "Set the limit of %s, %s and %s to %d.",
+            roles.progress,
+            roles.review,
+            roles.verify,
+            limit
+        ),
+    }
+end
+
 function commands.limits(backend, args)
+    local flags, words = parse(args, { [SET_FLAG] = true })
+    if not flags then
+        return words
+    end
+    if flags[SET_FLAG] then
+        return set_limit(backend, flags[SET_FLAG], words)
+    end
+    args = words
     if #args > 1 then
         return usage("takes at most one board name")
     end

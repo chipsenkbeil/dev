@@ -584,6 +584,10 @@ function Backend:limit_groups()
     return false
 end
 
+function Backend:set_limit_group()
+    return nil, "A local board has no limit group to set."
+end
+
 function Backend:add_checks_field()
     return true
 end

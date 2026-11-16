@@ -1825,6 +1825,54 @@ function Backend:add_limit_group(names, limit)
     return true
 end
 
+function Backend:set_limit_group(names, limit)
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local detail
+    detail, message = self:__request("GET", "/api/boards/" .. id)
+    if not detail then
+        return nil, message
+    end
+    local wanted = {}
+    for _, name in ipairs(names) do
+        for _, column in ipairs(detail.columns) do
+            if column.name:lower() == name:lower() then
+                wanted[#wanted + 1] = column.id
+                break
+            end
+        end
+    end
+    if #wanted ~= #names then
+        return nil, "The board lacks a column of " .. table.concat(names, ", ") .. "."
+    end
+    local groups = type(detail.limit_groups) == "table" and detail.limit_groups or {}
+    for _, group in ipairs(groups) do
+        local held = {}
+        for _, column_id in ipairs(group.column_ids) do
+            held[column_id] = true
+        end
+        local covers = true
+        for _, column_id in ipairs(wanted) do
+            covers = covers and held[column_id] == true
+        end
+        if covers and type(group.id) == "string" then
+            local done
+            done, message = self:__request(
+                "PATCH",
+                "/api/boards/" .. id .. "/limit-groups/" .. group.id,
+                { column_ids = group.column_ids, limit = limit }
+            )
+            if not done then
+                return nil, message
+            end
+            return true
+        end
+    end
+    return nil, "The board has no limit group that holds " .. table.concat(names, ", ") .. "."
+end
+
 function Backend:other_board(name)
     local opts = {}
     for key, value in pairs(self.__opts) do

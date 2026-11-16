@@ -1758,6 +1758,21 @@ Pomb move request, which makes Pomb skip the limits too. A move of any other
 card sends no `force`. Only a card whose change unblocks every landing carries
 the label, and the owner's standing exemption decides which one that is.
 
+`dev board limits --set N` sets the limit of the group that holds the In
+Progress, Review and Verify columns on this project's board.
+
+- N is a whole number of at least 1, else exit 2. A board name beside `--set`
+  is exit 2.
+- It reads the board, then sends `PATCH /api/boards/{id}/limit-groups/{group}`
+  with the group's own `column_ids` and the new `limit`, as Pomb replaces both.
+- Pomb needs `columns.edit` on the board. A lead token holds it and a worker
+  token does not, so a 403 prints a sentence that names the lead token and is
+  exit 1.
+- A board with no group that holds the three columns is exit 1.
+- A local board has no limit group and is exit 1 with a sentence.
+- On success it prints `Set the limit of In Progress, Review and Verify to N.`
+  with the board's own column names.
+
 ### add
 
 `dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD]

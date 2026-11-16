@@ -287,8 +287,9 @@ return {
     {
         words = { "board", "limits" },
         handler = "lua",
-        usage = "dev board limits [BOARD]",
-        desc = "Show the limits of a board and the cards in flight",
+        flags = "--set",
+        usage = "dev board limits [BOARD] [--set N]",
+        desc = "Show the limits of a board and the cards in flight, or set the group limit",
     },
     {
         words = { "board", "next" },

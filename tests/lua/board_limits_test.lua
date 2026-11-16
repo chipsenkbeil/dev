@@ -68,6 +68,13 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/limit-groups/*)
+    body='{"ok":true}'
+    if [ -f "$ROOT/limit_refusal" ]; then
+        body='{"message":"columns.edit is required"}'
+        status=403
+    fi
+    ;;
 */move)
     body='{"ok":true}'
     if [ -f "$ROOT/move_refusal" ]; then
@@ -424,6 +431,75 @@ testing.test("limits prints each column limit with its unit and each group", fun
             .. NAME.VERIFY
             .. ": 4 (2 in flight)\n"
     )
+end)
+
+testing.test("limits --set patches the group with its columns and the new limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        string.format(
+            "Set the limit of %s, %s and %s to 6.\n",
+            NAME.PROGRESS,
+            NAME.REVIEW,
+            NAME.VERIFY
+        )
+    )
+    local want = string.format(
+        '--data-raw {"column_ids":["%s","%s","%s"],"limit":6}',
+        ID.PROGRESS,
+        ID.REVIEW,
+        ID.VERIFY
+    ) .. " https://pomb.example/api/boards/board-1/limit-groups/g1"
+    testing.ok(read(box, "calls"):find("-X PATCH", 1, true), read(box, "calls"))
+    testing.ok(read(box, "calls"):find(want, 1, true), read(box, "calls"))
+end)
+
+testing.test("limits --set names the lead token when Pomb answers 403", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    assert(fs.write(box.root .. "/limit_refusal", "x"))
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("use a lead token, which holds columns.edit.", 1, true), out)
+end)
+
+testing.test("limits --set refuses a board with no group and a bad number", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export({}) })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no limit group that holds", 1, true), out)
+    for _, bad in ipairs({ "0", "x", "2.5" }) do
+        out, code = dev(box, { "board", "limits", "--set", bad }, "")
+        testing.eq(code, 2, out)
+        testing.ok(out:find("needs a whole number", 1, true), out)
+    end
+end)
+
+testing.test("limits --set refuses a board name beside it", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export({}) })
+    local out, code = dev(box, { "board", "limits", "other", "--set", "6" }, "")
+    testing.eq(code, 2, out)
+    testing.ok(out:find("--set changes only this project's board", 1, true), out)
+end)
+
+testing.test("limits --set refuses a local board with a sentence", function()
+    local box = sandbox({
+        project = '[board]\nbackend = "local"\nname = "mine"\n',
+        detail = detail({}),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("A local board has no limit group to set.", 1, true), out)
 end)
 
 testing.test("limits exits 1 with no limit group when the board has none", function()
