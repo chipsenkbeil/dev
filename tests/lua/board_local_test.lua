@@ -1796,6 +1796,49 @@ testing.test("take holds a claim with an expiry and no loop, and release gives i
     testing.eq(out:find("took " .. a .. ", fence 2, held for 50m\n\n", 1, true), 1, out)
 end)
 
+local function unnamed_card(tty)
+    local root, home = local_board()
+    assert(fs.write(root .. "/bin/ps", "#!/bin/sh\necho '" .. tty .. "'\n"))
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/ps" }) == 0, "chmod failed")
+    local out = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--checks",
+        "dev test",
+    })
+    return root, home, prefix_of(out)
+end
+
+testing.test("two runs from one terminal share a claimant", function()
+    local root, home, a = unnamed_card("ttys042")
+    local out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
+    testing.eq(code, 0, out)
+    out = dev(root, home, { "board", "ls" }, { CLAUDE_SESSION_ID = "" })
+    testing.ok(out:find("-ttys042", 1, true), out)
+end)
+
+testing.test("a caller with no terminal keeps the pid in its claimant", function()
+    local root, home, a = unnamed_card("??")
+    local out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
+    testing.eq(code, 1)
+    testing.ok(out:find("is claimed by dev@", 1, true), out)
+end)
+
 testing.test("a stale fence is refused once another process holds the claim", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {

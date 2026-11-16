@@ -106,7 +106,14 @@ local function claimant(name)
     local host = dev_os.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", "")
     local session = os.getenv("CLAUDE_SESSION_ID")
     if not session or session == "" then
-        session = dev_os.capture({ "sh", "-c", "echo $PPID" }):gsub("%s+$", "")
+        local tty = dev_os.capture({ "sh", "-c", "ps -o tty= -p $PPID" }, { stderr = "null" })
+        tty = tty:gsub("%s+", "")
+        if tty ~= "" and not tty:find("?", 1, true) then
+            local user = dev_os.capture({ "id", "-un" }):gsub("%s+$", "")
+            session = user .. "-" .. tty
+        else
+            session = dev_os.capture({ "sh", "-c", "echo $PPID" }):gsub("%s+$", "")
+        end
     end
     return ("dev@" .. host .. ":" .. session:gsub("[^%w._-]", "_")):sub(1, CLAIMANT_CHARS)
 end

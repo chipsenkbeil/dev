@@ -1516,7 +1516,9 @@ the claim alive. The claim lasts 900 seconds. The loop renews it every 5 minutes
 with curl, so it costs no model turns and outlives the shell that started it.
 
 The claimant is the name from `take --as NAME`, else the `DEV_AGENT`
-environment variable, else `dev@<host>:<session or pid>`. A name is one word of
+environment variable, else `dev@<host>:<session>`. The session is
+`CLAUDE_SESSION_ID`, else the login user and the controlling terminal of dev's
+process, else that process's pid when it has no terminal. A name is one word of
 letters, digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows it as the
 holder.
 
@@ -1528,7 +1530,7 @@ The usual roles are `lead`, `runner`, `planner`, `implementer`, `code-examiner`,
 
 A grab on a Pomb card sends the role part of that name as the owner's `role`,
 so `dotfiles/implementer/f5f0e007` sends `implementer`. A name with no role part,
-such as the default `dev@<host>:<session or pid>`, sends no role.
+such as the default `dev@<host>:<session>`, sends no role.
 
 A name of another shape is refused with
 `an agent name is <repo>/<role>[/<card>], got NAME` (exit 2). That happens when
@@ -3398,8 +3400,8 @@ and starts the keep-alive loop.
 The claim:
 
 - It is `POST /api/tasks/{id}/owner` with `name` NAME, else `DEV_AGENT`, else
-  `dev@<host>:<CLAUDE_SESSION_ID or the pid of dev's caller>`, and
-  `ttl_seconds` 900.
+  `dev@<host>:<CLAUDE_SESSION_ID, else the user and terminal, else the pid>`,
+  and `ttl_seconds` 900.
 - NAME is one word of letters, digits and `.`, `-`, `_` and `/`, at most 200
   characters, else exit 2.
 - When this machine already holds a fence, dev renews it through
