@@ -170,6 +170,29 @@ testing.test("finish names the failed checks and returns 1", function()
     testing.eq(lint:finish(), 1)
 end)
 
+testing.test("a check that fails twice is recorded once, in the order it first failed", function()
+    local lint = lint_for("/")
+    lint:check("a", { "false" })
+    lint:fail("b", "b is wrong")
+    lint:check("a", { "false" })
+    lint:fail("b", "b is still wrong")
+    lint:check("c", { "true" })
+    lint:fail("d", "d is wrong")
+    testing.eq(lint.failed, { "a", "b", "d" })
+end)
+
+testing.test("the closing note names each failed check once", function()
+    local root = support.tempdir()
+    local code = "local lint = require('lintset').new({ root = %q, verbose = 0 }); "
+        .. "lint:fail('a', 'one'); lint:fail('b', 'two'); lint:fail('a', 'three'); "
+        .. "os.exit(lint:finish())"
+    local snippet = ("package.path = %q; " .. code):format(package.path, root)
+    local errors = root .. "/stderr.txt"
+    dev_os.capture({ "luajit", "-e", snippet }, { stderr = errors })
+    testing.eq(assert(fs.read(errors)), "one\ntwo\nthree\nThese checks failed: a, b.\n")
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("standalone warns without failing the lint", function()
     local root = support.tempdir()
     assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir failed")
