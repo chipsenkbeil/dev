@@ -101,7 +101,9 @@ ignores a failure there. A plain folder is only moved.
 
 Before the move, `ws rm` runs `jj workspace update-stale` in a jj folder to
 refresh a stale working copy, and then treats a working-copy commit that is
-already on trunk as holding no changes.
+already on trunk as holding no changes. `ws prune --dry-run` does not refresh.
+It reads a stale workspace with `--ignore-working-copy` and plans the same
+removal.
 
 The move comes first, so a move that fails leaves the folder and the workspace
 as they were, and a forget or prune that fails moves the folder back. A target

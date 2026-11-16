@@ -1132,7 +1132,7 @@ case "$*" in
     root) pwd; exit 0 ;;
     *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
     *" git root") exit 0 ;;
-    *" workspace update-stale") exit 0 ;;
+    *" workspace update-stale") echo "update-stale" >> "${UPDATES:-/dev/null}"; exit 0 ;;
     *"workspace root --name "*)
         for last; do :; done
         printf '%s\n' "$ROOTS" | while read -r name path; do
@@ -1140,6 +1140,9 @@ case "$*" in
         done
         exit 0 ;;
     *"log -r @ "*)
+        case "$*" in *--ignore-working-copy*)
+            if [ -n "$STALE_READ" ]; then printf '%s' "$DIRTY"; exit 0; fi ;;
+        esac
         if [ -n "$ERROR" ]; then printf '%s\n' "$ERROR" >&2; exit 1; fi
         printf '%s' "$WARN" >&2; printf '%s' "$DIRTY"; exit 0 ;;
     *"& empty()"*)
@@ -1372,6 +1375,32 @@ testing.test("prune never touches the default workspace or a dirty folder", func
     testing.eq(fs.exists(log), false)
 end)
 
+testing.test("prune dry-run keeps a dirty jj folder", function()
+    -- Seed a done card whose folder is dirty
+    local root, dir, env, log = prune_setup("jj")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local dirty = folder(dir, DONE_ID)
+    env.env.WORKSPACES = table.concat({ "default", DONE_ID }, "\n")
+    env.env.ROOTS =
+        table.concat({ "default " .. dir .. "gone-default", DONE_ID .. " " .. dirty }, "\n")
+    env.env.DIRTY = "changes"
+
+    -- Dry-run the prune over the dirty folder
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect the folder kept as in the real run, intact and with no jj run
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Kept workspace " .. DONE_ID .. ". " .. dirty .. " holds changes not in a commit.",
+            "Would prune 0 workspaces and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.exists(dirty .. "/file"), true)
+    testing.eq(fs.exists(log), false)
+end)
+
 testing.test("prune keeps a folder when jj refuses to snapshot a file", function()
     -- Seed a done card and make jj warn that it refused a file
     local root, dir, env, log = prune_setup("jj")
@@ -1426,6 +1455,33 @@ testing.test("prune keeps an unreadable jj workspace and names its error", funct
     -- Expect the folder intact and no jj run
     testing.eq(fs.exists(broken .. "/file"), true)
     testing.eq(fs.exists(log), false)
+end)
+
+testing.test("prune dry-run plans a stale jj workspace without refreshing it", function()
+    -- Seed a done card whose workspace is stale but readable without a refresh
+    local root, dir, env = prune_setup("jj")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local stale = folder(dir, DONE_ID)
+    local updates = support.tempdir() .. "/updates"
+    env.env.WORKSPACES = table.concat({ "default", DONE_ID }, "\n")
+    env.env.ROOTS = DONE_ID .. " " .. stale
+    env.env.ERROR = "Error: The working copy is stale"
+    env.env.STALE_READ = "1"
+    env.env.UPDATES = updates
+
+    -- Dry-run the prune
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect the removal planned and no update-stale run
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Would forget workspace " .. DONE_ID .. ". Its card is done.",
+            "Would prune 1 workspace and 0 heads. Left 0 items alone."
+        )
+    )
+    testing.eq(fs.exists(updates), false)
 end)
 
 testing.test("prune keeps a linked folder in a dry run and a real run", function()

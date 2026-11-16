@@ -310,6 +310,7 @@ end
 
 ---@class dev.cmd.ws.clean.Opts
 ---@field refresh boolean? false when unset, true to update a stale jj workspace before the check
+---@field stale_ok boolean? false when unset, true to read a stale jj workspace without updating it
 
 ---Check that a workspace folder holds nothing outside a commit.
 ---
@@ -317,14 +318,14 @@ end
 ---@private
 ---@param backend dev.vcs.Backend? the backend of the workspace folder
 ---@param path string the workspace folder
----@param opts dev.cmd.ws.clean.Opts? whether to refresh a stale workspace first
+---@param opts dev.cmd.ws.clean.Opts? whether to refresh a stale workspace first or read it as it is
 ---@return boolean clean whether the folder holds nothing outside a commit
 ---@return dev.cmd.ws.Reason? why what was found or why it could not be read
 function M.__clean(backend, path, opts)
     if backend == nil then
         return true
     end
-    local argv
+    local argv, retry
     if backend == vcs.JJ then
         local base = vcs.base(path, backend, { quiet = true })
         if opts and opts.refresh then
@@ -335,19 +336,18 @@ function M.__clean(backend, path, opts)
                     { reason = Refusal.UNREADABLE, path = path, detail = first_line(text) }
             end
         end
-        argv = vcs.with(
-            base,
-            "log",
-            "-r",
-            "@ ~ ::trunk()",
-            "--no-graph",
-            "-T",
-            'if(empty, "", "changes")'
-        )
+        local log = { "log", "-r", "@ ~ ::trunk()", "--no-graph", "-T", 'if(empty, "", "changes")' }
+        argv = vcs.with(base, unpack(log))
+        if opts and opts.stale_ok then
+            retry = vcs.with(base, "--ignore-working-copy", unpack(log))
+        end
     else
         argv = vcs.with(vcs.base(path, backend), "status", "--porcelain")
     end
     local out, code = dev_os.capture(argv, { stderr = "stdout" })
+    if code ~= 0 and retry and out:find("stale", 1, true) then
+        out, code = dev_os.capture(retry, { stderr = "stdout" })
+    end
     if code ~= 0 then
         return false, { reason = Refusal.UNREADABLE, path = path, detail = first_line(out) }
     end
@@ -886,7 +886,7 @@ local function prune_workspaces(ctx, steps, opts)
             if step.kind == Step.DONE and fs.is_link(step.path) then
                 ok, why = false, { reason = Refusal.LINK, path = step.path }
             elseif step.kind == Step.DONE then
-                ok, why = M.__clean(opts.backend, step.path)
+                ok, why = M.__clean(opts.backend, step.path, { stale_ok = true })
                 if ok and opts.backend == vcs.GIT then
                     why = prune_blocker(
                         ctx.root,
