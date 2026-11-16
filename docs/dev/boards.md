@@ -1472,15 +1472,18 @@ The command asks Pomb for events after a cursor and holds each request for up to
 
 The cursor lives in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`<mode>`
 is `ready`, `human`, `lead` or `all`), readable by you alone and saved after
-every reply. A change made while no wait was running wakes the next one, except
-that `--for human` ignores a move made before it started. With no cursor file
-the first call starts from now.
+every reply. `--for human` saves it only when it prints its held lines, so a
+kill inside the settle window leaves them to print again. A change made while
+no wait was running wakes the next one, except that `--for human` ignores a
+move made before it started. With no cursor file the first call starts from
+now.
 
 When Pomb has dropped the events after the stored cursor, `wait` stores the
 oldest one it still has, prints `events were trimmed, check the board` and exits
 0. Look at the board and run it again. `--for human` instead keeps waiting on a
 trim, and exits only when a card that sat in Blocked or Icebox when it started
-has left it.
+has left it. It then prints `events were trimmed, check the board` after the
+lines it holds.
 
 An unreachable Pomb (no route, a locked `pass`, a gateway error) is retried
 every 30 seconds. After ten failures in a row `wait` exits 1 with the message.
@@ -3685,12 +3688,14 @@ The cursor:
   turned into `_`.
 - one file per `--for` mode, so a filtered wait never consumes another mode's
   events.
-- written after every reply. With no file, the first call asks without a
+- written after every reply, except for `--for human`, which writes it when it
+  prints its held lines. With no file, the first call asks without a
   cursor and starts from the cursor Pomb answers.
 - an expired cursor (410) stores the backend's oldest cursor and prints
   `events were trimmed, check the board` (exit 0).
-- `--for human` stores the oldest cursor and rereads the cards instead
-  (`Owner.sitting` at the start, `Owner.departed` on a trim). It prints
+- `--for human` stores the oldest cursor when it holds no line and rereads
+  the cards instead (`Owner.sitting` at the start, `Owner.departed` on a
+  trim). It prints
   `moved <id prefix> out of <column>` for each card that sat in Blocked or
   Icebox and has left it or the board, or keeps waiting when none has.
 

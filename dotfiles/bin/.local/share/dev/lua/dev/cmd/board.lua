@@ -5155,7 +5155,8 @@ end
 
 ---Hold until the board changes in a way the caller asked for.
 ---
----The cursor is saved after every reply, so a restart misses nothing. A Pomb
+---The cursor is saved after every reply, and `--for human` saves it when it
+---prints its held lines, so a restart misses nothing. A Pomb
 ---that cannot be asked is retried and fails once ten tries in a row run out. A
 ---refusal for too many open waits on the token is never a failure: the wait
 ---is reported once and retried with a pause that doubles from 30 seconds to
@@ -5204,18 +5205,27 @@ function M.wait(backend, args, opts)
             return failure(why)
         end
     end
+    local path = opts.stem .. "." .. (only or "all") .. ".cursor"
+    local cursor = read_cursor(path)
     local function flush(result)
         if #held == 0 then
             return result
+        end
+        if only == WaitFor.HUMAN then
+            local saved, why = store.write(path, cursor .. "\n", { private = true })
+            if not saved and not result.message then
+                result = failure(why)
+            end
         end
         local lines = table.concat(held, "\n")
         if result.message then
             return { message = lines .. "\n" .. result.message, code = result.code }
         end
+        if result.output then
+            lines = lines .. "\n" .. result.output
+        end
         return { output = lines }
     end
-    local path = opts.stem .. "." .. (only or "all") .. ".cursor"
-    local cursor = read_cursor(path)
     local failures = 0
     while true do
         local reply, message, oldest, refused = backend:wait(
@@ -5259,9 +5269,11 @@ function M.wait(backend, args, opts)
                     return failure(why)
                 end
             end
-            local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
-            if not saved then
-                return flush(failure(why))
+            if only ~= WaitFor.HUMAN then
+                local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
+                if not saved then
+                    return flush(failure(why))
+                end
             end
             cursor = reply.cursor
             local lines = {}
@@ -5294,13 +5306,15 @@ function M.wait(backend, args, opts)
             end
             if #held > 0 and not matched then
                 if #reply.events == 0 or clock() - last >= Owner.SETTLE_SECONDS then
-                    return { output = table.concat(held, "\n") }
+                    return flush({})
                 end
             end
         elseif oldest then
-            local saved, why = store.write(path, oldest .. "\n", { private = true })
-            if not saved then
-                return flush(failure(why))
+            if only ~= WaitFor.HUMAN or #held == 0 then
+                local saved, why = store.write(path, oldest .. "\n", { private = true })
+                if not saved then
+                    return flush(failure(why))
+                end
             end
             if only ~= WaitFor.HUMAN then
                 return flush({ output = WAIT_TRIMMED })

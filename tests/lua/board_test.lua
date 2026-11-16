@@ -19,6 +19,9 @@ local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 local LINK_A = "link: https://pomb.example/t/" .. ID_A
+local MOVED_A = "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked
+local MOVED_B = "moved 11111111 out of " .. board.DEFAULT_NAMES.icebox
+local TRIMMED_NOTICE = "\nevents were trimmed, check the board"
 local LEAD = "dotfiles/lead/1"
 local PROGRESS_COLUMN = support.column_id(support.COLUMN.PROGRESS)
 local READY_COLUMN = support.column_id(support.COLUMN.READY)
@@ -9036,7 +9039,69 @@ testing.test("wait --for human prints the lines it holds when the cursor is trim
         }),
         { oldest = "9" },
     }, { "--for", "human" }, { cards = cards })
-    testing.eq(result.output, "moved 11111111 out of Blocked")
+    testing.eq(result.output, MOVED_A .. TRIMMED_NOTICE)
+end)
+
+local function held_move()
+    return got("2", {
+        kind = "task_moved",
+        task_id = ID_A,
+        column = support.COLUMN_NAME.READY,
+        from_column = support.COLUMN_NAME.BLOCKED,
+        actor = "human",
+        at = 100,
+    })
+end
+
+local function blocked_a()
+    return { { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = {}, done = false } }
+end
+
+testing.test("wait --for human prints its held lines before a Pomb failure", function()
+    local result = waited(
+        { got("1"), held_move(), { message = "stop" } },
+        { "--for", "human" },
+        { cards = blocked_a() }
+    )
+    testing.eq(result.message, MOVED_A .. "\nstop")
+end)
+
+testing.test("wait --for human prints its held lines before a reply with no cursor", function()
+    local result = waited(
+        { got("1"), held_move(), { got = { events = {} } } },
+        { "--for", "human" },
+        { cards = blocked_a() }
+    )
+    testing.eq(result.message, MOVED_A .. "\nPomb answered without a cursor.")
+end)
+
+testing.test("wait --for human reports a failed cursor save after its held lines", function()
+    local root = support.tempdir()
+    assert(fs.write(root .. "/file", ""))
+    local result = waited(
+        { got("1"), held_move(), got("3") },
+        { "--for", "human" },
+        { cards = blocked_a(), path = root .. "/file/wait" }
+    )
+    testing.ok(result.message:find(MOVED_A .. "\n", 1, true) == 1)
+    testing.ok(result.code ~= nil)
+end)
+
+testing.test("wait --for human prints held lines again after a kill in the window", function()
+    local path = support.tempdir() .. "/wait"
+    local killed = pcall(waited, { got("1"), held_move() }, { "--for", "human" }, {
+        cards = blocked_a(),
+        path = path,
+    })
+    testing.eq(killed, false)
+    testing.eq((fs.read(path .. ".human.cursor")), nil)
+    local result, seen = waited({ got("1"), held_move(), got("3") }, { "--for", "human" }, {
+        cards = blocked_a(),
+        path = path,
+    })
+    testing.eq(result.output, MOVED_A)
+    testing.eq(seen.afters[1], "none")
+    testing.eq(fs.read(path .. ".human.cursor"), "3\n")
 end)
 
 testing.test("wait --for human ignores a human move older than the wait's start", function()
@@ -9108,7 +9173,7 @@ testing.test("wait --for human names the card that left Blocked on a trimmed str
         end,
         notice = function() end,
     })
-    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
+    testing.eq(result.output, MOVED_A .. TRIMMED_NOTICE)
     testing.eq(seen.afters, { "none" })
     testing.eq(fs.read(path .. ".human.cursor"), "9\n")
 end)
@@ -9146,20 +9211,20 @@ testing.test("wait --for human counts a human move in the second the wait starte
         }),
         got("2"),
     }, { "--for", "human" }, { cards = cards, now = 100 })
-    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
+    testing.eq(result.output, MOVED_A)
 end)
 
 testing.test("wait --for human reports a Blocked card that vanished on a trimmed stream", function()
     local sat = { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
     local result = trimmed_wait(sat, {})
-    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked)
+    testing.eq(result.output, MOVED_A .. TRIMMED_NOTICE)
 end)
 
 testing.test("wait --for human reports an Icebox card that left on a trimmed stream", function()
     local before = { { id = ID_B, column = board.DEFAULT_NAMES.icebox, labels = {}, done = false } }
     local after = { { id = ID_B, column = support.COLUMN_NAME.READY, labels = {}, done = false } }
     local result = trimmed_wait(before, after)
-    testing.eq(result.output, "moved 11111111 out of " .. board.DEFAULT_NAMES.icebox)
+    testing.eq(result.output, MOVED_B .. TRIMMED_NOTICE)
 end)
 
 testing.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
@@ -9376,7 +9441,7 @@ testing.test("wait --for human retries an unreachable comment read", function()
 end)
 
 testing.test(
-    "wait --for human gives up after ten unreachable comment reads and keeps the cursor",
+    "wait --for human gives up after ten unreachable comment reads and saves no cursor",
     function()
         local replies = { got("1") }
         local errors = { false }
@@ -9391,7 +9456,7 @@ testing.test(
         testing.eq(result.code, 1)
         testing.ok(result.message:find("curl exit 7", 1, true), result.message)
         testing.eq(#seen.naps, 9)
-        testing.eq(fs.read(path .. ".human.cursor"), "1\n")
+        testing.eq((fs.read(path .. ".human.cursor")), nil)
     end
 )
 
