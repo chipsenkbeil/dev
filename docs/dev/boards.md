@@ -336,6 +336,12 @@ What it lays out:
   - A column named In Review is renamed to Review with its cards kept,
     through `PATCH /api/columns/{id}`, so no card is left in a column that no
     longer exists. It renames no column but In Review.
+  - On a Pomb board, it gives the Ready, In Progress, Review, Verify and
+    Release columns the stages `ready`, `in_progress`, `review`, `verify` and
+    `release` through `PATCH /api/columns/{id}`, so the role token's standard
+    moves resolve. One line per column, such as `set the in_progress stage on
+    In Progress`. A column that already holds a stage, even another one, keeps
+    it. A local board has no stages and says nothing.
   - A rerun changes nothing.
   - A column it does not know stays, comes after Done and is reported as
     `kept column "X", which is not part of the standard board`.
@@ -3890,9 +3896,12 @@ The name and the config:
    exists, and add each missing column with `POST /api/columns` (Done with
    `is_done`). Then re-read the board and mark an existing Done column done
    with `PATCH /api/columns/{id}` when it is not. Mark the Blocked column with
-   `PATCH /api/columns/{id}` and `{"is_blocked": true}` when it is not. Last,
-   reorder with `POST /api/columns/{id}/move` (`{"position": N}`, 0 first), so
-   the nine standard columns come first in the order Icebox, Backlog, Ready,
+   `PATCH /api/columns/{id}` and `{"is_blocked": true}` when it is not. Set the
+   stage of Ready, In Progress, Review, Verify and Release that hold none with
+   `PATCH /api/columns/{id}` and `{"stage": "in_progress"}`, and likewise
+   `ready`, `review`, `verify` and `release`. Last, reorder with
+   `POST /api/columns/{id}/move` (`{"position": N}`, 0 first), so the nine
+   standard columns come first in the order Icebox, Backlog, Ready,
    In Progress, Review, Verify, Release, Blocked, Done and any other column
    follows, kept and reported on every run as
    `kept column "X", which is not part of the standard board`.

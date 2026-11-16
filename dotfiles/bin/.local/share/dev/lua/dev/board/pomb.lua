@@ -2268,11 +2268,16 @@ function Backend:read()
         if type(blocked) ~= "boolean" then
             blocked = nil
         end
+        local stage = column.stage
+        if type(stage) ~= "string" or stage == "" then
+            stage = nil
+        end
         columns[#columns + 1] = {
             id = column.id,
             name = column.name,
             is_done = column.is_done == true,
             is_blocked = blocked,
+            stage = stage,
         }
     end
     for _, color in ipairs(palette) do
@@ -2445,6 +2450,14 @@ end
 
 function Backend:mark_blocked(id)
     local done, message = self:__request("PATCH", "/api/columns/" .. id, { is_blocked = true })
+    if not done then
+        return nil, message
+    end
+    return true, nil, true
+end
+
+function Backend:set_stage(id, stage)
+    local done, message = self:__request("PATCH", "/api/columns/" .. id, { stage = stage })
     if not done then
         return nil, message
     end

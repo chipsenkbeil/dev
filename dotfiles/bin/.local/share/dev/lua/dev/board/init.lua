@@ -151,6 +151,26 @@ local function columns_step(layout, state, say)
             state.changes = state.changes + 1
         end
     end
+    local roles = state.roles
+    for _, stage in ipairs({
+        { column = roles.ready, name = "ready" },
+        { column = roles.progress, name = "in_progress" },
+        { column = roles.review, name = "review" },
+        { column = roles.verify, name = "verify" },
+        { column = roles.release, name = "release" },
+    }) do
+        local column = present[stage.column:lower()]
+        if not column.stage then
+            local ok, message, changed = layout:set_stage(column.id, stage.name)
+            if not ok then
+                return nil, message
+            end
+            if changed then
+                say("set the " .. stage.name .. " stage on " .. column.name)
+                state.changes = state.changes + 1
+            end
+        end
+    end
     local want, used = {}, {}
     for _, name in ipairs(standard) do
         local column = present[name:lower()]

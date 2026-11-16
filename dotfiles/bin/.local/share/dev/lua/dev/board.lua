@@ -262,6 +262,8 @@ local M = {}
 ---   of finished cards
 ---@field mark_blocked fun(self: dev.board.Layout, id: string): boolean?, string?, boolean? a column
 ---   made the one of cards waiting on an answer, third value true when it changed one
+---@field set_stage fun(self: dev.board.Layout, id: string, stage: string): boolean?, string?,
+---   boolean? a column given a stage, third value true when it wrote one
 ---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?,
 ---   string? a colour's label, description, default flag or enabled flag
 ---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?,
@@ -285,6 +287,7 @@ local M = {}
 ---@field is_done boolean whether a card in it counts as finished
 ---@field is_blocked boolean? whether it holds the cards waiting on an answer, nil when the backend
 ---   sends no such key
+---@field stage string? the stage the column holds, nil when it holds none
 
 ---@class dev.board.LayoutState
 ---@field columns dev.board.LayoutColumn[] the columns in board order

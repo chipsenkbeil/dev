@@ -179,6 +179,15 @@ local function fake_layout(opts)
         end
         return true, nil, true
     end
+    function layout:set_stage(id, stage)
+        write("set_stage", id, stage)
+        for _, column in ipairs(state.columns) do
+            if column.id == id then
+                column.stage = stage
+            end
+        end
+        return true, nil, true
+    end
     function layout:set_color(id, fields)
         write("set_color", id)
         for _, color in ipairs(state.colors) do
@@ -494,16 +503,29 @@ local BOARDS = '[{"id":"board-1","name":"demo","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"demo","swimlanes":[],"columns":['
 local GROUPS = '"limit_groups":[{"id":"g1","column_ids":["col-InProgress","col-Review","col-Verify"],'
     .. '"limit":4,"limit_unit":"count","count":0}]'
+local STAGE_OF = {
+    [support.COLUMN_NAME.READY] = "ready",
+    [support.COLUMN_NAME.PROGRESS] = "in_progress",
+    [support.COLUMN_NAME.IN_REVIEW] = "review",
+    [support.COLUMN_NAME.REVIEW] = "review",
+    [support.COLUMN_NAME.VERIFY] = "verify",
+    [support.COLUMN_NAME.RELEASE] = "release",
+}
+local function column_json(name)
+    local stage = STAGE_OF[name]
+    return string.format(
+        '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s,"stage":%s}',
+        name:gsub(" ", ""),
+        name,
+        name == support.COLUMN_NAME.DONE and "true" or "false",
+        name == support.COLUMN_NAME.BLOCKED and "true" or "false",
+        stage and '"' .. stage .. '"' or "null"
+    )
+end
 local function detail()
     local parts = {}
     for _, name in ipairs(STANDARD) do
-        parts[#parts + 1] = string.format(
-            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
-            name:gsub(" ", ""),
-            name,
-            name == support.COLUMN_NAME.DONE and "true" or "false",
-            name == support.COLUMN_NAME.BLOCKED and "true" or "false"
-        )
+        parts[#parts + 1] = column_json(name)
     end
     return DETAIL .. table.concat(parts, ",") .. "]," .. GROUPS .. "}"
 end
@@ -942,13 +964,7 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     }
     local parts = {}
     for _, name in ipairs(ordered) do
-        parts[#parts + 1] = string.format(
-            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
-            name:gsub(" ", ""),
-            name,
-            name == support.COLUMN_NAME.DONE and "true" or "false",
-            name == support.COLUMN_NAME.BLOCKED and "true" or "false"
-        )
+        parts[#parts + 1] = column_json(name)
     end
     assert(fs.write(root .. "/detail.json", last .. table.concat(parts, ",") .. "]}"))
     local stock = {}
@@ -1026,13 +1042,7 @@ testing.test("init renames In Review to Review through the column update", funct
         support.COLUMN_NAME.BLOCKED,
         support.COLUMN_NAME.DONE,
     }) do
-        parts[#parts + 1] = string.format(
-            '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s}',
-            name:gsub(" ", ""),
-            name,
-            name == support.COLUMN_NAME.DONE and "true" or "false",
-            name == support.COLUMN_NAME.BLOCKED and "true" or "false"
-        )
+        parts[#parts + 1] = column_json(name)
     end
     local body = DETAIL .. table.concat(parts, ",") .. "]," .. GROUPS .. "}"
     assert(fs.write(root .. "/detail.json", body))
@@ -1430,6 +1440,68 @@ testing.test("init stops before any write when the column views carry no is bloc
     testing.eq(code, 1)
     testing.ok(out:find("cannot mark a Blocked column yet", 1, true), out)
     testing.eq(writes(root), 0)
+end)
+
+local STAGE_CALLS = {
+    { stage = "ready", column = support.COLUMN_NAME.READY, id = "col-Ready" },
+    { stage = "in_progress", column = support.COLUMN_NAME.PROGRESS, id = "col-InProgress" },
+    { stage = "review", column = support.COLUMN_NAME.REVIEW, id = "col-Review" },
+    { stage = "verify", column = support.COLUMN_NAME.VERIFY, id = "col-Verify" },
+    { stage = "release", column = support.COLUMN_NAME.RELEASE, id = "col-Release" },
+}
+
+local function stage_patch(root, call)
+    return calls_of(root):find(
+        '--data-raw {"stage":"' .. call.stage .. '"} https://pomb.example/api/columns/' .. call.id,
+        1,
+        true
+    )
+end
+
+testing.test("init sets the five stages on columns that hold none and says each", function()
+    local root, home, tmp = sandbox()
+    assert(fs.write(root .. "/detail.json", (detail():gsub(',"stage":"[a-z_]+"', ',"stage":null'))))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    for _, call in ipairs(STAGE_CALLS) do
+        testing.ok(stage_patch(root, call), calls_of(root))
+        testing.ok(
+            out:find("set the " .. call.stage .. " stage on " .. call.column .. "\n", 1, true),
+            out
+        )
+    end
+    testing.eq(writes(root), #STAGE_CALLS)
+end)
+
+testing.test("init sends no stage write when every stage is set", function()
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(out:find("stage on", 1, true), nil)
+    testing.eq(writes(root), 0)
+end)
+
+testing.test("init leaves a column that holds another stage as it is", function()
+    local root, home, tmp = sandbox()
+    local other = detail():gsub('("id":"col%-Ready".-"stage":)"ready"', '%1"verify"', 1)
+    assert(fs.write(root .. "/detail.json", other))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(calls_of(root):find("api/columns/col-Ready", 1, true), nil)
+    testing.eq(writes(root), 0)
+end)
+
+testing.test("init sets the stage of the columns that hold none and then says nothing", function()
+    local layout = fake_layout({ columns = template_columns() })
+    layout.state.columns[2].stage = "review"
+    local _, message, lines = run(layout)
+    testing.eq(message, nil)
+    local text = table.concat(lines, "\n")
+    testing.ok(text:find("set the in_progress stage on In Progress", 1, true), text)
+    testing.eq(text:find("on Ready", 1, true), nil)
+    local again, _, said = run(layout)
+    testing.eq(again, 0)
+    testing.eq(said, {})
 end)
 
 local function limit_posts(root)
