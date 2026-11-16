@@ -250,7 +250,7 @@ testing.test(
         )
         out, code = mint(root, home)
         testing.ok(code == 1, out)
-        testing.ok(out:find("another token already has the name " .. NAME, 1, true), out)
+        testing.ok(out:find("Another token already has the name " .. NAME, 1, true), out)
         testing.eq(fs.exists(home .. "/state/dev/tokens"), false)
         out, code = mint(root, home, { agent = "dotfiles/implementer/other/1" })
         testing.ok(code == 1, out)
@@ -489,7 +489,7 @@ testing.test(
         )
         out, code = mint(root, home)
         testing.ok(code == 1, out)
-        testing.ok(out:find("another token already has the name " .. NAME, 1, true), out)
+        testing.ok(out:find("Another token already has the name " .. NAME, 1, true), out)
         testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
     end
 )

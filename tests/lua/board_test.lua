@@ -413,7 +413,7 @@ testing.test("ls filters by column and label", function()
     result = cmd_board.run("ls", { "--label", "docs" }, fake(sample()))
     testing.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
     result = cmd_board.run("ls", { "--label", "none" }, fake(sample()))
-    testing.eq(result.output, "no cards")
+    testing.eq(result.output, "No cards.")
 end)
 
 local function coloured(cards, args)
@@ -517,7 +517,7 @@ testing.test("ls filters by column, label and size in both layouts", function()
         testing.eq(run("--label", "docs"):find("Fix lint", 1, true), nil)
         testing.ok(run("--size", "1"):find("Write docs", 1, true))
         testing.eq(run("--size", "1"):find("Fix lint", 1, true), nil)
-        testing.eq(coloured(progress_sample(), { "--label", "none" }).output, "no cards")
+        testing.eq(coloured(progress_sample(), { "--label", "none" }).output, "No cards.")
     end
 end)
 
@@ -876,7 +876,7 @@ testing.test("ls --size keeps the cards of one colour and counts no colour as un
     result = cmd_board.run("ls", { "--size", "3", "--column", support.COLUMN.DONE }, fake(cards))
     testing.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
     result = cmd_board.run("ls", { "--size", "2" }, fake(cards))
-    testing.eq(result.output, "no cards")
+    testing.eq(result.output, "No cards.")
     testing.eq(cmd_board.run("ls", { "--size", "9" }, fake(cards)).code, 2)
 end)
 
@@ -1686,7 +1686,7 @@ testing.test("links lists each link with the kind, the id prefix and the board",
         "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -"
     )
     testing.eq(backend.calls[1], { "links", ID_A })
-    testing.eq(cmd_board.run("links", { "11111111-b" }, fake(sample())).output, "no links")
+    testing.eq(cmd_board.run("links", { "11111111-b" }, fake(sample())).output, "No links.")
     testing.eq(cmd_board.run("links", {}, backend).code, 2)
     testing.eq(cmd_board.run("links", { "deadbeef" }, backend).code, 1)
 end)
@@ -3784,7 +3784,7 @@ testing.test("next shows the top card or says none", function()
         "11111111  Ready  1 Pomodoro  docs  Write docs  0 comments, 0 the owner's"
     )
     result = cmd_board.run("next", {}, fake({}))
-    testing.eq(result.output, "no ready cards")
+    testing.eq(result.output, "No ready cards.")
 end)
 
 local function hosted(backend)
@@ -3892,7 +3892,7 @@ testing.test("next --column takes Backlog or Icebox and refuses other columns", 
     testing.eq(cmd_board.run("next", { "extra" }, backend).code, 2)
     testing.eq(
         cmd_board.run("next", { "--column", support.COLUMN.BACKLOG }, fake({})).output,
-        "no cards in Backlog"
+        "No cards in Backlog."
     )
 end)
 testing.test("next --column takes the Review, Verify and Release stage columns", function()
@@ -3903,7 +3903,7 @@ testing.test("next --column takes the Review, Verify and Release stage columns",
     }) do
         local backend = fake({})
         local result = cmd_board.run("next", { "--column", column:lower() }, backend)
-        testing.eq(result.output, "no cards in " .. column)
+        testing.eq(result.output, "No cards in " .. column .. ".")
         testing.eq(backend.calls[#backend.calls], { "next", column, nil })
     end
     testing.eq(cmd_board.run("next", { "--column", support.COLUMN.PROGRESS }, fake({})).code, 2)
@@ -3949,7 +3949,7 @@ end)
 testing.test("stale counts a card entered just under the limit as fresh", function()
     local cards, times = aged({ support.COLUMN_NAME.READY }, { 7 })
     times[cards[1].id] = os.date("!%Y-%m-%dT%H:%M:%SZ", NOW - 7 * box.SECONDS_PER_DAY + 1)
-    testing.eq(cmd_board.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+    testing.eq(cmd_board.run("stale", {}, fake(cards, times), NOW).output, "No stale cards.")
 end)
 
 testing.test("stale covers Backlog, Ready, In Progress, Review and Verify only", function()
@@ -3995,7 +3995,7 @@ testing.test("stale still lists a Release card the owner labelled needs:human", 
     local cards, times = aged({ support.COLUMN_NAME.RELEASE }, { 40 }, { { "needs:human" } })
     testing.eq(
         cmd_board.run("stale", {}, fake(cards, times), NOW).output,
-        "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Release  40d  unsized  Card 1"
+        "No stale cards.\n\nmoved by the owner, remove needs:human:\n00000001  Release  40d  unsized  Card 1"
     )
 end)
 
@@ -4049,7 +4049,7 @@ testing.test("stale lists every needs:human card apart at any age, and never as 
     result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
-        "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Ready  9d  unsized  Card 1"
+        "No stale cards.\n\nmoved by the owner, remove needs:human:\n00000001  Ready  9d  unsized  Card 1"
     )
 end)
 
@@ -4057,7 +4057,7 @@ testing.test("stale lists a needs:human card the owner moved to Done", function(
     local cards, times = aged({ support.COLUMN_NAME.DONE }, { 60 }, { { "needs:human" } })
     testing.eq(
         cmd_board.run("stale", {}, fake(cards, times), NOW).output,
-        "no stale cards\n\nmoved by the owner, remove needs:human:\n00000001  Done  60d  unsized  Card 1"
+        "No stale cards.\n\nmoved by the owner, remove needs:human:\n00000001  Done  60d  unsized  Card 1"
     )
 end)
 
@@ -4065,7 +4065,7 @@ testing.test("stale keeps a needs:human card in Blocked out of moved by the owne
     local cards, times = aged({ support.COLUMN_NAME.BLOCKED }, { 50 }, { { "needs:human" } })
     testing.eq(
         cmd_board.run("stale", {}, fake(cards, times), NOW).output,
-        "no stale cards\n\nfor the owner (needs:human):\n00000001  Blocked  50d  unsized  Card 1"
+        "No stale cards.\n\nfor the owner (needs:human):\n00000001  Blocked  50d  unsized  Card 1"
     )
 end)
 
@@ -4119,14 +4119,14 @@ testing.test(
         cards[6].color = nil
         testing.eq(
             cmd_board.run("stale", {}, fake(cards, times), NOW).output,
-            "no stale cards\n\nunsized outside Icebox:\n00000001  Backlog  Card 1\n00000003  Backlog  Card 3\n"
+            "No stale cards.\n\nunsized outside Icebox:\n00000001  Backlog  Card 1\n00000003  Backlog  Card 3\n"
                 .. "00000004  Ready    Card 4\n00000006  Done     Card 6"
         )
         cards[1].color = "red"
         cards[3].color = "blue"
         cards[4].color = "green"
         cards[6].color = "green"
-        testing.eq(cmd_board.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+        testing.eq(cmd_board.run("stale", {}, fake(cards, times), NOW).output, "No stale cards.")
     end
 )
 
@@ -4136,16 +4136,16 @@ testing.test("stale lists a TODO file at the repo root", function()
     backend.root = root
     testing.eq(
         cmd_board.run("stale", {}, backend, NOW).output,
-        "no stale cards\n\ntodo files, move their items onto cards:\nTODO.md\ndocs/TODO.md"
+        "No stale cards.\n\ntodo files, move their items onto cards:\nTODO.md\ndocs/TODO.md"
     )
 end)
 
 testing.test("stale prints no todo heading without a TODO file", function()
     local backend = fake({}, {})
     backend.root = support.sandbox({})
-    testing.eq(cmd_board.run("stale", {}, backend, NOW).output, "no stale cards")
+    testing.eq(cmd_board.run("stale", {}, backend, NOW).output, "No stale cards.")
     backend.root = nil
-    testing.eq(cmd_board.run("stale", {}, backend, NOW).output, "no stale cards")
+    testing.eq(cmd_board.run("stale", {}, backend, NOW).output, "No stale cards.")
 end)
 
 testing.test("stale names a card it could not date instead of skipping it", function()
@@ -4163,7 +4163,7 @@ testing.test("stale names a card it could not date instead of skipping it", func
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
-        "no stale cards\n\ncould not date "
+        "No stale cards.\n\ncould not date "
             .. cards[1].id
             .. " Card 1\ncould not date "
             .. cards[2].id
@@ -4206,7 +4206,7 @@ testing.test("stale lists a Blocked needs:lead card past an hour, oldest first",
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
-        "no stale cards\n\nfor the owner (needs:human):\n00000003  Blocked  0d  unsized  Card 3\n\n"
+        "No stale cards.\n\nfor the owner (needs:human):\n00000003  Blocked  0d  unsized  Card 3\n\n"
             .. "for a lead (needs:lead):\n00000005  Blocked  7h  unsized  Card 5\n"
             .. "00000001  Blocked  3h  unsized  Card 1\n\n"
             .. "asks nobody, add a needs label:\n00000006  Blocked  0d  unsized  Card 6"
@@ -4317,7 +4317,7 @@ testing.test("next --column blocked skips a needs:human card and a claimed one",
     cards[5].labels = {}
     testing.eq(
         cmd_board.run("next", { "--column", support.COLUMN.BLOCKED }, fake(cards)).output,
-        "no cards in Blocked"
+        "No cards in Blocked."
     )
 end)
 
@@ -4369,7 +4369,7 @@ testing.test("stale lists a Blocked card that asks nobody", function()
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
-        "no stale cards\n\nasks nobody, add a needs label:\n"
+        "No stale cards.\n\nasks nobody, add a needs label:\n"
             .. "00000002  Blocked  5d  unsized  Card 2\n"
             .. "00000001  Blocked  2d  unsized  Card 1"
     )
@@ -4477,14 +4477,14 @@ testing.test("stale lists untouched Icebox cards", function()
     end
     testing.eq(
         cmd_board.run("stale", {}, backend, NOW).output,
-        "no stale cards\n\nfor the owner (needs:human):\n"
+        "No stale cards.\n\nfor the owner (needs:human):\n"
             .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 30 days:\n"
             .. "00000001  Icebox  45d  unsized  Card 1\n"
             .. "00000004  Icebox  40d  unsized  Card 4"
     )
     testing.eq(
         cmd_board.run("stale", { "--icebox-days", "10" }, backend, NOW).output,
-        "no stale cards\n\nfor the owner (needs:human):\n"
+        "No stale cards.\n\nfor the owner (needs:human):\n"
             .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 10 days:\n"
             .. "00000001  Icebox  45d  unsized  Card 1\n"
             .. "00000004  Icebox  40d  unsized  Card 4\n"
@@ -4530,7 +4530,7 @@ testing.test("stale never lists the landing turn card", function()
     cards[1].name = "landing turn"
     testing.eq(
         cmd_board.run("stale", {}, fake(cards, times), NOW).output,
-        "no stale cards\n\nicebox, untouched for 30 days:\n00000002  Icebox  60d  unsized  Card 2"
+        "No stale cards.\n\nicebox, untouched for 30 days:\n00000002  Icebox  60d  unsized  Card 2"
     )
 end)
 
@@ -4541,7 +4541,7 @@ testing.test("stale counts an Icebox card exactly at the limit as untouched", fu
     )
     testing.eq(
         cmd_board.run("stale", {}, fake(cards, times), NOW).output,
-        "no stale cards\n\nicebox, untouched for 30 days:\n00000001  Icebox  30d  unsized  Card 1"
+        "No stale cards.\n\nicebox, untouched for 30 days:\n00000001  Icebox  30d  unsized  Card 1"
     )
 end)
 
@@ -4553,9 +4553,9 @@ testing.test("stale refuses a bad --icebox-days with a usage error", function()
 end)
 
 testing.test("stale says so when nothing is stale", function()
-    testing.eq(cmd_board.run("stale", {}, fake({}), NOW).output, "no stale cards")
+    testing.eq(cmd_board.run("stale", {}, fake({}), NOW).output, "No stale cards.")
     local cards, times = aged({ support.COLUMN_NAME.READY }, { 1 })
-    testing.eq(cmd_board.run("stale", {}, fake(cards, times), NOW).output, "no stale cards")
+    testing.eq(cmd_board.run("stale", {}, fake(cards, times), NOW).output, "No stale cards.")
 end)
 
 testing.test("stale fails on a column time it cannot read", function()
@@ -4694,7 +4694,7 @@ testing.test("every subcommand without a [board] section says so and exits 1", f
     local root, home = sandbox({ project = "" })
     for _, args in ipairs({ { "board", "status" }, { "board", "ls" }, { "board", "next" } }) do
         local out, code = dev(root, home, args)
-        testing.eq(out, "dev: no board for this project\n")
+        testing.eq(out, "dev: This project has no board.\n")
         testing.eq(code, 1)
     end
     testing.eq(read(root, "calls"), "")
@@ -5448,7 +5448,7 @@ testing.test("outcome delete with no lead token exits 1 naming subtasks.delete",
         { agent = LEAD }
     )
     testing.eq(code, 1, out)
-    testing.ok(out:find("lead_token is not set", 1, true), out)
+    testing.ok(out:find("`lead_token` setting of `[board.pomb]` is not set", 1, true), out)
     testing.ok(out:find("subtasks.delete", 1, true), out)
     testing.eq(read(root, "calls"), "")
     testing.eq(fs.exists(queue_file(home)), false)
@@ -5820,7 +5820,7 @@ testing.test("next never offers the landing turn card on a pomb board", function
     local root, home = sandbox({ task = TASK:gsub('"First"', '"landing turn"') })
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
-    testing.eq(out, "no ready cards\n")
+    testing.eq(out, "No ready cards.\n")
 end)
 
 testing.test("next asks for the unclaimed unblocked top of Ready", function()
@@ -5859,7 +5859,7 @@ testing.test("epic_next_skips_open_child", function()
     }) do
         local out, code = dev(root, home, args)
         testing.eq(code, 0, out)
-        testing.ok(out:find("^no ", 1), out)
+        testing.ok(out:find("^No ", 1), out)
     end
     root, home = sandbox({ task = EPIC_TASK:format(3) })
     local out, code = dev(root, home, { "board", "next" })
@@ -5970,10 +5970,10 @@ testing.test("next skips a card held by a blocker that is not in Done", function
     })
     local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
     testing.ok(code == 0, out)
-    testing.eq(out, "no cards in Backlog\n")
+    testing.eq(out, "No cards in Backlog.\n")
     out, code = dev(root, home, { "board", "next" })
     testing.ok(code == 0, out)
-    testing.eq(out, "no ready cards\n")
+    testing.eq(out, "No ready cards.\n")
 end)
 
 local function far_sandbox(column)
@@ -6022,21 +6022,21 @@ testing.test("next skips a backlog card whose blocker on another board cannot be
     assert(fs.write(root .. "/far_gone", ""))
     local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
     testing.ok(code == 0, out)
-    testing.eq(out, "no cards in Backlog\n")
+    testing.eq(out, "No cards in Backlog.\n")
 end)
 
 testing.test("next skips a Ready card whose blocker on another board is open", function()
     local root, home = far_sandbox("far-ready")
     local out, code = dev(root, home, { "board", "next" })
     testing.ok(code == 0, out)
-    testing.eq(out, "no ready cards\n")
+    testing.eq(out, "No ready cards.\n")
 end)
 
 testing.test("next skips a backlog card whose blocker on another board is open", function()
     local root, home = far_sandbox("far-ready")
     local out, code = dev(root, home, { "board", "next", "--column", support.COLUMN.BACKLOG })
     testing.ok(code == 0, out)
-    testing.eq(out, "no cards in Backlog\n")
+    testing.eq(out, "No cards in Backlog.\n")
 end)
 
 testing.test("add posts the card to the named column", function()
@@ -6766,7 +6766,7 @@ testing.test(
         root, home = sandbox()
         out, code = dev(root, home, { "board", "links", "11111111-a" })
         testing.eq(code, 0, out)
-        testing.eq(out, "no links\n")
+        testing.eq(out, "No links.\n")
     end
 )
 
@@ -6977,7 +6977,7 @@ testing.test("edit finds the board from a subdirectory and not from outside the 
             { input = text, cwd = home }
         )
         testing.eq(code, 1, out)
-        testing.eq(out, "dev: no board for this project\n")
+        testing.eq(out, "dev: This project has no board.\n")
     end
 end)
 
@@ -7911,7 +7911,7 @@ testing.test("next skips live owned cards and takes lapsed ones", function()
     local root, home = sandbox({ task = owned("2999-01-01T00:00:00Z") })
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
-    testing.eq(out, "no ready cards\n")
+    testing.eq(out, "No ready cards.\n")
     root, home = sandbox({ task = owned("2001-01-01T00:00:00Z") })
     out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
@@ -9272,7 +9272,7 @@ testing.test("delete without a lead token or on a local board does nothing", fun
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("lead_token is not set", 1, true), out)
+    testing.ok(out:find("`lead_token` setting of `[board.pomb]` is not set", 1, true), out)
     testing.eq(read(root, "calls"), "")
     root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "scratch"\n' })
     out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
@@ -9523,7 +9523,7 @@ testing.test("attachments lists id prefix, size and name, or says there are none
     testing.eq(out, "abcdef12  2048  old.png\n")
     assert(fs.write(root .. "/attachments.json", "[]"))
     out = dev(root, home, { "board", "attachments", "11111111-a" })
-    testing.eq(out, "no attachments\n")
+    testing.eq(out, "No attachments.\n")
 end)
 
 testing.test(

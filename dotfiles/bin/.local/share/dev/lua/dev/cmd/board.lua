@@ -27,7 +27,7 @@ local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 local wiring = require("dev.board.wiring")
 
-local NO_BOARD = "dev: no board for this project"
+local NO_BOARD = "dev: This project has no board."
 local USAGE = guards.USAGE
 local FAILURE = guards.FAILURE
 local usage = guards.usage
@@ -373,7 +373,7 @@ function commands.ls(backend, args, _, screen)
         end
     end
     if #shown_cards == 0 then
-        return { output = "no cards" }
+        return { output = "No cards." }
     end
     if screen and screen.color then
         local lines = render.ls(screen, shown_cards, {
@@ -453,9 +453,9 @@ function commands.next(backend, args)
             return failure(message)
         end
         if column == roles.ready then
-            return { output = "no ready cards" }
+            return { output = "No ready cards." }
         end
-        return { output = "no cards in " .. column }
+        return { output = "No cards in " .. column .. "." }
     end
     local list, why = backend:comments(card.id)
     if not list then
@@ -2827,7 +2827,7 @@ local function ship_ran(backend, runs)
     local remote = require("dev.remote")
     local rows = {}
     for i, one in ipairs(runs) do
-        verb.note(string.format("running %d of %d: %s", i, #runs, one.run))
+        verb.note(string.format("Running row %d of %d with `%s`.", i, #runs, one.run))
         rows[i] = check.run({
             root = backend.root,
             run = one.run,
@@ -3454,7 +3454,7 @@ function commands.attachments(backend, args)
         return failure(message)
     end
     if #held == 0 then
-        return { output = "no attachments" }
+        return { output = "No attachments." }
     end
     local lines = {}
     for _, attachment in ipairs(held) do
@@ -3599,7 +3599,7 @@ function commands.links(backend, args)
         return failure(message)
     end
     if #list == 0 then
-        return { output = "no links" }
+        return { output = "No links." }
     end
     return { output = link_rows(list) }
 end
@@ -3928,7 +3928,7 @@ function commands.stale(backend, args, now)
     table.sort(commented, oldest)
     local lines = {}
     if #found == 0 then
-        lines[1] = "no stale cards"
+        lines[1] = "No stale cards."
     else
         append(lines, stale_rows(found))
     end
@@ -4061,7 +4061,7 @@ function commands.lint(backend, args)
         end
     end
     if #rows == 0 then
-        return { output = "no findings" }
+        return { output = "No findings." }
     end
     return {
         output = table.concat(board.table_lines(rows), "\n"),
@@ -4393,7 +4393,7 @@ local function open_backend(settings, token)
         end
         if not settings.name:find(LOCAL_NAME_PATTERN) or #settings.name > NAME_CHARS then
             return nil,
-                "dev: a local board's name must be letters, digits, dots, dashes and underscores to name its file, or set [board] path"
+                "dev: A local board's name must be letters, digits, dots, dashes and underscores to name its file. Otherwise set the `path` setting of `[board]`."
         end
         return localboard.new({
             name = settings.name,
@@ -4408,7 +4408,7 @@ local function open_backend(settings, token)
         lead = token == LEAD_TOKEN_KEY,
     })
     if not backend then
-        return nil, "dev: " .. message
+        return nil, "dev: " .. sentence(message)
     end
     return backend
 end
@@ -4443,19 +4443,23 @@ local function settings(ctx)
         verb.die(NO_BOARD)
     end
     if backend ~= board.Backend.POMB and backend ~= board.Backend.LOCAL then
-        verb.die('dev: [board] backend must be "pomb" or "local" in .dev/config.toml')
+        verb.die(
+            'dev: The `backend` setting of `[board]` must be "pomb" or "local" in `.dev/config.toml`.'
+        )
     end
     local name = config.get(ctx.root, "board.name")
     if name == nil then
         name = fs.basename(ctx.root)
     end
     if type(name) ~= "string" or name == "" then
-        verb.die("dev: [board] name must be a non-empty string in .dev/config.toml")
+        verb.die(
+            "dev: The `name` setting of `[board]` must be a non-empty string in `.dev/config.toml`."
+        )
     end
     local path = config.get(ctx.root, "board.path")
     if path ~= nil then
         if backend ~= board.Backend.LOCAL then
-            verb.die('dev: [board] path only applies to backend = "local"')
+            verb.die('dev: The `path` setting of `[board]` only applies to `backend = "local"`.')
         end
         if
             type(path) ~= "string"
@@ -4464,7 +4468,7 @@ local function settings(ctx)
             or path:find("//", 1, true)
         then
             verb.die(
-                "dev: [board] path must be a relative path inside the project, such as .dev/board.json"
+                "dev: The `path` setting of `[board]` must be a relative path inside the project, such as `.dev/board.json`."
             )
         end
         path = ctx.root .. "/" .. path
@@ -4488,16 +4492,18 @@ local function board_name(ctx, flags)
     local backend = config.get(ctx.root, "board.backend")
     local name = config.get(ctx.root, "board.name")
     if backend == nil and has_section(ctx.root) then
-        verb.die('dev: [board] needs backend = "pomb" in .dev/config.toml')
+        verb.die('dev: The `[board]` section needs `backend = "pomb"` in `.dev/config.toml`.')
     end
     if backend ~= nil and backend ~= board.Backend.POMB then
-        verb.die('dev: [board] backend must be "pomb" or "local" in .dev/config.toml')
+        verb.die(
+            'dev: The `backend` setting of `[board]` must be "pomb" or "local" in `.dev/config.toml`.'
+        )
     end
     local asked = flags["--name"]
     if backend == nil then
         if not asked then
             verb.die(
-                "dev: this project has no [board] section, pass --name N to make a board and write it"
+                "dev: This project has no `[board]` section. Pass `--name N` to make a board and write it."
             )
         end
         name = asked
@@ -4516,7 +4522,7 @@ local function board_name(ctx, flags)
         or #name > NAME_CHARS
         or not name:find(NAME_PATTERN)
     then
-        verb.die("dev: the board's name must be 1 to 100 characters with no quote or backslash")
+        verb.die("dev: The board's name must be 1 to 100 characters with no quote or backslash.")
     end
     return name, backend == nil
 end
@@ -4535,7 +4541,7 @@ local function write_section(root, name)
         ok, message = fs.write(path, existing .. gap .. section)
     end
     if not ok then
-        verb.die("dev: cannot write " .. path .. ": " .. tostring(message))
+        verb.die("dev: Cannot write " .. path .. ". " .. sentence(tostring(message)))
     end
 end
 
@@ -4553,7 +4559,9 @@ local function config_lanes(ctx)
         ok = ok and type(lane) == "string" and lane ~= ""
     end
     if not ok then
-        verb.die("dev: [board] lanes must be a list of lane names in .dev/config.toml")
+        verb.die(
+            "dev: The `lanes` setting of `[board]` must be a list of lane names in `.dev/config.toml`."
+        )
     end
     return lanes
 end
@@ -4580,7 +4588,7 @@ local function init_local(ctx, flags, admin)
         warn_first_lane = false,
     })
     if not changes then
-        verb.die("dev: " .. message)
+        verb.die("dev: " .. sentence(message))
     end
     print(
         changes == 0
@@ -4623,13 +4631,13 @@ M.handlers["board init"] = function(ctx)
     }
     if not admin and opts.token == nil then
         verb.die(
-            "dev: [board.pomb] lead_token is not set in ~/.config/dev/config.toml, "
-                .. "set it to pass:<entry> or run with --admin"
+            "dev: The `lead_token` setting of `[board.pomb]` is not set in `~/.config/dev/config.toml`. "
+                .. "Set it to `pass:<entry>` or run with `--admin`."
         )
     end
     local backend, message = pomb.new(opts)
     if not backend then
-        verb.die("dev: " .. message)
+        verb.die("dev: " .. sentence(message))
     end
     backend.roles = board.roles(column_map(ctx.root))
     if admin then
@@ -4641,13 +4649,13 @@ M.handlers["board init"] = function(ctx)
             say = print,
         })
         if not secret then
-            verb.die("dev: " .. message)
+            verb.die("dev: " .. sentence(message))
         end
         backend:authorize(secret)
         local ok
         ok, message = backend:admin()
         if not ok then
-            verb.die("dev: " .. message)
+            verb.die("dev: " .. sentence(message))
         end
     end
     local changes
@@ -4657,7 +4665,7 @@ M.handlers["board init"] = function(ctx)
         warn_first_lane = true,
     })
     if not changes then
-        verb.die("dev: " .. message)
+        verb.die("dev: " .. sentence(message))
     end
     if missing then
         write_section(ctx.root, name)
@@ -4781,7 +4789,7 @@ local function open_board(ctx)
         pending = queue.new(found.name)
         local waiting, why = pending:count()
         if not waiting then
-            stderr_line("dev: " .. why .. ". The queue is left in place.")
+            stderr_line("dev: " .. sentence(why) .. " The queue is left in place.")
         elseif waiting > 0 then
             replay(backend, pending, stderr_news)
         end
@@ -4792,7 +4800,7 @@ end
 local function open_lead(ctx, action, permission)
     local refused = guards.delete_refusal(action)
     if refused then
-        verb.die("dev: " .. refused.message)
+        verb.die("dev: " .. sentence(refused.message))
     end
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then
@@ -4800,8 +4808,12 @@ local function open_lead(ctx, action, permission)
     end
     if config.user("board.pomb." .. LEAD_TOKEN_KEY) == nil then
         verb.die(
-            "dev: [board.pomb] lead_token is not set in ~/.config/dev/config.toml"
-                .. (permission and ", and " .. permission .. " needs the lead token" or "")
+            "dev: The `lead_token` setting of `[board.pomb]` is not set in `~/.config/dev/config.toml`."
+                .. (
+                    permission
+                        and " The `" .. permission .. "` permission needs the lead token."
+                    or ""
+                )
         )
     end
     local backend, message = M.open(found, { token_key = LEAD_TOKEN_KEY })
@@ -4823,7 +4835,7 @@ M.handlers["board token mint"] = function(ctx)
     local backend = open_lead(ctx, "mints a role token")
     local issued, message = backend:mint(flags["--role"], flags["--as"])
     if not issued then
-        verb.die("dev: " .. message)
+        verb.die("dev: " .. sentence(message))
     end
     local stamp = issued.expires > 0 and os.date("!%Y-%m-%dT%H:%M:%SZ", issued.expires) or "never"
     print(
@@ -4850,7 +4862,7 @@ M.handlers["board token revoke"] = function(ctx)
     local backend = open_lead(ctx, "revokes a role token")
     local done, message = backend:revoke(flags["--as"])
     if not done then
-        verb.die("dev: " .. message)
+        verb.die("dev: " .. sentence(message))
     end
     print(
         done.revoked and ("revoked the role token of " .. flags["--as"])
@@ -4868,7 +4880,7 @@ M.handlers["board status"] = function(ctx)
         local pending = queue.new(found.name)
         local waiting, why = pending:count()
         if not waiting then
-            stderr_line("dev: " .. why .. ". The queue is left in place.")
+            stderr_line("dev: " .. sentence(why) .. " The queue is left in place.")
         elseif waiting > 0 then
             local backend = M.open(found)
             if backend then
@@ -5297,7 +5309,7 @@ end
 M.handlers["board wait"] = function(ctx)
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then
-        verb.die("dev: a local board has nothing to wait on")
+        verb.die("dev: A local board has nothing to wait on.")
     end
     local backend = open_board(ctx)
     local result = M.wait(backend, ctx.args, { stem = cursor_path(found.name) })
@@ -5305,7 +5317,7 @@ M.handlers["board wait"] = function(ctx)
         if result.code == USAGE then
             verb.usage_error(ctx, result.message)
         end
-        verb.die("dev: " .. result.message)
+        verb.die("dev: " .. sentence(result.message))
     end
     print(result.output)
     return 0
@@ -5315,12 +5327,12 @@ M.handlers["board sync"] = function(ctx)
     verb.no_args(ctx)
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then
-        verb.die("dev: a local board has nothing to sync")
+        verb.die("dev: A local board has nothing to sync.")
     end
     local pending = queue.new(found.name)
     local waiting, message = pending:count()
     if not waiting then
-        verb.die("dev: " .. message .. ". The queue is left in place.")
+        verb.die("dev: " .. sentence(message) .. " The queue is left in place.")
     end
     if waiting == 0 then
         print("Nothing is queued.")
@@ -5334,7 +5346,7 @@ M.handlers["board sync"] = function(ctx)
     local left
     left, message = replay(backend, pending, print)
     if not left then
-        verb.die("dev: " .. message)
+        verb.die("dev: " .. sentence(message))
     end
     if left > 0 then
         print("queued: " .. left)
@@ -5373,7 +5385,7 @@ local function ensure_board(ctx)
         )
     end
     local name = fs.basename(ctx.root)
-    print("this project is private and has no board, making " .. name)
+    print("This project is private and has no board. Making " .. name .. ".")
     local making = {}
     for key, value in pairs(ctx) do
         making[key] = value
@@ -5415,7 +5427,7 @@ for sub in pairs(commands) do
         if sub == "lint" then
             local strict = config.get(ctx.root, "board.lint.strict")
             if strict ~= nil and type(strict) ~= "boolean" then
-                verb.die("dev: [board.lint] strict must be true or false in the config")
+                verb.die("dev: The `strict` setting of `[board.lint]` must be true or false.")
             end
             if strict and not index_of(args, STRICT_FLAG) then
                 args = { unpack(args) }

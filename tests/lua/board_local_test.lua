@@ -244,7 +244,7 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
             .. "  Ready    2 Pomodori  docs,needs:lead  -    Write docs\n"
     )
     out = dev(root, home, { "board", "ls", "--size", "3+" })
-    testing.eq(out, "no cards\n")
+    testing.eq(out, "No cards.\n")
     out = dev(root, home, { "board", "ls", "--label", "docs" })
     testing.ok(out:find("Write docs", 1, true), out)
     out = dev(root, home, { "board", "next" })
@@ -255,7 +255,7 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
     out = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
     testing.eq(out, "moved " .. a .. " to Review\n")
     out = dev(root, home, { "board", "next" })
-    testing.eq(out, "no ready cards\n")
+    testing.eq(out, "No ready cards.\n")
     out = dev(root, home, { "board", "size", b, "1" })
     testing.eq(out, "sized " .. b .. " 1\n")
     out = dev(root, home, { "board", "label", a, "+extra", "--remove", "docs" })
@@ -337,14 +337,14 @@ testing.test("next --column backlog skips a needs:human card", function()
     testing.eq(code, 0, out)
     testing.ok(out:find(b, 1, true) and not out:find(a, 1, true), out)
     out = dev(root, home, { "board", "next", "--column", COLUMN.BACKLOG })
-    testing.eq(out, "no cards in Backlog\n")
+    testing.eq(out, "No cards in Backlog.\n")
 end)
 
 testing.test("next --column icebox never offers the landing turn card", function()
     local root, home = local_board()
     dev(root, home, { "board", "add", "landing turn", "--column", COLUMN.ICEBOX })
     local out = dev(root, home, { "board", "next", "--column", COLUMN.ICEBOX })
-    testing.eq(out, "no cards in Icebox\n")
+    testing.eq(out, "No cards in Icebox.\n")
     local other =
         prefix_of((dev(root, home, { "board", "add", "Other", "--column", COLUMN.ICEBOX })))
     out = dev(root, home, { "board", "next", "--column", COLUMN.ICEBOX })
@@ -384,7 +384,7 @@ testing.test("next --column blocked returns the top unclaimed needs:lead card on
     out, code = dev(root, home, { "board", "label", free, "needs:human" })
     testing.eq(code, 0, out)
     out = dev(root, home, { "board", "next", "--column", COLUMN.BLOCKED })
-    testing.eq(out, "no cards in Blocked\n")
+    testing.eq(out, "No cards in Blocked.\n")
 end)
 
 testing.test("rename sets a local card's title and refuses a blank one", function()
@@ -818,7 +818,7 @@ testing.test(
             )
         )
         out = dev(root, home, { "board", "links", d })
-        testing.eq(out, "no links\n")
+        testing.eq(out, "No links.\n")
         out, code = dev(root, home, { "board", "links", "deadbeef" })
         testing.eq(code, 1, out)
     end
@@ -865,7 +865,7 @@ testing.test(
         testing.eq(code, 1, out)
         out, code = dev(root, home, { "board", "unlink", b, "blocks", a })
         testing.eq(code, 0, out)
-        testing.eq(dev(root, home, { "board", "links", a }), "no links\n")
+        testing.eq(dev(root, home, { "board", "links", a }), "No links.\n")
         out, code = dev(root, home, { "board", "unlink", a, "blocked_by", b })
         testing.eq(code, 1, out)
         testing.ok(out:find("The card holds no blocked_by link to " .. b, 1, true), out)
@@ -1098,7 +1098,7 @@ testing.test("a local board keeps an unsized or red card out of Ready", function
     dev(root, home, { "board", "size", a, "2" })
     out, code = dev(root, home, { "board", "move", a, COLUMN.READY })
     testing.eq(code, 0, out)
-    testing.eq(dev(root, home, { "board", "stale" }), "no stale cards\n")
+    testing.eq(dev(root, home, { "board", "stale" }), "No stale cards.\n")
 end)
 
 testing.test(
@@ -1570,7 +1570,7 @@ testing.test("take holds a claim with an expiry and no loop, and release gives i
     out = dev(root, home, { "board", "ls" })
     testing.ok(out:find("dev@", 1, true), out)
     out = dev(root, home, { "board", "next" })
-    testing.eq(out, "no ready cards\n")
+    testing.eq(out, "No ready cards.\n")
     out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
     testing.eq(code, 1)
     testing.ok(out:find("is claimed by dev@", 1, true), out)
@@ -1650,12 +1650,15 @@ testing.test("a path outside the project, or on a pomb board, is refused", funct
         local root, home = setup('[board]\nbackend = "local"\npath = "' .. path .. '"\n')
         local out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 1, path)
-        testing.ok(out:find("[board] path must be a relative path", 1, true), out)
+        testing.ok(
+            out:find("The `path` setting of `[board]` must be a relative path", 1, true),
+            out
+        )
     end
     local root, home = setup('[board]\nbackend = "pomb"\npath = ".dev/board.json"\n')
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find('path only applies to backend = "local"', 1, true), out)
+    testing.ok(out:find('only applies to `backend = "local"`.', 1, true), out)
 end)
 
 testing.test("a local board's name has to make a file name unless a path is set", function()
@@ -1677,14 +1680,14 @@ testing.test("sync on a local board says there is nothing to sync", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "sync" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: a local board has nothing to sync\n")
+    testing.eq(out, "dev: A local board has nothing to sync.\n")
 end)
 
 testing.test("wait on a local board says there is nothing to wait on", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "wait", "--for", COLUMN.READY })
     testing.eq(code, 1)
-    testing.eq(out, "dev: a local board has nothing to wait on\n")
+    testing.eq(out, "dev: A local board has nothing to wait on.\n")
 end)
 
 testing.test("six processes writing at once lose no card", function()
@@ -2447,7 +2450,7 @@ testing.test("a local board with renamed columns works through the project map",
     tick_first(root, home, id)
     out = dev(root, home, { "board", "move", id, COLUMN.DONE })
     testing.eq(out, "moved " .. id .. " to Shipped\n")
-    testing.eq(dev(root, home, { "board", "ls" }), "no cards\n")
+    testing.eq(dev(root, home, { "board", "ls" }), "No cards.\n")
     out = dev(root, home, { "board", "ls", "--column", "shipped" })
     testing.ok(out:find("Shipped", 1, true), out)
     out = dev(root, home, { "board", "move", id, COLUMN.READY })
@@ -2489,7 +2492,7 @@ testing.test(
             dev(root, home, { "board", "move", second, "archive" }),
             "moved " .. second .. " to Archive\n"
         )
-        testing.eq(dev(root, home, { "board", "ls" }), "no cards\n")
+        testing.eq(dev(root, home, { "board", "ls" }), "No cards.\n")
         local third = prefix_of(
             dev(
                 root,
@@ -2723,7 +2726,7 @@ testing.test("run starts a lint-clean run card, resumes it and ends it", functio
     testing.ok(out:find("already has the run card", 1, true), out)
     out, code = dev(root, home, { "board", "lint" })
     testing.eq(code, 0, out)
-    testing.eq(out, "no findings\n")
+    testing.eq(out, "No findings.\n")
     out, code = dev(root, home, { "board", "run" }, agent)
     testing.eq(code, 0, out)
     testing.ok(out:find("held by dotfiles/one:", 1, true), out)
@@ -2780,7 +2783,7 @@ testing.test("run on a private project with no board starts making one", functio
     local root, home = setup("")
     local out, code = dev(root, home, { "board", "run", "--orders", "x" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("private and has no board", 1, true), out)
+    testing.ok(out:find("This project is private and has no board.", 1, true), out)
     testing.ok(out:find("lead_token", 1, true), out)
 end)
 

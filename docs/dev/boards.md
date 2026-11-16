@@ -78,7 +78,7 @@ directory's name. The `local` backend keeps the board in a file (see Local
 boards below).
 
 `dev board status` prints the backend and the board. Without a `[board]`
-section it prints `dev: no board for this project` and exits 1, and every other
+section it prints `dev: This project has no board.` and exits 1, and every other
 subcommand says the same and exits 1.
 
 The server and the token live once in the user file
@@ -740,16 +740,16 @@ card colour's palette label, or `unsized`.
 `next` prints the top Ready card that is unclaimed, not blocked and not labelled
 `needs:human`. After the card line it prints its comment count and how many of
 those comments are the owner's (`2 comments, 1 the owner's`, or `1 comment` for
-one). With no card it prints `no ready cards`.
+one). With no card it prints `No ready cards.`
 
 A local board has no owner comments, so it always counts 0 as the owner's.
 
 `next --column` changes what it picks:
 
 - `backlog`, `icebox`, `review`, `verify` and `release` take the top such card
-  of that column, or print `no cards in <column>`.
+  of that column, or print `No cards in <column>.`
 - `blocked` prints the top unclaimed card labelled `needs:lead`, never one that
-  also carries `needs:human`, or `no cards in Blocked`. With `--for planner` it
+  also carries `needs:human`, or `No cards in Blocked.` With `--for planner` it
   prints the top such card labelled `needs:planner`.
 - Any other column is exit 2.
 
@@ -1164,7 +1164,7 @@ its `next` skips a card that a card outside Done blocks.
 - the other card's id prefix
 - the name of its board, with `-` for this board
 
-A card with no links prints `no links`. It lists both sides of a link, the ones
+A card with no links prints `No links.` It lists both sides of a link, the ones
 the card holds and the ones another card holds on it, which show as `blocks`,
 `related` or `child`.
 
@@ -1190,7 +1190,7 @@ Unlike `link`, `unlink` is not queued while Pomb is unreachable.
 file of that name, so a rerun uploads nothing twice.
 
 `attachments CARD` lists the card's files, one line each with the id prefix, the
-size in bytes and the name, or `no attachments`. `detach CARD ID` removes the
+size in bytes and the name, or `No attachments.` `detach CARD ID` removes the
 attachment whose id starts with ID and prints `detached <id prefix> <name>`.
 
 dev checks no size and no type. Pomb enforces its own limits and dev prints its
@@ -1211,7 +1211,7 @@ task view, so a card at 6 days is fresh and one at 7 is stale. Icebox, Blocked
 and Done are never stale.
 
 A `--days` that is not a whole number of 1 or more is a usage error (exit 2).
-When nothing is stale it prints `no stale cards`.
+When nothing is stale it prints `No stale cards.`
 
 These sections follow, each listed apart from the stale cards:
 
@@ -1269,7 +1269,7 @@ A finding only the owner can fix ends in `(owner)`. That is any finding on a
 Blocked and Icebox, which an agent fixes.
 
 The exit is 1 when any finding is left that an agent may fix, and 0 with
-`no findings` or when every finding is the owner's, so a card whose checks run
+`No findings.` or when every finding is the owner's, so a card whose checks run
 lint can land while the owner has an open question. `--strict` exits the same
 way.
 
@@ -1451,7 +1451,7 @@ The woken agent reads every comment with `dev board show`. Pomb's events carry
 no labels, so `wait` reads the board for each batch of events.
 
 Any other `--for` value is a usage error. On a local board `wait` prints
-`dev: a local board has nothing to wait on` and exits 1, and it is never queued.
+`dev: A local board has nothing to wait on.` and exits 1, and it is never queued.
 
 The command asks Pomb for events after a cursor and holds each request for up to
 50 seconds. On a quiet board it repeats until a matching event arrives.
@@ -1620,7 +1620,7 @@ the cards.
   none) sits after the labels, only when a listed card has outcomes.
 - `--size` keeps one size (`1`, `2`, `3`, `3+` or `unsized`, where a card with
   no colour is unsized).
-- It prints `no cards` when nothing matches.
+- It prints `No cards.` when nothing matches.
 - When standard output takes colour (`dev.ui.context`: a terminal, no
   `NO_COLOR`, `TERM` not `dumb`) it draws more than the plain lines:
   - A summary line `N cards · n backlog · ...` (the listed cards, by column).
@@ -1653,10 +1653,10 @@ prints the top Ready card that is unclaimed, not blocked and not labelled
 - The card is in the `ls` format, followed by `N comments, M the owner's`
   (`1 comment` for one). On a Pomb board a `link: <url>/t/<card id>` line
   follows it.
-- With no such card it prints `no ready cards` (exit 0).
+- With no such card it prints `No ready cards.` (exit 0).
 - Comments that cannot be read are exit 1.
 - `--column backlog`, `icebox`, `review`, `verify` or `release` takes the top
-  such card of that column instead, else `no cards in <column>` (exit 0).
+  such card of that column instead, else `No cards in <column>.` (exit 0).
 - `--column blocked` takes the top unclaimed card labelled `needs:lead`, or
   with `--for planner` `needs:planner`. It never takes one labelled
   `needs:human`.
@@ -1985,7 +1985,7 @@ typed in this session, on a `needs:human` card.
 - It prints one aligned line each: the kind (`blocked_by`, `blocks`,
   `related`, `parent` or `child`, as the card sees it), the other card's
   8-character id prefix and its board name (`-` for this board).
-- The order is the one the backend gives, else it prints `no links`.
+- The order is the one the backend gives, else it prints `No links.`
 - A Pomb board reads `GET /api/tasks/{id}/links`. That lists the links the card
   holds and a `blocks`, `related` or `child` entry for each link another card
   holds on it.
@@ -2037,7 +2037,7 @@ to OTHER (a card of this board, or `BOARD:PREFIX`).
 `dev board attachments CARD` lists the card's attachments.
 
 - It prints `<id prefix>  <size>  <name>` for each, in the order Pomb lists
-  them, else `no attachments`.
+  them, else `No attachments.`
 - Listing is its own verb, to keep `show` at one request.
 - A local board refuses it.
 
@@ -2090,7 +2090,7 @@ The first list:
   RFC 3339, read with `dev.cmd.box.parse_time`) to now, so 6 days is fresh and
   7 is stale.
 - Icebox, Blocked and Done are never stale.
-- It prints `no stale cards` when the first list is empty.
+- It prints `No stale cards.` when the first list is empty.
 
 The sections after it, each after a blank line and its heading, with the same
 columns as the first list unless noted:
@@ -2155,7 +2155,7 @@ one line per broken rule. With `CARD`, it resolves the prefix with
   reports as agent findings (its third return value holds the indexes of the
   owner's).
 - It exits 1 only when a finding without the mark is left.
-- A clean board prints `no findings` and exits 0.
+- A clean board prints `No findings.` and exits 0.
 - A flag other than `--strict`, or a second card, is exit 2. A `CARD` that
   matches no card or several is exit 1.
 - `--strict` is also on when `board.lint.strict` is `true` in the config
@@ -3504,7 +3504,7 @@ On a Pomb board:
 
 On a local board:
 
-- It prints `dev: a local board has nothing to sync` (exit 1).
+- It prints `dev: A local board has nothing to sync.` (exit 1).
 
 ### Prose warnings
 
@@ -3538,11 +3538,11 @@ The board comes from the `[board]` section of `<root>/.dev/config.toml`.
   (see the local backend below). Any other backend is exit 1.
 - `name`: defaults to the project directory's name.
 - no `[board]` section: every subcommand prints
-  `dev: no board for this project` and exits 1, which is how an agent
+  `dev: This project has no board.` and exits 1, which is how an agent
   branches.
 
 Every subcommand, `edit` and `show` alike, prints
-`dev: no board for this project` from a directory outside the project (the
+`dev: This project has no board.` from a directory outside the project (the
 root is found from the current directory). A refusal from a checkout's root
 or any directory below it means that checkout's `.dev/config.toml` has no
 `[board]` section. A refusal from elsewhere means the shell was not in the
@@ -3658,7 +3658,7 @@ the time left of the window as its timeout, and a match restarts the window.
 An empty reply or an elapsed window ends it with one line per card.
 
 An unknown `--for`, a card argument or another flag is exit 2. A local board
-prints `dev: a local board has nothing to wait on` (exit 1).
+prints `dev: A local board has nothing to wait on.` (exit 1).
 
 The cursor:
 
@@ -3719,8 +3719,9 @@ Where it lives:
 - default: `<state home>/dev/boards/<name>.json` (`$XDG_STATE_HOME` when
   absolute, else `~/.local/state`) at mode 600 in a mode 700 directory. The
   name is restricted to letters, digits, dots, dashes and underscores (else
-  `dev: a local board's name must be letters, digits, dots, dashes and
-  underscores to name its file, or set [board] path`, exit 1).
+  ``dev: A local board's name must be letters, digits, dots, dashes and
+  underscores to name its file. Otherwise set the `path` setting of
+  `[board]`.``, exit 1).
 - tracked: `<root>/<path>` at the default mode when
   `[board] path = ".dev/board.json"` is set. The path must be relative, start
   with a letter, digit, dot or underscore and hold no `..` or `//` (else exit
@@ -3797,7 +3798,7 @@ malformed:
 
 - `queue.count` and `queue.list` answer `<path>:<line>: <reason>` (the line
   from the parse error's offset, or `<path>: entry N is not a queued command`).
-- `dev board sync` prints `dev: <that>. The queue is left in place.` and exits
+- `dev board sync` prints `dev: <that sentence> The queue is left in place.` and exits
   1.
 - every other Pomb command (`status` included) prints the same line on
   standard error, replays nothing, runs normally and leaves the file

@@ -30,7 +30,8 @@ local function turn_row(column)
         column_id = support.column_id(column),
     })
 end
-local LANES_DIE = "dev: [board] lanes must be a list of lane names in .dev/config.toml"
+local LANES_DIE =
+    "dev: The `lanes` setting of `[board]` must be a list of lane names in `.dev/config.toml`."
 local STANDARD_ROLES = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 
 local function copy(value)
@@ -752,7 +753,7 @@ testing.test("a denied sign-in ends the run with no board call", function()
     })
     local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
     testing.eq(code, 1)
-    testing.ok(out:find("dev: the sign-in was denied", 1, true), out)
+    testing.ok(out:find("dev: The sign-in was denied.", 1, true), out)
     testing.eq(read(root, "calls"):find("/api/boards", 1, true), nil)
     testing.eq(fs.list(tmp), {})
 end)
@@ -776,7 +777,7 @@ testing.test("a token the approver lowered is refused", function()
     assert(fs.write(root .. "/whoami.json", '{"kind":"token","name":"x","scope":"work"}'))
     local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
     testing.eq(code, 1)
-    testing.ok(out:find("the approved token has the work scope, init needs admin", 1, true), out)
+    testing.ok(out:find("The approved token has the work scope, init needs admin.", 1, true), out)
     testing.eq(writes(root), 0)
 end)
 
@@ -784,14 +785,14 @@ testing.test("init without a lead token or --admin says what to set", function()
     local root, home, tmp = sandbox({ user = '[board.pomb]\nurl = "https://pomb.example"\n' })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 1)
-    testing.ok(out:find("lead_token is not set", 1, true), out)
+    testing.ok(out:find("`lead_token` setting of `[board.pomb]` is not set", 1, true), out)
 end)
 
 testing.test("a project with no [board] section needs --name and then gets one", function()
     local root, home, tmp = sandbox({ project = "" })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 1)
-    testing.ok(out:find("pass --name N", 1, true), out)
+    testing.ok(out:find("Pass `--name N`", 1, true), out)
     testing.eq(read(root, ".dev/config.toml"), "")
     out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
     testing.eq(code, 0)
@@ -810,7 +811,7 @@ testing.test("a project with no .dev/config.toml takes --name and gets the file"
     local root, home, tmp = sandbox({ project = false })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 1)
-    testing.ok(out:find("pass --name N", 1, true), out)
+    testing.ok(out:find("Pass `--name N`", 1, true), out)
     out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
     testing.eq(code, 0)
     testing.eq(

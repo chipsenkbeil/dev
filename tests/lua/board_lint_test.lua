@@ -190,7 +190,7 @@ testing.test("lint lets a Done epic with every child Done close without outcomes
         return { children = { done = 2, total = held.children[id] } }
     end
     local result = cmd_board.run("lint", {}, fake)
-    testing.eq(result.output, "no findings")
+    testing.eq(result.output, "No findings.")
 end)
 
 testing.test("lint gives an epic no claimant exemption", function()
@@ -274,7 +274,7 @@ testing.test("lint passes a clean board with exit 0 and no code", function()
         children = { [cards[7].id] = 2 },
     }
     local result = cmd_board.run("lint", {}, backend(cards, held))
-    testing.eq(result.output, "no findings")
+    testing.eq(result.output, "No findings.")
     testing.eq(result.code, nil)
     testing.eq(result.message, nil)
 end)
@@ -303,7 +303,7 @@ testing.test("lint with a card reports only that card", function()
         card(3, NAME.READY, { checks = {} }),
     }
     local result = cmd_board.run("lint", { "00000002" }, backend(cards))
-    testing.eq(result.output, "no findings")
+    testing.eq(result.output, "No findings.")
     testing.eq(result.code, nil)
     result = cmd_board.run("lint", { "00000003", "--strict" }, backend(cards))
     testing.eq(result.code, 1)
@@ -377,7 +377,7 @@ testing.test("dev board lint exits 1 on a bad local board and 0 on a clean one",
     local dev = local_board(LOCAL)
     local out, code = dev({ "board", "lint" })
     testing.eq(code, 0, out)
-    testing.eq(out, "no findings\n")
+    testing.eq(out, "No findings.\n")
     out, code = dev({
         "board",
         "add",
@@ -416,7 +416,10 @@ testing.test("a strict setting that is not a boolean is refused", function()
     local dev = local_board(LOCAL .. '\n[board.lint]\nstrict = "yes"\n')
     local out, code = dev({ "board", "lint" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("[board.lint] strict must be true or false", 1, true), out)
+    testing.ok(
+        out:find("The `strict` setting of `[board.lint]` must be true or false.", 1, true),
+        out
+    )
 end)
 
 testing.test(
@@ -427,7 +430,7 @@ testing.test(
             card(2, NAME.DONE, { description = false, labels = { "discarded" }, outcomes = {} }),
             card(3, NAME.ICEBOX, { description = false }),
         }
-        testing.eq(cmd_board.run("lint", {}, backend(cards)).output, "no findings")
+        testing.eq(cmd_board.run("lint", {}, backend(cards)).output, "No findings.")
         local result = cmd_board.run("lint", { "--strict" }, backend(cards))
         testing.eq(result.code, 1)
         testing.eq(findings(result.output), {
@@ -574,18 +577,18 @@ testing.test("lint leaves a card still in Review with the same builder and revie
     local out, code =
         done_card_with("project-run/aaaa", "project-run/aaaa", { column = NAME.REVIEW })
     testing.eq(code, 0, out)
-    testing.eq(out, "no findings\n")
+    testing.eq(out, "No findings.\n")
 end)
 
 testing.test("lint leaves a discarded Done card with the same builder and reviewer", function()
     local out, code =
         done_card_with("project-run/aaaa", "project-run/aaaa", { labels = { board.DISCARDED } })
     testing.eq(code, 0, out)
-    testing.eq(out, "no findings\n")
+    testing.eq(out, "No findings.\n")
 end)
 
 testing.test("lint passes a Done card whose builder and reviewers differ", function()
     local out, code = done_card_with("project-run/aaaa", "dotfiles/code-examiner/aaaa")
     testing.eq(code, 0, out)
-    testing.eq(out, "no findings\n")
+    testing.eq(out, "No findings.\n")
 end)
