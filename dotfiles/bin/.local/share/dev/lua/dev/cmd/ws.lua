@@ -308,23 +308,38 @@ local function first_line(text)
     return nil
 end
 
+---@class dev.cmd.ws.clean.Opts
+---@field refresh boolean? false when unset, true to update a stale jj workspace before the check
+
 ---Check that a workspace folder holds nothing outside a commit.
+---
+---A jj workspace whose working-copy commit is already on trunk holds nothing outside a commit.
 ---@private
 ---@param backend dev.vcs.Backend? the backend of the workspace folder
 ---@param path string the workspace folder
+---@param opts dev.cmd.ws.clean.Opts? whether to refresh a stale workspace first
 ---@return boolean clean whether the folder holds nothing outside a commit
 ---@return dev.cmd.ws.Reason? why what was found or why it could not be read
-function M.__clean(backend, path)
+function M.__clean(backend, path, opts)
     if backend == nil then
         return true
     end
     local argv
     if backend == vcs.JJ then
+        local base = vcs.base(path, backend, { quiet = true })
+        if opts and opts.refresh then
+            local text, status =
+                dev_os.capture(vcs.with(base, "workspace", "update-stale"), { stderr = "stdout" })
+            if status ~= 0 then
+                return false,
+                    { reason = Refusal.UNREADABLE, path = path, detail = first_line(text) }
+            end
+        end
         argv = vcs.with(
-            vcs.base(path, backend, { quiet = true }),
+            base,
             "log",
             "-r",
-            "@",
+            "@ ~ ::trunk()",
             "--no-graph",
             "-T",
             'if(empty, "", "changes")'
@@ -688,7 +703,7 @@ function M.remove(root, name, opts)
         return refused({ reason = Refusal.NOT_FORGOTTEN, path = path })
     end
     if not gone then
-        local clean, why = M.__clean(backend, path)
+        local clean, why = M.__clean(backend, path, { refresh = true })
         if not clean then
             return refused(why)
         end

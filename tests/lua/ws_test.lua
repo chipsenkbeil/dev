@@ -386,7 +386,13 @@ case "$*" in
     root) pwd; exit 0 ;;
     *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
     *" git root") printf '%s' "$GIT_ROOT"; exit 0 ;;
-    *" log "*) printf '%s' "$DIRTY"; exit "${LOG_CODE:-0}" ;;
+    *" workspace update-stale")
+        if [ -n "$UPDATE_FAIL" ]; then echo "update failed" >&2; exit 1; fi
+        rm -f "$STALE"; exit 0 ;;
+    *" log "*)
+        if [ -e "$STALE" ]; then echo "The working copy is stale" >&2; exit 1; fi
+        case "$*" in *"@ ~ ::trunk()"*) if [ -n "$LANDED" ]; then exit 0; fi ;; esac
+        printf '%s' "$DIRTY"; exit "${LOG_CODE:-0}" ;;
 esac
 echo "jj $*" >> "$LOG"
 ]]
@@ -601,6 +607,50 @@ testing.test("rm succeeds when the git prune of a colocated repo fails", functio
     -- Expect the removal to finish all the same
     testing.eq(code, 0, out)
     testing.eq(fs.exists(path), false)
+end)
+
+testing.test("rm updates a stale jj workspace before it checks for changes", function()
+    -- Make jj call the working copy stale until update-stale runs
+    local root, path, env = rm_setup("jj")
+    local flag = root .. "/stale-flag"
+    assert(fs.write(flag, "x"))
+    env.env.STALE = flag
+
+    -- Remove the stale workspace with no manual jj step
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the removal done and the stale flag cleared by update-stale
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), false)
+    testing.eq(fs.exists(flag), false)
+end)
+
+testing.test("rm removes a jj workspace whose commit is on trunk", function()
+    -- Report changes yet say the working-copy commit is on trunk
+    local root, path, env = rm_setup("jj")
+    env.env.DIRTY = "changes"
+    env.env.LANDED = "1"
+
+    -- Remove the workspace whose commit already landed
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the removal done
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), false)
+end)
+
+testing.test("rm keeps a jj workspace whose update-stale fails", function()
+    -- Make the refresh fail
+    local root, path, env = rm_setup("jj")
+    env.env.UPDATE_FAIL = "1"
+
+    -- Remove the workspace with the refresh failing
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect a refusal naming the failure and the folder kept
+    testing.eq(code, 1)
+    testing.eq(out, "Cannot read the state of " .. path .. ": update failed.\n")
+    testing.eq(fs.exists(path .. "/file"), true)
 end)
 
 testing.test("rm moves a git folder to the trash with its ignored files", function()
@@ -1082,6 +1132,7 @@ case "$*" in
     root) pwd; exit 0 ;;
     *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
     *" git root") exit 0 ;;
+    *" workspace update-stale") exit 0 ;;
     *"workspace root --name "*)
         for last; do :; done
         printf '%s\n' "$ROOTS" | while read -r name path; do

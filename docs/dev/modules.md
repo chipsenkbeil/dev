@@ -99,6 +99,10 @@ prune` from the project's main folder. After a forget in a colocated repo it
 also runs `git worktree prune`, which drops the git record jj leaves, and
 ignores a failure there. A plain folder is only moved.
 
+Before the move, `ws rm` runs `jj workspace update-stale` in a jj folder to
+refresh a stale working copy, and then treats a working-copy commit that is
+already on trunk as holding no changes.
+
 The move comes first, so a move that fails leaves the folder and the workspace
 as they were, and a forget or prune that fails moves the folder back. A target
 that already exists fails the move. Before the move, a git worktree is refused
