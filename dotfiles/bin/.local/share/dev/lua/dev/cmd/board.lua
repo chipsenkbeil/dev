@@ -3051,6 +3051,15 @@ function commands.ship(backend, args)
     if not commit then
         return failure("Revision " .. rev .. " does not name one commit. No card moved.")
     end
+    if not land.same_tree(backend.root, commit) then
+        return failure(
+            string.format(
+                "The working copy is not at %s, so a release command would test another tree. "
+                    .. "Run `dev board ship` from a workspace at that revision. No card moved.",
+                land.short(commit)
+            )
+        )
+    end
     local failed = ship_ran(backend, runs)
     if failed then
         return failed

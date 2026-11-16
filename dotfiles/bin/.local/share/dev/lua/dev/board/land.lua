@@ -1102,6 +1102,21 @@ function M.fetched_commit(root, revset)
     return out:match("^(%x+)\n$")
 end
 
+---Say whether the working copy holds the tree of a commit and nothing else.
+---@param root string the project root
+---@param commit string the commit id
+---@return boolean same true when the working-copy tree equals the commit's tree, false when it
+---   differs or a read failed
+function M.same_tree(root, commit)
+    if vcs.backend(root) == vcs.GIT then
+        local status = git_out(root, "status", "--porcelain")
+        local head = git_out(root, "rev-parse", "HEAD^{tree}")
+        local tree = git_out(root, "rev-parse", commit .. "^{tree}")
+        return status == "" and head ~= nil and head == tree
+    end
+    return jj_out(root, "diff", "--from", commit, "--to", "@", "--name-only") == ""
+end
+
 ---Say whether a commit is an ancestor of a revision, or the revision itself.
 ---@param root string the project root
 ---@param commit string the commit id, full or shortened

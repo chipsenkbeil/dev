@@ -2764,7 +2764,8 @@ The settings:
   the current trunk or an empty list lands as before. `land` reads the rows
   from the project config as trunk holds it, then from the user config, so the
   landing change cannot edit the rows that guard it. A trunk or a file `land`
-  cannot read refuses the land. This repo sets it to `dev --remote lint`.
+  cannot read refuses the land. This repo sets it to `dev --remote lint` and
+  `dev --remote test`.
 - In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
   exits 1 and names `dev board land`.
 - `dev board land` sets `DEV_BOARD_LAND=1` for the `jj land` it runs, and
@@ -3037,6 +3038,10 @@ The revision:
 - REV is a jj revset that names one commit, and it defaults to trunk. In a git
   project REV is a git revision, and the default is the fetched remote trunk.
 - When REV cannot be read, `ship` runs nothing and moves no card.
+- A `dev --remote` row tests the working tree of the project root. When that
+  tree differs from the tree of the commit REV names (a jj `@` that differs, a
+  git `HEAD` that differs or a dirty git tree), `ship` exits 1, runs no command
+  and moves no card. Run it from a workspace at that revision.
 
 The move:
 
