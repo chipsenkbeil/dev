@@ -1447,6 +1447,10 @@ local function move_once(backend, args, opts)
             return runner.full(refused.message)
         end
     end
+    local skipped = guards.skipped_refusal(roles, card, column)
+    if skipped then
+        return skipped
+    end
     local missing_note = unnoted(backend, card, column)
     if missing_note then
         return missing_note

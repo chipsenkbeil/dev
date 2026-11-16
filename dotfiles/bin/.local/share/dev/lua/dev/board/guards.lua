@@ -241,6 +241,41 @@ local function done_refusal(card, column)
     )
 end
 
+---Refuse a move into Review or Verify by a card that skipped the stage before it.
+---@param roles dev.board.Roles the board's columns
+---@param card dev.board.Card the card being moved
+---@param column string the column it moves to
+---@return dev.cmd.board.Result? err the refusal, nil when the move keeps the stage order
+local function skipped_refusal(roles, card, column)
+    if card.column == column then
+        return nil
+    end
+    local first
+    if column == roles.review then
+        local claimed = card.column == roles.progress and card.claimant
+        if claimed or card.column == roles.verify then
+            return nil
+        end
+        first = roles.progress .. " under a claim"
+    elseif column == roles.verify then
+        if card.column == roles.review then
+            return nil
+        end
+        first = roles.review
+    else
+        return nil
+    end
+    return failure(
+        string.format(
+            "Card %s cannot move to %s from %s. It must pass %s first.",
+            card.id:sub(1, board.MIN_PREFIX),
+            column,
+            card.column,
+            first
+        )
+    )
+end
+
 ---Refuse a tick that the claimant or a missing name does not allow.
 ---@param card dev.board.Card the card
 ---@param flag string? the ticker name given with the flag
@@ -359,6 +394,7 @@ M.on_board = on_board
 M.children_refusal = children_refusal
 M.unreadable_refusal = unreadable_refusal
 M.done_refusal = done_refusal
+M.skipped_refusal = skipped_refusal
 M.tick_refused = tick_refused
 M.claimant_refused = claimant_refused
 M.is_lead = is_lead

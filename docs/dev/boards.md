@@ -3207,6 +3207,11 @@ The refusals run in this order:
 - After the card is read, `move` refuses a card labelled `needs:human` that
   moves to a different column.
 - The Ready, planning, Done and epic rules follow, each described below.
+- A move into Review is refused unless the card is in In Progress under a claim
+  or comes back from Verify, and a move into Verify is refused unless the card
+  is in Review. The refusal reads ``Card <id prefix> cannot move to <column>
+  from <column>. It must pass <column> first.`` and names In Progress under a
+  claim or Review (exit 1). A move to the column the card is already in passes.
 - A card leaving In Progress for Review, Ready or Blocked with a claimant and
   no note from that claimant after the claim is refused with
   ``Card <id prefix> has no note from its claimant NAME since the claim. It

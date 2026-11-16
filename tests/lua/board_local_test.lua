@@ -276,6 +276,8 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
         out,
         a .. "  Ready  2 Pomodori  docs,needs:lead  Write docs  0 comments, 0 the owner's\n"
     )
+    dev(root, home, { "board", "move", a, COLUMN.PROGRESS })
+    dev(root, home, { "board", "note", a, "built, tried, learned" })
     out = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
     testing.eq(out, "moved " .. a .. " to Review\n")
     out = dev(root, home, { "board", "next" })
@@ -1685,6 +1687,7 @@ testing.test("move out of progress releases the claim and warns about nothing", 
     })))
     dev(root, home, { "board", "take", a })
     testing.ok(document(file_of(home)).cards[1].claim ~= nil, "claim held")
+    dev(root, home, { "board", "move", a, COLUMN.PROGRESS })
     dev(root, home, { "board", "note", a, "built it, tried it, learned it" })
     local out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
     testing.eq(code, 0, out)
@@ -1753,6 +1756,72 @@ testing.test("a second claim needs a fresh note of what was built, tried and lea
     out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
     testing.eq(code, 1, out)
     testing.ok(out:find("built, tried and learned", 1, true), out)
+end)
+
+local function card_in(root, home, column)
+    return prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        column,
+        "--size",
+        "1",
+        "--description",
+        V1,
+        "--checks",
+        "dev test",
+    })))
+end
+
+testing.test("move to Review refuses a card that is not in progress under a claim", function()
+    local root, home = local_board()
+    for _, column in ipairs({ COLUMN.BACKLOG, COLUMN.READY }) do
+        local a = card_in(root, home, column)
+        local out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("cannot move to Review from", 1, true), out)
+        testing.ok(out:find("It must pass In Progress under a claim first.", 1, true), out)
+        out = dev(root, home, { "board", "ls", "--column", COLUMN.REVIEW })
+        testing.eq(out, "No cards.\n")
+    end
+end)
+
+testing.test("move to Verify refuses a card that is not in Review", function()
+    local root, home = local_board()
+    local backlog = card_in(root, home, COLUMN.BACKLOG)
+    local ready = card_in(root, home, COLUMN.READY)
+    local working = card_in(root, home, COLUMN.READY)
+    dev(root, home, { "board", "move", working, COLUMN.PROGRESS })
+    for _, id in ipairs({ backlog, ready, working }) do
+        local out, code = dev(root, home, { "board", "move", id, COLUMN.VERIFY })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("cannot move to Verify from", 1, true), out)
+        testing.ok(out:find("It must pass Review first.", 1, true), out)
+    end
+    local out = dev(root, home, { "board", "ls", "--column", COLUMN.VERIFY })
+    testing.eq(out, "No cards.\n")
+end)
+
+testing.test("a claimed card with a note moves to Review and a Verify card moves back", function()
+    local root, home = local_board()
+    local a = card_in(root, home, COLUMN.READY)
+    dev(root, home, { "board", "take", a })
+    dev(root, home, { "board", "move", a, COLUMN.PROGRESS })
+    dev(root, home, { "board", "note", a, "built, tried, learned" })
+    local out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved " .. a .. " to Review\n")
+    out, code = dev(root, home, { "board", "move", a, COLUMN.VERIFY })
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved " .. a .. " to Verify\n")
+    out, code = dev(root, home, { "board", "move", a, COLUMN.REVIEW })
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved " .. a .. " to Review\n")
+    local staged = card_in(root, home, COLUMN.VERIFY)
+    out, code = dev(root, home, { "board", "move", staged, COLUMN.REVIEW })
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved " .. staged .. " to Review\n")
 end)
 
 testing.test("take holds a claim with an expiry and no loop, and release gives it up", function()
@@ -2026,6 +2095,7 @@ end)
 local BOARDS = '[{"id":"board-1","name":"dotfiles","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"dotfiles","columns":['
     .. '{"id":"col-backlog","name":"Backlog"},{"id":"col-ready","name":"Ready"},'
+    .. '{"id":"col-progress","name":"In Progress"},'
     .. '{"id":"col-review","name":"Review"},{"id":"col-done","name":"Done"}]}'
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
     .. '{"id":"blue-id","value":"blue","label":"3 Pomodori"},'
@@ -2047,13 +2117,24 @@ local EXPORT = '{"tasks":['
     })
     .. "]}"
 
-local PLANNED_EXPORT = (
-    EXPORT:gsub(
-        '"position":1,"color_id":null,"labels":%[%]',
-        '"position":1,"color_id":"yellow-id","labels":[],"description":"## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a"',
-        1
-    )
-)
+local WORKING_EXPORT = '{"tasks":['
+    .. support.pomb_export_task({
+        id = ID_A,
+        name = "First",
+        column_id = support.column_id(COLUMN.PROGRESS),
+        color_id = "yellow-id",
+        description = "## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a",
+        holder = "dotfiles/one",
+    })
+    .. ","
+    .. support.pomb_export_task({
+        id = ID_B,
+        name = "Second",
+        column_id = READY_COLUMN,
+        position = 2,
+        color_id = false,
+    })
+    .. "]}"
 
 local CURL = [[#!/bin/sh
 cat >"$ROOT/stdin"
@@ -2500,7 +2581,7 @@ end)
 
 testing.test("sync replays the queue in order and empties it", function()
     local root, home = pomb()
-    assert(fs.write(root .. "/export.json", PLANNED_EXPORT))
+    assert(fs.write(root .. "/export.json", WORKING_EXPORT))
     assert(fs.write(root .. "/down", ""))
     pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), COLUMN.REVIEW })
     pomb_dev(root, home, { "board", "note", ID_B:sub(1, 8), "hello" })
@@ -3517,6 +3598,13 @@ testing.test("with no size limit set next, take and move change nothing", functi
         { DEV_AGENT = "r/one", DEV_MAX_SIZE = "" }
     )
     testing.eq(code, 0, out)
+    out, code = dev(
+        root,
+        home,
+        { "board", "move", big, COLUMN.PROGRESS },
+        { DEV_AGENT = "r/one", DEV_MAX_SIZE = "" }
+    )
+    testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "note", big, "built it" }, { DEV_AGENT = "r/one" })
     testing.eq(code, 0, out)
     out, code = dev(
@@ -3660,6 +3748,8 @@ testing.test("epic_local_move", function()
     testing.eq(code, 1, out)
     testing.ok(out:find("is an epic and cannot enter Done, a done column", 1, true), out)
     testing.ok(out:find("1 of 1 children are open", 1, true), out)
+    dev(root, home, { "board", "move", epic, COLUMN.PROGRESS })
+    dev(root, home, { "board", "note", epic, "built, tried, learned" })
     out, code = dev(root, home, { "board", "move", epic, COLUMN.REVIEW })
     testing.eq(code, 0, out)
     tick_first(root, home, child)

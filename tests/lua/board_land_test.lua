@@ -457,6 +457,21 @@ local function approve_reviews(project, id)
     end
 end
 
+local function to_review(project, id, extra)
+    local env = { DEV_AGENT = "dotfiles/builder" }
+    for name, value in pairs(extra or {}) do
+        env[name] = value
+    end
+    must(dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, env))
+    must(dev(project, { "board", "note", id, "built, tried, learned" }, env))
+    must(dev(project, { "board", "move", id, support.COLUMN.REVIEW }, env))
+end
+
+local function to_verify(project, id, extra)
+    to_review(project, id, extra)
+    must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }, extra))
+end
+
 local function approve(project, id)
     approve_reviews(project, id)
     must(dev(project, { "board", "check", id }))
@@ -465,7 +480,7 @@ end
 
 local function verified_card(project)
     local id = new_card(project)
-    must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+    to_verify(project, id)
     approve(project, id)
     return id
 end
@@ -807,7 +822,7 @@ if has_jj then
     testing.test("land refuses a card in Review and names Verify", function()
         local project = jj_project()
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.REVIEW }))
+        to_review(project, id)
         approve(project, id)
         refused(project, id, { "It is in Review, and only a card in Verify lands." })
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.REVIEW)
@@ -1057,7 +1072,7 @@ if has_jj then
         local project = jj_project()
         local id = new_card(project)
         must(dev(project, { "board", "checks", id, "false" }))
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         approve_reviews(project, id)
         must(dev(project, { "board", "check", id, "--expect-fail" }))
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
@@ -1286,7 +1301,7 @@ if has_jj then
     testing.test("land gives the turn back when it refuses", function()
         local project = jj_project()
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
@@ -1310,7 +1325,7 @@ if has_jj then
         if row then
             must(dev(project, { "board", "checks", id, row }))
         end
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         approve(project, id)
         return id
     end
@@ -1319,7 +1334,7 @@ if has_jj then
         assert(fs.mkdir(project.root .. "/.dev/standalone", { parents = true }), "mkdir failed")
         assert(fs.write(project.root .. "/.dev/standalone/x.sh", "#!/bin/sh\n"), "write failed")
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         return id
     end
 
@@ -1671,7 +1686,7 @@ if has_jj then
             rebase_onto_trunk(project.root)
             assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
             local id = new_card(project)
-            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            to_verify(project, id)
             approve_reviews(project, id)
             must(dev(project, { "board", "check", id }))
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
@@ -1735,7 +1750,7 @@ if has_jj then
     testing.test("land refuses a carry from a checked commit of another change", function()
         local project = jj_project()
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         local trunk = jj(project.root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
         local change = jj(project.root, "log", "-r", "@", "--no-graph", "-T", "change_id")
@@ -1775,7 +1790,7 @@ if has_jj then
         rebase_onto_trunk(project.root)
         assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         local older = reviewed_and_checked({ project = project, id = id })
         assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
@@ -1804,7 +1819,7 @@ if has_jj then
         rebase_onto_trunk(project.root)
         assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         local older = reviewed_and_checked({ project = project, id = id })
         must(dev(project, { "board", "check", id }))
@@ -1824,7 +1839,7 @@ if has_jj then
         function()
             local project = jj_project()
             local id = new_card(project)
-            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            to_verify(project, id)
             must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
             approve_reviews(project, id)
             jj(project.root, "describe", "-m", "feat: work again")
@@ -1850,7 +1865,7 @@ if has_jj then
         function()
             local project = jj_project()
             local id = new_card(project)
-            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            to_verify(project, id)
             must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
             approve_reviews(project, id)
             assert(fs.write(project.root .. "/other.txt", "other\n"), "write failed")
@@ -1975,7 +1990,7 @@ if has_jj then
             trunk_moves(project, { ["shared.txt"] = SHARED })
             rebase_onto_trunk(project.root)
             local id = new_card(project)
-            must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+            to_verify(project, id)
             must(dev(project, {
                 "board",
                 "review",
@@ -2000,7 +2015,7 @@ if has_jj then
     testing.test("land refuses a working copy that holds conflicts", function()
         local project = jj_project()
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         local first = jj(project.root, "log", "-r", "@", "--no-graph", "-T", "change_id")
         jj(project.root, "new", "master", "-m", "feat: other")
         assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
@@ -2242,7 +2257,7 @@ if has_jj then
         local child = assert(out:match("added (%x+)"), out)
         must(dev(project, { "board", "epic", id }))
         must(dev(project, { "board", "link", child, "parent", id }))
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         approve(project, id)
         must(dev(project, { "board", "turn", id }))
         local commit = head(project.root)
@@ -2268,7 +2283,7 @@ if has_jj then
 
     local function in_verify(project)
         local id = new_card(project)
-        must(dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
+        to_verify(project, id)
         return id
     end
 
@@ -2680,7 +2695,7 @@ if has_jj then
         jj(path, "describe", "-m", "feat: work")
         jj(path, "bookmark", "create", id, "-r", "@")
         local inside = at_root(project, path)
-        must(dev(inside, { "board", "move", id, support.COLUMN.VERIFY }, { DEV_WS_ROOT = base }))
+        to_verify(inside, id, { DEV_WS_ROOT = base })
         approve(inside, id)
         return project, id, path, base, inside
     end
@@ -2884,6 +2899,10 @@ end
 
 local function git_approve(project)
     local id = project.id
+    local builder = { DEV_AGENT = "dotfiles/builder" }
+    must(git_dev(project, { "board", "move", id, support.COLUMN.PROGRESS }, builder))
+    must(git_dev(project, { "board", "note", id, "built, tried, learned" }, builder))
+    must(git_dev(project, { "board", "move", id, support.COLUMN.REVIEW }, builder))
     must(git_dev(project, { "board", "move", id, support.COLUMN.VERIFY }))
     for _, kind in ipairs({ "code", "style" }) do
         must(git_dev(project, {

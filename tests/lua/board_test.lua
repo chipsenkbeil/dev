@@ -1467,6 +1467,7 @@ testing.test(
         testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, 1)
         card.outcomes = { { id = "s1", name = "a", done = false } }
         testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.BACKLOG }, backend).code, nil)
+        card.column = support.COLUMN_NAME.VERIFY
         testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, nil)
         backend = fake({ planned() })
         testing.eq(cmd_board.run("move", { "cccccccc", support.COLUMN.REVIEW }, backend).code, 1)
@@ -1593,6 +1594,7 @@ end)
 testing.test("move to a working column does not demand outcomes dev cannot read", function()
     local cards = sample()
     cards[1].outcomes_unreadable = true
+    cards[1].column = support.COLUMN_NAME.VERIFY
     local backend = fake(cards)
     local result = cmd_board.run("move", { "11111111-a", support.COLUMN.REVIEW }, backend)
     testing.eq(result.code, nil)
@@ -1950,6 +1952,7 @@ testing.test("note and move resolve the card by prefix", function()
     cards[3].color = "green"
     cards[3].description = V2
     cards[3].outcomes = { { id = "s1", name = "a", done = false } }
+    cards[3].column = support.COLUMN_NAME.VERIFY
     local backend = fake(cards)
     local result = cmd_board.run("note", { "cccccccc", "landed", "as", "abc" }, backend)
     testing.eq(result.output, "noted cccccccc")
@@ -3743,7 +3746,11 @@ testing.test("move to Ready takes a sized card, and other columns take a planned
         support.COLUMN.BLOCKED,
         support.COLUMN.DONE,
     }) do
-        local backend = fake({ colored("green") })
+        local card = colored("green")
+        if column == support.COLUMN.REVIEW then
+            card.column = support.COLUMN_NAME.VERIFY
+        end
+        local backend = fake({ card })
         testing.eq(cmd_board.run("move", { "cccccccc", column }, backend).code, nil)
         testing.eq(#backend.calls, 1)
     end
@@ -4939,6 +4946,12 @@ local PLANNED_TEXT =
     "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [%s] a"
 local PLANNED_EXPORT = export_with_first_card({ description = PLANNED_TEXT:format(" ") })
 local PLANNED_DONE_EXPORT = export_with_first_card({ description = PLANNED_TEXT:format("x") })
+local WORKING_EXPORT = export_with_first_card({
+    description = PLANNED_TEXT:format(" "),
+    column_id = PROGRESS_COLUMN,
+    holder = "project-run/a",
+    lease_expires_at = LIVE_LEASE,
+})
 local COMMENTS = '[{"id":"aaaaaaaa-1111-4111-8111-111111111111","author":"api-token","actor_kind":"api_token",'
     .. '"token_name":"worker","created_at":"2026-10-27T09:30:12Z","body":"first\\nline"},'
     .. '{"id":"dddddddd-4444-4444-8444-444444444444","author":"x","actor_kind":"user",'
@@ -6218,7 +6231,7 @@ end)
 
 testing.test("epic_move_refused_by_settings", function()
     local detail = DETAIL:gsub('"name":"Backlog"', '"name":"Backlog","wip_limit":2', 1)
-    local export = PLANNED_EXPORT:gsub(
+    local export = WORKING_EXPORT:gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
         1
@@ -6241,7 +6254,7 @@ end)
 testing.test("epic_move_pomb_refusal", function()
     local text =
         "the epic still has open children (2), so it cannot enter a WIP-limited or Done column"
-    local export = PLANNED_EXPORT:gsub(
+    local export = WORKING_EXPORT:gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":3',
         1
@@ -6839,7 +6852,7 @@ testing.test("show prints the allow, tests and files fields a Pomb card holds", 
 end)
 
 testing.test("note posts a comment of kind agent and move goes to the top of the column", function()
-    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local root, home = sandbox({ export = WORKING_EXPORT })
     local out = dev(root, home, { "board", "note", "11111111-a", "landed", "it" })
     testing.eq(out, "noted 11111111\n")
     local calls = read(root, "calls")
@@ -7657,6 +7670,7 @@ testing.test("move out of progress stops the loop and sends the fence", function
         return heartbeats(root) >= 2
     end))
     local pid = loop_pid(home)
+    assert(fs.write(root .. "/export.json", WORKING_EXPORT))
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW })
     testing.eq(code, 0)
     testing.eq(out, "moved 11111111 to Review\n")
@@ -7931,6 +7945,7 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
         return heartbeats(root) >= 2
     end))
     local pid = loop_pid(home)
+    assert(fs.write(root .. "/export.json", WORKING_EXPORT))
     out, code = dev(root, home, { "board", "move", "11111111-a", support.COLUMN.REVIEW }, {
         agent = "r/one",
     })
@@ -10222,6 +10237,7 @@ end)
 
 local function crowded(rooms)
     local mover = planned()
+    mover.column = support.COLUMN_NAME.VERIFY
     mover.outcomes = { { id = "s1", name = "a", done = false } }
     local held = {
         id = ID_A,
