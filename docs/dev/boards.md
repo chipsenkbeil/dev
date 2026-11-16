@@ -3212,6 +3212,9 @@ A move into Ready:
 - An outcome that ends with neither `(check: ROW)` naming part of a checks row
   nor `(reviewer judgement)` is refused after the checks row, and the refusal
   names each such outcome (exit 1). An epic is not asked.
+- A prose outcome is the usual one to mark `(reviewer judgement)`. The
+  verifier ticks the reviewer judgement outcome after it reads the diff against
+  the outcome.
 - A card with children is an epic (`kind` epic or `children_total` on Pomb,
   `parent` links on a local board). It enters Ready under the same rules as any
   card, except that it needs no checks row, as its children carry the checks.
