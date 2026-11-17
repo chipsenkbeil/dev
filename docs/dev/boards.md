@@ -2565,7 +2565,11 @@ card's change on trunk.
 
 In order, it:
 
-- takes the landing turn and rebases the working-copy change onto trunk
+- rebases the working-copy change onto trunk and reruns the `recheck` rows on
+  the rebased commit, with no turn held
+- takes the landing turn, and fetches trunk again. When trunk moved or the
+  working copy changed since the recheck, it gives the turn back and starts
+  over with a new rebase and recheck, up to 5 times, and pushes nothing
 - lands the change with `jj land --yes -r @`, run in the project root, or in a
   git project pushes the HEAD commit to the trunk branch of the remote of
   record through the guarded push `dev push` uses
@@ -2637,15 +2641,14 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   is retried once. A second refusal or a timeout refuses with a message that
   tells the person to touch the hardware key and run `dev board land` again.
 
-`land` rebases the change onto trunk itself while it holds the turn, so the
-last condition holds unless the rebase failed. The conditions on the reviews and
-the check are then judged at the rebased commit. A change that sits on an
-unlanded parent is refused and not rebased. In a jj project an unlanded parent
-that is empty, has no description and is not a merge (the commit `dev ws new`
-leaves under a change built with `jj new`) does not count. `land` abandons
-it, then rebases the change onto trunk. A parent with a description or
-a patch is still refused, and a git project still refuses every unlanded
-parent.
+`land` rebases the change onto trunk itself, so the last condition holds
+unless the rebase failed. The conditions on the reviews and the check are
+then judged at the rebased commit. A change that sits on an unlanded parent
+is refused and not rebased. In a jj project an unlanded parent that is empty,
+has no description and is not a merge (the commit `dev ws new` leaves under a
+change built with `jj new`) does not count. `land` abandons it, then rebases
+the change onto trunk. A parent with a description or a patch is still
+refused, and a git project still refuses every unlanded parent.
 
 When the newest `dev-check:` record at the commit does not parse and its mode is
 not `expect-fail` (as with one written before rows carried run ids), `land`
@@ -2675,11 +2678,11 @@ The landing turn:
   that `take` uses.
 - The holder writes a `dev-turn:` note on the turn card with its name, the card
   it lands and the time it took the turn.
-- The lease is 900 seconds, and `land` renews it before the `jj land`. When
-  the landing commit carries a check across trunk commits, `land` first
-  stretches it to 3000 seconds for the recheck, which can queue in ci for
-  longer than 900 seconds, and the renewal before the `jj land` puts it back to
-  900 seconds.
+- The lease is 900 seconds, and `land` renews it before the `jj land`. The
+  recheck runs before `land` takes the turn, so the turn covers only the trunk
+  compare and the push. A hold from `turn` that already exists is stretched to
+  3000 seconds for a recheck, and the renewal before the `jj land` puts it back
+  to 900 seconds.
 - When a holder dies, the lease ends and the next asker takes the turn. A holder
   that comes back after that gets `The landing turn was lost.` or
   `The landing turn ran out and was lost. Ask for it again.`, writes nothing,
@@ -2793,13 +2796,13 @@ The settings:
 - `recheck` under `[board.land]` lists the commands `land` reruns itself, one
   plain command per row. When the carried check's commit does not sit directly
   on the trunk `land` rebased onto, `land` runs each row on the landing commit
-  under the landing turn, in order. A row that fails refuses the land with the
-  row, its run id and the end of its output, and nothing is pushed. A check on
-  the current trunk or an empty list lands as before. `land` reads the rows
-  from the project config as trunk holds it, then from the user config, so the
-  landing change cannot edit the rows that guard it. A trunk or a file `land`
-  cannot read refuses the land. This repo sets it to `dev --remote lint` and
-  `dev --remote test`.
+  before it takes the landing turn, in order. A row that fails refuses the
+  land with the row, its run id and the end of its output, and nothing is
+  pushed. A check on the current trunk or an empty list lands as before.
+  `land` reads the rows from the project config as trunk holds it, then from
+  the user config, so the landing change cannot edit the rows that guard it. A
+  trunk or a file `land` cannot read refuses the land. This repo sets it to
+  `dev --remote lint` and `dev --remote test`.
 - In a repo whose `.dev/config.toml` has a `[board]` section, a bare `jj land`
   exits 1 and names `dev board land`.
 - `dev board land` sets `DEV_BOARD_LAND=1` for the `jj land` it runs, and
@@ -2860,8 +2863,8 @@ landing turn for CARD early and keeps it, so `land` lands under it and no other
 landing moves trunk meanwhile.
 
 The turn is short and holding it is optional. A landing takes it only around
-the rebase and the push, so a runner holds none across the reviews or a check,
-and two cards whose checks ran in parallel land one after the other.
+the trunk compare and the push, so a runner holds none across the reviews or
+a check, and two cards whose checks ran in parallel land one after the other.
 
 The command:
 

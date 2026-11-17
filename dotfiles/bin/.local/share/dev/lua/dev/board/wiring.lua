@@ -197,6 +197,7 @@ end
 ---@class dev.board.wiring.LandWho
 ---@field name string the caller's agent name
 ---@field comments {body: string}[] the card's comments, oldest first
+---@field untaken boolean? true when no turn is held, so the turn's own trunk compare decides
 
 ---List what keeps the card from landing under the caller.
 ---@param backend dev.board.Backend the board backend
@@ -287,7 +288,7 @@ local function land_problems(backend, card, who)
     if unproven then
         problems[#problems + 1] = unproven
     end
-    if #problems == 0 and not carried then
+    if #problems == 0 and not carried and not who.untaken then
         local moved = land.trunk_problem(backend.root)
         if moved then
             problems[#problems + 1] = moved
@@ -343,18 +344,21 @@ local function await_turn(opts)
     end
 end
 
----@class dev.board.wiring.land_held.Opts
+---@class dev.board.wiring.Prepared
+---@field state dev.board.check.State the commit that was checked and rebased onto trunk
+---@field carried string? the commit whose check and reviews carry over
+
+---@class dev.board.wiring.land_prepare.Opts
 ---@field backend dev.board.Backend the board backend
 ---@field card dev.board.Card the card that lands
 ---@field name string the caller's agent name
----@field hold dev.board.turn.Turn the landing turn in hand
----@field move fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result moves the card to its column
----@field clean_up fun(root: string, short: string): string removes the card's bookmark and workspace
+---@field hold dev.board.turn.Turn? a hold the caller already has, stretched for the recheck
 
----Land the card while the turn is held.
----@param opts dev.board.wiring.land_held.Opts the card and the turn in hand
----@return dev.cmd.board.Result result the landing's outcome
-local function land_held(opts)
+---Rebase the change onto trunk, check what may land and rerun the recheck rows, with no turn taken.
+---@param opts dev.board.wiring.land_prepare.Opts the card and the hold the caller already has
+---@return dev.cmd.board.Result? result the refusal, nil when the change may go to the turn
+---@return dev.board.wiring.Prepared? prepared the commit the turn lands
+local function land_prepare(opts)
     local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold
     local short = card.id:sub(1, board.MIN_PREFIX)
     local message
@@ -381,9 +385,9 @@ local function land_held(opts)
     if not fresh then
         return failure(message)
     end
-    local rebase_note = rebased and "\nThe change was rebased onto trunk under the landing turn."
-        or ""
-    local problems, state, carried = land_problems(backend, card, { name = name, comments = fresh })
+    local rebase_note = rebased and "\nThe change was rebased onto trunk." or ""
+    local problems, state, carried =
+        land_problems(backend, card, { name = name, comments = fresh, untaken = not hold })
     if #problems > 0 then
         return failure(
             "Card "
@@ -393,7 +397,7 @@ local function land_held(opts)
                 .. rebase_note
         )
     end
-    if carried then
+    if carried and hold then
         local stretched
         stretched, message = turn.stretch(backend, hold, turn.RECHECK_LEASE_SECONDS)
         if not stretched then
@@ -423,6 +427,47 @@ local function land_held(opts)
         return failure(
             "Card " .. short .. " cannot land for these reasons.\n  - " .. unchecked .. rebase_note
         )
+    end
+    return nil, { state = state, carried = carried }
+end
+
+---@class dev.board.wiring.land_held.Opts
+---@field backend dev.board.Backend the board backend
+---@field card dev.board.Card the card that lands
+---@field name string the caller's agent name
+---@field hold dev.board.turn.Turn the landing turn in hand
+---@field prepared dev.board.wiring.Prepared the rebased and checked commit to push
+---@field move fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result moves the card to its column
+---@field clean_up fun(root: string, short: string): string removes the card's bookmark and workspace
+
+---Land the checked commit while the turn is held, or say that trunk moved and nothing was pushed.
+---@param opts dev.board.wiring.land_held.Opts the card and the turn in hand
+---@return dev.cmd.board.Result result the landing's outcome, with `moved` set when trunk moved
+local function land_held(opts)
+    local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local message
+    renew_claim(backend, card, name)
+    local current = card_problems(backend, card, { name = name, comments = {} })
+    if #current > 0 then
+        return failure(
+            "Card "
+                .. short
+                .. " cannot land for these reasons.\n  - "
+                .. table.concat(current, "\n  - ")
+        )
+    end
+    local rebased, why = land.rebase(backend.root)
+    if rebased == nil then
+        return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
+    end
+    local state, carried = opts.prepared.state, opts.prepared.carried
+    local now, bad = land.state(backend.root)
+    if not now then
+        return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
+    end
+    if rebased or now.commit ~= state.commit then
+        return { moved = true }
     end
     local renewed
     renewed, message = turn.renew(backend, hold)
@@ -553,6 +598,7 @@ M.check_rows = check_rows
 M.card_problems = card_problems
 M.land_problems = land_problems
 M.await_turn = await_turn
+M.land_prepare = land_prepare
 M.land_held = land_held
 M.kept_note = kept_note
 

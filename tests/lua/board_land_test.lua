@@ -1304,7 +1304,7 @@ if has_jj then
         release_turn(project.home, held)
     end)
 
-    testing.test("land gives the turn back when it refuses", function()
+    testing.test("land asks for no turn when it refuses", function()
         local project = jj_project()
         local id = new_card(project)
         to_verify(project, id)
@@ -1313,7 +1313,7 @@ if has_jj then
         testing.eq(code, 1, out)
         testing.ok(out:find("No code review", 1, true), out)
         testing.ok(
-            fs.read(project.home .. "/state/dev/boards/mine.json")
+            not fs.read(project.home .. "/state/dev/boards/mine.json")
                 :find("dev-turn: holder=dotfiles/lander", 1, true)
         )
         testing.eq(turn_holder(project.home), nil)
@@ -1487,7 +1487,7 @@ if has_jj then
         end
     )
 
-    testing.test("land reads trunk under the turn, to carry and after the land", function()
+    testing.test("land reads trunk before and under the turn, and after the land", function()
         local project = jj_project()
         local id = review_ready(project)
         trunk_moves(project, { ["docs.txt"] = "docs\n" })
@@ -1501,7 +1501,7 @@ if has_jj then
         testing.eq(code, 0, out)
         local list = comments(project.home)
         testing.ok(list[#list].body:find("carried over", 1, true), list[#list].body)
-        testing.eq(fs.read(reads), "fetch\nfetch\nfetch\n")
+        testing.eq(fs.read(reads), "fetch\nfetch\nfetch\nfetch\n")
     end)
 
     local function recheck_project(row)
@@ -1519,7 +1519,7 @@ if has_jj then
         testing.ok(fs.is_file(marker), "the recheck row never ran")
     end)
 
-    testing.test("land stretches the turn lease before the recheck rows run", function()
+    testing.test("land takes no turn while the recheck rows run", function()
         local snapshot = support.tempdir() .. "/board.json"
         local project = recheck_project("bin/snap")
         assert(
@@ -1540,17 +1540,109 @@ if has_jj then
         )
         testing.eq(code, 0, out)
         local doc = assert(json.decode(assert(fs.read(snapshot))), "decode failed")
+        for _, card in ipairs(doc.cards) do
+            if card.name == turn.NAME then
+                testing.ok(card.claim == nil or card.claim == json.null, "the turn was held")
+            end
+        end
+        testing.eq(turn_holder(project.home), nil)
+    end)
+
+    local function counting_project(runs, moves)
+        local script = support.tempdir() .. "/rows.sh"
+        local project = recheck_project("sh " .. script)
+        local lines = { "#!/bin/sh", "echo run >>" .. runs }
+        if moves then
+            local marker = support.tempdir() .. "/moved"
+            if moves == "once" then
+                lines[#lines + 1] = "[ -e " .. marker .. " ] && exit 0"
+                lines[#lines + 1] = "touch " .. marker
+            end
+            lines[#lines + 1] = "d=$(mktemp -d)"
+            lines[#lines + 1] = "git clone -q --branch master " .. project.bare .. ' "$d/c"'
+            lines[#lines + 1] = 'cd "$d/c" && echo "$d" >moved.txt && git add moved.txt'
+            lines[#lines + 1] = "git -c user.name=t -c user.email=t@example.com commit -q -m moved"
+            lines[#lines + 1] = "git push -q origin HEAD:refs/heads/master"
+            lines[#lines + 1] = ""
+        end
+        assert(fs.write(script, table.concat(lines, "\n")), "write failed")
+        return project
+    end
+
+    testing.test("land keeps a held turn and stretches it for the recheck", function()
+        local snapshot = support.tempdir() .. "/board.json"
+        local project = recheck_project("bin/snap")
+        assert(
+            fs.write(
+                project.root .. "/bin/snap",
+                '#!/bin/sh\ncp "$XDG_STATE_HOME/dev/boards/mine.json" "$SNAPSHOT"\n'
+            ),
+            "write failed"
+        )
+        must(dev_os.run({ "chmod", "755", project.root .. "/bin/snap" }))
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        must(dev(project, { "board", "turn", id }))
+        local out, code = dev(
+            project,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, SNAPSHOT = snapshot }
+        )
+        testing.eq(code, 0, out)
+        local doc = assert(json.decode(assert(fs.read(snapshot))), "decode failed")
         local claim
         for _, card in ipairs(doc.cards) do
             if card.name == turn.NAME then
                 claim = card.claim
             end
         end
-        testing.ok(claim ~= nil, "the turn was not held while the row ran")
+        testing.ok(type(claim) == "table", "the hold was not kept while the row ran")
         testing.ok(
             claim.expires_at > store.stamp(os.time() + turn.LEASE_SECONDS + 60),
             claim.expires_at
         )
+    end)
+
+    testing.test("land refuses after trunk moves in every recheck", function()
+        local runs = support.tempdir() .. "/runs"
+        local project = counting_project(runs, "always")
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Trunk moved during each of 5 rechecks", 1, true), out)
+        testing.eq(fs.read(runs), string.rep("run\n", 5))
+        testing.eq(fs.read(project.log), nil)
+        testing.eq(turn_holder(project.home), nil)
+    end)
+
+    testing.test("land rechecks again when trunk moves during the recheck", function()
+        local runs = support.tempdir() .. "/runs"
+        local project = counting_project(runs, "once")
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.eq(fs.read(runs), "run\nrun\n")
+        local log = dev_os.capture({ "git", "-C", project.bare, "log", "master", "--format=%s" })
+        testing.ok(log:find("moved", 1, true), log)
+        testing.ok(log:find("feat: work", 1, true), log)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("land pushes after one recheck when trunk stays put", function()
+        local runs = support.tempdir() .. "/runs"
+        local project = counting_project(runs, false)
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.eq(fs.read(runs), "run\n")
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a failed recheck row refuses the land and leaves trunk alone", function()

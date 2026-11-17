@@ -64,6 +64,7 @@ local SET_FLAG = "--set"
 local ID_ONLY_FLAG = "--id-only"
 local SWITCH = "switch"
 local MAX_WAIT_SECONDS = 86400
+local MAX_LAND_ATTEMPTS = 5
 local STRICT_FLAG = "--strict"
 local RESERVED_NOTE = "A note cannot begin with "
     .. board.CHECK_PREFIX
@@ -157,6 +158,7 @@ end
 ---@field unqueued boolean? true when the refusal must not be queued for a later sync, as a move to
 ---   Done is not
 ---@field lost boolean? true when the landing turn was lost before the landing
+---@field moved boolean? true when trunk moved under the turn and nothing was pushed
 ---@field landed boolean? true when the change is on trunk although the result is a failure
 
 ---@class dev.cmd.board
@@ -2831,45 +2833,84 @@ function commands.land(backend, args)
     if message then
         return failure("Card " .. short .. " cannot land. " .. message)
     end
-    if not hold then
-        hold, message = wiring.await_turn({
+    local kept = hold
+    local main = config.get(backend.root, "board.land.deploys") ~= true
+        and follow.main(backend.root)
+    for _ = 1, MAX_LAND_ATTEMPTS do
+        local current
+        current, message = find_card(backend, words[1])
+        if not current then
+            return message
+        end
+        local refused, prepared = wiring.land_prepare({
             backend = backend,
+            card = current,
             name = name,
-            id = card.id,
-            short = short,
-            wait = wait,
+            hold = kept,
         })
-    end
-    if not hold then
-        return failure("Card " .. short .. " cannot land. " .. message)
-    end
-    local current
-    current, message = find_card(backend, words[1])
-    if not current then
+        if refused then
+            if kept and refused.code and not refused.lost then
+                refused.message = refused.message .. wiring.kept_note(short)
+                return refused
+            end
+            if kept then
+                turn.release(backend, kept)
+            end
+            return refused
+        end
+        hold = kept
+        if not hold then
+            hold, message = wiring.await_turn({
+                backend = backend,
+                name = name,
+                id = card.id,
+                short = short,
+                wait = wait,
+            })
+        end
+        if not hold then
+            return failure("Card " .. short .. " cannot land. " .. message)
+        end
+        current, message = find_card(backend, words[1])
+        if not current then
+            if not hold.hold then
+                turn.release(backend, hold)
+            end
+            return message
+        end
+        local result = wiring.land_held({
+            backend = backend,
+            card = current,
+            name = name,
+            hold = hold,
+            prepared = prepared,
+            move = move_card,
+            clean_up = M.clean_up,
+        })
+        if not result.moved then
+            if hold.hold and result.code and not result.landed and not result.lost then
+                result.message = result.message .. wiring.kept_note(short)
+                return result
+            end
+            turn.release(backend, hold)
+            if main and not result.code then
+                result.output = result.output .. "\n" .. follow.launch(main)
+            end
+            return result
+        end
         if not hold.hold then
             turn.release(backend, hold)
         end
-        return message
+        verb.note("Trunk moved while the card was rechecked. Rebasing and rechecking again.")
     end
-    local main = config.get(backend.root, "board.land.deploys") ~= true
-        and follow.main(backend.root)
-    local result = wiring.land_held({
-        backend = backend,
-        card = current,
-        name = name,
-        hold = hold,
-        move = move_card,
-        clean_up = M.clean_up,
-    })
-    if hold.hold and result.code and not result.landed and not result.lost then
-        result.message = result.message .. wiring.kept_note(short)
-        return result
-    end
-    turn.release(backend, hold)
-    if main and not result.code then
-        result.output = result.output .. "\n" .. follow.launch(main)
-    end
-    return result
+    return failure(
+        "Card "
+            .. short
+            .. " cannot land. Trunk moved during each of "
+            .. MAX_LAND_ATTEMPTS
+            .. " rechecks. Nothing was pushed."
+            .. (kept and wiring.kept_note(short) or "")
+    )
 end
 
 ---@class dev.cmd.board.ShipRun
