@@ -87,10 +87,11 @@ end
 
 ---Refuse the first checks row that is not a plain command.
 ---@param runs string[] the rows as given
+---@param root string? the workspace the rows run in, nil to skip the PATH and path checks
 ---@return dev.cmd.board.Result? refusal a usage error naming the row, nil when every row is plain
-local function row_refusal(runs)
+local function row_refusal(runs, root)
     for _, run in ipairs(runs) do
-        local why = check.refusal(run)
+        local why = check.refusal(run) or root and check.unrunnable(run, root)
         if why then
             return usage(why)
         end

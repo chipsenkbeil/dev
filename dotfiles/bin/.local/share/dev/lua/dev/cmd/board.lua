@@ -606,7 +606,7 @@ local function add_card(backend, args, held)
         end
         checks[#checks + 1] = run
     end
-    local refused_row = guards.row_refusal(checks)
+    local refused_row = guards.row_refusal(checks, backend.root)
     if refused_row then
         return refused_row
     end
@@ -2529,7 +2529,7 @@ function commands.checks(backend, args)
     for pos = 2, #args do
         runs[#runs + 1] = args[pos]
     end
-    local refused_row = guards.row_refusal(runs)
+    local refused_row = guards.row_refusal(runs, backend.root)
     if refused_row then
         return refused_row
     end

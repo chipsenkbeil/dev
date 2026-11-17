@@ -1,6 +1,7 @@
 local bit = require("bit")
 local board = require("dev.board")
 local dev_os = require("dev.os")
+local fs = require("dev.fs")
 local json = require("dev.json")
 local registry = require("dev.registry")
 local vcs = require("dev.vcs")
@@ -17,6 +18,48 @@ M.MAX_SECONDS = 86400
 
 local SHELL_CHARS = "[|&;<>()$`\\\"'*?!\n]"
 local NEGATED = "^%s*!%s+(.*)$"
+local RG_COMMAND = "rg"
+local RG_USAGE_EXIT = 2
+---The rg flags that take a value word
+local RG_VALUE_FLAGS = {
+    ["--color"] = true,
+    ["--sort"] = true,
+    ["--sortr"] = true,
+    ["-E"] = true,
+    ["--encoding"] = true,
+    ["--max-filesize"] = true,
+    ["--max-columns"] = true,
+    ["--ignore-file"] = true,
+    ["--type-add"] = true,
+    ["--iglob"] = true,
+    ["-e"] = true,
+    ["-f"] = true,
+    ["-g"] = true,
+    ["-t"] = true,
+    ["-T"] = true,
+    ["-A"] = true,
+    ["-B"] = true,
+    ["-C"] = true,
+    ["-m"] = true,
+    ["-r"] = true,
+    ["-j"] = true,
+    ["-M"] = true,
+    ["-d"] = true,
+    ["--glob"] = true,
+    ["--type"] = true,
+    ["--type-not"] = true,
+    ["--regexp"] = true,
+    ["--file"] = true,
+    ["--max-count"] = true,
+    ["--replace"] = true,
+    ["--max-depth"] = true,
+    ["--threads"] = true,
+    ["--after-context"] = true,
+    ["--before-context"] = true,
+    ["--context"] = true,
+}
+---The rg flags that supply the pattern
+local RG_PATTERN_FLAGS = { ["-e"] = true, ["-f"] = true, ["--regexp"] = true, ["--file"] = true }
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "conflict", "clean")'
 local SHOWN_LINES = 12
 local NO_CHANGE = "-"
@@ -146,6 +189,77 @@ function M.refusal(row)
         )
     end
     return bare_name(row)
+end
+
+---List the paths an rg row names after its pattern.
+---@param words string[] the row's words, rg first
+---@return string[] paths the positional words that follow the pattern
+local function rg_paths(words)
+    local paths, patterned, positional = {}, false, false
+    local i = 2
+    while i <= #words do
+        local word = words[i]
+        if word == "--" and not positional then
+            positional = true
+        elseif not positional and RG_VALUE_FLAGS[word] then
+            patterned = patterned or RG_PATTERN_FLAGS[word] == true
+            i = i + 1
+        elseif positional or word:sub(1, 1) ~= "-" then
+            if patterned then
+                paths[#paths + 1] = word
+            else
+                patterned = true
+            end
+        end
+        i = i + 1
+    end
+    return paths
+end
+
+---Say whether a program named `name` sits in a PATH directory, which a shell builtin does not.
+---@param name string the first word of a row
+---@return boolean found true when a PATH directory holds an executable of that name
+local function on_path(name)
+    for dir in (os.getenv("PATH") or ""):gmatch("[^:]+") do
+        if fs.is_exec(fs.join(dir, name)) then
+            return true
+        end
+    end
+    return false
+end
+
+---Say why a checks row can never run in the workspace at `root`.
+---@param row string the row as the card holds it
+---@param root string the workspace the row runs in
+---@return string? message why the row cannot run, nil when it can
+function M.unrunnable(row, root)
+    row = row:match(NEGATED) or row
+    local words = {}
+    for word in row:gmatch("%S+") do
+        words[#words + 1] = word
+    end
+    local first = words[1]
+    if not first then
+        return nil
+    end
+    if not first:find("/", 1, true) and not on_path(first) then
+        return string.format("The row %q runs %q, which is not on PATH.", row, first)
+    end
+    if first ~= RG_COMMAND then
+        return nil
+    end
+    for _, path in ipairs(rg_paths(words)) do
+        local full = path:sub(1, 1) == "/" and path or fs.join(root, path)
+        if not fs.exists(full) then
+            return string.format(
+                "The row %q gives rg the word %q, which is not a path in the workspace. "
+                    .. "A row has no quoting, so write a pattern without a space.",
+                row,
+                path
+            )
+        end
+    end
+    return nil
 end
 
 ---Split a checks row into the words of one command.
@@ -388,6 +502,11 @@ function M.run(opts)
     if result == M.RESULT.TIMEOUT and run_id then
         reason = timeout_reason(run_id)
         note = note or (reason:sub(1, 1):upper() .. reason:sub(2) .. ".")
+    end
+    if opts.argv[1] == RG_COMMAND and code == RG_USAGE_EXIT then
+        result = M.RESULT.ERROR
+        note = "The row is an error, not a fail: rg exited 2, so it could not search."
+        reason = reason or last_line(output)
     end
     if opts.expect_fail and not refused and M.never_started(opts.argv, code, run_id) then
         result = M.RESULT.ERROR

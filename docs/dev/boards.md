@@ -2399,6 +2399,13 @@ How a row runs:
   `| & ; < > ( ) $`, a backtick, a backslash, a quote, `*`, `?`, `!` or a line
   break, or starts with a dotted run such as `dev.--remote.lint`, or passes a
   word to `dev --remote test` or `dev --remote lint` before the double dash.
+- `dev board checks` and `add --checks` also refuse a row whose command is not
+  on PATH, and an rg row whose words after its pattern are not paths that exist
+  in the workspace. A pattern with a space leaves a word that rg reads as a
+  path. A row has no quoting, so write the pattern without a space.
+- `dev board check` reports a row whose rg exits 2 as a row error with rg's
+  stderr, apart from a plain fail. The row never searched, so its result
+  proves nothing.
 - One `!` is allowed, as the first word. A row `! rg -n PATTERN FILE` runs the
   rest as the command and passes only when it exits 1 (a search that found
   nothing). Exit 0 fails the row as a match found, and any other exit fails it

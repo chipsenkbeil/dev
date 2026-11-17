@@ -188,6 +188,63 @@ testing.test("a negated row passes on no match, fails on a match and fails as an
     testing.eq(check.argv("!"), nil)
 end)
 
+testing.test("a row naming a command off PATH is unrunnable", function()
+    local root = support.tempdir()
+    local why = check.unrunnable("no-such-tool-xyz --flag", root)
+    testing.ok(why:find("not on PATH", 1, true), why)
+    testing.ok(check.unrunnable("! no-such-tool-xyz", root))
+    testing.eq(check.unrunnable("true", root), nil)
+end)
+
+testing.test("an rg row with a word that is no path is unrunnable", function()
+    local root = support.tempdir()
+    assert(fs.write(root .. "/a.txt", "x\n"))
+    local why = check.unrunnable("rg -n two words a.txt", root)
+    testing.ok(why:find('"words"', 1, true), why)
+    testing.eq(check.unrunnable("rg -n word a.txt", root), nil)
+    testing.eq(check.unrunnable("! rg -n word a.txt", root), nil)
+    testing.eq(check.unrunnable("rg -g a.txt word a.txt", root), nil)
+    testing.eq(check.unrunnable("rg -e word a.txt", root), nil)
+    testing.eq(check.unrunnable("rg -n -- word a.txt", root), nil)
+    testing.eq(check.unrunnable("rg --color never word a.txt", root), nil)
+    testing.ok(check.unrunnable("rg -- word missing.txt", root))
+    testing.ok(check.unrunnable("rg word missing.txt", root))
+end)
+
+testing.test("a row whose rg exits 2 is an error with rg's stderr", function()
+    local root = support.tempdir()
+    local row = check.run({
+        root = root,
+        run = "rg word absent.txt",
+        argv = { "rg", "word", "absent.txt" },
+        seconds = 30,
+    })
+    testing.eq(row.result, "error")
+    testing.eq(row.code, 2)
+    testing.ok(row.tail:find("absent.txt", 1, true), row.tail)
+end)
+
+testing.test("board check prints the row error and rg's stderr for an rg exit 2", function()
+    local root, home = git_root({ ["a.txt"] = "x\n" })
+    local id = card_with(root, home, { "rg [ a.txt" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.ok(code ~= 0, out)
+    testing.ok(out:find("rg exited 2", 1, true), out)
+    testing.ok(out:find("regex parse error", 1, true), out)
+    testing.eq(check.parse(comments(home)[1].body).rows[1].result, "error")
+end)
+
+testing.test("board checks refuses an unrunnable row and keeps the old rows", function()
+    local root, home = git_root({ ["a.txt"] = "x\n" })
+    local id = card_with(root, home, { "true" })
+    local out, code = dev(root, home, { "board", "checks", id, "no-such-tool-xyz" })
+    testing.ok(code ~= 0, out)
+    testing.ok(out:find("not on PATH", 1, true), out)
+    out, code = dev(root, home, { "board", "checks", id, "rg two words a.txt" })
+    testing.ok(code ~= 0, out)
+    testing.ok(out:find('"words"', 1, true), out)
+end)
+
 testing.test("the reserved prefix is found whatever its case and leading space", function()
     testing.ok(board.reserved("dev-check: commit=x"))
     testing.ok(board.reserved("  DEV-CHECK: x"))
@@ -570,7 +627,7 @@ end)
 
 testing.test("an expect-fail row that exits 127 fails the run", function()
     local root, home = git_root()
-    local id = card_with(root, home, { "no-such-command-for-check" })
+    local id = card_with(root, home, { "/no-such-dir/no-such-command-for-check" })
     local out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
     testing.eq(code, 1, out)
     testing.ok(out:find("The row never started (exit 127).", 1, true), out)
@@ -581,8 +638,8 @@ testing.test("an expect-fail row that exits 127 fails the run", function()
     testing.eq(
         check.run({
             root = root,
-            run = "no-such-command-for-check",
-            argv = { "no-such-command-for-check" },
+            run = "/no-such-dir/no-such-command-for-check",
+            argv = { "/no-such-dir/no-such-command-for-check" },
             seconds = 30,
         }).result,
         "fail"
