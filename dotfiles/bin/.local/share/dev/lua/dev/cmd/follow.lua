@@ -7,6 +7,7 @@ local verb = require("dev.verb")
 local SHORT_CHARS = 12
 local MAIN_WORKSPACE = "default"
 local ROOT_MARK = "root"
+local REV_ENV = "DEV_FOLLOW_REV"
 
 ---@class dev.cmd.follow
 local M = {}
@@ -80,7 +81,7 @@ local function runner(base)
     end
 end
 
-local function jj_follow(main)
+local function jj_follow(main, rev)
     local base = vcs.base(main, vcs.JJ, { quiet = true })
     local jj, read = runner(base)
     local out, code = jj("workspace", "update-stale")
@@ -106,13 +107,17 @@ local function jj_follow(main)
     if code ~= 0 or trunk == ROOT_MARK or trunk == "" then
         return "There is no trunk in " .. main .. ".", 1
     end
+    local target = rev or trunk
     local parent
     parent, code = read("log", "-r", "@-", "--no-graph", "-T", "commit_id")
-    if code == 0 and parent ~= trunk then
-        out, code = jj("new", "trunk()")
+    if code == 0 and parent ~= target then
+        out, code = jj("new", rev or "trunk()")
         if code ~= 0 then
             return failed(main, "jj new", out)
         end
+    end
+    if rev and rev ~= trunk then
+        return main .. " is on " .. short(rev) .. ".", 0
     end
     return main .. " is on trunk " .. short(trunk) .. ".", 0
 end
@@ -126,7 +131,7 @@ local function holds(list, word)
     return false
 end
 
-local function git_follow(main)
+local function git_follow(main, rev)
     local base = vcs.base(main, vcs.GIT)
     local git, read = runner(base)
     local dirty, code = read("status", "--porcelain", "--untracked-files=no")
@@ -152,6 +157,13 @@ local function git_follow(main)
         if code ~= 0 then
             return failed(main, "git fetch", out)
         end
+    end
+    if rev then
+        out, code = git("checkout", "--quiet", "--detach", rev)
+        if code ~= 0 then
+            return failed(main, "git checkout", out)
+        end
+        return main .. " is on " .. short(rev) .. ".", 0
     end
     out, code = git("checkout", "--quiet", trunk)
     if code ~= 0 then
@@ -181,18 +193,20 @@ end
 ---
 ---A checkout with uncommitted edits is left as it is. jj is used when the checkout has `.jj` and
 ---git otherwise.
+---With a commit the checkout moves onto it in place of trunk.
 ---@param main string absolute path of the main checkout
+---@param rev string? full commit id to move onto
 ---@return string line the one line saying what happened
 ---@return integer code 0 when the checkout moved, was current or was left alone, 1 on a failure
-function M.follow(main)
+function M.follow(main, rev)
     local backend, err = vcs.require(main)
     if not backend then
         return "Cannot follow " .. main .. ". " .. text.sentence(err), 1
     end
     if backend == vcs.JJ then
-        return jj_follow(main)
+        return jj_follow(main, rev)
     end
-    return git_follow(main)
+    return git_follow(main, rev)
 end
 
 ---List the command lines `dev help follow` shows.
@@ -223,21 +237,34 @@ function M.run(ctx)
         verb.note(text.sentence(err))
         return 1
     end
-    local line, code = M.follow(main)
+    local rev = os.getenv(REV_ENV)
+    if rev == "" then
+        rev = nil
+    end
+    if rev and not rev:match("^%x+$") then
+        verb.note(text.sentence(REV_ENV .. " must be a commit id"))
+        return 2
+    end
+    local line, code = M.follow(main, rev)
     verb.say(line)
     return code
 end
 
 ---Run `dev follow` for a main checkout through the launcher to let a project `.dev/follow`
 ---script replace the built-in.
+---With a commit the launcher gets it in `DEV_FOLLOW_REV`, which a project script reads too.
 ---@param main string absolute path of the main checkout
+---@param rev string? full commit id the checkout moves onto in place of trunk
 ---@return string line what it printed, or why it did not run
-function M.launch(main)
+function M.launch(main, rev)
     local launcher = os.getenv("DEV_SELF") or ""
     if launcher:sub(1, 1) ~= "/" or not fs.is_exec(launcher) then
         return "DEV_SELF is not the dev launcher. " .. main .. " was not moved."
     end
-    local out = dev_os.capture({ launcher, "follow" }, { cwd = main, stderr = "stdout" })
+    local out = dev_os.capture(
+        { launcher, "follow" },
+        { cwd = main, stderr = "stdout", env = { [REV_ENV] = rev or "" } }
+    )
     return text.trim(out)
 end
 

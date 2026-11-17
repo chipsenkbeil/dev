@@ -242,6 +242,32 @@ if dev_os.which("jj") then
         testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), trunk)
     end)
 
+    testing.test("ship.with.no.rev.stays.on.the.tested.commit.when.trunk.moves", function()
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        local tested = trunk_commit(root)
+        local remote = jj(root, "git", "remote", "list"):match("^origin (%S+)")
+        local parent = assert(fs.realpath(support.tempdir()))
+        local other = parent .. "/other"
+        must(dev_os.run({ "git", "clone", "-q", remote, other }, { stdout = "null" }))
+        assert(fs.write(other .. "/later.txt", "later\n"), "write failed")
+        local function git(...)
+            local argv = { "git", "-C", other, "-c", "user.name=t", "-c", "user.email=t@t", ... }
+            must(dev_os.run(argv, { stdout = "null", stderr = "null" }))
+        end
+        git("add", "later.txt")
+        git("commit", "-q", "-m", "later")
+        local push = "git -C " .. dev_os.quote(other) .. " push -q origin master"
+        local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", push })
+        testing.eq(code, 0, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+        testing.ok(out:find(root .. " is on " .. tested:sub(1, 12), 1, true), out)
+        testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), tested)
+        testing.eq(fs.exists(root .. "/later.txt"), false)
+    end)
+
     testing.test("ship.skips.follow.when.a.release.row.fails", function()
         local root, home = project('\n[board.release]\nchecks = ["false"]\n')
         must(dev(root, home, { "board", "init" }))
@@ -351,6 +377,8 @@ if dev_os.which("jj") then
         testing.ok(out:find(late:sub(1, 4), 1, true), out)
         testing.ok(out:find("is not in", 1, true), out)
         testing.eq(#done_notes(select(2, state(home, late))), 0)
+        testing.ok(out:find(root .. " is on " .. pinned:sub(1, 12), 1, true), out)
+        testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), pinned)
     end)
 
     testing.test("ship reads a pomb land note and moves the card", function()

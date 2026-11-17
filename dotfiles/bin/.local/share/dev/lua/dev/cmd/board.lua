@@ -3303,7 +3303,7 @@ function commands.ship(backend, args)
     local lines, ok = ship_batch(backend, waiting, rev, commit)
     local main = follow.main(backend.root)
     if main then
-        lines[#lines + 1] = follow.launch(main)
+        lines[#lines + 1] = follow.launch(main, commit)
     end
     local text = table.concat(lines, "\n")
     if not ok then

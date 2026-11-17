@@ -307,7 +307,10 @@ a verb does not take is a usage error that names it and exits 2.
 ## Follow
 
 `dev follow` moves the repo's main checkout onto trunk. It takes no argument and
-works from the main checkout, a jj workspace or a git worktree.
+works from the main checkout, a jj workspace or a git worktree. A set
+`DEV_FOLLOW_REV`, a commit id, moves it onto that commit in place of trunk: jj
+opens a new empty change on it and git detaches HEAD there. `dev board ship`
+sets it to the commit it tested, and a value that is not hex exits 2.
 
 - A folder with `.jj` answers to jj, and its main checkout is the workspace
   named `default`. Any other folder with `.git` answers to git, and its main

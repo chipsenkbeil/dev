@@ -3191,12 +3191,15 @@ A failing command:
 - When a command fails or times out, `ship` stops at it and moves no card.
 - It prints the command and its output tail, and exits 1.
 
-Following trunk:
+Following the shipped commit:
 
 - After every command passes, `ship` runs `dev follow` and adds its one line
   to the output, whether or not each card moved.
-- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in. When
-  a command fails, `ship` runs neither.
+- The main checkout lands on the commit `ship` tested, `--rev` or not, and not
+  on trunk, which may hold landed cards the ship never tested. `ship` passes the
+  commit in `DEV_FOLLOW_REV`, and `FOLDER is on COMMIT.` names it.
+- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in and
+  reads `DEV_FOLLOW_REV`. When a command fails, `ship` runs neither.
 - The line never changes the exit code.
 
 ### size
