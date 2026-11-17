@@ -1220,10 +1220,10 @@ not detach. A local board refuses all three with
 `a local board holds no attachments`. None of them is queued while Pomb is
 unreachable.
 
-`stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards that have
-sat in Backlog, Ready, In Progress, Review or Verify for `N` days or more, 7 by
-default, oldest first. Each line is the id prefix, the column, the days in it
-(`9d`), the size and the name.
+`stale [--days N] [--icebox-days N] [--lead-hours N] [--flight-hours N]` lists
+the cards that have sat in Backlog, Ready, In Progress, Review or Verify for
+`N` days or more, 7 by default, oldest first. Each line is the id prefix, the
+column, the days in it (`9d`), the size and the name.
 
 It counts whole days from the card's `column_entered_at`, which Pomb gives every
 task view, so a card at 6 days is fresh and one at 7 is stale. Icebox, Blocked
@@ -1234,6 +1234,11 @@ When nothing is stale it prints `No stale cards.`
 
 These sections follow, each listed apart from the stale cards:
 
+- `in flight, no claim and quiet for N hours:`: a card in In Progress, Review
+  or Verify with no live claim whose column time and latest comment are both
+  `--flight-hours` hours old or more (24 by default), with its time as
+  `<hours>h`. A card the first list already shows is left out. A flag that is
+  not a whole number of 1 or more is a usage error (exit 2).
 - `for the owner (needs:human):`: every card with the `needs:human` label in
   Blocked or Icebox, at any age, with its column and days in column. It never
   appears among the stale ones (it waits on the owner, not on an agent).
@@ -2135,8 +2140,8 @@ the lead.
 
 ### stale
 
-`dev board stale [--days N] [--icebox-days N] [--lead-hours N]` lists the cards
-that have sat too long.
+`dev board stale` takes `--days N`, `--icebox-days N`, `--lead-hours N` and
+`--flight-hours N`, each optional, and lists the cards that have sat too long.
 
 The first list:
 
@@ -2177,6 +2182,11 @@ columns as the first list unless noted:
   one per line, each when it is a file under `backend.root` (read with
   `dev.fs.is_file`). It is absent when neither exists or the backend has no
   root, and dev reads no item in the file.
+- `in flight, no claim and quiet for N hours:` lists every card in In
+  Progress, Review or Verify with no live claim whose column time and latest
+  comment are both `--flight-hours` hours old or more (24 by default), with
+  its time as `<hours>h`. A card already listed above is left out. A flag that
+  is not a whole number of 1 or more is a usage error.
 - `icebox, untouched for N days:` comes last. It lists, oldest first, every
   Icebox card without `needs:human` whose column time and latest comment
   (`backend:comments`) are both `--icebox-days` days old or more (30 by

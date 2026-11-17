@@ -4444,7 +4444,7 @@ testing.test("stale lists an unlabelled open card whose newest comment is the ow
         support.COLUMN_NAME.BLOCKED,
         support.COLUMN_NAME.DONE,
         support.COLUMN_NAME.READY,
-    }, { 1, 2, 3, 4, 10 })
+    }, { 1, 0.5, 3, 4, 10 })
     local backend = fake(cards, times)
     local replies = {
         [cards[1].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "1" } },
@@ -4596,6 +4596,52 @@ testing.test("stale --lead-hours moves the bound and refuses a bad value", funct
         testing.eq(cmd_board.run("stale", { "--lead-hours", word }, fake({}), NOW).code, 2, word)
     end
     testing.eq(cmd_board.run("stale", { "--lead-hours" }, fake({}), NOW).code, 2)
+end)
+
+local FLIGHT_HEAD = "in flight, no claim and quiet for "
+
+local function flight_cards()
+    local columns = {
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.READY,
+    }
+    return aged(columns, { 2, 0.5, 3, 3 })
+end
+
+testing.test("stale lists an unclaimed in-flight card quiet for a day", function()
+    local cards, times = flight_cards()
+    local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+    testing.eq(
+        result.output,
+        "No stale cards.\n\n"
+            .. FLIGHT_HEAD
+            .. "24 hours:\n"
+            .. "00000003  Verify       72h  unsized  Card 3\n"
+            .. "00000001  In Progress  48h  unsized  Card 1"
+    )
+end)
+
+testing.test("stale keeps a claimed or recently commented card off the flight list", function()
+    local cards, times = flight_cards()
+    cards[1].claimant = "dotfiles/implementer/a"
+    local backend = fake(cards, times)
+    backend.listed = { { actor = "agent", at = "2026-10-27T10:00:00Z", body = "status" } }
+    local result = cmd_board.run("stale", {}, backend, NOW)
+    testing.eq(result.output, "No stale cards.")
+end)
+
+testing.test("stale --flight-hours moves the bound and refuses a bad value", function()
+    local cards, times = flight_cards()
+    local result = cmd_board.run("stale", { "--flight-hours", "60" }, fake(cards, times), NOW)
+    testing.ok(result.output:find(FLIGHT_HEAD .. "60 hours:", 1, true), result.output)
+    testing.ok(result.output:find("Card 3", 1, true), result.output)
+    testing.ok(not result.output:find("Card 1", 1, true), result.output)
+    for _, word in ipairs({ "0", "x", "1.5", "" }) do
+        testing.eq(cmd_board.run("stale", { "--flight-hours", word }, fake({}), NOW).code, 2, word)
+    end
+    testing.eq(cmd_board.run("stale", { "--flight-hours" }, fake({}), NOW).code, 2)
 end)
 
 local function held_leads()

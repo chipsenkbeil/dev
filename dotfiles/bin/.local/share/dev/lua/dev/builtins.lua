@@ -533,8 +533,8 @@ return {
     {
         words = { "board", "stale" },
         handler = "lua",
-        flags = "--days --icebox-days --lead-hours",
-        usage = "dev board stale [--days N] [--icebox-days N] [--lead-hours N]",
+        flags = "--days --icebox-days --lead-hours --flight-hours",
+        usage = "dev board stale [--days N] [--icebox-days N] [--lead-hours N] [--flight-hours N]",
         desc = "List the cards that sat too long in a column",
     },
     {

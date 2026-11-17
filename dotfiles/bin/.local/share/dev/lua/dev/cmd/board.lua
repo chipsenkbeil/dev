@@ -57,6 +57,7 @@ local TODO_FILES = { "TODO.md", "docs/TODO.md" }
 local STALE_DAYS = 7
 local ICEBOX_DAYS = 30
 local LEAD_HOURS = 1
+local FLIGHT_HOURS = 24
 local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local WAIT_FLAG = "--wait"
@@ -4051,9 +4052,45 @@ local function icebox_rows(backend, cards, entered, limit, now)
     return found, undated
 end
 
+local function flight_rows(backend, cards, entered, limit, now)
+    local roles = backend.roles
+    local flying = { [roles.progress] = true, [roles.review] = true, [roles.verify] = true }
+    local days = limit * box.SECONDS_PER_HOUR / box.SECONDS_PER_DAY
+    local found = {}
+    for _, card in ipairs(cards) do
+        if flying[card.column] and not card.claimant and not card.done then
+            local latest = icebox_latest(backend, card, entered[card.id], days, now)
+            if latest then
+                local hours = math.floor((now - latest) / box.SECONDS_PER_HOUR)
+                if hours >= limit then
+                    found[#found + 1] = {
+                        id = card.id,
+                        column = card.column,
+                        size = card.size,
+                        name = card.name,
+                        hours = hours,
+                        at = latest,
+                    }
+                end
+            end
+        end
+    end
+    table.sort(found, function(a, b)
+        if a.at ~= b.at then
+            return a.at < b.at
+        end
+        return a.id < b.id
+    end)
+    return found
+end
+
 function commands.stale(backend, args, now)
-    local flags, extra =
-        parse(args, { ["--days"] = true, ["--icebox-days"] = true, ["--lead-hours"] = true })
+    local flags, extra = parse(args, {
+        ["--days"] = true,
+        ["--icebox-days"] = true,
+        ["--lead-hours"] = true,
+        ["--flight-hours"] = true,
+    })
     if not flags then
         return extra
     end
@@ -4081,6 +4118,15 @@ function commands.stale(backend, args, now)
         { default = LEAD_HOURS, unit = runner.limits.HOURS }
     )
     if not lead_limit then
+        return refusal
+    end
+    local flight_limit
+    flight_limit, refusal = whole_limit(
+        "--flight-hours",
+        flags["--flight-hours"],
+        { default = FLIGHT_HOURS, unit = runner.limits.HOURS }
+    )
+    if not flight_limit then
         return refusal
     end
     local cards, message = backend:cards()
@@ -4300,6 +4346,18 @@ function commands.stale(backend, args, now)
     if #undated > 0 then
         lines[#lines + 1] = ""
         append(lines, undated)
+    end
+    local flying = flight_rows(backend, cards, entered, flight_limit, now)
+    local quiet = {}
+    for _, item in ipairs(flying) do
+        if not listed[item.id] then
+            quiet[#quiet + 1] = item
+        end
+    end
+    if #quiet > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "in flight, no claim and quiet for " .. flight_limit .. " hours:"
+        append(lines, stale_rows(quiet))
     end
     local iced, iced_undated = icebox_rows(backend, cards, entered, icebox_limit, now)
     if #iced > 0 then
