@@ -120,9 +120,19 @@ local OUTCOME_FLAGS = {
 }
 local CONVERT_FLAG = "--convert"
 
+---Find the word that names an outcome form, which may follow a leading `--as NAME`.
+---@param args string[] the card and the form's words
+---@return string? word the form's flag, nil when the card has no second word
+local function outcome_word(args)
+    if args[2] == AS_FLAG then
+        return args[4]
+    end
+    return args[2]
+end
+
 local function idempotent(sub, args)
     local rule = QUEUE_RULES[sub]
-    local flag = OUTCOME_FLAGS[args[2]]
+    local flag = OUTCOME_FLAGS[outcome_word(args)]
     return (rule ~= nil and rule.idempotent)
         or (sub == "outcome" and flag ~= nil and flag ~= OutcomeMode.DELETE and flag ~= OutcomeMode.RENAME)
         or false
@@ -2037,14 +2047,34 @@ local function outcome_number(word, count)
     return number
 end
 
+local function has_outcome_flag(args)
+    local word = outcome_word(args)
+    return OUTCOME_FLAGS[word] ~= nil or word == CONVERT_FLAG
+end
+
+---Take `--as NAME` out of the words of an outcome form, wherever it sits.
+---@param args string[] the card and the form's words
+---@return string[]? rest the words without the flag, nil on a usage error
+---@return string? name the name after the flag, nil when there is none
+---@return dev.cmd.board.Result? err the usage error
 local function split_ticker(args)
-    local n = #args
-    if n >= 3 and args[n - 1] == AS_FLAG then
-        local rest = {}
-        for i = 1, n - 2 do
-            rest[i] = args[i]
+    if not has_outcome_flag(args) then
+        return args
+    end
+    for i = 2, #args do
+        if args[i] == AS_FLAG then
+            local name = args[i + 1]
+            if not name then
+                return nil, nil, usage(AS_FLAG .. " needs a name")
+            end
+            local rest = {}
+            for at, word in ipairs(args) do
+                if at ~= i and at ~= i + 1 then
+                    rest[#rest + 1] = word
+                end
+            end
+            return rest, name
         end
-        return rest, args[n]
     end
     return args
 end
@@ -2172,16 +2202,10 @@ end
 
 function commands.outcome(backend, args)
     local ticker_flag
-    local flagged = OUTCOME_FLAGS[args[2]]
-    if
-        #args >= 2
-        and (
-            flagged == OutcomeMode.TICK
-            or flagged == OutcomeMode.DELETE
-            or args[2] == CONVERT_FLAG
-        )
-    then
-        args, ticker_flag = split_ticker(args)
+    local bad
+    args, ticker_flag, bad = split_ticker(args)
+    if not args then
+        return bad
     end
     if #args < 2 then
         return usage(
@@ -5576,7 +5600,7 @@ for sub in pairs(commands) do
             backend = open_lead(ctx)
         elseif
             sub == "outcome"
-            and args[2] == DELETE_FLAG
+            and outcome_word(args) == DELETE_FLAG
             and settings(ctx).backend == board.Backend.POMB
         then
             backend = open_lead(ctx, "deletes an outcome", "subtasks.delete")
@@ -5600,12 +5624,13 @@ for sub in pairs(commands) do
         if result.message then
             local note = sub == "note" and (ctx.args[2] == EDIT_FLAG or ctx.args[2] == DELETE_FLAG)
             local queued = result.queue
+            local form = sub == "outcome" and outcome_word(args)
             if
                 not queued
                 and QUEUE_RULES[sub]
                 and not result.unqueued
                 and not note
-                and not (sub == "outcome" and (args[2] == CONVERT_FLAG or args[2] == DELETE_FLAG))
+                and not (form == CONVERT_FLAG or form == DELETE_FLAG)
             then
                 queued = { { sub = sub, args = args } }
             end

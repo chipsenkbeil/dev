@@ -3709,14 +3709,32 @@ testing.test(
     end
 )
 
-testing.test("--as is read only on a tick or convert, and names one word", function()
+testing.test("--as in any position leaves the text and the reason alone", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2, 1)
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+    local result =
+        cmd_board.run("outcome", { "cccccccc", "--as", "project-run/b", "--tick", "2" }, backend)
+    testing.eq(result.output, "outcome cccccccc 2 ticked by project-run/b")
+    result =
+        cmd_board.run("outcome", { "cccccccc", "--untick", "1", "--as", "project-run/b" }, backend)
+    testing.eq(result.output, "outcome cccccccc 1 unticked")
+    card.claimant = nil
+    result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--rename", "2", "New", "words", "--as", "project-run/b", "--reason", "why" },
+        backend
+    )
+    testing.eq(result.output, "outcome cccccccc 2 reworded")
+    testing.eq(backend.calls[#backend.calls - 1][4], { name = "New words" })
+    testing.eq(cmd_board.run("outcome", { "cccccccc", "--tick", "1", "--as" }, backend).code, 2)
+end)
+
+testing.test("--as names one word and is text in an added outcome", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
-    testing.eq(
-        cmd_board.run("outcome", { "cccccccc", "--untick", "1", "--as", "x" }, backend).code,
-        2
-    )
     testing.eq(
         cmd_board.run("outcome", { "cccccccc", "--tick", "1", "--as", "two words" }, backend).code,
         2
