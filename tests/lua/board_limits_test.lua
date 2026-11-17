@@ -512,6 +512,19 @@ testing.test("limits --set under a lead name sends the lead token", function()
     testing.ok(read(box, "stdin"):find(LEAD_SECRET, 1, true), read(box, "stdin"))
 end)
 
+testing.test("limits without --set under a lead name sends the worker token", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits" }, LEAD)
+    testing.eq(code, 0, out)
+    local sent = read(box, "stdin")
+    testing.ok(sent:find(TOKEN, 1, true), sent)
+    testing.eq(sent:find(LEAD_SECRET, 1, true), nil)
+end)
+
 testing.test("limits --set under a non-lead name is refused before any request", function()
     local box = sandbox({
         project = POMB,
