@@ -2758,12 +2758,59 @@ function M.clean_up(root, short)
     return "\n" .. table.concat(lines, "\n")
 end
 
+---@class dev.cmd.board.companion_cards.Opts
+---@field backend dev.board.Backend the board
+---@field words string[] the card words, the first of which names the workspace's card
+---@field primary dev.board.Card the card the first word names
+---@field name string the caller's agent name
+
+---Read the other cards that land with the first one, each held to the same early rules.
+---@param opts dev.cmd.board.companion_cards.Opts the board, the words and the caller
+---@return dev.board.Card[]? cards the other cards, nil on a refusal
+---@return dev.cmd.board.Result? err the refusal
+local function companion_cards(opts)
+    local backend, words, primary, name = opts.backend, opts.words, opts.primary, opts.name
+    local cards = {}
+    local seen = { [primary.id] = true }
+    for i = 2, #words do
+        local card, err = find_card(backend, words[i])
+        if not card then
+            return nil, err
+        end
+        local short = card.id:sub(1, board.MIN_PREFIX)
+        if seen[card.id] then
+            return nil, usage("names card " .. short .. " twice")
+        end
+        seen[card.id] = true
+        local held_back = owner_holds(card)
+        if held_back then
+            return nil, held_back
+        end
+        local list, message = backend:comments(card.id)
+        if not list then
+            return nil, failure(message)
+        end
+        local early = wiring.card_problems(backend, card, { name = name, comments = list })
+        if #early > 0 then
+            return nil,
+                failure(
+                    "Card "
+                        .. short
+                        .. " cannot land with the others for these reasons.\n  - "
+                        .. table.concat(early, "\n  - ")
+                )
+        end
+        cards[#cards + 1] = card
+    end
+    return cards
+end
+
 function commands.land(backend, args)
     local flags, words = parse(args, { [WAIT_FLAG] = true })
     if not flags then
         return words
     end
-    if #words ~= 1 then
+    if #words < 1 then
         return usage("needs a card")
     end
     local wait = 0
@@ -2816,6 +2863,15 @@ function commands.land(backend, args)
                 .. (kept and wiring.kept_note(short) or "")
         )
     end
+    local companions, companion_err = companion_cards({
+        backend = backend,
+        words = words,
+        primary = card,
+        name = name,
+    })
+    if not companions then
+        return companion_err
+    end
     local hold, lost
     hold, message, lost = turn.held(backend, name, short)
     if lost then
@@ -2845,6 +2901,7 @@ function commands.land(backend, args)
         local refused, prepared = wiring.land_prepare({
             backend = backend,
             card = current,
+            companions = companions,
             name = name,
             hold = kept,
         })

@@ -347,12 +347,64 @@ end
 ---@class dev.board.wiring.Prepared
 ---@field state dev.board.check.State the commit that was checked and rebased onto trunk
 ---@field carried string? the commit whose check and reviews carry over
+---@field companions dev.board.Card[] the other cards that land with it, each read after the rebase
 
 ---@class dev.board.wiring.land_prepare.Opts
 ---@field backend dev.board.Backend the board backend
 ---@field card dev.board.Card the card that lands
+---@field companions dev.board.Card[] the other cards the same change carries, empty when none
 ---@field name string the caller's agent name
 ---@field hold dev.board.turn.Turn? a hold the caller already has, stretched for the recheck
+
+---@alias dev.board.wiring.MoveFn fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result
+
+---@class dev.board.wiring.finish_companion.Opts
+---@field backend dev.board.Backend the board backend
+---@field move dev.board.wiring.MoveFn moves the card to its column
+---@field other dev.board.Card the card that landed with the first one
+---@field first dev.board.Card the card that ran the landing
+---@field text string the first card's done note
+---@field target string the column the landed cards move to
+
+---Write the done note on a card that landed with the first one, move it and end its claim.
+---@param opts dev.board.wiring.finish_companion.Opts the two cards and the note
+---@return string? problem what went wrong, nil when the card is done
+local function finish_companion(opts)
+    local backend, other = opts.backend, opts.other
+    local short = other.id:sub(1, board.MIN_PREFIX)
+    local held = claims.read(other.id)
+    local noted, message = backend:note(
+        other.id,
+        opts.text .. " It landed with card " .. opts.first.id:sub(1, board.MIN_PREFIX) .. ".",
+        held and held.fence,
+        { kind = board.NoteKind.DONE }
+    )
+    if not noted then
+        return string.format(
+            "The done note was NOT written on card %s, and the card was not moved. %s Write the note and move the card to %s by hand.",
+            short,
+            dev_text.sentence(message),
+            opts.target
+        )
+    end
+    local moved = opts.move(backend, { other.id, opts.target })
+    if moved.code then
+        return string.format(
+            "Card %s was noted, but the move to %s failed. %s",
+            short,
+            opts.target,
+            dev_text.sentence(moved.message)
+        )
+    end
+    local left = backend:card(other.id)
+    if left and left.claimant then
+        claims.stop(other.id)
+        local released, stuck = backend:release(other.id, held and held.fence)
+        if not released then
+            verb.note("Landed, but the claim was not released. " .. dev_text.sentence(stuck))
+        end
+    end
+end
 
 ---Rebase the change onto trunk, check what may land and rerun the recheck rows, with no turn taken.
 ---@param opts dev.board.wiring.land_prepare.Opts the card and the hold the caller already has
@@ -397,6 +449,44 @@ local function land_prepare(opts)
                 .. rebase_note
         )
     end
+    local others = {}
+    for _, listed in ipairs(opts.companions) do
+        local other = backend:card(listed.id)
+        local other_short = listed.id:sub(1, board.MIN_PREFIX)
+        if not other then
+            return failure(
+                "Card " .. other_short .. " cannot land with " .. short .. ". It is gone."
+            )
+        end
+        renew_claim(backend, other, name)
+        local other_comments, other_message = backend:comments(other.id)
+        if not other_comments then
+            return failure(other_message)
+        end
+        local who = { name = name, comments = other_comments, untaken = not hold }
+        local other_problems = card_problems(backend, other, who)
+        local other_carried
+        if #other_problems == 0 then
+            local other_state
+            other_problems, other_state, other_carried = land_problems(backend, other, who)
+            if not other_state and #other_problems == 0 then
+                other_problems[1] = "The commit to land could not be read."
+            end
+        end
+        if #other_problems > 0 then
+            return failure(
+                "Card "
+                    .. other_short
+                    .. " cannot land with "
+                    .. short
+                    .. " for these reasons.\n  - "
+                    .. table.concat(other_problems, "\n  - ")
+                    .. rebase_note
+            )
+        end
+        carried = carried or other_carried
+        others[#others + 1] = other
+    end
     if carried and hold then
         local stretched
         stretched, message = turn.stretch(backend, hold, turn.RECHECK_LEASE_SECONDS)
@@ -428,7 +518,7 @@ local function land_prepare(opts)
             "Card " .. short .. " cannot land for these reasons.\n  - " .. unchecked .. rebase_note
         )
     end
-    return nil, { state = state, carried = carried }
+    return nil, { state = state, carried = carried, companions = others }
 end
 
 ---@class dev.board.wiring.land_held.Opts
@@ -437,7 +527,7 @@ end
 ---@field name string the caller's agent name
 ---@field hold dev.board.turn.Turn the landing turn in hand
 ---@field prepared dev.board.wiring.Prepared the rebased and checked commit to push
----@field move fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result moves the card to its column
+---@field move dev.board.wiring.MoveFn moves the card to its column
 ---@field clean_up fun(root: string, short: string): string removes the card's bookmark and workspace
 
 ---Land the checked commit while the turn is held, or say that trunk moved and nothing was pushed.
@@ -468,6 +558,29 @@ local function land_held(opts)
     end
     if rebased or now.commit ~= state.commit then
         return { moved = true }
+    end
+    local companions = {}
+    for _, listed in ipairs(opts.prepared.companions) do
+        local other = backend:card(listed.id)
+        local other_short = listed.id:sub(1, board.MIN_PREFIX)
+        if not other then
+            return failure(
+                "Card " .. other_short .. " cannot land with " .. short .. ". It is gone."
+            )
+        end
+        renew_claim(backend, other, name)
+        local other_problems = card_problems(backend, other, { name = name, comments = {} })
+        if #other_problems > 0 then
+            return failure(
+                "Card "
+                    .. other_short
+                    .. " cannot land with "
+                    .. short
+                    .. " for these reasons.\n  - "
+                    .. table.concat(other_problems, "\n  - ")
+            )
+        end
+        companions[#companions + 1] = other
     end
     local renewed
     renewed, message = turn.renew(backend, hold)
@@ -534,34 +647,28 @@ local function land_held(opts)
     local noted
     noted, message =
         backend:note(card.id, text, held and held.fence, { kind = board.NoteKind.DONE })
+    local first_problem
     if not noted then
-        local refused = failure(
-            string.format(
-                "Landed commit %s. The done note was NOT written on card %s, and the card was not moved. %s Write the note and move the card to %s by hand.",
-                commit,
-                short,
-                dev_text.sentence(message),
-                target
-            )
+        first_problem = string.format(
+            "Landed commit %s. The done note was NOT written on card %s, and the card was not moved. %s Write the note and move the card to %s by hand.",
+            commit,
+            short,
+            dev_text.sentence(message),
+            target
         )
-        refused.landed = true
-        return refused
-    end
-    local moved = opts.move(backend, { card.id, target })
-    if moved.code then
-        local refused = failure(
-            string.format(
+    else
+        local moved = opts.move(backend, { card.id, target })
+        if moved.code then
+            first_problem = string.format(
                 "Landed commit %s and noted it on card %s. The move to %s failed. %s",
                 commit,
                 short,
                 target,
                 dev_text.sentence(moved.message)
             )
-        )
-        refused.landed = true
-        return refused
+        end
     end
-    local left = backend:card(card.id)
+    local left = not first_problem and backend:card(card.id)
     if left and left.claimant then
         claims.stop(card.id)
         local released, stuck = backend:release(card.id, held and held.fence)
@@ -569,13 +676,42 @@ local function land_held(opts)
             verb.note("dev: Landed, but the claim was not released. " .. dev_text.sentence(stuck))
         end
     end
+    local together = ""
+    local unfinished = {}
+    for _, other in ipairs(companions) do
+        local refused = finish_companion({
+            backend = backend,
+            move = opts.move,
+            other = other,
+            first = card,
+            text = text,
+            target = target,
+        })
+        if refused then
+            unfinished[#unfinished + 1] = refused
+        else
+            together = together .. " and " .. other.id:sub(1, board.MIN_PREFIX)
+        end
+    end
+    if first_problem or #unfinished > 0 then
+        local lines = { first_problem or ("Landed commit " .. commit .. ".") }
+        for _, line in ipairs(unfinished) do
+            lines[#lines + 1] = line
+        end
+        local tail = first_problem and "" or opts.clean_up(backend.root, short)
+        local refused = failure(table.concat(lines, " ") .. tail)
+        refused.landed = true
+        return refused
+    end
     return {
         output = string.format(
-            "landed %s at commit %s%s and moved it to %s",
+            "landed %s%s at commit %s%s and moved %s to %s",
             short,
+            together,
             commit,
             on_trunk and ""
                 or " (the commit from before the land, which may differ: trunk could not be read)",
+            together == "" and "it" or "them",
             target
         ) .. opts.clean_up(backend.root, short),
     }

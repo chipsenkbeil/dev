@@ -2568,8 +2568,16 @@ The result:
 
 ### land
 
-`dev board land CARD [--wait SECONDS]` takes the landing turn and lands the
-card's change on trunk.
+`dev board land CARD [CARD...] [--wait SECONDS]` takes the landing turn and
+lands the card's change on trunk.
+
+When one change carries several cards, name them all. The first names the
+workspace and runs the landing, and each other card is held to the same rules:
+it sits in Verify, the caller claims it, its outcomes are ticked, and it has its
+reviews and check at the commit. A card that fails them refuses the landing
+before anything lands. After the landing each other card gets its own `done`
+note naming the landed commit, moves to the same column and loses its claim.
+Only the first card's workspace and bookmark are removed.
 
 In order, it:
 

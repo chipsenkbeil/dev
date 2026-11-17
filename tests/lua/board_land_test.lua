@@ -783,6 +783,77 @@ if has_jj then
         end
     )
 
+    local function second_card(project)
+        local out = dev(project, {
+            "board",
+            "add",
+            "Second",
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "It works",
+        })
+        local id = assert(out:match("added (%x+)"), out)
+        must(dev(project, { "board", "checks", id, "true" }))
+        return id
+    end
+
+    testing.test("land with two cards on one change moves both to Done with a note", function()
+        local project = jj_project()
+        local first = verified_card(project)
+        local second = second_card(project)
+        to_verify(project, second)
+        jj(project.root, "workspace", "rename", second)
+        approve(project, second)
+        jj(project.root, "workspace", "rename", first)
+        local commit = head(project.root)
+        local out, code = dev(
+            project,
+            { "board", "land", first, second },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
+        testing.eq(code, 0, out)
+        for _, id in ipairs({ first, second }) do
+            local list = comments(project.home, id)
+            testing.eq(list[#list].kind, KIND_DONE)
+            testing.ok(list[#list].body:find("Landed commit " .. commit:sub(1, 12), 1, true))
+            testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+        end
+    end)
+
+    testing.test("land with a second card that fails its rules lands nothing", function()
+        local project = jj_project()
+        local first = verified_card(project)
+        local second = second_card(project)
+        to_verify(project, second)
+        local out, code = dev(
+            project,
+            { "board", "land", first, second },
+            { LAND_TRUNK = LAND_TRUNK_KEEP }
+        )
+        testing.eq(code, 1, out)
+        testing.ok(out:find("cannot land", 1, true), out)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(column_of(project.home, first), board.DEFAULT_NAMES.verify)
+        testing.eq(column_of(project.home, second), board.DEFAULT_NAMES.verify)
+    end)
+
+    testing.test("land names the same card twice and lands nothing", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        local out, code = dev(project, { "board", "land", id, id })
+        testing.eq(code, 2, out)
+        testing.ok(out:find("twice", 1, true), out)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
+    end)
+
     testing.test(
         "land runs jj land with DEV_BOARD_LAND=1 so the jj guard lets it through",
         function()

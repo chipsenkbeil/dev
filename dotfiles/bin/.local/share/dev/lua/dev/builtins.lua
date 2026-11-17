@@ -470,7 +470,7 @@ return {
         words = { "board", "land" },
         handler = "lua",
         flags = "--wait",
-        usage = "dev board land CARD [--wait SECONDS]",
+        usage = "dev board land CARD [CARD...] [--wait SECONDS]",
         desc = "Land a card's change on trunk under the landing turn",
     },
     {
