@@ -2436,6 +2436,29 @@ How a row runs:
   the state could not be read. The run keeps going, so read it before a rerun.
 - A card with no rows is exit 1.
 
+Rows that share one ci run:
+
+- A card with two or more plain rows such as `dev --remote lint` and
+  `dev --remote test`, each of a different job, runs them as one ci run, so
+  the card waits in the ci queue once. One row may add words after the double
+  dash.
+- `ci run` without `--job` starts every job and hands the same words to each,
+  so the rows share a run only when their jobs are exactly the jobs of the
+  default pipeline. A card whose rows leave a job out, repeat a job, give two
+  rows words, negate a row or add a flag to one runs each row on its own, as
+  does any `--expect-fail` run.
+- Every row of the shared run records its own result and the one run id. dev
+  reads each job's result with `ci ps RUN --json`, so a failed job shows as
+  that row failing, with the last 12 lines of `ci logs RUN --job NAME` under it.
+  The record keeps one line per row, so `land` reads it unchanged. A run that
+  exits 0 passes every row even when ci cannot be asked for the jobs.
+- The run starts when dev reaches the first of the rows, and each row keeps
+  its place in the card's order. A row that is not a ci row runs on its own as
+  before.
+- `--timeout` bounds the one run. A run that outlasts it records each of its
+  rows as `timeout` with the state reason.
+- A refused run counts as a refusal of its first row.
+
 The result belongs to one commit:
 
 - In a jj project the working copy is itself a commit, so a changed file is
@@ -2457,7 +2480,8 @@ command.
 - dev prints `row N run <id>` to standard error the moment the row's `run <id>`
   line is complete, before the row finishes, so a runner told to stop its own
   runs finds the ids in its log. It prints one line per row, for the first
-  `run` line the row prints. `land`'s recheck and `ship` print none.
+  `run` line the row prints. A shared run prints one `rows N, M run <id>` line
+  for all its rows. `land`'s recheck and `ship` print none.
 - A row that failed with no run id adds a second line under it, indented by
   two spaces, with the last line the row printed. A row that printed a run id,
   a negated row and a row that timed out add none.

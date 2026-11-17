@@ -101,6 +101,42 @@ end
 ---@field argvs string[][] one command per row
 ---@field options dev.board.wiring.CheckFlags the parsed flags
 
+---Run the rows of a plan as one ci run.
+---
+---The run takes the label a `dev --remote` row would give it. `ci` refuses a run that has no
+---`DEV_AGENT` and no terminal.
+---@param opts dev.board.wiring.check_rows.Opts the card, its commit and the flags
+---@param plan dev.board.check.Plan the rows that share the run
+---@param env table<string, string> variables set for the run
+---@return dev.board.check.Row[] rows the finished rows by their place in the card's checks
+local function run_shared(opts, plan, env)
+    local places = {}
+    for _, entry in ipairs(plan.rows) do
+        places[#places + 1] = tostring(entry.index)
+    end
+    local text = table.concat(places, ", ")
+    verb.note(string.format("running rows %s of %d as one ci run", text, #opts.argvs))
+    local label = remote.run_label(opts.backend.root, {
+        DEV_AGENT = os.getenv("DEV_AGENT"),
+        DEV_CI_VERB = env[remote.VERB_ENV],
+        DEV_CI_CARD = env[remote.CARD_ENV],
+    }, { tty = false })
+    local done = check.run_group({
+        root = opts.backend.root,
+        plan = plan,
+        seconds = opts.options.seconds,
+        env = { DEV_AGENT = label },
+        on_run_id = function(run_id)
+            verb.note(string.format("rows %s run %s", text, run_id))
+        end,
+    })
+    local rows = {}
+    for k, entry in ipairs(plan.rows) do
+        rows[entry.index] = done[k]
+    end
+    return rows
+end
+
 ---Run the card's rows and record the result.
 ---@param opts dev.board.wiring.check_rows.Opts the card, its commit and the commands
 ---@return dev.cmd.board.Result result the check's outcome
@@ -110,23 +146,44 @@ local function check_rows(opts)
     local short = card.id:sub(1, board.MIN_PREFIX)
     local message
     local rows = {}
+    local env = {
+        [remote.VERB_ENV] = remote.Verb.CHECK,
+        [remote.CARD_ENV] = short,
+    }
+    local plan
+    if not flags.expect_fail then
+        plan = check.plan(card.checks, argvs, function()
+            return remote.default_jobs(backend.root)
+        end)
+    end
+    local shared = {}
+    for _, entry in ipairs(plan and plan.rows or {}) do
+        shared[entry.index] = true
+    end
     for i, argv in ipairs(argvs) do
-        renew_claim(backend, card, opts.name)
-        verb.note(string.format("running %d of %d: %s", i, #argvs, card.checks[i]))
-        rows[i] = check.run({
-            root = backend.root,
-            run = card.checks[i],
-            argv = argv,
-            seconds = flags.seconds,
-            expect_fail = flags.expect_fail,
-            env = {
-                [remote.VERB_ENV] = remote.Verb.CHECK,
-                [remote.CARD_ENV] = short,
-            },
-            on_run_id = function(run_id)
-                verb.note(string.format("row %d run %s", i, run_id))
-            end,
-        })
+        if plan and shared[i] then
+            if not rows[i] then
+                renew_claim(backend, card, opts.name)
+                local done = run_shared(opts, plan, env)
+                for _, entry in ipairs(plan.rows) do
+                    rows[entry.index] = done[entry.index]
+                end
+            end
+        else
+            renew_claim(backend, card, opts.name)
+            verb.note(string.format("running %d of %d: %s", i, #argvs, card.checks[i]))
+            rows[i] = check.run({
+                root = backend.root,
+                run = card.checks[i],
+                argv = argv,
+                seconds = flags.seconds,
+                expect_fail = flags.expect_fail,
+                env = env,
+                on_run_id = function(run_id)
+                    verb.note(string.format("row %d run %s", i, run_id))
+                end,
+            })
+        end
         if rows[i].refused then
             return failure(
                 string.format(

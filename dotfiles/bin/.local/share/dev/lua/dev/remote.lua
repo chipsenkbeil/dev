@@ -94,6 +94,27 @@ function M.refuses_agent_local(root, words)
     return not M.machine_local(words) and M.has_default_job(root, words, AGENT_HINT)
 end
 
+---List the job names of the default pipeline.
+---@param root string the project root
+---@return string[]? names the job names in `ci` order, nil when `ci` cannot list them
+function M.default_jobs(root)
+    local out, code = dev_os.capture(
+        { "ci", "-C", root, "run", "--list", "--json" },
+        { stderr = "null" }
+    )
+    local doc = code == 0 and json.decode(out)
+    if type(doc) ~= "table" or type(doc.jobs) ~= "table" then
+        return nil
+    end
+    local names = {}
+    for _, entry in ipairs(doc.jobs) do
+        if type(entry) == "table" and type(entry.name) == "string" then
+            names[#names + 1] = entry.name
+        end
+    end
+    return names
+end
+
 ---Check whether a pipeline lists a job.
 ---@param root string the project root
 ---@param job string the job name

@@ -596,6 +596,151 @@ testing.test("a timeout row says when the ci state is unreadable", function()
     testing.ok(body:find("the ci run state could not be read at the limit", 1, true), body)
 end)
 
+local PASSED =
+    '{"name":"lint","state":"passed","exit_code":0},{"name":"test","state":"passed","exit_code":0}'
+local TEST_FAILED =
+    '{"name":"lint","state":"passed","exit_code":0},{"name":"test","state":"failed","exit_code":3}'
+
+local function group_run(code)
+    return 'echo "$DEV_AGENT $*" >> "$CI_LOG"; [ -n "$DEV_AGENT" ] || exit 9; echo "run 8cb600"; exit '
+        .. code
+end
+
+local function group_ci(opts)
+    local ps = opts.unreadable and "exit 1"
+        or string.format([[echo '{"status":"running","jobs":[%s]}']], opts.jobs)
+    return string.format(
+        [[case "$1" in
+-C)
+    case "$4" in
+    "--list") echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;
+    *) %s ;;
+    esac ;;
+ps) %s ;;
+logs) echo "output of $4" ;;
+esac]],
+        opts.run,
+        ps
+    )
+end
+
+---@class board_check_test.group_check.Opts
+---@field jobs string? the jobs `ci ps` reports
+---@field unreadable boolean? whether `ci ps` fails
+---@field run string the shell the fake `ci run` runs
+---@field rows string[]? the card's checks, a lint row and a test row when nil
+---@field timeout string? the `--timeout` seconds
+
+local function group_check(opts)
+    local root, home = git_root()
+    local id = card_with(root, home, opts.rows or { "dev --remote lint", "dev --remote test" })
+    local env = fake_ci(group_ci(opts))
+    local log = support.tempdir() .. "/ci.log"
+    env.CI_LOG = log
+    env.DEV_AGENT = ""
+    local args = { "board", "check", id }
+    if opts.timeout then
+        args[#args + 1] = "--timeout"
+        args[#args + 1] = opts.timeout
+    end
+    local out, status = dev(root, home, args, nil, env)
+    local first = comments(home)[1]
+    return out, status, first and first.body, fs.read(log) or ""
+end
+
+testing.test("a card with a lint row and a test row makes one ci run", function()
+    local out, code, body, log = group_check({ jobs = PASSED, run = group_run(0) })
+    testing.eq(code, 0, out)
+    testing.eq(select(2, log:gsub("\n", "")), 1, log)
+    testing.ok(log:find("mine/check/", 1, true), log)
+    testing.ok(out:find("1 pass 8cb600 dev --remote lint", 1, true), out)
+    testing.ok(out:find("2 pass 8cb600 dev --remote test", 1, true), out)
+    local record = check.parse(body)
+    testing.eq(record.rows, {
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+    })
+end)
+
+testing.test("a failed job records its own row and shows its own tail", function()
+    local out, code, body = group_check({ jobs = TEST_FAILED, run = group_run(1) })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("1 pass 8cb600", 1, true), out)
+    testing.ok(out:find("2 fail 8cb600", 1, true), out)
+    testing.ok(out:find("    output of test", 1, true), out)
+    testing.ok(not out:find("output of lint", 1, true), out)
+    testing.ok(body:find("2 fail 8cb600", 1, true), body)
+end)
+
+testing.test("the words after the double dash of a test row reach the one ci run", function()
+    local out, code, _, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = { "dev --remote lint", "dev --remote test -- tests/a_test.lua" },
+    })
+    testing.eq(code, 0, out)
+    testing.ok(log:find("-- tests/a_test.lua", 1, true), log)
+end)
+
+testing.test("a shared run that exits 0 passes its rows when ci cannot list the jobs", function()
+    local out, code, body = group_check({ unreadable = true, run = group_run(0) })
+    testing.eq(code, 0, out)
+    testing.ok(body:find("2 pass 8cb600", 1, true), body)
+end)
+
+testing.test("a shared run the hub refused records nothing and names its first row", function()
+    local out, code, body = group_check({ jobs = PASSED, run = REFUSED_STUB })
+    testing.eq(code, 1, out)
+    testing.eq(body, nil)
+    testing.ok(out:find("The ci hub refused row 1 (dev --remote lint).", 1, true), out)
+    testing.ok(out:find("The hub said: " .. REFUSAL, 1, true), out)
+end)
+
+testing.test("a shared run that outlasts the limit records every row as a timeout", function()
+    local out, code, body = group_check({
+        jobs = PASSED,
+        run = 'echo "run 8cb600"; sleep 30',
+        timeout = "2",
+    })
+    testing.eq(code, 1, out)
+    local reason = "the ci run was running at the limit and may still finish"
+    testing.ok(body:find("1 timeout 8cb600\n  " .. reason, 1, true), body)
+    testing.ok(body:find("2 timeout 8cb600\n  " .. reason, 1, true), body)
+end)
+
+testing.test("plan shares one run only among rows that cover the whole pipeline", function()
+    local function jobs(...)
+        local names = { ... }
+        return function()
+            return names
+        end
+    end
+    local function plan(rows, list)
+        local argvs = {}
+        for i, row in ipairs(rows) do
+            argvs[i] = check.argv(row)
+        end
+        return check.plan(rows, argvs, list)
+    end
+    local both = { "dev --remote lint", "dev --remote test -- a b" }
+    local found = plan(both, jobs("lint", "test"))
+    testing.eq(found.args, { "a", "b" })
+    testing.eq(found.rows[2], { index = 2, job = "test", run = "dev --remote test -- a b" })
+    testing.eq(plan(both, jobs("lint", "test", "docs")), nil)
+    testing.eq(plan(both, jobs("lint", "docs")), nil)
+    testing.eq(plan(both, function() end), nil)
+    testing.eq(plan({ "dev --remote lint" }, jobs("lint")), nil)
+    testing.eq(plan({ "dev --remote lint", "dev --remote lint" }, jobs("lint", "test")), nil)
+    testing.eq(plan({ "dev --remote lint", "! dev --remote test" }, jobs("lint", "test")), nil)
+    testing.eq(plan({ "dev --remote lint -v", "dev --remote test" }, jobs("lint", "test")), nil)
+    testing.eq(
+        plan({ "dev --remote test -- a", "dev --remote lint -- b" }, jobs("lint", "test")),
+        nil
+    )
+    local mixed = plan({ "rg x y", "dev --remote lint", "dev --remote test" }, jobs("lint", "test"))
+    testing.eq(mixed.rows[1].index, 2)
+end)
+
 testing.test("the default row limit is two hours and within the most --timeout accepts", function()
     testing.eq(check.DEFAULT_SECONDS, 7200)
     testing.ok(check.DEFAULT_SECONDS <= check.MAX_SECONDS)

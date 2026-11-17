@@ -87,6 +87,7 @@ local CI_COMMAND = "ci"
 local DEV_COMMAND = "dev"
 local DOUBLE_DASH = "--"
 local STATE_SECONDS = 20
+local LOGS_SECONDS = 60
 
 ---How a checks row ended.
 ---@enum dev.board.check.Result
@@ -379,6 +380,14 @@ local function drain_cap_refusal(output)
     return last_line(output)
 end
 
+local function hub_refusal(output, code)
+    local refused = drain_refusal(output)
+    if not refused and code == DRAINING_EXIT then
+        refused = drain_cap_refusal(output)
+    end
+    return refused
+end
+
 local function tail_of(output)
     local lines = {}
     for line in output:gmatch("[^\n]+") do
@@ -449,12 +458,15 @@ local function timeout_reason(run_id)
     return "the ci run was " .. status .. " at the limit and may still finish"
 end
 
----Run one checks row to its end or its time limit.
----@param opts dev.board.check.run.Opts the row and where it runs
----@return dev.board.check.Row row how it ended
-function M.run(opts)
+---Make the `on_text` callback that hands the first `run <id>` line to `on_run_id`.
+---@param on_run_id fun(run_id: string)? called once with the id, nil to watch nothing
+---@return (fun(text: string))? watch the callback, nil when nothing is watched
+local function run_id_watcher(on_run_id)
+    if not on_run_id then
+        return nil
+    end
     local pending, announced = "", false
-    local function watch(text)
+    return function(text)
         pending = pending .. text
         while not announced do
             local line, rest = pending:match("^([^\n]*)\n(.*)$")
@@ -465,15 +477,21 @@ function M.run(opts)
             local id = line:match(RUN_LINE)
             if id then
                 announced = true
-                opts.on_run_id(id)
+                on_run_id(id)
             end
         end
     end
+end
+
+---Run one checks row to its end or its time limit.
+---@param opts dev.board.check.run.Opts the row and where it runs
+---@return dev.board.check.Row row how it ended
+function M.run(opts)
     local output, code = dev_os.capture_timed(opts.argv, opts.seconds, {
         cwd = opts.root,
         merge = true,
         env = opts.env,
-        on_text = opts.on_run_id and watch or nil,
+        on_text = run_id_watcher(opts.on_run_id),
     })
     local negated = opts.run:match(NEGATED) ~= nil
     local passed = code == 0
@@ -489,10 +507,7 @@ function M.run(opts)
     local run_id = M.run_id(output)
     local reason, refused
     if not run_id and code ~= 0 then
-        refused = drain_refusal(output)
-        if not refused and code == DRAINING_EXIT then
-            refused = drain_cap_refusal(output)
-        end
+        refused = hub_refusal(output, code)
     end
     local result = passed and not refused and M.Result.PASS or M.Result.FAIL
     if code == TIMEOUT_EXIT then
@@ -537,6 +552,169 @@ function M.run_id(output)
         end
     end
     return nil
+end
+
+---@class dev.board.check.GroupRow
+---@field index integer the row's place in the card's checks, counted from 1
+---@field job string the ci job the row runs
+---@field run string the row as the card holds it
+
+---@class dev.board.check.Plan
+---@field rows dev.board.check.GroupRow[] the rows that share one ci run, in the card's order
+---@field args string[] the words after the double dash of the one row that has any
+
+---Read the job and the words after the double dash of a `dev --remote JOB [-- WORDS]` row.
+---@param argv string[] the row's words
+---@return string? job the job name, nil when the row is any other command
+---@return string[]? words the words after the double dash
+function M.job_row(argv)
+    local job = argv[3]
+    if argv[1] ~= DEV_COMMAND or argv[2] ~= REMOTE_FLAG or not job or not job:match("^[%w_]+$") then
+        return nil
+    end
+    local words = {}
+    if argv[4] ~= nil then
+        if argv[4] ~= DOUBLE_DASH then
+            return nil
+        end
+        for i = 5, #argv do
+            words[#words + 1] = argv[i]
+        end
+    end
+    return job, words
+end
+
+---Choose the rows of a card that run as one ci run.
+---
+---The rows qualify when two or more are plain `dev --remote JOB` rows of different jobs, at most
+---one passes words, and the jobs are exactly the jobs the default pipeline holds. A ci run without
+---`--job` starts every job of the pipeline and hands the same words to each.
+---@param commands string[] the card's checks rows as it holds them
+---@param argvs string[][] the rows' words, without a leading `! `
+---@param list_jobs fun(): string[]? the default pipeline's job names, called for a candidate only
+---@return dev.board.check.Plan? plan nil when every row runs on its own
+function M.plan(commands, argvs, list_jobs)
+    local rows, seen, args = {}, {}, nil
+    for i, argv in ipairs(argvs) do
+        local job, words = nil, nil
+        if not commands[i]:match(NEGATED) then
+            job, words = M.job_row(argv)
+        end
+        if job then
+            if seen[job] or (#words > 0 and args) then
+                return nil
+            end
+            seen[job] = true
+            args = #words > 0 and words or args
+            rows[#rows + 1] = { index = i, job = job, run = commands[i] }
+        end
+    end
+    if #rows < 2 then
+        return nil
+    end
+    local names = list_jobs()
+    if not names or #names ~= #rows then
+        return nil
+    end
+    for _, name in ipairs(names) do
+        if not seen[name] then
+            return nil
+        end
+    end
+    return { rows = rows, args = args or {} }
+end
+
+---Read how each job of a ci run ended.
+---@param run_id string the ci run id
+---@return table<string, {passed: boolean, code: integer}>? jobs by job name, nil when ci cannot say
+local function job_results(run_id)
+    local out, code = dev_os.capture_timed({ CI_COMMAND, "ps", run_id, "--json" }, STATE_SECONDS)
+    local doc = code == 0 and json.decode(out) or nil
+    if type(doc) ~= "table" or type(doc.jobs) ~= "table" then
+        return nil
+    end
+    local results = {}
+    for _, entry in ipairs(doc.jobs) do
+        if type(entry) == "table" and type(entry.name) == "string" then
+            local seen = results[entry.name] or { passed = true, code = 0 }
+            local failed = entry.state ~= "passed"
+            seen.passed = seen.passed and not failed
+            if failed and seen.code == 0 then
+                seen.code = type(entry.exit_code) == "number"
+                        and entry.exit_code ~= 0
+                        and entry.exit_code
+                    or 1
+            end
+            results[entry.name] = seen
+        end
+    end
+    return results
+end
+
+---Read the last lines one job of a ci run printed.
+---@param run_id string the ci run id
+---@param job string the job name
+---@return string tail the lines, empty when ci cannot say
+local function job_tail(run_id, job)
+    local argv = { CI_COMMAND, "logs", run_id, "--job", job }
+    local out = dev_os.capture_timed(argv, LOGS_SECONDS, { merge = true })
+    return tail_of(out)
+end
+
+---@class dev.board.check.run_group.Opts
+---@field root string the project root the run starts in
+---@field plan dev.board.check.Plan the rows that share the run
+---@field seconds integer how long the run may take
+---@field env table<string, string>? variables set for the run
+---@field on_run_id fun(run_id: string)? called with the run's ci run id once its line is complete
+
+---Run the rows of a plan as one ci run and read each row's result from its job.
+---@param opts dev.board.check.run_group.Opts the plan and where it runs
+---@return dev.board.check.Row[] rows one per plan row, in the plan's order, all with the one run id
+function M.run_group(opts)
+    local argv = { CI_COMMAND, "-C", opts.root, "run", "--local", "--follow", DOUBLE_DASH }
+    for _, word in ipairs(opts.plan.args) do
+        argv[#argv + 1] = word
+    end
+    local output, code = dev_os.capture_timed(argv, opts.seconds, {
+        cwd = opts.root,
+        merge = true,
+        env = opts.env,
+        on_text = run_id_watcher(opts.on_run_id),
+    })
+    local run_id = M.run_id(output)
+    local refused = not run_id and code ~= 0 and hub_refusal(output, code) or nil
+    local timed_out = code == TIMEOUT_EXIT
+    local reason = timed_out and run_id and timeout_reason(run_id) or nil
+    local results = run_id and not timed_out and job_results(run_id) or nil
+    local rows = {}
+    for k, entry in ipairs(opts.plan.rows) do
+        local found = results and results[entry.job]
+        local row = {
+            run = entry.run,
+            run_id = run_id or NO_RUN,
+            refused = refused,
+            result = M.Result.PASS,
+            code = 0,
+            tail = "",
+        }
+        if timed_out then
+            row.result, row.code, row.reason = M.Result.TIMEOUT, code, reason
+            row.tail = tail_of(output)
+            if reason then
+                row.tail = reason:sub(1, 1):upper() .. reason:sub(2) .. ".\n" .. row.tail
+            end
+        elseif not (found and found.passed) and not (code == 0 and not results) then
+            row.result = M.Result.FAIL
+            row.code = found and found.code or (code ~= 0 and code or 1)
+            if not found then
+                row.reason = run_id and "the ci run state could not be read" or last_line(output)
+            end
+            row.tail = run_id and found and job_tail(run_id, entry.job) or tail_of(output)
+        end
+        rows[k] = row
+    end
+    return rows
 end
 
 ---Write one row's line of a run.
