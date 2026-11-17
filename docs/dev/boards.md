@@ -2573,7 +2573,8 @@ card's change on trunk.
 In order, it:
 
 - rebases the working-copy change onto trunk and reruns the `recheck` rows on
-  the rebased commit, with no turn held
+  the rebased commit when its patch differs from the checked one, with no turn
+  held
 - takes the landing turn, and fetches trunk again. When trunk moved or the
   working copy changed since the recheck, it gives the turn back and starts
   over with a new rebase and recheck, up to 5 times, and pushes nothing
@@ -2627,7 +2628,7 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
 - A `code` and a `style` review of the working-copy change are recorded. A
   review of an earlier commit of the change counts when `jj interdiff` between
   that commit and the landing one is empty, so a clean rebase keeps its reviews
-  and only the check reruns. Any other earlier commit counts only with a
+  and its check. Any other earlier commit counts only with a
   `recheck` recorded at the landing commit.
 - No `code`, `style` or `recheck` review at the landing commit (or at an
   earlier commit of the change with the same empty interdiff) has `needs-work`
@@ -2801,11 +2802,16 @@ The settings:
 - `checks` under `[board.release]` lists the commands `dev board ship` runs once
   when it gets none after `--`, one plain command per row.
 - `recheck` under `[board.land]` lists the commands `land` reruns itself, one
-  plain command per row. When the carried check's commit does not sit directly
-  on the trunk `land` rebased onto, `land` runs each row on the landing commit
-  before it takes the landing turn, in order. A row that fails refuses the
-  land with the row, its run id and the end of its output, and nothing is
-  pushed. A check on the current trunk or an empty list lands as before.
+  plain command per row. `ship` checks the whole batch, and `land` retests only when
+  the carried patch changed. After a conflict-free rebase the change's patch is
+  compared with the checked commit's patch, both read as a diff with its
+  context lines and without hunk headers and blob ids. When they are equal,
+  whatever files trunk touched, `land` keeps the check and the reviews and runs
+  no row. When they differ, `land` runs each row on the landing commit before
+  it takes the landing turn, in order. A row that fails refuses the land with
+  the row, its run id and the end of its output, and nothing is pushed. A
+  rebase that leaves a conflict still voids the check, and an empty list lands
+  as before.
   `land` reads the rows from the project config as trunk holds it, then from
   the user config, so the landing change cannot edit the rows that guard it. A
   trunk or a file `land` cannot read refuses the land. This repo sets it to

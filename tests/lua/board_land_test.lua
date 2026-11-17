@@ -116,6 +116,7 @@ local PAST_CAP_SECONDS = 2
 local CHECK_WAIT_SECONDS = 60
 local CHECK_STOP_SECONDS = 300
 local SHARED = "a\nb\nc\nd\ne\nf\ng\n"
+local NEAR_EDIT = "a\nb\nc\nD\ne\nf\ng\n"
 local NARROWED = '[board]\nbackend = "local"\nname = "mine"\n\n[board.land]\nrecheck = []\n'
 
 local function setup(extra)
@@ -1508,11 +1509,11 @@ if has_jj then
         return jj_project('\n[board.land]\nrecheck = ["' .. row .. '"]\n')
     end
 
-    testing.test("land reruns the recheck rows when the carry crosses trunk commits", function()
+    testing.test("land reruns the recheck rows when trunk changes the patch's context", function()
         local marker = support.tempdir() .. "/rechecked"
         local project = recheck_project("touch " .. marker)
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
@@ -1531,7 +1532,7 @@ if has_jj then
         )
         must(dev_os.run({ "chmod", "755", project.root .. "/bin/snap" }))
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         local out, code = dev(
             project,
@@ -1581,7 +1582,7 @@ if has_jj then
         )
         must(dev_os.run({ "chmod", "755", project.root .. "/bin/snap" }))
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         must(dev(project, { "board", "turn", id }))
         local out, code = dev(
@@ -1608,7 +1609,7 @@ if has_jj then
         local runs = support.tempdir() .. "/runs"
         local project = counting_project(runs, "always")
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 1, out)
@@ -1622,7 +1623,7 @@ if has_jj then
         local runs = support.tempdir() .. "/runs"
         local project = counting_project(runs, "once")
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
@@ -1637,7 +1638,7 @@ if has_jj then
         local runs = support.tempdir() .. "/runs"
         local project = counting_project(runs, false)
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
@@ -1648,7 +1649,7 @@ if has_jj then
     testing.test("a failed recheck row refuses the land and leaves trunk alone", function()
         local project = recheck_project("false")
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
@@ -1656,6 +1657,18 @@ if has_jj then
         testing.ok(out:find("fail - false", 1, true), out)
         testing.eq(fs.read(project.log), nil)
         testing.eq(column_of(project.home), board.DEFAULT_NAMES.verify)
+    end)
+
+    testing.test("land skips the recheck rows over unrelated trunk files", function()
+        local marker = support.tempdir() .. "/rechecked"
+        local project = recheck_project("touch " .. marker)
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n", ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.ok(not fs.is_file(marker), "the recheck row ran")
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("land skips the recheck when the check sits on the current trunk", function()
@@ -1672,7 +1685,7 @@ if has_jj then
         local project = recheck_project("touch " .. marker)
         assert(fs.write(project.root .. "/.dev/config.toml", NARROWED), "write failed")
         local id = review_ready(project)
-        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
@@ -3239,10 +3252,28 @@ testing.test("land.git.recheck reruns trunk's rows when the change empties its o
     git_at(project.root, "add", "-A")
     git_at(project.root, "commit", "-q", "--amend", "--no-edit")
     git_approve(project)
-    git_trunk_moves(project, "other.txt", "other\n")
+    git_trunk_moves(
+        project,
+        ".dev/config.toml",
+        '[board]\nbackend = "local"\nname = "mine"\n# t\n[board.land]\nrecheck = ["touch '
+            .. marker
+            .. '"]\n'
+    )
     local out, code = git_dev(project, { "board", "land", id })
     testing.eq(code, 0, out)
     testing.ok(fs.is_file(marker), "trunk's recheck row never ran")
+end)
+
+testing.test("land.git.recheck skips the rows when the patch is unchanged", function()
+    local marker = support.tempdir() .. "/rechecked"
+    local project = git_project('\n[board.land]\nrecheck = ["touch ' .. marker .. '"]\n')
+    local id = project.id
+    git_approve(project)
+    git_trunk_moves(project, "other.txt", "other\n")
+    local out, code = git_dev(project, { "board", "land", id })
+    testing.eq(code, 0, out)
+    testing.ok(not fs.is_file(marker), "the recheck row ran")
+    testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
 end)
 
 testing.test("land.git.refused names a failed fetch or rebase and keeps the card", function()

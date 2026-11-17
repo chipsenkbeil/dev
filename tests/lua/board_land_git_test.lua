@@ -260,7 +260,7 @@ testing.test("git carry refuses a changed patch or a moved parent", function()
     testing.ok(problem and problem:find("has moved", 1, true), tostring(problem))
 end)
 
-testing.test("git recheck skips rows when the parent is shared", function()
+testing.test("git recheck skips rows on an unchanged patch", function()
     local root = with_origin({})
     git(root, "checkout", "-q", "-b", "work")
     write(root, "f.txt", "f\n")
@@ -281,6 +281,18 @@ testing.test("git recheck skips rows when the parent is shared", function()
     local moved_root, first = checked_then_trunk_moves()
     git(moved_root, "checkout", "-q", "-b", "moved")
     git(moved_root, "cherry-pick", first)
+    problem = land.recheck_problem({
+        root = moved_root,
+        commit = first,
+        card = "abc12345",
+        rows = { "false" },
+        note = function()
+            error("an unchanged patch over a moved trunk runs no row")
+        end,
+    })
+    testing.eq(problem, nil)
+    write(moved_root, "f.txt", "top\n" .. BODY .. "extra\n")
+    git(moved_root, "commit", "-q", "-a", "--amend", "-m", "feat: f")
     problem = land.recheck_problem({
         root = moved_root,
         commit = first,

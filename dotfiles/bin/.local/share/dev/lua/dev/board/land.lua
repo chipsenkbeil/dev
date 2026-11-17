@@ -956,6 +956,35 @@ function M.trunk_config(root)
     return text
 end
 
+local function patch_text(root, commit)
+    local out
+    if vcs.backend(root) == vcs.GIT then
+        out = git_out(
+            root,
+            "diff-tree",
+            "-p",
+            "--root",
+            "--no-commit-id",
+            "--no-color",
+            "--no-ext-diff",
+            "--binary",
+            commit or "HEAD"
+        )
+    else
+        out = jj_out(root, "diff", "--git", "--color", "never", "-r", commit or "@")
+    end
+    if out == nil then
+        return nil
+    end
+    local lines = {}
+    for line in out:gmatch("[^\n]*\n?") do
+        if line ~= "" and not line:find("^@@") and not line:find("^index ") then
+            lines[#lines + 1] = line
+        end
+    end
+    return table.concat(lines)
+end
+
 ---@class dev.board.land.recheck_problem.Opts
 ---@field root string the project root, a jj project
 ---@field commit string the checked commit the landing commit carries from
@@ -963,10 +992,11 @@ end
 ---@field rows any the `[board.land] recheck` value
 ---@field note fun(text: string) says which row is about to run
 
----Rerun the configured recheck rows on the landing commit when its carry crosses trunk commits.
+---Rerun the configured recheck rows on the landing commit when its patch is not the checked one.
 ---
----The carry crosses trunk commits when the checked commit's parent is not the landing commit's
----parent. A row fails the landing when it does not pass, and the first failure stops the run.
+---The patch is the commit's diff with its context lines, read without the hunk headers and blob
+---ids, so a rebase that moves the lines or lets trunk touch other files leaves it equal and runs
+---no row. A row fails the landing when it does not pass, and the first failure stops the run.
 ---@param opts dev.board.land.recheck_problem.Opts the project, the carried commit and the
 ---   configured rows
 ---@return string? problem the refusal naming the failing row and its run id, nil when none ran or
@@ -990,36 +1020,15 @@ function M.recheck_problem(opts)
         end
         argvs[i] = argv
     end
-    local direct
-    if vcs.backend(opts.root) == vcs.GIT then
-        local old, new = git_parents(opts.root, opts.commit), git_parents(opts.root, "HEAD")
-        if old and new then
-            direct = ""
-            for _, id in ipairs(old) do
-                for _, other in ipairs(new) do
-                    direct = id == other and id or direct
-                end
-            end
-        end
-    else
-        direct = jj_out(
-            opts.root,
-            "log",
-            "-r",
-            base_revset(opts.commit) .. " & @-",
-            "--no-graph",
-            "-T",
-            COMMIT_TEMPLATE
-        )
-    end
-    if direct == nil then
+    local old, new = patch_text(opts.root, opts.commit), patch_text(opts.root, nil)
+    if old == nil or new == nil then
         return string.format(
-            "%s could not read the parent of the checked commit %s.",
+            "%s could not read the patch of the checked commit %s.",
             tool_name(opts.root),
             M.short(opts.commit)
         )
     end
-    if direct ~= "" then
+    if old == new then
         return nil
     end
     local ran = {}
