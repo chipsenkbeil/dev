@@ -1620,6 +1620,28 @@ if has_jj then
         testing.eq(turn_holder(project.home), nil)
     end)
 
+    testing.test("land runs the recheck rows with DEV_CI_PRIORITY set to 1", function()
+        local mark = support.tempdir() .. "/priority"
+        local project = recheck_project("bin/prio")
+        local body = table.concat({
+            "#!/bin/sh",
+            'printf %s "$DEV_CI_PRIORITY" >"$MARK"',
+            "",
+        }, "\n")
+        assert(fs.write(project.root .. "/bin/prio", body), "write failed")
+        must(dev_os.run({ "chmod", "755", project.root .. "/bin/prio" }))
+        local id = review_ready(project)
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
+        rebase_onto_trunk(project.root)
+        local out, code = dev(
+            project,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, MARK = mark }
+        )
+        testing.eq(code, 0, out)
+        testing.eq(fs.read(mark), "1")
+    end)
+
     local function counting_project(runs, moves)
         local script = support.tempdir() .. "/rows.sh"
         local project = recheck_project("sh " .. script)

@@ -88,6 +88,7 @@ local function dev_env(base, env)
         DEV_AGENT = "",
         DEV_CI_VERB = "",
         DEV_CI_CARD = "",
+        DEV_CI_PRIORITY = "",
         DEV_BOX_MARKER = base .. "/no-box",
     }
     for key, value in pairs(env or {}) do
@@ -592,6 +593,16 @@ testing.test("--remote ci run label takes DEV_CI_VERB and DEV_CI_CARD", function
     _, code = dev(root, base, { "--remote", "test" }, { DEV_CI_VERB = "release" })
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.agent"), "p/release\n")
+end)
+
+testing.test("--remote passes --priority to ci run only when DEV_CI_PRIORITY is 1", function()
+    local root, base = setup()
+    local _, code, log = dev(root, base, { "--remote", "test" })
+    testing.eq(code, 0)
+    testing.ok(not log:find("--priority", 1, true), log)
+    _, code, log = dev(root, base, { "--remote", "test" }, { DEV_CI_PRIORITY = "1" })
+    testing.eq(code, 0)
+    testing.ok(log:find("[--job] [test] [--priority] [--]", 1, true), log)
 end)
 
 testing.test("run label is unset for a bare run in a terminal", function()

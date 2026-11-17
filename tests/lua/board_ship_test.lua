@@ -173,6 +173,26 @@ if dev_os.which("jj") then
         testing.ok(out:find(open:sub(1, 4), 1, true), out)
     end)
 
+    testing.test("ship runs the release command with DEV_CI_PRIORITY set to 1", function()
+        local dir = support.tempdir()
+        local mark = dir .. "/priority"
+        local script = dir .. "/prio.sh"
+        local body = table.concat({
+            "#!/bin/sh",
+            'printf %s "$DEV_CI_PRIORITY" >"' .. mark .. '"',
+            "",
+        }, "\n")
+        assert(fs.write(script, body))
+        must(dev_os.run({ "chmod", "755", script }))
+        local root, home = project('\n[board.release]\nchecks = ["' .. script .. '"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 0, out)
+        testing.eq(fs.read(mark), "1")
+    end)
+
     local function follow_script(root)
         local script = root .. "/.dev/follow.sh"
         assert(fs.write(script, '#!/bin/sh\necho "followed $PWD"\n'), "write failed")

@@ -163,6 +163,14 @@ A `dev --remote` run from a terminal with no `DEV_CI_VERB`, and with `stdin`
 attached to that terminal, carries no label at all. ci shows the person who
 started it. The same run with `stdin` off a terminal stays `<repo>/remote`.
 
+## Priority
+
+The ci runner adds `--priority` to `ci run` when `DEV_CI_PRIORITY` is `1`, which
+starts the run's jobs ahead of every normal job waiting for room on the hub.
+`dev board land` sets it on the `[board.land] recheck` rows, and `dev board
+ship` sets it on the `[board.release] checks` rows. `dev board check` and a
+plain `dev --remote` run leave it unset, so they pass no `--priority`.
+
 ## --detach
 
 `--detach` needs `--remote`, and alone it is a usage error. The ci runner then

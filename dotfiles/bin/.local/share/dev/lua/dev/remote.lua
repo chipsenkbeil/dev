@@ -164,6 +164,9 @@ M.VERB_ENV = "DEV_CI_VERB"
 ---The environment variable that names the card of a ci run, as `DEV_CI_CARD`.
 M.CARD_ENV = "DEV_CI_CARD"
 
+---The environment variable that starts the ci run ahead of normal jobs, as `DEV_CI_PRIORITY=1`.
+M.PRIORITY_ENV = "DEV_CI_PRIORITY"
+
 ---The verbs dev puts in a ci run label when the caller names none.
 ---@enum dev.remote.Verb
 M.Verb = { CHECK = "check", REMOTE = "remote", RELEASE = "release" }
@@ -242,7 +245,12 @@ function M.ci_runner(run, opts)
         argv[#argv + 1] = pipeline
     end
     local mode = run.detach and "--detach" or "--follow"
-    for _, word in ipairs({ "--local", mode, "--job", job, "--" }) do
+    local words = { "--local", mode, "--job", job }
+    if os.getenv(M.PRIORITY_ENV) == "1" then
+        words[#words + 1] = "--priority"
+    end
+    words[#words + 1] = "--"
+    for _, word in ipairs(words) do
         argv[#argv + 1] = word
     end
     for _, word in ipairs(run.args) do
