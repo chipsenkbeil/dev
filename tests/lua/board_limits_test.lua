@@ -157,6 +157,7 @@ local function export(placed)
             kind = place[3],
             labels = place[4],
             description = PLANNED,
+            fields = '{"dev.checks":[{"run":"dev test"}]}',
         })
     end
     return '{"tasks":[' .. table.concat(parts, ",") .. "]}"

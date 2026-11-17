@@ -5632,6 +5632,7 @@ local SUBTASKS_CARD = {
     description = "## Problem\\nWhy.\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
     subtasks = '[{"id":"sub-a","name":"A works","done":false},'
         .. '{"id":"sub-b","name":"B works","done":true}]',
+    fields = '{"dev.checks":[{"run":"dev test"}]}',
 }
 local function export_with_subtasks_card(card)
     return '{"tasks":['
@@ -7734,6 +7735,58 @@ testing.test("move out of progress stops the loop and sends the fence", function
     testing.ok(loop_gone(pid))
     local after = settle(root)
     testing.eq(heartbeats(root), after)
+end)
+
+testing.test("take refuses a Backlog card with no checks row", function()
+    local export = export_with_first_card({
+        column_id = BACKLOG_COLUMN,
+        description = PLANNED_TEXT:format(" "),
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+end)
+
+testing.test("take of a card in Review is not held to the Ready requirements", function()
+    local export = export_with_first_card({
+        column_id = support.column_id(support.Column.REVIEW),
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+end)
+
+testing.test("take of a card in Verify is not held to the Ready requirements", function()
+    local export = export_with_first_card({
+        column_id = support.column_id(support.Column.VERIFY),
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+end)
+
+testing.test("move into progress refuses a card with no checks row as Ready does", function()
+    local card = colored("green")
+    card.checks = {}
+    card.outcomes = {
+        { id = "s1", name = "a " .. board.JUDGEMENT, done = false },
+        { id = "s2", name = "b " .. board.JUDGEMENT, done = false },
+        { id = "s3", name = "c " .. board.JUDGEMENT, done = false },
+    }
+    local toward_ready = cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
+    testing.eq(toward_ready.code, 1)
+    local backend = fake({ card })
+    local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, toward_ready.message)
+    testing.eq(#backend.calls, 0)
 end)
 
 testing.test("move into progress does not release the claim", function()
@@ -10217,7 +10270,8 @@ local function local_cards()
     testing.eq(code, 0, out)
     local ids = {}
     for _, name in ipairs({ "One", "Two", "Three" }) do
-        ids[name] = dev(root, home, add_args(name, { "--id-only" })):gsub("%s+$", "")
+        local extra = { "--id-only", "--checks", "dev test" }
+        ids[name] = dev(root, home, add_args(name, extra)):gsub("%s+$", "")
     end
     return root, home, ids
 end

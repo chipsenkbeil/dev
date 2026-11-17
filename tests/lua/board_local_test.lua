@@ -707,6 +707,7 @@ testing.test("edit is refused under another process's claim fence", function()
             )
         )
     )
+    dev(root, home, { "board", "checks", a, "dev test" })
     dev(root, home, { "board", "take", a })
     local doc = document(file_of(home))
     doc.cards[1].claim.fence = 9
@@ -1594,6 +1595,8 @@ testing.test("a local board ticks an outcome while this machine holds the claim"
         "1",
         "--done-when",
         "A works",
+        "--checks",
+        "dev test",
     })))
     local out, code = dev(root, home, { "board", "take", a })
     testing.eq(code, 0, out)
@@ -1925,6 +1928,7 @@ testing.test("a stale fence is refused once another process holds the claim", fu
         "--done-when",
         "a",
     })))
+    dev(root, home, { "board", "checks", a, "dev test" })
     dev(root, home, { "board", "take", a })
     local doc = document(file_of(home))
     doc.cards[1].claim.fence = 9

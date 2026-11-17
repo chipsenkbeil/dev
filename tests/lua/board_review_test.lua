@@ -50,6 +50,8 @@ local function card_in(root, home)
         "1",
         "--done-when",
         "a",
+        "--checks",
+        "dev test",
     })
     return assert(out:match("added (%x+)"), out)
 end

@@ -1272,6 +1272,116 @@ local function unnoted(backend, card, column)
     end
 end
 
+---Refuse a card whose size cannot enter Ready.
+---@param card dev.board.Card the card
+---@return dev.cmd.board.Result? refused the failure, nil when the card has a size of 1 to 3
+local function size_refusal(card)
+    if not unready(card.color) then
+        return nil
+    end
+    local why = card.color == board.SIZES["3+"]
+            and " is red, more than 3 Pomodori. Split it, since a red card cannot enter Ready."
+        or " has no size. It cannot enter Ready."
+    return failure(
+        "Card "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. why
+            .. " Size it with `dev board size CARD 1`, `2` or `3`."
+    )
+end
+
+---Count a card's children and say whether it is an epic.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@return {children: integer, epic: boolean}? shape the card's family, nil when the board failed
+---@return string? why the reason the board could not be read
+local function family_shape(backend, card)
+    if card.epic == nil and card.kind ~= board.Kind.EPIC then
+        return { children = 0, epic = false }
+    end
+    local family, why = backend:family(card.id)
+    if not family then
+        return nil, why
+    end
+    return { children = family.children and family.children.total or 0, epic = true }
+end
+
+---Say whether a card sits in a column where work has not started.
+---@param roles dev.board.Roles the board's columns
+---@param card dev.board.Card the card
+---@return boolean before true in Icebox, Backlog or Ready
+local function before_work(roles, card)
+    return card.column == roles.icebox or card.column == roles.backlog or card.column == roles.ready
+end
+
+---Refuse a card with no checks row and no children.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param children integer how many children the card has
+---@return dev.cmd.board.Result? refused the failure, nil when the card has a row or children
+local function checks_refusal(backend, card, children)
+    if #card.checks > 0 or children > 0 then
+        return nil
+    end
+    local why, problem = named_field_problem(backend, board.CHECKS_FIELD)
+    if problem then
+        return problem
+    end
+    return failure(
+        why
+            or (
+                "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " has no checks row and cannot enter Ready. Give it one with `dev board checks CARD CMD`."
+            )
+    )
+end
+
+---Refuse a card that fails the Ready requirements past its size.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param shape {children: integer, epic: boolean} the card's children and whether it is an epic
+---@return dev.cmd.board.Result? refused the failure, nil when the card meets them
+local function ready_refusal(backend, card, shape)
+    local children, epic = shape.children, shape.epic
+    local roles = backend.roles
+    local unreadable = guards.unreadable_refusal(card, roles.ready)
+    if unreadable then
+        return unreadable
+    end
+    local missing = board.missing(card.description, #card.outcomes, children, epic)
+    if #missing > 0 then
+        return failure(
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " is not in card format v3 and cannot enter Ready. It lacks "
+                .. table.concat(missing, ", ")
+                .. ". Add outcomes with `dev board outcome` and fix the description with `dev board edit`, where a v1 Done when checklist also counts."
+        )
+    end
+    local unchecked = checks_refusal(backend, card, children)
+    if unchecked then
+        return unchecked
+    end
+    if children == 0 and not epic and not card.outcomes_unreadable then
+        local unnamed = board.unnamed_checks(card.outcomes, card.checks)
+        if #unnamed > 0 then
+            return failure(
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " has an outcome that names no deciding check and cannot enter Ready. "
+                    .. "These outcomes lack one: "
+                    .. table.concat(unnamed, ", ")
+                    .. ". End each with "
+                    .. board.CHECK_OPEN
+                    .. "ROW) naming part of a checks row, or with "
+                    .. board.JUDGEMENT
+                    .. "."
+            )
+        end
+    end
+end
+
 local MOVE_FLAGS = { [runner.FLAG] = true, [WAIT_FLAG] = true, ["--lane"] = true }
 
 ---Move a card to a column, checking its outcomes first when the column is Done.
@@ -1346,16 +1456,11 @@ local function move_once(backend, args, opts)
     end
     local children = kids and kids.total or 0
     local closing = to_done and board.children_closed(kids)
-    if column == roles.ready and unready(card.color) then
-        local why = card.color == board.SIZES["3+"]
-                and " is red, more than 3 Pomodori. Split it, since a red card cannot enter Ready."
-            or " has no size. It cannot enter Ready."
-        return failure(
-            "Card "
-                .. card.id:sub(1, board.MIN_PREFIX)
-                .. why
-                .. " Size it with `dev board size CARD 1`, `2` or `3`."
-        )
+    if column == roles.ready then
+        local refused = size_refusal(card)
+        if refused then
+            return refused
+        end
     end
     local dropping_icebox = opts and opts.drop and card.column == roles.icebox
     if column ~= roles.icebox and column ~= roles.ready and not dropping_icebox then
@@ -1388,51 +1493,16 @@ local function move_once(backend, args, opts)
             return refused
         end
     end
+    local starting = column == roles.progress and before_work(roles, card)
     if column == roles.ready then
-        local unreadable = guards.unreadable_refusal(card, roles.ready)
-        if unreadable then
-            return unreadable
+        local refused = ready_refusal(backend, card, { children = children, epic = epic })
+        if refused then
+            return refused
         end
-        local missing = board.missing(card.description, #card.outcomes, children, epic)
-        if #missing > 0 then
-            return failure(
-                "Card "
-                    .. card.id:sub(1, board.MIN_PREFIX)
-                    .. " is not in card format v3 and cannot enter Ready. It lacks "
-                    .. table.concat(missing, ", ")
-                    .. ". Add outcomes with `dev board outcome` and fix the description with `dev board edit`, where a v1 Done when checklist also counts."
-            )
-        end
-        if #card.checks == 0 and children == 0 then
-            local why, problem = named_field_problem(backend, board.CHECKS_FIELD)
-            if problem then
-                return problem
-            end
-            return failure(
-                why
-                    or (
-                        "Card "
-                        .. card.id:sub(1, board.MIN_PREFIX)
-                        .. " has no checks row and cannot enter Ready. Give it one with `dev board checks CARD CMD`."
-                    )
-            )
-        end
-        if children == 0 and not epic and not card.outcomes_unreadable then
-            local unnamed = board.unnamed_checks(card.outcomes, card.checks)
-            if #unnamed > 0 then
-                return failure(
-                    "Card "
-                        .. card.id:sub(1, board.MIN_PREFIX)
-                        .. " has an outcome that names no deciding check and cannot enter Ready. "
-                        .. "These outcomes lack one: "
-                        .. table.concat(unnamed, ", ")
-                        .. ". End each with "
-                        .. board.CHECK_OPEN
-                        .. "ROW) naming part of a checks row, or with "
-                        .. board.JUDGEMENT
-                        .. "."
-                )
-            end
+    elseif starting then
+        local refused = checks_refusal(backend, card, children)
+        if refused then
+            return refused
         end
     end
     if column == roles.progress then
@@ -4362,6 +4432,16 @@ function commands.take(backend, args)
         local shaped = runner.shape_refusal(name)
         if shaped then
             return shaped
+        end
+    end
+    if card.claimant == nil and before_work(roles, card) then
+        local shape, why_family = family_shape(backend, card)
+        if not shape then
+            return failure(why_family)
+        end
+        refused = checks_refusal(backend, card, shape.children)
+        if refused then
+            return refused
         end
     end
     local limited = card.column ~= roles.progress and not claims.read(card.id) and not rival

@@ -3320,6 +3320,9 @@ A move into Ready:
 - A card with children is an epic (`kind` epic or `children_total` on Pomb,
   `parent` links on a local board). It enters Ready under the same rules as any
   card, except that it needs no checks row, as its children carry the checks.
+- A move into In Progress of a card that sits in Icebox, Backlog or Ready is
+  held to the checks row rule too, with the same words. `take` holds such a
+  card to it as well.
 - A move into any other column, Icebox included, is never checked for the Ready
   rules.
 
@@ -3477,6 +3480,9 @@ The claim:
   `/owner/renew` first and grabs again when Pomb answers 409.
 - On a Pomb board dev refuses an epic with an open child, which the grab route
   does not.
+- A card with no children that sits in Icebox, Backlog or Ready with no claim
+  and has no checks row is refused before the claim, with the words of `move
+  CARD ready`. A card in any other column is not held to it.
 
 The output:
 
