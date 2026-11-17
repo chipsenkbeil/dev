@@ -1031,7 +1031,7 @@ function M.recheck_problem(opts)
             argv = argv,
             seconds = check.DEFAULT_SECONDS,
             env = {
-                [dev_remote.VERB_ENV] = dev_remote.VERB.CHECK,
+                [dev_remote.VERB_ENV] = dev_remote.Verb.CHECK,
                 [dev_remote.CARD_ENV] = opts.card,
             },
         })

@@ -120,7 +120,7 @@ local function check_rows(opts)
             seconds = flags.seconds,
             expect_fail = flags.expect_fail,
             env = {
-                [remote.VERB_ENV] = remote.VERB.CHECK,
+                [remote.VERB_ENV] = remote.Verb.CHECK,
                 [remote.CARD_ENV] = short,
             },
             on_run_id = function(run_id)

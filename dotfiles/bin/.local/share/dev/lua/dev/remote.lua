@@ -144,7 +144,8 @@ M.VERB_ENV = "DEV_CI_VERB"
 M.CARD_ENV = "DEV_CI_CARD"
 
 ---The verbs dev puts in a ci run label when the caller names none.
-M.VERB = { CHECK = "check", REMOTE = "remote", RELEASE = "release" }
+---@enum dev.remote.Verb
+M.Verb = { CHECK = "check", REMOTE = "remote", RELEASE = "release" }
 
 ---Name the ci run dev starts, as `repo/verb` or `repo/verb/card`.
 ---@param root string the project root
@@ -179,7 +180,7 @@ function M.run_label(root, env, opts)
         if opts.tty then
             return nil
         end
-        verb_name = M.VERB.REMOTE
+        verb_name = M.Verb.REMOTE
     end
     return label(root, verb_name, env.DEV_CI_CARD)
 end

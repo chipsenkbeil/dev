@@ -609,7 +609,7 @@ testing.test("run label keeps check and release labels in a terminal", function(
     local remote = require("dev.remote")
     local root = setup()
     with_empty_home(function()
-        local check = { DEV_CI_VERB = remote.VERB.CHECK, DEV_CI_CARD = "d9f0e004" }
+        local check = { DEV_CI_VERB = remote.Verb.CHECK, DEV_CI_CARD = "d9f0e004" }
         local terminal, piped = { tty = true }, { tty = false }
         testing.eq(remote.run_label(root, check, terminal), "p/check/d9f0e004")
         local release = "release"
