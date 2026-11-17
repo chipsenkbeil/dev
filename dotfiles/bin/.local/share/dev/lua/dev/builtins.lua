@@ -133,6 +133,12 @@ return {
         desc = "List this project's workspaces with their paths",
     },
     {
+        words = { "ws", "adopt" },
+        handler = "lua",
+        usage = "dev ws adopt PATH",
+        desc = "Move a workspace folder of this project into the central root",
+    },
+    {
         words = { "ws", "rm" },
         handler = "lua",
         flags = "--forgotten",

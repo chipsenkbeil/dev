@@ -19,6 +19,8 @@ local HEAD_TEMPLATE = 'commit_id ++ "\\t" ++ description.first_line() ++ "\\n"'
 local BOOKMARK_TEMPLATE = 'if(remote, "", name ++ "\\n")'
 local SHORT_ID = 12
 local STAMP_FORMAT = "!%Y%m%dT%H%M%SZ"
+local TRASH_DIR = ".trash"
+local ADOPT_PARENTS = "coalesce(@ & ::trunk(), @-)"
 
 ---@enum dev.cmd.ws.Step
 local Step = { GONE = "gone", DONE = "done", KEEP = "keep" }
@@ -50,6 +52,8 @@ local Refusal = {
     LIST_FAILED = "list_failed",
     FILESYSTEM = "filesystem",
     KEPT = "kept",
+    ADOPTED = "adopted",
+    EXISTS = "exists",
 }
 M.Refusal = Refusal
 
@@ -61,7 +65,7 @@ M.Refusal = Refusal
 ---@field command string? the vcs command that failed
 ---@field code integer? the exit code of a failed jj or git, which dev passes on as its own
 ---@field detail string? the line, error or exit status the reason carries
----@field stayed string? the folder a failed move back left in the trash, with `detail` its error
+---@field stayed string? the folder a failed command left behind, with `detail` what to know of it
 
 ---The sentence writer of each refusal.
 local DESCRIPTIONS = {
@@ -128,6 +132,12 @@ local DESCRIPTIONS = {
     end,
     [Refusal.KEPT] = function(why)
         return why.detail
+    end,
+    [Refusal.ADOPTED] = function(why)
+        return why.path .. " is already under " .. why.base
+    end,
+    [Refusal.EXISTS] = function(why)
+        return why.path .. " already exists"
     end,
 }
 
@@ -746,7 +756,6 @@ end
 ---@param opts dev.cmd.ws.remove.Opts? what to skip and show
 ---@return dev.cmd.ws.RemoveResult result
 function M.remove(root, name, opts)
-    local TRASH_DIR = ".trash"
     opts = opts or {}
     if opts.missing then
         return remove_missing(root, name, opts)
@@ -1137,6 +1146,184 @@ M.handlers["ws prune"] = function(ctx)
         )
     )
     return failure or 0
+end
+
+---@class dev.cmd.ws.adopt.Opts
+---@field show fun(argv: string[])? nil when unset, called with the command before it runs
+
+local function run_shown(argv, opts)
+    if opts.show then
+        opts.show(argv)
+    end
+    return dev_os.run(argv) or 1
+end
+
+local function adopt_parents(path)
+    local argv = vcs.with(
+        vcs.base(path, vcs.JJ, { quiet = true }),
+        "log",
+        "-r",
+        ADOPT_PARENTS,
+        "--no-graph",
+        "-T",
+        'commit_id ++ "\\n"'
+    )
+    local out, code = dev_os.capture(argv, { stderr = "stdout" })
+    if code ~= 0 or out == "" then
+        return nil, { reason = Refusal.UNREADABLE, path = path, detail = first_line(out) }
+    end
+    local ids = {}
+    for id in out:gmatch("%x+") do
+        ids[#ids + 1] = id
+    end
+    return ids
+end
+
+local function adopt_jj(root, space, target, opts)
+    local clean, why = M.__clean(vcs.JJ, space.path, { refresh = true })
+    if not clean then
+        return refused(why)
+    end
+    local parents, unread = adopt_parents(space.path)
+    if parents == nil then
+        return refused(unread)
+    end
+    local forget = vcs.with(vcs.base(root, vcs.JJ), "workspace", "forget", space.name)
+    local code = run_shown(forget, opts)
+    if code ~= 0 then
+        return refused({ reason = Refusal.COMMAND_FAILED, command = forget[1], code = code })
+    end
+    local add = vcs.with(vcs.base(root, vcs.JJ), "workspace", "add", "--name", space.name)
+    for _, id in ipairs(parents) do
+        add = vcs.with(add, "-r", id)
+    end
+    code = run_shown(vcs.with(add, target), opts)
+    if code ~= 0 then
+        return refused({
+            reason = Refusal.COMMAND_FAILED,
+            command = add[1],
+            code = code,
+            stayed = space.path,
+            detail = "workspace " .. space.name .. " is forgotten",
+        })
+    end
+    return nil
+end
+
+---Move a workspace folder of the project at `root` into the central root.
+---
+---A jj workspace with nothing outside a commit is forgotten and added again at
+---`<root>/<repo>/<name>` on the same parent commit, as jj cannot relocate one.
+---Its old folder then moves to the trash. A git worktree moves with
+---`git worktree move`. Nothing moves when the folder is not one of the
+---project's workspaces, is already under the central root, is the folder dev
+---runs in, would land on a path that exists, or holds a jj change outside a commit.
+---@param root string absolute path of the project root dev runs in
+---@param path string the workspace folder to adopt
+---@param opts dev.cmd.ws.adopt.Opts? what to show
+---@return dev.cmd.ws.RemoveResult result
+function M.adopt(root, path, opts)
+    opts = opts or {}
+    local backend = vcs.backend(root)
+    if backend ~= vcs.JJ and backend ~= vcs.GIT then
+        return refused({ reason = Refusal.NO_VCS, path = root })
+    end
+    local base = workspace_root()
+    local real = fs.realpath(path)
+    if real == nil or not fs.is_dir(real) or fs.is_link(path) then
+        return refused({ reason = Refusal.NOT_WORKSPACE, path = path })
+    end
+    local real_base = fs.realpath(base)
+    if real_base and under(real, real_base) then
+        return refused({ reason = Refusal.ADOPTED, path = path, base = base })
+    end
+    if real == fs.realpath(root) then
+        return refused({ reason = Refusal.RUNNING_HERE, path = path })
+    end
+    local space
+    for _, found in ipairs(backend == vcs.JJ and jj_workspaces(root) or git_worktrees(root)) do
+        if fs.realpath(found.path) == real then
+            space = { name = found.name, path = real }
+        end
+    end
+    if space == nil then
+        return refused({ reason = Refusal.NOT_WORKSPACE, path = path })
+    end
+    local repo = repo_name(base, root)
+    local target = fs.join(base, repo, space.name)
+    if fs.exists(target) then
+        return refused({ reason = Refusal.EXISTS, path = target })
+    end
+    local made, why = fs.mkdir(fs.dirname(target), { parents = true })
+    if not made then
+        return refused({ reason = Refusal.FILESYSTEM, detail = why })
+    end
+    if backend == vcs.GIT then
+        local move = vcs.with(vcs.base(root, vcs.GIT), "worktree", "move", real, target)
+        local code = run_shown(move, opts)
+        if code ~= 0 then
+            return refused({ reason = Refusal.COMMAND_FAILED, command = move[1], code = code })
+        end
+        return { ok = true, message = "Moved " .. path .. " to " .. target .. ".", purged = {} }
+    end
+    local failed = adopt_jj(root, space, target, opts)
+    if failed then
+        return failed
+    end
+    local trashed = move_to_trash(root, space.name, {
+        trash = fs.join(base, TRASH_DIR, repo),
+        path = real,
+    })
+    if trashed.ok then
+        trashed.message = "Adopted " .. space.name .. " at " .. target .. ". " .. trashed.message
+    else
+        trashed.detail = string.format(
+            "workspace %s is now at %s and its old folder stays at %s: %s",
+            space.name,
+            target,
+            real,
+            trashed.detail
+        )
+    end
+    return trashed
+end
+
+---Move a workspace folder of the current project into the central root.
+---
+---A clean jj workspace is forgotten and added again under ROOT/<repo> on the
+---same parent commit, and its old folder goes to the trash. A git worktree
+---moves with `git worktree move`. A folder that is not a workspace of this
+---project, one already under the root, one with changes not in a commit, and
+---a target that exists are refused and left in place.
+---@param ctx dev.Ctx the verb's context
+---@return integer code the exit code
+M.handlers["ws adopt"] = function(ctx)
+    local path = ctx.args[1]
+    if path == nil then
+        verb.usage_error(ctx, "needs a PATH")
+    end
+    if path:sub(1, 1) == "-" then
+        verb.usage_error(ctx, "Unknown flag " .. path .. ".")
+    end
+    if ctx.args[2] ~= nil then
+        verb.usage_error(ctx, "takes one PATH, got " .. ctx.args[2])
+    end
+    local result = M.adopt(ctx.root, path, {
+        show = function(argv)
+            verb.show(ctx, argv)
+        end,
+    })
+    if not result.ok then
+        if result.code and not result.stayed then
+            return result.code
+        end
+        verb.die(M.describe(result))
+    end
+    verb.say(result.message)
+    for _, line in ipairs(result.purged) do
+        verb.say(line)
+    end
+    return 0
 end
 
 return M

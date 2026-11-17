@@ -52,8 +52,8 @@ The luajit modules of `dev`, one per item.
 
 ### Workspaces
 
-`dev.cmd.ws` holds `ws new NAME`, `ws ls`, `ws rm NAME` and `ws prune`. `ws` is
-machine-local, so `--remote` refuses it.
+`dev.cmd.ws` holds `ws new NAME`, `ws ls`, `ws adopt PATH`, `ws rm NAME` and
+`ws prune`. `ws` is machine-local, so `--remote` refuses it.
 
 The path of a workspace is `DEV_WS_ROOT`, else `~/.local/share/workspaces`,
 then the project folder's name, then NAME. A path that exists is refused with
@@ -85,6 +85,22 @@ Otherwise it works by project kind:
 
 The path is printed. `ws ls` prints each folder under ROOT/<repo> as its name,
 a tab and its path.
+
+`ws adopt PATH` calls `ws.adopt(root, path, opts)` and moves a workspace folder
+of the project into ROOT/<repo>/<name>, where name is the jj workspace name or
+the worktree folder's name. It returns the same result table as `ws.remove`.
+jj cannot relocate a workspace, as `jj workspace list` keeps naming the old
+folder after a hand move. So a jj workspace is read first, refreshed with
+`jj workspace update-stale` and refused with `DIRTY` when its `@` holds changes.
+Then `adopt` runs `jj workspace forget NAME` and `jj workspace add --name NAME`
+at the new path on the parent of `@`, or on `@` itself when it is already on
+trunk. The old folder goes to the trash as `ws rm` does, and the line is
+`Adopted NAME at TARGET. Moved PATH to TRASH.` When the add fails, the
+workspace stays forgotten and its folder stays where it was, and the refusal
+names that folder. A git worktree moves with `git worktree move PATH TARGET`
+and may hold changes. `adopt` refuses a PATH that is not a workspace of this
+project (`NOT_WORKSPACE`), one already under the central root (`ADOPTED`), the
+folder dev runs in, and a target that exists (`EXISTS`), and moves nothing.
 
 `ws rm NAME` calls `ws.remove(root, name, opts)`. It returns a result table with
 `ok`, `message`, `code` and `purged` instead of dying, and `opts.inside` skips

@@ -2111,6 +2111,196 @@ local function finds_the_sleep(find)
     testing.eq(found, { { pid = pid, command = "sleep" } })
 end
 
+local function adopt_env()
+    local ws = assert(fs.realpath(support.tempdir()))
+    local env = {
+        env = {
+            DEV_WS_ROOT = ws,
+            JJ_FORGE = "",
+            JJ_USER = IDENT.JJ_USER,
+            JJ_EMAIL = IDENT.JJ_EMAIL,
+        },
+    }
+    return env, ws
+end
+
+if dev_os.which("jj") then
+    local function adopt_jj_project()
+        local root = support.sandbox({}, {})
+        local init = { stdout = "null", stderr = "null", env = IDENT }
+        assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj git init failed")
+        assert(fs.write(root .. "/base", "1"))
+        local _, code = real_jj(root, "commit", "-m", "base")
+        testing.eq(code, 0)
+        local old = assert(fs.realpath(support.tempdir())) .. "/feat"
+        _, code = real_jj(root, "workspace", "add", "--name", "feat", old)
+        testing.eq(code, 0)
+        local env, ws = adopt_env()
+        return root, old, ws .. "/" .. fs.basename(root) .. "/feat", env
+    end
+
+    local function workspace_root(root, name)
+        local out = real_jj(root, "workspace", "root", "--name", name)
+        return (out:gsub("\n$", ""))
+    end
+
+    testing.test("adopt moves a clean jj workspace to the central root", function()
+        -- Make a jj project with a workspace outside the root and note its parent commit
+        local root, old, target, env = adopt_jj_project()
+        local parent = real_jj(root, "log", "-r", "feat@-", "--no-graph", "-T", "commit_id")
+
+        -- Adopt the workspace folder
+        local out, code = support.dev(root, { "ws", "adopt", old }, env)
+
+        -- Expect the workspace forgotten and added at the target on the same parent
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Adopted feat at " .. target .. ". ", 1, true) ~= nil, out)
+        testing.eq(fs.exists(target .. "/.jj"), true)
+        testing.eq(workspace_root(root, "feat"), target)
+        testing.eq(real_jj(root, "log", "-r", "feat@-", "--no-graph", "-T", "commit_id"), parent)
+
+        -- Expect the old folder in the trash, not in its place
+        testing.eq(fs.exists(old), false)
+        testing.eq(fs.exists(trashed(env, root, "feat") .. "/.jj"), true)
+    end)
+
+    testing.test("adopt of a jj workspace on trunk adds it on its own commit", function()
+        -- Commit a file in the workspace and make that commit the trunk
+        local root, old, target, env = adopt_jj_project()
+        assert(fs.write(old .. "/work", "1"))
+        local _, code = real_jj(old, "bookmark", "create", "tip", "-r", "@")
+        testing.eq(code, 0)
+        _, code = real_jj(root, "config", "set", "--repo", 'revset-aliases."trunk()"', "tip")
+        testing.eq(code, 0)
+        local tip = real_jj(root, "log", "-r", "tip", "--no-graph", "-T", "commit_id")
+
+        -- Adopt the workspace folder
+        local out, adopt_code = support.dev(root, { "ws", "adopt", old }, env)
+
+        -- Expect the new workspace on the trunk commit with the file checked out
+        testing.eq(adopt_code, 0, out)
+        testing.eq(real_jj(root, "log", "-r", "feat@-", "--no-graph", "-T", "commit_id"), tip)
+        testing.eq(fs.read(target .. "/work"), "1")
+    end)
+
+    testing.test("adopt refuses a jj workspace with changes and moves nothing", function()
+        -- Leave a file in the workspace outside any commit
+        local root, old, target, env = adopt_jj_project()
+        assert(fs.write(old .. "/draft", "x"))
+
+        -- Adopt the workspace folder
+        local out, code = support.dev(root, { "ws", "adopt", old }, env)
+
+        -- Expect the refusal, the folder in place and no workspace at the target
+        testing.eq(code, 1)
+        testing.eq(out, old .. " holds changes not in a commit.\n")
+        testing.eq(fs.read(old .. "/draft"), "x")
+        testing.eq(fs.exists(target), false)
+        testing.eq(workspace_root(root, "feat"), old)
+    end)
+
+    testing.test("adopt refuses a target that exists and moves nothing", function()
+        -- Make the target folder before the adopt
+        local root, old, target, env = adopt_jj_project()
+        assert(fs.mkdir(target, { parents = true }))
+
+        -- Adopt the workspace folder
+        local out, code = support.dev(root, { "ws", "adopt", old }, env)
+
+        -- Expect the refusal with the workspace still at its old folder
+        testing.eq(code, 1)
+        testing.eq(out, target .. " already exists.\n")
+        testing.eq(workspace_root(root, "feat"), old)
+        testing.eq(fs.exists(old .. "/.jj"), true)
+    end)
+
+    testing.test("adopt refuses a workspace already under the root", function()
+        -- Adopt the workspace once so it sits under the root
+        local root, old, target, env = adopt_jj_project()
+        local _, first = support.dev(root, { "ws", "adopt", old }, env)
+        testing.eq(first, 0)
+
+        -- Adopt it again
+        local out, code = support.dev(root, { "ws", "adopt", target }, env)
+
+        -- Expect the refusal and the workspace where it is
+        testing.eq(code, 1)
+        testing.eq(out, target .. " is already under " .. env.env.DEV_WS_ROOT .. ".\n")
+        testing.eq(workspace_root(root, "feat"), target)
+    end)
+
+    testing.test("adopt refuses a folder that is not a workspace of the project", function()
+        -- Pick a folder that no workspace of the project holds
+        local root, _, _, env = adopt_jj_project()
+        local stray = assert(fs.realpath(support.tempdir()))
+
+        -- Adopt the stray folder and a path that does not exist
+        local out, code = support.dev(root, { "ws", "adopt", stray }, env)
+        local gone, gone_code = support.dev(root, { "ws", "adopt", stray .. "/none" }, env)
+
+        -- Expect both refused and the stray folder left in place
+        testing.eq(code, 1)
+        testing.eq(out, stray .. " is not a workspace folder.\n")
+        testing.eq(gone_code, 1)
+        testing.eq(gone, stray .. "/none is not a workspace folder.\n")
+        testing.eq(fs.is_dir(stray), true)
+    end)
+end
+
+if dev_os.which("git") then
+    testing.test("adopt moves a git worktree with git worktree move", function()
+        -- Make a git project with a worktree outside the root and a change in it
+        local root = support.sandbox({}, {})
+        local quiet = { stdout = "null", stderr = "null" }
+        assert(dev_os.run({ "git", "init", "-q", root }, quiet) == 0, "git init failed")
+        local made = dev_os.run({
+            "git",
+            "-C",
+            root,
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "base",
+        }, quiet)
+        testing.eq(made, 0)
+        local old = assert(fs.realpath(support.tempdir())) .. "/feat"
+        local added = dev_os.run({ "git", "-C", root, "worktree", "add", "-q", "-b", "feat", old })
+        testing.eq(added, 0)
+        assert(fs.write(old .. "/draft", "x"))
+        local env, ws = adopt_env()
+        local target = ws .. "/" .. fs.basename(root) .. "/feat"
+
+        -- Adopt the worktree folder
+        local out, code = support.dev(root, { "ws", "adopt", old }, env)
+
+        -- Expect the folder moved with its change and git listing the new path
+        testing.eq(code, 0, out)
+        testing.eq(out, "Moved " .. old .. " to " .. target .. ".\n")
+        testing.eq(fs.read(target .. "/draft"), "x")
+        testing.eq(fs.exists(old), false)
+        local listed = dev_os.capture({ "git", "-C", root, "worktree", "list", "--porcelain" })
+        testing.ok(listed:find("worktree " .. target, 1, true) ~= nil, listed)
+    end)
+end
+
+testing.test("adopt needs one PATH", function()
+    local root, _, env = setup("none")
+    for _, case in ipairs({
+        { { "ws", "adopt" }, "dev ws adopt: needs a PATH\n" },
+        { { "ws", "adopt", "a", "b" }, "dev ws adopt: takes one PATH, got b\n" },
+        { { "ws", "adopt", "-x" }, "dev ws adopt: Unknown flag -x.\n" },
+    }) do
+        local out, code = support.dev(root, case[1], env)
+        testing.eq(code, 2)
+        testing.eq(out, case[2])
+    end
+end)
+
 testing.test("describe writes a sentence for every refusal", function()
     local why = {
         path = "/w/card",
@@ -2127,7 +2317,7 @@ testing.test("describe writes a sentence for every refusal", function()
         testing.ok(text:find("^[%u/]") and text:find("%.$"), reason .. ": " .. text)
         seen = seen + 1
     end
-    testing.eq(seen, 17)
+    testing.eq(seen, 19)
     testing.eq(
         cmd_ws.describe({ reason = cmd_ws.Refusal.LINK, path = "/w/card" }),
         "/w/card is a link, not removed."
