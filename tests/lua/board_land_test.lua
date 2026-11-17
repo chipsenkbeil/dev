@@ -2423,6 +2423,17 @@ if has_jj then
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
     end)
 
+    testing.test("a turn wait that times out exits nonzero and names the holder", function()
+        local project = jj_project()
+        local id = in_verify(project)
+        must(dev(project, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
+        local out, code = dev(project, { "board", "turn", id, "--wait", "1" })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("cannot take the landing turn", 1, true), out)
+        testing.ok(out:find("held by dotfiles/other since", 1, true), out)
+        testing.eq(assert(turn_holder(project.home)).name, "dotfiles/other")
+    end)
+
     testing.test("land lands under a live claim whose hold note is stale", function()
         local project = jj_project()
         local id = in_verify(project)
