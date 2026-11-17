@@ -506,10 +506,19 @@ function Backend:__role()
     return self.__who or nil
 end
 
+---@class dev.board.pomb.Who
+---@field name string the credential's name
+---@field kind string the credential's kind
+---@field scope string how far the credential reaches
+---@field role string? the role the credential holds
+---@field label string? the label the credential carries
+---@field issuer string? who issued the credential
+---@field expires integer? when the credential expires
+---@field boards string[]|string the boards the credential reaches
+---@field permissions string[] the permissions the credential holds
+
 ---Read the credential behind the token in use from whoami.
----@return {name: string, kind: string, scope: string, role: string?, label: string?, issuer:
----   string?, expires: integer?, boards: string[]|string, permissions: string[]}? who the
----   credential, never its token
+---@return dev.board.pomb.Who? who the credential, never its token
 ---@return string? message why nothing was read
 function Backend:whoami()
     local doc, message = self:__request("GET", WHOAMI_PATH)

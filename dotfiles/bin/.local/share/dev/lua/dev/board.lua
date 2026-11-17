@@ -59,6 +59,12 @@ local M = {}
 ---@field wip_limit integer? how many cards it holds at most, nil when it has no limit, and always
 ---   nil on a local board
 
+---@class dev.board.OutcomeFields
+---@field name string? the new wording of the outcome
+---@field done boolean? the new tick of the outcome
+
+---@alias dev.board.FieldValue string|string[]|table<string, any>[]|dev.json.Null
+
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints
 ---   them
@@ -94,9 +100,9 @@ local M = {}
 ---@field add_outcome fun(self: dev.board.Backend, id: string, text: string, fence: integer?):
 ---   boolean?, string? an outcome appended to the card, checked against the claim's fence when one
 ---   is given
----@field set_outcome fun(self: dev.board.Backend, id: string, outcome: string, fields: {name:
----   string?, done: boolean?}, fence: integer?): boolean?, string? the wording or the tick of the
----   outcome with that id changed, checked against the claim's fence when one is given
+---@field set_outcome fun(self: dev.board.Backend, id: string, outcome: string,
+---   fields: dev.board.OutcomeFields, fence: integer?): boolean?, string? the wording or the tick
+---   of the outcome with that id changed, checked against the claim's fence when one is given
 ---@field delete_outcome fun(self: dev.board.Backend, id: string, outcome: string, fence: integer?):
 ---   boolean?, string? the outcome with that id removed from the card, checked against the claim's
 ---   fence when one is given
@@ -109,13 +115,13 @@ local M = {}
 ---@field set_checks fun(self: dev.board.Backend, id: string, runs: string[], fence: integer?):
 ---   boolean?, string? the card's checks rows replaced by one row per command, checked against the
 ---   claim's fence when one is given
----@field set_field fun(self: dev.board.Backend, id: string, key: string, value:
----   string|string[]|table[]|dev.json.Null, fence: integer?): boolean?, string? the custom field
----   with that key replaced whole by the value, where json.null clears it, checked against the
----   claim's fence when one is given
----@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?, opts:
----   dev.board.note.Opts?): boolean?, string? a comment added to the card, of kind agent unless
----   opts names one, checked against the claim's fence when one is given
+---@field set_field fun(self: dev.board.Backend, id: string, key: string,
+---   value: dev.board.FieldValue, fence: integer?): boolean?, string? the custom field with that
+---   key replaced whole by the value, where json.null clears it, checked against the claim's
+---   fence when one is given
+---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?,
+---   opts: dev.board.note.Opts?): boolean?, string? a comment added to the card, of kind agent
+---   unless opts names one, checked against the claim's fence when one is given
 ---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?):
 ---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
 ---   needs:human, or nil and Pomb's refusal
@@ -171,8 +177,8 @@ local M = {}
 ---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the
 ---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
 ---   board with none, or nil and a message
----@field claim fun(self: dev.board.Backend, id: string, claimant: string, opts:
----   dev.board.claim.Opts): integer?, string? the fence of the owner grab, renewed when the
+---@field claim fun(self: dev.board.Backend, id: string, claimant: string,
+---   opts: dev.board.claim.Opts): integer?, string? the fence of the owner grab, renewed when the
 ---   caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the
 ---   owner lease ended
@@ -290,10 +296,17 @@ local M = {}
 ---   sends no such key
 ---@field stage string? the stage the column holds, nil when it holds none
 
+---@class dev.board.LayoutColor
+---@field id string the colour's id
+---@field value string the colour's palette value
+---@field label string the colour's label
+---@field description string the colour's description
+---@field is_default boolean whether new cards take this colour
+---@field enabled boolean whether the colour is in use
+
 ---@class dev.board.LayoutState
 ---@field columns dev.board.LayoutColumn[] the columns in board order
----@field colors {id: string, value: string, label: string, description: string, is_default:
----   boolean, enabled: boolean}[] the palette
+---@field colors dev.board.LayoutColor[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 ---@field has_checks boolean whether the board has the checks field
 ---@field lanes string[]? the names of the board's lanes in board order

@@ -21,11 +21,18 @@ local SWATCH_VALUES = { "yellow", "green", "blue", "red", "white" }
 ---@class dev.board.localboard
 local M = {}
 
+---@class dev.board.localboard.Color
+---@field id string the colour's id
+---@field value string the colour's palette value
+---@field label string the colour's label
+---@field description string the colour's description
+---@field is_default boolean whether new cards take this colour
+---@field enabled boolean? whether the colour is in use
+
 ---@class dev.board.localboard.Doc
 ---@field name string the board's name
 ---@field columns {id: string, name: string, is_done: boolean}[] the columns in board order
----@field colors {id: string, value: string, label: string, description: string, is_default:
----   boolean, enabled: boolean?}[] the palette
+---@field colors dev.board.localboard.Color[] the palette
 ---@field swimlanes {id: string, name: string}[] the swimlanes in board order, empty on a board
 ---   that never had one
 ---@field cards table<integer, table<string, any>> the cards, each a table of the fields the file
