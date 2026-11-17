@@ -45,6 +45,16 @@ function M.say(msg)
     stdout:write(msg, "\n")
 end
 
+---Write a captured text to standard output without its one trailing newline, and nothing for an
+---empty text.
+---@param text string the captured command output
+function M.relay(text)
+    if text == "" then
+        return
+    end
+    M.say((text:gsub("\n$", "")))
+end
+
 ---Write `msg` and a newline to standard error.
 ---@param msg string the whole message
 function M.note(msg)

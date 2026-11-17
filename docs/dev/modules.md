@@ -8,7 +8,7 @@ The luajit modules of `dev`, one per item.
 
 - `dev.cli`: dispatch.
 - `dev.verb`: the `.lua` verb contract (`chunk(ctx)`, `usage_error`, `no_args`,
-  `say`, `note`, `die`, `show`, `need`).
+  `say`, `relay`, `note`, `die`, `show`, `need`).
 - `dev.cmd.types`: the project type's built-ins and the command lines
   `dev help <verb>` prints for them.
 - `dev.cmd.misc`: `deploy`, `guide` and `bootstrap`.

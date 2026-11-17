@@ -12,6 +12,30 @@ testing.test("note writes the message and a newline to standard error", function
     testing.eq(out, "dev sync: nothing to pull\n")
 end)
 
+local function relayed(text)
+    local script = string.format(
+        "package.path = %q; require('dev.verb').relay(%q)",
+        support.absolute_path(),
+        text
+    )
+    return dev_os.capture({ "luajit", "-e", script })
+end
+
+testing.test("relay writes nothing for an empty text", function()
+    local out, code = relayed("")
+    testing.eq(code, 0)
+    testing.eq(out, "")
+end)
+
+testing.test("relay drops one trailing newline and adds the newline say writes", function()
+    testing.eq((relayed("one\n")), "one\n")
+    testing.eq((relayed("plain")), "plain\n")
+end)
+
+testing.test("relay keeps the second of two trailing newlines", function()
+    testing.eq((relayed("two\n\n")), "two\n\n")
+end)
+
 testing.test("no_args refuses a stray argument with one message", function()
     local script = string.format(
         "package.path = %q; require('dev.verb').no_args({ name = 'lint', args = { 'extra' } })",
