@@ -295,7 +295,7 @@ out="$(cd "$PROJ" && PATH="$NOJIT" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --
 assert_eq "no luajit, dev bootstrap --verbose --remote exits 1" "$?" "1"
 ran_nothing "no luajit, a remote bootstrap with -v runs no bootstrap.sh"
 
-for words in "--remote tools install" "lint --detach"; do
+for words in "--remote tools install" "lint --detach" "lint --priority"; do
     # shellcheck disable=SC2086
     out="$(cd "$PROJ" && PATH="$ROOTID:$CIBIN:$NOLUA" "$LC_NONE" $words 2>&1)"
     assert_eq "root without luajit, dev $words exits 2" "$?" "2"

@@ -7,7 +7,7 @@ local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = io.stderr
 local RESERVED_DIRS = { lua = true, topics = true, standalone = true }
 local HIDDEN_GROUP = "hidden"
-local BARE_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach" }
+local BARE_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach", "--priority" }
 local VALUE_FLAGS = { "-C", "--agent" }
 local GLOBAL_FLAGS = {}
 local bare_set, value_set = {}, {}

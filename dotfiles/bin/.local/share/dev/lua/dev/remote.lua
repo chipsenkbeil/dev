@@ -32,6 +32,7 @@ local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."
 ---@field words string[] the command words, a noun and its subcommand as two
 ---@field args string[] the arguments for the job, untouched
 ---@field detach boolean whether `--detach` was given
+---@field priority boolean whether `--priority` was given
 ---@field root string absolute path of the project root
 ---@field verbose integer 0, or 1 or 2 for `-v` or `-vv`
 
@@ -246,7 +247,7 @@ function M.ci_runner(run, opts)
     end
     local mode = run.detach and "--detach" or "--follow"
     local words = { "--local", mode, "--job", job }
-    if os.getenv(M.PRIORITY_ENV) == "1" then
+    if run.priority or os.getenv(M.PRIORITY_ENV) == "1" then
         words[#words + 1] = "--priority"
     end
     words[#words + 1] = "--"
@@ -307,9 +308,10 @@ end
 ---@param ctx dev.Ctx the command's context, whose `args` are every argument after the command words
 ---@param words string[] the command words
 ---@param args string[] the arguments after `--`
----@param detach boolean whether to start the job and return
+---@param flags {detach: boolean, priority: boolean} whether to start the job and return, and
+---   whether to start its ci jobs ahead of normal ones
 ---@return integer code the runner's exit code
-function M.run(ctx, words, args, detach)
+function M.run(ctx, words, args, flags)
     if M.machine_local(words) then
         verb.usage_error(ctx, "runs on this machine only, so --remote does not apply")
     end
@@ -326,7 +328,8 @@ function M.run(ctx, words, args, detach)
     local run = {
         words = words,
         args = ctx.dashed and args or ctx.args,
-        detach = detach,
+        detach = flags.detach,
+        priority = flags.priority,
         root = ctx.root,
         verbose = ctx.verbose,
     }

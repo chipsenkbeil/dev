@@ -165,8 +165,10 @@ started it. The same run with `stdin` off a terminal stays `<repo>/remote`.
 
 ## Priority
 
-The ci runner adds `--priority` to `ci run` when `DEV_CI_PRIORITY` is `1`, which
-starts the run's jobs ahead of every normal job waiting for room on the hub.
+The ci runner adds `--priority` to `ci run`, before the `--`, when
+`dev --remote --priority test` is given or `DEV_CI_PRIORITY` is `1`. It
+starts the run's jobs ahead of every normal job waiting for room on the
+hub. `--priority` without `--remote` is a usage error.
 `dev board land` sets it on the `[board.land] recheck` rows, and `dev board
 ship` sets it on the `[board.release] checks` rows. `dev board check` and a
 plain `dev --remote` run leave it unset, so they pass no `--priority`.
@@ -196,6 +198,7 @@ end
 - `run.words`: the command words (`{"test"}`, or `{"box", "ls"}`)
 - `run.args`: the arguments for the job
 - `run.detach`: whether `--detach` was given
+- `run.priority`: whether `--priority` was given
 - `run.root`: the project root as an absolute path
 - `run.verbose`: the level of `-v` (0, 1 or 2)
 

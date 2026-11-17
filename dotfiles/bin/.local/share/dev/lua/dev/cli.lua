@@ -73,6 +73,7 @@ end
 ---@field dashed boolean whether a `--` was typed, even with nothing after it
 ---@field remote boolean whether `--remote` or `DEV_REMOTE` asks for a remote run
 ---@field detach boolean whether `--detach` was given
+---@field priority boolean whether `--priority` was given
 ---@field local_flag boolean whether `--local` was given
 ---@field env_local boolean whether `DEV_REMOTE` says 0, no or false
 ---@field conflict boolean whether `--local` and `--remote` were both given
@@ -85,6 +86,7 @@ local function parse(argv)
         dashed = false,
         remote = enabled(os.getenv("DEV_REMOTE") or ""),
         detach = false,
+        priority = false,
         conflict = false,
         local_flag = false,
         env_local = false,
@@ -109,6 +111,8 @@ local function parse(argv)
             flag_local = true
         elseif word == "--detach" then
             parsed.detach = true
+        elseif word == "--priority" then
+            parsed.priority = true
         elseif word:find("^%-v+$") then
             count = count + #word - 1
         else
@@ -358,7 +362,12 @@ local function run_as_root(parsed)
     }
     if parsed.remote then
         os.exit(
-            remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), parsed.detach)
+            remote.run(
+                ctx,
+                words,
+                tail(rest, math.max(1, #rest - parsed.after + 1)),
+                { detach = parsed.detach, priority = parsed.priority }
+            )
         )
     end
     prepare(ctx)
@@ -380,6 +389,10 @@ function M.main(argv)
     end
     if parsed.detach and not parsed.remote then
         stderr:write("The flag `--detach` needs `--remote`.\n")
+        os.exit(2)
+    end
+    if parsed.priority and not parsed.remote then
+        stderr:write("The flag `--priority` needs `--remote`.\n")
         os.exit(2)
     end
     root_gate(parsed.args)
@@ -440,14 +453,19 @@ function M.main(argv)
     end
     if parsed.remote then
         os.exit(
-            remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), parsed.detach)
+            remote.run(
+                ctx,
+                words,
+                tail(rest, math.max(1, #rest - parsed.after + 1)),
+                { detach = parsed.detach, priority = parsed.priority }
+            )
         )
     end
     if
         not (parsed.local_flag or parsed.env_local or on_remote_host or runs_local(reg, row))
         and remote_default(project_root, words)
     then
-        os.exit(remote.run(ctx, words, rest, false))
+        os.exit(remote.run(ctx, words, rest, { detach = false, priority = false }))
     end
     if not on_remote_host and not runs_local(reg, row) then
         refuse_agent_local(project_root, words)

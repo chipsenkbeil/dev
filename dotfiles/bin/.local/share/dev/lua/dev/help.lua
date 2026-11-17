@@ -379,6 +379,7 @@ local function verb_text(ctx, reg, c, opts)
                 .. "(refused for a ci verb under DEV_AGENT)",
         },
         { "--detach", "with --remote, start the job and return" },
+        { "--priority", "with --remote, start the job ahead of normal ci jobs" },
         { "-C DIR", "run as if dev started in DIR" },
         { "--agent NAME", "export DEV_AGENT=NAME to the command" },
     }

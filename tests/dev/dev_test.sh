@@ -335,6 +335,7 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 --remote
 --local
 --detach
+--priority
 -C
 --agent"
 out="$(run_dev "$rust" __flags sync)"
@@ -347,6 +348,7 @@ assert_eq "__flags sync" "$out" "--check
 --remote
 --local
 --detach
+--priority
 -C
 --agent"
 out="$(run_dev "$rust" help sync)"
@@ -877,6 +879,7 @@ assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
 --remote
 --local
 --detach
+--priority
 -C
 --agent"
 assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
@@ -969,6 +972,11 @@ out="$(cirun "$cip" --detach test 2>&1)"
 assert_eq "--detach without --remote exits 2" "$?" "2"
 assert_contains "--detach without --remote says so" "$out" "The flag \`--detach\` needs \`--remote\`."
 assert_eq "--detach without --remote runs nothing" "$(log)" ""
+cirun "$cip" --remote --priority test >/dev/null 2>&1
+assert_contains "--priority passes --priority to ci run" "$(log)" "[--job] [test] [--priority] [--]"
+out="$(cirun "$cip" --priority test 2>&1)"
+assert_eq "--priority without --remote exits 2" "$?" "2"
+assert_eq "--priority without --remote runs nothing" "$(log)" ""
 
 out="$(cirun "$cip" --remote build 2>&1)"
 assert_eq "--remote with no such job exits 1" "$?" "1"

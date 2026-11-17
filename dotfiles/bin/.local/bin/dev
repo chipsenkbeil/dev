@@ -83,7 +83,7 @@ case "${DEV_REMOTE:-}" in
 esac
 for arg in "$@"; do
     case "$arg" in
-    --remote | --detach) remote_flag=1 ;;
+    --remote | --detach | --priority) remote_flag=1 ;;
     --) break ;;
     esac
 done
