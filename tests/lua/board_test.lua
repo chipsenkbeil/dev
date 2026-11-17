@@ -9078,13 +9078,48 @@ testing.test(
                     from_column = support.COLUMN_NAME.BACKLOG,
                 }
             ),
-        }, { "--for", "ready" })
+        }, { "--for", "ready" }, {
+            cards = {
+                { id = ID_B, column = support.COLUMN_NAME.READY },
+                { id = ID_C, column = support.COLUMN_NAME.READY },
+            },
+        })
         testing.eq(result.output, "added 11111111 to Ready\nmoved cccccccc to Ready")
         testing.eq(seen.afters, { "none", "1", "2" })
         testing.eq(seen.kinds[1], "task_added,task_moved")
         testing.eq(fs.read(path .. ".ready.cursor"), "3\n")
     end
 )
+
+testing.test("wait --for ready skips a move into Ready of a card in another column", function()
+    local cards = {
+        { id = ID_A, column = support.COLUMN_NAME.DONE },
+        { id = ID_B, column = support.COLUMN_NAME.READY, claimant = "x" },
+        { id = ID_C, column = support.COLUMN_NAME.READY },
+    }
+    local result, seen = waited({
+        got("1"),
+        got(
+            "2",
+            { kind = "task_moved", task_id = ID_A, column = support.COLUMN_NAME.READY },
+            { kind = "task_added", task_id = ID_B, column = support.COLUMN_NAME.READY }
+        ),
+        got("3", { kind = "task_moved", task_id = ID_C, column = support.COLUMN_NAME.READY }),
+    }, { "--for", "ready" }, { cards = cards })
+    testing.eq(result.output, "moved cccccccc to Ready")
+    testing.eq(seen.afters, { "none", "1", "2" })
+end)
+
+testing.test("wait --for ready keeps waiting on a trim and wakes for an unclaimed card", function()
+    local cards = { { id = ID_A, column = support.COLUMN_NAME.READY } }
+    local result, seen, path = waited({
+        { message = "board unavailable: pomb answered 410: too old", oldest = "17" },
+        got("18", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
+    }, { "--for", "ready" }, { cards = cards })
+    testing.eq(result.output, "added 11111111 to Ready")
+    testing.eq(seen.afters, { "none", "17" })
+    testing.eq(fs.read(path .. ".ready.cursor"), "18\n")
+end)
 
 testing.test(
     "wait --for human wakes on the owner's move out of Blocked, not an agent's move or comment",
@@ -9645,7 +9680,10 @@ testing.test("wait resumes from the stored cursor", function()
     assert(fs.write(path .. ".ready.cursor", "41\n"))
     local result, seen = waited({
         got("42", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
-    }, { "--for", "ready" }, { path = path })
+    }, { "--for", "ready" }, {
+        path = path,
+        cards = { { id = ID_A, column = support.COLUMN_NAME.READY } },
+    })
     testing.eq(result.output, "added 11111111 to Ready")
     testing.eq(seen.afters, { "41" })
     testing.eq(fs.read(path .. ".ready.cursor"), "42\n")
@@ -9669,10 +9707,10 @@ testing.test(
     function()
         local result, _, path = waited({
             { message = "board unavailable: pomb answered 410: too old", oldest = "17" },
-        }, { "--for", "ready" })
+        }, { "--for", "lead" })
         testing.eq(result.output, "events were trimmed, check the board")
         testing.eq(result.message, nil)
-        testing.eq(fs.read(path .. ".ready.cursor"), "17\n")
+        testing.eq(fs.read(path .. ".lead.cursor"), "17\n")
     end
 )
 
@@ -9680,7 +9718,7 @@ testing.test("wait retries Pomb being unreachable, then gives up after ten in a 
     local result, seen = waited({
         { message = "board unavailable: cannot reach https://p (curl exit 7)" },
         got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
-    }, { "--for", "ready" })
+    }, { "--for", "ready" }, { cards = { { id = ID_A, column = support.COLUMN_NAME.READY } } })
     testing.eq(result.output, "added 11111111 to Ready")
     testing.eq(seen.naps, { 30 })
     local down = {}
@@ -9705,7 +9743,9 @@ testing.test(
         end
         replies[15] =
             got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY })
-        local result, seen = waited(replies, { "--for", "ready" })
+        local result, seen = waited(replies, { "--for", "ready" }, {
+            cards = { { id = ID_A, column = support.COLUMN_NAME.READY } },
+        })
         testing.eq(result.output, "added 11111111 to Ready")
         testing.eq(
             seen.naps,

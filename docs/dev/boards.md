@@ -1445,10 +1445,10 @@ timeout 86400 dev board wait --for planner
 
 Each mode wakes on its own events:
 
-- `--for ready`: a card added to Ready or moved into it. It prints
-  `added <id prefix> to Ready` or `moved <id prefix> to Ready`.
-- `--for review`, `--for verify` and `--for release`: the same for that column,
-  but only for a card nobody has claimed.
+- `--for ready`, `--for review`, `--for verify` and `--for release`: a card
+  added to that column or moved into it, but only a card that still sits there
+  and that nobody has claimed. It prints `added <id prefix> to Ready` or
+  `moved <id prefix> to Ready`, with the column's name.
 - `--for human`: a card the owner moved out of Blocked, and a card in any column
   but Done whose newest comment is the owner's and newer than the wait's start.
   It prints `moved <id prefix> out of Blocked` or
@@ -1487,10 +1487,11 @@ now.
 
 When Pomb has dropped the events after the stored cursor, `wait` stores the
 oldest one it still has, prints `events were trimmed, check the board` and exits
-0. Look at the board and run it again. `--for human` instead keeps waiting on a
-trim, and exits only when a card that sat in Blocked or Icebox when it started
-has left it. It then prints `events were trimmed, check the board` after the
-lines it holds.
+0. Look at the board and run it again. A stage wait (`--for ready`, `review`,
+`verify` or `release`) instead stores the oldest cursor and keeps waiting.
+`--for human` also keeps waiting on a trim, and exits only when a card that
+sat in Blocked or Icebox when it started has left it. It then prints
+`events were trimmed, check the board` after the lines it holds.
 
 An unreachable Pomb (no route, a locked `pass`, a gateway error) is retried
 every 30 seconds. After ten failures in a row `wait` exits 1 with the message.
@@ -3721,11 +3722,11 @@ wakes the session.
 
 The `--for` modes:
 
-- `ready`: sends the kinds `task_added,task_moved` and matches a card whose
-  column is Ready after the event, printed as `added <id prefix> to Ready` or
-  `moved <id prefix> to Ready`.
-- `review`, `verify` and `release`: send the same kinds and print the same
-  lines for their own column, and match only a card with no claimant.
+- `ready`, `review`, `verify` and `release`: send the kinds
+  `task_added,task_moved` and match only a card that sits in their column with
+  no claimant, which `wait` reads with `Backend:cards`. They print
+  `added <id prefix> to Ready` or `moved <id prefix> to Ready`, with the
+  column's name.
 - `human`: sends `task_moved,comment_added` and matches two things. The first
   is a move whose `from_column` is Blocked, whose `actor` is `human` (Pomb's
   `actor_kind` of `user`) and whose `at` is not earlier than the wait's start,
@@ -3767,7 +3768,8 @@ The cursor:
   prints its held lines. With no file, the first call asks without a
   cursor and starts from the cursor Pomb answers.
 - an expired cursor (410) stores the backend's oldest cursor and prints
-  `events were trimmed, check the board` (exit 0).
+  `events were trimmed, check the board` (exit 0). A stage wait stores it and
+  keeps waiting.
 - `--for human` stores the oldest cursor when it holds no line and rereads
   the cards instead (`Owner.sitting` at the start, `Owner.departed` on a
   trim). It prints

@@ -5092,7 +5092,12 @@ local WaitFor = {
     VERIFY = "verify",
     RELEASE = "release",
 }
-WaitFor.STAGES = { [WaitFor.REVIEW] = true, [WaitFor.VERIFY] = true, [WaitFor.RELEASE] = true }
+WaitFor.STAGES = {
+    [WaitFor.READY] = true,
+    [WaitFor.REVIEW] = true,
+    [WaitFor.VERIFY] = true,
+    [WaitFor.RELEASE] = true,
+}
 local EventKind = {
     ADDED = "task_added",
     MOVED = "task_moved",
@@ -5286,10 +5291,6 @@ local function wait_line(event, opts)
         then
             return (added and "added " or "moved ") .. id .. " to " .. roles[only]
         end
-    elseif only == WaitFor.READY then
-        if event.column == roles.ready and (added or event.kind == EventKind.MOVED) then
-            return (added and "added " or "moved ") .. id .. " to " .. roles.ready
-        end
     elseif added then
         return "added " .. id .. " to " .. tostring(event.column)
     elseif event.kind == EventKind.MOVED then
@@ -5473,19 +5474,22 @@ function M.wait(backend, args, opts)
                     return flush(failure(why))
                 end
             end
-            if only ~= WaitFor.HUMAN then
+            if WaitFor.STAGES[only] then
+                cursor = oldest
+            elseif only ~= WaitFor.HUMAN then
                 return flush({ output = WAIT_TRIMMED })
-            end
-            local gone, reason = Owner.departed(backend, sat)
-            if not gone then
-                return flush(failure(reason))
-            end
-            for _, line in ipairs(gone) do
-                held[#held + 1] = line
-            end
-            cursor = oldest
-            if #held > 0 then
-                return flush({ output = WAIT_TRIMMED })
+            else
+                local gone, reason = Owner.departed(backend, sat)
+                if not gone then
+                    return flush(failure(reason))
+                end
+                for _, line in ipairs(gone) do
+                    held[#held + 1] = line
+                end
+                cursor = oldest
+                if #held > 0 then
+                    return flush({ output = WAIT_TRIMMED })
+                end
             end
         elseif refused then
             failures = 0
