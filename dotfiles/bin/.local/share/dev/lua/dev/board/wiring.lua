@@ -86,8 +86,9 @@ end
 ---@param backend dev.board.Backend the board backend
 ---@param card dev.board.Card the card whose claim to renew
 ---@param name string? the caller's agent name
-local function renew_claim(backend, card, name)
-    local why = runner.renew_claim(backend, card, name)
+---@param seconds integer? the seconds the claim must outlast when that passes the size's cap
+local function renew_claim(backend, card, name, seconds)
+    local why = runner.renew_claim(backend, card, name, seconds)
     if why then
         verb.note("The claim was not renewed. " .. dev_text.sentence(why))
     end
@@ -163,14 +164,14 @@ local function check_rows(opts)
     for i, argv in ipairs(argvs) do
         if plan and shared[i] then
             if not rows[i] then
-                renew_claim(backend, card, opts.name)
+                renew_claim(backend, card, opts.name, flags.seconds)
                 local done = run_shared(opts, plan, env)
                 for _, entry in ipairs(plan.rows) do
                     rows[entry.index] = done[entry.index]
                 end
             end
         else
-            renew_claim(backend, card, opts.name)
+            renew_claim(backend, card, opts.name, flags.seconds)
             verb.note(string.format("running %d of %d: %s", i, #argvs, card.checks[i]))
             rows[i] = check.run({
                 root = backend.root,
@@ -788,6 +789,7 @@ end
 M.check_options = check_options
 M.check_lines = check_lines
 M.check_rows = check_rows
+M.renew_claim = renew_claim
 M.card_problems = card_problems
 M.land_problems = land_problems
 M.await_turn = await_turn

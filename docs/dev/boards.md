@@ -1585,17 +1585,27 @@ The loop stops in four cases:
 - you `move` the card to any column but In Progress or Blocked.
 - Pomb refuses a renewal (the claim is gone).
 - twice the card's size has passed: 50 minutes for 1 Pomodoro, 100 for 2
-  Pomodori and 150 for the rest.
+  Pomodori and 150 for the rest. Every renewal restarts that count.
 
 A crashed agent therefore loses its claim within 15 minutes of the loop's end. A
 network failure does not stop the loop.
 
-`check` renews the claimant's claim and restarts the loop before each row to
-keep a long ci run inside the loop's cap, and `land` does the same before its
-checks and again after its recheck. Only a caller that holds the card's claim
-state and is its claimant renews anything. A renewal that fails prints a note
-and the command goes on. It leaves the old claim and loop as they were and
-never releases the claim.
+These verbs renew the claimant's claim and restart the loop, and the claim
+lasts 900 seconds after each renewal:
+
+- `check`, before each row. The loop it restarts lasts for the longer of the
+  size's cap and the row's `--timeout`, so a row that runs past the cap keeps
+  the claim for its whole run.
+- `land`, before its checks and again after its recheck.
+- `review`, when it records a review on the card. The reviewer renews under the
+  claimant's name, not its own.
+- `move`, before it moves the card. A move to any column but In Progress or
+  Blocked then releases the claim.
+
+Only a caller that holds the card's claim state and is its claimant renews
+anything, except that `review` needs only the claim state on this machine. A
+renewal that fails prints a note and the command goes on. It leaves the old
+claim and loop as they were and never releases the claim.
 
 A `move` out of In Progress to any column but Blocked also releases the claim
 once the move has succeeded. A refused release prints a warning and leaves the

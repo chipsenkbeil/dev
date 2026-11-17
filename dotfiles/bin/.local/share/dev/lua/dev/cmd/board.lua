@@ -1557,6 +1557,10 @@ local function move_once(backend, args, opts)
         started = true
         held = { fence = fence }
     end
+    if held and not started then
+        wiring.renew_claim(backend, card, (agent_name()))
+        held = claims.read(card.id) or held
+    end
     local ok, message, at_limit = backend:move(card.id, column, {
         fence = held and held.fence,
         lane = lane,
@@ -2750,6 +2754,9 @@ function commands.review(backend, args)
                 rev.change
             )
         )
+    end
+    if card.claimant then
+        wiring.renew_claim(backend, card, card.claimant)
     end
     local held = claims.read(card.id)
     local ok

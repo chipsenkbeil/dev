@@ -212,8 +212,9 @@ end
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card whose claim to renew
 ---@param name string? the agent name, nil to name the host and session
+---@param seconds integer? the seconds the loop must outlast when that passes the size's cap
 ---@return string? message why the claim could not be renewed, nil when it was or nothing applied
-local function renew_claim(backend, card, name)
+local function renew_claim(backend, card, name, seconds)
     local held = claims.read(card.id)
     local who = claimant(name)
     if not held or card.claimant ~= who then
@@ -227,7 +228,7 @@ local function renew_claim(backend, card, name)
     if not fence then
         return message
     end
-    local ticks = claims.cap(card.size)
+    local ticks = claims.cap(card.size, seconds)
     local ok
     ok, message = claims.write({ card = card.id, fence = fence, pid = held.pid })
     if not ok then

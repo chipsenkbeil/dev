@@ -43,13 +43,18 @@ end
 ---Count the renewals a card's loop may make before it ends by itself.
 ---
 ---The loop lives for twice the card's size: 50 minutes for 1 Pomodoro, 100 for
----2 Pomodori and 150 for anything else.
+---2 Pomodori and 150 for anything else, or the given seconds when those run
+---longer.
 ---@param size string the card's size label
+---@param seconds integer? the seconds a stretch of work needs the claim for
 ---@return integer ticks the renewals
 ---@return integer minutes the loop's lifetime in minutes
-function M.cap(size)
+function M.cap(size, seconds)
     local minutes = CAP_MINUTES[size:lower()] or CAP_DEFAULT_MINUTES
-    return math.floor(minutes / M.TICK_MINUTES), minutes
+    if seconds then
+        minutes = math.max(minutes, math.ceil(seconds / 60))
+    end
+    return math.ceil(minutes / M.TICK_MINUTES), minutes
 end
 
 ---Read a card's state.

@@ -2702,6 +2702,47 @@ if has_jj then
         testing.ok(claim_of(project.home, id).expires_at > short, out)
     end)
 
+    testing.test("a review record renews the claimant's claim", function()
+        local project = jj_project()
+        local id = new_card(project)
+        local builder = { DEV_AGENT = "dotfiles/builder" }
+        must(dev(project, { "board", "move", id, support.Column.PROGRESS }, builder))
+        local short = shortened_claim(project, id)
+        local fence = claim_of(project.home, id).fence
+        local out, code = dev(project, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "code",
+            "--by",
+            "dotfiles/code-examiner/x",
+            "--rev",
+            "@",
+            "--verdict",
+            "clean",
+        }, { DEV_AGENT = "dotfiles/code-examiner/x" })
+        testing.eq(code, 0, out)
+        local claim = claim_of(project.home, id)
+        testing.eq(claim.fence, fence)
+        testing.ok(claim.expires_at > short, claim.expires_at)
+    end)
+
+    testing.test("a move by the claimant renews its claim", function()
+        local project = jj_project()
+        local id = new_card(project)
+        local builder = { DEV_AGENT = "dotfiles/builder" }
+        must(dev(project, { "board", "move", id, support.Column.PROGRESS }, builder))
+        must(dev(project, { "board", "note", id, "built and tried" }, builder))
+        local short = shortened_claim(project, id)
+        local fence = claim_of(project.home, id).fence
+        local out, code = dev(project, { "board", "move", id, support.Column.BLOCKED }, builder)
+        testing.eq(code, 0, out)
+        local claim = claim_of(project.home, id)
+        testing.eq(claim.fence, fence)
+        testing.ok(claim.expires_at > short, claim.expires_at)
+    end)
+
     local function lander_asked(home)
         local backend, restore = board_at(home)
         local found = false

@@ -2,9 +2,11 @@ local ffi = require("ffi")
 
 local testing = require("dev.testing")
 local board = require("dev.board")
+local claims = require("dev.board.claims")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local localboard = require("dev.board.localboard")
+local runner = require("dev.board.runner")
 local store = require("dev.board.store")
 local support = require("support")
 local turn = require("dev.board.turn")
@@ -156,4 +158,31 @@ testing.test("await_turn with a wait of 0 asks once and never sleeps", function(
     -- It joined no line, so the next asker takes the freed turn
     turn.release(backend, first)
     testing.ok(turn.take(backend, "gamma", "cccc3333"), "a wait of 0 joined the line")
+end)
+
+testing.test("a renewal keeps the loop for the longer of the cap and the row's seconds", function()
+    local home = board_home()
+    backend_at(home)
+    local card = { id = "cccc3333", size = "2 Pomodori", claimant = "dotfiles/a" }
+    local ticks
+    local stub = {
+        claim = function(_, _, _, opts)
+            return opts.fence
+        end,
+        keepalive = function(_, _, _, count)
+            ticks = count
+            return 0
+        end,
+    }
+    local cases = {
+        { seconds = nil, ticks = 20 },
+        { seconds = 600, ticks = 20 },
+        { seconds = 7200, ticks = 24 },
+        { seconds = 7201, ticks = 25 },
+    }
+    for _, case in ipairs(cases) do
+        assert(claims.write({ card = card.id, fence = 3 }))
+        testing.eq(runner.renew_claim(stub, card, "dotfiles/a", case.seconds), nil)
+        testing.eq(ticks, case.ticks, tostring(case.seconds))
+    end
 end)
