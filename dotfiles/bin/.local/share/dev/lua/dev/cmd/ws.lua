@@ -208,6 +208,29 @@ local function fetch_trunk(ctx)
     return nil
 end
 
+---@class dev.cmd.ws.Record
+---@field path string the worktree folder
+---@field locked boolean whether git marks the worktree locked
+---@field prunable boolean whether git marks the worktree prunable
+
+---Read the records of `git worktree list --porcelain` output.
+---@param out string the porcelain output
+---@return dev.cmd.ws.Record[] records one per worktree block that names a folder
+local function worktree_records(out)
+    local records = {}
+    for block in (out .. "\n"):gmatch("(.-)\n\n") do
+        local path = block:match("^worktree ([^\n]+)")
+        if path then
+            records[#records + 1] = {
+                path = path,
+                locked = block:find("\nlocked") ~= nil,
+                prunable = block:find("\nprunable") ~= nil,
+            }
+        end
+    end
+    return records
+end
+
 ---Find the git folder a jj project is colocated with.
 ---@param root string the folder jj runs in
 ---@return string? dir nil when the project is not colocated with git
@@ -239,13 +262,12 @@ local function drop_own_record(root, path, show)
         return nil
     end
     local mine, other = false, nil
-    for block in (out .. "\n"):gmatch("(.-)\n\n") do
-        local at = block:match("^worktree ([^\n]+)")
-        if at and block:find("\nprunable") and not block:find("\nlocked") then
-            if at == path then
+    for _, record in ipairs(worktree_records(out)) do
+        if record.prunable and not record.locked then
+            if record.path == path then
                 mine = true
             else
-                other = other or at
+                other = other or record.path
             end
         end
     end
@@ -653,18 +675,13 @@ local function prune_blocker(anchor, paths, opts)
     if code ~= 0 then
         return { reason = Refusal.LIST_FAILED, detail = tostring(code) }
     end
-    for block in (out .. "\n"):gmatch("(.-)\n\n") do
-        local path = block:match("^worktree ([^\n]+)")
-        if path and (path == paths[1] or path == paths[2]) then
-            if block:find("\nlocked") then
+    for _, record in ipairs(worktree_records(out)) do
+        local path = record.path
+        if path == paths[1] or path == paths[2] then
+            if record.locked then
                 return { reason = Refusal.LOCKED, path = path }
             end
-        elseif
-            path
-            and not (opts.gone and opts.gone[path])
-            and block:find("\nprunable")
-            and not block:find("\nlocked")
-        then
+        elseif not (opts.gone and opts.gone[path]) and record.prunable and not record.locked then
             return { reason = Refusal.PRUNE_DROPS, path = path }
         end
     end
