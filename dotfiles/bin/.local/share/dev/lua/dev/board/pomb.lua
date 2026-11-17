@@ -46,9 +46,9 @@ local URL_PATTERN = "^https?://[%w%.%-]+:?%d*[%w%._~/%-]*$"
 local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
 local HTTP_ERROR = 400
 local TOP = 0
-local COMMENT_KIND = "agent"
+local COMMENT_KIND = board.ACTOR.AGENT
 local DEFAULT_AUTHOR = "api-token"
-local ACTORS = { user = "human", api_token = "agent" }
+local ACTORS = { user = board.ACTOR.HUMAN, api_token = board.ACTOR.AGENT }
 local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
 local KEEPALIVE_SCRIPT = "/board/keepalive.sh"
 local TEMPLATE = "agent project"
@@ -674,8 +674,8 @@ local function holder(task)
         return nil
     end
     local who = owner.holder
-    local name = who.kind == "agent" and who.name
-        or who.kind == "human" and "member " .. tostring(who.id)
+    local name = who.kind == board.ACTOR.AGENT and who.name
+        or who.kind == board.ACTOR.HUMAN and "member " .. tostring(who.id)
     if type(name) ~= "string" or owner.live == false then
         return nil
     end
@@ -1990,7 +1990,7 @@ function Backend:release(id, fence)
     if not name then
         return true
     end
-    if task.owner.holder.kind == "human" then
+    if task.owner.holder.kind == board.ACTOR.HUMAN then
         return nil, "The card is held by " .. name .. ". Only that member can release it in Pomb."
     end
     local done

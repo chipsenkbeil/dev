@@ -21,7 +21,7 @@ M.MAX_WORDS = 400
 ---   children, total 0 when it has none, and whether it is an epic
 
 ---The actor kind a comment from a token carries.
-local AGENT = "agent"
+local AGENT = board.ACTOR.AGENT
 
 local function word_count(description)
     local count = 0

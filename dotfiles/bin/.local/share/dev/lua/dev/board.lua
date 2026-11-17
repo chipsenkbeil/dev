@@ -319,6 +319,10 @@ M.ALLOW_NONE = "none"
 ---The key of the checks table column that holds the command to run.
 M.CHECKS_RUN = "run"
 
+---The actors a comment or an owner can be, by role.
+---@type {AGENT: string, HUMAN: string}
+M.ACTOR = { AGENT = "agent", HUMAN = "human" }
+
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"
 

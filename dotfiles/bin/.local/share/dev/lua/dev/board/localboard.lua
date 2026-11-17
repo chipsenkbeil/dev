@@ -5,8 +5,8 @@ local store = require("dev.board.store")
 
 local present = json.present
 local SECONDS_PER_MINUTE = 60
-local COMMENT_ACTOR = "agent"
-local COMMENT_KIND = "agent"
+local COMMENT_ACTOR = board.ACTOR.AGENT
+local COMMENT_KIND = board.ACTOR.AGENT
 local NOT_YOURS = "that comment is not yours to change"
 local NO_ATTACHMENTS = "a local board holds no attachments"
 local INVERSE = {
