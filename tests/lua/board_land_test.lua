@@ -565,14 +565,53 @@ local function fake_backend(root, card)
     return backend
 end
 
-local function land_as_lander(backend)
+local function land_word(backend, word)
     local previous = os.getenv("DEV_AGENT") or ""
     ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
-    local ok, result = pcall(cmd_board.run, "land", { CARD_PREFIX }, backend)
+    local ok, result = pcall(cmd_board.run, "land", { word }, backend)
     ffi.C.setenv("DEV_AGENT", previous, 1)
     assert(ok, result)
     return result
 end
+
+local function land_as_lander(backend)
+    return land_word(backend, CARD_PREFIX)
+end
+
+testing.test("land refuses a card id that is too short or not hex", function()
+    local backend = fake_backend(nil)
+    for _, word in ipairs({ "aaa", "zzzzzzzz" }) do
+        local result = land_word(backend, word)
+        testing.eq(result.code, 1)
+        testing.eq(
+            result.message,
+            "A card id needs at least " .. board.MIN_PREFIX .. " hex characters: " .. word .. "."
+        )
+    end
+    testing.eq(backend.notes, {})
+end)
+
+testing.test("land refuses a card id that no card starts with", function()
+    local backend = fake_backend(nil)
+    local result = land_word(backend, "bbbbbbbb")
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "No card starts with bbbbbbbb.")
+    testing.eq(backend.notes, {})
+end)
+
+testing.test("land refuses a card id that more than one card starts with", function()
+    local backend = fake_backend(nil)
+    function backend:cards()
+        return {
+            { id = "cccccccc-1111-4ccc-8ccc-cccccccccccc", name = "One" },
+            { id = "cccccccc-2222-4ccc-8ccc-cccccccccccc", name = "Two" },
+        }
+    end
+    local result = land_word(backend, "cccccccc")
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "More than one card starts with cccccccc. Give more characters.")
+    testing.eq(backend.notes, {})
+end)
 
 testing.test("land on a board with In Review and no Verify names dev board init", function()
     local backend = fake_backend("/nonexistent")
@@ -2407,6 +2446,128 @@ if has_jj then
             "Trunk cannot be compared. The remote of record gerrit is not a remote of this project",
         }, { JJ_FORGE = "gerrit" })
     end)
+
+    testing.test("land refuses a forge value that is not gerrit, github or plain", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        refused(project, id, {
+            "Trunk cannot be compared. Forge must be gerrit, github or plain "
+                .. "(got: bogus, from JJ_FORGE=bogus).",
+        }, { JJ_FORGE = "bogus" })
+    end)
+
+    testing.test("land refuses when jj cannot name the working-copy commit", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        local out = refused(
+            project,
+            id,
+            { "The `jj` command could not name the working-copy commit of" },
+            { LOG_FAIL_AT = "log" }
+        )
+        testing.ok(out:find(project.root, 1, true), out)
+    end)
+
+    testing.test("land refuses a jj project when jj is not on PATH", function()
+        local project = jj_project()
+        local backend = fake_backend(project.root)
+        local original = os.getenv("PATH")
+        local bare = support.tempdir()
+        must(dev_os.run({ "ln", "-s", assert(dev_os.which("sh")), bare .. "/sh" }))
+        ffi.C.setenv("PATH", bare, 1)
+        local ok, result = pcall(land_as_lander, backend)
+        ffi.C.setenv("PATH", original, 1)
+        assert(ok, result)
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find("could not read the worktree of " .. project.root, 1, true),
+            result.message
+        )
+        testing.eq(backend.notes, {})
+    end)
+
+    local function land_through_stub(project, id, wrap)
+        local backend, restore = board_at(project.home)
+        backend.root = project.root
+        wrap(backend)
+        local set = {
+            PATH = project.root .. "/bin:" .. os.getenv("PATH"),
+            LAND_LOG = project.log,
+            LAND_MSG = "stub land",
+            REAL_JJ = dev_os.which("jj"),
+            DEV_AGENT = "dotfiles/lander",
+        }
+        local saved = {}
+        for name, value in pairs(set) do
+            saved[name] = os.getenv(name) or ""
+            ffi.C.setenv(name, value, 1)
+        end
+        local ok, result = pcall(cmd_board.run, "land", { id }, backend)
+        for name, value in pairs(saved) do
+            ffi.C.setenv(name, value, 1)
+        end
+        restore()
+        assert(ok, result)
+        return result
+    end
+
+    local function has_landed(project)
+        return landed_calls(project.log) ~= ""
+    end
+
+    testing.test(
+        "a landed card that is no longer planned is named when its move to Done fails",
+        function()
+            local project = jj_project()
+            local id = verified_card(project)
+            local result = land_through_stub(project, id, function(backend)
+                local cards = backend.cards
+                function backend:cards()
+                    local list, message = cards(self)
+                    if not list or not has_landed(project) then
+                        return list, message
+                    end
+                    for _, card in ipairs(list) do
+                        card.color = nil
+                    end
+                    return list
+                end
+            end)
+            testing.eq(result.code, 1, result.message)
+            testing.ok(result.message:find("The move to Done failed.", 1, true), result.message)
+            testing.ok(
+                result.message:find("is not planned and cannot enter Done", 1, true),
+                result.message
+            )
+            testing.ok(result.message:find("It lacks a size.", 1, true), result.message)
+        end
+    )
+
+    testing.test(
+        "a landed epic whose family cannot be read is named when its move to Done fails",
+        function()
+            local project = jj_project()
+            local id = new_card(project)
+            must(dev(project, { "board", "epic", id }))
+            to_verify(project, id)
+            approve(project, id)
+            local result = land_through_stub(project, id, function(backend)
+                local family = backend.family
+                function backend:family(...)
+                    if has_landed(project) then
+                        return nil, "board unavailable: family timed out"
+                    end
+                    return family(self, ...)
+                end
+            end)
+            testing.eq(result.code, 1, result.message)
+            testing.ok(result.message:find("The move to Done failed.", 1, true), result.message)
+            testing.ok(
+                result.message:find("Board unavailable: family timed out.", 1, true),
+                result.message
+            )
+        end
+    )
 
     testing.test(
         "a landed commit whose done note was not written is named and exits non-zero",
