@@ -2785,9 +2785,10 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
 - The working-copy commit is non-empty, has a description and has no conflicts.
 - The commit adds no file under `.dev/standalone/` unless the card carries the
   `standalone-ok` label.
-- The commit does not change both a lint-set template file and a dev module
-  that the template requires. The refusal says to land the dev change first,
-  have infra rebake the ci images, then land the template change.
+- A commit that changes a lint-set template file calls only the dev modules and
+  functions that `.dev/baked.txt` lists. The refusal says to land the dev change
+  first, have infra rebake the ci images, then land the template change with
+  the entries added.
 - A `code` and a `style` review of the working-copy change are recorded. A
   review of an earlier commit of the change counts when `jj interdiff` between
   that commit and the landing one is empty, so a clean rebase keeps its reviews

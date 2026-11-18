@@ -9,8 +9,6 @@ local support = require("support")
 local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 
-local MODULE = "dotfiles/bin/.local/share/dev/lua/dev/fs.lua"
-
 local function git(root, ...)
     local argv = {
         "git",
@@ -159,12 +157,11 @@ end)
 testing.test("git template problem reads the template listing", function()
     local root = repo({})
     write(root, templates.BASE .. "/lint.lua", 'local fs = require("dev.fs")\n')
-    write(root, MODULE, "return {}\n")
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "feat: template")
     local touched = assert(land.touched(root, head(root)))
     local problem = land.template_problem(root, touched)
-    testing.ok(problem and problem:find(MODULE, 1, true), tostring(problem))
+    testing.ok(problem and problem:find("calls dev.fs", 1, true), tostring(problem))
 end)
 
 local NUMBERED = {}

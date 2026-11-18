@@ -121,6 +121,30 @@ testing.test(
     end
 )
 
+testing.test("dev_calls lists the modules and functions a template takes from dev", function()
+    local text = table.concat({
+        'local fs = require("dev.fs")',
+        'local dev_os = require("dev.os")',
+        'local standalone = require("dev.standalone")',
+        'local x = require("dev.verb").say',
+        "return fs.exists(a) and dev_os.run(b) and self.fs.read(c) and other.run(d)",
+        "",
+    }, "\n")
+    testing.eq(templates.dev_calls(text), {
+        "dev.fs",
+        "dev.fs.exists",
+        "dev.os",
+        "dev.os.run",
+        "dev.standalone",
+        "dev.verb",
+        "dev.verb.say",
+    })
+end)
+
+testing.test("dev_calls lists nothing for a file that requires no dev module", function()
+    testing.eq(templates.dev_calls('local fs = require("lfs")\nreturn fs.exists(a)\n'), {})
+end)
+
 testing.test("render leaves deny.toml alone when the project has no ignore array", function()
     local template = table.concat({ "[advisories]", 'yanked = "deny"', "" }, "\n")
     local existing = table.concat({ "[advisories]", 'yanked = "warn"', "" }, "\n")

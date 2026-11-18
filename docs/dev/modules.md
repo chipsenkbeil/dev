@@ -455,8 +455,13 @@ The rule covers `dev.templates` and `dev.cmd.sync`. A change making a synced
 template call a dev module or function the deployed dev lacks lands only after
 infra has rebaked the ci images at a dotfiles rev that holds it.
 
-`dev board land` refuses a commit that changes a template file and a dev
-module the template requires, so the dev change lands first. The runner blocks
+`.dev/baked.txt` lists the dev modules (`dev.fs`) and functions
+(`dev.fs.exists`) the dev baked into ci's images provides, and
+`dev.templates.dev_calls` reads the same entries from a template file's
+`require("dev.x")` locals. `dev board land` refuses a commit that changes a
+template file calling an entry the list lacks, with the dev change in the same
+commit or an earlier one, so the dev change lands first and the template
+commit adds the entries after the rebake. The runner blocks
 the template card on the infra card for that rebake
 (`agents/runner.md`, Template changes that need new
 dev).

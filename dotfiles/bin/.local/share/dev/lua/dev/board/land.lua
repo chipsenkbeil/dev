@@ -829,17 +829,14 @@ function M.touched(root, rev)
     return sorted_paths(root, rev, TOUCHED_TEMPLATE)
 end
 
----Name why a commit may not change a lint-set template file and a dev module the template requires.
+---Name why a lint-set template file may not call a dev function the baked dev lacks.
 ---@param root string the project root, a jj project
 ---@param touched string[] the paths the landing commit touches
 ---@return string? problem the refusal, nil when the landing may go ahead
 function M.template_problem(root, touched)
-    local MODULE_DIR = "dotfiles/bin/.local/share/dev/lua/dev/"
     local base = templates.BASE .. "/"
     local changed_template = false
-    local changed = {}
     for _, path in ipairs(touched) do
-        changed[path] = true
         if path:sub(1, #base) == base then
             changed_template = true
         end
@@ -867,27 +864,35 @@ function M.template_problem(root, touched)
     if not listed then
         return tool_name(root) .. " could not list the lint-set template files."
     end
-    local modules = {}
+    local baked = {}
+    for entry in (fs.read(root .. "/" .. templates.BAKED) or ""):gmatch("[^\n]+") do
+        baked[entry] = true
+    end
+    local lacking = {}
     for path in listed:gmatch("[^\n]+") do
-        for name in (fs.read(root .. "/" .. path) or ""):gmatch('require%("(dev%.[%w_.]+)"%)') do
-            local module = MODULE_DIR .. name:sub(5):gsub("%.", "/") .. ".lua"
-            if changed[module] then
-                modules[module] = true
+        for _, call in ipairs(templates.dev_calls(fs.read(root .. "/" .. path) or "")) do
+            if not baked[call] then
+                lacking[call] = true
             end
         end
     end
     local names = {}
-    for module in pairs(modules) do
-        names[#names + 1] = module
+    for call in pairs(lacking) do
+        names[#names + 1] = call
     end
     if #names == 0 then
         return nil
     end
     table.sort(names)
-    return "This commit changes the lint-set template and "
+    return "The lint-set template calls "
         .. table.concat(names, ", ")
-        .. ", which the template requires. Land the dev change first,"
-        .. " have infra rebake the ci images, then land the template change."
+        .. ", which "
+        .. templates.BAKED
+        .. " does not list as baked into ci's images. Land the dev change first,"
+        .. " have infra rebake the ci images,"
+        .. " then land the template change with the entries added to "
+        .. templates.BAKED
+        .. "."
 end
 
 ---@class dev.board.land.Opts

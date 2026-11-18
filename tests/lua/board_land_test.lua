@@ -653,6 +653,7 @@ if has_jj then
             )
         )
         for path, body in pairs(files or {}) do
+            assert(fs.mkdir(fs.dirname(other .. "/" .. path), { parents = true }), "mkdir failed")
             assert(fs.write(other .. "/" .. path, body), "write failed")
             support.git(other, "add", path)
         end
@@ -1494,51 +1495,70 @@ if has_jj then
     )
 
     local TEMPLATE_DIR = "dotfiles/claude/.claude/skills/style/lint/lua"
-    local MODULE_DIR = "dotfiles/bin/.local/share/dev/lua/dev"
 
     local function template_ready(project, opts)
         assert(fs.mkdir(project.root .. "/" .. TEMPLATE_DIR, { parents = true }), "mkdir failed")
-        assert(fs.mkdir(project.root .. "/" .. MODULE_DIR, { parents = true }), "mkdir failed")
         assert(
-            fs.write(
-                project.root .. "/" .. TEMPLATE_DIR .. "/lint.lua",
-                'local fs = require("dev.fs")\n'
-            ),
+            fs.write(project.root .. "/" .. TEMPLATE_DIR .. "/lint.lua", opts.template),
             "write failed"
         )
-        if opts.module then
-            assert(
-                fs.write(project.root .. "/" .. MODULE_DIR .. "/" .. opts.module, "return {}\n"),
-                "write"
-            )
+        assert(fs.mkdir(project.root .. "/.dev", { parents = true }), "mkdir failed")
+        if opts.baked then
+            assert(fs.write(project.root .. "/.dev/baked.txt", opts.baked), "write failed")
         end
-        local id = verified_card(project)
-        return id
+        return verified_card(project)
     end
 
+    local CALLS_EXISTS = 'local fs = require("dev.fs")\nreturn fs.exists("x")\n'
+
     testing.test(
-        "land refuses a commit that changes the lint-set template and a dev module it requires",
+        "land refuses a template change that calls a dev function the baked list lacks",
         function()
             local project = jj_project()
-            local id = template_ready(project, { module = "fs.lua" })
+            local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
             refused(project, id, {
-                "This commit changes the lint-set template and " .. MODULE_DIR .. "/fs.lua",
-                "Land the dev change first, have infra rebake the ci images,",
+                "The lint-set template calls dev.fs.exists, which .dev/baked.txt",
+                "have infra rebake the ci images, then land the template change",
             })
         end
     )
 
-    testing.test("land lands a template change with a dev module it does not require", function()
+    testing.test(
+        "land refuses a template change when the dev change is already on trunk",
+        function()
+            local project = jj_project()
+            trunk_moves(project, {
+                ["dotfiles/bin/.local/share/dev/lua/dev/fs.lua"] = "return {}\n",
+                [".dev/baked.txt"] = "dev.fs\n",
+            })
+            local id = template_ready(project, { template = CALLS_EXISTS })
+            refused(project, id, { "The lint-set template calls dev.fs.exists," })
+        end
+    )
+
+    testing.test(
+        "land refuses a template change that requires a module the baked list lacks",
+        function()
+            local project = jj_project()
+            local id = template_ready(project, { template = CALLS_EXISTS })
+            refused(project, id, { "The lint-set template calls dev.fs, dev.fs.exists," })
+        end
+    )
+
+    testing.test("land lands a template change whose dev calls the baked list holds", function()
         local project = jj_project()
-        local id = template_ready(project, { module = "other.lua" })
+        local id = template_ready(project, {
+            template = CALLS_EXISTS,
+            baked = "dev.fs\ndev.fs.exists\n",
+        })
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
     end)
 
-    testing.test("land lands a commit that changes only the lint-set template", function()
+    testing.test("land lands a template change that calls no dev function", function()
         local project = jj_project()
-        local id = template_ready(project, {})
+        local id = template_ready(project, { template = "return 1\n" })
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
