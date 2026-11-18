@@ -2994,7 +2994,9 @@ function commands.review(backend, args)
     local recorded
     for _, comment in ipairs(past) do
         local record = review.parse(comment.body) or check.parse(comment.body)
-        recorded = record and record.change or recorded
+        if record and record.mode ~= check.Mode.EXPECT_FAIL then
+            recorded = record.change
+        end
     end
     if recorded and recorded ~= rev.change then
         return failure(
