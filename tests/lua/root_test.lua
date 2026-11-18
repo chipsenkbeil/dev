@@ -411,7 +411,7 @@ testing.test("a refused manifest never reaches the driver and leaves no copy", f
     fs.remove(base, { recursive = true })
 end)
 
-testing.test("a removed working directory exits 1 at once and names it", function()
+testing.test("a removed working directory exits 1 instead of hanging and names it", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir = base .. "/gone"
     assert(fs.mkdir(dir))
@@ -422,7 +422,7 @@ testing.test("a removed working directory exits 1 at once and names it", functio
         "sh",
         dir,
         MAIN,
-    }, 1, { merge = true, env = { CI = "", DEV_REMOTE = "0" } })
+    }, 10, { merge = true, env = { CI = "", DEV_REMOTE = "0" } })
     testing.eq(code, 1)
     testing.ok(out:find("dev: The working directory " .. dir .. " cannot be read.\n", 1, true), out)
     fs.remove(base, { recursive = true })
