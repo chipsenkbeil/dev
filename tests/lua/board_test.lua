@@ -5913,6 +5913,29 @@ testing.test("the keep-alive loop reads the token under the same lock", function
     testing.ok(read(root, "events"):find("held=1", 1, true), out .. read(root, "events"))
 end)
 
+testing.test("the keep-alive loop ends after its ticks and removes its state", function()
+    local root = sandbox()
+    local lock = root .. "/pass.lock"
+    pass_stub(root, lock)
+    assert(fs.write(root .. "/state", "fence=7\n"))
+    executable(
+        root .. "/bin/curl",
+        "#!/bin/sh\ncat >/dev/null\nprintf 'renew\\n' >>\"$ROOT/calls\"\nprintf 200\n"
+    )
+    shell(
+        root,
+        lock,
+        "bash "
+            .. SHARE
+            .. "keepalive.sh "
+            .. root
+            .. "/state card 7 3 https://pomb.example Agents/x 0 dotfiles/x 900",
+        "600"
+    )
+    testing.eq(fs.exists(root .. "/state"), false)
+    testing.eq(occurrences(read(root, "calls"), "renew"), 3)
+end)
+
 testing.test("a token that is not plain text is refused without echoing it", function()
     local root, home = sandbox()
     executable(root .. "/bin/pass", "#!/bin/sh\necho 'bad token\"; evil'\n")
