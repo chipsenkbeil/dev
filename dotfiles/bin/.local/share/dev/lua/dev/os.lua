@@ -670,6 +670,13 @@ function M.append_path(dirs)
     ffi.C.setenv("PATH", path, 1)
 end
 
+---Set a variable in this process's environment, which every later command and the verb inherit.
+---@param name string the variable name
+---@param value string its value
+function M.setenv(name, value)
+    ffi.C.setenv(name, value, 1)
+end
+
 ---Read the real user id.
 ---@return integer uid user id of the process
 function M.getuid()

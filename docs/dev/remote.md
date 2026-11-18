@@ -75,6 +75,32 @@ beside a job of the same name.
 `--remote` still sends it. `dev help <verb>` says the verb runs here under the
 default.
 
+### Verbs that fetch a built file
+
+A verb script whose header has a `# fetch JOB FILE` line runs here, and under
+the remote mode it first builds `FILE` on ci. `JOB` is a job of a pipeline in
+`.ci/`, and `FILE` is the artifact that job keeps with `ci.artifact`. The
+header is `# fetch client ci` for the job `client` that keeps `ci`.
+
+The remote mode is the remote default (`[remote] default` is not `"local"`) or
+`--remote`. In it dev reads `uname -sm`, takes the first target of the job
+whose OS word matches this host (`macos-` for Darwin, `freebsd-`, `windows-`,
+and any other target for Linux), and starts the job on that target at this
+host's architecture, `aarch64` for `arm64` and `x86_64` for `amd64`. It waits
+for the run with `ci ps RUN -w`, pulls the artifact `JOB.INDEX.TARGET/FILE`
+with `ci cp`, and runs the verb here with `DEV_FETCHED` set to the pulled
+file's path in a new temporary directory.
+
+`--local`, `DEV_REMOTE=0` and `[remote] default = "local"` run the verb here
+with no fetch and no `DEV_FETCHED`, so the verb builds the file itself. Inside a
+ci job or a dev box the verb always runs here with no fetch.
+
+A host whose platform no target of the job matches, or whose job ci cannot
+start for it, fails with exit 1. The message names the platform, such as
+`Windows x86_64`, and says to pass `--local`. A run that does not pass fails
+with its run id and the `ci logs` command that reads it. An agent's `DEV_AGENT`
+label rides on every ci run the fetch starts, as for `--remote`.
+
 ### When ci cannot be asked
 
 The default fails instead of running here, to keep a ci deploy from moving

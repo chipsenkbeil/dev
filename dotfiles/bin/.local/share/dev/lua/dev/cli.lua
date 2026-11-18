@@ -14,6 +14,7 @@ local tools = require("dev.cmd.tools")
 local types = require("dev.cmd.types")
 local ws = require("dev.cmd.ws")
 local dev_os = require("dev.os")
+local fetch = require("dev.fetch")
 local fs = require("dev.fs")
 local help = require("dev.help")
 local project = require("dev.project")
@@ -135,10 +136,7 @@ local function parse(argv)
     return parsed
 end
 
-local function remote_default(project_root, words)
-    if dev_os.getuid() == 0 or remote.machine_local(words) then
-        return false
-    end
+local function default_is_remote(project_root)
     local setting = config.prefer_user(project_root, "remote.default")
     if setting ~= nil and setting ~= "remote" and setting ~= "local" then
         verb.die(
@@ -147,12 +145,32 @@ local function remote_default(project_root, words)
                 .. "."
         )
     end
-    return setting ~= "local" and remote.has_default_job(project_root, words)
+    return setting ~= "local"
+end
+
+local function remote_default(project_root, words)
+    if dev_os.getuid() == 0 or remote.machine_local(words) then
+        return false
+    end
+    return default_is_remote(project_root) and remote.has_default_job(project_root, words)
 end
 
 local function runs_local(reg, row)
     local header = row and reg:header(row)
-    return header ~= nil and header.runs_local
+    return header ~= nil and (header.runs_local or header.fetch ~= nil)
+end
+
+local function fetch_spec(reg, row)
+    local header = row and reg:header(row)
+    return header and header.fetch
+end
+
+local function fetches(parsed, project_root)
+    if parsed.remote then
+        return true
+    end
+    return not (parsed.local_flag or parsed.env_local or dev_os.getuid() == 0)
+        and default_is_remote(project_root)
 end
 
 local function takes_positionals(reg, row)
@@ -458,7 +476,8 @@ function M.main(argv)
     if name == "help" and not parsed.remote and not (row and row.script) then
         os.exit(help.run(ctx, reg))
     end
-    if parsed.remote then
+    local fetch_job = fetch_spec(reg, row)
+    if parsed.remote and not fetch_job then
         os.exit(
             remote.run(
                 ctx,
@@ -479,6 +498,9 @@ function M.main(argv)
     end
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)
+        if fetch_job and not on_remote_host and fetches(parsed, project_root) then
+            dev_os.setenv(fetch.ENV, fetch.pull(project_root, fetch_job))
+        end
         if takes_positionals(reg, row) then
             ctx.args, ctx.vars = rest, {}
         else

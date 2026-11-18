@@ -263,6 +263,9 @@ card's bookmark.
 - `dev.root`: the command words dev may run as root (`tools install` and
   `tools check`) and the checked manifest copy.
 - `dev.remote`: `--remote`.
+- `dev.fetch`: the `# fetch JOB FILE` verb header. `fetch.pull(root, spec)`
+  runs the job on ci for this host's platform and returns the pulled file, and
+  `dev.cli` hands it to the verb in `DEV_FETCHED` (`dev help remote`).
 - `dev.registry`: the registry of verbs.
 - `dev.xdg`: `state_home`, the one place that resolves `XDG_STATE_HOME`. It
   falls back to `$HOME/.local/state` when the variable is unset or not

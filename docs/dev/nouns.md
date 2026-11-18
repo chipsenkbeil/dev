@@ -65,8 +65,8 @@ dev reads the comment block under the shebang of each script.
   takes the group of its first subcommand script that has the line.
 - `# hidden` keeps a flat verb out of `dev help`, and `dev help -a` still
   lists it.
-- `# local` and `# positional` change how a verb is called. `dev help flags`
-  describes both.
+- `# local`, `# fetch JOB FILE` and `# positional` change how a verb is called.
+  `dev help flags` describes them.
 
 A Lua verb (`.lua`) takes the same lines in one leading `--[[ ... ]]` block,
 with no `# ` prefix. The `group:` line comes first and the description on the

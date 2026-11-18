@@ -13,6 +13,11 @@ root=""
 if [ "$1" = -C ]; then root="$2"; shift 2; fi
 case "$1 ${2:-}" in
 "run --list")
+    if [ "$3" = --all ]; then
+        printf '{"jobs":[{"name":"client","targets":["macos-vm-rust","linux-x86-rust"]}],'
+        printf '"pipeline":"%s/.ci/client.lua"}\n' "$root"
+        exit 0
+    fi
     case "${CI_STUB_JOBS:-}" in
     fail)
         echo "hub unreachable" >&2
@@ -42,7 +47,21 @@ run*)
     printf ' [%s]' "$@" >>"$STUB_LOG"
     printf '\n' >>"$STUB_LOG"
     printf '%s\n' "${DEV_AGENT:-}" >>"$STUB_LOG.agent"
+    case " $* " in
+    *" --detach "*) [ "${CI_STUB_RC:-0}" = 0 ] && echo 123abc ;;
+    esac
     exit "${CI_STUB_RC:-0}"
+    ;;
+"ps 123abc")
+    printf 'ci -C %s [ps] [%s]\n' "$root" "$3" >>"$STUB_LOG"
+    if [ "$3" = --json ]; then
+        printf '{"status":"%s","jobs":[{"name":"client","target":"%s","index":2}]}\n' \
+            "${CI_STUB_STATUS:-passed}" "${CI_STUB_TARGET:-macos-vm-rust}"
+    fi
+    ;;
+"cp 123abc:"*)
+    printf 'ci -C %s [cp] [%s] [%s]\n' "$root" "$2" "${4:+--force}" >>"$STUB_LOG"
+    printf 'binary\n' >"$3/${2##*/}"
     ;;
 esac
 ]]
@@ -662,6 +681,87 @@ testing.test("--remote ci run label is unset when run from a real terminal", fun
     )
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.agent"), "\n")
+end)
+
+local FETCH_VERB = [[#!/usr/bin/env bash
+# Show the file ci built.
+# fetch client ci
+echo "fetched=${DEV_FETCHED:-none}"
+[ -z "${DEV_FETCHED:-}" ] || cat "$DEV_FETCHED"
+]]
+
+local function fetch_setup()
+    local root, base = setup({ ["show.sh"] = FETCH_VERB })
+    write_exec(base .. "/bin/uname", '#!/usr/bin/env bash\necho "${UNAME_STUB:-Darwin arm64}"\n')
+    return root, base
+end
+
+local FETCH_LOG = "ci -C %s [run] [client] [--local] [--detach] [--job] [client:%s] [--arch] [%s]\n"
+    .. "ci -C %s [ps] [-w]\n"
+    .. "ci -C %s [ps] [--json]\n"
+    .. "ci -C %s [cp] [123abc:client.2.%s/ci] [--force]\n"
+
+testing.test("a fetch verb run remote runs here with the pulled file for this platform", function()
+    local root, base = fetch_setup()
+    local expected =
+        FETCH_LOG:format(root, "macos-vm-rust", "aarch64", root, root, root, "macos-vm-rust")
+    for _, args in ipairs({ { "show" }, { "--remote", "show" } }) do
+        local out, code, log = dev(root, base, args)
+        testing.eq(code, 0, out)
+        testing.ok(out:find("fetched=/", 1, true), out)
+        testing.ok(out:find("binary", 1, true), out)
+        testing.eq(log, expected)
+    end
+end)
+
+testing.test("a fetch verb picks the target for this host's OS and architecture", function()
+    local root, base = fetch_setup()
+    local out, code, log = dev(
+        root,
+        base,
+        { "show" },
+        { UNAME_STUB = "Linux x86_64", CI_STUB_TARGET = "linux-x86-rust" }
+    )
+    testing.eq(code, 0, out)
+    testing.eq(
+        log,
+        FETCH_LOG:format(root, "linux-x86-rust", "x86_64", root, root, root, "linux-x86-rust")
+    )
+end)
+
+testing.test("a fetch verb under --local or default local runs here with no fetch", function()
+    local root, base = fetch_setup()
+    local runs = {
+        { args = { "--local", "show" }, env = {} },
+        { args = { "show" }, env = { DEV_REMOTE = "0" } },
+    }
+    for _, case in ipairs(runs) do
+        local out, code, log = dev(root, base, case.args, case.env)
+        testing.eq(code, 0, out)
+        testing.eq(out, "fetched=none\n")
+        testing.eq(log, "")
+    end
+    write_config(base, 'default = "local"')
+    local out, code, log = dev(root, base, { "show" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "fetched=none\n")
+    testing.eq(log, "")
+end)
+
+testing.test("a fetch verb on a platform with no target names it and hints --local", function()
+    local root, base = fetch_setup()
+    local out, code, log = dev(root, base, { "show" }, { UNAME_STUB = "Windows x86_64" })
+    testing.eq(code, 1)
+    testing.ok(out:find("has no matrix entry for Windows x86_64", 1, true), out)
+    testing.ok(out:find("Pass `--local` to build it here.", 1, true), out)
+    testing.ok(not log:find("[--detach]", 1, true), log)
+end)
+
+testing.test("a fetch verb fails and names the run when the job does not pass", function()
+    local root, base = fetch_setup()
+    local out, code = dev(root, base, { "show" }, { CI_STUB_STATUS = "failed" })
+    testing.eq(code, 1)
+    testing.ok(out:find("The ci run 123abc of job client did not pass.", 1, true), out)
 end)
 
 testing.test("--remote ci run label keeps a caller's DEV_AGENT", function()

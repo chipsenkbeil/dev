@@ -132,6 +132,9 @@ prints the script's header. A header can carry these lines.
 - `# local`: keeps the remote default from sending that verb to ci, for a
   script that drives ci itself beside a same-named job. An explicit `--remote`
   still sends it, and `dev help <verb>` says it runs here under the default.
+- `# fetch JOB FILE`: runs the verb here, and under the remote mode first
+  builds `FILE` with the ci job `JOB` on this host's platform and hands the
+  pulled path to the verb in `DEV_FETCHED`. `dev help remote` has the rule.
 - `# positional`: marks a `.lua` verb that takes positional words. A word
   shaped `KEY=value` stays in `ctx.args` for it and `ctx.vars` is empty.
 

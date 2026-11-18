@@ -145,6 +145,22 @@ testing.test("a positional line sets positional and stays out of the description
     testing.eq(lua.long, { "Lua desc." })
 end)
 
+testing.test("a fetch line names the job and the file and is not part of the text", function()
+    local h = header.parse(sh("# Builds it.", "# fetch client ci", "# More.", "echo"), "sh")
+    testing.eq(h.fetch, { job = "client", file = "ci" })
+    testing.eq(h.desc, "Builds it.")
+    testing.eq(h.long, { "Builds it.", "More." })
+    local lua = header.parse("--[[\nBuilds it.\nfetch client ci\n]]\nlocal x\n", "lua")
+    testing.eq(lua.fetch, { job = "client", file = "ci" })
+    testing.eq(lua.long, { "Builds it." })
+end)
+
+testing.test("a fetch line needs exactly a job and a file", function()
+    testing.eq(header.parse(sh("# Desc.", "# fetch client", "echo"), "sh").fetch, nil)
+    testing.eq(header.parse(sh("# Desc.", "# fetch a b c", "echo"), "sh").fetch, nil)
+    testing.eq(header.parse(sh("# Desc.", "echo"), "sh").fetch, nil)
+end)
+
 testing.test("a positional line needs the word alone", function()
     testing.eq(header.parse(sh("# Desc.", "# positional x", "echo"), "sh").positional, false)
     testing.eq(header.parse(sh("# Desc.", "echo"), "sh").positional, false)
