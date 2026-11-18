@@ -1066,7 +1066,7 @@ testing.test("expect-fail skips the standard rows when a landed card proves trun
     local landed = card_with(root, home, { "true" })
     local note = "Landed commit " .. base .. " on trunk, run by x."
     must(dev(root, home, { "board", "note", landed, note }))
-    must(dev(root, home, { "board", "move", landed, "release" }))
+    support.place(home .. "/state/dev/boards/mine.json", landed, support.COLUMN_NAME.RELEASE)
 
     -- The baseline runs only the new row and names the proof
     local id = card_with(root, home, { "false", "dev --remote lint", "dev --remote test" })

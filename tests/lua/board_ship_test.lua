@@ -95,7 +95,7 @@ local function release_card(root, home, name, outcomes, landed)
     end
     local out = dev(root, home, argv)
     local id = assert(out:match("added (%x+)"), out)
-    must(dev(root, home, { "board", "move", id, support.Column.RELEASE }))
+    support.place(home .. "/state/dev/boards/" .. BOARD .. ".json", id, support.COLUMN_NAME.RELEASE)
     if landed ~= false then
         land_note(root, home, id, landed or trunk_commit(root))
     end
@@ -596,7 +596,7 @@ local function git_release_card(root, home, name, landed)
         "It works",
     })
     local id = assert(out:match("added (%x+)"), out)
-    must(dev(root, home, { "board", "move", id, support.Column.RELEASE }))
+    support.place(home .. "/state/dev/boards/" .. BOARD .. ".json", id, support.COLUMN_NAME.RELEASE)
     land_note(root, home, id, landed)
     tick(root, home, id)
     return id

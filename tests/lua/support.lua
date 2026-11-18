@@ -28,6 +28,28 @@ function M.drop_turn_card(path)
     assert(fs.write(path, json.encode(doc)))
 end
 
+---Put a card in a column of a local board file, the way a landed card arrives, so the proof guard
+---on a move into Release or Done never reads it.
+---@param path string the local board file
+---@param id string the card id or a prefix of it
+---@param column string the column display name, one of `COLUMN_NAME`
+function M.place(path, id, column)
+    local doc = assert(json.decode(assert(fs.read(path))))
+    local column_id
+    for _, row in ipairs(doc.columns) do
+        if row.name == column then
+            column_id = row.id
+        end
+    end
+    assert(column_id, "no column " .. column)
+    for _, card in ipairs(doc.cards) do
+        if card.id:sub(1, #id) == id then
+            card.column_id = column_id
+        end
+    end
+    assert(fs.write(path, json.encode(doc)))
+end
+
 ---Make a temporary directory.
 ---@return string dir the new directory
 function M.tempdir()
