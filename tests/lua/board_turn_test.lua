@@ -814,6 +814,42 @@ testing.test("release drops the queued ask of a caller that holds no turn", func
     testing.ok(turn.take(backend, "gamma", "cccc3333"), "the released ask kept the line")
 end)
 
+testing.test("a failed claim release keeps the hold found until a retry gives it back", function()
+    -- Hold the turn and find its card
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+    local found = assert(turn.held(backend, "alpha", "aaaa1111"))
+
+    -- Count the left notes the holder wrote
+    local function lefts()
+        local count = 0
+        for _, comment in ipairs(assert(backend:comments(found.card))) do
+            if comment.body:find("left holder=alpha", 1, true) then
+                count = count + 1
+            end
+        end
+        return count
+    end
+
+    -- Fail the claim release and expect the hold still found with no left note
+    local release = backend.release
+    backend.release = function()
+        return nil, "the claim is stuck"
+    end
+    local ok, message = turn.release(backend, found)
+    testing.eq(ok, nil)
+    testing.eq(message, "The landing turn could not be released. The claim is stuck.")
+    testing.eq(lefts(), 0)
+    local again = assert(turn.held(backend, "alpha", "aaaa1111"))
+    testing.eq(again.fence, found.fence)
+
+    -- Let the release pass and expect the retry to give the hold back
+    backend.release = release
+    testing.eq(turn.release(backend, again), true)
+    testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
+    testing.eq(lefts(), 1)
+end)
+
 testing.test("a leave keeps a live hold", function()
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
