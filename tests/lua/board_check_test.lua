@@ -938,6 +938,82 @@ if has_jj then
     end)
 end
 
+local function baseline_of(rows)
+    local argvs = {}
+    for i, row in ipairs(rows) do
+        argvs[i] = check.argv(row)
+    end
+    return check.baseline(rows, argvs)
+end
+
+testing.test("the baseline drops the standard rows and keeps the rows a card adds", function()
+    local both = { "rg -n x y", "dev --remote lint", "dev --remote test" }
+    testing.eq(baseline_of(both).commands, { "rg -n x y" })
+    testing.eq(baseline_of(both).skipped, 2)
+    testing.eq(baseline_of({ "false", "! rg -n x y" }).skipped, 0)
+end)
+
+testing.test("the baseline keeps the standard test row when a new row is a test", function()
+    local rows = { "dev --remote lint", "dev --remote test", "dev --remote test -- tests/a.lua" }
+    local baseline = baseline_of(rows)
+    testing.eq(baseline.commands, { "dev --remote test", "dev --remote test -- tests/a.lua" })
+    testing.eq(baseline.skipped, 1)
+end)
+
+testing.test("the baseline keeps every row when the card adds none", function()
+    local rows = { "dev --remote lint", "dev --remote test" }
+    local baseline = baseline_of(rows)
+    testing.eq(baseline.commands, rows)
+    testing.eq(baseline.skipped, 0)
+end)
+
+testing.test("a record names its trunk proof and parse reads it back", function()
+    local state = { commit = "abc123", change = "-", proof = "8af0e001@0123456789ab" }
+    local rows = { { result = "fail", run_id = "-", run = "false" } }
+    local record = check.parse(check.record(state, rows, true))
+    testing.eq(record.proof, "8af0e001@0123456789ab")
+    testing.eq(record.mode, "expect-fail")
+    testing.eq(#record.rows, 1)
+    testing.eq(check.parse(check.record(state, rows, true):gsub(" proof=%S+", "")).proof, nil)
+end)
+
+testing.test("expect-fail skips the standard rows when a landed card proves trunk", function()
+    local root, home, base = git_root()
+    assert(fs.write(root .. "/next.txt", "x\n"))
+    local function git(...)
+        local argv =
+            { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
+        must(dev_os.run(argv, { stdout = "null" }))
+    end
+    git("add", "-A")
+    git("commit", "-q", "-m", "next")
+
+    -- A landed card in Release proves the parent commit
+    local landed = card_with(root, home, { "true" })
+    local note = "Landed commit " .. base .. " on trunk, run by x."
+    must(dev(root, home, { "board", "note", landed, note }))
+    must(dev(root, home, { "board", "move", landed, "release" }))
+
+    -- The baseline runs only the new row and names the proof
+    local id = card_with(root, home, { "false", "dev --remote lint", "dev --remote test" })
+    local out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("1 fail - false", 1, true), out)
+    testing.ok(out:find("left out 2 standard rows", 1, true), out)
+    local proof = landed .. "@" .. base:sub(1, 12)
+    testing.ok(out:find(proof, 1, true), out)
+
+    -- The stored record carries the proof
+    local doc = assert(json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"))))
+    for _, card in ipairs(doc.cards) do
+        if card.id:sub(1, #id) == id then
+            local record = check.parse(card.comments[#card.comments].body)
+            testing.eq(record.proof, proof)
+            testing.eq(#record.rows, 1)
+        end
+    end
+end)
+
 testing.test("the claimant's note is found by the token that posted the claim", function()
     local STATUS, DECISION = board.NoteKind.STATUS, board.NoteKind.DECISION
     local function note(who, body, kind)

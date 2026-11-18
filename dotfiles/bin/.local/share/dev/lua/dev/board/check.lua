@@ -87,6 +87,8 @@ local CI_COMMAND = "ci"
 local DEV_COMMAND = "dev"
 local DOUBLE_DASH = "--"
 local STATE_SECONDS = 20
+local STANDARD_TEST = "test"
+local STANDARD_JOBS = { lint = true, [STANDARD_TEST] = true }
 local LOGS_SECONDS = 60
 
 ---How a checks row ended.
@@ -100,6 +102,7 @@ M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@class dev.board.check.State
 ---@field commit string the full commit id the result belongs to
 ---@field change string the change id in a jj project, `-` in a git one
+---@field proof string? the trunk proof an expect-fail run relied on, which `record` writes
 
 ---@class dev.board.check.Row
 ---@field run string the row's command as the card holds it
@@ -584,6 +587,48 @@ function M.job_row(argv)
     return job, words
 end
 
+---@class dev.board.check.Baseline
+---@field commands string[] the rows the baseline runs, as the card holds them
+---@field argvs string[][] the rows' words, without a leading `! `
+---@field skipped integer how many standard rows the baseline leaves out
+
+---Choose the rows an `--expect-fail` baseline runs.
+---
+---The standard rows are the plain `dev --remote lint` and `dev --remote test` rows. Only a row the
+---card adds can fail on unchanged code, so the baseline drops the standard rows. It keeps the
+---standard test row when a new row is a test, which is a `dev --remote test` row with words after
+---the double dash. A card whose rows are all standard keeps every row.
+---@param commands string[] the card's checks rows as it holds them
+---@param argvs string[][] the rows' words, without a leading `! `
+---@return dev.board.check.Baseline baseline the rows to run
+function M.baseline(commands, argvs)
+    local standard, new_test = {}, false
+    for i, argv in ipairs(argvs) do
+        local job, words = nil, nil
+        if not commands[i]:match(NEGATED) then
+            job, words = M.job_row(argv)
+        end
+        if job and STANDARD_JOBS[job] and #words == 0 then
+            standard[i] = job
+        elseif job == STANDARD_TEST then
+            new_test = true
+        end
+    end
+    local baseline = { commands = {}, argvs = {}, skipped = 0 }
+    for i, argv in ipairs(argvs) do
+        if standard[i] and not (standard[i] == STANDARD_TEST and new_test) then
+            baseline.skipped = baseline.skipped + 1
+        else
+            baseline.commands[#baseline.commands + 1] = commands[i]
+            baseline.argvs[#baseline.argvs + 1] = argv
+        end
+    end
+    if #baseline.commands == 0 then
+        return { commands = commands, argvs = argvs, skipped = 0 }
+    end
+    return baseline
+end
+
 ---Choose the rows of a card that run as one ci run.
 ---
 ---The rows qualify when two or more are plain `dev --remote JOB` rows of different jobs, at most
@@ -786,6 +831,9 @@ function M.record(state, rows, expect_fail)
         #rows,
         M.fingerprint(commands)
     )
+    if state.proof then
+        head = head .. " proof=" .. state.proof
+    end
     size = size + #head
     local out = { head }
     for i, row in ipairs(rows) do
@@ -809,6 +857,7 @@ end
 ---@field change string the change id, `-` in a git project
 ---@field mode string one of `Mode`
 ---@field sum string the fingerprint of the checks rows the run used
+---@field proof string? the trunk proof an expect-fail run relied on, as `CARD@COMMIT`
 ---@field rows dev.board.check.RecordRow[] the rows in the order they ran
 
 ---Read a comment that `record` wrote.
@@ -816,6 +865,8 @@ end
 ---@return dev.board.check.Record? record nil when the body is not a record
 function M.parse(body)
     local head, rest = body:match("^([^\n]*)\n?(.*)$")
+    local bare, proof = head:match("^(.*) proof=(%S+)$")
+    head = bare or head
     local prefix, commit, change, mode, count, sum =
         head:match("^(%S+) commit=(%x+) change=(%S+) mode=(%S+) rows=(%d+) sum=(%x+)$")
     if prefix ~= board.CHECK_PREFIX then
@@ -843,7 +894,7 @@ function M.parse(body)
     if #rows ~= tonumber(count) then
         return nil
     end
-    return { commit = commit, change = change, mode = mode, sum = sum, rows = rows }
+    return { commit = commit, change = change, mode = mode, sum = sum, rows = rows, proof = proof }
 end
 
 ---Read the commit of a comment that carries a record's head but does not parse.

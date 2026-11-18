@@ -138,7 +138,28 @@ local function run_shared(opts, plan, env)
     return rows
 end
 
+---Find the landed card whose commit the working copy sits on.
+---
+---A card the board holds in Release names the commit `land` put on trunk, and `land` passed its
+---checks first, so trunk was green at that commit.
+---@param backend dev.board.Backend the board backend
+---@return string? proof the card and the commit as `CARD@COMMIT`, nil when no card proves it
+local function trunk_proof(backend)
+    local base = land.base_commit(backend.root)
+    local cards = base and backend:cards()
+    for _, card in ipairs(cards or {}) do
+        local comments = card.column == backend.roles.release and backend:comments(card.id)
+        local landed = comments and land.landed_commit(comments)
+        if landed and (base:sub(1, #landed) == landed or landed:sub(1, #base) == base) then
+            return card.id:sub(1, board.MIN_PREFIX) .. "@" .. land.short(base)
+        end
+    end
+end
+
 ---Run the card's rows and record the result.
+---
+---An `--expect-fail` run on a commit with a trunk proof runs the rows the card adds only. Without
+---a proof it runs every row, which is then the only sign that trunk was green.
 ---@param opts dev.board.wiring.check_rows.Opts the card, its commit and the commands
 ---@return dev.cmd.board.Result result the check's outcome
 local function check_rows(opts)
@@ -147,13 +168,19 @@ local function check_rows(opts)
     local short = card.id:sub(1, board.MIN_PREFIX)
     local message
     local rows = {}
+    local commands, skipped = card.checks, 0
+    local proof = flags.expect_fail and trunk_proof(backend) or nil
+    if proof then
+        local baseline = check.baseline(card.checks, argvs)
+        commands, argvs, skipped = baseline.commands, baseline.argvs, baseline.skipped
+    end
     local env = {
         [remote.VERB_ENV] = remote.Verb.CHECK,
         [remote.CARD_ENV] = short,
     }
     local plan
     if not flags.expect_fail then
-        plan = check.plan(card.checks, argvs, function()
+        plan = check.plan(commands, argvs, function()
             return remote.default_jobs(backend.root)
         end)
     end
@@ -172,10 +199,10 @@ local function check_rows(opts)
             end
         else
             renew_claim(backend, card, opts.name, flags.seconds)
-            verb.note(string.format("running %d of %d: %s", i, #argvs, card.checks[i]))
+            verb.note(string.format("running %d of %d: %s", i, #argvs, commands[i]))
             rows[i] = check.run({
                 root = backend.root,
-                run = card.checks[i],
+                run = commands[i],
                 argv = argv,
                 seconds = flags.seconds,
                 expect_fail = flags.expect_fail,
@@ -190,7 +217,7 @@ local function check_rows(opts)
                 string.format(
                     "The ci hub refused row %d (%s). Nothing was recorded on card %s. The hub said: %s",
                     i,
-                    card.checks[i],
+                    commands[i],
                     short,
                     rows[i].refused
                 )
@@ -211,10 +238,11 @@ local function check_rows(opts)
         )
     end
     local held = claims.read(card.id)
+    local stamped = { commit = before.commit, change = before.change, proof = proof }
     local ok
     ok, message = backend:note(
         card.id,
-        check.record(before, rows, flags.expect_fail),
+        check.record(stamped, rows, flags.expect_fail),
         held and held.fence,
         { kind = board.NoteKind.STATUS }
     )
@@ -244,6 +272,15 @@ local function check_rows(opts)
         verdict = verdict
             .. (passed > 0 and " " or ". ")
             .. "With --expect-fail a row that never started proves nothing. Fix the row."
+    end
+    if proof and skipped > 0 then
+        verdict = verdict
+            .. string.format(
+                "%sThe baseline left out %s that trunk proof %s covers.",
+                verdict:sub(-1) == "." and " " or ". ",
+                render.count_text(skipped, "standard row"),
+                proof
+            )
     end
     lines[#lines + 1] = verdict
     if not good then

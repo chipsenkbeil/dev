@@ -2569,6 +2569,25 @@ The result and the exit code:
   the same way (its failure shows nothing about the code). A row that
   exits 1 or any other code after it started is still the expected failure.
 
+Which rows an `--expect-fail` baseline runs:
+
+- The standard rows are the plain `dev --remote lint` and `dev --remote test`
+  rows with no words after the double dash. Only a row the card adds can fail
+  on unchanged code.
+- The baseline runs the rows the card adds, and leaves the standard lint row
+  out. It keeps the standard test row only when a new row is a test, a
+  `dev --remote test` row with words after the double dash.
+- A card whose rows are all standard runs every row.
+- The baseline leaves rows out only on a commit that has a trunk proof. The
+  proof is a card in Release whose `Landed commit` note names the commit the
+  working copy sits on. `land` passed that card's checks before it landed.
+- With no such card the baseline runs every row, as the only sign that trunk
+  was green.
+- A baseline that left rows out adds `proof=CARD@COMMIT` to the record's first
+  line, with the 12 characters of the commit, and the command says how many
+  standard rows it left out. The record lists only the rows that ran, with
+  `rows` and `sum` counting those.
+
 When the comment cannot be written:
 
 - If Pomb is unreachable, a timeout occurs or a fence is refused, the command

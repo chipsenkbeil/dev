@@ -1057,6 +1057,38 @@ function M.recheck_problem(opts)
     end
 end
 
+---Read the commit a card's newest land note names.
+---@param comments {body: string}[] the card's comments, oldest first
+---@return string? commit the commit id, nil when the newest land note names none or there is none
+function M.landed_commit(comments)
+    local patterns = { "^Landed commit (%x+) ", "^landed (%x+) on [^%s/]+/main" }
+    for i = #comments, 1, -1 do
+        local body = comments[i].body
+        for _, pattern in ipairs(patterns) do
+            local commit = body:match(pattern)
+            if commit then
+                return commit
+            end
+        end
+        if body:match("^Landed change ") then
+            return nil
+        end
+    end
+end
+
+---Read the commit the working-copy commit sits on.
+---@param root string the project root
+---@return string? commit the full commit id, nil when it cannot be read or is not one commit
+function M.base_commit(root)
+    local out
+    if vcs.backend(root) == vcs.GIT then
+        out = git_out(root, "rev-parse", "HEAD^")
+    else
+        out = jj_out(root, "log", "-r", "@-", "--no-graph", "-T", COMMIT_TEMPLATE)
+    end
+    return out and out:match("^(%x+)\n$")
+end
+
 ---Read the commit that holds a change on trunk, which `jj land` may have rewritten.
 ---@param root string the project root
 ---@param change string the change id, which survives the rewrite, ignored in git

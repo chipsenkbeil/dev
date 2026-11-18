@@ -3161,25 +3161,6 @@ function Ship.rev(args)
     return rev, rest
 end
 
----Read the commit a card's newest land note names.
----@param comments {body: string}[] the card's comments, oldest first
----@return string? commit the commit id, nil when the newest land note names none or there is none
-function Ship.landed(comments)
-    local patterns = { "^Landed commit (%x+) ", "^landed (%x+) on [^%s/]+/main" }
-    for i = #comments, 1, -1 do
-        local body = comments[i].body
-        for _, pattern in ipairs(patterns) do
-            local commit = body:match(pattern)
-            if commit then
-                return commit
-            end
-        end
-        if body:match("^Landed change ") then
-            return nil
-        end
-    end
-end
-
 ---Say why a Release card cannot ship at a revision.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the Release card
@@ -3191,7 +3172,7 @@ function Ship.reason(backend, card, commit, name)
         return "an outcome is not ticked"
     end
     local comments = backend:comments(card.id)
-    local landed = comments and Ship.landed(comments)
+    local landed = comments and land.landed_commit(comments)
     if not landed then
         return "no landed commit in its notes"
     end
