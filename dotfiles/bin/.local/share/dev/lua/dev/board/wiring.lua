@@ -24,6 +24,8 @@ local usage = guards.usage
 local failure = guards.failure
 local EXPECT_FAIL_FLAG = "--expect-fail"
 local TIMEOUT_FLAG = "--timeout"
+local RUN_FLAG = "--run"
+local MIN_RUN_COMMIT = 7
 
 ---Parse the flags and the card word of `board check`.
 ---@param args string[] the arguments
@@ -49,6 +51,12 @@ local function check_options(args)
                     )
             end
             opts.seconds = seconds
+        elseif arg == RUN_FLAG then
+            i = i + 1
+            opts.run = args[i] and args[i]:match("^%x+$")
+            if not opts.run then
+                return nil, usage("The " .. RUN_FLAG .. " flag needs a ci run id.")
+            end
         elseif #arg > 1 and arg:sub(1, 1) == "-" then
             return nil, usage("Unknown flag " .. arg .. ".")
         else
@@ -58,6 +66,10 @@ local function check_options(args)
     end
     if #opts.words ~= 1 then
         return nil, usage("needs a card")
+    end
+    if opts.run and opts.expect_fail then
+        return nil,
+            usage("The " .. RUN_FLAG .. " flag cannot be used with " .. EXPECT_FAIL_FLAG .. ".")
     end
     return opts
 end
@@ -81,6 +93,7 @@ end
 ---@class dev.board.wiring.CheckFlags
 ---@field expect_fail boolean whether every row should fail
 ---@field seconds integer the longest each row may run
+---@field run string? the ci run to record the rows from instead of starting one
 ---@field words string[] the words that are not flags
 
 ---Renew the caller's claim on a card, and say so when it could not be.
@@ -117,7 +130,17 @@ local function run_shared(opts, plan, env)
         places[#places + 1] = tostring(entry.index)
     end
     local text = table.concat(places, ", ")
-    verb.note(string.format("running rows %s of %d as one ci run", text, #opts.argvs))
+    local attach = opts.options.run
+    verb.note(
+        attach
+                and string.format(
+                    "Waiting on ci run %s for rows %s of %d.",
+                    attach,
+                    text,
+                    #opts.argvs
+                )
+            or string.format("running rows %s of %d as one ci run", text, #opts.argvs)
+    )
     local label = remote.run_label(opts.backend.root, {
         DEV_AGENT = os.getenv("DEV_AGENT"),
         DEV_CI_VERB = env[remote.VERB_ENV],
@@ -128,6 +151,7 @@ local function run_shared(opts, plan, env)
         plan = plan,
         seconds = opts.options.seconds,
         env = { DEV_AGENT = label },
+        attach = attach,
         on_run_id = function(run_id)
             verb.note(string.format("rows %s run %s", text, run_id))
         end,
@@ -185,6 +209,30 @@ local function check_rows(opts)
             return remote.default_jobs(backend.root)
         end)
     end
+    if flags.run then
+        if not plan then
+            return failure(
+                string.format(
+                    "Card %s has no rows that share one ci run, so --run has nothing to record.",
+                    short
+                )
+            )
+        end
+        local at = check.run_commit(flags.run)
+        local full = before.commit
+        local width = at and math.min(#at, #full) or 0
+        if width < MIN_RUN_COMMIT or at:sub(1, width) ~= full:sub(1, width) then
+            return failure(
+                string.format(
+                    "The ci run %s is of commit %s, not the checked commit %s. Nothing was recorded on card %s.",
+                    flags.run,
+                    at and at:sub(1, 12) or "unknown",
+                    land.short(full),
+                    short
+                )
+            )
+        end
+    end
     local shared = {}
     for _, entry in ipairs(plan and plan.rows or {}) do
         shared[entry.index] = true
@@ -226,6 +274,18 @@ local function check_rows(opts)
         end
     end
     local lines = check_lines(rows)
+    local told = {}
+    for _, row in ipairs(rows) do
+        if row.result == check.Result.TIMEOUT and row.run_id ~= "-" and not told[row.run_id] then
+            told[row.run_id] = true
+            lines[#lines + 1] = string.format(
+                "The wait ended while ci run %s was still going. Record it when it ends with `dev board check %s --run %s`.",
+                row.run_id,
+                short,
+                row.run_id
+            )
+        end
+    end
     local after = check.state(backend.root)
     if not after or after.commit ~= before.commit then
         return failure(

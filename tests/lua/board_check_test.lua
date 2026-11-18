@@ -606,20 +606,29 @@ local function group_run(code)
         .. code
 end
 
-local function group_ci(opts)
+local function group_ci(opts, head)
     local ps = opts.unreadable and "exit 1"
-        or string.format([[echo '{"status":"running","jobs":[%s]}']], opts.jobs)
+        or string.format(
+            [[echo '{"status":"running","source":"local@%s","jobs":[%s]}']],
+            opts.source or head:sub(1, 12),
+            opts.jobs
+        )
     return string.format(
         [[case "$1" in
 -C)
-    case "$4" in
-    "--list") echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;
-    *) %s ;;
+    case "$3" in
+    ps) echo "watch $4 $5" >> "$CI_LOG"; %s ;;
+    *)
+        case "$4" in
+        "--list") echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;
+        *) %s ;;
+        esac ;;
     esac ;;
 ps) %s ;;
 logs) echo "output of $4" ;;
 esac]],
-        opts.run,
+        opts.watch or "exit 0",
+        opts.run or "exit 9",
         ps
     )
 end
@@ -627,18 +636,25 @@ end
 ---@class board_check_test.group_check.Opts
 ---@field jobs string? the jobs `ci ps` reports
 ---@field unreadable boolean? whether `ci ps` fails
----@field run string the shell the fake `ci run` runs
+---@field run string? the shell the fake `ci run` runs
 ---@field rows string[]? the card's checks, a lint row and a test row when nil
 ---@field timeout string? the `--timeout` seconds
+---@field attach string? the run id passed to `--run`
+---@field source string? the commit the fake run reports, the working copy's commit when nil
+---@field watch string? the shell the fake `ci ps --watch` runs
 
 local function group_check(opts)
-    local root, home = git_root()
+    local root, home, head = git_root()
     local id = card_with(root, home, opts.rows or { "dev --remote lint", "dev --remote test" })
-    local env = fake_ci(group_ci(opts))
+    local env = fake_ci(group_ci(opts, head))
     local log = support.tempdir() .. "/ci.log"
     env.CI_LOG = log
     env.DEV_AGENT = ""
     local args = { "board", "check", id }
+    if opts.attach then
+        args[#args + 1] = "--run"
+        args[#args + 1] = opts.attach
+    end
     if opts.timeout then
         args[#args + 1] = "--timeout"
         args[#args + 1] = opts.timeout
@@ -706,6 +722,64 @@ testing.test("a shared run that outlasts the limit records every row as a timeou
     local reason = "the ci run was running at the limit and may still finish"
     testing.ok(body:find("1 timeout 8cb600\n  " .. reason, 1, true), body)
     testing.ok(body:find("2 timeout 8cb600\n  " .. reason, 1, true), body)
+end)
+
+testing.test("a row whose wait ends early names its run and the command that records it", function()
+    local out, code = group_check({
+        jobs = PASSED,
+        run = 'echo "run 8cb600"; sleep 30',
+        timeout = "2",
+    })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("rows 1, 2 run 8cb600", 1, true), out)
+    testing.ok(out:find("`dev board check %x+ %-%-run 8cb600`"), out)
+end)
+
+testing.test("check --run records the rows from a run that has ended", function()
+    local out, code, body, log = group_check({ jobs = PASSED, attach = "8cb600" })
+    testing.eq(code, 0, out)
+    testing.ok(log:find("watch 8cb600 --watch", 1, true), log)
+    testing.ok(not log:find("run --local", 1, true), log)
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+    })
+end)
+
+testing.test("check --run records a failed job of the named run", function()
+    local out, code, body = group_check({
+        jobs = TEST_FAILED,
+        attach = "8cb600",
+        watch = "exit 1",
+    })
+    testing.eq(code, 1, out)
+    testing.ok(body:find("1 pass 8cb600", 1, true), body)
+    testing.ok(body:find("2 fail 8cb600", 1, true), body)
+end)
+
+testing.test("check --run refuses a run of another commit and records nothing", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        attach = "8cb600",
+        source = "abcdef012345",
+    })
+    testing.eq(code, 1, out)
+    testing.eq(body, nil)
+    testing.ok(out:find("is of commit abcdef012345, not the checked commit", 1, true), out)
+    testing.ok(not log:find("watch", 1, true), log)
+end)
+
+testing.test("check --run refuses --expect-fail and a card with no shared run", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "true" })
+    local _, code = dev(root, home, { "board", "check", id, "--run", "8cb600", "--expect-fail" })
+    testing.eq(code, 2)
+    _, code = dev(root, home, { "board", "check", id, "--run", "xyz" })
+    testing.eq(code, 2)
+    local out
+    out, code = dev(root, home, { "board", "check", id, "--run", "8cb600" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("--run has nothing to record", 1, true), out)
 end)
 
 testing.test("plan shares one run only among rows that cover the whole pipeline", function()

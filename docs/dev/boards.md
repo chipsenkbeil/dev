@@ -2437,8 +2437,9 @@ command and prints `set checks <id prefix>, N rows`, or `1 row` for one.
 
 ### check
 
-`dev board check CARD [--expect-fail] [--timeout SECONDS]` runs every checks
-row of the card and records the result as one comment on the card.
+`dev board check CARD [--expect-fail] [--timeout SECONDS] [--run ID]`
+runs every checks row of the card and records the result as one comment
+on the card.
 
 The workspace rule:
 
@@ -2505,6 +2506,14 @@ Rows that share one ci run:
 - `--timeout` bounds the one run. A run that outlasts it records each of its
   rows as `timeout` with the state reason.
 - A refused run counts as a refusal of its first row.
+- When the wait ends while the run still goes, the output names the run and
+  the command that records it: `dev board check CARD --run ID`.
+- `dev board check CARD --run ID` starts no run. It waits on the named run with
+  `ci ps ID --watch`, bounded by `--timeout`, and records each row from the
+  run's jobs as above. A run that has ended is read at once.
+- `--run` needs a card whose rows share one ci run, takes a hex run id and
+  refuses `--expect-fail`. It refuses, with nothing recorded, a run whose
+  commit differs from the working copy's commit.
 
 The result belongs to one commit:
 

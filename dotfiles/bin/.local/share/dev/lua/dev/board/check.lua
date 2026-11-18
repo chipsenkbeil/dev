@@ -712,14 +712,33 @@ end
 ---@field seconds integer how long the run may take
 ---@field env table<string, string>? variables set for the run
 ---@field on_run_id fun(run_id: string)? called with the run's ci run id once its line is complete
+---@field attach string? the id of a ci run that already started, which is waited on, not started
+
+---Find the commit a ci run holds.
+---@param run_id string the ci run id
+---@return string? commit the commit id ci shows, nil when ci cannot say
+function M.run_commit(run_id)
+    local out, code = dev_os.capture_timed({ CI_COMMAND, "ps", run_id, "--json" }, STATE_SECONDS)
+    local doc = code == 0 and json.decode(out) or nil
+    local source = type(doc) == "table" and doc.source
+    return type(source) == "string" and source:match("@(%x+)$") or nil
+end
 
 ---Run the rows of a plan as one ci run and read each row's result from its job.
+---
+---With `attach` the run is the named one, and the wait is `ci ps RUN --watch`, which returns at once
+---for a run that has ended.
 ---@param opts dev.board.check.run_group.Opts the plan and where it runs
 ---@return dev.board.check.Row[] rows one per plan row, in the plan's order, all with the one run id
 function M.run_group(opts)
-    local argv = { CI_COMMAND, "-C", opts.root, "run", "--local", "--follow", DOUBLE_DASH }
-    for _, word in ipairs(opts.plan.args) do
-        argv[#argv + 1] = word
+    local argv
+    if opts.attach then
+        argv = { CI_COMMAND, "-C", opts.root, "ps", opts.attach, "--watch" }
+    else
+        argv = { CI_COMMAND, "-C", opts.root, "run", "--local", "--follow", DOUBLE_DASH }
+        for _, word in ipairs(opts.plan.args) do
+            argv[#argv + 1] = word
+        end
     end
     local output, code = dev_os.capture_timed(argv, opts.seconds, {
         cwd = opts.root,
@@ -727,7 +746,7 @@ function M.run_group(opts)
         env = opts.env,
         on_text = run_id_watcher(opts.on_run_id),
     })
-    local run_id = M.run_id(output)
+    local run_id = opts.attach or M.run_id(output)
     local refused = not run_id and code ~= 0 and hub_refusal(output, code) or nil
     local timed_out = code == TIMEOUT_EXIT
     local reason = timed_out and run_id and timeout_reason(run_id) or nil

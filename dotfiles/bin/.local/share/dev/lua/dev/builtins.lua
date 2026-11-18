@@ -470,8 +470,8 @@ return {
     {
         words = { "board", "check" },
         handler = "lua",
-        flags = "--expect-fail --timeout",
-        usage = "dev board check CARD [--expect-fail] [--timeout SECONDS]",
+        flags = "--expect-fail --timeout --run",
+        usage = "dev board check CARD [--expect-fail] [--timeout SECONDS] [--run ID]",
         desc = "Run a card's checks rows, print each ci run id and record the results",
     },
     {
