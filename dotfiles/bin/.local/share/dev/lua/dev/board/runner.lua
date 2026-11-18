@@ -54,7 +54,7 @@ end
 ---@return dev.cmd.board.Result? err the usage error, nil when the name passes
 local function shape_refusal(name)
     if name and not board.agent_shape(name) then
-        return usage("an agent name is <repo>/<role>[/<card>], got " .. name)
+        return usage("An agent name is <repo>/<role>[/<card>], got " .. name .. ".")
     end
 end
 
@@ -72,7 +72,14 @@ local function limit(flag)
     end
     local size = board.SIZE_LIMITS[word]
     if not size then
-        return nil, usage((flag and M.FLAG or "DEV_MAX_SIZE") .. " is 1, 2 or 3, not " .. word)
+        return nil,
+            usage(
+                "The "
+                    .. (flag and M.FLAG .. " flag" or "DEV_MAX_SIZE variable")
+                    .. " is 1, 2 or 3, not "
+                    .. word
+                    .. "."
+            )
     end
     return size
 end

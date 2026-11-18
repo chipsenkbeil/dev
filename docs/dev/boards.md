@@ -1597,7 +1597,7 @@ so `dotfiles/implementer/f5f0e007` sends `implementer`. A name with no role part
 such as the default `dev@<host>:<session>`, sends no role.
 
 A name of another shape is refused with
-`an agent name is <repo>/<role>[/<card>], got NAME` (exit 2). That happens when
+`An agent name is <repo>/<role>[/<card>], got NAME.` (exit 2). That happens when
 `take` or a `move` into In Progress would take a new claim, whether the name
 came from `DEV_AGENT` or `--as`. Every other verb on a card already claimed
 under that exact name passes, so a card claimed under an older name finishes and

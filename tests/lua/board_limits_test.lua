@@ -495,7 +495,7 @@ testing.test("limits --set refuses a board name beside it", function()
     local box = sandbox({ project = POMB, detail = detail({}), export = export({}) })
     local out, code = dev(box, { "board", "limits", "other", "--set", "6" }, LEAD)
     testing.eq(code, 2, out)
-    testing.ok(out:find("--set changes only this project's board", 1, true), out)
+    testing.ok(out:find("The --set flag changes only this project's board.", 1, true), out)
 end)
 
 testing.test("limits --set under a lead name sends the lead token", function()

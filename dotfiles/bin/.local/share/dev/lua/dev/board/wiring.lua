@@ -45,9 +45,11 @@ local function check_options(args)
             if not seconds or seconds < 1 or seconds > check.MAX_SECONDS then
                 return nil,
                     usage(
-                        TIMEOUT_FLAG
-                            .. " needs a whole number of seconds from 1 to "
+                        "The "
+                            .. TIMEOUT_FLAG
+                            .. " flag needs a whole number of seconds from 1 to "
                             .. check.MAX_SECONDS
+                            .. "."
                     )
             end
             opts.seconds = seconds
@@ -65,7 +67,7 @@ local function check_options(args)
         i = i + 1
     end
     if #opts.words ~= 1 then
-        return nil, usage("needs a card")
+        return nil, usage("Needs a card.")
     end
     if opts.run and opts.expect_fail then
         return nil,

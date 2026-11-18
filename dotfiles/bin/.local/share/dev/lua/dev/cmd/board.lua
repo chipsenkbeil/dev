@@ -179,7 +179,7 @@ local function parse(args, takes, many)
             flags[arg] = true
         elseif takes[arg] then
             if i > #args then
-                return nil, usage(arg .. " needs a value.")
+                return nil, usage("The " .. arg .. " flag needs a value.")
             end
             if many and many[arg] then
                 flags[arg] = flags[arg] or {}
@@ -578,7 +578,7 @@ local function add_card(backend, args, held)
     end
     for _, flag in ipairs({ "--problem", "--out-of-scope", "--source" }) do
         if flags[flag] and #flags[flag] > 1 then
-            return usage(flag .. " takes one value, so give its text once")
+            return usage("The " .. flag .. " flag takes one value, so give its text once.")
         end
     end
     local problem = flags["--problem"] and flags["--problem"][1]
@@ -610,7 +610,7 @@ local function add_card(backend, args, held)
     local checks = {}
     for _, run in ipairs(flags["--checks"] or {}) do
         if not run:find("%S") then
-            return usage("--checks needs a command")
+            return usage("The --checks flag needs a command.")
         end
         checks[#checks + 1] = run
     end
@@ -621,7 +621,7 @@ local function add_card(backend, args, held)
     local outcomes = {}
     for _, item in ipairs(flags["--done-when"] or {}) do
         if not item:find("%S") then
-            return usage("--done-when needs the outcome")
+            return usage("The --done-when flag needs the outcome.")
         end
         outcomes[#outcomes + 1] = item
     end
@@ -659,8 +659,9 @@ local function add_card(backend, args, held)
         and column ~= roles.icebox
     then
         return usage(
-            board.NEEDS_HUMAN
-                .. " lives only in Blocked or Icebox, so add the card there with --column."
+            "The "
+                .. board.NEEDS_HUMAN
+                .. " label lives only in Blocked or Icebox, so add the card there with --column."
         )
     end
     if column == roles.ready and unready(color) then
@@ -910,7 +911,7 @@ end
 
 local function edit_note(backend, args)
     if #args < 4 then
-        return usage(EDIT_FLAG .. " needs a comment and the new text")
+        return usage("The " .. EDIT_FLAG .. " flag needs a comment and the new text.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -936,7 +937,7 @@ end
 
 local function delete_note(backend, args)
     if #args < 3 then
-        return usage(DELETE_FLAG .. " needs a comment")
+        return usage("The " .. DELETE_FLAG .. " flag needs a comment.")
     end
     if #args > 3 then
         return usage("Unknown argument " .. args[4] .. ".")
@@ -1173,7 +1174,7 @@ local function note_opts(args)
     local i = 2
     while args[i] == KIND_FLAG or args[i] == AS_FLAG do
         if i == #args then
-            return nil, usage(args[i] .. " needs a value")
+            return nil, usage("The " .. args[i] .. " flag needs a value.")
         end
         if args[i] == KIND_FLAG then
             kind = args[i + 1]
@@ -1183,7 +1184,8 @@ local function note_opts(args)
         i = i + 2
     end
     if i > 2 and (args[i] == EDIT_FLAG or args[i] == DELETE_FLAG) then
-        return nil, usage(args[i] .. " takes no " .. KIND_FLAG .. " or " .. AS_FLAG)
+        return nil,
+            usage("The " .. args[i] .. " flag takes no " .. KIND_FLAG .. " or " .. AS_FLAG .. ".")
     end
     local words = { args[1] }
     for j = i, #args do
@@ -1217,10 +1219,18 @@ local function note_opts(args)
     if label then
         opts.author = label:match("^%s*(.-)%s*$")
         if opts.author == "" or opts.author:find("%c") then
-            return nil, usage(AS_FLAG .. " needs a label with no control characters")
+            return nil,
+                usage("The " .. AS_FLAG .. " flag needs a label with no control characters.")
         end
         if #opts.author > board.AUTHOR_CHARS then
-            return nil, usage(AS_FLAG .. " takes at most " .. board.AUTHOR_CHARS .. " characters")
+            return nil,
+                usage(
+                    "The "
+                        .. AS_FLAG
+                        .. " flag takes at most "
+                        .. board.AUTHOR_CHARS
+                        .. " characters."
+                )
         end
     end
     return words, opts
@@ -1228,7 +1238,7 @@ end
 
 function commands.note(backend, args)
     if args[2] == "--board" and (args[4] == EDIT_FLAG or args[4] == DELETE_FLAG) then
-        return usage("--board takes no " .. EDIT_FLAG .. " or " .. DELETE_FLAG)
+        return usage("The --board flag takes no " .. EDIT_FLAG .. " or " .. DELETE_FLAG .. ".")
     end
     local home, rest, refused = guards.on_board(backend, args)
     if not home then
@@ -1742,7 +1752,13 @@ local function move_card(backend, args, opts)
     if flags and flags[WAIT_FLAG] then
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
         if not wait or wait > MAX_WAIT_SECONDS then
-            return usage(WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS)
+            return usage(
+                "The "
+                    .. WAIT_FLAG
+                    .. " flag needs a whole number of seconds up to "
+                    .. MAX_WAIT_SECONDS
+                    .. "."
+            )
         end
     end
     local nap = opts and opts.nap or dev_os.nap
@@ -1883,7 +1899,7 @@ function commands.discard(backend, args)
     end
     local reason = flags["--reason"]
     if reason and reason:find("^%s*$") then
-        return usage("--reason needs text")
+        return usage("The --reason flag needs text.")
     end
     local card, err = find_card(backend, words[1])
     if not card then
@@ -1993,7 +2009,7 @@ function commands.label(backend, args)
         pos = pos + 1
         if arg == "--remove" then
             if pos > #args then
-                return usage("--remove needs a value")
+                return usage("The --remove flag needs a value.")
             end
             local ok, err = plain(args[pos])
             if not ok then
@@ -2107,17 +2123,17 @@ function commands.ask(backend, args)
     while i <= #args do
         local flag, value = args[i], args[i + 1]
         if not value then
-            return usage(flag .. " needs a value")
+            return usage("The " .. flag .. " flag needs a value.")
         end
         if flag == "--choice" then
             local column, label = value:match("^%s*([^=]-)%s*=%s*(.-)%s*$")
             if not column or column == "" or label == "" then
-                return usage("--choice takes COLUMN=LABEL, not " .. value)
+                return usage("The --choice flag takes COLUMN=LABEL, not " .. value .. ".")
             end
             question.choices[#question.choices + 1] = { column = column, label = label }
         elseif fields[flag] == "recommended" then
             if not value:match("^%d+$") then
-                return usage("--recommend takes a choice number, not " .. value)
+                return usage("The --recommend flag takes a choice number, not " .. value .. ".")
             end
             question.recommended = tonumber(value)
         elseif fields[flag] then
@@ -2198,11 +2214,11 @@ function commands.answer(backend, args)
         return usage("Needs a card, --choice N and --quote TEXT.")
     end
     if not choice:match("^%d+$") or tonumber(choice) < 1 then
-        return usage("--choice counts from 1, not " .. choice)
+        return usage("The --choice flag counts from 1, not " .. choice .. ".")
     end
     local quote = table.concat(args, " ", quote_at + 1)
     if not quote:find("%S") then
-        return usage("--quote needs the owner's words")
+        return usage("The --quote flag needs the owner's words.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -2314,7 +2330,7 @@ local function split_ticker(args)
         if args[i] == AS_FLAG and args[i - 1] ~= REASON_FLAG then
             local name = args[i + 1]
             if not name then
-                return nil, nil, usage(AS_FLAG .. " needs a name")
+                return nil, nil, usage("The " .. AS_FLAG .. " flag needs a name.")
             end
             local rest = {}
             for at, word in ipairs(args) do
@@ -2485,7 +2501,7 @@ function commands.outcome(backend, args)
     local text, word, reason
     if args[2] == CONVERT_FLAG then
         if #args ~= 2 then
-            return usage(CONVERT_FLAG .. " takes only the card")
+            return usage("The " .. CONVERT_FLAG .. " flag takes only the card.")
         end
         local card, err = find_card(backend, args[1])
         if not card then
@@ -2510,7 +2526,7 @@ function commands.outcome(backend, args)
         mode, text = OutcomeMode.ADD, table.concat(args, " ", 2)
     elseif mode == OutcomeMode.RENAME then
         if #args < 4 then
-            return usage("--rename needs an outcome number and the new text")
+            return usage("The --rename flag needs an outcome number and the new text.")
         end
         local at
         for i = 5, #args do
@@ -2520,20 +2536,26 @@ function commands.outcome(backend, args)
             end
         end
         if not at then
-            return usage("--rename needs " .. REASON_FLAG .. " TEXT")
+            return usage("The --rename flag needs " .. REASON_FLAG .. " TEXT.")
         end
         word, text = args[3], table.concat(args, " ", 4, at - 1)
         reason = table.concat(args, " ", at + 1)
         if not reason:find("%S") then
-            return usage(REASON_FLAG .. " needs the reason")
+            return usage("The " .. REASON_FLAG .. " flag needs the reason.")
         end
     elseif mode == OutcomeMode.DELETE then
         if #args < 5 or args[4] ~= REASON_FLAG then
-            return usage(DELETE_FLAG .. " needs an outcome number and " .. REASON_FLAG .. " TEXT")
+            return usage(
+                "The "
+                    .. DELETE_FLAG
+                    .. " flag needs an outcome number and "
+                    .. REASON_FLAG
+                    .. " TEXT."
+            )
         end
         word, text = args[3], table.concat(args, " ", 5)
         if not text:find("%S") then
-            return usage(REASON_FLAG .. " needs the reason")
+            return usage("The " .. REASON_FLAG .. " flag needs the reason.")
         end
         local agent = os.getenv("DEV_AGENT") or ""
         if not guards.is_lead(agent) then
@@ -2546,7 +2568,7 @@ function commands.outcome(backend, args)
         end
     else
         if #args ~= 3 then
-            return usage(args[2] .. " needs one outcome number")
+            return usage("The " .. args[2] .. " flag needs one outcome number.")
         end
         word = args[3]
     end
@@ -3140,7 +3162,13 @@ function commands.land(backend, args)
     if flags[WAIT_FLAG] then
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
         if not wait or wait > MAX_WAIT_SECONDS then
-            return usage(WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS)
+            return usage(
+                "The "
+                    .. WAIT_FLAG
+                    .. " flag needs a whole number of seconds up to "
+                    .. MAX_WAIT_SECONDS
+                    .. "."
+            )
         end
     end
     local name, why = agent_name()
@@ -3383,7 +3411,7 @@ function Ship.rev(args)
     while i <= #args do
         if i < split and args[i] == flag then
             if i + 1 >= split then
-                return nil, usage(flag .. " needs a value")
+                return nil, usage("The " .. flag .. " flag needs a value.")
             end
             rev = args[i + 1]
             i = i + 2
@@ -3599,8 +3627,9 @@ function commands.turn(backend, args)
         seconds = flags[HOLD_FLAG]:match("^%d+$") and tonumber(flags[HOLD_FLAG])
         if not seconds or seconds < 1 or seconds > turn.MAX_HOLD_SECONDS then
             return usage(
-                HOLD_FLAG
-                    .. " needs a whole number of seconds up to "
+                "The "
+                    .. HOLD_FLAG
+                    .. " flag needs a whole number of seconds up to "
                     .. turn.MAX_HOLD_SECONDS
                     .. "."
             )
@@ -3610,7 +3639,11 @@ function commands.turn(backend, args)
         wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
         if not wait or wait > MAX_WAIT_SECONDS then
             return usage(
-                WAIT_FLAG .. " needs a whole number of seconds up to " .. MAX_WAIT_SECONDS .. "."
+                "The "
+                    .. WAIT_FLAG
+                    .. " flag needs a whole number of seconds up to "
+                    .. MAX_WAIT_SECONDS
+                    .. "."
             )
         end
     end
@@ -3746,7 +3779,12 @@ local function parse_allow(args)
         end
     end
     if none and #args > 2 then
-        return nil, usage(board.ALLOW_NONE .. " clears the allow field and takes no other word")
+        return nil,
+            usage(
+                "The word "
+                    .. board.ALLOW_NONE
+                    .. " clears the allow field and takes no other word."
+            )
     end
     return words, none
 end
@@ -4190,10 +4228,10 @@ end
 local function set_limit(backend, value, words)
     local limit = value:match("^%d+$") and tonumber(value)
     if not limit or limit < 1 then
-        return usage("--set needs a whole number of at least 1")
+        return usage("The --set flag needs a whole number of at least 1.")
     end
     if #words > 0 then
-        return usage("--set changes only this project's board")
+        return usage("The --set flag changes only this project's board.")
     end
     local roles = backend.roles
     local columns = { roles.progress, roles.review, roles.verify }
@@ -4318,7 +4356,15 @@ local function whole_limit(flag, value, opts)
     local limit = value:find("^%d+$") and tonumber(value)
     if not limit or limit < 1 then
         return nil,
-            usage(flag .. " needs a whole number of " .. opts.unit .. ", 1 or more: " .. value)
+            usage(
+                "The "
+                    .. flag
+                    .. " flag needs a whole number of "
+                    .. opts.unit
+                    .. ", 1 or more: "
+                    .. value
+                    .. "."
+            )
     end
     return limit
 end
@@ -5060,7 +5106,7 @@ local function start_run(backend, name, orders)
         words = words + 1
     end
     if #quoted == 0 then
-        return usage(RUN_ORDERS_FLAG .. " needs the orders")
+        return usage("The " .. RUN_ORDERS_FLAG .. " flag needs the orders.")
     end
     if words > RUN_ORDERS_WORDS then
         return usage(
@@ -5171,14 +5217,16 @@ function commands.run(backend, args)
         return words
     end
     if flags[RUN_ORDERS_FLAG] and #flags[RUN_ORDERS_FLAG] > 1 then
-        return usage(RUN_ORDERS_FLAG .. " takes one value, so give the orders once")
+        return usage("The " .. RUN_ORDERS_FLAG .. " flag takes one value, so give the orders once.")
     end
     flags[RUN_ORDERS_FLAG] = flags[RUN_ORDERS_FLAG] and flags[RUN_ORDERS_FLAG][1]
     if #words > 0 then
         return usage("Unknown argument " .. words[1] .. ".")
     end
     if ending and flags[RUN_ORDERS_FLAG] then
-        return usage(RUN_END_FLAG .. " and " .. RUN_ORDERS_FLAG .. " do not go together")
+        return usage(
+            "The " .. RUN_END_FLAG .. " and " .. RUN_ORDERS_FLAG .. " flags do not go together."
+        )
     end
     local name, why = agent_name()
     if why then

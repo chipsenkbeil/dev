@@ -3406,7 +3406,10 @@ testing.test("outcome --rename without --reason is refused and changes nothing",
     local backend = fake({ card })
     local result = cmd_board.run("outcome", { "cccccccc", "--rename", "1", "New" }, backend)
     testing.eq(result.code, 2)
-    testing.ok(result.message:find("--rename needs --reason TEXT", 1, true), result.message)
+    testing.ok(
+        result.message:find("The --rename flag needs --reason TEXT.", 1, true),
+        result.message
+    )
     testing.eq(
         cmd_board.run("outcome", { "cccccccc", "--rename", "1", "New", "--reason" }, backend).code,
         2
@@ -8406,7 +8409,11 @@ testing.test(
             testing.eq(code, 2, out)
             if not name:find(" ", 1, true) then
                 testing.ok(
-                    out:find("an agent name is <repo>/<role>[/<card>], got " .. name, 1, true),
+                    out:find(
+                        "An agent name is <repo>/<role>[/<card>], got " .. name .. ".",
+                        1,
+                        true
+                    ),
                     out
                 )
             end
