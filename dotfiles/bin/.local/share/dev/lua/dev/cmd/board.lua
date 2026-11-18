@@ -1389,6 +1389,52 @@ local function checks_refusal(backend, card, children)
     )
 end
 
+---Read the checks rows the project requires of every card.
+---@param backend dev.board.Backend the board
+---@return string[]? rows the required rows, nil when the project lists none
+---@return dev.cmd.board.Result? err the failure when the setting is not a list of commands
+local function required_rows(backend)
+    if not backend.root then
+        return nil
+    end
+    local rows = config.get(backend.root, "board.lint.required")
+    if rows == nil then
+        return nil
+    end
+    local bad = failure("The `required` setting of `[board.lint]` must be a list of commands.")
+    if type(rows) ~= "table" or (#rows == 0 and next(rows) ~= nil) then
+        return nil, bad
+    end
+    for _, row in ipairs(rows) do
+        if type(row) ~= "string" or not row:find("%S") then
+            return nil, bad
+        end
+    end
+    return rows
+end
+
+---Refuse a card whose checks lack a row the project requires.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@return dev.cmd.board.Result? refused the failure, nil when the card holds every required row
+local function required_refusal(backend, card)
+    local required, err = required_rows(backend)
+    if err then
+        return err
+    end
+    local missing = board.missing_rows(card.checks, required or {})
+    if #missing == 0 then
+        return nil
+    end
+    return failure(
+        "Card "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. " lacks the required row "
+            .. table.concat(missing, ", ")
+            .. " and cannot enter Ready. Add it with `dev board checks CARD CMD...`."
+    )
+end
+
 ---Refuse a card that fails the Ready requirements past its size.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
@@ -1414,6 +1460,12 @@ local function ready_refusal(backend, card, shape)
     local unchecked = checks_refusal(backend, card, children)
     if unchecked then
         return unchecked
+    end
+    if children == 0 and not epic then
+        local unrequired = required_refusal(backend, card)
+        if unrequired then
+            return unrequired
+        end
     end
     if children == 0 and not epic and not card.outcomes_unreadable then
         local unnamed = board.unnamed_checks(card.outcomes, card.checks)
@@ -4725,6 +4777,10 @@ function commands.lint(backend, args)
         return usage("Takes at most one card.")
     end
     local strict = flags[STRICT_FLAG] == true
+    local required, bad = required_rows(backend)
+    if bad then
+        return bad
+    end
     local cards, message = backend:cards()
     if not cards then
         return failure(message)
@@ -4763,8 +4819,10 @@ function commands.lint(backend, args)
                 return { done = counts.done, total = counts.total, epic = family.epic }
             end,
         }
-        local rules, why, owned =
-            lint.card(card, { roles = backend.roles, facts = facts, strict = strict })
+        local rules, why, owned = lint.card(
+            card,
+            { roles = backend.roles, facts = facts, strict = strict, required = required }
+        )
         if not rules then
             return failure(why)
         end

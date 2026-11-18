@@ -1384,6 +1384,20 @@ A project makes `--strict` its default with a `[board.lint]` table in
 strict = true
 ```
 
+The same table can list the checks rows every card must hold. The required setting
+is a list of commands, and a card row satisfies one when it equals it or
+starts with it and a space, so `dev --remote test -- tests/lua/x_test.lua`
+counts as `dev --remote test`. `dev board lint` reports an open card in Ready,
+In Progress or Review that lacks a listed row, and `dev board move CARD ready`
+refuses it. An epic and a card with children are skipped. A `required` that is
+not a list of commands makes both exit 1 and name the setting. A project with
+no list keeps the rules above:
+
+```toml
+[board.lint]
+required = ["dev --remote lint", "dev --remote test"]
+```
+
 ## Local boards
 
 `backend = "local"` keeps the board in one JSON file, so a project needs no Pomb
@@ -2320,6 +2334,10 @@ size, the v4 sections and the outcomes. It adds these:
 - Outside Icebox and Done: `over 400 words (N)`.
 - In Ready, In Progress and In Review, for a card with no children:
   `no checks row`.
+- In Ready, In Progress and In Review, for a card with a checks row, no
+  children and no epic kind, when `board.lint.required` lists rows:
+  `checks lack the required row: ROW`, once per listed row that
+  `dev.board.missing_rows` finds no checks row satisfying.
 - In Ready and In Progress, for a card with a checks row that is not an epic:
   `outcome names no deciding check: NAME`, once per outcome that ends with
   neither `(check: ROW)` naming part of a checks row nor `(reviewer
@@ -3533,6 +3551,11 @@ A move into Ready:
   ``The board has no checks field. Run `dev board init` to add it.`` (exit 1,
   on both backends, which `checks_field` tells apart).
 - A local board always has the checks field.
+- A card with no children that lacks a row listed in `board.lint.required` is
+  refused after the checks row, with
+  ``Card <id prefix> lacks the required row ROW and cannot enter Ready. Add it
+  with `dev board checks CARD CMD...`.`` (exit 1, on both backends). A
+  `required` that is not a list of commands is exit 1 too.
 - An outcome that ends with neither `(check: ROW)` naming part of a checks row
   nor `(reviewer judgement)` is refused after the checks row, and the refusal
   names each such outcome (exit 1). An epic is not asked.

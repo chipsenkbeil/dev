@@ -220,6 +220,53 @@ testing.test("lint asks a card without children for a checks row and an epic for
     )
 end)
 
+local REQUIRED_CONFIG = '[board.lint]\nrequired = ["dev --remote lint", "dev --remote test"]\n'
+
+local function required_board(cards, config)
+    local fake = backend(cards, { children = { [cards[3].id] = 2 } })
+    fake.root = support.sandbox({ [".dev/config.toml"] = config }, {})
+    return fake
+end
+
+local function required_cards()
+    return {
+        card(1, NAME.READY, { outcomes = outcomes(3), checks = { "dev --remote lint" } }),
+        card(2, NAME.PROGRESS, {
+            outcomes = outcomes(3),
+            checks = { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" },
+        }),
+        card(3, NAME.REVIEW, { outcomes = outcomes(3), checks = { "dev --remote lint" } }),
+        card(4, NAME.BACKLOG, { outcomes = outcomes(3), checks = { "dev test" } }),
+        card(5, NAME.REVIEW, { outcomes = outcomes(3), checks = { "dev test" } }),
+    }
+end
+
+testing.test("lint reports an open card missing a required row", function()
+    local result = cmd_board.run("lint", {}, required_board(required_cards(), REQUIRED_CONFIG))
+    testing.eq(findings(result.output), {
+        "00000001 Ready checks lack the required row: dev --remote test",
+        "00000005 Review checks lack the required row: dev --remote lint",
+        "00000005 Review checks lack the required row: dev --remote test",
+    })
+    testing.eq(result.code, 1)
+end)
+
+testing.test("lint without a required list keeps today's findings", function()
+    local result = cmd_board.run("lint", {}, required_board(required_cards(), ""))
+    testing.eq(result.output, "No findings.")
+    testing.eq(result.code, nil)
+end)
+
+testing.test("lint refuses a required setting that is not a list of commands", function()
+    local fake = required_board(required_cards(), '[board.lint]\nrequired = "dev test"\n')
+    local result = cmd_board.run("lint", {}, fake)
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "The `required` setting of `[board.lint]` must be a list of commands."
+    )
+end)
+
 testing.test(
     "lint flags an outcome that names no deciding check in Ready and In Progress",
     function()

@@ -1147,6 +1147,28 @@ function M.epic_mark(card)
     return "[epic " .. M.open_children(epic) .. " of " .. epic.total .. " open] "
 end
 
+---List the required rows a card's checks lack.
+---
+---A checks row satisfies a required row when it equals it or starts with it and a space.
+---@param checks string[] the card's checks rows
+---@param required string[] the rows the project requires
+---@return string[] missing the required rows no checks row satisfies
+function M.missing_rows(checks, required)
+    local missing = {}
+    for _, row in ipairs(required) do
+        local held = false
+        for _, check in ipairs(checks) do
+            if check == row or check:sub(1, #row + 1) == row .. " " then
+                held = true
+            end
+        end
+        if not held then
+            missing[#missing + 1] = row
+        end
+    end
+    return missing
+end
+
 ---List the outcomes that name no deciding check.
 ---
 ---An outcome names one by ending with `CHECK_OPEN`, a ROW and a closing parenthesis, where ROW is

@@ -2903,6 +2903,59 @@ testing.test("move to Ready counts a card with no checks row as missing them", f
     testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)
 end)
 
+local REQUIRED_CONFIG = '[board.lint]\nrequired = ["dev --remote lint", "dev --remote test"]\n'
+
+local function ready_with(config, checks)
+    local card = colored("green")
+    card.checks = checks
+    local backend = fake({ card })
+    backend.root = support.sandbox({ [".dev/config.toml"] = config }, {})
+    return cmd_board.run("move", { "cccccccc", support.Column.READY }, backend), backend
+end
+
+testing.test("move to Ready refuses a card missing a required row", function()
+    local result, backend = ready_with(REQUIRED_CONFIG, { "dev --remote lint" })
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find(
+            "lacks the required row dev --remote test and cannot enter Ready.",
+            1,
+            true
+        ),
+        result.message
+    )
+    testing.eq(#backend.calls, 0)
+    result = ready_with(REQUIRED_CONFIG, { "dev --remote lint", "dev --remote test" })
+    testing.eq(result.code, nil)
+    result = ready_with(
+        REQUIRED_CONFIG,
+        { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" }
+    )
+    testing.eq(result.code, nil)
+    result = ready_with(REQUIRED_CONFIG, { "dev --remote lint", "dev --remote tests" })
+    testing.eq(result.code, 1)
+end)
+
+testing.test("a repo with no required list keeps today's behaviour", function()
+    local result = ready_with("[board.lint]\nstrict = true\n", { "dev test" })
+    testing.eq(result.code, nil)
+    result = ready_with("", { "dev test" })
+    testing.eq(result.code, nil)
+end)
+
+testing.test("a required setting that is not a list of commands is refused", function()
+    local result = ready_with('[board.lint]\nrequired = "dev --remote test"\n', { "dev test" })
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "The `required` setting of `[board.lint]` must be a list of commands."
+    )
+    result = ready_with("[board.lint]\nrequired = [1]\n", { "dev test" })
+    testing.eq(result.code, 1)
+    result = ready_with("[board.lint.required]\nlint = true\n", { "dev test" })
+    testing.eq(result.code, 1)
+end)
+
 testing.test("move to Ready refuses an outcome that names no deciding check", function()
     local card = planned()
     card.checks = { "dev --remote test", "dev (x) y" }

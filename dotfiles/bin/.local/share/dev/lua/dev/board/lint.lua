@@ -12,6 +12,7 @@ M.MAX_WORDS = 400
 ---@field roles dev.board.Roles the board's columns
 ---@field facts dev.board.lint.Facts lazy readers of the card's comments, links and children
 ---@field strict boolean? whether a Done card is held to the v3 sections too
+---@field required string[]? the checks rows every open card must hold, none when nil
 
 ---@class dev.board.lint.Facts
 ---@field comments fun(): dev.board.Comment[]?, string? the card's comments, read only when a rule
@@ -175,13 +176,22 @@ function M.card(card, opts)
             and #card.checks > 0
             and not card.outcomes_unreadable
             and card.kind ~= board.Kind.EPIC
-        if lacks_checks or names_checks then
+        local lacks_required = worked
+            and #card.checks > 0
+            and #(opts.required or {}) > 0
+            and card.kind ~= board.Kind.EPIC
+        if lacks_checks or names_checks or lacks_required then
             local found, why = children()
             if not found then
                 return nil, why
             end
             if found.total == 0 and lacks_checks then
                 add("no checks row")
+            end
+            if found.total == 0 and lacks_required then
+                for _, row in ipairs(board.missing_rows(card.checks, opts.required)) do
+                    add("checks lack the required row: " .. row)
+                end
             end
             if found.total == 0 and names_checks then
                 for _, name in ipairs(board.unnamed_checks(card.outcomes, card.checks)) do
