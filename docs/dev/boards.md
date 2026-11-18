@@ -252,6 +252,24 @@ left to revoke for NAME.` and deletes a stale file for NAME.
 When Pomb refuses the revoke, dev prints the reason, exits 1 and keeps the
 file.
 
+### Reviewer tokens: token-reviewer
+
+Pomb refuses a seat to a caller whose credential equals the card's live
+owner's, and it compares tokens, never names. A reviewer on the shared agents
+token would hold the implementer's credential, so each reviewer holds a role
+token of its own.
+
+- The lead mints one per reviewer name with `dev board token mint --role ROLE
+  --as NAME`, for the code reviewer, the style reviewer, the recheck reviewer
+  and the verifier, for example `dotfiles/code-examiner/f5f0e007`.
+- The runner messages the lead with the role and name pairs before it
+  dispatches. It never mints, reads or prints a token.
+- A reviewer runs `dev board review` under `DEV_AGENT=NAME`, and dev reads
+  the token file that the hash of NAME names. The runner passes NAME in the
+  prompt, and no token reaches a prompt, an argument list or a log.
+- A second round reuses NAME. While the earlier token lives, the lead mints
+  again only after `dev board token revoke --as NAME` or its expiry.
+
 ## Which token each tool holds
 
 Pomb groups permissions into four presets, each holding the one before it:
