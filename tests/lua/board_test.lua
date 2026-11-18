@@ -4007,6 +4007,20 @@ testing.test("--as in any position leaves the text and the reason alone", functi
     testing.eq(cmd_board.run("outcome", { "cccccccc", "--tick", "1", "--as" }, backend).code, 2)
 end)
 
+testing.test("a reason that starts with --as stays text", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2, 1)
+    local backend = fake({ card })
+    local result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--rename", "2", "New", "words", "--reason", "--as", "is", "a", "flag" },
+        backend
+    )
+    testing.eq(result.output, "outcome cccccccc 2 reworded")
+    testing.eq(backend.calls[#backend.calls - 1][4], { name = "New words" })
+    testing.ok(backend.calls[#backend.calls][3]:find("Reason: --as is a flag", 1, true))
+end)
+
 testing.test("--as names one word and is text in an added outcome", function()
     local card = colored("green")
     card.outcomes = outcomes(2)

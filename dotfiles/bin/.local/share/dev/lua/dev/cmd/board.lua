@@ -2301,7 +2301,7 @@ local function split_ticker(args)
         return args
     end
     for i = 2, #args do
-        if args[i] == AS_FLAG then
+        if args[i] == AS_FLAG and args[i - 1] ~= REASON_FLAG then
             local name = args[i + 1]
             if not name then
                 return nil, nil, usage(AS_FLAG .. " needs a name")
