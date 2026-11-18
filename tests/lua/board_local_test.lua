@@ -181,10 +181,10 @@ testing.test("show and note refuse a crossboard --board on a local board", funct
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "show", "11111111", "--board", "other" })
     testing.eq(code, 1, out)
-    testing.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+    testing.eq(out, "a local board links only its own cards, so other is not reachable\n")
     out, code = dev(root, home, { "board", "note", "11111111", "--board", "other", "text" })
     testing.eq(code, 1, out)
-    testing.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+    testing.eq(out, "a local board links only its own cards, so other is not reachable\n")
 end)
 
 testing.test("edit --board reaches the dispatcher and a local board refuses it", function()
@@ -196,7 +196,7 @@ testing.test("edit --board reaches the dispatcher and a local board refuses it",
         { "board", "edit", "11111111", "--board", "other", "--file", root .. "/plan.md" }
     )
     testing.eq(code, 1, out)
-    testing.eq(out, "dev: a local board links only its own cards, so other is not reachable\n")
+    testing.eq(out, "a local board links only its own cards, so other is not reachable\n")
 end)
 
 testing.test("boards and columns answer for a local board's own name only", function()
@@ -214,7 +214,7 @@ testing.test("boards and columns answer for a local board's own name only", func
     testing.eq(out, columns)
     out, code = dev(root, home, { "board", "columns", "other" })
     testing.eq(code, 1, out)
-    testing.eq(out, "dev: a local board knows only its own columns, so other is not reachable\n")
+    testing.eq(out, "a local board knows only its own columns, so other is not reachable\n")
     out, code = dev(root, home, { "board", "columns", "mine", "extra" })
     testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "boards", "extra" })
@@ -773,7 +773,7 @@ testing.test("notes, edit and delete work on a local board and refuse another au
     doc.cards[1].comments[1].who = "human"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     out = dev(root, home, { "board", "note", a, "--edit", first, "x" })
-    testing.eq(out, "dev: that comment is not yours to change\n")
+    testing.eq(out, "that comment is not yours to change\n")
 end)
 
 testing.test("note --kind and --as are stored on a local comment and notes prints them", function()
@@ -2157,14 +2157,14 @@ testing.test("sync on a local board says there is nothing to sync", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "sync" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: A local board has nothing to sync.\n")
+    testing.eq(out, "A local board has nothing to sync.\n")
 end)
 
 testing.test("wait on a local board says there is nothing to wait on", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "wait", "--for", Column.READY })
     testing.eq(code, 1)
-    testing.eq(out, "dev: A local board has nothing to wait on.\n")
+    testing.eq(out, "A local board has nothing to wait on.\n")
 end)
 
 testing.test("six processes writing at once lose no card", function()

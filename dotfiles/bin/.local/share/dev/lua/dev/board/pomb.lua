@@ -313,7 +313,8 @@ end
 ---@return string? message why the options are not usable
 function M.new(opts)
     if type(opts.url) ~= "string" or not opts.url:find(URL_PATTERN) then
-        return nil, "[board.pomb] url must be an http or https address in ~/.config/dev/config.toml"
+        return nil,
+            "The `url` setting of `[board.pomb]` must be an http or https address in ~/.config/dev/config.toml."
     end
     opts.url = opts.url:gsub("/+$", "")
     return setmetatable({ __opts = opts }, Backend)

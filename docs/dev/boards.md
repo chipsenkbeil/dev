@@ -78,7 +78,7 @@ directory's name. The `local` backend keeps the board in a file (see Local
 boards below).
 
 `dev board status` prints the backend and the board. Without a `[board]`
-section it prints `dev: This project has no board.` and exits 1, and every other
+section it prints `This project has no board.` and exits 1, and every other
 subcommand says the same and exits 1.
 
 The server and the token live once in the user file
@@ -221,7 +221,7 @@ for itself, and dispatch's own re-mint is a separate matter.
 token first. When the card is an epic and the column is the Done column, dev
 opens the board again with `[board.pomb] lead_token`, as `delete` does, and
 sends the move with it, and never queues it when Pomb is unreachable. Pomb grants `epics.manage` to the `lead` preset alone.
-A `DEV_AGENT` that is not a lead is refused with `dev: Only the lead closes an
+A `DEV_AGENT` that is not a lead is refused with `Only the lead closes an
 epic. DEV_AGENT NAME is not a lead name, whose role segment is lead. Ask the
 lead.` before the move goes out, and an unset `lead_token` exits 1 naming
 `epics.manage`. The move still refuses a child that is open and an outcome
@@ -1478,7 +1478,7 @@ hand-edited into invalid JSON, is never treated as empty and never overwritten.
 `dev board sync` exits 1 and prints:
 
 ```
-dev: <file>:<line>: <reason>. The queue is left in place.
+<file>:<line>: <reason>. The queue is left in place.
 ```
 
 Any other `dev board` command prints that line on standard error, skips the
@@ -1529,7 +1529,7 @@ comments of a card it already reported, and a failed read of the board or a
 comment is retried like an unreachable Pomb, up to ten tries in a row.
 
 Any other `--for` value is a usage error. On a local board `wait` prints
-`dev: A local board has nothing to wait on.` and exits 1, and it is never queued.
+`A local board has nothing to wait on.` and exits 1, and it is never queued.
 
 The command asks Pomb for events after a cursor and holds each request for up to
 50 seconds. On a quiet board it repeats until a matching event arrives.
@@ -3471,7 +3471,7 @@ The claim:
 - For any column but In Progress or Blocked, the move also stops the keep-alive
   loop and forgets the claim. Once the move has succeeded, it releases the
   claim on the backend with its fence.
-- A refused release prints `dev: Moved, but the claim was not released.
+- A refused release prints `Moved, but the claim was not released.
   <reason>` on stderr, and the move still succeeds.
 - A move into In Progress of a card nobody holds, on a machine with no claim on
   it, takes the claim first as `take` does, with `DEV_AGENT` as the name. An
@@ -3738,7 +3738,7 @@ The output:
 - A local board needs no loop and prints `took <id prefix>, fence N, held for
   Mm`.
 - A blank line and the card as `show CARD` prints it follow.
-- When that read fails, `dev: Took card <id prefix>, but its view failed.
+- When that read fails, `Took card <id prefix>, but its view failed.
   <reason>` goes to stderr and the claim stays.
 
 A card another agent owns:
@@ -3861,7 +3861,7 @@ On a Pomb board:
 
 On a local board:
 
-- It prints `dev: A local board has nothing to sync.` (exit 1).
+- It prints `A local board has nothing to sync.` (exit 1).
 
 ### Prose warnings
 
@@ -3895,11 +3895,11 @@ The board comes from the `[board]` section of `<root>/.dev/config.toml`.
   (see the local backend below). Any other backend is exit 1.
 - `name`: defaults to the project directory's name.
 - no `[board]` section: every subcommand prints
-  `dev: This project has no board.` and exits 1, which is how an agent
+  `This project has no board.` and exits 1, which is how an agent
   branches.
 
 Every subcommand, `edit` and `show` alike, prints
-`dev: This project has no board.` from a directory outside the project (the
+`This project has no board.` from a directory outside the project (the
 root is found from the current directory). A refusal from a checkout's root
 or any directory below it means that checkout's `.dev/config.toml` has no
 `[board]` section. A refusal from elsewhere means the shell was not in the
@@ -4015,7 +4015,7 @@ the time left of the window as its timeout, and a match restarts the window.
 An empty reply or an elapsed window ends it with one line per card.
 
 An unknown `--for`, a card argument or another flag is exit 2. A local board
-prints `dev: A local board has nothing to wait on.` (exit 1).
+prints `A local board has nothing to wait on.` (exit 1).
 
 The cursor:
 
@@ -4048,7 +4048,7 @@ Failures:
 - a 429 whose body has the code `too_many_waits` (4 open waits per token, and
   every session shares the token) is never a failure. `Backend:wait` returns a
   fourth value, `true`. `wait` prints
-  `dev: pomb holds too many open waits for this token, waiting for one to end`
+  `Pomb holds too many open waits for this token. Waiting for one to end.`
   on standard error once per call, resets the failure count and retries with a
   pause of 30, 60, 120, 240 and then 300 seconds, each cut by up to a quarter
   with a random fraction. A reply starts the pause over.
@@ -4079,7 +4079,7 @@ Where it lives:
 - default: `<state home>/dev/boards/<name>.json` (`$XDG_STATE_HOME` when
   absolute, else `~/.local/state`) at mode 600 in a mode 700 directory. The
   name is restricted to letters, digits, dots, dashes and underscores (else
-  ``dev: A local board's name must be letters, digits, dots, dashes and
+  ``A local board's name must be letters, digits, dots, dashes and
   underscores to name its file. Otherwise set the `path` setting of
   `[board]`.``, exit 1).
 - tracked: `<root>/<path>` at the default mode when
@@ -4158,12 +4158,12 @@ malformed:
 
 - `queue.count` and `queue.list` answer `<path>:<line>: <reason>` (the line
   from the parse error's offset, or `<path>: entry N is not a queued command`).
-- `dev board sync` prints `dev: <that sentence> The queue is left in place.` and exits
+- `dev board sync` prints `<that sentence> The queue is left in place.` and exits
   1.
 - every other Pomb command (`status` included) prints the same line on
   standard error, replays nothing, runs normally and leaves the file
   untouched, so a bad queue never blocks a read.
-- a write that would have been queued fails with `dev: REASON. The change could
+- a write that would have been queued fails with `REASON. The change could
   not be queued. WHY.` (`push` refuses a malformed file), and nothing
   overwrites the file.
 
@@ -4323,7 +4323,7 @@ Each change prints one line:
 - `created limit group In Progress, Review and Verify at 4`
 
 The last line is `Board X already follows the standard. Nothing changed.`
-or `board X: N changes`. A failure prints `dev: <message>` with exit 1 after the
+or `board X: N changes`. A failure prints `<message>` with exit 1 after the
 lines of the changes already made. A `403` adds
 ``. This token may not change this board, so run `dev board init --admin`.``
 
@@ -4347,7 +4347,7 @@ read like `token`, else exit 1 saying to set it or pass `--admin`.
    `slow_down`).
 4. The poll ends on `access_denied`, `device_code_expired`, `invalid_grant`,
    `quota_exceeded` or an unapproved sign-in after `expires_in_seconds`. Each
-   prints `dev: <reason>` and exits 1.
+   prints `<reason>` and exits 1.
 
 The token comes back once, is held in the process's memory for that run and
 goes to curl only as the `-K -` header line. The `device_code` goes to curl as

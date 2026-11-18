@@ -26,7 +26,7 @@ local EPIC = "epic"
 local COUNT = "count"
 local HOURS = "hours"
 local IN_FLIGHT = string.format(
-    "dev: 3 cards are in flight in %s, %s and %s"
+    "3 cards are in flight in %s, %s and %s"
         .. " (aaaaaaaa, bbbbbbbb, cccccccc), at the limit of 3. Land one first.\n",
     NAME.PROGRESS,
     NAME.REVIEW,
@@ -233,7 +233,7 @@ testing.test("take refuses at a column limit with room in its group", function()
     testing.eq(code, 1, out)
     testing.eq(
         out,
-        "dev: " .. NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
+        NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
     )
     testing.eq(read(box, "calls"):find("/owner", 1, true), nil)
 end)
@@ -248,7 +248,7 @@ testing.test("a count limit still refuses at its limit", function()
     testing.eq(code, 1, out)
     testing.eq(
         out,
-        "dev: " .. NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
+        NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
     )
 end)
 
@@ -357,10 +357,7 @@ testing.test("move refuses a card entering a full column", function()
     })
     local out, code = dev(box, { "board", "move", "dddddddd", Column.REVIEW }, "")
     testing.eq(code, 3, out)
-    testing.eq(
-        out,
-        "dev: " .. NAME.REVIEW .. " holds 1 card (bbbbbbbb), at its limit of 1. Land one first.\n"
-    )
+    testing.eq(out, NAME.REVIEW .. " holds 1 card (bbbbbbbb), at its limit of 1. Land one first.\n")
     testing.eq(read(box, "calls"):find("/move", 1, true), nil)
 end)
 
@@ -381,7 +378,7 @@ testing.test("a 409 wip_limit_reached becomes the refusal and move releases the 
     assert(fs.write(box.root .. "/move_refusal", LIMIT_BODY))
     local out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 3, out)
-    testing.eq(out, "dev: Pomb refused the move: " .. LIMIT_TEXT .. "\n")
+    testing.eq(out, "Pomb refused the move: " .. LIMIT_TEXT .. "\n")
     local calls = read(box, "calls")
     testing.ok(calls:find("/api/tasks/" .. uuid("d") .. "/owner/release", 1, true), calls)
     testing.eq(calls:find("force", 1, true), nil)

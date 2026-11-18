@@ -855,7 +855,7 @@ local function land_held(opts)
         claims.stop(card.id)
         local released, stuck = backend:release(card.id, held and held.fence)
         if not released then
-            verb.note("dev: Landed, but the claim was not released. " .. dev_text.sentence(stuck))
+            verb.note("Landed, but the claim was not released. " .. dev_text.sentence(stuck))
         end
     end
     local together = ""

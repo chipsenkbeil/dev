@@ -31,7 +31,7 @@ local function turn_row(column)
     })
 end
 local LANES_DIE =
-    "dev: The `lanes` setting of `[board]` must be a list of lane names in `.dev/config.toml`."
+    "The `lanes` setting of `[board]` must be a list of lane names in `.dev/config.toml`."
 local STANDARD_ROLES = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 
 local function copy(value)
@@ -912,7 +912,7 @@ testing.test("a denied sign-in ends the run with no board call", function()
     })
     local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
     testing.eq(code, 1)
-    testing.ok(out:find("dev: The sign-in was denied.", 1, true), out)
+    testing.ok(out:find("The sign-in was denied.", 1, true), out)
     testing.eq(read(root, "calls"):find("/api/boards", 1, true), nil)
     testing.eq(fs.list(tmp), {})
 end)

@@ -1119,16 +1119,21 @@ function M.recheck_problem(opts)
         return nil
     end
     if type(rows) ~= "table" then
-        return "[board.land] recheck must be a list of commands."
+        return "The `recheck` setting of `[board.land]` must be a list of commands."
     end
     local argvs = {}
     for i, row in ipairs(rows) do
         if type(row) ~= "string" then
-            return "[board.land] recheck row " .. i .. " is not a string."
+            return "The `recheck` setting of `[board.land]` has a row "
+                .. i
+                .. " that is not a string."
         end
         local argv, why = check.argv(row)
         if not argv then
-            return "[board.land] recheck row " .. i .. " cannot be run. " .. sentence(why)
+            return "The `recheck` setting of `[board.land]` has a row "
+                .. i
+                .. " that cannot be run. "
+                .. sentence(why)
         end
         argvs[i] = argv
     end

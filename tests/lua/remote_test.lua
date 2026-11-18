@@ -311,7 +311,7 @@ testing.test("commands without a job and machine-local verbs run here under the 
     testing.eq(log, "")
     out, code, log = dev(root, base, { "board", "status" })
     testing.eq(log, "")
-    testing.eq(out, "dev: This project has no board.\n")
+    testing.eq(out, "This project has no board.\n")
     testing.eq(code, 1)
 end)
 

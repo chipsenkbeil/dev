@@ -5537,7 +5537,7 @@ testing.test("every subcommand without a [board] section says so and exits 1", f
     local root, home = sandbox({ project = "" })
     for _, args in ipairs({ { "board", "status" }, { "board", "ls" }, { "board", "next" } }) do
         local out, code = dev(root, home, args)
-        testing.eq(out, "dev: This project has no board.\n")
+        testing.eq(out, "This project has no board.\n")
         testing.eq(code, 1)
     end
     testing.eq(read(root, "calls"), "")
@@ -6013,7 +6013,7 @@ testing.test("a missing user url or token reference is a plain error", function(
     local root, home = sandbox({ user = "" })
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("[board.pomb] url", 1, true), out)
+    testing.ok(out:find("`[board.pomb]`", 1, true), out)
     root, home =
         sandbox({ user = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "$(pass x)"\n' })
     out, code = dev(root, home, { "board", "ls" })
@@ -7659,7 +7659,7 @@ testing.test(
         testing.eq(code, 1, out)
         testing.eq(
             out,
-            "dev: pomb kept the link: this token can delete only the links it created, and this one"
+            "pomb kept the link: this token can delete only the links it created, and this one"
                 .. " was made by another token or before Pomb 0.5.40\n"
         )
         testing.ok(
@@ -7738,13 +7738,13 @@ testing.test("a 403 on a comment says it is not yours and exits 1", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "dddddddd", "x" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: that comment is not yours to change\n")
+    testing.eq(out, "that comment is not yours to change\n")
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "dddddddd" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: that comment is not yours to change\n")
+    testing.eq(out, "that comment is not yours to change\n")
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: A comment id needs at least 8 hex characters: eeee.\n")
+    testing.eq(out, "A comment id needs at least 8 hex characters: eeee.\n")
 end)
 
 testing.test("a card_locked 403 on a comment says the card is locked and exits 1", function()
@@ -7829,7 +7829,7 @@ testing.test("edit finds the board from a subdirectory and not from outside the 
             { input = text, cwd = home }
         )
         testing.eq(code, 1, out)
-        testing.eq(out, "dev: This project has no board.\n")
+        testing.eq(out, "This project has no board.\n")
     end
 end)
 
@@ -8278,7 +8278,7 @@ testing.test("take keeps the claim and warns when the card cannot be read after 
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("took 11111111, fence 7", 1, true), out)
-    testing.ok(out:find("dev: Took card 11111111, but ", 1, true), out)
+    testing.ok(out:find("Took card 11111111, but ", 1, true), out)
     testing.eq(fs.exists(state_file(home)), true)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
@@ -9009,7 +9009,7 @@ testing.test("a permission_denied with no board says the token lacks it everywhe
     testing.eq(code, 1)
     testing.eq(
         out,
-        "dev: board unavailable: pomb answered 403: this token lacks the tasks.edit permission "
+        "board unavailable: pomb answered 403: this token lacks the tasks.edit permission "
             .. "on every board; use a token that has it\n"
     )
 end)
@@ -9025,7 +9025,7 @@ testing.test("a permission_denied with a board says the board is not assigned", 
     testing.eq(code, 1)
     testing.eq(
         out,
-        "dev: board unavailable: this token has the tasks.edit permission but is not assigned "
+        "board unavailable: this token has the tasks.edit permission but is not assigned "
             .. "to board board-9; add the board to the token\n"
     )
 end)
@@ -9052,7 +9052,7 @@ testing.test("role-refusal-denied names the refused permission and the role", fu
     testing.eq(code, 1)
     testing.eq(
         out,
-        "dev: board unavailable: pomb answered 403: this token (role implementer) lacks the "
+        "board unavailable: pomb answered 403: this token (role implementer) lacks the "
             .. "tasks.edit permission on every board; use a token that has it\n"
     )
 end)
@@ -9066,10 +9066,7 @@ testing.test("role-refusal-exceeds-grant names the refused action and the role",
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(
-        out,
-        "dev: board unavailable: pomb answered 403: the implementer role cannot tasks.bin\n"
-    )
+    testing.eq(out, "board unavailable: pomb answered 403: the implementer role cannot tasks.bin\n")
 end)
 
 testing.test("role-refusal-norole keeps the refusal text with no role named", function()
@@ -9081,7 +9078,7 @@ testing.test("role-refusal-norole keeps the refusal text with no role named", fu
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "dev: board unavailable: pomb answered 403: too much\n")
+    testing.eq(out, "board unavailable: pomb answered 403: too much\n")
 end)
 
 testing.test("role-refusal-expired says the role token expired and to mint it again", function()
@@ -9093,10 +9090,7 @@ testing.test("role-refusal-expired says the role token expired and to mint it ag
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(
-        out,
-        "dev: board unavailable: the role token expired; mint it again from its issuer\n"
-    )
+    testing.eq(out, "board unavailable: the role token expired; mint it again from its issuer\n")
 end)
 
 testing.test("an insufficient_scope 403 still reports the server's message", function()
@@ -9108,10 +9102,7 @@ testing.test("an insufficient_scope 403 still reports the server's message", fun
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(
-        out,
-        "dev: board unavailable: pomb answered 403: insufficient token scope: needs admin\n"
-    )
+    testing.eq(out, "board unavailable: pomb answered 403: insufficient token scope: needs admin\n")
 end)
 
 testing.test("a board missing from a token's assigned boards gets its own message", function()
@@ -9126,7 +9117,7 @@ testing.test("a board missing from a token's assigned boards gets its own messag
     testing.eq(code, 1)
     testing.eq(
         out,
-        "dev: board unavailable: pomb lists no board named dotfiles for this token, which is "
+        "board unavailable: pomb lists no board named dotfiles for this token, which is "
             .. "assigned only to Other; if the board exists, add it to the token\n"
     )
 end)
@@ -9139,7 +9130,7 @@ testing.test("a missing board stays plain on a token that sees every board", fun
 ]])
         local out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 1)
-        testing.eq(out, "dev: board unavailable: pomb has no board named dotfiles\n")
+        testing.eq(out, "board unavailable: pomb has no board named dotfiles\n")
     end
 end)
 
