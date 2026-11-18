@@ -704,3 +704,31 @@ testing.test("lint passes a Done card whose builder and reviewers differ", funct
     testing.eq(code, 0, out)
     testing.eq(out, "No findings.\n")
 end)
+
+testing.test("lint leaves the landing turn card with no findings", function()
+    local cards = {
+        card(1, NAME.DONE, {
+            name = board.TURN_NAME,
+            color = false,
+            description = false,
+            claimant = false,
+            outcomes = {},
+        }),
+    }
+    local result = cmd_board.run("lint", {}, backend(cards))
+    testing.eq(result.output, "No findings.")
+    testing.eq(result.code, nil)
+end)
+
+testing.test("lint skips the size of a discarded Done card and keeps it for another", function()
+    local discarded = {
+        card(1, NAME.DONE, { labels = { board.DISCARDED }, color = false, outcomes = {} }),
+    }
+    local result = cmd_board.run("lint", {}, backend(discarded))
+    testing.eq(result.output, "No findings.")
+    testing.eq(result.code, nil)
+    local kept = { card(2, NAME.DONE, { color = false }) }
+    result = cmd_board.run("lint", {}, backend(kept))
+    testing.eq(result.code, 1)
+    testing.eq(findings(result.output), { "00000002 Done lacks a size" })
+end)

@@ -120,6 +120,9 @@ end
 ---@return string? message why a read failed
 ---@return table<integer, true>? owned the indexes of the rules only the owner can fix
 function M.card(card, opts)
+    if board.is_turn_card(card) then
+        return {}, nil, {}
+    end
     local roles, facts = opts.roles, opts.facts
     local rules = {}
     local owned = {}
@@ -163,7 +166,9 @@ function M.card(card, opts)
             sections = sectioned,
         })
         for _, item in ipairs(missing) do
-            add("lacks " .. item, item == "a size")
+            if item ~= "a size" or not (discarded and card.done) then
+                add("lacks " .. item, item == "a size")
+            end
         end
         if card.outcomes_unreadable then
             add("outcomes unreadable")
