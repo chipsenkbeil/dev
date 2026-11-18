@@ -1623,9 +1623,13 @@ local function move_once(backend, args, opts)
         started = true
         held = { fence = fence }
     end
+    local own_claim = held ~= nil
     if held and not started then
         wiring.renew_claim(backend, card, (agent_name()))
         held = claims.read(card.id) or held
+    elseif card.claimant then
+        local name, bad = agent_name()
+        own_claim = not bad and runner.claimant(name) == card.claimant
     end
     local ok, message, at_limit = backend:move(card.id, column, {
         fence = held and held.fence,
@@ -1642,9 +1646,9 @@ local function move_once(backend, args, opts)
         end
         return to_done and unqueued(failure(message)) or failure(message)
     end
-    if held and column ~= roles.progress and column ~= roles.blocked then
+    if own_claim and column ~= roles.progress and column ~= roles.blocked then
         claims.stop(card.id)
-        local released, why = backend:release(card.id, held.fence)
+        local released, why = backend:release(card.id, held and held.fence)
         if not released then
             verb.note("dev: Moved, but the claim was not released. " .. sentence(why))
         end

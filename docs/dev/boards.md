@@ -1631,8 +1631,9 @@ renewal that fails prints a note and the command goes on. It leaves the old
 claim and loop as they were and never releases the claim.
 
 A `move` out of In Progress to any column but Blocked also releases the claim
-once the move has succeeded. A refused release prints a warning and leaves the
-move done.
+once the move has succeeded. The claimant gets that release from a machine that
+holds no claim state too, and a caller with another name leaves the claim as it
+was. A refused release prints a warning and leaves the move done.
 
 A `move` to Blocked keeps the owner and the keep-alive loop. `ask` ends them
 once Pomb has parked the card, and so does a move out of Blocked from the

@@ -1826,6 +1826,42 @@ testing.test("a move by another name after the lease lapsed is refused", functio
     testing.ok(out:find("It must pass In Progress under a claim first.", 1, true), out)
 end)
 
+local function without_claim_state(home)
+    local dir = home .. "/state/dev/board"
+    for _, name in ipairs(fs.list(dir) or {}) do
+        assert(fs.remove(dir .. "/" .. name))
+    end
+end
+
+testing.test(
+    "a move by the claimant with no claim state on this machine releases the claim",
+    function()
+        local root, home = local_board()
+        local a = lapsed_in_progress(root, home)
+        local doc = document(file_of(home))
+        doc.cards[1].claim.expires_at = "2999-01-01T00:00:00Z"
+        assert(fs.write(file_of(home), assert(json.encode(doc))))
+        without_claim_state(home)
+        local out, code = dev(root, home, { "board", "move", a, Column.REVIEW })
+        testing.eq(code, 0, out)
+        testing.eq(out, "moved " .. a .. " to Review\n")
+        testing.eq(document(file_of(home)).cards[1].claim, nil)
+    end
+)
+
+testing.test("a move by another name with no claim state leaves the claim held", function()
+    local root, home = local_board()
+    local a = lapsed_in_progress(root, home)
+    local doc = document(file_of(home))
+    doc.cards[1].claim.expires_at = "2999-01-01T00:00:00Z"
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    without_claim_state(home)
+    dev(root, home, { "board", "move", a, Column.REVIEW }, {
+        CLAUDE_SESSION_ID = "other",
+    })
+    testing.ok(document(file_of(home)).cards[1].claim ~= nil, "claim kept")
+end)
+
 testing.test("a move while another claimant holds the card is refused", function()
     local root, home = local_board()
     local a = lapsed_in_progress(root, home)
