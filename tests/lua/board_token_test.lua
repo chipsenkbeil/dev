@@ -39,6 +39,9 @@ case "$last" in
     ;;
 */auth/tokens/children)
     body=$(cat "$ROOT/children.json")
+    case "$*" in
+    *"-X GET"*) [ -f "$ROOT/list.json" ] && body=$(cat "$ROOT/list.json") ;;
+    esac
     status=$(cat "$ROOT/children_status" 2>/dev/null || echo 200)
     ;;
 *) body='{}' ;;
@@ -201,6 +204,21 @@ testing.test("token-mint-file writes a 0600 file in a 0700 dir named by a hash o
     testing.eq(#files, 1)
     testing.eq(mode_of(dir), tonumber("700", 8))
     testing.eq(mode_of(dir .. "/" .. files[1]), tonumber("600", 8))
+end)
+
+testing.test("token-mint-write-failure revokes the token it just issued", function()
+    local root, home = sandbox()
+    assert(fs.mkdir(home .. "/state", { parents = true }))
+    assert(fs.write(home .. "/state/dev", "not a directory"))
+    assert(fs.write(root .. "/list.json", '[{"id":"tok-child-9","name":"' .. NAME .. '"}]'))
+    local out, code = mint(root, home)
+    testing.ok(code == 1, out)
+    testing.ok(out:find("annot keep the token", 1, true), out)
+    testing.ok(out:find("It was revoked.", 1, true), out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find("-X DELETE", 1, true), calls)
+    testing.ok(calls:find("/api/v1/auth/tokens/children/tok-child-9\n", 1, true), calls)
+    testing.eq(read(root, "stdin"):find(RAW, 1, true), nil)
 end)
 
 testing.test("token-mint-sweep deletes expired token files and keeps live ones", function()

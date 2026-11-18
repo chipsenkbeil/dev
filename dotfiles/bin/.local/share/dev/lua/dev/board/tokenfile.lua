@@ -72,7 +72,7 @@ function M.write(name, token, expires)
     end
     local dir = M.dir()
     if
-        dev_os.run({ "sh", "-c", 'umask 077 && mkdir -p -- "$1" && chmod 700 -- "$1"', "sh", dir })
+        dev_os.run({ "sh", "-c", 'umask 077 && mkdir -p -- "$1" && chmod 700 "$1"', "sh", dir })
         ~= 0
     then
         return nil, "cannot make " .. dir

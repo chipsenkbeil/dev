@@ -275,7 +275,7 @@ local function download_and_install(row, pin, dest, opts)
     end
     local work = { download = fs.join(dir, "download"), extract = fs.join(dir, "extract") }
     local code = steps({ row = row, pin = pin, dest = dest, work = work }, opts)
-    dev_os.run({ "chmod", "-R", "u+rwX", "--", dir }, { stdout = "null", stderr = "null" })
+    dev_os.run({ "chmod", "-R", "u+rwX", dir }, { stdout = "null", stderr = "null" })
     fs.remove(dir, { recursive = true })
     return code
 end
