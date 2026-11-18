@@ -5925,22 +5925,25 @@ testing.test("a token read fresh from pass that Pomb refuses is not retried", fu
     testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
+local function keepalive(root, ticks, tick_time)
+    return "bash "
+        .. SHARE
+        .. "keepalive.sh "
+        .. root
+        .. "/state card 7 "
+        .. ticks
+        .. " https://pomb.example Agents/x "
+        .. tick_time
+        .. " dotfiles/x 900"
+end
+
 testing.test("the keep-alive loop drops a refused cached token", function()
     local root = sandbox()
     with_security(root)
     assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
     assert(fs.write(root .. "/state", "fence=7\n"))
     executable(root .. "/bin/curl", "#!/bin/sh\ncat >/dev/null\nprintf 401\n")
-    shell(
-        root,
-        root .. "/pass.lock",
-        "bash "
-            .. SHARE
-            .. "keepalive.sh "
-            .. root
-            .. "/state card 7 3 https://pomb.example Agents/x 0 dotfiles/x 900",
-        "600"
-    )
+    shell(root, root .. "/pass.lock", keepalive(root, 3, 0), "600")
     testing.ok(
         read(root, "seccalls"):find("delete-generic-password", 1, true),
         read(root, "seccalls")
@@ -5953,16 +5956,7 @@ testing.test("the keep-alive loop reads the token under the same lock", function
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
     assert(fs.write(root .. "/state", "fence=7\n"))
-    local out = shell(
-        root,
-        lock,
-        "bash "
-            .. SHARE
-            .. "keepalive.sh "
-            .. root
-            .. "/state card 7 1 https://pomb.example Agents/x 0 dotfiles/x 900",
-        "600"
-    )
+    local out = shell(root, lock, keepalive(root, 1, 0), "600")
     testing.ok(read(root, "events"):find("held=1", 1, true), out .. read(root, "events"))
 end)
 
@@ -5975,16 +5969,7 @@ testing.test("the keep-alive loop ends after its ticks and removes its state", f
         root .. "/bin/curl",
         "#!/bin/sh\ncat >/dev/null\nprintf 'renew\\n' >>\"$ROOT/calls\"\nprintf 200\n"
     )
-    shell(
-        root,
-        lock,
-        "bash "
-            .. SHARE
-            .. "keepalive.sh "
-            .. root
-            .. "/state card 7 3 https://pomb.example Agents/x 0 dotfiles/x 900",
-        "600"
-    )
+    shell(root, lock, keepalive(root, 3, 0), "600")
     testing.eq(fs.exists(root .. "/state"), false)
     testing.eq(occurrences(read(root, "calls"), "renew"), 3)
 end)
@@ -10625,13 +10610,7 @@ testing.test(
         shell(
             root,
             root .. "/pass.lock",
-            "DEV_BOARD_TOKEN="
-                .. ISSUED
-                .. " bash "
-                .. SHARE
-                .. "keepalive.sh "
-                .. root
-                .. "/state card 7 1 https://pomb.example Agents/x 0 dotfiles/x 900",
+            "DEV_BOARD_TOKEN=" .. ISSUED .. " " .. keepalive(root, 1, 0),
             "600"
         )
         testing.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
