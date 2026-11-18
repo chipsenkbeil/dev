@@ -2373,6 +2373,43 @@ if dev_os.which("jj") then
         testing.eq(real_jj(root, "workspace", "list"):find("feat:", 1, true), nil)
     end)
 
+    local function sibling_workspace()
+        local env, base = adopt_env()
+        local main = base .. "/elsewhere/main"
+        assert(fs.mkdir(main, { parents = true }))
+        local init = { stdout = "null", stderr = "null", env = IDENT }
+        assert(dev_os.run({ "jj", "git", "init", main }, init) == 0, "jj git init failed")
+        assert(fs.write(main .. "/base", "1"))
+        local _, code = real_jj(main, "commit", "-m", "base")
+        testing.eq(code, 0)
+        assert(fs.mkdir(base .. "/mine", { parents = true }))
+        local sibling = base .. "/mine/lead"
+        _, code = real_jj(main, "workspace", "add", "--name", "lead", "-r", "@-", sibling)
+        testing.eq(code, 0)
+        return main, sibling, env, base
+    end
+
+    testing.test("rm by name from a sibling workspace finds another repo folder", function()
+        local main, sibling, env, base = sibling_workspace()
+        local path = base .. "/elsewhere/feat"
+        local _, code = real_jj(main, "workspace", "add", "--name", "feat", "-r", "@-", path)
+        testing.eq(code, 0)
+
+        local out, rm_code = support.dev(sibling, { "ws", "rm", "feat" }, env)
+
+        testing.eq(rm_code, 0, out)
+        testing.eq(fs.exists(path), false)
+    end)
+
+    testing.test("rm by name from a sibling workspace refuses a name jj does not list", function()
+        local _, sibling, env, base = sibling_workspace()
+
+        local out, rm_code = support.dev(sibling, { "ws", "rm", "nope" }, env)
+
+        testing.eq(rm_code, 1, out)
+        testing.eq(out, base .. "/mine/nope is not a workspace folder.\n")
+    end)
+
     testing.test("rm forgets a jj workspace while the main checkout is stale", function()
         local root, path, env = foreign_workspace()
         local before =
