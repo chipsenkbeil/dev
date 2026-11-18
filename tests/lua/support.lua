@@ -281,6 +281,29 @@ M.COLUMN_NAME = {
     VERIFY = "Verify",
 }
 
+---Walk a card to Review through In Progress and the status note.
+---
+---Stops at the first step that exits non-zero.
+---@param run fun(args: string[]): string, integer? one-command runner returning output and code
+---@param id string the card id
+---@return string output the output of the last step run
+---@return integer? code the exit code of the last step run
+function M.to_review(run, id)
+    local steps = {
+        { "board", "move", id, M.Column.PROGRESS },
+        { "board", "note", id, "built, tried, learned" },
+        { "board", "move", id, M.Column.REVIEW },
+    }
+    local out, code
+    for _, args in ipairs(steps) do
+        out, code = run(args)
+        if code ~= 0 then
+            break
+        end
+    end
+    return out, code
+end
+
 ---The id Pomb gives a column in the fixtures, from a column constant or display name.
 ---@param column string the column constant or display name
 ---@return string id the column id

@@ -469,9 +469,9 @@ local function to_review(project, id, extra)
     for name, value in pairs(extra or {}) do
         env[name] = value
     end
-    must(dev(project, { "board", "move", id, support.Column.PROGRESS }, env))
-    must(dev(project, { "board", "note", id, "built, tried, learned" }, env))
-    must(dev(project, { "board", "move", id, support.Column.REVIEW }, env))
+    must(support.to_review(function(args)
+        return dev(project, args, env)
+    end, id))
 end
 
 local function to_verify(project, id, extra)
@@ -3315,9 +3315,9 @@ end
 local function git_approve(project)
     local id = project.id
     local builder = { DEV_AGENT = "dotfiles/builder" }
-    must(git_dev(project, { "board", "move", id, support.Column.PROGRESS }, builder))
-    must(git_dev(project, { "board", "note", id, "built, tried, learned" }, builder))
-    must(git_dev(project, { "board", "move", id, support.Column.REVIEW }, builder))
+    must(support.to_review(function(args)
+        return git_dev(project, args, builder)
+    end, id))
     must(git_dev(project, { "board", "move", id, support.Column.VERIFY }))
     for _, kind in ipairs({ "code", "style" }) do
         must(git_dev(project, {
