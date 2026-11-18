@@ -611,13 +611,19 @@ testing.test("add defaults to Backlog and joins the words of the name", function
         "--column",
         support.Column.READY,
         "--description",
-        V1,
+        V2,
+        "--done-when",
+        "a " .. board.JUDGEMENT,
+        "--done-when",
+        "b " .. board.JUDGEMENT,
+        "--done-when",
+        "c " .. board.JUDGEMENT,
         "--size",
         "2",
         "--checks",
         "dev test",
     }, backend)
-    testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.READY, V1, "green" })
+    testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.READY, V2, "green" })
     testing.eq(cmd_board.run("add", {}, backend).code, 2)
 end)
 
@@ -2334,7 +2340,13 @@ testing.test(
             "--size",
             "3",
             "--description",
-            V1,
+            V2,
+            "--done-when",
+            "a " .. board.JUDGEMENT,
+            "--done-when",
+            "b " .. board.JUDGEMENT,
+            "--done-when",
+            "c " .. board.JUDGEMENT,
             "--checks",
             "dev test",
         }
@@ -2349,7 +2361,12 @@ local function colored(color)
         column = support.COLUMN_NAME.BACKLOG,
         size = "x",
         labels = {},
-        description = V1,
+        description = V2,
+        outcomes = {
+            { id = "s1", name = "a " .. board.JUDGEMENT, done = false },
+            { id = "s2", name = "b " .. board.JUDGEMENT, done = false },
+            { id = "s3", name = "c " .. board.JUDGEMENT, done = false },
+        },
         checks = { "dev test" },
     }
     card.color = color
@@ -2386,8 +2403,12 @@ testing.test(
         testing.eq(result.code, 2)
         testing.ok(result.message:find(board.TEXT_UNDER .. "Change", 1, true), result.message)
         testing.eq(#backend.calls, 0)
-        cmd_board.run("add", { "X", "--description", V1, "--size", "1" }, backend)
-        testing.eq(backend.calls[1][4], V1)
+        cmd_board.run(
+            "add",
+            { "X", "--description", V2, "--size", "1", "--done-when", "a" },
+            backend
+        )
+        testing.eq(backend.calls[1][4], V2)
         cmd_board.run(
             "add",
             { "X", "--column", support.Column.ICEBOX, "--description", "loose" },
@@ -2635,7 +2656,8 @@ testing.test("missing and backlog_missing count a heading with text, not an empt
     })
     testing.eq(board.backlog_missing("## Problem\nx"), { "## Change", "## Out of scope" })
     testing.eq(board.backlog_missing(nil), { "## Problem", "## Change", "## Out of scope" })
-    testing.eq(board.missing(V1, 0, 0), {})
+    testing.eq(board.missing(V2, 3, 0), {})
+    testing.eq(board.missing(V1, 0, 0), { "3 to 7 Done when outcomes" })
     testing.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3, 0), {
         board.TEXT_UNDER .. "Change",
     })
@@ -2852,7 +2874,11 @@ testing.test(
     "add to Ready without a checks row names the missing row, or the missing field",
     function()
         local backend = fake(sample())
-        local args = { "X", "--column", support.Column.READY, "--size", "1", "--description", V1 }
+        local args = { "X", "--column", support.Column.READY, "--size", "1", "--description", V2 }
+        for _, name in ipairs({ "a", "b", "c" }) do
+            args[#args + 1] = "--done-when"
+            args[#args + 1] = name .. " " .. board.JUDGEMENT
+        end
         local result = cmd_board.run("add", args, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("checks row", 1, true), result.message)
@@ -3045,6 +3071,7 @@ testing.test("move to Ready refuses a card missing a heading or a Done when item
     for _, case in ipairs(cases) do
         local card = colored("green")
         card.description = case[1]
+        card.outcomes = {}
         local backend = fake({ card })
         local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
         testing.eq(result.code, 1)
@@ -3053,10 +3080,12 @@ testing.test("move to Ready refuses a card missing a heading or a Done when item
     end
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
-    testing.eq(
-        cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card })).code,
-        nil
-    )
+    card.outcomes = {}
+    local backend = fake({ card })
+    local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
 end)
 
 local function outcomes(count, ticked, marker)
@@ -3071,37 +3100,28 @@ local function outcomes(count, ticked, marker)
     return list
 end
 
-testing.test(
-    "move to Ready counts 3 to 7 outcomes, and a v1 checklist when there are none",
-    function()
-        for _, count in ipairs({ 3, 5, 7 }) do
-            local card = colored("green")
-            card.description = V2
-            card.outcomes = outcomes(count, 0, " " .. board.JUDGEMENT)
-            testing.eq(
-                cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card })).code,
-                nil
-            )
-        end
-        for _, count in ipairs({ 0, 2, 8 }) do
-            local card = colored("green")
-            card.description = V2
-            card.outcomes = outcomes(count)
-            local backend = fake({ card })
-            local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
-            testing.eq(result.code, 1)
-            testing.ok(result.message:find("card format v3", 1, true), result.message)
-            testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
-            testing.eq(#backend.calls, 0)
-        end
+testing.test("move to Ready counts 3 to 7 outcomes and refuses a card with none", function()
+    for _, count in ipairs({ 3, 5, 7 }) do
         local card = colored("green")
-        card.outcomes = {}
+        card.description = V2
+        card.outcomes = outcomes(count, 0, " " .. board.JUDGEMENT)
         testing.eq(
             cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card })).code,
             nil
         )
     end
-)
+    for _, count in ipairs({ 0, 2, 8 }) do
+        local card = colored("green")
+        card.description = V2
+        card.outcomes = outcomes(count)
+        local backend = fake({ card })
+        local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("card format v3", 1, true), result.message)
+        testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
+    end
+end)
 
 testing.test("an epic with 1 to 3 outcomes enters Ready", function()
     for _, count in ipairs({ 1, 2, 3 }) do
@@ -3238,6 +3258,7 @@ testing.test("show lists the outcomes with their ticks, and ls adds a done colum
     result = cmd_board.run("ls", {}, fake({ card }))
     testing.eq(result.output, "cccccccc  Backlog  x  -  1/3  Card")
     local plain = colored("green")
+    plain.outcomes = {}
     testing.eq(cmd_board.run("ls", {}, fake({ plain })).output, "cccccccc  Backlog  x  -  Card")
 end)
 
@@ -4041,6 +4062,7 @@ end)
 testing.test("convert refuses a claimant's ticks but moves an unticked checklist", function()
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
+    card.outcomes = {}
     card.claimant = "project-run/a"
     local backend = fake({ card })
     local result =
@@ -4085,6 +4107,9 @@ testing.test("move to Ready takes a sized card, and other columns take a planned
         support.Column.DONE,
     }) do
         local card = colored("green")
+        for _, outcome in ipairs(card.outcomes) do
+            outcome.done = true
+        end
         if column == support.Column.REVIEW then
             card.column = support.COLUMN_NAME.VERIFY
         end
@@ -5513,12 +5538,28 @@ local function export_with_first_card(first)
         .. "]}"
 end
 local EXPORT = export_with_first_card()
-local PLANNED_TEXT =
-    "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [%s] a"
-local PLANNED_EXPORT = export_with_first_card({ description = PLANNED_TEXT:format(" ") })
-local PLANNED_DONE_EXPORT = export_with_first_card({ description = PLANNED_TEXT:format("x") })
+local PLANNED_TEXT = "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone"
+local SUBTASK = '{"id":"sub-%s","name":"%s (reviewer judgement)","done":%s}'
+local SUBTASKS = "["
+    .. SUBTASK:format("a", "a", "false")
+    .. ","
+    .. SUBTASK:format("b", "b", "false")
+    .. ","
+    .. SUBTASK:format("c", "c", "false")
+    .. "]"
+local SUBTASKS_DONE = "["
+    .. SUBTASK:format("a", "a", "true")
+    .. ","
+    .. SUBTASK:format("b", "b", "true")
+    .. ","
+    .. SUBTASK:format("c", "c", "true")
+    .. "]"
+local PLANNED_EXPORT = export_with_first_card({ description = PLANNED_TEXT, subtasks = SUBTASKS })
+local PLANNED_DONE_EXPORT =
+    export_with_first_card({ description = PLANNED_TEXT, subtasks = SUBTASKS_DONE })
 local WORKING_EXPORT = export_with_first_card({
-    description = PLANNED_TEXT:format(" "),
+    description = PLANNED_TEXT,
+    subtasks = SUBTASKS,
     column_id = PROGRESS_COLUMN,
     holder = "project-run/a",
     lease_expires_at = LIVE_LEASE,
@@ -6782,7 +6823,7 @@ end)
 
 testing.test("epic_move_refused_by_settings", function()
     local detail = DETAIL:gsub('"name":"Backlog"', '"name":"Backlog","wip_limit":2', 1)
-    local export = WORKING_EXPORT:gsub(
+    local export = WORKING_EXPORT:gsub('"done":false', '"done":true'):gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
         1
@@ -6823,7 +6864,7 @@ testing.test("epic_move_pomb_refusal", function()
 end)
 
 testing.test("an epic closes when the task read shows every child Done", function()
-    local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
+    local export = PLANNED_DONE_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(3), user = LEAD_USER })
     two_tokens(root)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
@@ -6835,7 +6876,7 @@ testing.test("an epic closes when the task read shows every child Done", functio
 end)
 
 testing.test("an epic with an open child in the task read is refused", function()
-    local export = PLANNED_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
+    local export = PLANNED_DONE_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), user = LEAD_USER })
     two_tokens(root)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
@@ -6944,7 +6985,13 @@ testing.test("add posts the card to the named column", function()
         "--column",
         support.Column.READY,
         "--description",
-        V1,
+        V2,
+        "--done-when",
+        "a " .. board.JUDGEMENT,
+        "--done-when",
+        "b " .. board.JUDGEMENT,
+        "--done-when",
+        "c " .. board.JUDGEMENT,
         "--size",
         "1",
         "--checks",
@@ -8240,7 +8287,8 @@ end)
 testing.test("take refuses a Backlog card with no checks row", function()
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
-        description = PLANNED_TEXT:format(" "),
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
         fields = "{}",
     })
     local root, home = sandbox({ export = export })
@@ -8516,7 +8564,8 @@ end)
 
 testing.test("a move into progress of a card claimed elsewhere takes no claim", function()
     local export = export_with_first_card({
-        description = PLANNED_TEXT:format(" "),
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
         holder = "dev@box:42",
         lease_expires_at = LIVE_LEASE,
     })
@@ -8566,7 +8615,8 @@ end)
 
 testing.test("a release with no claim file sends the owner fence pomb reports", function()
     local export = export_with_first_card({
-        description = PLANNED_TEXT:format(" "),
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
         holder = "r/old",
         lease_expires_at = LIVE_LEASE,
     })
@@ -8587,7 +8637,8 @@ end)
 
 testing.test("a release of an owner with no claim sends the owner fence", function()
     local export = export_with_first_card({
-        description = PLANNED_TEXT:format(" "),
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
         holder = "r/old",
         lease_expires_at = LIVE_LEASE,
     })
@@ -8731,9 +8782,7 @@ testing.test("take of a card a live owner holds names the owner and the lease en
 end)
 
 testing.test("move to ready takes an epic like any card", function()
-    local description =
-        "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a"
-    local export = EXPORT:gsub("Why it matters%.", description, 1)
+    local export = export_with_first_card({ description = PLANNED_TEXT, subtasks = SUBTASKS })
     local root, home = sandbox({
         export = export,
         task = EPIC_TASK:format(3),
@@ -9316,7 +9365,11 @@ testing.test("add, note and edit report prose warnings and still write", functio
         "a",
     }, backend)
     testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
-    result = cmd_board.run("add", { "X", "--description", V1, "--size", "1" }, backend)
+    result = cmd_board.run(
+        "add",
+        { "X", "--description", V2, "--size", "1", "--done-when", "a" },
+        backend
+    )
     testing.eq(result.warnings, {})
     result = cmd_board.run(
         "edit",

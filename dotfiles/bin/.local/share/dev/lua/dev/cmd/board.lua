@@ -1474,7 +1474,7 @@ local function ready_refusal(backend, card, shape)
                 .. card.id:sub(1, board.MIN_PREFIX)
                 .. " is not in card format v3 and cannot enter Ready. It lacks "
                 .. table.concat(missing, ", ")
-                .. ". Add outcomes with `dev board outcome` and fix the description with `dev board edit`, where a v1 Done when checklist also counts."
+                .. ". Add outcomes with `dev board outcome` and fix the description with `dev board edit`."
         )
     end
     local unchecked = checks_refusal(backend, card, children)

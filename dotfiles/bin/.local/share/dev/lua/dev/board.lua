@@ -1067,19 +1067,6 @@ function M.shapes(description)
     return shapes
 end
 
-local function checklist_items(description)
-    local items, current = 0, nil
-    for line in lines_of(description) do
-        local name = heading_of(line)
-        if name then
-            current = name
-        elseif current == DONE_WHEN and line:find("^%s*[-*]%s%[[ xX]%]%s+%S") then
-            items = items + 1
-        end
-    end
-    return items
-end
-
 ---@class dev.board.Unplanned
 ---@field color string? the card's colour
 ---@field description string? the card's description
@@ -1105,9 +1092,8 @@ end
 
 ---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v3 section with text under
 ---Problem, no empty Change or Out of scope section and no misplaced line under Problem, and, when
----asked, at least one Done when outcome. A v1 `## Done when` checklist item
----counts as an outcome. An epic, a card with children, needs 1 to 3 outcomes as its final
----check, unless it is closing with every child Done.
+---asked, at least one Done when outcome. An epic, a card with children, needs 1 to 3 outcomes as
+---its final check, unless it is closing with every child Done.
 ---@param card dev.board.Unplanned the card's size, description and outcome facts
 ---@return string[] missing the problems, empty when the card may sit outside Icebox
 function M.unplanned(card)
@@ -1127,7 +1113,7 @@ function M.unplanned(card)
         end
     end
     if card.need_outcomes then
-        if card.outcomes == 0 and checklist_items(description) == 0 and not card.closing then
+        if card.outcomes == 0 and not card.closing then
             if missing[1] ~= "a size" or card.children == 0 then
                 missing[#missing + 1] = "Done when outcomes"
             end
@@ -1219,8 +1205,7 @@ function M.unnamed_checks(outcomes, checks)
 end
 
 ---List what a card lacks of card format v3 to enter Ready: each missing or empty section, and
----Done when outcomes. The outcomes are 3 to 7 subtasks, or 1 to 3 for an epic, and a card with none
----is accepted when its description has a v1 `## Done when` checklist item.
+---Done when outcomes. The outcomes are 3 to 7 subtasks, or 1 to 3 for an epic.
 ---@param description string? the card's description
 ---@param outcomes integer how many outcomes the card has
 ---@param children integer how many children the card has
@@ -1228,7 +1213,6 @@ end
 ---@return string[] missing the problems, empty when the card follows the format
 function M.missing(description, outcomes, children, epic)
     local seen, filled = sections(description)
-    local items = checklist_items(description)
     local missing = {}
     for _, heading in ipairs(M.HEADINGS) do
         if not seen[heading] then
@@ -1241,7 +1225,7 @@ function M.missing(description, outcomes, children, epic)
         missing[#missing + 1] = shape
     end
     if children > 0 or epic then
-        if outcomes == 0 and items == 0 then
+        if outcomes == 0 then
             missing[#missing + 1] = M.MIN_EPIC_OUTCOMES
                 .. " to "
                 .. M.MAX_EPIC_OUTCOMES
@@ -1249,7 +1233,7 @@ function M.missing(description, outcomes, children, epic)
         elseif outcomes > M.MAX_EPIC_OUTCOMES then
             missing[#missing + 1] = epic_outcomes(outcomes)
         end
-    elseif outcomes == 0 and items == 0 then
+    elseif outcomes == 0 then
         missing[#missing + 1] = M.MIN_OUTCOMES .. " to " .. M.MAX_OUTCOMES .. " Done when outcomes"
     elseif outcomes > 0 and (outcomes < M.MIN_OUTCOMES or outcomes > M.MAX_OUTCOMES) then
         missing[#missing + 1] = M.MIN_OUTCOMES

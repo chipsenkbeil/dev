@@ -306,10 +306,17 @@ testing.test("lint fails when the children of a card cannot be read", function()
     testing.ok(result.message:find("pomb is down", 1, true), result.message)
 end)
 
+testing.test("lint reports a card with a v1 checklist and no outcomes as lacking them", function()
+    local cards = { card(1, NAME.BACKLOG, { description = V1, outcomes = {} }) }
+    local result = cmd_board.run("lint", {}, backend(cards))
+    testing.eq(result.code, 1)
+    testing.eq(findings(result.output), { "00000001 Backlog lacks Done when outcomes" })
+end)
+
 testing.test("lint passes a clean board with exit 0 and no code", function()
     local cards = {
         card(1, NAME.ICEBOX, { description = false, color = false, outcomes = {} }),
-        card(2, NAME.DONE, { description = V1, outcomes = {} }),
+        card(2, NAME.DONE),
         card(3, NAME.DONE, { labels = { "discarded" }, outcomes = outcomes(0) }),
         card(4, NAME.DONE, { description = false, claimant = false }),
         card(5, NAME.BLOCKED, { labels = { "needs:human" } }),

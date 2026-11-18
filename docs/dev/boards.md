@@ -843,8 +843,7 @@ section only. One line names each word.
 
 Only Icebox holds a card that is unsized or free-form. Every other column takes
 a card with a size of `1`, `2`, `3` or `3+`, all three v4 headings with text
-under Problem, and, for `add` and `move`, at least one Done when outcome (a v1
-`## Done when` item counts).
+under Problem, and, for `add` and `move`, at least one Done when outcome.
 
 A `move` of a card whose Pomb outcomes dev cannot read is not refused for
 missing outcomes, except into Done and Ready. `dev.board.unplanned` is the one
@@ -879,9 +878,6 @@ The optional `## Source` is never required, and an empty one is refused:
 - 3 to 7 Done when outcomes (subtasks)
 - each outcome ends with `(check: ROW)`, where ROW is part of one checks row,
   or with `(reviewer judgement)`
-
-A card with no outcomes is still accepted when its description has a v1
-`## Done when` checklist item, until the boards are converted.
 
 `move CARD ready` refuses a card without them and names what is missing (exit
 1). `add --column ready` does the same for its description and `--done-when`
@@ -1975,9 +1971,8 @@ Ready and the card format:
   and this one lacks ...` and is checked before the backend adds anything.
 - A `--column ready` whose description lacks a heading or text under one is a
   usage error too.
-- So is a `--column ready` that has neither 3 to 7 `--done-when` outcomes nor
-  a `- [ ]` or `- [x]` item under a v1 `## Done when`. Both are checked after
-  the scaffold, so a Ready card needs a full `--description`.
+- So is a `--column ready` that has no 3 to 7 `--done-when` outcomes. It is
+  checked after the scaffold, so a Ready card needs a full `--description`.
 
 Outcomes:
 
@@ -3558,14 +3553,13 @@ A move into Ready:
   cannot enter Ready. Size it with `dev board size CARD 1`, `2` or `3`.``
   (exit 1).
 - A card whose description lacks one of the three v4 headings or text under
-  one, or that has neither 3 to 7 outcomes (subtasks) nor a v1 checklist item,
-  is refused the same way, before the backend is called.
-- The v1 fallback is a `- [ ]` or `- [x]` item under `## Done when`, and it
-  holds while boards are converted.
+  one, or that has no 3 to 7 outcomes (subtasks), is refused the same way,
+  before the backend is called. A `## Done when` checklist in the description
+  does not count.
 - The refusal reads
   ``Card <id prefix> is not in card format v3 and cannot enter Ready. It lacks
   <what>. Add outcomes with `dev board outcome` and fix the description with
-  `dev board edit`, where a v1 Done when checklist also counts.``
+  `dev board edit`.``
   (exit 1, on both backends, size checked first).
 - `dev.board.missing(description, outcomes)` lists what is missing.
 - A card with no checks row and no children is refused after those, before the

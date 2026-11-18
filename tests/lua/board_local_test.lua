@@ -15,7 +15,8 @@ local ID_B = "bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb"
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
-local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
+local PLANNED = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
+local JUDGED = "done (reviewer judgement)"
 
 local function setup(project)
     local root = support.sandbox({ [".dev/config.toml"] = project }, {})
@@ -72,6 +73,24 @@ local function tick_first(root, home, id)
     local out, code =
         dev(root, home, { "board", "outcome", id, "--tick", "1", "--as", "r/reviewer" })
     testing.ok(code == 0, out)
+end
+
+local function add_outcomes(root, home, id)
+    for _ = 1, 3 do
+        local out, code = dev(root, home, { "board", "outcome", id, JUDGED })
+        testing.ok(code == 0, out)
+    end
+end
+
+local function tick_all(root, home, id)
+    for number = 1, 3 do
+        local out, code = dev(
+            root,
+            home,
+            { "board", "outcome", id, "--tick", tostring(number), "--as", "r/reviewer" }
+        )
+        testing.ok(code == 0, out)
+    end
 end
 
 local function mode(path)
@@ -236,7 +255,13 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
         "--label",
         "needs:lead",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })
@@ -265,7 +290,7 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
         b
             .. "  Backlog  1 Pomodoro  -                0/1  Second\n"
             .. a
-            .. "  Ready    2 Pomodori  docs,needs:lead  -    Write docs\n"
+            .. "  Ready    2 Pomodori  docs,needs:lead  0/3  Write docs\n"
     )
     out = dev(root, home, { "board", "ls", "--size", "3+" })
     testing.eq(out, "No cards.\n")
@@ -286,6 +311,7 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
     testing.eq(out, "sized " .. b .. " 1\n")
     out = dev(root, home, { "board", "label", a, "+extra", "--remove", "docs" })
     testing.eq(out, "labelled " .. a .. " needs:lead,extra\n")
+    tick_all(root, home, a)
     out = dev(root, home, { "board", "move", a, Column.DONE })
     out = dev(root, home, { "board", "ls" })
     testing.eq(out, b .. "  Backlog  1 Pomodoro  -  0/1  Second\n")
@@ -851,7 +877,13 @@ testing.test(
                 "--size",
                 "1",
                 "--description",
-                V1,
+                PLANNED,
+                "--done-when",
+                JUDGED,
+                "--done-when",
+                JUDGED,
+                "--done-when",
+                JUDGED,
                 "--checks",
                 "dev test",
             })))
@@ -879,9 +911,11 @@ testing.test(
         testing.eq(held[third], nil)
         out = dev(root, home, { "board", "next" })
         testing.ok(out:find("^" .. third), out)
+        tick_all(root, home, third)
         dev(root, home, { "board", "move", third, Column.DONE })
         out = dev(root, home, { "board", "next" })
         testing.ok(out:find("^" .. second), out)
+        tick_all(root, home, second)
         dev(root, home, { "board", "move", second, Column.DONE })
         out = dev(root, home, { "board", "next" })
         testing.ok(out:find("^" .. first), out)
@@ -1136,7 +1170,13 @@ testing.test("a local board refuses what the needs:human and epic rules forbid",
         "--size",
         "2",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -1237,7 +1277,13 @@ testing.test("stale counts the days a card sat in its column", function()
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -1250,7 +1296,13 @@ testing.test("stale counts the days a card sat in its column", function()
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -1271,7 +1323,13 @@ testing.test("a local board keeps an unsized or red card out of Ready", function
         "--column",
         Column.ICEBOX,
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -1329,9 +1387,10 @@ testing.test(
         out = dev(root, home, { "board", "show", ice })
         testing.ok(out:find("no description", 1, true), out)
         local file = root .. "/v1.md"
-        assert(fs.write(file, V1))
+        assert(fs.write(file, PLANNED))
         out, code = dev(root, home, { "board", "edit", a, "--file", file })
         testing.eq(code, 0, out)
+        add_outcomes(root, home, a)
         out, code = dev(root, home, { "board", "move", a, Column.READY })
         testing.eq(code, 0, out)
     end
@@ -1544,7 +1603,17 @@ testing.test("a local board converts a v1 checklist into outcomes and ticks", fu
     local root, home = local_board()
     local v1 =
         "## Problem\nP\n\n## Change\nC\n\n## Done when\n- [ ] A works\n- [x] B works\n- [ ] C works\n\n## Out of scope\nNone\n"
-    local out, code = dev(root, home, { "board", "add", "Old", "--description", v1, "--size", "1" })
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Old",
+        "--column",
+        Column.ICEBOX,
+        "--description",
+        v1,
+        "--size",
+        "1",
+    })
     testing.eq(code, 0, out)
     local a = prefix_of(out)
     out, code = dev(root, home, { "board", "outcome", a, "--convert" })
@@ -1566,6 +1635,33 @@ testing.test("a local board converts a v1 checklist into outcomes and ticks", fu
     testing.eq(out, "Outcomes of card " .. a .. " are left alone. It already has outcomes.\n")
     testing.eq(#document(file_of(home)).cards[1].outcomes, 3)
 end)
+
+testing.test(
+    "a local board refuses a v1 checklist in place of outcomes on a move to Ready",
+    function()
+        local root, home = local_board()
+        local v1 =
+            "## Problem\nP\n\n## Change\nC\n\n## Out of scope\nNone\n\n## Done when\n- [ ] A\n- [ ] B\n- [ ] C\n"
+        local out, code = dev(root, home, {
+            "board",
+            "add",
+            "Old",
+            "--column",
+            Column.ICEBOX,
+            "--description",
+            v1,
+            "--size",
+            "1",
+            "--checks",
+            "dev test",
+        })
+        testing.eq(code, 0, out)
+        local a = prefix_of(out)
+        out, code = dev(root, home, { "board", "move", a, Column.READY })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("3 to 7 Done when outcomes", 1, true), out)
+    end
+)
 
 testing.test("outcome --convert leaves a card with no checklist alone", function()
     local root, home = local_board()
@@ -1630,7 +1726,13 @@ testing.test(
                 "--size",
                 "1",
                 "--description",
-                V1,
+                PLANNED,
+                "--done-when",
+                JUDGED,
+                "--done-when",
+                JUDGED,
+                "--done-when",
+                JUDGED,
                 "--checks",
                 "dev test",
             })))
@@ -1684,7 +1786,13 @@ testing.test("move out of progress releases the claim and warns about nothing", 
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -1711,7 +1819,13 @@ testing.test(
             "--size",
             "1",
             "--description",
-            V1,
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
             "--checks",
             "dev test",
         })))
@@ -1745,7 +1859,13 @@ testing.test("a second claim needs a fresh note of what was built, tried and lea
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -1771,7 +1891,13 @@ local function card_in(root, home, column)
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -1917,7 +2043,6 @@ end)
 
 local function in_review(root, home)
     local a = card_in(root, home, Column.READY)
-    dev(root, home, { "board", "outcome", a, "First", "works" })
     dev(root, home, { "board", "take", a })
     local out, code = support.to_review(function(args)
         return dev(root, home, args)
@@ -1940,10 +2065,13 @@ end)
 testing.test("on a local board the last tick moves a Review card to Verify", function()
     local root, home = local_board()
     local a = in_review(root, home)
+    for number = 1, 2 do
+        dev(root, home, { "board", "outcome", a, "--tick", tostring(number), "--as", "r/verifier" })
+    end
     local out, code =
-        dev(root, home, { "board", "outcome", a, "--tick", "1", "--as", "r/verifier" })
+        dev(root, home, { "board", "outcome", a, "--tick", "3", "--as", "r/verifier" })
     testing.eq(code, 0, out)
-    testing.eq(out, "outcome " .. a .. " 1 ticked by r/verifier\nmoved " .. a .. " to Verify\n")
+    testing.eq(out, "outcome " .. a .. " 3 ticked by r/verifier\nmoved " .. a .. " to Verify\n")
     out = dev(root, home, { "board", "ls", "--column", Column.VERIFY })
     testing.ok(out:find(a, 1, true), out)
 end)
@@ -1971,7 +2099,13 @@ testing.test("take holds a claim with an expiry and no loop, and release gives i
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -2082,7 +2216,13 @@ testing.test("an expired claim does not block the card", function()
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -2260,7 +2400,10 @@ local WORKING_EXPORT = '{"tasks":['
         name = "First",
         column_id = support.column_id(Column.PROGRESS),
         color_id = "yellow-id",
-        description = "## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone\\n\\n## Done when\\n- [ ] a",
+        description = "## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
+        subtasks = '[{"id":"s1","name":"a (reviewer judgement)","done":false},'
+            .. '{"id":"s2","name":"b (reviewer judgement)","done":false},'
+            .. '{"id":"s3","name":"c (reviewer judgement)","done":false}]',
         holder = "dotfiles/one",
     })
     .. ","
@@ -2606,8 +2749,9 @@ testing.test("a local board replaces a card's checks and then lets it enter Read
         "1",
     })))
     local file = root .. "/v1.md"
-    assert(fs.write(file, V1))
+    assert(fs.write(file, PLANNED))
     assert(dev(root, home, { "board", "edit", a, "--file", file }))
+    add_outcomes(root, home, a)
     local out, code = dev(root, home, { "board", "move", a, Column.READY })
     testing.eq(code, 1)
     out, code = dev(root, home, { "board", "checks", a, "dev lint", "dev test" })
@@ -2917,8 +3061,9 @@ testing.test("a local board keeps a card with no checks row out of Ready", funct
         "1",
     })))
     local file = root .. "/v1.md"
-    assert(fs.write(file, V1))
+    assert(fs.write(file, PLANNED))
     assert(dev(root, home, { "board", "edit", a, "--file", file }))
+    add_outcomes(root, home, a)
     local out, code = dev(root, home, { "board", "move", a, Column.READY })
     testing.eq(code, 1)
     testing.ok(out:find("has no checks row", 1, true), out)
@@ -2931,7 +3076,13 @@ testing.test("a local board keeps a card with no checks row out of Ready", funct
         "--size",
         "1",
         "--description",
-        V1,
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
     })
     testing.eq(code, 2)
     testing.ok(out:find("--checks", 1, true), out)
@@ -3687,7 +3838,13 @@ local function sized_board()
             "--size",
             size,
             "--description",
-            V1,
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
             "--checks",
             "dev test",
         })))
@@ -3912,7 +4069,13 @@ testing.test("epic_local_next", function()
             "--size",
             "1",
             "--description",
-            V1,
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
             "--checks",
             "dev test",
         })))
@@ -3928,6 +4091,7 @@ testing.test("epic_local_next", function()
     testing.ok(out:find(child .. "  Ready", 1, true), out)
     out = dev(root, home, { "board", "next", "--column", Column.READY })
     testing.ok(out:find(child, 1, true) and not out:find(epic, 1, true), out)
+    tick_all(root, home, child)
     out = dev(root, home, { "board", "move", child, Column.DONE })
     out = dev(root, home, { "board", "next" })
     testing.ok(out:find(epic .. "  Ready", 1, true), out)
