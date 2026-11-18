@@ -830,6 +830,10 @@ local function land_held(opts)
         )
     end
     local deploys = config.get(backend.root, "board.land.deploys") == true
+    local deployed = config.get(backend.root, "board.land.deployed")
+    if deploys and type(deployed) == "table" and #deployed > 0 then
+        deploys = land.deploys(land.touched(backend.root, state.commit), deployed)
+    end
     local target = deploys and backend.roles.release or backend.roles:done_column()
     if deploys then
         text = text .. " It waits in " .. target .. " for the deploy."

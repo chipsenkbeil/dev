@@ -3065,6 +3065,11 @@ The settings:
 - `deploys = true` under `[board.land]` makes `land` move the card to Release,
   where it waits until it is live. Without it `land` moves the card to Done.
   This repo sets it.
+- `deployed` under `[board.land]` lists path globs, where `**` crosses a slash
+  and `*` and `?` stay inside one path segment. When it is set with
+  `deploys = true`, `land` moves a card to Release only when its change touches
+  a matching path, and to Done otherwise. A change whose files cannot be read
+  goes to Release.
 - The done note then ends with `It waits in Release for the deploy.`
 - The lead runs `dev board ship` from a workspace at trunk, and rolls the
   checkout only onto the revision that ship passed.

@@ -958,6 +958,35 @@ if has_jj then
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
     end)
 
+    testing.test(
+        "land moves a card touching only unlisted paths to Done when it deploys",
+        function()
+            local project =
+                jj_project('\n[board.land]\ndeploys = true\ndeployed = ["lib/**", "bin/*"]\n')
+            local id = verified_card(project)
+            local out, code = dev(
+                project,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
+            testing.eq(code, 0, out)
+            testing.ok(out:find("and moved it to Done", 1, true), out)
+            local list = comments(project.home, id)
+            testing.eq(list[#list].body:find("waits in Release", 1, true), nil)
+            testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+        end
+    )
+
+    testing.test("land moves a card touching a listed path to Release", function()
+        local project =
+            jj_project('\n[board.land]\ndeploys = true\ndeployed = ["lib/**", "*.txt"]\n')
+        local id = verified_card(project)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("and moved it to Release", 1, true), out)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
+    end)
+
     testing.test("land moves a verified card to Done when the project does not deploy", function()
         local project = jj_project()
         local id = verified_card(project)

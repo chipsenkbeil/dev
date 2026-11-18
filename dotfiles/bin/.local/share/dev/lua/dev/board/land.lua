@@ -845,6 +845,34 @@ function M.touched(root, rev)
     return sorted_paths(root, rev, TOUCHED_TEMPLATE)
 end
 
+---Turn a path glob into a Lua pattern, where `**` crosses a slash and `*` and `?` stay inside one
+---path segment.
+---@param glob string the glob
+---@return string pattern the anchored Lua pattern
+local function glob_pattern(glob)
+    local escaped = glob:gsub("[%^%$%(%)%%%.%[%]%+%-]", "%%%0")
+    escaped = escaped:gsub("%*%*", "\0"):gsub("%*", "[^/]*"):gsub("%?", "[^/]"):gsub("%z", ".*")
+    return "^" .. escaped .. "$"
+end
+
+---Say whether a landing commit touches a path that deploys.
+---@param touched string[]? the paths the commit touches, nil when they could not be read
+---@param globs string[] the `[board.land] deployed` globs
+---@return boolean deploys true when a path matches a glob, or when the paths could not be read
+function M.deploys(touched, globs)
+    if not touched then
+        return true
+    end
+    for _, path in ipairs(touched) do
+        for _, glob in ipairs(globs) do
+            if path:find(glob_pattern(glob)) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 ---Name why a lint-set template file may not call a dev function the baked dev lacks.
 ---@param root string the project root, a jj project
 ---@param touched string[] the paths the landing commit touches
