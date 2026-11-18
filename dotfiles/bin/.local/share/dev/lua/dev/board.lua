@@ -1387,11 +1387,24 @@ function CardHandle:land_problem()
 end
 
 ---Move the card to a column.
+---
+---A move into Release or Done is refused unless the card's check, reviews and outcomes prove it,
+---read at the commit `state` names, or at the working-copy commit when it is nil. Pass `state`
+---when the working copy no longer holds the change to prove, such as after a merge.
 ---@param column string the column's name
+---@param state dev.board.check.State? the commit to prove, read before the merge
 ---@return boolean? ok true when the card moved
 ---@return string? message why it did not
-function CardHandle:move_to(column)
-    local result = cmd_board().move(self.board.backend, { self.card.id, column }, { landed = true })
+function CardHandle:move_to(column, state)
+    local opts
+    if state then
+        opts = {
+            state = function()
+                return state
+            end,
+        }
+    end
+    local result = cmd_board().move(self.board.backend, { self.card.id, column }, opts)
     if result.code then
         return nil, result.message
     end
@@ -1399,17 +1412,19 @@ function CardHandle:move_to(column)
 end
 
 ---Move the card to the release column.
+---@param state dev.board.check.State? the commit to prove, as `move_to` takes it
 ---@return boolean? ok true when the card moved
 ---@return string? message why it did not
-function CardHandle:move_to_release()
-    return self:move_to(self.board:release_column())
+function CardHandle:move_to_release(state)
+    return self:move_to(self.board:release_column(), state)
 end
 
 ---Move the card to the done column.
+---@param state dev.board.check.State? the commit to prove, as `move_to` takes it
 ---@return boolean? ok true when the card moved
 ---@return string? message why it did not
-function CardHandle:move_to_done()
-    return self:move_to(self.board:done_column())
+function CardHandle:move_to_done(state)
+    return self:move_to(self.board:done_column(), state)
 end
 
 return M

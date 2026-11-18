@@ -17,9 +17,46 @@ local workspace = scm.workspace(ctx.root)
 local found = assert(board.find(workspace))
 local card = assert(found:find_card(ctx.args[1]))
 assert(workspace:rebase() ~= nil)
+local state = assert(workspace:state())
 assert(workspace:merge_into_trunk())
-assert(card[ctx.args[2]](card))
+assert(card[ctx.args[2]](card, state))
 print("landed " .. found:release_column() .. " " .. found:done_column())
+]=]
+
+local PROVE_SCRIPT = [=[
+local ctx = ...
+local board = require("dev.board")
+local check = require("dev.board.check")
+local review = require("dev.board.review")
+local scm = require("dev.scm")
+
+local workspace = scm.workspace(ctx.root)
+local found = assert(board.find(workspace))
+local card = assert(found:find_card(ctx.args[1]))
+local state = workspace:state()
+if ctx.args[2] == "fake" then
+    state = { commit = "abcdef1234", change = "klmnopqrst" }
+end
+local rows = { { run = "dev test", result = check.Result.PASS, run_id = "ab12" } }
+assert(found.backend:note(card.card.id, check.record(state, rows, false)))
+for _, kind in ipairs({ "code", "style" }) do
+    assert(found.backend:note(card.card.id, review.record(kind, "r/" .. kind, state, "clean")))
+end
+]=]
+
+local MOVE_SCRIPT = [=[
+local ctx = ...
+local board = require("dev.board")
+local scm = require("dev.scm")
+
+local found = assert(board.find(scm.workspace(ctx.root)))
+local card = assert(found:find_card(ctx.args[1]))
+local state
+if ctx.args[2] == "fake" then
+    state = { commit = "abcdef1234", change = "klmnopqrst" }
+end
+local ok, message = card:move_to_release(state)
+print((ok and "moved" or "refused") .. ": " .. tostring(message))
 ]=]
 
 local PROOF_SCRIPT = [=[
@@ -58,6 +95,8 @@ local function project()
         [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "' .. BOARD .. '"\n',
         [".dev/apiland.lua"] = LAND_SCRIPT,
         [".dev/apiproof.lua"] = PROOF_SCRIPT,
+        [".dev/apiprove.lua"] = PROVE_SCRIPT,
+        [".dev/apimove.lua"] = MOVE_SCRIPT,
     }, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
@@ -84,7 +123,7 @@ local function dev(root, home, args)
     })
 end
 
-local function card(root, home, start)
+local function card(root, home, start, with_checks)
     local out = dev(root, home, {
         "board",
         "add",
@@ -104,6 +143,9 @@ local function card(root, home, start)
     })
     local id = assert(out:match("added (%x+)"), out)
     must(dev(root, home, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+    if with_checks then
+        must(dev(root, home, { "board", "checks", id, "dev test" }))
+    end
     return id
 end
 
@@ -126,10 +168,11 @@ end
 local function land_by_script(method, start)
     local root, home, bare = project()
     must(dev(root, home, { "board", "init" }))
-    local id = card(root, home, start)
+    local id = card(root, home, start, true)
     assert(fs.write(root .. "/work.txt", "work\n"), "write failed")
     git(root, "add", "work.txt")
     git(root, "commit", "-q", "-m", "feat: work")
+    must(dev(root, home, { "apiprove", id }))
     local out, code = dev(root, home, { "apiland", id, method })
     testing.eq(code, 0, out)
     local remote = dev_os.capture({ "git", "-C", bare, "rev-parse", "master" })
@@ -149,6 +192,31 @@ testing.test("a card found by the board api moves to the release column", functi
     local column = land_by_script("move_to_release", support.Column.VERIFY)
     testing.eq(column, support.COLUMN_NAME.RELEASE)
 end)
+
+testing.test("move_to refuses an unproven card and leaves it where it is", function()
+    local root, home = project()
+    must(dev(root, home, { "board", "init" }))
+    local id = card(root, home, support.Column.VERIFY, true)
+    local out, code = dev(root, home, { "apimove", id })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("refused: Card", 1, true), out)
+    testing.ok(out:find("cannot move to " .. support.COLUMN_NAME.RELEASE, 1, true), out)
+    testing.eq(column_of(home, id), support.COLUMN_NAME.VERIFY)
+end)
+
+testing.test(
+    "move_to moves a proven card after a jj merge from the state read before it",
+    function()
+        local root, home = project()
+        must(dev(root, home, { "board", "init" }))
+        local id = card(root, home, support.Column.VERIFY, true)
+        must(dev(root, home, { "apiprove", id, "fake" }))
+        local out, code = dev(root, home, { "apimove", id, "fake" })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("moved: nil", 1, true), out)
+        testing.eq(column_of(home, id), support.COLUMN_NAME.RELEASE)
+    end
+)
 
 testing.test("a card found by the board api names why it cannot land and lands nothing", function()
     local root, home, bare = project()

@@ -46,11 +46,13 @@ The luajit modules of `dev`, one per item.
   and `done_column`, and a card found on it has `land_problem`, `move_to`,
   `move_to_release` and `move_to_done`. `land_problem` returns why the card
   cannot land, from its column, claimant, outcomes, check and reviews, or nil,
-  and lands nothing. A verb calls them in its own order.
+  and lands nothing. `move_to` into Release or Done refuses a card its check,
+  reviews and outcomes do not prove, read at the working-copy commit or at the
+  state a caller passes. A verb calls them in its own order.
 - `dev.scm`: the source control half of that API, a new module over `dev.vcs`
   and `dev.board.land`. `scm.workspace(root)` returns a workspace with `name`,
-  `is_dirty`, `touched`, `holds`, `rebase` and `merge_into_trunk`. `board land`
-  runs on it.
+  `is_dirty`, `touched`, `holds`, `state`, `rebase` and `merge_into_trunk`.
+  `board land` runs on it.
 - `dev.board.render`: the color terminal table and summary `board ls` prints.
 - `dev.board.guards`: the refusals and guards the `board` verbs run before they
   act, and the usage and failure results they return.

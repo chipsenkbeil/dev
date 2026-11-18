@@ -60,6 +60,13 @@ function Workspace:holds(commit, rev)
     return land.holds(self.root, commit, rev)
 end
 
+---Read the commit and change the working copy holds.
+---@return dev.board.check.State? state the commit and change
+---@return string? problem why the working copy has no change to land
+function Workspace:state()
+    return land.state(self.root)
+end
+
 ---Fetch the remote of record and rebase the change onto trunk when it sits elsewhere.
 ---@return boolean? rebased true when the change moved, false when it sat on trunk already
 ---@return string? problem why trunk could not be read or the rebase failed
