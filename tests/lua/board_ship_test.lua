@@ -364,7 +364,7 @@ if dev_os.which("jj") then
         tick(root, home, id)
         local out, code = dev(root, home, { "board", "ship", "--" })
         testing.eq(code, 2, out)
-        testing.ok(out:find("needs a command after --", 1, true), out)
+        testing.ok(out:find("Needs a command after --.", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
     end)
 
@@ -517,7 +517,7 @@ if dev_os.which("jj") then
         must(dev(root, home, { "board", "init" }))
         local out, code = dev(root, home, { "board", "ship", "--rev", "master@origin", "--" })
         testing.eq(code, 2, out)
-        testing.ok(out:find("needs a command after --", 1, true), out)
+        testing.ok(out:find("Needs a command after --.", 1, true), out)
     end)
 
     testing.test("ship with an unreadable rev moves no card", function()

@@ -200,7 +200,8 @@ end
 local function named_column(backend, word)
     local column = backend.roles:column(word)
     if not column then
-        return nil, usage("unknown column " .. word .. ", the columns are " .. backend.roles:help())
+        return nil,
+            usage("Unknown column " .. word .. ". The columns are " .. backend.roles:help() .. ".")
     end
     return column
 end
@@ -216,15 +217,16 @@ local function named_lane(backend, word)
         end
     end
     if #lanes == 0 then
-        return nil, usage("the board has no lanes, so --lane " .. word .. " names none")
+        return nil, usage("The board has no lanes, so --lane " .. word .. " names none.")
     end
-    return nil, usage("unknown lane " .. word .. ", the lanes are " .. table.concat(lanes, ", "))
+    return nil,
+        usage("Unknown lane " .. word .. ". The lanes are " .. table.concat(lanes, ", ") .. ".")
 end
 
 local function sized(word)
     local color = board.size_color(word)
     if not color then
-        return nil, usage("unknown size " .. word .. ", the sizes are " .. board.size_help())
+        return nil, usage("Unknown size " .. word .. ". The sizes are " .. board.size_help() .. ".")
     end
     return color
 end
@@ -256,7 +258,7 @@ end
 
 local function plain(label)
     if label == "" or label:find("%s") or label:find("%c") or label:sub(1, 1) == "-" then
-        return nil, usage("label " .. label .. " must be one word that does not start with -")
+        return nil, usage("Label " .. label .. " must be one word that does not start with -.")
     end
     return label
 end
@@ -334,7 +336,7 @@ function commands.ls(backend, args, _, screen)
         return extra
     end
     if #extra > 0 then
-        return usage("unknown argument " .. extra[1])
+        return usage("Unknown argument " .. extra[1] .. ".")
     end
     local lane
     if flags["--lane"] then
@@ -419,7 +421,7 @@ function commands.next(backend, args)
         return words
     end
     if #words > 0 then
-        return usage("unknown argument " .. words[1])
+        return usage("Unknown argument " .. words[1] .. ".")
     end
     local lane
     if flags["--lane"] then
@@ -449,14 +451,14 @@ function commands.next(backend, args)
             or named == roles.release
         if not takes then
             return usage(
-                "next --column takes Ready, Backlog, Icebox, Review, Verify, Release or Blocked"
+                "Next --column takes Ready, Backlog, Icebox, Review, Verify, Release or Blocked."
             )
         end
         column = named
     end
     local asked = flags["--for"] and flags["--for"]:lower()
     if asked and (column ~= roles.blocked or not board.BLOCKED_LABELS[asked]) then
-        return usage("next --for takes planner or lead, with --column Blocked")
+        return usage("Next --for takes planner or lead, with --column Blocked.")
     end
     local card, message = backend:next(column, {
         label = column == roles.blocked and board.BLOCKED_LABELS[asked or "lead"] or nil,
@@ -564,7 +566,7 @@ local function add_card(backend, args, held)
         return words
     end
     if #words == 0 then
-        return usage("needs a card name")
+        return usage("Needs a card name.")
     end
     held.id_only = flags[ID_ONLY_FLAG]
     if flags["--board"] then
@@ -586,7 +588,8 @@ local function add_card(backend, args, held)
     local sectioned = problem or change or out_of_scope or source
     if sectioned and flags["--description"] then
         return usage(
-            "--description holds the whole text, so it cannot go with --problem, --change, --out-of-scope or --source"
+            "The --description flag holds the whole text, "
+                .. "so it cannot go with --problem, --change, --out-of-scope or --source."
         )
     end
     local labels
@@ -623,7 +626,7 @@ local function add_card(backend, args, held)
         outcomes[#outcomes + 1] = item
     end
     if #outcomes > board.MAX_OUTCOMES then
-        return usage("a card has at most " .. board.MAX_OUTCOMES .. " --done-when outcomes")
+        return usage("A card has at most " .. board.MAX_OUTCOMES .. " --done-when outcomes.")
     end
     local color
     if flags["--size"] then
@@ -657,12 +660,13 @@ local function add_card(backend, args, held)
     then
         return usage(
             board.NEEDS_HUMAN
-                .. " lives only in Blocked or Icebox, so add the card there with --column"
+                .. " lives only in Blocked or Icebox, so add the card there with --column."
         )
     end
     if column == roles.ready and unready(color) then
         return usage(
-            "a card must be sized 1, 2 or 3 before it enters Ready, so add it with --size or to Backlog"
+            "A card must be sized 1, 2 or 3 before it enters Ready, "
+                .. "so add it with --size or to Backlog."
         )
     end
     local description = flags["--description"]
@@ -682,12 +686,13 @@ local function add_card(backend, args, held)
         })
         if #missing > 0 then
             return usage(
-                "a card outside "
+                "A card outside "
                     .. roles.icebox
                     .. " needs a size, card format v3 and Done when outcomes, and this one lacks "
                     .. table.concat(missing, ", ")
-                    .. "; pass --size, --problem and --done-when, or add it to "
+                    .. ". Pass --size, --problem and --done-when, or add it to "
                     .. roles.icebox
+                    .. "."
             )
         end
     end
@@ -695,9 +700,10 @@ local function add_card(backend, args, held)
         local missing = board.missing(description, #outcomes, 0, flags["--epic"])
         if #missing > 0 then
             return usage(
-                "a card needs card format v3 before it enters Ready, and this one lacks "
+                "A card needs card format v3 before it enters Ready, and this one lacks "
                     .. table.concat(missing, ", ")
-                    .. "; add it to Backlog or pass --problem, --change, --out-of-scope and --done-when"
+                    .. ". Add it to Backlog or pass --problem, --change, "
+                    .. "--out-of-scope and --done-when."
             )
         end
     end
@@ -710,7 +716,7 @@ local function add_card(backend, args, held)
             return usage(why)
         end
         if #checks == 0 then
-            return usage("a card needs a checks row before it enters Ready; pass --checks CMD")
+            return usage("A card needs a checks row before it enters Ready. Pass --checks CMD.")
         end
     end
     if column == roles.ready and not flags["--epic"] then
@@ -933,7 +939,7 @@ local function delete_note(backend, args)
         return usage(DELETE_FLAG .. " needs a comment")
     end
     if #args > 3 then
-        return usage("unknown argument " .. args[4])
+        return usage("Unknown argument " .. args[4] .. ".")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -1020,7 +1026,7 @@ end
 
 function commands.notes(backend, args)
     if #args ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -1118,7 +1124,7 @@ function commands.show(backend, args)
     end
     args = rest
     if #args ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local card, err = find_card(home, args[1])
     if not card then
@@ -1174,7 +1180,7 @@ local function note_opts(args)
         words[#words + 1] = args[j]
     end
     if #words < 2 then
-        return nil, usage("needs a card and the note")
+        return nil, usage("Needs a card and the note.")
     end
     local opts = {}
     if kind then
@@ -1182,18 +1188,19 @@ local function note_opts(args)
         if opts.kind == board.NoteKind.QUESTION then
             return nil,
                 usage(
-                    "question is not a note kind: ask the owner with "
+                    "Question is not a note kind. Ask the owner with "
                         .. "dev board ask CARD --question TEXT --choice COLUMN=LABEL "
-                        .. "--recommend N --why TEXT"
+                        .. "--recommend N --why TEXT."
                 )
         end
         if not index_of(board.NOTE_KINDS, opts.kind) then
             return nil,
                 usage(
-                    "unknown kind "
+                    "Unknown kind "
                         .. kind
-                        .. ", the kinds are "
+                        .. ". The kinds are "
                         .. table.concat(board.NOTE_KINDS, ", ")
+                        .. "."
                 )
         end
     end
@@ -1400,7 +1407,7 @@ local function move_once(backend, args, opts)
         return words
     end
     if #words < 2 then
-        return usage("needs a card and a column")
+        return usage("Needs a card and a column.")
     end
     local lane
     if flags["--lane"] then
@@ -1665,7 +1672,7 @@ function commands.order(backend, args)
         return words
     end
     if #words == 0 then
-        return usage("needs one or more cards")
+        return usage("Needs one or more cards.")
     end
     local cards, message = backend:cards()
     if not cards then
@@ -1748,7 +1755,7 @@ function commands.discard(backend, args)
         return words
     end
     if #words ~= 1 then
-        return usage("needs a card, and an optional --reason TEXT")
+        return usage("Needs a card, and an optional --reason TEXT.")
     end
     local reason = flags["--reason"]
     if reason and reason:find("^%s*$") then
@@ -1824,7 +1831,7 @@ end
 
 function commands.size(backend, args)
     if #args ~= 2 then
-        return usage("needs a card and a size")
+        return usage("Needs a card and a size.")
     end
     local color, err = sized(args[2])
     if not color then
@@ -1881,7 +1888,7 @@ function commands.label(backend, args)
         end
     end
     if #args < 1 or #edits + #removals == 0 then
-        return usage("needs a card and one or more labels to add or --remove label")
+        return usage("Needs a card and one or more labels to add or --remove label.")
     end
     for _, removal in ipairs(removals) do
         edits[#edits + 1] = removal
@@ -1968,7 +1975,7 @@ function commands.ask(backend, args)
     local fields = { ["--question"] = "text", ["--recommend"] = "recommended", ["--why"] = "why" }
     if #args < 1 then
         return usage(
-            "needs a card, --question TEXT, --choice COLUMN=LABEL, --recommend N and --why TEXT"
+            "Needs a card, --question TEXT, --choice COLUMN=LABEL, --recommend N and --why TEXT."
         )
     end
     local question = { choices = {} }
@@ -2064,7 +2071,7 @@ function commands.answer(backend, args)
         end
     end
     if #args < 2 or not choice or not quote_at then
-        return usage("needs a card, --choice N and --quote TEXT")
+        return usage("Needs a card, --choice N and --quote TEXT.")
     end
     if not choice:match("^%d+$") or tonumber(choice) < 1 then
         return usage("--choice counts from 1, not " .. choice)
@@ -2099,9 +2106,9 @@ function commands.escalate(backend, args)
         local flag = args[index]:match("^(%-%-[%a-]+)")
         if asks[flag] then
             return usage(
-                "escalate takes a card and the note text, not "
+                "Escalate takes a card and the note text, not "
                     .. flag
-                    .. ", so put a question for the owner through dev board ask"
+                    .. ", so put a question for the owner through dev board ask."
             )
         end
         if index > 1 then
@@ -2110,7 +2117,7 @@ function commands.escalate(backend, args)
     end
     local why = table.concat(words, " ")
     if #args < 2 or not why:find("%S") then
-        return usage("needs a card and the reason")
+        return usage("Needs a card and the reason.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -2149,7 +2156,7 @@ local OUTCOME_SAID = {
 local function outcome_number(word, count)
     local number = tonumber(word)
     if not word:match("^%d+$") or number < 1 then
-        return nil, usage("outcome numbers count from 1, not " .. word)
+        return nil, usage("Outcome numbers count from 1, not " .. word .. ".")
     end
     if number > count then
         return nil,
@@ -2327,7 +2334,8 @@ function commands.outcome(backend, args)
     end
     if #args < 2 then
         return usage(
-            "needs a card and the outcome text, or --rename N TEXT --reason TEXT, --tick N, --untick N, --delete N --reason TEXT or --convert"
+            "Needs a card and the outcome text, or --rename N TEXT --reason TEXT, "
+                .. "--tick N, --untick N, --delete N --reason TEXT or --convert."
         )
     end
     local mode = OUTCOME_FLAGS[args[2]]
@@ -2396,7 +2404,7 @@ function commands.outcome(backend, args)
         word = args[3]
     end
     if text and not text:find("%S") then
-        return usage("the outcome text is empty")
+        return usage("The outcome text is empty.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -2540,7 +2548,7 @@ function commands.edit(backend, args)
     end
     backend, args = home, rest
     if #args ~= 2 then
-        return usage("needs a card and the new description")
+        return usage("Needs a card and the new description.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -2577,7 +2585,7 @@ end
 
 function commands.rename(backend, args)
     if #args < 2 then
-        return usage("needs a card and the new title")
+        return usage("Needs a card and the new title.")
     end
     for pos = 2, #args do
         if args[pos]:sub(1, 1) == "-" then
@@ -2587,9 +2595,9 @@ function commands.rename(backend, args)
     local name = table.concat(args, " ", 2)
     if not name:find("%S") or #name > NAME_CHARS or not name:find(NAME_PATTERN) then
         return usage(
-            "a title is one line of up to "
+            "A title is one line of up to "
                 .. NAME_CHARS
-                .. " characters, with no quotes or backslashes"
+                .. " characters, with no quotes or backslashes."
         )
     end
     local cards, message = backend:cards()
@@ -2650,11 +2658,11 @@ end
 
 function commands.checks(backend, args)
     if #args < 2 then
-        return usage("needs a card and one or more commands to run as its checks")
+        return usage("Needs a card and one or more commands to run as its checks.")
     end
     for pos = 2, #args do
         if not args[pos]:find("%S") then
-            return usage("a check needs a command")
+            return usage("A check needs a command.")
         end
     end
     local runs = {}
@@ -2736,26 +2744,27 @@ function commands.review(backend, args)
         return words
     end
     if #words ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     for _, flag in ipairs({ KIND_FLAG, BY_FLAG, REV_FLAG, review.VERDICT_FLAG }) do
         if not flags[flag] then
-            return usage("needs " .. flag)
+            return usage("Needs " .. flag .. ".")
         end
     end
     local kind = flags[KIND_FLAG]
     if not index_of(review.KINDS, kind) then
         return usage(
-            "unknown kind " .. kind .. ", the kinds are " .. table.concat(review.KINDS, ", ")
+            "Unknown kind " .. kind .. ". The kinds are " .. table.concat(review.KINDS, ", ") .. "."
         )
     end
     local verdict = flags[review.VERDICT_FLAG]
     if not index_of(review.VERDICTS, verdict) then
         return usage(
-            "unknown verdict "
+            "Unknown verdict "
                 .. verdict
-                .. ", the verdicts are "
+                .. ". The verdicts are "
                 .. table.concat(review.VERDICTS, ", ")
+                .. "."
         )
     end
     local by, why = agent_name(flags[BY_FLAG])
@@ -2928,7 +2937,7 @@ local function companion_cards(opts)
         end
         local short = card.id:sub(1, board.MIN_PREFIX)
         if seen[card.id] then
-            return nil, usage("names card " .. short .. " twice")
+            return nil, usage("Names card " .. short .. " twice.")
         end
         seen[card.id] = true
         local held_back = owner_holds(card)
@@ -2960,7 +2969,7 @@ function commands.land(backend, args)
         return words
     end
     if #words < 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local wait = 0
     if flags[WAIT_FLAG] then
@@ -2974,7 +2983,7 @@ function commands.land(backend, args)
         return why
     end
     if not name then
-        return usage("needs DEV_AGENT, the name that lands the card")
+        return usage("Needs DEV_AGENT, the name that lands the card.")
     end
     local legacy = guards.stage_refusal(backend)
     if legacy then
@@ -3131,21 +3140,21 @@ end
 local function ship_runs(backend, args)
     local split = index_of(args, "--")
     if split and split > 1 then
-        return nil, usage("takes no argument before --, only the release command after it")
+        return nil, usage("Takes no argument before --, only the release command after it.")
     end
     if split then
         if #args == 1 then
-            return nil, usage("needs a command after --")
+            return nil, usage("Needs a command after --.")
         end
         local argv = { unpack(args, 2) }
         return { { argv = argv, run = table.concat(argv, " ") } }
     end
     if #args > 0 then
-        return nil, usage("takes the release command after --, not " .. args[1])
+        return nil, usage("Takes the release command after --, not " .. args[1] .. ".")
     end
     local rows = config.get(backend.root, "board.release.checks")
     if rows == nil then
-        return nil, usage("needs a release command after --, or checks rows under [board.release]")
+        return nil, usage("Needs a release command after --, or checks rows under [board.release].")
     end
     if type(rows) ~= "table" or #rows == 0 then
         return nil, failure("The `[board.release]` checks must be a list of commands.")
@@ -3539,10 +3548,11 @@ local function parse_allow(args)
     if #args < 2 then
         return nil,
             usage(
-                "needs a card and one or more of "
+                "Needs a card and one or more of "
                     .. table.concat(board.ALLOW_WORDS, ", ")
                     .. " or "
                     .. board.ALLOW_NONE
+                    .. "."
             )
     end
     local words = {}
@@ -3555,12 +3565,13 @@ local function parse_allow(args)
         elseif not index_of(board.ALLOW_WORDS, word) then
             return nil,
                 usage(
-                    "unknown allow word "
+                    "Unknown allow word "
                         .. word
-                        .. ", the words are "
+                        .. ". The words are "
                         .. table.concat(board.ALLOW_WORDS, ", ")
                         .. " and "
                         .. board.ALLOW_NONE
+                        .. "."
                 )
         elseif not seen[word] then
             seen[word] = true
@@ -3598,11 +3609,11 @@ end
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 local function set_names(backend, args, key, noun)
     if #args < 2 then
-        return usage("needs a card and one or more " .. noun .. " names")
+        return usage("Needs a card and one or more " .. noun .. " names.")
     end
     for pos = 2, #args do
         if not args[pos]:find("%S") or args[pos]:find("%c") then
-            return usage("a " .. noun .. " name must be one line of text")
+            return usage("A " .. noun .. " name must be one line of text.")
         end
     end
     local names = {}
@@ -3636,13 +3647,16 @@ end
 
 local function link_ends(backend, args)
     if #args ~= 3 then
-        return nil, nil, nil, usage("needs a card, a kind (" .. LINK_HELP .. ") and the other card")
+        return nil,
+            nil,
+            nil,
+            usage("Needs a card, a kind (" .. LINK_HELP .. ") and the other card.")
     end
     if not index_of(board.LINK_KINDS, args[2]) then
         return nil,
             nil,
             nil,
-            usage("unknown link kind " .. args[2] .. ", the kinds are " .. LINK_HELP)
+            usage("Unknown link kind " .. args[2] .. ". The kinds are " .. LINK_HELP .. ".")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -3684,7 +3698,7 @@ end
 
 function commands.epic(backend, args)
     if #args ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -3705,7 +3719,7 @@ function commands.delete(backend, args)
     end
     local reason = flags["--reason"]
     if #words ~= 1 or reason == nil or reason:find("^%s*$") then
-        return usage("needs a card and --reason TEXT")
+        return usage("Needs a card and --reason TEXT.")
     end
     local refused = guards.delete_refusal()
     if refused then
@@ -3766,7 +3780,7 @@ end
 
 function commands.attach(backend, args)
     if #args < 2 then
-        return usage("needs a card and one or more files")
+        return usage("Needs a card and one or more files.")
     end
     for index = 2, #args do
         if not fs.is_file(args[index]) then
@@ -3814,7 +3828,7 @@ end
 
 function commands.attachments(backend, args)
     if #args ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -3840,7 +3854,7 @@ end
 
 function commands.detach(backend, args)
     if #args ~= 2 then
-        return usage("needs a card and an attachment id")
+        return usage("Needs a card and an attachment id.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -3878,7 +3892,7 @@ function commands.download(backend, args)
         return words
     end
     if #words ~= 2 then
-        return usage("needs a card and an attachment id or name")
+        return usage("Needs a card and an attachment id or name.")
     end
     local card, err = find_card(backend, words[1])
     if not card then
@@ -3934,7 +3948,7 @@ end
 
 function commands.boards(backend, args)
     if #args > 0 then
-        return usage("unknown argument " .. args[1])
+        return usage("Unknown argument " .. args[1] .. ".")
     end
     local names, message = backend:boards()
     if not names then
@@ -3945,7 +3959,7 @@ end
 
 function commands.whoami(backend, args)
     if #args > 0 then
-        return usage("unknown argument " .. args[1])
+        return usage("Unknown argument " .. args[1] .. ".")
     end
     if not backend.whoami then
         return failure("This board holds no credential. There is nobody to show.")
@@ -3974,7 +3988,7 @@ end
 
 function commands.columns(backend, args)
     if #args > 1 then
-        return usage("takes at most one board name")
+        return usage("Takes at most one board name.")
     end
     local rows, message = backend:columns(args[1])
     if not rows then
@@ -4028,7 +4042,7 @@ function commands.limits(backend, args)
     end
     args = words
     if #args > 1 then
-        return usage("takes at most one board name")
+        return usage("Takes at most one board name.")
     end
     local limits, message = backend:limits(args[1])
     if not limits then
@@ -4058,7 +4072,7 @@ end
 
 function commands.links(backend, args)
     if #args ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -4219,7 +4233,7 @@ function commands.stale(backend, args, now)
         return extra
     end
     if #extra > 0 then
-        return usage("unknown argument " .. extra[1])
+        return usage("Unknown argument " .. extra[1] .. ".")
     end
     local limit, refusal =
         whole_limit("--days", flags["--days"], { default = STALE_DAYS, unit = "days" })
@@ -4573,7 +4587,7 @@ function commands.take(backend, args)
         return words
     end
     if #words ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local name, why = agent_name(flags[AS_FLAG])
     if why then
@@ -4666,7 +4680,7 @@ end
 
 function commands.release(backend, args)
     if #args ~= 1 then
-        return usage("needs a card")
+        return usage("Needs a card.")
     end
     local card, err = find_card(backend, args[1])
     if not card then
@@ -4717,7 +4731,8 @@ local function start_run(backend, name, orders)
     if words > RUN_ORDERS_WORDS then
         return usage(
             string.format(
-                "the orders are %d words and a run card holds at most %d; keep the rest in a file and name it in the orders",
+                "The orders are %d words and a run card holds at most %d. "
+                    .. "Keep the rest in a file and name it in the orders.",
                 words,
                 RUN_ORDERS_WORDS
             )
@@ -4826,7 +4841,7 @@ function commands.run(backend, args)
     end
     flags[RUN_ORDERS_FLAG] = flags[RUN_ORDERS_FLAG] and flags[RUN_ORDERS_FLAG][1]
     if #words > 0 then
-        return usage("unknown argument " .. words[1])
+        return usage("Unknown argument " .. words[1] .. ".")
     end
     if ending and flags[RUN_ORDERS_FLAG] then
         return usage(RUN_END_FLAG .. " and " .. RUN_ORDERS_FLAG .. " do not go together")
@@ -4837,11 +4852,11 @@ function commands.run(backend, args)
     end
     local session = os.getenv("CLAUDE_SESSION_ID")
     if not name and (not session or session == "") then
-        return usage("run needs DEV_AGENT or CLAUDE_SESSION_ID, so the session keeps one name")
+        return usage("Run needs DEV_AGENT or CLAUDE_SESSION_ID, so the session keeps one name.")
     end
     name = claimant(name)
     if #RUN_NAME + #name > NAME_CHARS then
-        return usage("the session name is too long for a card name")
+        return usage("The session name is too long for a card name.")
     end
     local cards, message = backend:cards()
     if not cards then
@@ -5651,14 +5666,14 @@ function M.wait(backend, args, opts)
         return words
     end
     if #words > 0 then
-        return usage("takes no card")
+        return usage("Takes no card.")
     end
     local only = flags["--for"]
     if only and not WAIT_FOR_KINDS[only] then
         return usage(
-            "unknown --for "
+            "Unknown --for "
                 .. only
-                .. ", the choices are ready, review, verify, release, human, lead and planner"
+                .. ". The choices are ready, review, verify, release, human, lead and planner."
         )
     end
     local roles = backend.roles or board.roles()

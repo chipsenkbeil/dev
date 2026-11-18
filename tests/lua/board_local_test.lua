@@ -802,7 +802,7 @@ testing.test("note --kind and --as are stored on a local comment and notes print
     )
     testing.ok(out:find("agent  agent     -         ", 1, true), out)
     out = dev(root, home, { "board", "note", a, "--kind", "chatter", "x" })
-    testing.ok(out:find("unknown kind chatter", 1, true), out)
+    testing.ok(out:find("Unknown kind chatter", 1, true), out)
     local first = assert(dev(root, home, { "board", "notes", a }):match("^(%x+)"))
     dev(root, home, { "board", "note", a, "--edit", first, "changed" })
     out = dev(root, home, { "board", "notes", a })
@@ -4167,7 +4167,7 @@ testing.test("local a lane the board lacks is refused", function()
     }) do
         local out, code = dev(root, home, args)
         testing.eq(code, 2, out)
-        testing.ok(out:find("unknown lane Features, the lanes are Parity, Fixes", 1, true), out)
+        testing.ok(out:find("Unknown lane Features. The lanes are Parity, Fixes.", 1, true), out)
     end
 end)
 

@@ -128,7 +128,7 @@ testing.test("review verdict is required, must be known and is written on the re
         "bad",
     })
     testing.eq(code, 2, out)
-    testing.ok(out:find("the verdicts are clean, minor, needs-work", 1, true), out)
+    testing.ok(out:find("The verdicts are clean, minor, needs-work", 1, true), out)
     testing.eq(#comments(home), 0)
     for i, verdict in ipairs({ "clean", "minor", "needs-work" }) do
         out, code = dev(root, home, {
@@ -317,7 +317,7 @@ testing.test(
             "clean",
         })
         testing.eq(code, 2, out)
-        testing.ok(out:find("the kinds are code, style, recheck", 1, true), out)
+        testing.ok(out:find("The kinds are code, style, recheck", 1, true), out)
         out, code = dev(root, home, { "board", "review", id, "--kind", "code", "--by", "r" })
         testing.eq(code, 2, out)
         out, code = dev(root, home, {

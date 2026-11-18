@@ -1937,7 +1937,7 @@ Checks:
   is a usage error saying
   ``The board has no checks field. Run `dev board init` to add it.``
 - A `--column ready` with no `--checks` is a usage error too:
-  `a card needs a checks row before it enters Ready; pass --checks CMD`. It is
+  `A card needs a checks row before it enters Ready. Pass --checks CMD.` It is
   checked after the heading check and before the backend adds anything.
 - An Icebox card is exempt.
 
