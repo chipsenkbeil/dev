@@ -4002,6 +4002,25 @@ function commands.whoami(backend, args)
     return { output = table.concat(lines, "\n") }
 end
 
+function commands.permissions(backend, args)
+    if #args > 0 then
+        return usage("Unknown argument " .. args[1] .. ".")
+    end
+    if not backend.permissions then
+        return failure("This board holds no credential. There is no catalog to show.")
+    end
+    local catalog, message = backend:permissions()
+    if not catalog then
+        return failure(message)
+    end
+    local lines = {}
+    for i, entry in ipairs(catalog) do
+        local presets = #entry.presets > 0 and table.concat(entry.presets, ", ") or "none"
+        lines[i] = entry.name .. " (" .. entry.group .. "): " .. presets
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
 function commands.columns(backend, args)
     if #args > 1 then
         return usage("Takes at most one board name.")

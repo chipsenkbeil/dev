@@ -293,6 +293,12 @@ return {
         desc = "Show the Pomb credential dev board uses",
     },
     {
+        words = { "board", "permissions" },
+        handler = "lua",
+        usage = "dev board permissions",
+        desc = "List Pomb's permission catalog with each permission's group and presets",
+    },
+    {
         words = { "board", "columns" },
         handler = "lua",
         usage = "dev board columns [BOARD]",

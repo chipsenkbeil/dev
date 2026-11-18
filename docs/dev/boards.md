@@ -1769,6 +1769,18 @@ line.
 - The drift of a role token from its template is not listed, as Pomb's whoami
   does not return it.
 
+### permissions
+
+`dev board permissions` prints Pomb's permission catalog, from
+`GET /api/v1/auth/permissions`, which any token may read.
+
+- It prints one `name (group): presets` line per entry, in Pomb's order, with
+  the presets that hold it. Compare it with the `permissions` of `whoami` to
+  see what a token may do.
+- Pomb's whoami returns no preset field, so dev prints none for the token.
+- The token is never printed.
+- A local board is exit 1, and an extra word is exit 2.
+
 ### columns
 
 `dev board columns [BOARD]` lists the columns of the board named BOARD, else of

@@ -61,6 +61,7 @@ local PERMISSION_DENIED = "permission_denied"
 local EXCEEDS_GRANT = "exceeds_grant"
 local TOKEN_EXPIRED = "token_expired"
 local WHOAMI_PATH = "/api/v1/auth/whoami"
+local PERMISSIONS_PATH = "/api/v1/auth/permissions"
 local EXPIRED = "the role token expired; mint it again from its issuer"
 local ROLES_PATH = "/api/v1/agent-roles/standard"
 local STANDARD_ROLE_KEYS = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
@@ -561,6 +562,37 @@ function Backend:whoami()
         boards = doc.boards == "all" and "all" or boards,
         permissions = permissions,
     }
+end
+
+---@class dev.board.pomb.Permission
+---@field name string the permission's name
+---@field group string the group the permission belongs to
+---@field presets string[] the presets that hold the permission
+
+---Read the permission catalog, which any token may read.
+---@return dev.board.pomb.Permission[]? catalog every entry, in Pomb's order
+---@return string? message why nothing was read
+function Backend:permissions()
+    local doc, message = self:__request("GET", PERMISSIONS_PATH)
+    if not doc then
+        return nil, message
+    end
+    if type(doc) ~= "table" or #doc == 0 then
+        return nil, unavailable("pomb sent an answer dev cannot read")
+    end
+    local catalog = {}
+    for _, entry in ipairs(doc) do
+        local presets = {}
+        for _, name in ipairs(type(entry.presets) == "table" and entry.presets or {}) do
+            presets[#presets + 1] = tostring(name)
+        end
+        catalog[#catalog + 1] = {
+            name = present(entry.name) or "?",
+            group = present(entry.group) or "?",
+            presets = presets,
+        }
+    end
+    return catalog
 end
 
 function Backend:__roles()
@@ -2205,7 +2237,7 @@ function Backend:admin()
         return true
     end
     local catalog
-    catalog, message = self:__request("GET", "/api/v1/auth/permissions")
+    catalog, message = self:__request("GET", PERMISSIONS_PATH)
     if not catalog then
         return nil, message
     end
