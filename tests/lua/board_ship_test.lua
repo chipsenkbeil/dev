@@ -95,7 +95,7 @@ local function release_card(root, home, name, outcomes, landed)
     end
     local out = dev(root, home, argv)
     local id = assert(out:match("added (%x+)"), out)
-    support.place(home .. "/state/dev/boards/" .. BOARD .. ".json", id, support.COLUMN_NAME.RELEASE)
+    support.place(support.board_file(home, BOARD), id, support.COLUMN_NAME.RELEASE)
     if landed ~= false then
         land_note(root, home, id, landed or trunk_commit(root))
     end
@@ -108,9 +108,7 @@ end
 
 local function state(home, id)
     local doc = assert(
-        json.decode(
-            assert(fs.read(home .. "/state/dev/boards/" .. BOARD .. ".json"), "read failed")
-        ),
+        json.decode(assert(fs.read(support.board_file(home, BOARD)), "read failed")),
         "decode failed"
     )
     for _, card in ipairs(doc.cards) do
@@ -125,7 +123,7 @@ local function state(home, id)
 end
 
 local function label_owner_hold(home, id)
-    local file = home .. "/state/dev/boards/" .. BOARD .. ".json"
+    local file = support.board_file(home, BOARD)
     local doc = assert(json.decode(assert(fs.read(file), "read failed")), "decode failed")
     for _, card in ipairs(doc.cards) do
         if card.id:sub(1, #id) == id then
@@ -596,7 +594,7 @@ local function git_release_card(root, home, name, landed)
         "It works",
     })
     local id = assert(out:match("added (%x+)"), out)
-    support.place(home .. "/state/dev/boards/" .. BOARD .. ".json", id, support.COLUMN_NAME.RELEASE)
+    support.place(support.board_file(home, BOARD), id, support.COLUMN_NAME.RELEASE)
     land_note(root, home, id, landed)
     tick(root, home, id)
     return id

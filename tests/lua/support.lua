@@ -13,6 +13,14 @@ function M.absolute_path()
     return ((";" .. package.path):gsub(";%./", ";" .. cwd .. "/"):sub(2))
 end
 
+---Return the local backend's board file path for a test home.
+---@param home string the test home
+---@param name string the board name
+---@return string path the board file
+function M.board_file(home, name)
+    return home .. "/state/dev/boards/" .. name .. ".json"
+end
+
 ---Remove the landing turn card `dev board init` made from a local board file, to leave a test
 ---with only the cards it adds.
 ---@param path string the local board file

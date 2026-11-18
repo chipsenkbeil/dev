@@ -42,7 +42,7 @@ end
 
 local function card_with(root, home, rows)
     must(dev(root, home, { "board", "init" }))
-    support.drop_turn_card(home .. "/state/dev/boards/mine.json")
+    support.drop_turn_card(support.board_file(home, "mine"))
     local out = dev(root, home, {
         "board",
         "add",
@@ -82,7 +82,7 @@ local function git_root(files)
 end
 
 local function comments(home)
-    local doc = assert(json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"))))
+    local doc = assert(json.decode(assert(fs.read(support.board_file(home, "mine")))))
     return doc.cards[1].comments or {}
 end
 
@@ -546,7 +546,7 @@ end)
 testing.test("check runs a row as a plain command and never through a shell", function()
     local root, home = git_root()
     local id = card_with(root, home, { "true" })
-    local path = home .. "/state/dev/boards/mine.json"
+    local path = support.board_file(home, "mine")
     local doc = assert(json.decode(assert(fs.read(path))))
     doc.cards[1].checks = { "touch marker; true" }
     assert(fs.write(path, json.encode(doc)))
@@ -1066,7 +1066,7 @@ testing.test("expect-fail skips the standard rows when a landed card proves trun
     local landed = card_with(root, home, { "true" })
     local note = "Landed commit " .. base .. " on trunk, run by x."
     must(dev(root, home, { "board", "note", landed, note }))
-    support.place(home .. "/state/dev/boards/mine.json", landed, support.COLUMN_NAME.RELEASE)
+    support.place(support.board_file(home, "mine"), landed, support.COLUMN_NAME.RELEASE)
 
     -- The baseline runs only the new row and names the proof
     local id = card_with(root, home, { "false", "dev --remote lint", "dev --remote test" })
@@ -1078,7 +1078,7 @@ testing.test("expect-fail skips the standard rows when a landed card proves trun
     testing.ok(out:find(proof, 1, true), out)
 
     -- The stored record carries the proof
-    local doc = assert(json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"))))
+    local doc = assert(json.decode(assert(fs.read(support.board_file(home, "mine")))))
     for _, card in ipairs(doc.cards) do
         if card.id:sub(1, #id) == id then
             local record = check.parse(card.comments[#card.comments].body)
