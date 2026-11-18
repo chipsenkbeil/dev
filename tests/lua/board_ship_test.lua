@@ -50,9 +50,20 @@ local function dev(root, home, args)
             JJ_USER = "t",
             JJ_EMAIL = "t@example.com",
             DEV_AGENT = "dotfiles/shipper",
+            GIT_AUTHOR_NAME = "t",
+            GIT_AUTHOR_EMAIL = "t@example.com",
+            GIT_COMMITTER_NAME = "t",
+            GIT_COMMITTER_EMAIL = "t@example.com",
         },
     })
 end
+
+local READY_OUTCOMES = {
+    "It works (reviewer judgement)",
+    "It reads well (reviewer judgement)",
+    "It is documented (reviewer judgement)",
+}
+local READY_CHECKS = "dev --remote lint"
 
 local function trunk_commit(root)
     return jj(root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
@@ -416,6 +427,97 @@ if dev_os.which("jj") then
         testing.ok(out:find("printed no FAIL line, so no suspect is named", 1, true), out)
     end)
 
+    local RED_FILE = "tests/lua/x_test.lua"
+    local REVERT_NOW = "\n[board.release]\nrevert_after = 0\n"
+
+    local function red_card(extra)
+        local root, home = project(extra)
+        must(dev(root, home, { "board", "init" }))
+        local landed = push_file(root, RED_FILE)
+        local id = release_card(root, home, "Touched", READY_OUTCOMES, landed)
+        must(dev(root, home, { "board", "checks", id, READY_CHECKS }))
+        for n = 1, #READY_OUTCOMES do
+            must(
+                dev(
+                    root,
+                    home,
+                    { "board", "outcome", id, "--tick", tostring(n), "--as", "verifier" }
+                )
+            )
+        end
+        return root, home, id
+    end
+
+    local function red_ship_again(root, home)
+        local echo = "echo FAIL " .. RED_FILE .. "; exit 1"
+        return dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    end
+
+    local function red_notes(home, id)
+        local count = 0
+        for _, comment in ipairs(select(2, state(home, id))) do
+            if comment.body:find("^Ship went red") then
+                count = count + 1
+            end
+        end
+        return count
+    end
+
+    testing.test("ship.notes.each.suspect.once.when.red", function()
+        local root, home, id = red_card()
+        local out, code = red_ship_again(root, home)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("First red, so the card is noted.", 1, true), out)
+        testing.eq(red_notes(home, id), 1)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    end)
+
+    testing.test("ship.keeps.a.suspect.red.within.revert.after", function()
+        local root, home, id = red_card()
+        red_ship_again(root, home)
+        local out, code = red_ship_again(root, home)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Reverted after 3600", 1, true), out)
+        testing.eq(red_notes(home, id), 1)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    end)
+
+    testing.test("ship.reverts.a.suspect.red.past.revert.after", function()
+        local root, home, id = red_card(REVERT_NOW)
+        red_ship_again(root, home)
+        local out, code = red_ship_again(root, home)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("The card is back in Ready.", 1, true), out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.READY)
+        testing.ok(jj(root, "log", "-r", "@-", "--no-graph", "-T", "description"):find("Revert"))
+        testing.eq(dev(root, home, { "board", "show", id }):find("[x]", 1, true), nil)
+    end)
+
+    testing.test("ship.starts.a.suspect.over.when.it.lands.again", function()
+        local root, home, id = red_card(REVERT_NOW)
+        red_ship_again(root, home)
+        land_note(root, home, id, push_file(root, RED_FILE, "again\n"))
+        local out, code = red_ship_again(root, home)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("First red, so the card is noted.", 1, true), out)
+        testing.eq(red_notes(home, id), 2)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    end)
+
+    testing.test("ship.leaves.a.suspect.whose.revert.conflicts", function()
+        local root, home, id = red_card(REVERT_NOW)
+        push_file(root, RED_FILE, "later\n")
+        red_ship_again(root, home)
+        local out, code = red_ship_again(root, home)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("conflicts with later changes", 1, true), out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+        testing.eq(
+            jj(root, "log", "-r", "@-", "--no-graph", "-T", "description"):find("Revert"),
+            nil
+        )
+    end)
+
     testing.test("ship with a command runs it once in place of the rows", function()
         local root, home = project('\n[board.release]\nchecks = ["false"]\n')
         must(dev(root, home, { "board", "init" }))
@@ -633,11 +735,12 @@ local function git_head(root)
     return (dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", ""))
 end
 
-local function git_project()
+local function git_project(revert_after)
     local root = support.sandbox({
         [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "'
             .. BOARD
-            .. '"\n[board.release]\nchecks = ["true"]\n',
+            .. '"\n[board.release]\nchecks = ["true"]\n'
+            .. (revert_after and "revert_after = " .. revert_after .. "\n" or ""),
     }, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
@@ -661,8 +764,9 @@ local function git_push_commit(root, name)
     return git_head(root)
 end
 
-local function git_release_card(root, home, name, landed)
-    local out = dev(root, home, {
+local function git_release_card(root, home, name, landed, outcomes)
+    outcomes = outcomes or { "It works" }
+    local argv = {
         "board",
         "add",
         name,
@@ -674,13 +778,18 @@ local function git_release_card(root, home, name, landed)
         "y",
         "--size",
         "1",
-        "--done-when",
-        "It works",
-    })
+    }
+    for _, outcome in ipairs(outcomes) do
+        argv[#argv + 1] = "--done-when"
+        argv[#argv + 1] = outcome
+    end
+    local out = dev(root, home, argv)
     local id = assert(out:match("added (%x+)"), out)
     support.place(support.board_file(home, BOARD), id, support.COLUMN_NAME.RELEASE)
     land_note(root, home, id, landed)
-    tick(root, home, id)
+    for n = 1, #outcomes do
+        must(dev(root, home, { "board", "outcome", id, "--tick", tostring(n), "--as", "verifier" }))
+    end
     return id
 end
 
@@ -711,6 +820,63 @@ testing.test("ship.in.a.git.project.leaves.a.card.landed.after.the.rev", functio
     testing.eq((state(home, late)), support.COLUMN_NAME.RELEASE)
     testing.ok(out:find("is not in", 1, true), out)
     testing.eq(#done_notes(select(2, state(home, late))), 0)
+end)
+
+testing.test("ship.reverts.a.suspect.in.a.git.project", function()
+    local root, home = git_project(0)
+    must(dev(root, home, { "board", "init" }))
+    local landed = git_push_commit(root, "g_test")
+    local id = git_release_card(root, home, "Touched", landed, READY_OUTCOMES)
+    must(dev(root, home, { "board", "checks", id, READY_CHECKS }))
+    local echo = "echo FAIL g_test.txt; exit 1"
+    local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("First red, so the card is noted.", 1, true), out)
+    out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The card is back in Ready.", 1, true), out)
+    testing.eq((state(home, id)), support.COLUMN_NAME.READY)
+    local subject = dev_os.capture({ "git", "-C", root, "log", "-1", "--format=%s" })
+    testing.ok(subject:find("Revert", 1, true), subject)
+end)
+
+testing.test("ship.leaves.a.suspect.whose.git.revert.conflicts", function()
+    local root, home = git_project(0)
+    must(dev(root, home, { "board", "init" }))
+    local id = git_release_card(root, home, "Touched", git_push_commit(root, "g_test"))
+    assert(fs.write(root .. "/g_test.txt", "later\n"), "write failed")
+    git(root, "commit", "-q", "-am", "later edit")
+    git(root, "push", "-q", "origin", "master")
+    local echo = "echo FAIL g_test.txt; exit 1"
+    dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("conflicts with later changes", 1, true), out)
+    testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    testing.eq(dev_os.capture({ "git", "-C", root, "status", "--porcelain" }), "")
+    local subject = dev_os.capture({ "git", "-C", root, "log", "-1", "--format=%s" })
+    testing.eq(subject:find("Revert", 1, true), nil)
+end)
+
+testing.test("ship.reverts.suspects.newest.landed.first.by.short.commit.id", function()
+    local root, home = git_project(0)
+    must(dev(root, home, { "board", "init" }))
+    local older = git_push_commit(root, "g_test")
+    assert(fs.write(root .. "/g_test.txt", "g_test\nmore\n"), "write failed")
+    git(root, "commit", "-q", "-am", "newer edit")
+    git(root, "push", "-q", "origin", "master")
+    local newer = git_head(root)
+    local old_id = git_release_card(root, home, "Older", older:sub(1, 12), READY_OUTCOMES)
+    local new_id = git_release_card(root, home, "Newer", newer:sub(1, 12), READY_OUTCOMES)
+    must(dev(root, home, { "board", "checks", old_id, READY_CHECKS }))
+    must(dev(root, home, { "board", "checks", new_id, READY_CHECKS }))
+    local echo = "echo FAIL g_test.txt; exit 1"
+    dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    testing.eq(code, 1, out)
+    testing.ok(state(home, new_id) == support.COLUMN_NAME.READY, out)
+    testing.ok(state(home, old_id) == support.COLUMN_NAME.READY, out)
+    testing.eq(out:find("conflicts with later changes", 1, true), nil)
 end)
 
 testing.test("ship.in.a.git.project.refuses.a.head.off.the.rev", function()

@@ -3383,6 +3383,19 @@ A failed command:
   that would have shipped are listed.
 - When no card in the batch touched a failing file, the list says so. When the
   row printed no `FAIL` line, it says that instead.
+- The first red ship writes a `Ship went red` note on each named card, with the
+  time. A card keeps that note until its next land note.
+- A later red ship reverts a named card whose first red note is at least
+  `revert_after` seconds old, the `[board.release]` key that defaults to 3600.
+  The lead runs it again from a workspace at trunk. `jj revert` or `git revert`
+  puts the landed commit's reverse on trunk's side of the working copy, and the
+  card goes to Ready with its outcomes unticked and a note.
+- Suspects revert newest landed first. A revert that conflicts with a later
+  change stays out, and the line for that card says so. A card whose outcomes
+  cannot be unticked, or whose move to Ready is refused, stays in Release and
+  the line says that.
+- The lead lands the revert commit before the next ship, with
+  `jj land --no-card` in a jj project and `dev push` in a git project.
 
 The move:
 

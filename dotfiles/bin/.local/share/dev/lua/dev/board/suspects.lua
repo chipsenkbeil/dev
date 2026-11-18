@@ -13,6 +13,7 @@ local MODULE_SUFFIXES = { ".lua", "/init.lua" }
 ---@class dev.board.suspects.Entry
 ---@field label string the card as the ship prints it
 ---@field landed string the card's landed commit
+---@field card dev.board.Card the card
 
 local function module_file(root, name)
     local relative = (name:gsub("%.", "/"))
@@ -52,10 +53,12 @@ end
 ---@param failed string[] the failing test files
 ---@param entries dev.board.suspects.Entry[] the cards that would ship
 ---@return string[] lines the suspect list
+---@return dev.board.suspects.Entry[] named each card the list names, once
 function M.lines(root, failed, entries)
     if #failed == 0 then
-        return { "The failing row printed no FAIL line, so no suspect is named." }
+        return { "The failing row printed no FAIL line, so no suspect is named." }, {}
     end
+    local named, listed = {}, {}
     local touched, unread = {}, {}
     for i, entry in ipairs(entries) do
         local set = {}
@@ -78,6 +81,10 @@ function M.lines(root, failed, entries)
         for i, entry in ipairs(entries) do
             for file in pairs(loaded) do
                 if touched[i][file] then
+                    if not listed[i] then
+                        listed[i] = true
+                        named[#named + 1] = entry
+                    end
                     hits[#hits + 1] = "    "
                         .. entry.label
                         .. " ("
@@ -98,7 +105,7 @@ function M.lines(root, failed, entries)
             end
         end
     end
-    return lines
+    return lines, named
 end
 
 return M

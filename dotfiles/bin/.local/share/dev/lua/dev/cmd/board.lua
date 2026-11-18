@@ -3565,6 +3565,92 @@ local function ship_batch(backend, cards, rev, commit)
     return lines, ok
 end
 
+---Note each red suspect, and revert the landed commit of one that stayed red past `revert_after`.
+---@param backend dev.board.Backend the board
+---@param named dev.board.suspects.Entry[] the suspect cards the failed ship named
+---@param commit string the full commit the ship tested
+---@return string[] lines what happened to each suspect
+function Ship.settle(backend, named, commit)
+    local revert = require("dev.board.revert")
+    local after = tonumber(config.get(backend.root, "board.release.revert_after"))
+        or revert.AFTER_SECONDS
+    local now = os.time()
+    local lines = {}
+    for _, entry in ipairs(revert.newest_first(backend.root, named)) do
+        local since = revert.red_since(backend:comments(entry.card.id) or {})
+        local said
+        if not since then
+            local ok, why = backend:note(
+                entry.card.id,
+                revert.red_text(land.short(commit), now),
+                nil,
+                { kind = board.NoteKind.STATUS }
+            )
+            said = ok and "First red, so the card is noted."
+                or ("First red, but the note failed. " .. tostring(why))
+        elseif now - since < after then
+            said = string.format("Red for %d seconds. Reverted after %d.", now - since, after)
+        else
+            said = Ship.requeue(backend, entry, now - since)
+        end
+        lines[#lines + 1] = "  " .. entry.label .. ": " .. said
+    end
+    return lines
+end
+
+---Revert a suspect's landed commit, unmark its outcomes and send its card back to Ready.
+---@param backend dev.board.Backend the board
+---@param entry dev.board.suspects.Entry the suspect
+---@param seconds integer how long it has been red
+---@return string said what happened, as sentences
+function Ship.requeue(backend, entry, seconds)
+    local revert = require("dev.board.revert")
+    local short = land.short(entry.landed)
+    local ok, reason, detail = revert.apply(backend.root, entry.landed)
+    if not ok then
+        if reason == revert.Reason.CONFLICT then
+            return "The revert of " .. short .. " conflicts with later changes, so it is left."
+        end
+        return "The revert of " .. short .. " failed. " .. tostring(detail)
+    end
+    for number, outcome in ipairs(entry.card.outcomes) do
+        if outcome.done then
+            local untick =
+                commands.outcome(backend, { entry.card.id, "--untick", tostring(number) })
+            if untick.code then
+                return string.format(
+                    "Reverted %s, but outcome %d stays ticked. The card stays in %s. %s",
+                    short,
+                    number,
+                    backend.roles.release,
+                    untick.message
+                )
+            end
+        end
+    end
+    backend:note(
+        entry.card.id,
+        string.format(
+            "Reverted landed commit %s after the batch stayed red for %d seconds. "
+                .. "Land the revert, then ship again.",
+            short,
+            seconds
+        ),
+        nil,
+        { kind = board.NoteKind.DECISION }
+    )
+    local moved = move_card(backend, { entry.card.id, backend.roles.ready })
+    if moved.code then
+        return string.format(
+            "Reverted %s, but the move to Ready was refused. The card stays in %s. %s",
+            short,
+            backend.roles.release,
+            moved.message
+        )
+    end
+    return "Reverted " .. short .. ". The card is back in Ready."
+end
+
 ---Name the cards of a batch that touched the files a failed release command left failing.
 ---@param backend dev.board.Backend the board
 ---@param opts { files: string[], rev: string, commit: string } the failing test files the command
@@ -3582,11 +3668,16 @@ function Ship.suspects(backend, opts)
                 entries[#entries + 1] = {
                     label = card.id:sub(1, board.MIN_PREFIX) .. " " .. card.name,
                     landed = landed,
+                    card = card,
                 }
             end
         end
     end
-    return require("dev.board.suspects").lines(backend.root, files, entries)
+    local lines, named = require("dev.board.suspects").lines(backend.root, files, entries)
+    for _, line in ipairs(Ship.settle(backend, named, commit)) do
+        lines[#lines + 1] = line
+    end
+    return lines
 end
 
 function commands.ship(backend, args)
