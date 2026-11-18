@@ -20,6 +20,7 @@ local review = require("dev.board.review")
 local runner = require("dev.board.runner")
 local store = require("dev.board.store")
 local text_width = require("dev.text").width
+local templates = require("dev.templates")
 local toml = require("dev.toml")
 local turn = require("dev.board.turn")
 local ui = require("dev.ui")
@@ -3167,6 +3168,7 @@ end
 ---@param commit string the commit the ship covers
 ---@param name string what to call that revision
 ---@return string? reason why it stays, nil when it may move
+---@return string? landed the card's landed commit when it may move
 function Ship.reason(backend, card, commit, name)
     if guards.done_refusal(card, backend.roles:done_column()) then
         return "an outcome is not ticked"
@@ -3179,6 +3181,33 @@ function Ship.reason(backend, card, commit, name)
     if not land.holds(backend.root, landed, commit) then
         return "landed commit " .. land.short(landed) .. " is not in " .. name
     end
+    return nil, landed
+end
+
+---Name the dev sync templates the landed commits of a batch changed.
+---@param root string the project root
+---@param landed string[] the landed commits of the shipped cards
+---@return string[] lines the heading and one line per changed template, empty when none changed
+local function ship_templates(root, landed)
+    local set = {}
+    for _, commit in ipairs(landed) do
+        for _, path in ipairs(land.touched(root, commit) or {}) do
+            set[path] = true
+        end
+    end
+    local paths = {}
+    for path in pairs(set) do
+        paths[#paths + 1] = path
+    end
+    local synced = templates.changed(paths)
+    if #synced == 0 then
+        return {}
+    end
+    local lines = { "The dev sync templates changed. Synced repos run dev sync:" }
+    for _, path in ipairs(synced) do
+        lines[#lines + 1] = "  " .. path
+    end
+    return lines
 end
 
 ---Move every Release card the shipped revision holds to Done, each with a done note.
@@ -3192,9 +3221,13 @@ local function ship_batch(backend, cards, rev, commit)
     local name = rev == Ship.DEFAULT_REV and "trunk" or rev
     local text = string.format("Shipped in %s, commit %s.", name, land.short(commit))
     local moved, kept, stranded, ok = {}, {}, {}, true
+    local landed_commits = {}
     for _, card in ipairs(cards) do
         local short = card.id:sub(1, board.MIN_PREFIX)
-        local reason = Ship.reason(backend, card, commit, name)
+        local reason, landed = Ship.reason(backend, card, commit, name)
+        if landed then
+            landed_commits[#landed_commits + 1] = landed
+        end
         if reason then
             kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. reason .. ")"
         else
@@ -3251,6 +3284,9 @@ local function ship_batch(backend, cards, rev, commit)
         for _, line in ipairs(stranded) do
             lines[#lines + 1] = line
         end
+    end
+    for _, line in ipairs(ship_templates(backend.root, landed_commits)) do
+        lines[#lines + 1] = line
     end
     return lines, ok
 end

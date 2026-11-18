@@ -11,6 +11,8 @@ local DENY_MARKER = "# --- project-specific entries below (dev sync keeps them) 
 local LINTS_TABLE = "^%[workspace%.lints"
 local LINT_RETURN = "return lint:finish()"
 local LIB_DEST = ".dev/lua/lintset.lua"
+local LIB_SRC = "dotfiles/claude/.claude/skills/style/lintset.lua"
+local README_SRC = "dotfiles/bin/.local/share/dev/init/README.md"
 
 ---The marker line that ends the guide part of a project's `docs/STYLE.md`.
 M.STYLE_MARKER = "## This project"
@@ -690,7 +692,22 @@ end
 ---Name the path of the `.dev/README.md` template.
 ---@return string path the template's path below the dotfiles clone
 function M.readme_template()
-    return project.dotfiles_root() .. "/dotfiles/bin/.local/share/dev/init/README.md"
+    return project.dotfiles_root() .. "/" .. README_SRC
+end
+
+---Pick the paths that dev sync copies into other projects.
+---@param paths string[] repo-relative paths, such as the files a commit touches
+---@return string[] changed the sorted lint set files, lintset.lua and the README guide template among them
+function M.changed(paths)
+    local base = BASE .. "/"
+    local found = {}
+    for _, path in ipairs(paths) do
+        if path:sub(1, #base) == base or path == LIB_SRC or path == README_SRC then
+            found[#found + 1] = path
+        end
+    end
+    table.sort(found)
+    return found
 end
 
 ---Join the template above its marker and the project's own section of `.dev/README.md`.

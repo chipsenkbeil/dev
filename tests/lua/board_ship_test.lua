@@ -173,6 +173,48 @@ if dev_os.which("jj") then
         testing.ok(out:find(open:sub(1, 4), 1, true), out)
     end)
 
+    local function push_file(root, path)
+        local dir = fs.dirname(root .. "/" .. path)
+        assert(fs.mkdir(dir, { parents = true }), "mkdir failed")
+        assert(fs.write(root .. "/" .. path, "changed\n"), "write failed")
+        jj(root, "commit", "-m", "touch " .. path)
+        jj(root, "bookmark", "set", "master", "-r", "@-")
+        jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
+        return trunk_commit(root)
+    end
+
+    local function ship_template_run(path)
+        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "First", { "It works" }, push_file(root, path))
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 0, out)
+        return out
+    end
+
+    testing.test("ship.names.a.changed.lint.template", function()
+        local path = "dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml"
+        local out = ship_template_run(path)
+        testing.ok(out:find("The dev sync templates changed.", 1, true), out)
+        testing.ok(out:find(path, 1, true), out)
+        testing.ok(out:find("Synced repos run dev sync", 1, true), out)
+        local lib = "dotfiles/claude/.claude/skills/style/lintset.lua"
+        testing.ok(ship_template_run(lib):find(lib, 1, true))
+    end)
+
+    testing.test("ship.names.a.changed.readme.guide.template", function()
+        local path = "dotfiles/bin/.local/share/dev/init/README.md"
+        local out = ship_template_run(path)
+        testing.ok(out:find("The dev sync templates changed.", 1, true), out)
+        testing.ok(out:find(path, 1, true), out)
+    end)
+
+    testing.test("ship.prints.no.template.line.when.none.changed", function()
+        local out = ship_template_run("docs/other.md")
+        testing.ok(not out:find("The dev sync templates changed.", 1, true), out)
+    end)
+
     testing.test("ship runs the release command with DEV_CI_PRIORITY set to 1", function()
         local dir = support.tempdir()
         local mark = dir .. "/priority"

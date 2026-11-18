@@ -3233,6 +3233,17 @@ Following the shipped commit:
   reads `DEV_FOLLOW_REV`. When a command fails, `ship` runs neither.
 - The line never changes the exit code.
 
+Changed templates:
+
+- Repos that run `dev sync` copy the lint set files, `lintset.lua` and the
+  `.dev/README.md` guide template from dotfiles, so a change to one
+  makes the sync check fail in each of them until they sync.
+- After the moves, `ship` reads the files the landed commits of the shipped
+  cards touched. When any is one of those templates, it prints
+  `The dev sync templates changed. Synced repos run dev sync:` and one indented
+  path per template.
+- A batch that changed no template prints no such line.
+
 ### size
 
 `dev board size CARD S` sets the card's colour and prints
