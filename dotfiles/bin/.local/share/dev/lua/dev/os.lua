@@ -89,7 +89,7 @@ local TIMED_WRAPPER = table.concat({
     'set -m; exec 3<&0; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } 3<&- & pid=$!;',
     '( read -r _ <&3; [ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
     'rm -rf -- "$3" ) >/dev/null 2>&1 & watcher=$!;',
-    'echo $pid $watcher >"$3/pids.tmp"; mv "$3/pids.tmp" "$3/pids"; wait $watcher',
+    'exec 2>/dev/null; echo $pid $watcher >"$3/pids.tmp"; mv "$3/pids.tmp" "$3/pids"; wait $watcher',
 }, " ")
 
 ---@alias dev.os.Kind "file"|"dir"|"link"|"other"

@@ -635,6 +635,41 @@ local function timed_dirs_gone(tmp)
     end)
 end
 
+local function stderr_of_capture_timed(body)
+    local snippet = ("package.path = %q; local dev_os = require('dev.os'); "):format(package.path)
+        .. body
+    return dev_os.capture({
+        "sh",
+        "-c",
+        [[luajit -e "$1" 2>&1 >/dev/null </dev/null]],
+        "sh",
+        snippet,
+    })
+end
+
+testing.test("capture_timed writes no job-control lines to stderr", function()
+    testing.eq(stderr_of_capture_timed("dev_os.capture_timed({ 'true' }, 10)"), "")
+    testing.eq(stderr_of_capture_timed("dev_os.capture_timed({ 'sh', '-c', 'exit 3' }, 10)"), "")
+end)
+
+testing.test("capture_timed still passes the command's own stderr through", function()
+    local got = stderr_of_capture_timed("dev_os.capture_timed({ 'sh', '-c', 'echo err >&2' }, 10)")
+    testing.eq(got, "err\n")
+end)
+
+testing.test("capture_timed leaves no defunct child once it returns", function()
+    local body = "dev_os.capture_timed({ 'true' }, 10); "
+        .. "local mine = tostring(dev_os.getpid()); local n = 0; "
+        .. "for ppid, stat in dev_os.capture({ 'ps', '-A', '-o', 'ppid=,stat=' })"
+        .. ":gmatch('(%d+)%s+(%S+)') do "
+        .. "if ppid == mine and stat:sub(1, 1) == 'Z' then n = n + 1 end end; "
+        .. "io.write(n)"
+    local tmp = assert(fs.mktemp({ dir = true }))
+    local got = capture_timed_in(tmp, body)
+    fs.remove(tmp, { recursive = true })
+    testing.eq(got, "0")
+end)
+
 testing.test("capture_timed leaves no temporary directory after a normal return", function()
     -- Give the run a private temporary directory so only its own directories show
     local tmp = assert(fs.mktemp({ dir = true }))
