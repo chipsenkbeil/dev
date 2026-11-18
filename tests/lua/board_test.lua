@@ -4587,7 +4587,14 @@ testing.test("stale marks a needs:human card whose newest comment is the owner's
         return nil, "pomb is down"
     end
     output = cmd_board.run("stale", {}, backend, NOW).output
-    testing.ok(output:find("could not read the comments of " .. cards[2].id, 1, true), output)
+    testing.ok(
+        output:find(
+            "Could not read the comments of " .. cards[2].id .. " " .. cards[2].name .. ".",
+            1,
+            true
+        ),
+        output
+    )
 end)
 
 testing.test("stale reads no comments of a card it already lists or of a Done card", function()
@@ -4651,14 +4658,15 @@ testing.test("stale warns when the other board cannot be read and still finishes
     local result = cmd_board.run("stale", {}, backend, NOW)
     testing.eq(result.code, nil)
     testing.ok(
-        result.output:find("could not read blocker gone:00000001 of " .. cards[1].id, 1, true),
+        result.output:find("Could not read blocker gone:00000001 of " .. cards[1].id, 1, true),
         result.output
     )
     testing.ok(result.output:find("No stale cards.", 1, true), result.output)
     backend.held =
         { { kind = "blocked_by", id = "ffffffff-aaaa-4aaa-8aaa-aaaaaaaaaaaa", board = "ci" } }
     result = cmd_board.run("stale", {}, backend, NOW)
-    testing.ok(result.output:find("could not read blocker ci:ffffffff", 1, true), result.output)
+    testing.ok(result.output:find("Could not read blocker ci:ffffffff", 1, true), result.output)
+    testing.ok(result.output:find("%.\n?$"), result.output)
 end)
 
 testing.test("stale lists every needs:human card apart at any age, and never as stale", function()
@@ -4800,13 +4808,13 @@ testing.test("stale names a card it could not date instead of skipping it", func
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
-        "No stale cards.\n\ncould not date "
+        "No stale cards.\n\nCould not date "
             .. cards[1].id
-            .. " Card 1\ncould not date "
+            .. " Card 1.\nCould not date "
             .. cards[2].id
-            .. " Card 2\ncould not date "
+            .. " Card 2.\nCould not date "
             .. cards[3].id
-            .. " Card 3"
+            .. " Card 3."
     )
 end)
 
@@ -5210,13 +5218,13 @@ testing.test(
         end
         testing.eq(
             cmd_board.run("stale", {}, backend, NOW).output,
-            "00000001  Ready  9d  unsized  Card 1\n\ncould not date "
+            "00000001  Ready  9d  unsized  Card 1\n\nCould not date "
                 .. cards[2].id
-                .. " Card 2\ncould not read the comments of "
+                .. " Card 2.\nCould not read the comments of "
                 .. cards[3].id
-                .. " Card 3\ncould not read the comments of "
+                .. " Card 3.\nCould not read the comments of "
                 .. cards[4].id
-                .. " Card 4"
+                .. " Card 4."
         )
     end
 )
@@ -8833,9 +8841,9 @@ testing.test("stale reads column_entered_at from every page of the tasks view", 
         ),
         out
     )
-    testing.ok(out:find("unsized outside Icebox:.*cccccccc  Backlog +Early.*could not date"), out)
-    testing.ok(out:find("unsized outside Icebox:.*11111111  Ready +Second.*could not date"), out)
-    testing.ok(out:find("could not date cccccccc%S+ Early\n$"), out)
+    testing.ok(out:find("unsized outside Icebox:.*cccccccc  Backlog +Early.*Could not date"), out)
+    testing.ok(out:find("unsized outside Icebox:.*11111111  Ready +Second.*Could not date"), out)
+    testing.ok(out:find("Could not date cccccccc%S+ Early%.\n$"), out)
     local calls = read(root, "calls")
     testing.ok(
         calls:find("/tasks?limit=500 ", 1, true) or calls:find("/tasks?limit=500\n", 1, true),

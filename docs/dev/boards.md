@@ -1257,8 +1257,9 @@ These sections follow, each listed apart from the stale cards:
 - `blocker started on another board:`: a card in Backlog or Ready with a
   `blocked_by` link to a card on another board that sits in In Progress or
   Review, with its days in column and the blocker as `board:id`. A board or card
-  `stale` cannot read becomes a `could not read blocker` line and the rest
-  still prints.
+  `stale` cannot read becomes a `Could not read blocker` line and the rest
+  still prints. Every warning line `stale` prints is a capitalised sentence
+  with a final period.
 - `for the owner (needs:human):`: every card with the `needs:human` label in
   Blocked or Icebox, at any age, with its column and days in column. It never
   appears among the stale ones (it waits on the owner, not on an agent).
@@ -1288,9 +1289,9 @@ These sections follow, each listed apart from the stale cards:
   `needs:human` are left out, and the section is absent when no card qualifies.
 
 A card in one of the scanned columns, or with the `needs:human` label, that the
-tasks view did not date gets a line `could not date <id> <name>` after a blank
+tasks view did not date gets a line `Could not date <id> <name>.` after a blank
 line, instead of being skipped. A card the Icebox section cannot date, or whose
-comments it cannot read, gets a `could not` line after the section.
+comments it cannot read, gets a `Could not` line after the section.
 
 An orchestrator can run it at startup and re-plan, escalate or ice each card it
 lists, and scope the Icebox ones.
@@ -2264,9 +2265,9 @@ Cards it cannot date:
 
 - A card in those columns or with that label that the tasks view did not date
   (missing from the pages, or no `column_entered_at`) gets one line
-  `could not date <id> <name>` after a blank line.
+  `Could not date <id> <name>.` after a blank line.
 - An Icebox card the tasks view did not date, or whose comments could not be
-  read, gets a `could not date` or `could not read the comments of` line after
+  read, gets a `Could not date` or `Could not read the comments of` line after
   the Icebox section.
 
 Exit codes:

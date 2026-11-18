@@ -4173,6 +4173,11 @@ local function append(lines, more)
     end
 end
 
+local function warning(text)
+    local bare = text:gsub("%.$", "")
+    return bare:sub(1, 1):upper() .. bare:sub(2) .. "."
+end
+
 ---Check whether `next` would skip an unclaimed card: a run card, an epic with an open child, or a
 ---card an open card blocks.
 ---@param backend dev.board.Backend the board
@@ -4214,19 +4219,19 @@ end
 local function icebox_latest(backend, card, stamp, limit, now)
     local latest = stamp and box.parse_time(stamp)
     if not latest then
-        return nil, "could not date " .. card.id .. " " .. card.name
+        return nil, warning("could not date " .. card.id .. " " .. card.name)
     end
     if (now - latest) / box.SECONDS_PER_DAY < limit then
         return nil
     end
     local list = backend:comments(card.id)
     if not list then
-        return nil, "could not read the comments of " .. card.id .. " " .. card.name
+        return nil, warning("could not read the comments of " .. card.id .. " " .. card.name)
     end
     for _, comment in ipairs(list) do
         local at = box.parse_time(comment.at)
         if not at then
-            return nil, "could not read the comments of " .. card.id .. " " .. card.name
+            return nil, warning("could not read the comments of " .. card.id .. " " .. card.name)
         end
         latest = math.max(latest, at)
     end
@@ -4312,12 +4317,14 @@ local function started_rows(backend, cards, entered, now)
             local why
             list, why = backend:links(card.id)
             if not list then
-                warnings[#warnings + 1] = "could not read the links of "
-                    .. card.id
-                    .. " "
-                    .. card.name
-                    .. ": "
-                    .. tostring(why)
+                warnings[#warnings + 1] = warning(
+                    "could not read the links of "
+                        .. card.id
+                        .. " "
+                        .. card.name
+                        .. ": "
+                        .. tostring(why)
+                )
             end
         end
         for _, link in ipairs(list or {}) do
@@ -4334,14 +4341,16 @@ local function started_rows(backend, cards, entered, now)
                     blocker, message = other:card(link.id)
                 end
                 if other.failed or not blocker then
-                    warnings[#warnings + 1] = "could not read blocker "
-                        .. target
-                        .. " of "
-                        .. card.id
-                        .. " "
-                        .. card.name
-                        .. ": "
-                        .. tostring(other.failed or message)
+                    warnings[#warnings + 1] = warning(
+                        "could not read blocker "
+                            .. target
+                            .. " of "
+                            .. card.id
+                            .. " "
+                            .. card.name
+                            .. ": "
+                            .. tostring(other.failed or message)
+                    )
                 elseif started[blocker.column] then
                     local at = entered[card.id] and box.parse_time(entered[card.id]) or now
                     found[#found + 1] = {
@@ -4433,7 +4442,7 @@ function commands.stale(backend, args, now)
         then
             local at = entered[card.id] and box.parse_time(entered[card.id])
             if not at then
-                undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name
+                undated[#undated + 1] = warning("could not date " .. card.id .. " " .. card.name)
             else
                 nobody[#nobody + 1] = {
                     id = card.id,
@@ -4455,7 +4464,7 @@ function commands.stale(backend, args, now)
         then
             local at = entered[card.id] and box.parse_time(entered[card.id])
             if not at then
-                undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name
+                undated[#undated + 1] = warning("could not date " .. card.id .. " " .. card.name)
             else
                 local hours = math.floor((now - at) / box.SECONDS_PER_HOUR)
                 if hours >= lead_limit then
@@ -4491,7 +4500,7 @@ function commands.stale(backend, args, now)
         if mine or (not card.done and roles.stale[card.column]) then
             local stamp = entered[card.id]
             if not stamp then
-                undated[#undated + 1] = "could not date " .. card.id .. " " .. card.name
+                undated[#undated + 1] = warning("could not date " .. card.id .. " " .. card.name)
             else
                 local at = box.parse_time(stamp)
                 if not at then
@@ -4513,7 +4522,7 @@ function commands.stale(backend, args, now)
                     if held then
                         local answered, why = Owner.commented(backend, card)
                         if answered == nil then
-                            undated[#undated + 1] = why
+                            undated[#undated + 1] = warning(why)
                         else
                             item.answered = answered
                         end
@@ -4549,7 +4558,7 @@ function commands.stale(backend, args, now)
             local spoke, why = Owner.commented(backend, card)
             if spoke == nil then
                 if card.column ~= roles.icebox then
-                    undated[#undated + 1] = why
+                    undated[#undated + 1] = warning(why)
                 end
             elseif spoke then
                 local at = entered[card.id] and box.parse_time(entered[card.id]) or now
