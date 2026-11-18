@@ -4590,6 +4590,25 @@ testing.test("stale marks a needs:human card whose newest comment is the owner's
     testing.ok(output:find("could not read the comments of " .. cards[2].id, 1, true), output)
 end)
 
+testing.test("stale reads no comments of a card it already lists or of a Done card", function()
+    local cards, times = aged({
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.DONE,
+    }, { 9, 1, 1 })
+    local backend = fake(cards, times)
+    local reads = {}
+    function backend:comments(id)
+        reads[#reads + 1] = id
+        return {}
+    end
+    testing.eq(
+        cmd_board.run("stale", {}, backend, NOW).output,
+        "00000001  Ready  9d  unsized  Card 1"
+    )
+    testing.eq(reads, { cards[2].id })
+end)
+
 local function across(column, blocked_in)
     local cards, times = aged({ column }, { 1 })
     local far = aged({ blocked_in }, { 1 })
@@ -9340,6 +9359,12 @@ local function waited(replies, args, opts)
     end
     if opts.comments then
         function backend:comments(id)
+            if opts.comments_errors and table.remove(opts.comments_errors, 1) then
+                return nil, "pomb refused the read"
+            end
+            if opts.reads then
+                opts.reads[#opts.reads + 1] = id
+            end
             return opts.comments[id] or {}
         end
     end
@@ -9359,6 +9384,9 @@ local function waited(replies, args, opts)
             return 0
         end,
         now = function()
+            if type(opts.now) == "function" then
+                return opts.now(#seen.afters)
+            end
             return opts.now or 0
         end,
         notice = function(line)
@@ -9940,7 +9968,15 @@ local function comment_added()
 end
 
 local function human_board()
-    return { { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false } }
+    return {
+        {
+            id = ID_A,
+            name = "Card A",
+            column = support.COLUMN_NAME.READY,
+            labels = {},
+            done = false,
+        },
+    }
 end
 
 testing.test("wait --for human retries an unreachable comment read", function()
@@ -9959,6 +9995,134 @@ testing.test("wait --for human retries an unreachable comment read", function()
     testing.eq(result.output, "the owner commented on 11111111")
     testing.eq(seen.naps, { 30 })
     testing.eq(seen.afters, { "none", "1", "1", "2" })
+end)
+
+testing.test("wait --for human retries a failed comment read", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local result, seen = waited({
+        got("1"),
+        comment_added(),
+        comment_added(),
+        got("3"),
+    }, { "--for", "human" }, {
+        cards = human_board(),
+        comments_errors = { true },
+        comments = { [ID_A] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } } },
+        now = started,
+    })
+    testing.eq(result.output, "the owner commented on 11111111")
+    testing.eq(seen.naps, { 30 })
+    testing.eq(seen.afters, { "none", "1", "1", "2" })
+end)
+
+testing.test("wait --for human gives up after ten failed comment reads", function()
+    local replies = { got("1") }
+    local errors = {}
+    for _ = 1, 10 do
+        replies[#replies + 1] = comment_added()
+        errors[#errors + 1] = true
+    end
+    local result, seen = waited(replies, { "--for", "human" }, {
+        cards = human_board(),
+        comments_errors = errors,
+        comments = {},
+    })
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("could not read the comments of " .. ID_A, 1, true),
+        result.message
+    )
+    testing.eq(#seen.naps, 9)
+end)
+
+local function window_board()
+    local at = "2026-11-02T10:00:00Z"
+    return {
+        cards = {
+            { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false },
+            { id = ID_B, column = support.COLUMN_NAME.READY, labels = {}, done = false },
+            { id = ID_C, column = support.COLUMN_NAME.REVIEW, labels = {}, done = false },
+        },
+        comments = {
+            [ID_A] = { { actor = "human", at = at, body = "1" } },
+            [ID_B] = { { actor = "human", at = at, body = "2" } },
+            [ID_C] = { { actor = "agent", at = at, body = "3" } },
+        },
+    }
+end
+
+local function comment_on(cursor, id, column)
+    return got(cursor, { kind = "comment_added", task_id = id, column = column })
+end
+
+testing.test("wait --for human restarts the settle window on each new owner event", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local opts = window_board()
+    local offsets = { 0, 0, 0, 50, 100, 100 }
+    function opts.now(count)
+        return started + offsets[count + 1]
+    end
+    local result, seen = waited({
+        got("1"),
+        comment_on("2", ID_A, support.COLUMN_NAME.READY),
+        comment_on("3", ID_B, support.COLUMN_NAME.READY),
+        comment_on("4", ID_C, support.COLUMN_NAME.REVIEW),
+        got("5"),
+    }, { "--for", "human" }, opts)
+    testing.eq(
+        result.output,
+        "the owner commented on 11111111\nthe owner commented on " .. ID_B:sub(1, 8)
+    )
+    testing.eq(#seen.afters, 5)
+end)
+
+testing.test("wait --for human closes the window once a non-matching event is late", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local opts = window_board()
+    local offsets = { 0, 0, 0, 61, 61 }
+    function opts.now(count)
+        return started + offsets[count + 1]
+    end
+    local result, seen = waited({
+        got("1"),
+        comment_on("2", ID_A, support.COLUMN_NAME.READY),
+        comment_on("3", ID_C, support.COLUMN_NAME.REVIEW),
+        comment_on("4", ID_B, support.COLUMN_NAME.READY),
+    }, { "--for", "human" }, opts)
+    testing.eq(result.output, "the owner commented on 11111111")
+    testing.eq(#seen.afters, 3)
+end)
+
+testing.test("wait --for human skips a comment whose time it cannot read", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local opts = window_board()
+    opts.now = started
+    opts.comments[ID_A] = { { actor = "human", at = "not a time", body = "1" } }
+    local result = waited({
+        got("1"),
+        comment_on("2", ID_A, support.COLUMN_NAME.READY),
+        comment_on("3", ID_B, support.COLUMN_NAME.READY),
+        got("4"),
+    }, { "--for", "human" }, opts)
+    testing.eq(result.output, "the owner commented on " .. ID_B:sub(1, 8))
+end)
+
+testing.test("wait --for human reads no comments of a card it already reported", function()
+    local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+    local reads = {}
+    local result = waited({
+        got("1"),
+        comment_added(),
+        comment_added(),
+        got("4"),
+    }, { "--for", "human" }, {
+        cards = human_board(),
+        reads = reads,
+        comments = { [ID_A] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } } },
+        now = started,
+    })
+    testing.eq(result.output, "the owner commented on 11111111")
+    testing.eq(reads, { ID_A })
 end)
 
 testing.test(

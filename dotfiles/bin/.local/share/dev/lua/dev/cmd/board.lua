@@ -4422,6 +4422,7 @@ function commands.stale(backend, args, now)
     local roles = backend.roles
     local found, owner, moved, undated, unsized, commented = {}, {}, {}, {}, {}, {}
     local lead, planner, nobody = {}, {}, {}
+    local candidates = {}
     for _, card in ipairs(cards) do
         if
             card.column == roles.blocked
@@ -4485,22 +4486,7 @@ function commands.stale(backend, args, now)
         local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
         local held = mine and (card.column == roles.blocked or card.column == roles.icebox)
         if not held then
-            local spoke, why = Owner.commented(backend, card)
-            if spoke == nil then
-                if card.column ~= roles.icebox then
-                    undated[#undated + 1] = why
-                end
-            elseif spoke then
-                local at = entered[card.id] and box.parse_time(entered[card.id]) or now
-                commented[#commented + 1] = {
-                    id = card.id,
-                    column = card.column,
-                    size = card.size,
-                    name = card.name,
-                    days = math.floor((now - at) / box.SECONDS_PER_DAY),
-                    at = at,
-                }
-            end
+            candidates[#candidates + 1] = card
         end
         if mine or (not card.done and roles.stale[card.column]) then
             local stamp = entered[card.id]
@@ -4540,7 +4526,6 @@ function commands.stale(backend, args, now)
             end
         end
     end
-    table.sort(undated)
     local function oldest(a, b)
         if a.at ~= b.at then
             return a.at < b.at
@@ -4559,13 +4544,27 @@ function commands.stale(backend, args, now)
             listed[item.id] = true
         end
     end
-    local fresh = {}
-    for _, item in ipairs(commented) do
-        if not listed[item.id] then
-            fresh[#fresh + 1] = item
+    for _, card in ipairs(candidates) do
+        if not listed[card.id] then
+            local spoke, why = Owner.commented(backend, card)
+            if spoke == nil then
+                if card.column ~= roles.icebox then
+                    undated[#undated + 1] = why
+                end
+            elseif spoke then
+                local at = entered[card.id] and box.parse_time(entered[card.id]) or now
+                commented[#commented + 1] = {
+                    id = card.id,
+                    column = card.column,
+                    size = card.size,
+                    name = card.name,
+                    days = math.floor((now - at) / box.SECONDS_PER_DAY),
+                    at = at,
+                }
+            end
         end
     end
-    commented = fresh
+    table.sort(undated)
     table.sort(commented, oldest)
     local lines = {}
     if #found == 0 then
@@ -5661,13 +5660,18 @@ end
 ---@param backend dev.board.Backend the board
 ---@param events dev.board.Event[] the events of one reply
 ---@param since integer the time in seconds since the epoch a comment must be newer than
+---@param skip table<string, boolean> the ids of the cards already reported, which are not read again
 ---@return table<string, boolean>? spoke the ids of the cards, nil when the board could not be read
 ---@return string? why the reason the board could not be read
-function Owner.comments(backend, events, since)
+function Owner.comments(backend, events, since, skip)
     local spoke = {}
     local cards
     for _, event in ipairs(events) do
-        if event.kind == EventKind.COMMENTED and type(event.task_id) == "string" then
+        if
+            event.kind == EventKind.COMMENTED
+            and type(event.task_id) == "string"
+            and not skip[event.task_id]
+        then
             if not cards then
                 local list, message = backend:cards()
                 if not list then
@@ -5901,14 +5905,12 @@ function M.wait(backend, args, opts)
             end
         end
         local spoke
+        local unread = false
         if reply and only == WaitFor.HUMAN then
             local why
-            spoke, why = Owner.comments(backend, reply.events, started)
+            spoke, why = Owner.comments(backend, reply.events, started, touched)
             if not spoke then
-                if not pomb.unreachable(why, true) then
-                    return flush(failure(why))
-                end
-                reply, message = nil, why
+                reply, message, unread = nil, why, true
             end
         end
         if reply then
@@ -5998,7 +6000,7 @@ function M.wait(backend, args, opts)
             local pause = math.min(WAIT_RETRY_SECONDS * 2 ^ limited, WAIT_LIMITED_MAX_SECONDS)
             limited = limited + 1
             nap(pause * (1 - WAIT_JITTER * random()))
-        elseif pomb.unreachable(message, true) then
+        elseif unread or pomb.unreachable(message, true) then
             failures = failures + 1
             if failures >= WAIT_RETRIES then
                 return flush(failure(message))

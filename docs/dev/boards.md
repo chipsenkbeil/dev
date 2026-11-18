@@ -1494,7 +1494,9 @@ no new event from the owner has come for that long, to catch a second reply,
 then prints one line per card the owner touched, not one per comment.
 
 The woken agent reads every comment with `dev board show`. Pomb's events carry
-no labels, so `wait` reads the board for each batch of events.
+no labels, so `wait` reads the board for each batch of events. It reads no
+comments of a card it already reported, and a failed read of the board or a
+comment is retried like an unreachable Pomb, up to ten tries in a row.
 
 Any other `--for` value is a usage error. On a local board `wait` prints
 `dev: A local board has nothing to wait on.` and exits 1, and it is never queued.
@@ -2236,6 +2238,7 @@ columns as the first list unless noted:
   any other column, Done included, with no answer note.
 - `newest comment is the owner's:` lists every other card but Done and not
   listed above whose newest comment is the owner's, whatever its label and age.
+  `stale` reads the comments only of a card that no earlier list shows.
 - `unsized outside Icebox:` lists every card outside Icebox that is white or
   has no colour, at any age, one line each with id prefix, column and name, in
   board order. Sizing happens in planning, so a card that waits unsized is a
