@@ -540,7 +540,14 @@ local function dir_empty(dir)
     return dev_os.capture({ "ls", dir }) == ""
 end
 
-local function cleans_up_after(signal, first, second)
+local function unique_secs(factor)
+    local pid = dev_os.capture({ "sh", "-c", "echo $$" }):match("%d+")
+    return 1000000 + factor * tonumber(pid)
+end
+
+local function cleans_up_after(signal, factor)
+    local first = unique_secs(factor)
+    local second = first + 1
     local tmp = assert(fs.mktemp({ dir = true }))
     local pid = launch_capture_timed(("sleep %d & sleep %d; wait"):format(first, second), tmp)
     testing.ok(
@@ -562,11 +569,11 @@ local function cleans_up_after(signal, first, second)
 end
 
 testing.test("capture_timed cleans up when its process is terminated", function()
-    cleans_up_after("-TERM", 3773, 3774)
+    cleans_up_after("-TERM", 6)
 end)
 
 testing.test("capture_timed cleans up when its process is killed", function()
-    cleans_up_after("-KILL", 3777, 3778)
+    cleans_up_after("-KILL", 8)
 end)
 
 local function children_of(marker)
@@ -593,17 +600,18 @@ end
 
 testing.test("capture_timed starts no process while its command runs", function()
     local tmp = assert(fs.mktemp({ dir = true }))
-    local pid = launch_capture_timed("sleep 3779", tmp)
+    local marker = "sleep " .. unique_secs(10)
+    local pid = launch_capture_timed(marker, tmp)
     testing.ok(
         wait_until(function()
-            return process_listed("sleep 3779")
+            return process_listed(marker)
         end),
         "the command should be running"
     )
     local WATCH_POLLS = 15
     local polled, saw_owner = false, false
     for _ = 1, WATCH_POLLS do
-        local found, owned = children_of("sleep 3779")
+        local found, owned = children_of(marker)
         if #found > 0 then
             polled = true
         end
@@ -612,7 +620,7 @@ testing.test("capture_timed starts no process while its command runs", function(
     end
     dev_os.run({ "kill", "-KILL", pid }, { stderr = "null" })
     wait_until(function()
-        return not process_listed("sleep 3779")
+        return not process_listed(marker)
     end)
     fs.remove(tmp, { recursive = true })
     testing.ok(saw_owner, "the probe should see the command's owner row")
