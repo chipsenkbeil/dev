@@ -10,6 +10,11 @@ local function cmd_board()
     return require("dev.cmd.board")
 end
 
+-- dev.board.wiring requires this module, so the require waits for the first call
+local function wiring()
+    return require("dev.board.wiring")
+end
+
 ---@class dev.board.claim.Opts
 ---@field ttl integer the seconds a Pomb grab or a lease claim lasts
 ---@field fence integer? the caller's live fence, which renews the claim it names
@@ -1317,6 +1322,29 @@ end
 ---@return string column the done column
 function Board:done_column()
     return self.backend.roles:done_column()
+end
+
+---Name why the card cannot land, without landing it.
+---
+---The reasons are its column, its claimant, its open outcomes, its check, its reviews and the files
+---its commit touches. The agent is the one `DEV_AGENT` names, and a moved trunk is no reason, since
+---landing rebases.
+---@return string? problem every reason in one text, nil when the card may land
+function CardHandle:land_problem()
+    local backend = self.board.backend
+    local comments, message = backend:comments(self.card.id)
+    if not comments then
+        return text.sentence(message)
+    end
+    local problems = wiring().land_problems(backend, self.card, {
+        name = os.getenv("DEV_AGENT") or "",
+        comments = comments,
+        untaken = true,
+    })
+    if #problems == 0 then
+        return nil
+    end
+    return table.concat(problems, " ")
 end
 
 ---Move the card to a column.

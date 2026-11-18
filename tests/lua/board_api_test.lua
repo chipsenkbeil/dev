@@ -22,6 +22,16 @@ assert(card[ctx.args[2]](card))
 print("landed " .. found:release_column() .. " " .. found:done_column())
 ]=]
 
+local PROOF_SCRIPT = [=[
+local ctx = ...
+local board = require("dev.board")
+local scm = require("dev.scm")
+
+local found = assert(board.find(scm.workspace(ctx.root)))
+local card = assert(found:find_card(ctx.args[1]))
+print("problem: " .. tostring(card:land_problem()))
+]=]
+
 local function must(first, second)
     local code = type(first) == "number" and first or second
     assert(code == 0, tostring(first))
@@ -47,6 +57,7 @@ local function project()
     local root = support.sandbox({
         [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "' .. BOARD .. '"\n',
         [".dev/apiland.lua"] = LAND_SCRIPT,
+        [".dev/apiproof.lua"] = PROOF_SCRIPT,
     }, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
@@ -139,6 +150,19 @@ end)
 testing.test("a card found by the board api moves to the release column", function()
     local column = land_by_script("move_to_release", support.Column.VERIFY)
     testing.eq(column, support.COLUMN_NAME.RELEASE)
+end)
+
+testing.test("a card found by the board api names why it cannot land and lands nothing", function()
+    local root, home, bare = project()
+    must(dev(root, home, { "board", "init" }))
+    local id = card(root, home, support.Column.REVIEW)
+    local trunk = dev_os.capture({ "git", "-C", bare, "rev-parse", "master" })
+    local out, code = dev(root, home, { "apiproof", id })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("problem: No code review of change", 1, true), out)
+    testing.ok(out:find("The card has no checks rows.", 1, true), out)
+    testing.eq(dev_os.capture({ "git", "-C", bare, "rev-parse", "master" }), trunk)
+    testing.eq(column_of(home, id), support.COLUMN_NAME.VERIFY)
 end)
 
 testing.test("board.find names a project with no board", function()

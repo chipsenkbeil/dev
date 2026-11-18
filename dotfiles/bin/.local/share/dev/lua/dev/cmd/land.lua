@@ -1,6 +1,7 @@
 local board = require("dev.board")
 local cmd_board = require("dev.cmd.board")
 local config = require("dev.config")
+local guards = require("dev.board.guards")
 local scm = require("dev.scm")
 local text = require("dev.text")
 local verb = require("dev.verb")
@@ -48,9 +49,10 @@ end
 
 ---Land the change of the workspace dev runs in.
 ---
----In a project with a board the workspace's name is the card, and the `board land` command lands it
----with its records, turn, note and move. A project with no board gets a rebase onto trunk and a
----land of the change. A `.dev/land.lua` replaces all of it.
+---In a project with a board the workspace's name is the card. The card's own proof refusal stops an
+---unproven card, and the `board land` command lands the rest with its turn, note and move. A
+---project with no board gets a rebase onto trunk and a land of the change. A `.dev/land.lua`
+---replaces all of it.
 ---@param ctx dev.Ctx the verb's context
 ---@return integer code the exit code
 function M.run(ctx)
@@ -69,6 +71,16 @@ function M.run(ctx)
         local named = flags[CARD_FLAG] and ""
             or "Cannot land the workspace " .. workspace:name() .. " as a card. "
         verb.note(named .. text.sentence(why))
+        return 1
+    end
+    local agent, bad = guards.agent_name()
+    if bad or not agent then
+        verb.note(bad and bad.message or "Needs DEV_AGENT, the name that lands the card.")
+        return 1
+    end
+    local problem = card:land_problem()
+    if problem then
+        verb.note("Card " .. card.card.id:sub(1, board.MIN_PREFIX) .. " cannot land. " .. problem)
         return 1
     end
     local landing = {}
