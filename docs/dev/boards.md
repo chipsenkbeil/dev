@@ -2893,6 +2893,10 @@ Carrying a check and reviews across a rebase:
   too.
 - When no commit carries, the refusal gives the reason for the newest one,
   unless a jj read fails first, which refuses at once and names that read.
+- A checked commit that lacks a passing check or a review of its own, such as a
+  code review that was never recorded at it, never reaches the tests above. The
+  refusal then reads `The check at commit X cannot carry over to this commit.`
+  and names what that commit lacks.
 - The done note then adds that the check and reviews were carried over from the
   checked commit.
 

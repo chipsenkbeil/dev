@@ -376,7 +376,9 @@ local function land_problems(backend, card, who)
     end
     local refused = land.refused_reviews(who.comments, state, backend.root)
     for _, missing in ipairs(lacking) do
-        problems[#problems + 1] = missing
+        if not (carry_why and carry_why:find(missing, 1, true)) then
+            problems[#problems + 1] = missing
+        end
     end
     for _, line in ipairs(refused) do
         problems[#problems + 1] = line

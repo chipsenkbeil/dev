@@ -1559,6 +1559,21 @@ if has_jj then
         end
     )
 
+    testing.test("land carries the check and reviews over the rebase it makes itself", function()
+        local project = jj_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        local list = comments(project.home)
+        testing.ok(
+            list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
+            list[#list].body
+        )
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+    end)
+
     testing.test("land reads trunk before and under the turn, and after the land", function()
         local project = jj_project()
         local id = review_ready(project)
@@ -2209,10 +2224,21 @@ if has_jj then
                 "clean",
             }, { DEV_AGENT = "rev" }))
             must(dev(project, { "board", "check", id }))
+            local at_check = head(project.root)
             must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
             rebase_onto_trunk(project.root)
-            refused(project, id, { "No style review of change" })
+            local out = refused(project, id, { "No style review of change" })
+            testing.ok(
+                out:find(
+                    "The check at commit " .. at_check:sub(1, 12) .. " cannot carry over",
+                    1,
+                    true
+                ),
+                out
+            )
+            local _, repeats = out:gsub("No style review of change", "")
+            testing.eq(repeats, 1, out)
         end
     )
 

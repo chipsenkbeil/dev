@@ -601,8 +601,31 @@ local function file_set(out)
     return set
 end
 
+---@class dev.board.land.uncarried_problem.Opts
+---@field root string the project root
+---@field comments {body: string}[] the card's comments, oldest first
+---@field at {commit: string, change: string} the checked commit and the change id
+---@field rows string[] the card's checks rows
+
+---@param opts dev.board.land.uncarried_problem.Opts the checked commit and the card's records
+---@return string? problem what the checked commit lacks, nil when it lacks nothing
+local function uncarried_problem(opts)
+    local problem = M.checks_problem(opts.comments, opts.at, opts.rows)
+    if problem then
+        return problem
+    end
+    local lacking = M.missing_reviews(opts.comments, opts.at, opts.root)
+    if #lacking > 0 then
+        return table.concat(lacking, " ")
+    end
+    local refused = M.refused_reviews(opts.comments, opts.at, opts.root)
+    if #refused > 0 then
+        return table.concat(refused, " ")
+    end
+end
+
 local function checked_commits(root, comments, state, rows)
-    local found, seen = {}, {}
+    local found, seen, why = {}, {}, nil
     for i = #comments, 1, -1 do
         local record = check.parse(comments[i].body)
         if
@@ -614,16 +637,25 @@ local function checked_commits(root, comments, state, rows)
         then
             seen[record.commit] = true
             local at = { commit = record.commit, change = state.change }
-            if
-                not M.checks_problem(comments, at, rows)
-                and #M.missing_reviews(comments, at, root) == 0
-                and #M.refused_reviews(comments, at, root) == 0
-            then
+            local problem = uncarried_problem({
+                root = root,
+                comments = comments,
+                at = at,
+                rows = rows,
+            })
+            if problem then
+                why = why
+                    or string.format(
+                        "The check at commit %s cannot carry over to this commit. %s",
+                        M.short(record.commit),
+                        problem
+                    )
+            else
                 found[#found + 1] = record.commit
             end
         end
     end
-    return found
+    return found, why
 end
 
 local function git_carry_problem(root, state, commit)
@@ -876,7 +908,8 @@ end
 ---The checked commits are those of the change with a passing run and their reviews. They are tried
 ---newest first, the first that passes every test carries, and a refusal names the newest one's
 ---reason, unless a jj read fails, which refuses at once naming that read. A commit with a check
----record of its own, readable or not, never carries.
+---record of its own, readable or not, never carries. When every checked commit lacks a passing
+---check or a review, the problem names the newest one and what it lacks.
 ---@param opts dev.board.land.Opts the project, the card's records and the landing commit
 ---@return string? commit the checked commit the records carry over from
 ---@return string? problem why it is refused, nil when it carries or no commit was checked
@@ -891,9 +924,9 @@ function M.carry(opts)
             return nil
         end
     end
-    local candidates = checked_commits(root, comments, state, rows)
+    local candidates, unmet = checked_commits(root, comments, state, rows)
     if #candidates == 0 then
-        return nil
+        return nil, unmet
     end
     local moved = M.trunk_problem(root)
     if moved then
