@@ -3822,6 +3822,8 @@ The claim note:
 - The first claim by a name also writes a status note `dev-claim: by=NAME`, so
   the name outlives the claim. `review` reads those notes.
 - If that note cannot be written, the claim is released and `take` exits 1.
+- A take by the card's current claimant writes no note. When its comments
+  cannot be read, the claim is kept and `take` prints the reason.
 - `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
 
 The handoff:

@@ -188,3 +188,55 @@ testing.test("a renewal keeps the loop for the longer of the cap and the row's s
         testing.eq(ticks, case.ticks, tostring(case.seconds))
     end
 end)
+
+local function claim_stub(fails)
+    local stub = { released = 0 }
+    function stub:claim(_, _, opts)
+        return (opts.fence or 0) + 1
+    end
+    function stub:comments()
+        if fails == "comments" then
+            return nil, "pomb is down"
+        end
+        return {}
+    end
+    function stub:note()
+        if fails == "note" then
+            return nil, "note refused"
+        end
+        return true
+    end
+    function stub:release()
+        self.released = self.released + 1
+        return true
+    end
+    function stub:keepalive()
+        return 0
+    end
+    return stub
+end
+
+testing.test("take keeps a renewed claim when the comments cannot be read", function()
+    backend_at(board_home())
+    local card = { id = "cccc3333", size = "1 Pomodoro", claimant = "dotfiles/a" }
+    assert(claims.write({ card = card.id, fence = 3 }))
+    local stub = claim_stub("comments")
+    local result, fence = runner.claim_card(stub, card, "dotfiles/a")
+    testing.eq(result.code, nil)
+    testing.eq(fence, 4)
+    testing.eq(stub.released, 0)
+    testing.ok(result.output:find("pomb is down", 1, true), result.output)
+end)
+
+testing.test("take releases a first claim when the note or the comments fail", function()
+    backend_at(board_home())
+    for _, fails in ipairs({ "note", "comments" }) do
+        local card = { id = "cccc3333", size = "1 Pomodoro" }
+        local stub = claim_stub(fails)
+        local result, fence = runner.claim_card(stub, card, "dotfiles/a")
+        testing.eq(result.code, 1)
+        testing.eq(fence, nil)
+        testing.eq(stub.released, 1)
+        testing.ok(result.message:find("was dropped", 1, true), result.message)
+    end
+end)

@@ -155,18 +155,25 @@ local function claim_card(backend, card, name)
         return failure(message)
     end
     claims.stop(card.id)
+    local fresh = card.claimant ~= who
     local past, why = backend:comments(card.id)
     local ok
-    if past and card.claimant ~= who then
+    if past and fresh then
         ok, why =
             backend:note(card.id, board.claim_record(who), fence, { kind = board.NoteKind.STATUS })
         past = ok and past
     end
+    local warning = ""
     if not past then
-        backend:release(card.id, fence)
-        return failure(
-            "the claim on " .. card.id:sub(1, board.MIN_PREFIX) .. " was dropped: " .. why
-        )
+        if fresh then
+            backend:release(card.id, fence)
+            return failure(
+                "the claim on " .. card.id:sub(1, board.MIN_PREFIX) .. " was dropped: " .. why
+            )
+        end
+        warning = "\nThe claim is kept. Its comments could not be read: "
+            .. (why:gsub("[%.%s]+$", ""))
+            .. "."
     end
     local ticks, minutes = claims.cap(card.size)
     local state = { card = card.id, fence = fence }
@@ -192,21 +199,23 @@ local function claim_card(backend, card, name)
     if pid == 0 then
         return {
             output = string.format(
-                "took %s, fence %d, held for %dm",
+                "took %s, fence %d, held for %dm%s",
                 card.id:sub(1, board.MIN_PREFIX),
                 fence,
-                minutes
+                minutes,
+                warning
             ),
         },
             fence
     end
     return {
         output = string.format(
-            "took %s, fence %d, renewing every %dm for up to %dm",
+            "took %s, fence %d, renewing every %dm for up to %dm%s",
             card.id:sub(1, board.MIN_PREFIX),
             fence,
             claims.TICK_MINUTES,
-            minutes
+            minutes,
+            warning
         ),
     },
         fence
