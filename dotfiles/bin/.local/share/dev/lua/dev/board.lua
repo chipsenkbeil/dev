@@ -103,8 +103,10 @@ end
 ---@field done_columns fun(self: dev.board.Backend): string[]?, string? the names of the columns
 ---   marked finished, in board order, or nil and a message
 ---@field column_map table<string, string>? the `[board.columns]` map the runner resolves into
----   `roles`
----@field roles dev.board.Roles? the column set of this run, which the runner sets before a command
+---   `stages`
+---@field stages dev.board.Stages? the column set of this run, which the runner sets before a
+---   command
+---@field roles dev.board.Stages? the temporary alias of `stages`
 ---@field card fun(self: dev.board.Backend, id: string): dev.board.Card?, string? the card with that
 ---   id, or nil and a message
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order,
@@ -680,10 +682,11 @@ function M.fits(card, limit)
     return limit == nil or (SIZE_RANKS[card.color] or 0) <= limit
 end
 
----The roles a column map names, in board order.
-M.ROLES = { "icebox", "backlog", "ready", "progress", "review", "verify", "release", "blocked" }
+---The stages a column map names, in board order.
+M.STAGES = { "icebox", "backlog", "ready", "progress", "review", "verify", "release", "blocked" }
+M.ROLES = M.STAGES
 
----The name each role has when the config map does not rename it.
+---The name each stage has when the config map does not rename it.
 M.DEFAULT_NAMES = {
     icebox = "Icebox",
     backlog = "Backlog",
@@ -696,7 +699,7 @@ M.DEFAULT_NAMES = {
     done = "Done",
 }
 
----@class dev.board.Roles
+---@class dev.board.Stages
 ---@field icebox string the column of free-form cards, which are never scaffolded or checked
 ---@field backlog string the column of new cards, which planners size and split
 ---@field ready string the column a worker takes cards from
@@ -709,63 +712,65 @@ M.DEFAULT_NAMES = {
 ---@field finished string[] the names of the columns the backend marks finished, in board order
 ---@field list string[] the column names in board order, the mapped or default Done last
 ---@field stale table<string, boolean> the columns where a card that sits untouched is stale
-local Roles = {}
-Roles.__index = Roles
+local Stages = {}
+Stages.__index = Stages
 
 ---Resolve the column set of one command run.
----@param map table<string, any>? the `[board.columns]` table, keyed by role
+---@param map table<string, any>? the `[board.columns]` table, keyed by stage
 ---@param finished string[]? the names of the columns the backend marks finished
----@return dev.board.Roles
-function M.roles(map, finished)
+---@return dev.board.Stages
+function M.stages(map, finished)
     map = map or {}
-    local roles = setmetatable({ finished = finished or {} }, Roles)
+    local stages = setmetatable({ finished = finished or {} }, Stages)
     local list = {}
-    for _, role in ipairs(M.ROLES) do
-        local name = map[role]
-        roles[role] = type(name) == "string" and name ~= "" and name or M.DEFAULT_NAMES[role]
-        list[#list + 1] = roles[role]
+    for _, stage in ipairs(M.STAGES) do
+        local name = map[stage]
+        stages[stage] = type(name) == "string" and name ~= "" and name or M.DEFAULT_NAMES[stage]
+        list[#list + 1] = stages[stage]
     end
     local done = map.done
     if type(done) == "string" and done ~= "" then
-        roles.done = done
+        stages.done = done
     end
-    list[#list + 1] = roles.done or roles.finished[1] or M.DEFAULT_NAMES.done
-    roles.list = list
-    roles.stale = {
-        [roles.backlog] = true,
-        [roles.ready] = true,
-        [roles.progress] = true,
-        [roles.review] = true,
-        [roles.verify] = true,
+    list[#list + 1] = stages.done or stages.finished[1] or M.DEFAULT_NAMES.done
+    stages.list = list
+    stages.stale = {
+        [stages.backlog] = true,
+        [stages.ready] = true,
+        [stages.progress] = true,
+        [stages.review] = true,
+        [stages.verify] = true,
     }
-    return roles
+    return stages
 end
+M.roles = M.stages
 
----Point `backend` at a `columns` map, a `root` and its roles.
+---Point `backend` at a `columns` map, a `root` and its stages.
 ---@param backend dev.board.Backend the backend to retarget
 ---@param columns table<string, string>? the `[board.columns]` map the runner resolves into
 ---@param root string? the project root the board's config lives under
 ---@param finished string[]? the names of the columns the backend marks finished
 function M.retarget(backend, columns, root, finished)
     backend.column_map = columns
-    backend.roles = M.roles(columns, finished)
+    backend.stages = M.stages(columns, finished)
+    backend.roles = backend.stages
     backend.root = root
 end
 
 ---The column `discard` moves a card to: the mapped done column, else the first finished one.
 ---@return string
-function Roles:done_column()
+function Stages:done_column()
     return self.done or self.finished[1] or M.DEFAULT_NAMES.done
 end
 
----Name a column from its full name or a role name, in any case.
+---Name a column from its full name or a stage name, in any case.
 ---@param word string `ready`, `progress`, `Review`, a finished column's name and so on
 ---@return string? column the column's name, or nil when it is not one of the board's
-function Roles:column(word)
+function Stages:column(word)
     local lowered = word:lower():gsub("%s+", " ")
-    for _, role in ipairs(M.ROLES) do
-        if role == lowered then
-            return self[role]
+    for _, stage in ipairs(M.STAGES) do
+        if stage == lowered then
+            return self[stage]
         end
     end
     if lowered == "done" then
@@ -784,8 +789,8 @@ function Roles:column(word)
 end
 
 ---List the column names a user may type.
----@return string names the column names and the role words
-function Roles:help()
+---@return string names the column names and the stage words
+function Stages:help()
     local names, seen = {}, {}
     for _, name in ipairs(self.list) do
         names[#names + 1] = name
@@ -796,7 +801,7 @@ function Roles:help()
             names[#names + 1] = name
         end
     end
-    return table.concat(names, ", ") .. " (or a role such as progress or review, in any case)"
+    return table.concat(names, ", ") .. " (or a stage such as progress or review, in any case)"
 end
 
 ---Name a palette colour from a size word.
@@ -1386,13 +1391,13 @@ end
 ---Name the column a landed card waits in for a deploy.
 ---@return string column the release column
 function Board:release_column()
-    return self.backend.roles.release
+    return self.backend.stages.release
 end
 
 ---Name the column a finished card moves to.
 ---@return string column the done column
 function Board:done_column()
-    return self.backend.roles:done_column()
+    return self.backend.stages:done_column()
 end
 
 ---Name why the card cannot land, without landing it.

@@ -94,8 +94,8 @@ local function columns_step(layout, state, say)
     local RENAMED_FROM = "In Review"
     local present = by_name(state.columns)
     local added = false
-    local standard = state.roles.list
-    local review = state.roles.review
+    local standard = state.stages.list
+    local review = state.stages.review
     local from, to = RENAMED_FROM:lower(), review:lower()
     local old = present[from]
     if old and not present[to] and to ~= from then
@@ -143,7 +143,7 @@ local function columns_step(layout, state, say)
         say("marked " .. done.name .. " as the column of finished cards")
         state.changes = state.changes + 1
     end
-    local blocked = present[state.roles.blocked:lower()]
+    local blocked = present[state.stages.blocked:lower()]
     if blocked.is_blocked == nil then
         return nil,
             "This Pomb cannot mark a Blocked column yet, and `dev board ask` needs it. "
@@ -159,13 +159,13 @@ local function columns_step(layout, state, say)
             state.changes = state.changes + 1
         end
     end
-    local roles = state.roles
+    local stages = state.stages
     for _, stage in ipairs({
-        { column = roles.ready, name = "ready" },
-        { column = roles.progress, name = "in_progress" },
-        { column = roles.review, name = "review" },
-        { column = roles.verify, name = "verify" },
-        { column = roles.release, name = "release" },
+        { column = stages.ready, name = "ready" },
+        { column = stages.progress, name = "in_progress" },
+        { column = stages.review, name = "review" },
+        { column = stages.verify, name = "verify" },
+        { column = stages.release, name = "release" },
     }) do
         local column = present[stage.column:lower()]
         if column.outcomes_locked == false then
@@ -321,20 +321,20 @@ local function limits_step(layout, state, say)
     if groups == false or #groups > 0 then
         return true
     end
-    local roles = state.roles
+    local stages = state.stages
     local ok
     ok, message =
-        layout:add_limit_group({ roles.progress, roles.review, roles.verify }, LIMIT_GROUP_CARDS)
+        layout:add_limit_group({ stages.progress, stages.review, stages.verify }, LIMIT_GROUP_CARDS)
     if not ok then
         return nil, message
     end
     say(
         "created limit group "
-            .. roles.progress
+            .. stages.progress
             .. ", "
-            .. roles.review
+            .. stages.review
             .. " and "
-            .. roles.verify
+            .. stages.verify
             .. " at "
             .. LIMIT_GROUP_CARDS
     )
@@ -447,7 +447,7 @@ local function strip_step(layout, state, say)
 end
 
 local function turn_step(layout, state, say)
-    local card, message, existed = layout:add(board.TURN_NAME, state.roles.icebox, { once = true })
+    local card, message, existed = layout:add(board.TURN_NAME, state.stages.icebox, { once = true })
     if not card then
         return nil, message
     end
@@ -502,7 +502,7 @@ local function lanes_step(layout, state, say)
 end
 
 ---@class dev.board.Opts
----@field roles? dev.board.Roles the column set to lay out, the standard names when nil
+---@field stages? dev.board.Stages the column set to lay out, the standard names when nil
 ---@field lanes? string[] the lanes the board config lists, an empty list when nil
 ---@field warn_first_lane? boolean whether to warn when the first lane is unlisted, false when nil
 ---@field warn? fun(line: string) prints one warning line, standard error when nil
@@ -520,7 +520,7 @@ function M.run(layout, name, say, opts)
     opts = opts or {}
     local state = {
         changes = 0,
-        roles = opts.roles or board.roles(),
+        stages = opts.stages or board.stages(),
         wanted_lanes = opts.lanes or {},
         warn_first_lane = opts.warn_first_lane or false,
         warn = opts.warn or verb.note,

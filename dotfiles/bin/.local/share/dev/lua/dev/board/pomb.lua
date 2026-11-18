@@ -598,8 +598,8 @@ function Backend:permissions()
     return catalog
 end
 
-function Backend:__roles()
-    return self.roles or board.roles()
+function Backend:__stages()
+    return self.stages or board.stages()
 end
 
 function Backend:__load()
@@ -969,7 +969,7 @@ function Backend:next(column, opts)
     if not id then
         return nil, unavailable("the board has no " .. column .. " column")
     end
-    local ready_filter = column == self:__roles().ready and "&ready=true" or ""
+    local ready_filter = column == self:__stages().ready and "&ready=true" or ""
     local filters = { "" }
     if opts and opts.lane then
         local lane_id = self:__lane_id(opts.lane)
@@ -1140,11 +1140,11 @@ function Backend:add(name, column, opts)
     end
     local outcomes = opts and opts.outcomes or {}
     local final = id
-    local roles = self:__roles()
-    if #outcomes > 0 and column == roles.ready then
-        id = self:__column_id(roles.backlog)
+    local stages = self:__stages()
+    if #outcomes > 0 and column == stages.ready then
+        id = self:__column_id(stages.backlog)
         if not id then
-            return nil, unavailable("the board has no " .. roles.backlog .. " column")
+            return nil, unavailable("the board has no " .. stages.backlog .. " column")
         end
     end
     local body = { name = name, column_id = id }
@@ -1209,7 +1209,7 @@ function Backend:add(name, column, opts)
             return nil,
                 task.id:sub(1, board.MIN_PREFIX)
                     .. " was added to "
-                    .. roles.backlog
+                    .. stages.backlog
                     .. " with its outcomes but the move to "
                     .. column
                     .. " failed: "

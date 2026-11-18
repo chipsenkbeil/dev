@@ -1789,7 +1789,10 @@ end
 ---@param opts dev.cmd.board.move.Opts? how to sleep and tell time
 ---@return dev.cmd.board.Result result the result of the last try
 function M.move(backend, args, opts)
-    backend.roles = backend.roles or board.roles(backend.column_map, backend:done_columns() or {})
+    backend.stages = backend.stages
+        or backend.roles
+        or board.stages(backend.column_map, backend:done_columns() or {})
+    backend.roles = backend.stages
     return move_card(backend, args, opts)
 end
 
@@ -1802,7 +1805,10 @@ local function closes_epic(backend, args)
     if not flags or #words < 2 then
         return false
     end
-    backend.roles = backend.roles or board.roles(backend.column_map, backend:done_columns() or {})
+    backend.stages = backend.stages
+        or backend.roles
+        or board.stages(backend.column_map, backend:done_columns() or {})
+    backend.roles = backend.stages
     local column = named_column(backend, table.concat(words, " ", 2))
     if not column or column ~= backend.roles:done_column() then
         return false
@@ -5694,7 +5700,7 @@ local function init_local(ctx, flags, admin)
     end
     local changes
     changes, message = init.run(backend, found.name, verb.say, {
-        roles = backend.roles,
+        stages = backend.stages,
         lanes = config_lanes(ctx),
         warn_first_lane = false,
     })
@@ -5750,7 +5756,8 @@ M.handlers["board init"] = function(ctx)
     if not backend then
         verb.die(sentence(message))
     end
-    backend.roles = board.roles(column_map(ctx.root))
+    backend.stages = board.stages(column_map(ctx.root))
+    backend.roles = backend.stages
     if admin then
         local secret
         secret, message = device.pair({
@@ -5771,7 +5778,7 @@ M.handlers["board init"] = function(ctx)
     end
     local changes
     changes, message = init.run(backend, name, verb.say, {
-        roles = backend.roles,
+        stages = backend.stages,
         lanes = config_lanes(ctx),
         warn_first_lane = true,
     })
