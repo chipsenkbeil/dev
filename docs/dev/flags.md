@@ -2,7 +2,7 @@
 
 ## Global flags
 
-Seven flags work anywhere before a `--` on the line, whatever the verb.
+Eight flags work anywhere before a `--` on the line, whatever the verb.
 
 - `-v` or `--verbose`: print each command before it runs, and export
   `VERBOSE=1` to it.
@@ -49,6 +49,22 @@ dev -v lint
 dev -vv test
 dev --remote test
 ```
+
+### Adding a global flag
+
+A new flag goes first into `BARE_FLAGS` or `VALUE_FLAGS` in
+`lua/dev/registry.lua`, the one list every other copy is checked against.
+Then add it to each copy:
+
+- the launcher, `bin/.local/bin/dev`, when it consumes the flag or implies
+  `--remote`
+- the parser in `lua/dev/cli.lua`
+- the flag table in `lua/dev/help.lua`
+- the completion in `zsh/.config/zsh/completions/_dev`
+- the list above
+
+`tests/lua/global_flags_test.lua` fails and names the flag when a copy
+misses it.
 
 ## Help flags
 
