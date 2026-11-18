@@ -27,7 +27,9 @@ The luajit modules of `dev`, one per item.
   `--check` and `--yes` together are a usage error. It also rewrites the
   head of `.dev/README.md` above `## Commands in this repo` for every project
   type, in the same diff and confirm flow, and leaves a file with no marker
-  line alone.
+  line alone. A project's own lint checks below the marker are scanned too,
+  and `undefined: .dev/lint.lua:LINE: NAME` names a table name they use that
+  nothing in the file defines, which exits 1.
 
 ### Board
 

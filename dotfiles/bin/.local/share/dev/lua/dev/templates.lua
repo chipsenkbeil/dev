@@ -202,6 +202,92 @@ local function lint_tail(root)
     return tail .. "\n\n"
 end
 
+---Standard Lua globals a lint tail may use
+local GLOBAL_NAMES = {}
+for name in
+    ([[string table os io math require ipairs pairs type tostring tonumber pcall xpcall error
+    assert select setmetatable getmetatable rawget rawset rawequal next unpack print package debug
+    coroutine jit ffi bit load loadstring dofile arg _G _ENV utf8 collectgarbage self]]):gmatch(
+        "%S+"
+    )
+do
+    GLOBAL_NAMES[name] = true
+end
+
+local function blank(text)
+    return (text:gsub("[^\n]", ""))
+end
+
+local function without_text(text)
+    text = text:gsub("\\[^\n]", ""):gsub('"[^"\n]*"', '""'):gsub("'[^'\n]*'", "''")
+    text = text:gsub("(%-%-%[(=*)%[.-%]%2%])", blank)
+    text = text:gsub("(%[(=*)%[.-%]%2%])", blank)
+    return (text:gsub("%-%-[^\n]*", ""))
+end
+
+local function add_words(set, text)
+    for word in text:gmatch("[%a_][%w_]*") do
+        set[word] = true
+    end
+end
+
+local function defined_names(text)
+    local set = {}
+    for params in text:gmatch("function[%w_%.:%s]*%(([^)]*)%)") do
+        add_words(set, params)
+    end
+    for name in text:gmatch("function%s+([%w_]+)") do
+        set[name] = true
+    end
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        for names in line:gmatch("local[ \t]+([%w_ \t,]+)") do
+            add_words(set, names)
+        end
+        for names in line:gmatch("for[ \t]+([%w_ \t,]+)[ \t]+in%f[%s]") do
+            add_words(set, names)
+        end
+        for name in line:gmatch("for[ \t]+([%w_]+)[ \t]*=") do
+            set[name] = true
+        end
+        local target = line:match("^[ \t]*([%a_][%w_]*)[ \t]*=[^=]")
+        if target then
+            set[target] = true
+        end
+    end
+    return set
+end
+
+---List the table names the project's own checks in `.dev/lint.lua` use without defining them.
+---
+---A name counts when the tail uses it as `name.` or `name:` and nothing in the file defines it
+---as a local, a function, a parameter or a loop variable, and it is no standard Lua global.
+---@param text string the text of `.dev/lint.lua`, as sync would write it
+---@return {line: integer, name: string}[] unbound each use, in file order
+function M.lint_unbound(text)
+    local unbound = {}
+    local raws = lines_of(text)
+    local scrubbed = without_text(text)
+    local lines = lines_of(scrubbed)
+    local defined = defined_names(scrubbed)
+    local marked = false
+    for index, raw in ipairs(raws) do
+        if marked then
+            local seen = {}
+            for start, name in lines[index]:gmatch("()([%a_][%w_]*)[%.:]%f[%a_]") do
+                local before = lines[index]:sub(start - 1, start - 1)
+                local known = defined[name] or GLOBAL_NAMES[name]
+                if not known and before ~= "." and before ~= ":" and not seen[name] then
+                    seen[name] = true
+                    unbound[#unbound + 1] = { line = index, name = name }
+                end
+            end
+        elseif raw == LINT_MARKER then
+            marked = true
+        end
+    end
+    return unbound
+end
+
 local function lint_head(content)
     local out = {}
     for _, line in ipairs(lines_of(content)) do

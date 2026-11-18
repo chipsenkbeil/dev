@@ -150,6 +150,7 @@ function M.run(ctx)
     end
     local channel = templates.channel(root)
     local drifted = false
+    local unbound = false
 
     local entries, pending = templates.skip_pending(root, templates.manifest(dir, kind))
     local rendered = {}
@@ -166,6 +167,13 @@ function M.run(ctx)
         elseif current ~= text then
             io.write("differs: ", entry.dest, "\n")
             drifted = true
+        end
+        if entry.dest == ".dev/lint.lua" then
+            for _, use in ipairs(templates.lint_unbound(text)) do
+                verb.say("undefined: " .. entry.dest .. ":" .. use.line .. ": " .. use.name)
+                unbound = true
+                drifted = true
+            end
         end
     end
 
@@ -268,7 +276,7 @@ function M.run(ctx)
         io.write("aborted\n")
         return 0
     end
-    local code = 0
+    local code = unbound and 1 or 0
     local function failed(err)
         verb.note("dev: " .. tostring(err))
         code = 1
