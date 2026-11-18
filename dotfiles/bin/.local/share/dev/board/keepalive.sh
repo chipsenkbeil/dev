@@ -12,10 +12,21 @@ name=$8
 lease=$9
 here=$(cd "$(dirname "$0")" && pwd)
 
+sleeper=
+stop_sleeper() {
+    if [ -n "$sleeper" ]; then
+        kill "$sleeper" 2>/dev/null
+    fi
+}
+trap 'exit 143' TERM INT HUP
+trap stop_sleeper EXIT
+
 n=0
 healed=0
 while [ "$n" -lt "$ticks" ]; do
-    sleep "$tick"
+    sleep "$tick" &
+    sleeper=$!
+    wait "$sleeper"
     grep -qx "fence=$fence" "$state" 2>/dev/null || exit 0
     if [ -n "${DEV_BOARD_TOKEN:-}" ]; then
         read_out=$DEV_BOARD_TOKEN

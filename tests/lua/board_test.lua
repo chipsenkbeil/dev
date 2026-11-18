@@ -6111,6 +6111,31 @@ testing.test("the keep-alive loop drops a refused cached token", function()
     testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
+testing.test("the keep-alive loop leaves no sleep running after a TERM", function()
+    local root = sandbox()
+    executable(
+        root .. "/bin/sleep",
+        '#!/bin/sh\necho $$ >"$ROOT/sleeper"\nexec ' .. dev_os.which("sleep") .. " 30\n"
+    )
+    assert(fs.write(root .. "/state", "fence=7\n"))
+    local out = shell(
+        root,
+        root .. "/pass.lock",
+        keepalive(root, 3, 300)
+            .. " & loop=$!; n=0; "
+            .. 'while [ ! -s "$ROOT/sleeper" ] && [ "$n" -lt 100 ]; do '
+            .. "n=$((n + 1)); "
+            .. dev_os.which("sleep")
+            .. " 0.1; done; "
+            .. "kill $loop; wait $loop 2>/dev/null; "
+            .. dev_os.which("sleep")
+            .. ' 0.5; sleeper=$(cat "$ROOT/sleeper"); '
+            .. 'if kill -0 "$sleeper" 2>/dev/null; then echo SLEEP_ALIVE; kill "$sleeper"; fi'
+    )
+    testing.ok(not out:find("SLEEP_ALIVE", 1, true), out)
+    testing.ok(fs.exists(root .. "/sleeper"), "the loop never started its sleep")
+end)
+
 testing.test("the keep-alive loop reads the token under the same lock", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
