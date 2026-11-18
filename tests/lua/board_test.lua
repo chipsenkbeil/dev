@@ -2415,12 +2415,89 @@ testing.test(
 
 testing.test("add refuses --description together with a section flag", function()
     local backend = fake(sample())
-    for _, flag in ipairs({ "--problem", "--change", "--out-of-scope" }) do
+    for _, flag in ipairs({ "--problem", "--change", "--out-of-scope", "--source" }) do
         local result = cmd_board.run("add", { "X", "--description", "text", flag, "y" }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("--description", 1, true), result.message)
     end
     testing.eq(#backend.calls, 0)
+end)
+
+testing.test("add writes a Source section after Out of scope from --source", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "p",
+        "--change",
+        "- c",
+        "--out-of-scope",
+        "n",
+        "--source",
+        '  "Ship it." 2026-11-17 https://example.com/c/1  ',
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(
+        backend.calls[1][4],
+        '## Problem\np\n\n## Change\n- c\n\n## Out of scope\nn\n\n## Source\n"Ship it." 2026-11-17 https://example.com/c/1\n'
+    )
+end)
+
+testing.test("add leaves the Source section out when --source is blank", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "p",
+        "--change",
+        "c",
+        "--out-of-scope",
+        "n",
+        "--source",
+        "  ",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
+    testing.eq(result.output, "added cccccccc Backlog")
+    testing.eq(backend.calls[1][4], "## Problem\np\n\n## Change\nc\n\n## Out of scope\nn\n")
+end)
+
+testing.test("add refuses a repeated --source by name", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("add", { "X", "--source", "a", "--source", "b" }, backend)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("--source", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("a Source section is optional and never required", function()
+    local with = "## Problem\nx\n\n## Change\ny\n\n## Out of scope\nn\n\n## Source\nq 2026-11-17\n"
+    testing.eq(board.missing(with, 3, 0), {})
+    testing.eq(board.backlog_missing(with), {})
+    testing.eq(board.shapes(with), {})
+    testing.eq(board.backlog_missing("## Problem\nx\n\n## Change\ny\n"), { "## Out of scope" })
+    testing.eq(board.missing("## Problem\nx\n\n## Source\nq\n", 3, 0), {
+        "## Change",
+        "## Out of scope",
+    })
+    testing.eq(board.shapes("## Problem\nx\n\n## Change\ny\n\n## Out of scope\nn\n\n## Source\n"), {
+        board.TEXT_UNDER .. "Source",
+    })
+end)
+
+testing.test("prose_warnings leaves the text under Source alone", function()
+    testing.eq(
+        board.prose_warnings(
+            '## Problem\nok\n\n## Source\n"see a/b.lua and 2af0e003" 2026-11-17\n\n## Out of scope\nsrc/a.lua\n'
+        ),
+        { "Card prose holds a path: src/a.lua." }
+    )
 end)
 
 testing.test("add keeps each repeated --change as its own line, in order", function()

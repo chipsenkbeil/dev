@@ -778,8 +778,11 @@ function M.resolve(items, word, noun)
     return found
 end
 
----The headings of card format v3, in order.
+---The required headings of card format v4, in order.
 M.HEADINGS = { "Problem", "Change", "Out of scope" }
+
+---The optional heading of card format v4, after Out of scope.
+M.SOURCE = "Source"
 
 ---The fewest and the most Done when outcomes a planned card has.
 M.MIN_OUTCOMES = 3
@@ -860,8 +863,8 @@ local function is_hex_id(run)
         and run:find("^%d+[eE]%d+$") == nil
 end
 
----Warn about the hex ids, hashes and paths in prose. Text under a `## Change` heading is left out,
----and so is a URL.
+---Warn about the hex ids, hashes and paths in prose. Text under a `## Change` or `## Source`
+---heading is left out, and so is a URL.
 ---@param prose string? the description or note
 ---@return string[] warnings one line per offending word, in order, without repeats
 function M.prose_warnings(prose)
@@ -876,7 +879,7 @@ function M.prose_warnings(prose)
     for line in lines_of(prose) do
         local name = heading_of(line)
         if name then
-            in_change = name == CHANGE
+            in_change = name == CHANGE or name == M.SOURCE
         elseif not in_change then
             for raw in line:gmatch("%S+") do
                 local word = raw:gsub("^[%(%[<\"'`]+", ""):gsub("[%)%]>\"'`,;:!?.]+$", "")
@@ -948,17 +951,22 @@ local function sections(description)
     return seen, filled
 end
 
----Build a card format v3 description from the text of each section.
+---Build a card format v4 description from the text of each section.
 ---@param problem string? the Problem text
 ---@param change string? the Change text
 ---@param out_of_scope string? the Out of scope text
----@return string description the three headings with their text
-function M.compose(problem, change, out_of_scope)
+---@param source string? the Source text, left out of the description when blank
+---@return string description the three headings with their text, then Source when it has text
+function M.compose(problem, change, out_of_scope, source)
     local texts = { problem, change, out_of_scope }
     local parts = {}
     for i, heading in ipairs(M.HEADINGS) do
         local body = (texts[i] or ""):match("^%s*(.-)%s*$")
         parts[i] = "## " .. heading .. "\n" .. (body ~= "" and body .. "\n" or "")
+    end
+    local quote = (source or ""):match("^%s*(.-)%s*$")
+    if quote ~= "" then
+        parts[#parts + 1] = "## " .. M.SOURCE .. "\n" .. quote .. "\n"
     end
     return table.concat(parts, "\n")
 end
@@ -988,7 +996,7 @@ end
 function M.shapes(description)
     local seen, filled = sections(description)
     local shapes = {}
-    for _, heading in ipairs({ CHANGE, OUT_OF_SCOPE }) do
+    for _, heading in ipairs({ CHANGE, OUT_OF_SCOPE, M.SOURCE }) do
         if seen[heading] and not filled[heading] then
             shapes[#shapes + 1] = M.TEXT_UNDER .. heading
         end

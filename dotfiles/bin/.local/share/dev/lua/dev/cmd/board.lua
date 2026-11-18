@@ -535,6 +535,7 @@ local function add_card(backend, args, held)
         ["--problem"] = true,
         ["--change"] = true,
         ["--out-of-scope"] = true,
+        ["--source"] = true,
         ["--size"] = true,
         ["--label"] = true,
         ["--checks"] = true,
@@ -552,6 +553,7 @@ local function add_card(backend, args, held)
         ["--problem"] = true,
         ["--change"] = true,
         ["--out-of-scope"] = true,
+        ["--source"] = true,
         ["--label"] = true,
         ["--checks"] = true,
         ["--done-when"] = true,
@@ -571,7 +573,7 @@ local function add_card(backend, args, held)
         end
         backend = home
     end
-    for _, flag in ipairs({ "--problem", "--out-of-scope" }) do
+    for _, flag in ipairs({ "--problem", "--out-of-scope", "--source" }) do
         if flags[flag] and #flags[flag] > 1 then
             return usage(flag .. " takes one value, so give its text once")
         end
@@ -579,10 +581,11 @@ local function add_card(backend, args, held)
     local problem = flags["--problem"] and flags["--problem"][1]
     local out_of_scope = flags["--out-of-scope"] and flags["--out-of-scope"][1]
     local change = flags["--change"] and table.concat(flags["--change"], "\n")
-    local sectioned = problem or change or out_of_scope
+    local source = flags["--source"] and flags["--source"][1]
+    local sectioned = problem or change or out_of_scope or source
     if sectioned and flags["--description"] then
         return usage(
-            "--description holds the whole text, so it cannot go with --problem, --change or --out-of-scope"
+            "--description holds the whole text, so it cannot go with --problem, --change, --out-of-scope or --source"
         )
     end
     local labels
@@ -663,7 +666,7 @@ local function add_card(backend, args, held)
     end
     local description = flags["--description"]
     if sectioned then
-        description = board.compose(problem, change, out_of_scope)
+        description = board.compose(problem, change, out_of_scope, source)
     elseif column ~= roles.icebox then
         description = board.scaffold(description)
     end

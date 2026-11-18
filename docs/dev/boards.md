@@ -849,7 +849,9 @@ card is split instead.
 
 `add --column ready` without `--size 1`, `2` or `3` is a usage error (exit 2).
 
-A card also needs card format v3 to enter Ready:
+A card also needs the three required headings of card format v3 and v4 to
+enter Ready (v4 adds only the optional `## Source`, which is never required,
+and an empty one is refused):
 
 - all three headings with text under each
 - no `Change:` or `Out of scope:` line under Problem
@@ -865,9 +867,10 @@ A card with no outcomes is still accepted when its description has a v1
 items (exit 2).
 
 Icebox cards are free-form, so adding to or moving into Icebox is never
-checked. `add` fills the sections from `--problem`, `--change` and
-`--out-of-scope`, and `--description` cannot go with them. A repeated `--change`
-adds a line each, and a repeated `--problem` or `--out-of-scope` is refused.
+checked. `add` fills the sections from `--problem`, `--change`,
+`--out-of-scope` and `--source`, and `--description` cannot go with them. A
+repeated `--change` adds a line each, and a repeated `--problem`,
+`--out-of-scope` or `--source` is refused.
 
 A card needs a checks row to enter Ready too. The checks live in the board's
 `dev.checks` field, a table with a `run` column, and `add --checks CMD`
@@ -1807,8 +1810,8 @@ Progress, Review and Verify columns on this project's board.
 `dev board add NAME [--board B] [--blocked-by CARD]... [--from CARD]
 [--id-only] [--top | --before CARD | --after CARD] [--column C] [--lane L]
 [--description TEXT] [--problem TEXT] [--change TEXT]... [--out-of-scope TEXT]
-[--size S] [--label L]... [--checks CMD]... [--done-when TEXT]...` creates the
-card.
+[--source TEXT] [--size S] [--label L]... [--checks CMD]...
+[--done-when TEXT]...` creates the card.
 
 - The card goes in Backlog by default.
 - On a Pomb board `add` prints `link: <url>/t/<card id>` under the `added` line.
@@ -1820,16 +1823,22 @@ card.
 - `--size` gives the card the colour of the size, as `size` does.
 - Each `--label L` (repeatable, duplicates dropped) gives it a label.
 - Unless the column is Icebox, the description is given the three card format
-  v3 headings (`## Problem`, `## Change`, `## Out of scope`). The text comes
+  v4 headings (`## Problem`, `## Change`, `## Out of scope`). The text comes
   from one of two sources:
   - `--description` text fills Problem.
   - Each section is filled from `--problem`, `--change` and `--out-of-scope`.
     These cannot go with `--description` (exit 2), and `dev.board.compose`
     builds the text.
+- `--source TEXT` adds a fourth, optional `## Source` section after Out of
+  scope, which holds the owner's dated words and a link. A blank `--source`
+  adds no section, a `--description` that also holds a Problem, Change or Out
+  of scope heading keeps its own `## Source` section as it is, and `## Source`
+  is never required to enter Backlog or Ready.
+  The text under it raises no hex id or path warning, as with Change.
 - Each `--change TEXT` (repeatable) is one line of the Change section, in the
   order given.
-- A repeated `--problem` or `--out-of-scope` is a usage error naming the flag
-  (exit 2) to avoid dropping text silently.
+- A repeated `--problem`, `--out-of-scope` or `--source` is a usage error
+  naming the flag (exit 2) to avoid dropping text silently.
 - A text that already holds one of those headings or the v1 `## Done when` is
   kept as it is.
 - An Icebox card gets the text as given and none otherwise.
