@@ -5,8 +5,19 @@ local argv = {}
 for i = 1, #arg do
     argv[i] = arg[i]
 end
-local cli = require("dev.cli")
-require("dev.os").catch_term()
+
+local INTERRUPTED = 130
+local ok, cli = pcall(function()
+    local loaded = require("dev.cli")
+    require("dev.os").catch_term()
+    return loaded
+end)
+if not ok then
+    if tostring(cli):find("interrupted!", 1, true) then
+        os.exit(INTERRUPTED)
+    end
+    error(cli, 0)
+end
 local code = cli.guard(cli.main, argv)
 if code then
     os.exit(code)

@@ -399,6 +399,29 @@ testing.test(
     end
 )
 
+testing.test("an interrupt while a dev module loads exits 130 with no traceback", function()
+    for _, module in ipairs({ "dev.cli", "dev.os" }) do
+        local preload =
+            string.format('package.preload["%s"] = function() error("interrupted!", 0) end', module)
+        local out, code = dev_os.capture(
+            { "luajit", "-e", preload, MAIN, "help" },
+            { stderr = "stdout", env = { CI = "", DEV_REMOTE = "0" } }
+        )
+        testing.ok(code == 130, module .. " exited " .. tostring(code))
+        testing.ok(out == "", module .. " printed " .. out)
+    end
+end)
+
+testing.test("a dev module that fails to load for another reason still shows the error", function()
+    local preload = 'package.preload["dev.cli"] = function() error("boom", 0) end'
+    local out, code = dev_os.capture(
+        { "luajit", "-e", preload, MAIN, "help" },
+        { stderr = "stdout", env = { CI = "", DEV_REMOTE = "0" } }
+    )
+    testing.ok(code ~= 0 and code ~= 130, "exited " .. tostring(code))
+    testing.ok(out:find("boom", 1, true), out)
+end)
+
 testing.test("a project Lua verb that is interrupted exits 130 with nothing on stderr", function()
     local root = project({ ["stop.lua"] = 'error("interrupted!", 0)\n' })
     local out, code = dev(root, { "stop" })
