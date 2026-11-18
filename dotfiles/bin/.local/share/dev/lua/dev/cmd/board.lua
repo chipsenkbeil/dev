@@ -4222,6 +4222,69 @@ local function flight_rows(backend, cards, entered, limit, now)
     return found
 end
 
+local function started_rows(backend, cards, entered, now)
+    local roles = backend.roles
+    local started = { [roles.progress] = true, [roles.review] = true }
+    local waiting = { [roles.backlog] = true, [roles.ready] = true }
+    local found, warnings, others = {}, {}, {}
+    for _, card in ipairs(cards) do
+        local list
+        if waiting[card.column] and not card.done then
+            local why
+            list, why = backend:links(card.id)
+            if not list then
+                warnings[#warnings + 1] = "could not read the links of "
+                    .. card.id
+                    .. " "
+                    .. card.name
+                    .. ": "
+                    .. tostring(why)
+            end
+        end
+        for _, link in ipairs(list or {}) do
+            if link.kind == "blocked_by" and link.board then
+                local target = link.board .. ":" .. link.id:sub(1, board.MIN_PREFIX)
+                local other = others[link.board]
+                if other == nil then
+                    local opened, message = backend:other_board(link.board)
+                    other = opened or { failed = message }
+                    others[link.board] = other
+                end
+                local blocker, message
+                if not other.failed then
+                    blocker, message = other:card(link.id)
+                end
+                if other.failed or not blocker then
+                    warnings[#warnings + 1] = "could not read blocker "
+                        .. target
+                        .. " of "
+                        .. card.id
+                        .. " "
+                        .. card.name
+                        .. ": "
+                        .. tostring(other.failed or message)
+                elseif started[blocker.column] then
+                    local at = entered[card.id] and box.parse_time(entered[card.id]) or now
+                    found[#found + 1] = {
+                        id = card.id,
+                        column = card.column,
+                        size = card.size,
+                        name = card.name
+                            .. " (blocked by "
+                            .. target
+                            .. " in "
+                            .. blocker.column
+                            .. ")",
+                        days = math.floor((now - at) / box.SECONDS_PER_DAY),
+                        at = at,
+                    }
+                end
+            end
+        end
+    end
+    return found, warnings
+end
+
 function commands.stale(backend, args, now)
     local flags, extra = parse(args, {
         ["--days"] = true,
@@ -4496,6 +4559,17 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         lines[#lines + 1] = "in flight, no claim and quiet for " .. flight_limit .. " hours:"
         append(lines, stale_rows(quiet))
+    end
+    local begun, begun_warnings = started_rows(backend, cards, entered, now)
+    table.sort(begun, oldest)
+    if #begun > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "blocker started on another board:"
+        append(lines, stale_rows(begun))
+    end
+    if #begun_warnings > 0 then
+        lines[#lines + 1] = ""
+        append(lines, begun_warnings)
     end
     local iced, iced_undated = icebox_rows(backend, cards, entered, icebox_limit, now)
     if #iced > 0 then

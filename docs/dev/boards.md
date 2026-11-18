@@ -1251,6 +1251,11 @@ These sections follow, each listed apart from the stale cards:
   `--flight-hours` hours old or more (24 by default), with its time as
   `<hours>h`. A card the first list already shows is left out. A flag that is
   not a whole number of 1 or more is a usage error (exit 2).
+- `blocker started on another board:`: a card in Backlog or Ready with a
+  `blocked_by` link to a card on another board that sits in In Progress or
+  Review, with its days in column and the blocker as `board:id`. A board or card
+  `stale` cannot read becomes a `could not read blocker` line and the rest
+  still prints.
 - `for the owner (needs:human):`: every card with the `needs:human` label in
   Blocked or Icebox, at any age, with its column and days in column. It never
   appears among the stale ones (it waits on the owner, not on an agent).

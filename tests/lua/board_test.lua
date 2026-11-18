@@ -81,6 +81,14 @@ local function fake(cards, times, finished)
     function backend:cards()
         return cards
     end
+    function backend:card(id)
+        for _, card in ipairs(cards) do
+            if card.id == id then
+                return card
+            end
+        end
+        return nil, "no card " .. id
+    end
     function backend:next(column, opts)
         local label = opts and opts.label
         calls[#calls + 1] = { "next", column, label }
@@ -4578,6 +4586,58 @@ testing.test("stale marks a needs:human card whose newest comment is the owner's
     end
     output = cmd_board.run("stale", {}, backend, NOW).output
     testing.ok(output:find("could not read the comments of " .. cards[2].id, 1, true), output)
+end)
+
+local function across(column, blocked_in)
+    local cards, times = aged({ column }, { 1 })
+    local far = aged({ blocked_in }, { 1 })
+    local backend = fake(cards, times)
+    backend.sibling = fake(far, {})
+    backend.held = { { kind = "blocked_by", id = far[1].id, board = "ci" } }
+    return backend, cards
+end
+
+testing.test("stale lists a card whose cross-board blocker is in progress or review", function()
+    for _, started in ipairs({ support.COLUMN_NAME.PROGRESS, support.COLUMN_NAME.REVIEW }) do
+        for _, waiting in ipairs({ support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.READY }) do
+            local backend, cards = across(waiting, started)
+            local output = cmd_board.run("stale", {}, backend, NOW).output
+            local heading = "blocker started on another board:\n"
+            testing.ok(output:find(heading, 1, true), output)
+            testing.ok(
+                output:find(
+                    cards[1].name .. " (blocked by ci:00000001 in " .. started .. ")",
+                    1,
+                    true
+                ),
+                output
+            )
+        end
+    end
+end)
+
+testing.test("stale leaves a card whose cross-board blocker has not started", function()
+    for _, idle in ipairs({ support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.READY }) do
+        local backend = across(support.COLUMN_NAME.BACKLOG, idle)
+        local output = cmd_board.run("stale", {}, backend, NOW).output
+        testing.ok(not output:find("blocker started", 1, true), output)
+    end
+end)
+
+testing.test("stale warns when the other board cannot be read and still finishes", function()
+    local backend, cards = across(support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.PROGRESS)
+    backend.held = { { kind = "blocked_by", id = cards[1].id, board = "gone" } }
+    local result = cmd_board.run("stale", {}, backend, NOW)
+    testing.eq(result.code, nil)
+    testing.ok(
+        result.output:find("could not read blocker gone:00000001 of " .. cards[1].id, 1, true),
+        result.output
+    )
+    testing.ok(result.output:find("No stale cards.", 1, true), result.output)
+    backend.held =
+        { { kind = "blocked_by", id = "ffffffff-aaaa-4aaa-8aaa-aaaaaaaaaaaa", board = "ci" } }
+    result = cmd_board.run("stale", {}, backend, NOW)
+    testing.ok(result.output:find("could not read blocker ci:ffffffff", 1, true), result.output)
 end)
 
 testing.test("stale lists every needs:human card apart at any age, and never as stale", function()
