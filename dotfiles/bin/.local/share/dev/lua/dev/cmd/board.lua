@@ -2647,6 +2647,8 @@ function commands.outcome(backend, args)
                         .. sentence(message)
                         .. ' Its text was "'
                         .. deleted_text
+                        .. '". Its reason was "'
+                        .. text
                         .. '".'
                 )
             )

@@ -1104,7 +1104,8 @@ reason.
 
 The outcomes after it move up a number. The command writes a decision note
 holding the deleted text and the reason, then prints
-`outcome <id prefix> N deleted`.
+`outcome <id prefix> N deleted`. When the outcome is deleted but the note
+fails, the error names the deleted text and the reason, so neither is retyped.
 
 A missing number or reason is exit 2. `--reason` is the one way to say why an
 outcome that was never achievable is deleted and not reworded.

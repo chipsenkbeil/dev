@@ -3633,6 +3633,35 @@ testing.test("outcome delete by a lead notes the reason and the text", function(
     end
 end)
 
+testing.test(
+    "outcome --delete names the deleted text and the reason when the note fails",
+    function()
+        local card = colored("green")
+        card.column = support.COLUMN_NAME.BACKLOG
+        card.outcomes = outcomes(2)
+        local deleted = card.outcomes[2].name
+        local backend = fake({ card })
+        function backend:note()
+            return nil, "board unavailable: cannot reach pomb"
+        end
+        as_agent(LEAD, function()
+            local result = cmd_board.run(
+                "outcome",
+                { "cccccccc", "--delete", "2", "--reason", "never achievable" },
+                backend
+            )
+            testing.eq(result.code, 1)
+            testing.eq(result.unqueued, true)
+            testing.ok(
+                result.message:find("was deleted, but the note failed", 1, true),
+                result.message
+            )
+            testing.ok(result.message:find(deleted, 1, true), result.message)
+            testing.ok(result.message:find("never achievable", 1, true), result.message)
+        end)
+    end
+)
+
 local function delete_in(backend, id)
     local result
     as_agent(LEAD, function()
