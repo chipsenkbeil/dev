@@ -2959,6 +2959,9 @@ Cleanup never changes the exit code or the card's column.
   and the output says to run the next command from another folder.
 - A workspace outside the central root, or one with changes not in a commit,
   stays. The output names it and why.
+- A jj workspace whose `@` holds the landed change is moved to a new change on
+  trunk before it is removed. A forget or prune that fails keeps the workspace,
+  and the output names its path and the first line the command printed.
 
 Following trunk:
 

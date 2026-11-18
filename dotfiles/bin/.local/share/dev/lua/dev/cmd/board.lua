@@ -2845,7 +2845,11 @@ function M.clean_up(root, short)
             delete_branch_from(main)
         end
     else
-        add("Kept the workspace. " .. ws.describe(result))
+        local reason = ws.describe(result)
+        if result.path and not reason:find(result.path, 1, true) then
+            reason = reason .. " The workspace is at " .. result.path .. "."
+        end
+        add("Kept the workspace. " .. reason)
     end
     return "\n" .. table.concat(lines, "\n")
 end

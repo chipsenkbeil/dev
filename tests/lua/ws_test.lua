@@ -620,7 +620,7 @@ testing.test("rm moves a jj folder to the trash with its ignored files", functio
     testing.eq(code, 0)
     local target = trashed(env, root, "feat")
     testing.eq(out, "Moved " .. path .. " to " .. target .. ".\n")
-    testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget feat\n")
+    testing.eq(fs.read(log), "jj -R " .. root .. " --ignore-working-copy workspace forget feat\n")
 
     -- Expect the folder gone from its place with the ignored file in the trash
     testing.eq(fs.exists(path), false)
@@ -643,7 +643,7 @@ testing.test("rm of a colocated jj workspace prunes the git record", function()
         fs.read(log),
         "jj -R "
             .. root
-            .. " workspace forget feat\ngit --git-dir "
+            .. " --ignore-working-copy workspace forget feat\ngit --git-dir "
             .. root
             .. "/.git worktree prune\n"
     )
@@ -661,7 +661,7 @@ testing.test("rm of a jj workspace that is not colocated runs no git", function(
     -- Expect only the forget in the log
     testing.eq(code, 0, out)
     testing.eq(fs.exists(path), false)
-    testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget feat\n")
+    testing.eq(fs.read(log), "jj -R " .. root .. " --ignore-working-copy workspace forget feat\n")
 end)
 
 testing.test("rm succeeds when the git prune of a colocated repo fails", function()
@@ -1325,7 +1325,7 @@ testing.test("prune forgets a jj workspace whose folder is gone", function()
     )
 
     -- Expect one forget run in jj
-    testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget gone1\n")
+    testing.eq(fs.read(log), "jj -R " .. root .. " --ignore-working-copy workspace forget gone1\n")
 end)
 
 testing.test("prune forgets a jj workspace named for a done card", function()
@@ -1355,7 +1355,10 @@ testing.test("prune forgets a jj workspace named for a done card", function()
             "Pruned 1 workspace and 0 heads. Left 0 items alone."
         )
     )
-    testing.eq(fs.read(log), "jj -R " .. root .. " workspace forget " .. DONE_ID .. "\n")
+    testing.eq(
+        fs.read(log),
+        "jj -R " .. root .. " --ignore-working-copy workspace forget " .. DONE_ID .. "\n"
+    )
 
     -- Expect the done folder gone and the open one kept
     testing.eq(fs.exists(done), false)
@@ -2337,5 +2340,115 @@ end
 if dev_os.which("lsof") then
     testing.test("the lsof lookup finds a process by its working directory", function()
         finds_the_sleep(cmd_ws.__processes_lsof)
+    end)
+end
+
+if dev_os.which("jj") then
+    local function foreign_workspace()
+        local env, base = adopt_env()
+        local root = support.sandbox({}, {})
+        local init = { stdout = "null", stderr = "null", env = IDENT }
+        assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj git init failed")
+        assert(fs.write(root .. "/base", "1"))
+        local _, code = real_jj(root, "commit", "-m", "base")
+        testing.eq(code, 0)
+        local path = base .. "/elsewhere/feat"
+        assert(fs.mkdir(base .. "/elsewhere", { parents = true }))
+        _, code = real_jj(root, "workspace", "add", "--name", "feat", "-r", "@-", path)
+        testing.eq(code, 0)
+        return root, path, env, base
+    end
+
+    testing.test("rm removes a jj workspace made under another repo folder name", function()
+        local root, path, env, base = foreign_workspace()
+
+        local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+        testing.eq(code, 0, out)
+        testing.ok(
+            out:find("Moved " .. path .. " to " .. base .. "/.trash/elsewhere/feat-", 1, true),
+            out
+        )
+        testing.eq(fs.exists(path), false)
+        testing.eq(real_jj(root, "workspace", "list"):find("feat:", 1, true), nil)
+    end)
+
+    testing.test("rm forgets a jj workspace while the main checkout is stale", function()
+        local root, path, env = foreign_workspace()
+        local before =
+            real_jj(root, "--ignore-working-copy", "op", "log", "--no-graph", "-n", "1", "-T", "id")
+        local _, code = real_jj(root, "new")
+        testing.eq(code, 0)
+        assert(fs.write(root .. "/second", "2"))
+        _, code = real_jj(root, "status")
+        testing.eq(code, 0)
+        _, code = real_jj(path, "--ignore-working-copy", "op", "restore", before)
+        testing.eq(code, 0)
+        local status = real_jj(root, "status")
+        testing.ok(status:find("The working copy is stale", 1, true) ~= nil, status)
+
+        local out, rm_code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+        testing.eq(rm_code, 0, out)
+        testing.eq(fs.exists(path), false)
+    end)
+
+    testing.test("rm names the jj message and keeps the folder when the forget fails", function()
+        local root, path, env = foreign_workspace()
+        local bin = support.tempdir()
+        local script = table.concat({
+            "#!/bin/sh",
+            'for word in "$@"; do',
+            '    if [ "$word" = forget ]; then',
+            '        echo "forget refused" >&2',
+            "        exit 1",
+            "    fi",
+            "done",
+            "exec " .. assert(dev_os.which("jj")) .. ' "$@"',
+            "",
+        }, "\n")
+        assert(fs.write(bin .. "/jj", script))
+        assert(dev_os.run({ "chmod", "755", bin .. "/jj" }) == 0, "chmod failed")
+        env.env.PATH = bin .. ":" .. os.getenv("PATH")
+
+        local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+        testing.eq(code, 1, out)
+        testing.eq(out, "The jj command exited 1: forget refused.\n")
+        testing.eq(fs.is_dir(path), true)
+    end)
+
+    local function refuses_listed(place)
+        local root, _, env, base = foreign_workspace()
+        local target = place(base) .. "/other"
+        fs.mkdir(fs.dirname(target), { parents = true })
+        local _, code = real_jj(root, "workspace", "add", "--name", "other", "-r", "@-", target)
+        testing.eq(code, 0)
+
+        local out, rm_code = support.dev(root, { "ws", "rm", "other" }, env)
+
+        testing.eq(rm_code, 1, out)
+        testing.eq(fs.is_dir(target), true)
+        testing.ok(real_jj(root, "workspace", "list"):find("other:", 1, true) ~= nil)
+    end
+
+    testing.test("rm refuses a listed jj workspace at the wrong depth", function()
+        refuses_listed(function(base)
+            return base .. "/deep/er"
+        end)
+    end)
+
+    testing.test("rm refuses a listed jj workspace outside the central root", function()
+        refuses_listed(function()
+            return assert(fs.realpath(support.tempdir())) .. "/x"
+        end)
+    end)
+
+    testing.test("rm refuses a listed jj workspace through a link to outside the root", function()
+        refuses_listed(function(base)
+            local outside = assert(fs.realpath(support.tempdir()))
+            assert(fs.symlink(outside, base .. "/linked"))
+            return base .. "/linked"
+        end)
     end)
 end

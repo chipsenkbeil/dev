@@ -63,6 +63,7 @@ M.Refusal = Refusal
 ---@field name string? the workspace's name
 ---@field base string? the central workspaces root, for an outside folder
 ---@field command string? the vcs command that failed
+---@field output string? the first line the failed command printed
 ---@field code integer? the exit code of a failed jj or git, which dev passes on as its own
 ---@field detail string? the line, error or exit status the reason carries
 ---@field stayed string? the folder a failed command left behind, with `detail` what to know of it
@@ -80,6 +81,9 @@ local DESCRIPTIONS = {
     end,
     [Refusal.COMMAND_FAILED] = function(why)
         local text = "the " .. why.command .. " command exited " .. why.code
+        if why.output then
+            text = text .. ": " .. why.output
+        end
         if why.stayed then
             text = text .. ". The folder stayed at " .. why.stayed .. ": " .. why.detail
         end
@@ -557,7 +561,8 @@ local function processes_inside(dir)
 end
 
 ---@class dev.cmd.ws.remove.Opts
----@field inside boolean? false when unset, skips only the refusal of the workspace dev runs in
+---@field inside boolean? false when unset, skips only the refusal of the workspace dev runs in and
+---   moves a jj workspace's `@` off a change already on trunk
 ---@field forgotten boolean? false when unset, removes a jj folder that jj does not list and refuses
 ---   any other
 ---@field show fun(argv: string[])? nil when unset, called with the command before it runs
@@ -599,7 +604,8 @@ end
 local function detach(root, name, opts)
     local argv
     if opts.backend == vcs.JJ then
-        argv = vcs.with(vcs.base(root, vcs.JJ), "workspace", "forget", name)
+        argv =
+            vcs.with(vcs.base(root, vcs.JJ), "--ignore-working-copy", "workspace", "forget", name)
     elseif opts.backend == vcs.GIT and opts.moved then
         argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "prune")
     elseif opts.backend == vcs.GIT then
@@ -609,9 +615,16 @@ local function detach(root, name, opts)
         if opts.show then
             opts.show(argv)
         end
-        local code = dev_os.run(argv) or 1
+        local out, code = dev_os.capture(argv, { stderr = "stdout" })
         if code ~= 0 then
-            return false, { reason = Refusal.COMMAND_FAILED, command = argv[1], code = code }
+            return false,
+                {
+                    reason = Refusal.COMMAND_FAILED,
+                    command = argv[1],
+                    code = code or 1,
+                    path = opts.path,
+                    output = (out or ""):match("Error: [^\n]+") or first_line(out or ""),
+                }
         end
     end
     if opts.backend == vcs.JJ then
@@ -632,6 +645,40 @@ local function refused(why)
     why.ok = false
     why.purged = {}
     return why
+end
+
+local function listed_folder(root, name, real_base)
+    if vcs.backend(root) ~= vcs.JJ or real_base == nil then
+        return nil
+    end
+    local argv = vcs.with(
+        vcs.base(root, vcs.JJ, { quiet = true }),
+        "--ignore-working-copy",
+        "workspace",
+        "root",
+        "--name",
+        name
+    )
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        return nil
+    end
+    local listed = out:gsub("\n$", "")
+    local real = fs.realpath(listed)
+    if real and fs.is_dir(real) and fs.dirname(fs.dirname(real)) == real_base then
+        return listed
+    end
+    return nil
+end
+
+local function leave_landed(path)
+    local base = vcs.base(path, vcs.JJ, { quiet = true })
+    local landed =
+        vcs.with(base, "log", "-r", "(@ & ::trunk()) ~ empty()", "--no-graph", "-T", '"landed"')
+    local out, code = dev_os.capture(landed, { stderr = "null" })
+    if code == 0 and out ~= "" then
+        dev_os.capture(vcs.with(base, "new", "trunk()"), { stderr = "null" })
+    end
 end
 
 local function remove_missing(root, name, opts)
@@ -761,9 +808,12 @@ function M.remove(root, name, opts)
         return remove_missing(root, name, opts)
     end
     local base = workspace_root()
-    local path = fs.join(base, repo_name(base, root), name)
-    local real = fs.realpath(path)
     local real_base = fs.realpath(base)
+    local path = fs.join(base, repo_name(base, root), name)
+    if not fs.is_dir(path) and not fs.is_file(path) then
+        path = listed_folder(root, name, real_base) or path
+    end
+    local real = fs.realpath(path)
     local real_root = fs.realpath(root)
     local stray = fs.is_file(path)
     if not fs.is_dir(path) and not stray then
@@ -789,6 +839,9 @@ function M.remove(root, name, opts)
     if opts.forgotten and not gone then
         return refused({ reason = Refusal.NOT_FORGOTTEN, path = path })
     end
+    if opts.inside and backend == vcs.JJ and not gone and real == real_root then
+        leave_landed(path)
+    end
     if not gone then
         local clean, why = M.__clean(backend, path, { refresh = true })
         if not clean then
@@ -809,7 +862,7 @@ function M.remove(root, name, opts)
         end
     end
     return move_to_trash(anchor, name, {
-        trash = fs.join(base, TRASH_DIR, repo_name(base, root)),
+        trash = fs.join(base, TRASH_DIR, fs.basename(fs.dirname(path))),
         backend = not gone and backend or nil,
         path = path,
         show = opts.show,
@@ -818,7 +871,8 @@ end
 
 ---Remove a workspace of the current project and its folder.
 ---
----Only a folder directly under ROOT/<repo> is removed, never a link and never
+---Only a folder directly under ROOT/<repo>, or a jj workspace that jj lists
+---directly under another folder of ROOT, is removed, never a link and never
 ---the workspace the command runs in. The folder moves to the trash, a jj
 ---workspace is forgotten, a git worktree record is pruned, and a folder with
 ---changes not in a commit is refused and left in place. A jj folder whose
@@ -845,6 +899,7 @@ M.handlers["ws rm"] = function(ctx)
     })
     if not result.ok then
         if result.code then
+            verb.note(M.describe(result))
             return result.code
         end
         verb.die(M.describe(result))

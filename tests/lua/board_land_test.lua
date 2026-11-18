@@ -3180,6 +3180,58 @@ if has_jj then
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
     end)
 
+    testing.test("land moves the workspace off the landed change and removes it", function()
+        local project, id, path, base, inside = central_project()
+        local out, code = dev(
+            inside,
+            { "board", "land", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, DEV_WS_ROOT = base }
+        )
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Moved " .. path, 1, true), out)
+        testing.ok(out:find("Run the next command from another folder.", 1, true), out)
+        testing.eq(fs.exists(path), false)
+        testing.eq(jj(project.root, "workspace", "list"):find(id .. ":", 1, true), nil)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+    end)
+
+    testing.test("clean up names the workspace path and the jj message when it keeps it", function()
+        local _, id, path, base = central_project()
+        local bin = support.tempdir()
+        local script = table.concat({
+            "#!/bin/sh",
+            'for word in "$@"; do',
+            '    if [ "$word" = forget ]; then',
+            '        echo "forget refused" >&2',
+            "        exit 1",
+            "    fi",
+            "done",
+            "exec " .. assert(dev_os.which("jj")) .. ' "$@"',
+            "",
+        }, "\n")
+        assert(fs.write(bin .. "/jj", script), "write failed")
+        must(dev_os.run({ "chmod", "755", bin .. "/jj" }))
+        jj(path, "bookmark", "set", "master", "-r", "@")
+        jj(path, "git", "push", "--remote", "origin", "--bookmark", "master")
+        local original = os.getenv("PATH")
+        ffi.C.setenv("DEV_WS_ROOT", base, 1)
+        ffi.C.setenv("PATH", bin .. ":" .. original, 1)
+        local lines = cmd_board.clean_up(path, id)
+        ffi.C.setenv("PATH", original, 1)
+        ffi.C.setenv("DEV_WS_ROOT", "", 1)
+        testing.ok(
+            lines:find(
+                "Kept the workspace. The jj command exited 1: forget refused. The workspace is at "
+                    .. path
+                    .. ".",
+                1,
+                true
+            ),
+            lines
+        )
+        testing.eq(fs.exists(path), true)
+    end)
+
     testing.test("land keeps a workspace with uncommitted changes", function()
         local project, id, path, base, inside = central_project()
         local out, code = dev(inside, { "board", "land", id }, {

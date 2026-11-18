@@ -105,7 +105,17 @@ folder dev runs in, and a target that exists (`EXISTS`), and moves nothing.
 `ws rm NAME` calls `ws.remove(root, name, opts)`. It returns a result table with
 `ok`, `message`, `code` and `purged` instead of dying, and `opts.inside` skips
 only the refusal of the workspace dev runs in, which `dev board land` uses when
-it removes the card's workspace.
+it removes the card's workspace. With `opts.inside` a jj workspace whose `@`
+holds a change already on trunk is first moved to a new change on trunk.
+
+A jj workspace whose folder is not under `ROOT/<repo>` for the checkout's own
+folder name is found with `jj workspace root --name NAME`. The folder is taken
+only when it sits directly under a folder of `ROOT`, so a checkout named
+`infra-deploy` removes the workspace at `ROOT/infra/NAME`. The trash entry goes
+under the folder the workspace sat in. The forget runs with
+`--ignore-working-copy` to keep a stale main checkout from stopping it. A
+failed forget or prune keeps the folder, and the message names the command's
+`Error:` line or else its first line of output.
 
 It refuses a NAME that is missing, a link, outside the central root or the
 workspace dev runs in, and a folder whose jj `@` is not empty or whose `git
