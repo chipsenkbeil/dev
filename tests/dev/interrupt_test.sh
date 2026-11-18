@@ -108,7 +108,7 @@ cat >"$TMP/shim/sh" <<'SHIM'
 if [[ "$2" == *'pidfile=$4'* ]]; then
     trap : INT
     pidwrite='echo "$!" >"$pidfile"'
-    script="${2/"$pidwrite"/"kill -INT 0; sleep 1; $pidwrite"}"
+    script="${2/"$pidwrite"/"kill -INT 0; sleep ${HOLD:-1}; $pidwrite"}"
     out="$("$REAL_SH" -c "$script" "${@:3}")"
     printf '%s\n' "$out"
 else
@@ -137,6 +137,30 @@ assert_eq "dev test exits 130 on an INT that lands while a suite is still being 
 scratch2="$(dirname "$(head -n 1 "$TMPDIRS")")"
 assert_eq "the scratch directory is removed after the late INT" "$([ -d "$scratch2" ] && echo present || echo gone)" "gone"
 assert_eq "a suite launched at the moment of INT is stopped" "$(count_alive "$PIDS")" "0"
+
+mkdir -p "$TMP/c/tests/a" "$TMP/c/.dev/lua/dotfiles"
+cp "$REPO/.dev/test.lua" "$TMP/c/.dev/"
+cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/c/.dev/lua/dotfiles/"
+cp "$TMP/tests/a/slow1_test.sh" "$TMP/c/tests/a/"
+
+export HOLD=7 PIDS="$TMP/run/pids3" TMPDIRS="$TMP/run/tmpdirs3"
+: >"$PIDS"
+: >"$TMPDIRS"
+
+set -m
+(cd "$TMP/c" && PATH="$TMP/shim:$PATH" exec "$DEV" test) >"$TMP/run/out3" 2>&1 &
+devpid=$!
+set +m
+
+waited=0
+while [ "$(wc -l <"$PIDS")" -lt 2 ] && [ "$waited" -lt "$LAUNCH_WAIT_POLLS" ]; do
+    sleep 0.2
+    waited=$((waited + 1))
+done
+assert_eq "the suite and its sleep started before the held launch" "$(wc -l <"$PIDS" | tr -d ' ')" "2"
+wait "$devpid"
+assert_eq "dev test exits 130 on an INT that lands during a launch held past the grace wait" "$?" "130"
+assert_eq "a suite whose launch outlasts dev is stopped" "$(count_alive "$PIDS")" "0"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

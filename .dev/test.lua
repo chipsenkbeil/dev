@@ -177,6 +177,7 @@ local function scratch_dir()
 end
 
 local scratch = scratch_dir()
+local stop_marker = scratch .. "/stop"
 
 local GUARD = [=[
 set -m
@@ -207,14 +208,18 @@ out=$1
 status=$2
 dir=$3
 pidfile=$4
-shift 4
+stopfile=$5
+shift 5
 (
     trap - INT
     ( cd -- "$dir" && "$@" ) >"$out" 2>&1 </dev/null
     echo "$?" >"$status.tmp"
     mv "$status.tmp" "$status"
 ) >/dev/null 2>&1 </dev/null &
-echo "$!" >"$pidfile"
+{ echo "$!" >"$pidfile"; } 2>/dev/null
+if [ -e "$stopfile" ] || [ ! -d "${stopfile%/*}" ]; then
+    kill -TERM -- "-$!" 2>/dev/null
+fi
 echo "$!"
 ]]
 
@@ -223,14 +228,13 @@ local function start(index, suite)
     suite.out, suite.status, suite.tmp = base .. ".out", base .. ".status", base .. ".t"
     assert(fs.mkdir(suite.tmp))
     suite.pidfile = base .. ".pid"
-    local argv = { "sh", "-c", LAUNCH, "sh", suite.out, suite.status, root, suite.pidfile }
+    local argv =
+        { "sh", "-c", LAUNCH, "sh", suite.out, suite.status, root, suite.pidfile, stop_marker }
     for _, word in ipairs(suite.argv) do
         argv[#argv + 1] = word
     end
-    suite.launching = true
     local pid = dev_os.capture(argv, { env = { TMPDIR = suite.tmp } })
     suite.pid = pid:match("%d+")
-    suite.launching = false
     suite.started = true
 end
 
@@ -259,24 +263,8 @@ done
 exit 0
 ]=]
 
-local LAUNCH_GRACE_POLLS = 50
-
-local function await_launches()
-    for _, suite in ipairs(suites) do
-        local polls = 0
-        while
-            suite.launching
-            and polls < LAUNCH_GRACE_POLLS
-            and not (fs.read(suite.pidfile) or ""):find("%d")
-        do
-            dev_os.nap(POLL_SECS)
-            polls = polls + 1
-        end
-    end
-end
-
 local function stop_all()
-    await_launches()
+    fs.write(stop_marker, "")
     dev_os.run({ "sh", "-c", STOP, "sh", scratch }, { stderr = "null" })
 end
 
