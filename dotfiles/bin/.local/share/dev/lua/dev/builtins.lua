@@ -553,6 +553,13 @@ return {
         desc = "Drop a card, labelled discarded, into Done",
     },
     {
+        words = { "board", "time" },
+        handler = "lua",
+        flags = "--as --note",
+        usage = "dev board time CARD MINUTES --as ROLE [--note TEXT]",
+        desc = "Log a role's minutes on a card to Pomb",
+    },
+    {
         words = { "board", "size" },
         handler = "lua",
         usage = "dev board size CARD S",

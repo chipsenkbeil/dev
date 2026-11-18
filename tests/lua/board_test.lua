@@ -138,6 +138,10 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "note", id, text, opts }
         return true
     end
+    function backend:log_time(id, minutes, role, note)
+        calls[#calls + 1] = { "log_time", id, minutes, role, note }
+        return backend.refusal == nil, backend.refusal
+    end
     function backend:ask(id, question, fence)
         calls[#calls + 1] = { "ask", id, question, fence }
         return backend.refusal == nil, backend.refusal
@@ -5391,6 +5395,44 @@ testing.test("next --column blocked --for planner asks for a needs:planner card"
     )
 end)
 
+testing.test("time logs the minutes, role and note on the card", function()
+    local backend = fake(sample())
+    local result = cmd_board.run(
+        "time",
+        { "11111111-a", "25", "--as", "planner", "--note", "scoped it" },
+        backend
+    )
+    testing.eq(result.output, "logged 25 minutes as planner on 11111111")
+    testing.eq(backend.calls, { { "log_time", ID_A, 25, "planner", "scoped it" } })
+end)
+
+testing.test("time refuses bad minutes and a missing role with a usage error", function()
+    local backend = fake(sample())
+    for _, words in ipairs({
+        { "11111111-a", "0", "--as", "planner" },
+        { "11111111-a", "1441", "--as", "planner" },
+        { "11111111-a", "2.5", "--as", "planner" },
+        { "11111111-a", "0x19", "--as", "planner" },
+        { "11111111-a", "1e1", "--as", "planner" },
+        { "11111111-a", "-5", "--as", "planner" },
+        { "11111111-a", "soon", "--as", "planner" },
+        { "11111111-a", "25" },
+        { "11111111-a", "25", "--as", "  " },
+        { "11111111-a", "--as", "planner" },
+    }) do
+        testing.eq(cmd_board.run("time", words, backend).code, 2, table.concat(words, " "))
+    end
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("time prints the refusal of the backend", function()
+    local backend = fake(sample())
+    backend.refusal = "A local board holds no time entries."
+    local result = cmd_board.run("time", { "11111111-a", "5", "--as", "lead" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "A local board holds no time entries.")
+end)
+
 testing.test("escalate posts the tier and reason to the endpoint", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner", "docs" }
@@ -7435,6 +7477,23 @@ testing.test("label sends the fence of a claim this machine holds", function()
     local patched = read(root, "calls"):match("%-X PATCH.-/api/tasks/")
     testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
     dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+testing.test("pomb time posts the minutes, role and note to the time route", function()
+    local root, home = sandbox()
+    local out, code = dev(
+        root,
+        home,
+        { "board", "time", "11111111-a", "25", "--as", "implementer", "--note", "built it" }
+    )
+    testing.eq(out, "logged 25 minutes as implementer on 11111111\n")
+    testing.eq(code, 0)
+    local calls = read(root, "calls")
+    local posted = calls:match("[^\n]*\n[^\n]*/api/tasks/" .. ID_A:gsub("%-", "%%-") .. "/time")
+    testing.ok(posted, calls)
+    testing.ok(posted:find('"minutes":25', 1, true), calls)
+    testing.ok(posted:find('"role":"implementer"', 1, true), calls)
+    testing.ok(posted:find('"note":"built it"', 1, true), calls)
 end)
 
 testing.test("pomb escalate posts the tier and reason with the fence", function()

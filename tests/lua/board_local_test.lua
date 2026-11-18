@@ -835,6 +835,29 @@ testing.test("note --kind and --as are stored on a local comment and notes print
     testing.ok(out:find("decision  reviewer  ", 1, true) and out:find("changed", 1, true), out)
 end)
 
+testing.test("local time refuses with a message and writes nothing", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
+    local out, code = dev(root, home, { "board", "time", a, "5", "--as", "planner" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("A local board holds no time entries.", 1, true), out)
+    testing.eq(#document(file_of(home)).cards[1].comments, 0)
+end)
+
 testing.test("local escalate swaps the label in one write", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {

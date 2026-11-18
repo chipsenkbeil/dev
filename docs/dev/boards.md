@@ -3468,6 +3468,26 @@ The write:
 - A board without the colour is `board unavailable: the board has no <colour>
   colour` (exit 1).
 
+### time
+
+`dev board time CARD MINUTES --as ROLE [--note TEXT]` logs MINUTES of work in
+ROLE on the card and prints `logged <minutes> minutes as <role> on <id
+prefix>`.
+
+The arguments:
+
+- MINUTES is a whole number from 1 to 1440, and anything else is exit 2.
+- `--as` is required and names the role, such as `planner`, `implementer` or
+  `reviewer`. A missing or blank role is exit 2.
+- `--note` is stored with the entry.
+
+The write:
+
+- It is `POST /api/tasks/{id}/time` with `minutes`, `role` and `note`. Pomb
+  groups its time reports by the role.
+- A local board refuses with `A local board holds no time entries. Log time on
+  a Pomb board.` (exit 1).
+
 ### note
 
 `dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT` adds a comment

@@ -818,6 +818,10 @@ function Backend:ask()
     return nil, "A local board holds no structured questions. Use `dev board note` instead."
 end
 
+function Backend:log_time()
+    return nil, "A local board holds no time entries. Log time on a Pomb board."
+end
+
 function Backend:answer(id, choice, quote, fence)
     return self:__update(function(doc)
         local card, message = card_of(doc, id, fence)

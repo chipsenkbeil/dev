@@ -1252,6 +1252,23 @@ function Backend:note(id, body, fence, opts)
     return true
 end
 
+function Backend:log_time(id, minutes, role, note)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local made
+    made, message = self:__request("POST", "/api/tasks/" .. id .. "/time", {
+        minutes = minutes,
+        role = role,
+        note = note,
+    })
+    if not made then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:seat_verdict(id, seat, name, verdict, revision)
     local ok, message = self:__load()
     if not ok then

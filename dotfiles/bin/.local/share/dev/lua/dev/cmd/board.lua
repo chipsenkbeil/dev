@@ -2006,6 +2006,40 @@ function commands.size(backend, args)
     return { output = "sized " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. args[2]:lower() }
 end
 
+function commands.time(backend, args)
+    local NOTE_FLAG = "--note"
+    local MAX_LOG_MINUTES = 1440
+    local flags, positional = parse(args, { [AS_FLAG] = true, [NOTE_FLAG] = true })
+    if not flags then
+        return positional
+    end
+    if #positional ~= 2 then
+        return usage("Needs a card and the minutes.")
+    end
+    local minutes = positional[2]:match("^%d+$") and tonumber(positional[2])
+    if not minutes or minutes < 1 or minutes > MAX_LOG_MINUTES then
+        return usage("The minutes are a whole number from 1 to " .. MAX_LOG_MINUTES .. ".")
+    end
+    local role = flags[AS_FLAG] and flags[AS_FLAG]:match("^%s*(.-)%s*$")
+    if not role or role == "" or role:find("%c") then
+        return usage("The " .. AS_FLAG .. " flag needs the role the time was logged in.")
+    end
+    local card, err = find_card(backend, positional[1])
+    if not card then
+        return err
+    end
+    local ok, message = backend:log_time(card.id, minutes, role, flags[NOTE_FLAG])
+    if not ok then
+        return failure(message)
+    end
+    return {
+        output = "logged " .. minutes .. " minutes as " .. role .. " on " .. card.id:sub(
+            1,
+            board.MIN_PREFIX
+        ),
+    }
+end
+
 function commands.label(backend, args)
     local edits, removals = {}, {}
     local pos = 2
