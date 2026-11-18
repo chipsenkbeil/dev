@@ -568,7 +568,10 @@ Every card in every column is fair game for an agent unless it is labelled
     `jj land --no-card` is a second merge path, and a forge merge bypasses both.
     The WIP limit group counts only In Progress, Review and Verify.
 - Release: where `[board.land] deploys` is true, land sends a card to Release
-  and it waits there to go live.
+  and it waits there on main, not yet deployed or installed.
+  - `move` refuses a move into Release or Done of a card that lacks a passing
+    check at the working-copy commit, a code and a style review of it, or a
+    ticked outcome, so a project's own land is covered too.
   - A deploying repo merges many cards, then cuts and tests one release
     after about 10 cards land, or when a peer needs a change.
     Release drains at least once a day.
@@ -3409,6 +3412,12 @@ The refusals run in this order:
 - After the card is read, `move` refuses a card labelled `needs:human` that
   moves to a different column.
 - The Ready, planning, Done and epic rules follow, each described below.
+- A move into Release or Done reads the working-copy commit and refuses with
+  every problem `land` would name for the card's check record, its code and
+  style reviews and its unticked outcomes (exit 1). A card already in Release,
+  an epic, a card with the trunk-blocker label, a discard, the move `land`
+  makes itself and the board API's `move_to` skip it, and so does a project
+  with no jj or git checkout.
 - A move into Review is refused unless the card is in In Progress under a claim
   or comes back from Verify, and a move into Verify is always refused. A card
   outside Review reads ``Card <id prefix> cannot move to <column> from

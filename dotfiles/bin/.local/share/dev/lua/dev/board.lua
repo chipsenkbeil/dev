@@ -1324,7 +1324,7 @@ end
 ---@return boolean? ok true when the card moved
 ---@return string? message why it did not
 function CardHandle:move_to(column)
-    local result = cmd_board().move(self.board.backend, { self.card.id, column })
+    local result = cmd_board().move(self.board.backend, { self.card.id, column }, { landed = true })
     if result.code then
         return nil, result.message
     end

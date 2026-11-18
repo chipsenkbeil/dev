@@ -1457,6 +1457,17 @@ local function move_once(backend, args, opts)
             return refused
         end
     end
+    local proving = (column == roles.release or to_done)
+        and card.column ~= roles.release
+        and card.kind ~= board.Kind.EPIC
+        and not (opts and (opts.landed or opts.drop))
+        and not board.labelled(card, board.TRUNK_BLOCKER)
+    if proving then
+        local refused = guards.proof_refusal(backend, card, column, opts)
+        if refused then
+            return to_done and unqueued(refused) or refused
+        end
+    end
     local epic = card.epic ~= nil or card.kind == board.Kind.EPIC
     local kids
     if epic then
@@ -1604,6 +1615,9 @@ end
 
 ---@class dev.cmd.board.move.Opts
 ---@field drop boolean? skips the outcome check, and the planning check from Icebox
+---@field landed boolean? skips the proof of a move into Release or Done that land already checked
+---@field state (fun(root: string): dev.board.check.State?, string?)? reads the commit the proof
+---   of a move into Release or Done covers, `land.state` when nil
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
 
@@ -3099,7 +3113,9 @@ function commands.land(backend, args)
             name = name,
             hold = hold,
             prepared = prepared,
-            move = move_card,
+            move = function(home, move_words)
+                return move_card(home, move_words, { landed = true })
+            end,
             clean_up = M.clean_up,
         })
         if not result.moved then

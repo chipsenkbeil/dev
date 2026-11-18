@@ -1,6 +1,7 @@
 local board = require("dev.board")
 local check = require("dev.board.check")
 local land = require("dev.board.land")
+local vcs = require("dev.vcs")
 
 ---The refusals and guards a board change runs before it acts.
 ---@class dev.board.guards
@@ -285,6 +286,49 @@ local function skipped_refusal(roles, card, column)
     )
 end
 
+---@class dev.board.guards.proof_refusal.Opts
+---@field state (fun(root: string): dev.board.check.State?, string?)? reads the commit to prove,
+---   `land.state` when nil
+
+---Refuse a move into Release or Done that the check, the reviews and the outcomes do not back.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card being moved
+---@param column string the column it moves to
+---@param opts dev.board.guards.proof_refusal.Opts? how to read the commit
+---@return dev.cmd.board.Result? err the refusal, nil when the card is proven or the project has no
+---   version control to prove it against
+local function proof_refusal(backend, card, column, opts)
+    local root = backend.root
+    local read = opts and opts.state or root and vcs.backend(root) and land.state
+    if not root or not read then
+        return nil
+    end
+    local problems = {}
+    local state, why = read(root)
+    if state then
+        local comments = backend:comments(card.id) or {}
+        for _, line in ipairs(land.missing_reviews(comments, state, root)) do
+            problems[#problems + 1] = line
+        end
+        for _, line in ipairs(land.refused_reviews(comments, state, root)) do
+            problems[#problems + 1] = line
+        end
+        local unproven = land.checks_problem(comments, state, card.checks or {})
+        if unproven then
+            problems[#problems + 1] = unproven
+        end
+    else
+        problems[1] = why
+    end
+    local open = done_refusal(card, column)
+    if #problems == 0 then
+        return open
+    end
+    local head = open and open.message
+        or string.format("Card %s cannot move to %s.", card.id:sub(1, board.MIN_PREFIX), column)
+    return failure(head .. " " .. table.concat(problems, " "))
+end
+
 ---Refuse a tick that the claimant or a missing name does not allow.
 ---@param card dev.board.Card the card
 ---@param flag string? the ticker name given with the flag
@@ -404,6 +448,7 @@ M.children_refusal = children_refusal
 M.unreadable_refusal = unreadable_refusal
 M.done_refusal = done_refusal
 M.skipped_refusal = skipped_refusal
+M.proof_refusal = proof_refusal
 M.tick_refused = tick_refused
 M.claimant_refused = claimant_refused
 M.is_lead = is_lead

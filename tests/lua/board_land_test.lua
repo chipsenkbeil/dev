@@ -935,8 +935,9 @@ if has_jj then
 
     testing.test("a card in Release moves to Done once every outcome is ticked", function()
         local project = jj_project()
-        local id = new_card(project)
+        local id = verified_card(project)
         must(dev(project, { "board", "move", id, support.Column.RELEASE }))
+        must(dev(project, { "board", "outcome", id, "--untick", "1" }))
         local out, code = dev(project, { "board", "move", id, support.Column.DONE })
         testing.eq(code, 1, out)
         testing.ok(out:find("1 of 1 outcomes are unticked", 1, true), out)

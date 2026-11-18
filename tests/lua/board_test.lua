@@ -2,6 +2,8 @@ local ffi = require("ffi")
 
 local testing = require("dev.testing")
 local board = require("dev.board")
+local check = require("dev.board.check")
+local review = require("dev.board.review")
 local box = require("dev.cmd.box")
 local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
@@ -11030,4 +11032,79 @@ testing.test("pomb next falls through to the next lane when one has no card", fu
     testing.ok(out:find(ID_A:sub(1, 8), 1, true), out)
     local calls = read(root, "calls")
     testing.ok(calls:find("&swimlane_id=lane-fixes", 1, true), calls)
+end)
+
+local PROOF = { commit = "abcdef1234", change = "klmnopqrst" }
+
+local function proof_backend(parts)
+    local card = colored("green")
+    card.column = parts.column or support.COLUMN_NAME.VERIFY
+    card.outcomes = outcomes(1, parts.ticked and 1 or 0)
+    local backend = fake({ card })
+    backend.root = "/proof"
+    backend.listed = {}
+    if parts.check then
+        local rows = { { run = "dev test", result = check.Result.PASS, run_id = "ab12" } }
+        backend.listed[#backend.listed + 1] = { body = check.record(PROOF, rows, false) }
+    end
+    for _, kind in ipairs(parts.reviews or {}) do
+        backend.listed[#backend.listed + 1] = {
+            body = review.record(kind, "r/" .. kind, PROOF, "clean"),
+        }
+    end
+    return backend
+end
+
+local function proof_move(backend, column)
+    local opts = {
+        state = function()
+            return PROOF
+        end,
+    }
+    return cmd_board.move(backend, { "cccccccc", column }, opts)
+end
+
+testing.test("a move into Release without a passing check is refused", function()
+    local backend = proof_backend({ ticked = true, reviews = { "code", "style" } })
+    local result = proof_move(backend, support.COLUMN_NAME.RELEASE)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("cannot move to Release", 1, true), result.message)
+    testing.ok(result.message:find("dev board check", 1, true), result.message)
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the card moved")
+    end
+end)
+
+testing.test("a move into Release without both reviews is refused", function()
+    local backend = proof_backend({ ticked = true, check = true, reviews = { "code" } })
+    local result = proof_move(backend, support.COLUMN_NAME.RELEASE)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("No style review", 1, true), result.message)
+end)
+
+testing.test("a move into Release with an unticked outcome is refused", function()
+    local backend = proof_backend({ check = true, reviews = { "code", "style" } })
+    local result = proof_move(backend, support.COLUMN_NAME.RELEASE)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("1 of 1 outcomes are unticked", 1, true), result.message)
+end)
+
+testing.test("a fully proven card moves into Release", function()
+    local backend = proof_backend({ ticked = true, check = true, reviews = { "code", "style" } })
+    local result = proof_move(backend, support.COLUMN_NAME.RELEASE)
+    testing.eq(result.code, nil)
+    testing.eq(result.output, "moved cccccccc to Release")
+end)
+
+testing.test("a move into Done without a passing check is refused", function()
+    local backend = proof_backend({ ticked = true, reviews = { "code", "style" } })
+    local result = proof_move(backend, support.COLUMN_NAME.DONE)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("dev board check", 1, true), result.message)
+end)
+
+testing.test("a card in Release moves to Done without a new proof", function()
+    local backend = proof_backend({ ticked = true, column = support.COLUMN_NAME.RELEASE })
+    local result = proof_move(backend, support.COLUMN_NAME.DONE)
+    testing.eq(result.code, nil)
 end)
