@@ -540,13 +540,13 @@ Every card in every column is fair game for an agent unless it is labelled
   - A scoping agent sharpens, sizes and promotes cards to Backlog.
   - A `needs:human` card here is an idea you want to flesh out yourself.
 - Backlog: wanted, not ready to run.
-  - A card enters with a size, the card format v3 sections and an outcome.
+  - A card enters with a size, the card format v4 sections and an outcome.
   - A planner refines the description, the outcomes and the checks, and
     re-sizes the card if needed (splitting a red card, which may become an
     epic over its children).
   - The planner then moves it to Ready.
 - Ready: an agent can run it with no questions.
-  - It has size 1 to 3, v3, 3 to 7 outcomes (1 to 3 for an epic) and a checks
+  - It has size 1 to 3, v4, 3 to 7 outcomes (1 to 3 for an epic) and a checks
     row, which `dev board` enforces, except for an epic with children.
   - The top card is next, and the order within Ready is the priority.
   - A runner takes it by size: yellow by a haiku agent, green and blue by a
@@ -697,7 +697,7 @@ card that already carries the label is locked, and dev refuses the question
 before it posts anything. The refusal tells the agent to run `dev board label
 CARD --remove needs:human` and then ask again.
 
-`ask` also refuses a card that `board.unplanned` finds lacking a size, a v3
+`ask` also refuses a card that `board.unplanned` finds lacking a size, a v4
 section, a filled Change, Out of scope or Problem, or a Done when outcome (exit
 1). The refusal names what is missing. Pomb locks a card once it carries
 `needs:human`, and the lock refuses the edits that would plan it, so a question
@@ -773,8 +773,9 @@ A local board has no owner comments, so it always counts 0 as the owner's.
 - Any other column is exit 2.
 
 `add` puts a card in Backlog unless `--column` names another column. It writes
-the three card format v3 headings into the description (Problem, Change and Out
-of scope), filling Problem from `--description`.
+the three required card format v4 headings into the description (Problem,
+Change and Out of scope), filling Problem from `--description`. The optional
+`## Source` heading is never written unless `--source` gives it text.
 
 A description that already holds a heading or the v1 Done when is kept as it
 is. An Icebox card gets the text as given, with no headings.
@@ -810,7 +811,7 @@ These fail with exit 1 before any move, and no card is touched:
 A move that fails partway leaves the cards before it in place.
 
 `add`, `note` and `edit` warn on standard error, and still write, when the prose
-holds a hex id, a hash or a path, which the v3 format keeps in the Change
+holds a hex id, a hash or a path, which the v4 format keeps in the Change
 section only. One line names each word.
 
 - A hex id is 7 or more hex characters with a digit and a letter.
@@ -820,7 +821,7 @@ section only. One line names each word.
   prose, and `--checks` is never scanned.
 
 Only Icebox holds a card that is unsized or free-form. Every other column takes
-a card with a size of `1`, `2`, `3` or `3+`, all three v3 headings with text
+a card with a size of `1`, `2`, `3` or `3+`, all three v4 headings with text
 under Problem, and, for `add` and `move`, at least one Done when outcome (a v1
 `## Done when` item counts).
 
@@ -849,9 +850,8 @@ card is split instead.
 
 `add --column ready` without `--size 1`, `2` or `3` is a usage error (exit 2).
 
-A card also needs the three required headings of card format v3 and v4 to
-enter Ready (v4 adds only the optional `## Source`, which is never required,
-and an empty one is refused):
+A card also needs the three required headings of card format v4 to enter Ready.
+The optional `## Source` is never required, and an empty one is refused:
 
 - all three headings with text under each
 - no `Change:` or `Out of scope:` line under Problem
@@ -958,7 +958,7 @@ the `ls` line, and an epic `children: N of M done`.
 `--file PATH`, or of standard input when there is no `--file`. It prints
 `edited <id prefix>`.
 
-The format v3 description always holds the current plan, so rewrite it after a
+The format v4 description always holds the current plan, so rewrite it after a
 decision. Trailing whitespace is dropped, and empty text is a usage error (exit
 2), to keep an empty pipe from wiping a plan.
 
@@ -1306,7 +1306,7 @@ way.
 
 The rules:
 
-- Outside Icebox: a size, the three v3 headings with text under Problem, and a
+- Outside Icebox: a size, the three v4 headings with text under Problem, and a
   Done when outcome. This is `dev.board.unplanned`, the check `move` and `add`
   make, which keeps a move, an add and lint in agreement.
 - Where a card's sections are checked (outside Icebox and not Done, or every
@@ -1320,7 +1320,7 @@ The rules:
 - An epic, a card with children, needs 1 to 3 outcomes. A Done epic with every
   child Done may have none, and 1 to 3 if it has any. Lint reads the children of
   every card it checks for outcomes.
-- With `--strict`, a Done card also needs the three v3 headings with text under
+- With `--strict`, a Done card also needs the three v4 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
 - Outside Icebox and Done: a description of at most 400 words. In Ready, In
@@ -2270,7 +2270,7 @@ one line per broken rule. With `CARD`, it resolves the prefix with
   every Pomb command.
 
 The rules live in `dev.board.lint`, which calls `dev.board.unplanned` for the
-size, the v3 sections and the outcomes. It adds these:
+size, the v4 sections and the outcomes. It adds these:
 
 - Outside Icebox and Done: `over 400 words (N)`.
 - In Ready, In Progress and In Review, for a card with no children:
@@ -3387,7 +3387,7 @@ A move into Ready:
   ``Card <id prefix> is red, more than 3 Pomodori. Split it, since a red card
   cannot enter Ready. Size it with `dev board size CARD 1`, `2` or `3`.``
   (exit 1).
-- A card whose description lacks one of the three v3 headings or text under
+- A card whose description lacks one of the three v4 headings or text under
   one, or that has neither 3 to 7 outcomes (subtasks) nor a v1 checklist item,
   is refused the same way, before the backend is called.
 - The v1 fallback is a `- [ ]` or `- [x]` item under `## Done when`, and it
@@ -3424,7 +3424,7 @@ A move into Ready:
 
 A move into any column but Icebox or Ready:
 
-- A card with no size, a description that lacks a v3 heading or text under
+- A card with no size, a description that lacks a v4 heading or text under
   Problem, with an empty Change or Out of scope section or a `Change:` or
   `Out of scope:` line under Problem, or no outcome is refused before the
   backend is called. A discard skips the empty section and the line.
