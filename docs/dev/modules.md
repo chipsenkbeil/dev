@@ -408,7 +408,9 @@ two busy loops per core:
 It prints each run as `PASS` or `FAIL` with the burner count, core count, load
 average and runnable count it ran under, and keeps the output of a failed run.
 It fails a run in which no case ran and exits 1 when any run failed. It
-refuses to run off a ci host to avoid loading the machine.
+refuses to run off a ci host to avoid loading the machine. Each case runs in its
+own process group with a 300 second limit, so a TERM or a kill of dev alone
+stops the case and its busy loops at once.
 
 #### dev test
 

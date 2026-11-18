@@ -85,16 +85,9 @@ local function count_ran(output)
 end
 
 local function run_case(case, number, runs)
-    local argv = {
-        "bash",
-        "-c",
-        WRAPPER:format(BURNERS_PER_CORE),
-        "soak",
-        "timeout",
-        tostring(CASE_TIMEOUT_SECS),
-        unpack(case.argv),
-    }
-    local output, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
+    local argv = { "bash", "-c", WRAPPER:format(BURNERS_PER_CORE), "soak", unpack(case.argv) }
+    local output, code =
+        dev_os.capture_timed(argv, CASE_TIMEOUT_SECS, { cwd = ctx.root, merge = true })
     local load_line = output:match("load: [^\n]*\n?$") or "load: not recorded"
     local ran = count_ran(output)
     local passed = code == 0 and ran > 0

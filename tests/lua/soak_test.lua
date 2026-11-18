@@ -73,3 +73,50 @@ testing.test("soak fails a run in which no case ran", function()
     testing.eq(code, 1)
     testing.ok(out:find("FAIL guide interrupt 1/1 (0 cases)", 1, true), out)
 end)
+
+local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
+local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
+
+local DRIVER = [[
+luajit "$MAIN" soak --runs 1 >/dev/null 2>&1 &
+soak=$!
+n=0
+while [ ! -s "$GROUP" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+[ -s "$GROUP" ] || exit 2
+kill -TERM "$soak"
+wait "$soak"
+group=$(tr -d ' \n' <"$GROUP")
+alive() {
+    ps -A -o pgid= -o stat= | awk -v g="$group" '$1 == g && $2 !~ /^Z/ { found = 1 } END { exit !found }'
+}
+n=0
+while alive && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+if alive; then
+    kill -KILL -- "-$group"
+    exit 1
+fi
+]]
+
+testing.test("a TERM to dev alone stops the case and its busy loops", function()
+    local root = project("")
+    local group = root .. "/group"
+    assert(
+        fs.write(
+            root .. "/bin/bats",
+            ("#!/bin/sh\nps -o pgid= -p $$ >%s\nsleep 60\n"):format(group)
+        )
+    )
+    assert(fs.write(root .. "/driver.sh", DRIVER))
+    local code = dev_os.run({ "bash", root .. "/driver.sh" }, {
+        cwd = root,
+        env = {
+            CI = "true",
+            MAIN = MAIN,
+            GROUP = group,
+            DEV_SELF = SELF,
+            DEV_BOARD_TOKEN = "",
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+        },
+    })
+    testing.eq(code, 0)
+end)
