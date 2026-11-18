@@ -605,12 +605,6 @@ if has_jj then
         return out
     end
 
-    local function git(dir, ...)
-        local argv =
-            { "git", "-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
-        must(dev_os.run(argv, { stdout = "null", stderr = "null" }))
-    end
-
     local function push_trunk(project, files)
         local other = support.tempdir() .. "/clone"
         must(
@@ -621,10 +615,10 @@ if has_jj then
         )
         for path, body in pairs(files or {}) do
             assert(fs.write(other .. "/" .. path, body), "write failed")
-            git(other, "add", path)
+            support.git(other, "add", path)
         end
-        git(other, "commit", "-q", "--allow-empty", "-m", "moved")
-        git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+        support.git(other, "commit", "-q", "--allow-empty", "-m", "moved")
+        support.git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
     end
 
     local function trunk_moves(project, files)
@@ -3318,16 +3312,11 @@ end
 testing.test("land removes the worktree and branch in a git project", function()
     local base = assert(fs.realpath(support.tempdir()))
     local root = assert(fs.realpath(support.tempdir()))
-    local function git(...)
-        local argv =
-            { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
-        must(dev_os.run(argv, { stdout = "null", stderr = "null" }))
-    end
-    git("init", "-q", "-b", "master")
-    git("commit", "-q", "--allow-empty", "-m", "base")
+    support.git(root, "init", "-q", "-b", "master")
+    support.git(root, "commit", "-q", "--allow-empty", "-m", "base")
     local path = base .. "/" .. fs.basename(root) .. "/card"
     assert(fs.mkdir(base .. "/" .. fs.basename(root), { parents = true }), "mkdir failed")
-    git("worktree", "add", "-q", "-b", "card", path)
+    support.git(root, "worktree", "add", "-q", "-b", "card", path)
     ffi.C.setenv("DEV_WS_ROOT", base, 1)
     local deleted, why = vcs.delete_branch(root, vcs.GIT, "card")
     testing.eq(deleted, nil)
@@ -3340,7 +3329,7 @@ testing.test("land removes the worktree and branch in a git project", function()
     testing.eq(vcs.delete_branch(root, vcs.GIT, "card"), true)
     testing.eq(vcs.delete_branch(root, vcs.GIT, "card"), false)
     assert(fs.remove(base .. "/.trash", { recursive = true }))
-    git("worktree", "add", "-q", "-b", "card", path)
+    support.git(root, "worktree", "add", "-q", "-b", "card", path)
     local lines = cmd_board.clean_up(path, "card")
     testing.ok(lines:find("Moved " .. path, 1, true), lines)
     testing.ok(lines:find("Deleted branch card", 1, true), lines)
@@ -3348,21 +3337,9 @@ testing.test("land removes the worktree and branch in a git project", function()
     ffi.C.setenv("DEV_WS_ROOT", "", 1)
 end)
 
-local GIT_IDENT = {
-    GIT_AUTHOR_NAME = "t",
-    GIT_AUTHOR_EMAIL = "t@example.com",
-    GIT_COMMITTER_NAME = "t",
-    GIT_COMMITTER_EMAIL = "t@example.com",
-}
-
-local function git_at(dir, ...)
-    local argv = { "git", "-C", dir, "-c", "commit.gpgsign=false", ... }
-    must(dev_os.run(argv, { stdout = "null", stderr = "null", env = GIT_IDENT }))
-end
-
 local function git_dev(project, args, extra)
     local env = {}
-    for name, value in pairs(GIT_IDENT) do
+    for name, value in pairs(support.GIT_IDENT) do
         env[name] = value
     end
     for name, value in pairs(extra or {}) do
@@ -3382,15 +3359,15 @@ local function git_project(extra)
         )
     )
     must(dev_os.run({ "git", "init", "-q", "-b", "master", root }, { stdout = "null" }))
-    git_at(root, "remote", "add", "origin", project.bare)
+    support.git(root, "remote", "add", "origin", project.bare)
     project.id = new_card(project)
-    git_at(root, "add", "-A")
-    git_at(root, "commit", "-q", "-m", "base")
-    git_at(root, "push", "-q", "origin", "master")
-    git_at(root, "checkout", "-q", "-b", "work")
+    support.git(root, "add", "-A")
+    support.git(root, "commit", "-q", "-m", "base")
+    support.git(root, "push", "-q", "origin", "master")
+    support.git(root, "checkout", "-q", "-b", "work")
     assert(fs.write(root .. "/work.txt", "one\n"), "write failed")
-    git_at(root, "add", "-A")
-    git_at(root, "commit", "-q", "-m", "feat: work")
+    support.git(root, "add", "-A")
+    support.git(root, "commit", "-q", "-m", "feat: work")
     return project
 end
 
@@ -3424,9 +3401,9 @@ local function git_trunk_moves(project, name, text)
     local clone = assert(fs.realpath(support.tempdir())) .. "/clone"
     must(dev_os.run({ "git", "clone", "-q", project.bare, clone }, { stdout = "null" }))
     assert(fs.write(clone .. "/" .. name, text), "write failed")
-    git_at(clone, "add", "-A")
-    git_at(clone, "commit", "-q", "-m", "trunk moves")
-    git_at(clone, "push", "-q", "origin", "master")
+    support.git(clone, "add", "-A")
+    support.git(clone, "commit", "-q", "-m", "trunk moves")
+    support.git(clone, "push", "-q", "origin", "master")
 end
 
 local function git_rev(dir, rev)
@@ -3462,8 +3439,8 @@ testing.test("land.git.recheck reruns trunk's rows when the change empties its o
     local project = git_project('\n[board.land]\nrecheck = ["touch ' .. marker .. '"]\n')
     local id = project.id
     assert(fs.write(project.root .. "/.dev/config.toml", NARROWED), "write failed")
-    git_at(project.root, "add", "-A")
-    git_at(project.root, "commit", "-q", "--amend", "--no-edit")
+    support.git(project.root, "add", "-A")
+    support.git(project.root, "commit", "-q", "--amend", "--no-edit")
     git_approve(project)
     git_trunk_moves(
         project,
@@ -3502,7 +3479,7 @@ testing.test("land.git.refused names a failed fetch or rebase and keeps the card
     testing.eq(git_rev(project.root, "HEAD"), before)
     testing.eq(git_remote_master(project), trunk)
     testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
-    git_at(project.root, "remote", "set-url", "origin", project.bare .. "/missing")
+    support.git(project.root, "remote", "set-url", "origin", project.bare .. "/missing")
     out, code = git_dev(project, { "board", "land", id })
     testing.eq(code, 1, out)
     testing.ok(out:find("The fetch from origin failed", 1, true), out)
@@ -3514,12 +3491,12 @@ local function linked_worktree(prepare)
     local project = git_project()
     local id = project.id
     local main = project.root
-    git_at(main, "checkout", "-q", "master")
+    support.git(main, "checkout", "-q", "master")
     local base = assert(fs.realpath(support.tempdir()))
     local folder = base .. "/" .. fs.basename(main)
     local path = folder .. "/" .. id
     assert(fs.mkdir(folder, { parents = true }), "mkdir failed")
-    git_at(main, "worktree", "add", "-q", "-b", id, path, "work")
+    support.git(main, "worktree", "add", "-q", "-b", id, path, "work")
     if prepare then
         prepare(main, folder, path)
     end
@@ -3557,7 +3534,7 @@ end
 
 testing.test("land.git.worktree.keeps.a.locked worktree and says why", function()
     local out, path = land_kept_worktree(function(main, _, tree)
-        git_at(main, "worktree", "lock", tree)
+        support.git(main, "worktree", "lock", tree)
     end)
     local reason = path .. " is a locked git worktree. Run git worktree unlock first."
     testing.ok(out:find("Kept the workspace. " .. reason, 1, true), out)
@@ -3567,7 +3544,7 @@ testing.test("land.git.worktree.keeps.one.beside.a.prunable sibling and says why
     local sibling
     local out = land_kept_worktree(function(main, folder)
         sibling = folder .. "/sibling"
-        git_at(main, "worktree", "add", "-q", "-b", "sibling", sibling, "work")
+        support.git(main, "worktree", "add", "-q", "-b", "sibling", sibling, "work")
         assert(fs.remove(sibling, { recursive = true }))
     end)
     local reason = "Git worktree prune would also drop the record of "
