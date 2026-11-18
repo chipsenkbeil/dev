@@ -23,6 +23,14 @@ M.PALETTE = {
     { value = "white", label = "Unsized", description = "Never sized" },
 }
 
+---The labels a board highlights, with their colours.
+---@type dev.board.Highlight[]
+M.HIGHLIGHTS = {
+    { label = board.NEEDS_HUMAN, color = "#b8461f" },
+    { label = board.NEEDS_LEAD, color = "#2f6fab" },
+    { label = board.NEEDS_PLANNER, color = "#7a5ab0" },
+}
+
 local DEFAULT_VALUE = "white"
 local LIMIT_GROUP_CARDS = 4
 
@@ -351,6 +359,24 @@ local function enabled_step(layout, state, say)
     return true
 end
 
+local function highlights_step(layout, state, say)
+    local LEFT_HIGHLIGHTS = "Left the highlighted labels as they are, since this token may not change them. "
+        .. "Run `dev board init --admin`."
+    local added, message = layout:add_highlights(M.HIGHLIGHTS)
+    if added == nil then
+        if needs_admin(message) then
+            state.warn(LEFT_HIGHLIGHTS)
+            return true
+        end
+        return nil, message
+    end
+    for _, label in ipairs(added or {}) do
+        say("highlighted " .. label)
+        state.changes = state.changes + 1
+    end
+    return true
+end
+
 local function worn_step(_, state)
     local off = {}
     for _, color in ipairs(state.colors) do
@@ -526,6 +552,7 @@ function M.run(layout, name, say, opts)
         turn_step,
         worn_step,
         lanes_step,
+        highlights_step,
     }) do
         local ok
         ok, message = step(layout, state, say)

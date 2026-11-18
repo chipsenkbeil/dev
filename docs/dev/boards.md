@@ -424,9 +424,22 @@ What it lays out:
   - A local board gets none and stays uncapped.
   - A 403 is shown with the `--admin` hint like the other changes.
   - `dev board limits` shows the result.
-- labels: they need nothing. `needs:planner`, `needs:lead` and `needs:human`
-  are plain strings on a card, and Pomb makes them when a card first carries
-  one.
+- labels: `needs:planner`, `needs:lead` and `needs:human` are plain strings on
+  a card, and Pomb makes them when a card first carries one. `init` also
+  highlights them in the board's label settings, `needs:human` in `#b8461f`,
+  `needs:lead` in `#2f6fab` and `needs:planner` in `#7a5ab0`.
+  - It reads `GET /api/boards/{id}/label-settings`, and when a standard label
+    is not highlighted it puts the settings back with `PUT` and the missing
+    highlights added after the existing ones. It prints
+    `highlighted needs:human` for each one.
+  - A label that is already highlighted keeps its colour, and the other
+    highlights, the show-all flag and the added labels stay as they are. A rerun
+    changes nothing and says nothing.
+  - A local board has no label settings and says nothing.
+  - Pomb needs `labels.manage` for the `PUT`. When a 403 refuses it, `init`
+    prints ``Left the highlighted labels as they are, since this token may not
+    change them. Run `dev board init --admin`.``, and the rest of the run still
+    happens.
 
 The board's name comes from `[board]`. In a project with no `[board]`
 section, `--name N` names the board and `init` appends the section to

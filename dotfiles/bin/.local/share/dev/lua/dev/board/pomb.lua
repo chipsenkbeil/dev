@@ -2461,6 +2461,44 @@ function Backend:add_checks_field()
     return true
 end
 
+function Backend:add_highlights(wanted)
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local path = "/api/boards/" .. id .. "/label-settings"
+    local current
+    current, message = self:__request("GET", path)
+    if type(current) ~= "table" then
+        return nil, message or "pomb sent label settings dev cannot read"
+    end
+    local highlights = type(current.highlights) == "table" and current.highlights or {}
+    local held = {}
+    for _, highlight in ipairs(highlights) do
+        held[highlight.label] = true
+    end
+    local added = {}
+    for _, highlight in ipairs(wanted) do
+        if not held[highlight.label] then
+            highlights[#highlights + 1] = { label = highlight.label, color = highlight.color }
+            added[#added + 1] = highlight.label
+        end
+    end
+    if #added == 0 then
+        return added
+    end
+    local put
+    put, message = self:__request("PUT", path, {
+        highlights = highlights,
+        show_all = current.show_all == true,
+        added = type(current.added) == "table" and current.added or {},
+    })
+    if not put then
+        return nil, message
+    end
+    return added
+end
+
 function Backend:__roles_granted(board_id)
     local rows, message = self:__request("GET", ROLES_LIST_PATH)
     if type(rows) ~= "table" then

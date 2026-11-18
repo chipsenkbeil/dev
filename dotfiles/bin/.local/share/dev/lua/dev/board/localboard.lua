@@ -603,6 +603,10 @@ function Backend:add_checks_field()
     return true
 end
 
+function Backend:add_highlights()
+    return false
+end
+
 function Backend:add_roles()
     return false
 end

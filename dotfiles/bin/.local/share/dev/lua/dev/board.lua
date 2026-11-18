@@ -259,6 +259,10 @@ end
 ---@field lane string? the name of the lane to put it in
 ---@field once boolean? whether to return the open card of that name instead of adding a second
 
+---@class dev.board.Highlight
+---@field label string the label to highlight
+---@field color string the colour as `#rrggbb`
+
 ---@class dev.board.Layout
 ---@field add fun(self: dev.board.Layout, name: string, column: string, opts: dev.board.add.Opts?):
 ---   dev.board.Card?, string?, boolean? a card added, or with `once` the open card of that name and
@@ -283,6 +287,9 @@ end
 ---   boolean? a column given a stage, third value true when it wrote one
 ---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?,
 ---   string? a colour's label, description, default flag or enabled flag
+---@field add_highlights fun(self: dev.board.Layout, wanted: dev.board.Highlight[]): string[]|false|
+---   nil, string? the labels highlighted by this call, empty when all were, false when the board
+---   has no label settings, or nil and a message
 ---@field set_card fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?,
 ---   string? a card's name or colour
 ---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined

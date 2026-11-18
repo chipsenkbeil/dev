@@ -90,9 +90,27 @@ local function fake_layout(opts)
         has_checks = opts.has_checks ~= false,
         roles = opts.roles == nil and {} or opts.roles,
         groups = opts.groups or {},
+        highlights = copy(opts.highlights or init.HIGHLIGHTS),
         writes = {},
     }
     local layout = { state = state }
+    function layout:add_highlights(wanted)
+        local held = {}
+        for _, highlight in ipairs(state.highlights) do
+            held[highlight.label] = true
+        end
+        local added = {}
+        for _, highlight in ipairs(wanted) do
+            if not held[highlight.label] then
+                state.highlights[#state.highlights + 1] = copy(highlight)
+                added[#added + 1] = highlight.label
+            end
+        end
+        if #added > 0 then
+            state.writes[#state.writes + 1] = { "put_highlights" }
+        end
+        return added
+    end
     local function write(...)
         state.writes[#state.writes + 1] = { ... }
     end
@@ -341,6 +359,88 @@ testing.test("a second run changes nothing and says nothing", function()
     testing.eq(#layout.state.writes, writes)
 end)
 
+testing.test("a new board leaves the three standard labels highlighted in their colours", function()
+    local layout = fake_layout({ exists = false, highlights = {} })
+    local _, message, lines = run(layout)
+    testing.eq(message, nil)
+    testing.eq(lines[#lines - 2], "highlighted needs:human")
+    testing.eq(lines[#lines - 1], "highlighted needs:lead")
+    testing.eq(lines[#lines], "highlighted needs:planner")
+    testing.eq(layout.state.highlights, init.HIGHLIGHTS)
+end)
+
+testing.test("a board with no highlights gains the three standard ones", function()
+    local layout = fake_layout()
+    run(layout)
+    layout.state.highlights = {}
+    local changes, message, lines = run(layout)
+    testing.eq(message, nil)
+    testing.eq(changes, 3)
+    testing.eq(lines, {
+        "highlighted needs:human",
+        "highlighted needs:lead",
+        "highlighted needs:planner",
+    })
+    testing.eq(layout.state.highlights, init.HIGHLIGHTS)
+end)
+
+testing.test("a board with custom highlights keeps them and gains only the missing ones", function()
+    local custom = {
+        { label = "idea", color = "#112233" },
+        { label = board.NEEDS_LEAD, color = "#abcdef" },
+    }
+    local layout = fake_layout()
+    run(layout)
+    layout.state.highlights = custom
+    local changes, message, lines = run(layout)
+    testing.eq(message, nil)
+    testing.eq(changes, 2)
+    testing.eq(lines, { "highlighted needs:human", "highlighted needs:planner" })
+    testing.eq(layout.state.highlights, {
+        { label = "idea", color = "#112233" },
+        { label = board.NEEDS_LEAD, color = "#abcdef" },
+        init.HIGHLIGHTS[1],
+        init.HIGHLIGHTS[3],
+    })
+end)
+
+testing.test("a second run highlights nothing and writes nothing", function()
+    local layout = fake_layout({ highlights = {} })
+    run(layout)
+    local writes = #layout.state.writes
+    local changes, message, lines = run(layout)
+    testing.eq(message, nil)
+    testing.eq(changes, 0)
+    testing.eq(lines, {})
+    testing.eq(#layout.state.writes, writes)
+end)
+
+testing.test("a token that may not change the highlights leaves them and carries on", function()
+    local layout = fake_layout()
+    run(layout)
+    function layout:add_highlights()
+        return nil, "pomb answered 403 permission_denied"
+    end
+    local changes, message, lines, warnings = run(layout)
+    testing.eq(message, nil)
+    testing.eq(changes, 0)
+    testing.eq(lines, {})
+    testing.eq(warnings, {
+        "Left the highlighted labels as they are, since this token may not change them. "
+            .. "Run `dev board init --admin`.",
+    })
+end)
+
+testing.test("a failed highlight write that is not a refusal ends the run", function()
+    local layout = fake_layout({ highlights = {} })
+    function layout:add_highlights()
+        return nil, "pomb answered 500"
+    end
+    local changes, message = run(layout)
+    testing.eq(changes, nil)
+    testing.eq(message, "pomb answered 500")
+end)
+
 testing.test("an old board keeps its cards and gains what is missing", function()
     local layout = fake_layout({
         columns = {
@@ -556,6 +656,10 @@ local function colors_json()
     return "[" .. table.concat(parts, ",") .. "]"
 end
 
+local STANDARD_LABELS = '{"highlights":[{"label":"needs:human","color":"#b8461f"},'
+    .. '{"label":"needs:lead","color":"#2f6fab"},{"label":"needs:planner","color":"#7a5ab0"}],'
+    .. '"show_all":false,"added":[]}'
+
 local FIELDS =
     '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
 
@@ -606,6 +710,7 @@ case "$last" in
     ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
+*/label-settings) body=$(cat "$ROOT/labels.json") ;;
 */api/tasks) body='{"id":"33333333-cccc"}' ;;
 */fields)
     case " $* " in
@@ -658,6 +763,7 @@ local function sandbox(opts)
         ["boards.json"] = BOARDS,
         ["detail.json"] = detail(),
         ["colors.json"] = colors_json(),
+        ["labels.json"] = opts.labels or STANDARD_LABELS,
         ["fields.json"] = opts.fields or FIELDS,
         ["roles.json"] = opts.roles or '200|{"created":[],"roles":[]}\n',
         ["rolelist.json"] = opts.rolelist or "{}",
@@ -718,6 +824,7 @@ local function writes(root)
     for line in calls_of(root):gmatch("[^\n]+") do
         if
             line:find("-X PATCH", 1, true)
+            or line:find("-X PUT", 1, true)
             or (
                 line:find("-X POST", 1, true)
                 and not line:find("/auth/", 1, true)
@@ -1026,6 +1133,51 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     testing.ok(out:find("made white the default colour\n", 1, true), out)
     testing.ok(out:find('renamed card 11111111 to "Keep it" and coloured it blue\n', 1, true), out)
     testing.eq(out:find(TOKEN, 1, true), nil)
+end)
+
+testing.test("init puts the missing highlights after the custom ones and keeps the rest", function()
+    local root, home, tmp = sandbox({
+        labels = '{"highlights":[{"label":"idea","color":"#112233"},'
+            .. '{"label":"needs:lead","color":"#abcdef"}],"show_all":true,"added":["later"]}',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0)
+    local calls = calls_of(root)
+    testing.ok(
+        calls:find(
+            '%-X PUT[^\n]*%-%-data%-raw {"added":%["later"%],"highlights":'
+                .. '%[{"color":"#112233","label":"idea"},{"color":"#abcdef","label":"needs:lead"},'
+                .. '{"color":"#b8461f","label":"needs:human"},'
+                .. '{"color":"#7a5ab0","label":"needs:planner"}%],"show_all":true} '
+                .. "https://pomb%.example/api/boards/board%-1/label%-settings"
+        ),
+        calls
+    )
+    testing.ok(out:find("highlighted needs:human\nhighlighted needs:planner\n", 1, true), out)
+    testing.eq(out:find("highlighted needs:lead", 1, true), nil)
+    testing.eq(writes(root), 1)
+end)
+
+testing.test("init on a board with no highlights sets all three and a rerun sets none", function()
+    local root, home, tmp = sandbox({
+        labels = '{"highlights":[],"show_all":false,"added":[]}',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0)
+    testing.ok(
+        out:find(
+            "highlighted needs:human\nhighlighted needs:lead\nhighlighted needs:planner\n",
+            1,
+            true
+        ),
+        out
+    )
+    testing.eq(writes(root), 1)
+    root, home, tmp = sandbox()
+    out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0)
+    testing.eq(out:find("highlighted", 1, true), nil)
+    testing.eq(writes(root), 0)
 end)
 
 testing.test("init renames In Review to Review through the column update", function()
