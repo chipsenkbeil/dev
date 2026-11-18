@@ -171,10 +171,10 @@ if dev_os.which("jj") then
         testing.ok(out:find(open:sub(1, 4), 1, true), out)
     end)
 
-    local function push_file(root, path)
+    local function push_file(root, path, text)
         local dir = fs.dirname(root .. "/" .. path)
         assert(fs.mkdir(dir, { parents = true }), "mkdir failed")
-        assert(fs.write(root .. "/" .. path, "changed\n"), "write failed")
+        assert(fs.write(root .. "/" .. path, text or "changed\n"), "write failed")
         jj(root, "commit", "-m", "touch " .. path)
         jj(root, "bookmark", "set", "master", "-r", "@-")
         jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
@@ -330,6 +330,90 @@ if dev_os.which("jj") then
         testing.ok(out:find("false", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
         testing.eq(#done_notes(select(2, state(home, id))), 0)
+    end)
+
+    local function red_ship(failing, landed)
+        local root, home = project()
+        must(dev(root, home, { "board", "init" }))
+        local pushed = {}
+        for _, card in ipairs(landed) do
+            if card.name then
+                local id = release_card(
+                    root,
+                    home,
+                    card.name,
+                    { "It works" },
+                    push_file(root, card.path, card.text)
+                )
+                tick(root, home, id)
+                pushed[#pushed + 1] = id
+            else
+                push_file(root, card.path, card.text)
+            end
+        end
+        local echo = "echo " .. (failing and "FAIL " .. failing or "no failure line") .. "; exit 1"
+        local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("No card moved", 1, true), out)
+        for _, id in ipairs(pushed) do
+            testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+        end
+        return out
+    end
+
+    testing.test("ship.names.the.landed.card.that.touched.a.failing.test", function()
+        local out = red_ship("tests/lua/x_test.lua", {
+            { name = "Touched", path = "tests/lua/x_test.lua" },
+            { name = "Bystander", path = "docs/other.md" },
+        })
+        testing.ok(out:find("Suspects among the landed cards:", 1, true), out)
+        testing.ok(out:find("tests/lua/x_test.lua:\n", 1, true), out)
+        testing.ok(out:find("Touched", 1, true), out)
+        testing.eq(out:find("Bystander", 1, true), nil)
+    end)
+
+    testing.test("ship.says.no.landed.card.touched.a.failing.test", function()
+        local out = red_ship("tests/lua/y_test.lua", {
+            { name = "Bystander", path = "docs/other.md" },
+        })
+        testing.ok(
+            out:find("tests/lua/y_test.lua: no landed card in this batch touched it", 1, true),
+            out
+        )
+        testing.eq(out:find("Bystander", 1, true), nil)
+    end)
+
+    testing.test("ship.names.the.card.that.touched.code.a.failing.test.loads", function()
+        local module = "dotfiles/bin/.local/share/dev/lua/dev/zmod.lua"
+        local out = red_ship("tests/lua/z_test.lua", {
+            { path = "tests/lua/z_test.lua", text = 'require("dev.zmod")\n' },
+            { name = "Loaded", path = module },
+            { name = "Bystander", path = "docs/other.md" },
+        })
+        testing.ok(out:find("tests/lua/z_test.lua:\n", 1, true), out)
+        testing.ok(out:find("Loaded", 1, true), out)
+        testing.eq(out:find("Bystander", 1, true), nil)
+    end)
+
+    testing.test(
+        "ship.names.the.card.that.touched.code.a.failing.test.loads.through.a.chain",
+        function()
+            local lua = "dotfiles/bin/.local/share/dev/lua/dev/"
+            local out = red_ship("tests/lua/c_test.lua", {
+                { path = "tests/lua/c_test.lua", text = 'require("dev.mid")\n' },
+                { path = lua .. "mid.lua", text = 'require("dev.leaf")\n' },
+                { name = "Leafy", path = lua .. "leaf/init.lua" },
+                { name = "Bystander", path = "docs/other.md" },
+            })
+            testing.ok(out:find("tests/lua/c_test.lua:\n", 1, true), out)
+            testing.ok(out:find("Leafy", 1, true), out)
+            testing.eq(out:find("Bystander", 1, true), nil)
+        end
+    )
+
+    testing.test("ship.says.a.row.with.no.fail.line.names.no.suspect", function()
+        local out = red_ship(nil, { { name = "Bystander", path = "docs/other.md" } })
+        testing.ok(out:find("printed no FAIL line, so no suspect is named", 1, true), out)
     end)
 
     testing.test("ship with a command runs it once in place of the rows", function()

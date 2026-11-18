@@ -3376,8 +3376,9 @@ end
 ---Run each command once and stop at the first that fails.
 ---@param backend dev.board.Backend the board
 ---@param runs dev.cmd.board.ShipRun[] the commands
+---@param name_suspects fun(files: string[]): string[] the lines naming the cards behind a failure
 ---@return dev.cmd.board.Result? err the failure naming the command, nil when every one passed
-local function ship_ran(backend, runs)
+local function ship_ran(backend, runs, name_suspects)
     local remote = require("dev.remote")
     local rows = {}
     for i, one in ipairs(runs) do
@@ -3390,11 +3391,15 @@ local function ship_ran(backend, runs)
             env = { [remote.VERB_ENV] = remote.Verb.RELEASE, [remote.PRIORITY_ENV] = "1" },
         })
         if rows[i].result ~= check.Result.PASS then
+            local lines = wiring.check_lines(rows)
+            for _, line in ipairs(name_suspects(rows[i].failed or {})) do
+                lines[#lines + 1] = line
+            end
             return failure(
                 string.format(
                     "The release command `%s` failed. No card moved.\n%s",
                     one.run,
-                    table.concat(wiring.check_lines(rows), "\n")
+                    table.concat(lines, "\n")
                 )
             )
         end
@@ -3556,6 +3561,30 @@ local function ship_batch(backend, cards, rev, commit)
     return lines, ok
 end
 
+---Name the cards of a batch that touched the files a failed release command left failing.
+---@param backend dev.board.Backend the board
+---@param opts { files: string[], rev: string, commit: string } the failing test files the command
+---printed, the revset the ship covers and the full commit it names
+---@return string[] lines the suspect list
+function Ship.suspects(backend, opts)
+    local files, commit = opts.files, opts.commit
+    local name = opts.rev == Ship.DEFAULT_REV and "trunk" or opts.rev
+    local cards = backend:cards() or {}
+    local entries = {}
+    for _, card in ipairs(cards) do
+        if card.column == backend.roles.release then
+            local reason, landed = Ship.reason(backend, card, commit, name)
+            if not reason and landed then
+                entries[#entries + 1] = {
+                    label = card.id:sub(1, board.MIN_PREFIX) .. " " .. card.name,
+                    landed = landed,
+                }
+            end
+        end
+    end
+    return require("dev.board.suspects").lines(backend.root, files, entries)
+end
+
 function commands.ship(backend, args)
     local rev, rest = Ship.rev(args)
     if not rev then
@@ -3581,7 +3610,9 @@ function commands.ship(backend, args)
             )
         )
     end
-    local failed = ship_ran(backend, runs)
+    local failed = ship_ran(backend, runs, function(files)
+        return Ship.suspects(backend, { files = files, rev = rev, commit = commit })
+    end)
     if failed then
         return failed
     end

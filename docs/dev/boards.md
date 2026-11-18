@@ -3371,6 +3371,17 @@ The revision:
   git `HEAD` that differs or a dirty git tree), `ship` exits 1, runs no command
   and moves no card. Run it from a workspace at that revision.
 
+A failed command:
+
+- `ship` moves no card and prints the last lines of the failing row, then a
+  suspect list. The list names the landed cards that touched each failing test
+  file, which are the files on the row's `FAIL PATH` lines.
+- A card counts when its landed commit touched the test file or a Lua file the
+  test loads through `require`, directly or through another file. Only cards
+  that would have shipped are listed.
+- When no card in the batch touched a failing file, the list says so. When the
+  row printed no `FAIL` line, it says that instead.
+
 The move:
 
 - It happens only when every command passes.

@@ -110,6 +110,7 @@ M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field result string one of `Result`, where a timeout also covers a row killed from outside and an error is a row that never started under `--expect-fail`
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
+---@field failed string[]? the paths on the `FAIL PATH` lines the run printed, which the test runner prints
 ---@field reason string? the last line a failed row printed when it printed no run id
 ---@field refused string? ci's refusal line when the hub refused the run, which no row records
 
@@ -400,6 +401,17 @@ local function tail_of(output)
     return table.concat(lines, "\n", first)
 end
 
+local function failed_files(output)
+    local seen, files = {}, {}
+    for path in output:gmatch("%f[%w]FAIL ([%w_./%-]+%.%w+)") do
+        if not seen[path] then
+            seen[path] = true
+            files[#files + 1] = path
+        end
+    end
+    return files
+end
+
 ---@class dev.board.check.run.Opts
 ---@field root string the project root the row runs in
 ---@field run string the row
@@ -541,6 +553,7 @@ function M.run(opts)
         result = result,
         code = code,
         tail = note and (note .. "\n" .. tail_of(output)) or tail_of(output),
+        failed = failed_files(output),
     }
 end
 
