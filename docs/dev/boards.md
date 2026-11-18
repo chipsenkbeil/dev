@@ -695,8 +695,10 @@ which dev prints as they come (exit 1).
 
 `ask` adds `needs:human` itself, so an agent never labels the card first. A
 card that already carries the label is locked, and dev refuses the question
-before it posts anything. The refusal tells the agent to run `dev board label
-CARD --remove needs:human` and then ask again.
+before it posts anything, unless the newest comment on the card is the owner's.
+Then `ask` posts a new question, so an agent can restate what a partial answer
+left open. Otherwise the refusal tells the agent to run `dev board label CARD
+--remove needs:human` and then ask again.
 
 `ask` also refuses a card that `board.unplanned` finds lacking a size, a v4
 section, a filled Change, Out of scope or Problem, or a Done when outcome (exit

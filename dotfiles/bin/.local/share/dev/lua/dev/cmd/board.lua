@@ -1934,6 +1934,36 @@ function commands.label(backend, args)
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
 end
 
+local Owner = { SETTLE_SECONDS = 60 }
+
+---Check whether the newest comment on a card is the owner's.
+---
+---A card in Done never counts. Without `since`, a comment of any age counts.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param since integer? the time in seconds since the epoch, only a comment newer than it counts
+---@return boolean? answered whether the newest comment is the owner's, nil when they could not be
+---   read
+---@return string? why the reason the comments could not be read
+function Owner.commented(backend, card, since)
+    if card.done then
+        return false
+    end
+    local list = backend:comments(card.id)
+    if not list then
+        return nil, "could not read the comments of " .. card.id .. " " .. card.name
+    end
+    local newest = list[#list]
+    if newest == nil or newest.actor ~= HUMAN_ACTOR then
+        return false
+    end
+    if since == nil then
+        return true
+    end
+    local at = box.parse_time(newest.at)
+    return at ~= nil and at > since
+end
+
 function commands.ask(backend, args)
     local fields = { ["--question"] = "text", ["--recommend"] = "recommended", ["--why"] = "why" }
     if #args < 1 then
@@ -1971,19 +2001,26 @@ function commands.ask(backend, args)
         return err
     end
     if index_of(card.labels, board.NEEDS_HUMAN) then
-        local short = card.id:sub(1, board.MIN_PREFIX)
-        local label = board.NEEDS_HUMAN
-        return failure(
-            "Card "
-                .. short
-                .. " already carries "
-                .. label
-                .. ". `dev board ask` adds that label itself. Run `dev board label "
-                .. short
-                .. " --remove "
-                .. label
-                .. "` and then ask again."
-        )
+        local answered, why = Owner.commented(backend, card)
+        if answered == nil then
+            return failure(why)
+        end
+        if not answered then
+            local short = card.id:sub(1, board.MIN_PREFIX)
+            local label = board.NEEDS_HUMAN
+            return failure(
+                "Card "
+                    .. short
+                    .. " already carries "
+                    .. label
+                    .. " and its newest comment is not the owner's. `dev board ask` adds that"
+                    .. " label itself. Run `dev board label "
+                    .. short
+                    .. " --remove "
+                    .. label
+                    .. "` and then ask again."
+            )
+        end
     end
     local missing = board.unplanned({
         color = card.color,
@@ -4041,36 +4078,6 @@ local function append(lines, more)
     for _, line in ipairs(more) do
         lines[#lines + 1] = line
     end
-end
-
-local Owner = { SETTLE_SECONDS = 60 }
-
----Check whether the newest comment on a card is the owner's.
----
----A card in Done never counts. Without `since`, a comment of any age counts.
----@param backend dev.board.Backend the board
----@param card dev.board.Card the card
----@param since integer? the time in seconds since the epoch, only a comment newer than it counts
----@return boolean? answered whether the newest comment is the owner's, nil when they could not be
----   read
----@return string? why the reason the comments could not be read
-function Owner.commented(backend, card, since)
-    if card.done then
-        return false
-    end
-    local list = backend:comments(card.id)
-    if not list then
-        return nil, "could not read the comments of " .. card.id .. " " .. card.name
-    end
-    local newest = list[#list]
-    if newest == nil or newest.actor ~= HUMAN_ACTOR then
-        return false
-    end
-    if since == nil then
-        return true
-    end
-    local at = box.parse_time(newest.at)
-    return at ~= nil and at > since
 end
 
 ---Check whether `next` would skip an unclaimed card: a run card, an epic with an open child, or a

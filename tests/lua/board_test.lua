@@ -4105,25 +4105,58 @@ testing.test(
     end
 )
 
-testing.test("ask refuses a card that already carries needs:human and posts nothing", function()
-    local backend = fake(blocked_cards())
-    local result = cmd_board.run("ask", {
-        "11111111-a",
-        "--question",
-        "Which?",
-        "--choice",
-        "Ready=Ship it",
-        "--recommend",
-        "1",
-        "--why",
-        "w",
-    }, backend)
-    testing.eq(result.code, 1)
-    testing.ok(
-        result.message:find("dev board label 11111111 --remove needs:human", 1, true),
-        result.message
-    )
-    testing.eq(#backend.calls, 0)
+local ASK_ARGS = {
+    "11111111-a",
+    "--question",
+    "Which?",
+    "--choice",
+    "Ready=Ship it",
+    "--recommend",
+    "1",
+    "--why",
+    "w",
+}
+
+local function ask_was_sent(backend)
+    for _, call in ipairs(backend.calls) do
+        if call[1] == "ask" then
+            return true
+        end
+    end
+    return false
+end
+
+testing.test("ask refuses a needs:human card when the newest comment is not the owners", function()
+    for _, listed in ipairs({
+        {},
+        { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" }, { actor = "agent" } },
+    }) do
+        local backend = fake(blocked_cards())
+        backend.listed = listed
+        local result = cmd_board.run("ask", ASK_ARGS, backend)
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find("dev board label 11111111 --remove needs:human", 1, true),
+            result.message
+        )
+        testing.eq(ask_was_sent(backend), false)
+    end
+end)
+
+testing.test("ask posts on a needs:human card after the owners comment", function()
+    local cards = blocked_cards()
+    cards[1].size = "2 Pomodori"
+    cards[1].color = "green"
+    cards[1].description = V2
+    cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
+    local backend = fake(cards)
+    backend.listed = {
+        { actor = "agent", at = "2026-11-02T09:00:00Z", body = "q" },
+        { actor = "human", at = "2026-11-02T10:00:00Z", body = "more please" },
+    }
+    local result = cmd_board.run("ask", ASK_ARGS, backend)
+    testing.eq(result.output, "asked 11111111")
+    testing.eq(ask_was_sent(backend), true)
 end)
 
 testing.test("ask posts the question on a planned Backlog card", function()
