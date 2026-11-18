@@ -397,6 +397,31 @@ testing.test("capture_timed hands output to on_text while the command runs", fun
     testing.ok(#chunks >= 2, "the first line should arrive before the command ends")
 end)
 
+testing.test(
+    "capture_timed leaves no defunct child under this process while the command runs",
+    function()
+        local zombies
+        local function defunct()
+            local rows = dev_os.capture({ "ps", "-A", "-o", "ppid=,stat=" })
+            local mine = tostring(dev_os.getpid())
+            local found = {}
+            for ppid, stat in rows:gmatch("(%d+)%s+(%S+)") do
+                if ppid == mine and stat:sub(1, 1) == "Z" then
+                    found[#found + 1] = stat
+                end
+            end
+            return found
+        end
+        dev_os.capture_timed({ "sh", "-c", "echo go; sleep 2" }, 30, {
+            on_text = function()
+                dev_os.nap(1)
+                zombies = defunct()
+            end,
+        })
+        testing.eq(zombies, {})
+    end
+)
+
 testing.test("capture_timed hands the input to the command", function()
     local out, code = dev_os.capture_timed({ "cat" }, 10, { input = "a b\n" })
     testing.eq(out, "a b\n")
