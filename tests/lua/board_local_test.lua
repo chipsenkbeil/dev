@@ -1790,6 +1790,59 @@ testing.test("move to Review refuses a card that is not in progress under a clai
     end
 end)
 
+local function lapsed_in_progress(root, home)
+    local a = card_in(root, home, Column.READY)
+    dev(root, home, { "board", "outcome", a, "First", "works" })
+    local steps = {
+        { "board", "take", a },
+        { "board", "move", a, Column.PROGRESS },
+        { "board", "note", a, "built, tried, learned" },
+    }
+    for _, args in ipairs(steps) do
+        local out, code = dev(root, home, args)
+        testing.eq(code, 0, out)
+    end
+    local doc = document(file_of(home))
+    doc.cards[1].claim.expires_at = "2020-01-01T00:00:00Z"
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    return a
+end
+
+testing.test("a move by the last claimant after the lease lapsed takes the claim again", function()
+    local root, home = local_board()
+    local a = lapsed_in_progress(root, home)
+    local out, code = dev(root, home, { "board", "move", a, Column.REVIEW })
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved " .. a .. " to Review\n")
+end)
+
+testing.test("a move by another name after the lease lapsed is refused", function()
+    local root, home = local_board()
+    local a = lapsed_in_progress(root, home)
+    local out, code = dev(root, home, { "board", "move", a, Column.REVIEW }, {
+        CLAUDE_SESSION_ID = "other",
+    })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("It must pass In Progress under a claim first.", 1, true), out)
+end)
+
+testing.test("a move while another claimant holds the card is refused", function()
+    local root, home = local_board()
+    local a = lapsed_in_progress(root, home)
+
+    -- Another claimant takes the lapsed card
+    local out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
+    testing.eq(code, 0, out)
+
+    -- The first claimant's move is refused
+    out, code = dev(root, home, { "board", "move", a, Column.REVIEW })
+    testing.ok(code ~= 0, out)
+
+    -- Review stays empty
+    out = dev(root, home, { "board", "ls", "--column", Column.REVIEW })
+    testing.eq(out, "No cards.\n")
+end)
+
 testing.test("move to Verify refuses a card that is not in Review", function()
     local root, home = local_board()
     local backlog = card_in(root, home, Column.BACKLOG)

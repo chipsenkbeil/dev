@@ -1284,6 +1284,46 @@ local function unnoted(backend, card, column)
     end
 end
 
+---Take a lapsed claim again when the caller is the card's last claimant and leaves In Progress.
+---
+---A card whose claim lapsed during a long ci wait has no claimant, and the card's newest claim
+---record still names who held it. Only that name takes the claim again, after the same note rule
+---that a live claim meets. Any other caller, and a card another claimant holds, change nothing.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card, whose claimant this sets when it takes the claim
+---@param column string the column the card moves to
+---@return dev.cmd.board.Result? refused the failure, nil when nothing applied or the claim was taken
+local function retake_lapsed(backend, card, column)
+    local roles = backend.roles
+    if card.column ~= roles.progress or column == roles.progress or card.claimant then
+        return nil
+    end
+    local name, bad = agent_name()
+    if bad then
+        return nil
+    end
+    local past, why = backend:comments(card.id)
+    if not past then
+        return failure(why)
+    end
+    local who = runner.claimant(name)
+    if board.last_claimant(past) ~= who then
+        return nil
+    end
+    card.claimant = who
+    local refused = unnoted(backend, card, column)
+    if refused then
+        card.claimant = nil
+        return refused
+    end
+    local result, fence = claim_card(backend, card, name)
+    if not fence then
+        card.claimant = nil
+        return result
+    end
+    return nil
+end
+
 ---Refuse a card whose size cannot enter Ready.
 ---@param card dev.board.Card the card
 ---@return dev.cmd.board.Result? refused the failure, nil when the card has a size of 1 to 3
@@ -1552,6 +1592,10 @@ local function move_once(backend, args, opts)
         if refused then
             return runner.full(refused.message)
         end
+    end
+    local lapsed = retake_lapsed(backend, card, column)
+    if lapsed then
+        return lapsed
     end
     local skipped = guards.skipped_refusal(roles, card, column)
     if skipped then
