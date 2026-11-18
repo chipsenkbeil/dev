@@ -11568,6 +11568,7 @@ local PROOF = { commit = "abcdef1234", change = "klmnopqrst" }
 local function proof_backend(parts)
     local card = colored("green")
     card.column = parts.column or support.COLUMN_NAME.VERIFY
+    card.labels = parts.labels or card.labels
     card.outcomes = outcomes(1, parts.ticked and 1 or 0)
     local backend = fake({ card })
     backend.root = "/proof"
@@ -11630,6 +11631,48 @@ testing.test("a move into Done without a passing check is refused", function()
     local result = proof_move(backend, support.COLUMN_NAME.DONE)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("dev board check", 1, true), result.message)
+end)
+
+local function empty_move(backend)
+    local opts = {
+        state = function()
+            return nil, "The working-copy commit is empty. There is no change to land."
+        end,
+    }
+    return cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.DONE }, opts)
+end
+
+testing.test("a card labelled no-change moves to Done with an empty working copy", function()
+    local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })
+    local result = empty_move(backend)
+    testing.eq(result.code, nil)
+    testing.eq(result.output, "moved cccccccc to Done")
+end)
+
+testing.test("a card with no no-change label is refused with an empty working copy", function()
+    local backend = proof_backend({ ticked = true })
+    local result = empty_move(backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("There is no change to land", 1, true), result.message)
+end)
+
+testing.test("a card labelled no-change is still proven for a move into Release", function()
+    local backend = proof_backend({ labels = { board.NO_CHANGE } })
+    local opts = {
+        state = function()
+            return nil, "The working-copy commit is empty. There is no change to land."
+        end,
+    }
+    local result = cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.RELEASE }, opts)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("There is no change to land", 1, true), result.message)
+end)
+
+testing.test("a card labelled no-change still needs every outcome ticked", function()
+    local backend = proof_backend({ labels = { board.NO_CHANGE } })
+    local result = empty_move(backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("1 of 1 outcomes are unticked", 1, true), result.message)
 end)
 
 testing.test("a card in Release moves to Done without a new proof", function()

@@ -3584,10 +3584,12 @@ The refusals run in this order:
   every problem `land` would name for the card's check record, its code and
   style reviews and its unticked outcomes (exit 1). A card already in Release,
   an epic, a card with the trunk-blocker label, a discard and the move `land`
-  makes itself skip it, and so does a project with no jj or git checkout. The
-  board API's `move_to` proves the card too. A jj project's land has an empty
-  working copy after its merge, so it reads `workspace:state()` before the merge
-  and passes it to `move_to`, `move_to_release` or `move_to_done`.
+  makes itself skip it, and so does a project with no jj or git checkout. So
+  does a move into Done of a card with the no-change label, a spike or a
+  check-only card that ships no change, which still needs every outcome ticked.
+  The board API's `move_to` proves the card too. A jj project's land has an
+  empty working copy after its merge, so it reads `workspace:state()` before
+  the merge and passes it to `move_to`, `move_to_release` or `move_to_done`.
 - A move into Review is refused unless the card is in In Progress under a claim
   or comes back from Verify, and a move into Verify is always refused. A card
   outside Review reads ``Card <id prefix> cannot move to <column> from

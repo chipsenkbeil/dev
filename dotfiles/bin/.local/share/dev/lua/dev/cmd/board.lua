@@ -1578,6 +1578,7 @@ local function move_once(backend, args, opts)
         and card.kind ~= board.Kind.EPIC
         and not (opts and (opts.landed or opts.drop))
         and not board.labelled(card, board.TRUNK_BLOCKER)
+        and not (to_done and board.labelled(card, board.NO_CHANGE))
     if proving then
         local refused = guards.proof_refusal(backend, card, column, opts)
         if refused then

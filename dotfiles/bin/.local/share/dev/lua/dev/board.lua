@@ -427,6 +427,9 @@ M.RUN = "run"
 ---The label of a card whose change unblocks every landing, which skips the in-flight limits.
 M.TRUNK_BLOCKER = "trunk-blocker"
 
+---The label of a card that ships no change, which moves to Done with no proof.
+M.NO_CHANGE = "no-change"
+
 ---The names in a multiline text field, one per line.
 ---@param value string|string[]|nil the field's value
 ---@return string[] names the non-blank lines, empty for any other value
