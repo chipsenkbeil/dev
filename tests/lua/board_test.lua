@@ -201,6 +201,10 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "set_size", id, color, fence }
         return true
     end
+    function backend:set_responsible(id, name, fence)
+        calls[#calls + 1] = { "set_responsible", id, name, fence }
+        return backend.refusal == nil, backend.refusal
+    end
     function backend:make_epic(id, fence)
         calls[#calls + 1] = { "make_epic", id, fence }
         return backend.refusal == nil, backend.refusal
@@ -1882,6 +1886,29 @@ testing.test(
         )
     end
 )
+
+testing.test("responsible shows, sets and clears the session and refuses a bad call", function()
+    local cards = sample()
+    cards[2].responsible = "dotfiles/lead"
+    local backend = fake(cards)
+    testing.eq(
+        cmd_board.run("responsible", { "11111111-b" }, backend).output,
+        "11111111 dotfiles/lead"
+    )
+    testing.eq(cmd_board.run("responsible", { "11111111-a" }, backend).output, "11111111 none")
+    local result = cmd_board.run("responsible", { "11111111-a", "dotfiles/lead" }, backend)
+    testing.eq(result.output, "set 11111111 responsible dotfiles/lead")
+    testing.eq(backend.calls[#backend.calls], { "set_responsible", ID_A, "dotfiles/lead", nil })
+    result = cmd_board.run("responsible", { "11111111-a", "--clear" }, backend)
+    testing.eq(result.output, "cleared 11111111 responsible")
+    testing.eq(backend.calls[#backend.calls], { "set_responsible", ID_A, nil, nil })
+    testing.eq(cmd_board.run("responsible", {}, backend).code, 2)
+    testing.eq(cmd_board.run("responsible", { "11111111-a", "x", "--clear" }, backend).code, 2)
+    backend.refusal = "pomb answered 403: no"
+    result = cmd_board.run("responsible", { "11111111-a", "x" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "pomb answered 403: no")
+end)
 
 local function with_epic()
     local cards = sample()
@@ -7323,6 +7350,27 @@ testing.test("add --label and label reach pomb as the whole list", function()
     testing.ok(read(root, "calls"):find('--data-raw {"labels":[]}', 1, true))
     out, code = dev(root, home, { "board", "label", "11111111-a", "+two words" })
     testing.eq(code, 2)
+end)
+
+testing.test("pomb responsible sends the session object and null to clear", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "responsible", "11111111-a", "dotfiles/lead" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "set 11111111 responsible dotfiles/lead\n")
+    testing.ok(
+        read(root, "calls"):find(
+            '--data-raw {"responsible":{"kind":"session","name":"dotfiles/lead"}}',
+            1,
+            true
+        ),
+        read(root, "calls")
+    )
+    out, code = dev(root, home, { "board", "responsible", "11111111-a", "--clear" })
+    testing.eq(code, 0, out)
+    testing.ok(
+        read(root, "calls"):find('--data-raw {"responsible":null}', 1, true),
+        read(root, "calls")
+    )
 end)
 
 testing.test("label sends the fence of a claim this machine holds", function()

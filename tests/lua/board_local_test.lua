@@ -1205,6 +1205,39 @@ testing.test("a local board refuses what the needs:human and epic rules forbid",
     testing.eq(code, 0, out)
 end)
 
+testing.test("responsible is stored on a local card and show prints it only while set", function()
+    local root, home = local_board()
+    local card = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Coordinated",
+        "--size",
+        "1",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--done-when",
+        "a",
+    })))
+    local out, code = dev(root, home, { "board", "responsible", card })
+    testing.eq(code, 0, out)
+    testing.eq(out, card .. " none\n")
+    out, code = dev(root, home, { "board", "responsible", card, "dotfiles/lead" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "set " .. card .. " responsible dotfiles/lead\n")
+    testing.eq(dev(root, home, { "board", "responsible", card }), card .. " dotfiles/lead\n")
+    out = dev(root, home, { "board", "show", card })
+    testing.ok(out:find("\nresponsible: dotfiles/lead\n", 1, true), out)
+    out, code = dev(root, home, { "board", "responsible", card, "--clear" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "cleared " .. card .. " responsible\n")
+    out = dev(root, home, { "board", "show", card })
+    testing.ok(not out:find("responsible:", 1, true), out)
+end)
+
 testing.test("link parent sets one epic and show and links report it", function()
     local root, home = local_board()
     local function add(name)

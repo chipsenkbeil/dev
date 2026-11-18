@@ -104,6 +104,7 @@ local QUEUE_RULES = {
     label = { idempotent = true },
     link = { idempotent = true },
     epic = { idempotent = false },
+    responsible = { idempotent = true },
     edit = { idempotent = true },
     rename = { idempotent = true },
     checks = { idempotent = true },
@@ -1092,6 +1093,9 @@ local function card_view(backend, card)
     if family.epic then
         local open = board.open_children(family.children)
         kin = "kind: epic" .. (open > 0 and ", " .. open .. " open" or "") .. "\n" .. kin
+    end
+    if card.responsible then
+        kin = "responsible: " .. card.responsible .. "\n" .. kin
     end
     local description = (card.description or ""):match("^%s*(.-)%s*$")
     if #card.outcomes > 0 then
@@ -3915,6 +3919,37 @@ function commands.epic(backend, args)
         return failure(message)
     end
     return { output = "made " .. card.id:sub(1, board.MIN_PREFIX) .. " an epic" }
+end
+
+function commands.responsible(backend, args)
+    local flags, words = parse(args, { ["--clear"] = SWITCH })
+    if not flags then
+        return words
+    end
+    if #words < 1 or #words > 2 or (flags["--clear"] and #words ~= 1) then
+        return usage("Needs a card, and a session name or --clear to change it.")
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    if #words == 1 and not flags["--clear"] then
+        return { output = short .. " " .. (card.responsible or "none") }
+    end
+    local name = words[2]
+    if name and not name:find("%S") then
+        return usage("A session name needs text.")
+    end
+    local held = claims.read(card.id)
+    local ok, message = backend:set_responsible(card.id, name, held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    if name then
+        return { output = "set " .. short .. " responsible " .. name }
+    end
+    return { output = "cleared " .. short .. " responsible" }
 end
 
 function commands.delete(backend, args)

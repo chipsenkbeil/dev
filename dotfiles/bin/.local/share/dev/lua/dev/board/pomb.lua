@@ -838,10 +838,24 @@ local function epic_counts(task)
     return { done = task.children_done or 0, total = total }
 end
 
+local function responsible_of(task)
+    local who = task.responsible
+    if type(who) ~= "table" then
+        return nil
+    end
+    if who.kind == "session" and type(who.name) == "string" then
+        return who.name
+    end
+    if who.kind == "member" and type(who.id) == "string" then
+        return "member " .. who.id
+    end
+end
+
 function Backend:__card(task)
     local outcomes, readable = outcomes_of(task)
     return {
         epic = epic_counts(task),
+        responsible = responsible_of(task),
         kind = task.kind == board.Kind.EPIC and board.Kind.EPIC or board.Kind.TASK,
         checks = runs_of(task),
         allow = field_names(task, board.ALLOW_FIELD),
@@ -1551,6 +1565,16 @@ function Backend:set_labels(id, labels, fence)
     end
     local done
     done, message = self:__request("PATCH", "/api/tasks/" .. id, { labels = labels }, fence)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:set_responsible(id, name, fence)
+    local value = name and { kind = "session", name = name } or json.null
+    local done, message =
+        self:__request("PATCH", "/api/tasks/" .. id, { responsible = value }, fence)
     if not done then
         return nil, message
     end

@@ -373,6 +373,12 @@ return {
         desc = "Turn a card into an epic",
     },
     {
+        words = { "board", "responsible" },
+        handler = "lua",
+        usage = "dev board responsible CARD [NAME | --clear]",
+        desc = "Show, set or clear the session responsible for a card",
+    },
+    {
         words = { "board", "links" },
         handler = "lua",
         usage = "dev board links CARD",

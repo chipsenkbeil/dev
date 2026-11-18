@@ -34,6 +34,8 @@ end
 ---@field description string? the card's description, nil when it has none
 ---@field claimant string? who holds the card while its owner lease is live
 ---@field claim_fence integer? the fence of that claim, nil when no claim is live
+---@field responsible string? the session that is responsible, or `member ID` for a member account,
+---   nil when none is set
 ---@field kind string? `epic` for an epic, `task` otherwise
 ---@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not
 ---   one
@@ -170,6 +172,9 @@ end
 ---   words it
 ---@field detach fun(self: dev.board.Backend, id: string, attachment: string): boolean?, string? the
 ---   attachment with that full id removed, or nil and a message
+---@field set_responsible fun(self: dev.board.Backend, id: string, name: string?, fence: integer?): boolean?, string?
+---   the card's responsible session set to that name, or cleared when the name is nil, checked
+---   against the claim's fence when one is given, or nil and the backend's refusal
 ---@field make_epic fun(self: dev.board.Backend, id: string, fence: integer?): boolean?, string? the
 ---   card turned into an epic, checked against the claim's fence when one is given, or nil and the
 ---   backend's refusal, as for a card that is already an epic

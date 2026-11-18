@@ -2104,6 +2104,20 @@ typed in this session, on a `needs:human` card.
 - Turning an epic back into a plain card is not supported.
 - `add --epic` creates the card with `"kind": "epic"`, on a local board too.
 
+### responsible
+
+`dev board responsible CARD [NAME | --clear]` shows, sets or clears the agent
+session responsible for a card.
+
+- With only `CARD` it prints `<id prefix> <name>`, or `<id prefix> none`.
+- `NAME` sends `PATCH /api/tasks/{id}` with `{"responsible": {"kind":
+  "session", "name": NAME}}` and prints `set <id prefix> responsible NAME`.
+  `--clear` sends `null` and prints `cleared <id prefix> responsible`.
+- A card whose responsible is a member account shows `member <user id>`.
+- `show` prints a `responsible:` line while one is set. A local board stores
+  the name on the card.
+- A write made while Pomb is unreachable is queued and replays safely.
+
 ### link
 
 `dev board link CARD KIND OTHER` links a card to another.
