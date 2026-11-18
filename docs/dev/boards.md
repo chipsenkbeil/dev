@@ -101,13 +101,15 @@ with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`. A locked
 store fails at once with `board unavailable: pass is locked or has no entry
 ...` instead of waiting on a prompt.
 
-`board/passlock.sh` runs `pass` under one lock, the directory
-`/tmp/dev-pass-<uid>.lock`. Concurrent dev calls and keep-alive ticks queue
-instead of crowding the hardware key.
+`board/passlock.sh` runs `pass` under one kernel file lock on
+`/tmp/dev-pass-<uid>.lock`, taken with `flock` or, where that is missing,
+`lockf` (macOS). Concurrent dev calls and keep-alive ticks queue instead of
+crowding the hardware key.
 
-- wait: up to 2 minutes for the lock, then it fails like a timeout.
-- takeover: a lock whose owner pid is gone, or that is older than 30
-  seconds, is taken over.
+- wait: up to 2 minutes for the lock, then it exits 124 like a timeout.
+  `DEV_PASS_LOCK_SECS` changes the bound.
+- dead holder: the kernel frees the lock when its holder dies, so nothing
+  takes it over.
 - reads: a dev process reads each entry once, while the keep-alive loop reads
   it on every tick.
 

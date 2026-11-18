@@ -5442,13 +5442,17 @@ end)
 
 local SHARE = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/board/"
 
+local function occurrences(text, word)
+    return select(2, text:gsub(word, ""))
+end
+
 local function pass_stub(root, lock)
     executable(
         root .. "/bin/pass",
         "#!/bin/sh\n"
-            .. 'echo "start $$ held=$([ -d "'
+            .. 'echo "start $$ held=$(flock -n "'
             .. lock
-            .. '" ] && echo 1 || echo 0)" >>"$ROOT/events"\n'
+            .. '" true && echo 0 || echo 1)" >>"$ROOT/events"\n'
             .. "sleep 1\n"
             .. 'echo "end $$" >>"$ROOT/events"\n'
             .. 'echo "'
@@ -5457,13 +5461,13 @@ local function pass_stub(root, lock)
     )
 end
 
-local function shell(root, lock, script, polls)
+local function shell(root, lock, script, secs)
     return dev_os.capture({ "sh", "-c", script }, {
         env = {
             PATH = root .. "/bin:" .. os.getenv("PATH"),
             ROOT = root,
             DEV_PASS_LOCK = lock,
-            DEV_PASS_LOCK_POLLS = polls or "600",
+            DEV_PASS_LOCK_SECS = secs or "60",
         },
         stderr = "stdout",
     })
@@ -5481,63 +5485,30 @@ testing.test("concurrent pass reads queue on one lock and none times out", funct
         order[#order + 1] = kind
     end
     testing.eq(order, { "start", "end", "start", "end", "start", "end" })
-    testing.eq(fs.read(lock .. "/pid"), nil)
+    testing.eq(occurrences(read(root, "events"), "held=1"), 3)
 end)
 
-testing.test("a lock left by a killed process does not block a later read", function()
+local HOLD_THEN_KILL = "( flock 9; exec /bin/sleep 20 ) 9>%s & holder=$!; /bin/sleep 0.5; "
+    .. "kill $holder; wait $holder 2>/dev/null; "
+
+testing.test("readers queued after a killed holder never overlap", function()
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
+    local cmd = "bash " .. SHARE .. "passlock.sh Agents/x"
     local out = shell(
         root,
         lock,
-        "sh -c 'exit 0' & dead=$!; wait $dead; mkdir "
-            .. lock
-            .. "; echo $dead >"
-            .. lock
-            .. "/pid; bash "
-            .. SHARE
-            .. "passlock.sh Agents/x; echo code=$?",
-        "50"
+        HOLD_THEN_KILL:format(lock) .. "(" .. cmd .. ") & (" .. cmd .. ") & (" .. cmd .. ") & wait",
+        "30"
     )
-    testing.ok(out:find(TOKEN, 1, true), out)
-    testing.ok(out:find("code=0", 1, true), out)
-end)
-
-testing.test("an old lock is taken over even when its pid is alive again", function()
-    local root = sandbox()
-    local lock = root .. "/pass.lock"
-    pass_stub(root, lock)
-    local out = shell(
-        root,
-        lock,
-        "/bin/sleep 20 & holder=$!; mkdir "
-            .. lock
-            .. "; echo 0 >"
-            .. lock
-            .. "/at; echo $holder >"
-            .. lock
-            .. "/pid; bash "
-            .. SHARE
-            .. "passlock.sh Agents/x; echo code=$?; kill $holder",
-        "50"
-    )
-    testing.ok(out:find(TOKEN, 1, true), out)
-    testing.ok(out:find("code=0", 1, true), out)
-end)
-
-testing.test("a lock with no owner is taken over after a short wait", function()
-    local root = sandbox()
-    local lock = root .. "/pass.lock"
-    pass_stub(root, lock)
-    local out = shell(
-        root,
-        lock,
-        "mkdir " .. lock .. "; bash " .. SHARE .. "passlock.sh Agents/x; echo code=$?",
-        "100"
-    )
-    testing.ok(out:find(TOKEN, 1, true), out)
-    testing.ok(out:find("code=0", 1, true), out)
+    testing.eq(occurrences(out, TOKEN), 3, out)
+    local order = {}
+    for kind in read(root, "events"):gmatch("(%a+) %d+") do
+        order[#order + 1] = kind
+    end
+    testing.eq(order, { "start", "end", "start", "end", "start", "end" })
+    testing.eq(occurrences(read(root, "events"), "held=1"), 3)
 end)
 
 testing.test("a lock held by a live process times out with 124", function()
@@ -5547,16 +5518,12 @@ testing.test("a lock held by a live process times out with 124", function()
     local out = shell(
         root,
         lock,
-        "/bin/sleep 20 & holder=$!; mkdir "
+        "( flock 9; exec /bin/sleep 20 ) 9>"
             .. lock
-            .. "; date +%s >"
-            .. lock
-            .. "/at; echo $holder >"
-            .. lock
-            .. "/pid; bash "
+            .. " & holder=$!; /bin/sleep 0.5; bash "
             .. SHARE
             .. "passlock.sh Agents/x; echo code=$?; kill $holder",
-        "3"
+        "1"
     )
     testing.ok(out:find("code=124", 1, true), out)
     testing.eq(out:find(TOKEN, 1, true), nil)
@@ -5615,10 +5582,6 @@ local function passlock_once(root, entry)
         root .. "/pass.lock",
         "bash " .. SHARE .. "passlock.sh " .. (entry or "Agents/x") .. "; echo code=$?"
     )
-end
-
-local function occurrences(text, word)
-    return select(2, text:gsub(word, ""))
 end
 
 testing.test("a pass read is stored in the Keychain and the next read skips pass", function()
@@ -5684,8 +5647,10 @@ testing.test("a read that finds the Keychain filled after the lock releases the 
     )
     testing.eq(passlock_once(root), TOKEN .. "\nkeychain\ncode=0\n")
     testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
-    testing.eq(fs.read(root .. "/pass.lock/pid"), nil)
-    testing.eq(fs.exists(root .. "/pass.lock"), false)
+    testing.eq(
+        shell(root, root .. "/pass.lock", "flock -n $DEV_PASS_LOCK true; echo code=$?"),
+        "code=0\n"
+    )
 end)
 
 testing.test(
