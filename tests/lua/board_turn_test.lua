@@ -205,6 +205,17 @@ testing.test("two turn cards made by a race leave one turn on the lowest id", fu
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
 end)
 
+testing.test("holder and claimed read the lowest turn card, not the cached one", function()
+    local backend = backend_at(board_home())
+    local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+    local lower
+    repeat
+        lower = assert(backend:add(turn.NAME, backend.roles.icebox, {}))
+    until lower.id < taken.card
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(turn.claimed(backend, "alpha", "aaaa1111"), nil)
+end)
+
 testing.test("waiting cards get the turn in the order they asked", function()
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
