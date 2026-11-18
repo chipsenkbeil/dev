@@ -8500,7 +8500,7 @@ testing.test("take keeps the claim and warns when the card cannot be read after 
         root .. "/bin/curl",
         '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/'
             .. ID_A
-            .. ") exit 7 ;; esac\n"
+            .. ") cat >/dev/null; exit 7 ;; esac\n"
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
@@ -11550,10 +11550,11 @@ testing.test("pomb next falls through to the next lane when one has no card", fu
     executable(
         root .. "/bin/curl",
         "#!/bin/sh\n"
+            .. 'cat >"$ROOT/in"\n'
             .. 'case " $* " in *swimlane_id=lane-parity*)\n'
             .. 'printf \'curl %s\\n\' "$*" >>"$ROOT/calls"\n'
             .. "printf '%s\\n%s' '{\"items\":[],\"next_cursor\":null}' 200 ;;\n"
-            .. '*) exec "$ROOT/bin/curl_real" "$@" ;; esac\n'
+            .. '*) exec "$ROOT/bin/curl_real" "$@" <"$ROOT/in" ;; esac\n'
     )
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
