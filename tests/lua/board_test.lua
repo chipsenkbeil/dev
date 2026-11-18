@@ -229,6 +229,18 @@ local function fake(cards, times, finished)
         end
         return nil, "pomb has no board named " .. name
     end
+    function backend:release(id)
+        for _, card in ipairs(cards) do
+            if card.id == id then
+                if not card.claimant then
+                    return nil, "the claim on " .. id .. " is not held"
+                end
+                card.claimant = nil
+                return true
+            end
+        end
+        return nil, "no card " .. id
+    end
     function backend:move(id, column, opts)
         local position = opts and opts.position
         calls[#calls + 1] = { "move", id, column, position }
