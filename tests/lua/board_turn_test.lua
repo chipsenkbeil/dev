@@ -383,7 +383,7 @@ testing.test("extending a hold records the new lease for the next command", func
 end)
 
 testing.test(
-    "a waiting poll lists the cards twice per call and never reads a single card",
+    "a waiting poll reads the remembered card twice per call and never lists the cards",
     function()
         local backend = backend_at(board_home())
         assert(turn.take(backend, "alpha", "aaaa1111"))
@@ -404,8 +404,8 @@ testing.test(
             testing.ok(message:find("held by alpha", 1, true), message)
             testing.eq(place, first)
         end
-        testing.eq(listed, 6)
-        testing.eq(single, 0)
+        testing.eq(listed, 0)
+        testing.eq(single, 6)
     end
 )
 
@@ -481,20 +481,18 @@ end)
 testing.test("a claim lost after the turn card was read still names the holder", function()
     local backend = backend_at(board_home())
     assert(turn.take(backend, "alpha", "aaaa1111"))
-    local cards = backend.cards
+    local card = backend.card
     local reads = 0
-    function backend:cards()
+    function backend:card(id)
         reads = reads + 1
-        local listed, message = cards(self)
-        if listed and reads == 1 then
-            for _, read in ipairs(listed) do
-                read.claimant = nil
-            end
+        local read, message = card(self, id)
+        if read and reads == 1 then
+            read.claimant = nil
         end
-        return listed, message
+        return read, message
     end
     local taken, message = turn.take(backend, "beta", "bbbb2222")
-    backend.cards = cards
+    backend.card = card
     testing.eq(taken, nil)
     testing.ok(message:find("held by alpha", 1, true), message)
 end)
@@ -571,20 +569,21 @@ testing.test("held, claimed and release failures are full sentences", function()
     -- Hold the turn so the card and its notes exist
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
-    local cards = backend.cards
+    local cards, card = backend.cards, backend.card
     local comments = backend.comments
 
-    -- Fail the card listing and expect the read sentence from both
+    -- Fail the card reads and expect the read sentence from both
     backend.cards = function()
         return nil, "the board is down"
     end
+    backend.card = backend.cards
     local _, message = turn.held(backend, "alpha", "aaaa1111")
     testing.eq(message, "The landing turn card could not be read. The board is down.")
     _, message = turn.claimed(backend, "alpha", "aaaa1111")
     testing.eq(message, "The landing turn card could not be read. The board is down.")
 
     -- Fail the notes listing and expect the notes sentence from both
-    backend.cards = cards
+    backend.cards, backend.card = cards, card
     backend.comments = function()
         return nil, "the notes are gone"
     end
@@ -617,6 +616,49 @@ local function open_turn_card(backend)
         end
     end
 end
+
+local function count_lists(backend)
+    local lists = { n = 0 }
+    local listed = backend.cards
+    backend.cards = function(self, ...)
+        lists.n = lists.n + 1
+        return listed(self, ...)
+    end
+    return lists
+end
+
+testing.test("turnpoll: a second take on one backend reads no board list", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local lists = count_lists(backend)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(lists.n, 0)
+end)
+
+testing.test("turnpoll: held right after a take reads no board list", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    local lists = count_lists(backend)
+    testing.eq(turn.held(backend, "beta", "bbbb2222"), nil)
+    testing.eq(lists.n, 0)
+end)
+
+testing.test("turnpoll: a rotated turn card is found again by the next take", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the full card was reused")
+    local lists = count_lists(backend)
+    testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    testing.eq(lists.n, 0)
+    testing.eq(turn.holder(backend).name, "beta")
+    turn.release(backend, second)
+    testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).card, second.card)
+end)
 
 testing.test("a full landing turn card rotates to a fresh one", function()
     local backend = backend_at(board_home())
@@ -1136,11 +1178,23 @@ testing.test("a Pomb hold is found by the claim fence and lost when the fence di
     end)
 end)
 
-testing.test("a Pomb turn taken with a hold is found as held from the export", function()
+testing.test("a Pomb turn taken with a hold is found as held from the remembered card", function()
     local root = pomb_root()
     on_pomb(root, function(backend)
         local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true }))
-        assert(fs.write(root .. "/export.json", '{"tasks":[' .. turn_card(taken.fence) .. "]}"))
+        assert(
+            fs.write(
+                root .. "/task.json",
+                '{"id":"'
+                    .. ID_A
+                    .. '","name":"landing turn","column_id":"'
+                    .. ICEBOX_ID
+                    .. '","position":1,"labels":[],"owner":{"holder":{"kind":"agent",'
+                    .. '"name":"alpha"},"lease_expires_at":null,"live":true,"fence":'
+                    .. taken.fence
+                    .. "}}"
+            )
+        )
         assert(fs.write(root .. "/comments.json", hold_record(taken.fence)))
         local found, message = turn.held(backend, "alpha", "aaaa1111")
         testing.eq(message, nil)

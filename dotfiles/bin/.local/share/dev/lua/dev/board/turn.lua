@@ -109,12 +109,27 @@ local function find(cards)
     return found
 end
 
-local function lookup(backend)
+---@type table<dev.board.Backend, string> the id of the turn card each backend read last
+local remembered = setmetatable({}, { __mode = "k" })
+
+---@class dev.board.turn.lookup.Opts
+---@field relist boolean? true to list the board even when a turn card is remembered
+
+local function lookup(backend, opts)
+    local id = remembered[backend]
+    if id and not (opts and opts.relist) then
+        local card = backend:card(id)
+        if card and card.name == M.NAME and not card.done then
+            return card
+        end
+    end
     local cards, message = backend:cards()
     if not cards then
         return nil, message
     end
-    return find(cards)
+    local found = find(cards)
+    remembered[backend] = found and found.id or nil
+    return found
 end
 
 local function turn_card(backend)
@@ -198,7 +213,7 @@ end
 ---@return dev.board.turn.Turn? turn the claim under its live fence, nil when `name` has none
 ---@return string? message why the board could not be read
 function M.claimed(backend, name, card)
-    local holding, message = lookup(backend)
+    local holding, message = lookup(backend, { relist = true })
     if not holding then
         return nil,
             message and ("The landing turn card could not be read." .. sentence_after(message))
@@ -229,7 +244,7 @@ end
 ---@return dev.board.turn.Holder? holder who holds it, nil when no one does
 ---@return string? message why the board could not be read
 function M.holder(backend)
-    local card, message = lookup(backend)
+    local card, message = lookup(backend, { relist = true })
     if not card then
         return nil, message
     end
@@ -471,7 +486,7 @@ function M.take(backend, name, card, opts)
         backend:claim(holding.id, name, { ttl = lease, lease = true, fence = own and own.fence })
     if fence then
         local canonical
-        canonical, message = lookup(backend)
+        canonical, message = lookup(backend, { relist = true })
         if not canonical then
             backend:release(holding.id, fence)
             return nil, "The landing turn card could not be read." .. sentence_after(message)
@@ -557,11 +572,10 @@ end
 ---@return string? message why a hold that was taken is gone, or why the board failed
 ---@return boolean? lost true when the hold ran out or was taken by another, nil otherwise
 function M.held(backend, name, card)
-    local cards, message = backend:cards()
-    if not cards then
+    local holding, message = lookup(backend)
+    if not holding and message then
         return nil, "The landing turn card could not be read." .. sentence_after(message)
     end
-    local holding = find(cards)
     if not holding then
         return nil
     end

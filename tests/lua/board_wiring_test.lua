@@ -105,7 +105,9 @@ testing.test("await_turn sleeps no longer than its wait and looks once at the de
     local looks = 0
     local card = backend.card
     function backend:card(id)
-        looks = looks + 1
+        if id == opts.id then
+            looks = looks + 1
+        end
         return card(self, id)
     end
 
