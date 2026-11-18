@@ -260,7 +260,15 @@ local function skipped_refusal(roles, card, column)
         first = roles.progress .. " under a claim"
     elseif column == roles.verify then
         if card.column == roles.review then
-            return nil
+            return failure(
+                string.format(
+                    "Card %s cannot move to %s from %s. "
+                        .. "The verifier's tick of its last open outcome moves it there.",
+                    card.id:sub(1, board.MIN_PREFIX),
+                    column,
+                    card.column
+                )
+            )
         end
         first = roles.review
     else

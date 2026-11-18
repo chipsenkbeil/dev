@@ -476,7 +476,8 @@ end
 
 local function to_verify(project, id, extra)
     to_review(project, id, extra)
-    must(dev(project, { "board", "move", id, support.Column.VERIFY }, extra))
+    must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }, extra))
+    must(dev(project, { "board", "outcome", id, "--untick", "1" }, extra))
 end
 
 local function approve(project, id)
@@ -900,8 +901,10 @@ if has_jj then
     testing.test("land refuses a card in Review and names Verify", function()
         local project = jj_project()
         local id = new_card(project)
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
         to_review(project, id)
-        approve(project, id)
+        approve_reviews(project, id)
+        must(dev(project, { "board", "check", id }))
         refused(project, id, { "It is in Review, and only a card in Verify lands." })
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.REVIEW)
     end)
@@ -3370,7 +3373,7 @@ local function git_approve(project)
     must(support.to_review(function(args)
         return git_dev(project, args, builder)
     end, id))
-    must(git_dev(project, { "board", "move", id, support.Column.VERIFY }))
+    must(git_dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
     for _, kind in ipairs({ "code", "style" }) do
         must(git_dev(project, {
             "board",

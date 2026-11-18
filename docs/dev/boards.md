@@ -555,11 +555,12 @@ Every card in every column is fair game for an agent unless it is labelled
   it.
 - Review: the change is under review or ci.
   - The claimant dispatches the reviewers.
-  - When every review is clean and the check passes, it moves the card to
-    Verify. The card stays the claimant's.
-- Verify: a verifier ticks the outcomes from the ci logs while the card sits
-  here. Then `dev board land` lands it and moves the card to Release, or to
-  Done when `[board.land] deploys` is not true.
+  - When every review is clean and the check passes, the verifier ticks the
+    outcomes from the ci logs while the card sits here.
+- Verify: the verifier's tick of the last open outcome moves the card here, so
+  Review holds only ci and reviews and Verify only verified work. A plain move
+  from Review to Verify is refused. Then `dev board land` lands it and moves
+  the card to Release, or to Done when `[board.land] deploys` is not true.
   - dev board land merges a card once Verify passes.
     A card's change stays unmerged until land merges it.
     `jj land --no-card` is a second merge path, and a forge merge bypasses both.
@@ -3122,7 +3123,8 @@ The forms:
 - `--tick` and `--untick` set it done or clear it (`PATCH` on
   `/api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`).
 - The output is `outcome <id prefix> N reworded`, `ticked by NAME` or
-  `unticked`.
+  `unticked`. A tick of the last open outcome of a card in Review moves it to
+  Verify and adds the line `moved <id prefix> to Verify`.
 - `--delete` removes the Nth outcome, and only the lead runs it. Its rules are
   under `outcome CARD --delete` in Columns, cards and sizes.
 - `--convert` moves a v1 `## Done when` checklist into outcomes. It takes no
@@ -3377,10 +3379,15 @@ The refusals run in this order:
   moves to a different column.
 - The Ready, planning, Done and epic rules follow, each described below.
 - A move into Review is refused unless the card is in In Progress under a claim
-  or comes back from Verify, and a move into Verify is refused unless the card
-  is in Review. The refusal reads ``Card <id prefix> cannot move to <column>
-  from <column>. It must pass <column> first.`` and names In Progress under a
-  claim or Review (exit 1). A move to the column the card is already in passes.
+  or comes back from Verify, and a move into Verify is always refused. A card
+  outside Review reads ``Card <id prefix> cannot move to <column> from
+  <column>. It must pass <column> first.`` and names In Progress under a claim
+  or Review (exit 1). A card in Review reads ``... cannot move to Verify from
+  Review. The verifier's tick of its last open outcome moves it there.``
+  (exit 1). A move to the column the card is already in passes. `dev board
+  outcome CARD --tick N` moves a card in Review to Verify
+  when the tick leaves no outcome open, and prints `moved <id prefix> to
+  Verify` on a second line.
 - A card leaving In Progress for Review, Ready or Blocked with a claimant and
   no note from that claimant after the claim is refused with
   ``Card <id prefix> has no note from its claimant NAME since the claim. It

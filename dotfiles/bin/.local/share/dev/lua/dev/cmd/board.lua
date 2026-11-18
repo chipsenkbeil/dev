@@ -2474,6 +2474,22 @@ function commands.outcome(backend, args)
     if mode == OutcomeMode.TICK and ticker then
         result.output = result.output .. " by " .. ticker
     end
+    local roles = backend.roles or board.roles()
+    if mode == OutcomeMode.TICK and card.column == roles.review then
+        local open = false
+        for i, outcome in ipairs(card.outcomes) do
+            open = open or (i ~= number and not outcome.done)
+        end
+        if not open then
+            local moved, why = backend:move(card.id, roles.verify, { fence = fence })
+            if not moved then
+                return failure(
+                    result.output .. ", but the move to Verify failed. " .. sentence(why)
+                )
+            end
+            result.output = result.output .. "\nmoved " .. prefix .. " to " .. roles.verify
+        end
+    end
     if text then
         result.warnings = board.prose_warnings(text)
     end

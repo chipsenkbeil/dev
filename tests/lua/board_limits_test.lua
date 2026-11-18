@@ -370,9 +370,9 @@ testing.test("a move inside the group is not counted", function()
         detail = detail({}, { groups = GROUP .. '"limit":2,"count":3}]' }),
         export = export(FLIGHT),
     })
-    local out, code = dev(box, { "board", "move", "bbbbbbbb", Column.VERIFY }, "")
+    local out, code = dev(box, { "board", "move", "cccccccc", Column.REVIEW }, "")
     testing.eq(code, 0, out)
-    testing.eq(out, "moved bbbbbbbb to Verify\n")
+    testing.eq(out, "moved cccccccc to Review\n")
     testing.ok(read(box, "calls"):find("/move", 1, true), read(box, "calls"))
 end)
 
