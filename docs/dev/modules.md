@@ -430,10 +430,10 @@ the working-copy change (`dev.board.select`). This is the selection rule:
 - A touched suite is picked itself.
 - A touched Lua module picks every Lua suite that requires it, directly,
   through the modules that require it, or through a concatenated require such
-  as `require("dev.pkg." .. name)`, and every Lua suite whose text names the
-  file, since it reads the source. It also picks every bats and shell suite and
-  every Lua suite that requires `support` or `dev.testenv` or names a fixture,
-  because those drive the `dev` command and reach modules by no require.
+  as `require("dev.pkg." .. name)`, and no other suite. A bats or shell suite,
+  a suite that requires `support` or `dev.testenv`, and a suite that names a
+  fixture or reads the source are not picked, and `dev board ship` runs the
+  whole suite as the backstop.
 - A touched file that is not a Lua module or a suite, a touched test helper,
   or a touched module that no Lua suite reaches leaves the whole suite running.
 - A moved or copied file counts at both its old and its new path.

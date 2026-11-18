@@ -78,27 +78,12 @@ local function closure_of(start, users, prefix_users)
     return closure
 end
 
-local function runs_the_cli(path, text)
-    if not path:match("%.lua$") then
-        return true
-    end
-    for dep in requires(text) do
-        if dep == "support" or dep == "dev.testenv" then
-            return true
-        end
-    end
-    return text:find("fixtures", 1, true) ~= nil
-end
-
 ---Pick the suites that cover a change from the text of every Lua file and suite.
 ---
 ---A touched suite is picked itself. A touched Lua module picks every Lua suite that requires it,
----directly, through the modules that require it, or through a concatenated require. Every suite
----that drives the `dev` command or a fixture is picked too, since it reaches modules by no require,
----and so is every Lua suite whose text names the touched file's name, since it reads the source.
----A suite that requires `dev.testenv` drives the command too. A touched file that is not a Lua
----module or a suite, a touched test helper, or a touched module that no Lua suite reaches leaves
----the map unsure.
+---directly, through the modules that require it, or through a concatenated require, and no other.
+---A touched file that is not a Lua module or a suite, a touched test helper, or a touched module
+---that no Lua suite reaches leaves the map unsure.
 ---@param sources table<string, string> the text of each Lua file and suite by path from the root
 ---@param touched string[] the paths the change touches
 ---@return string[]? suites the sorted suite paths, nil when the whole suite should run
@@ -126,30 +111,18 @@ function M.pick(sources, touched)
     for _, path in ipairs(changed) do
         local closure = closure_of(names[path], users, prefix_users)
         local reached = false
-        local base = path:match("[^/]+$")
         for suite, text in pairs(sources) do
             if is_suite(suite) and suite:match("%.lua$") then
-                local reads = text:find(base, 1, true) ~= nil
                 for dep in requires(text) do
                     if closure[dep] then
-                        reads = true
+                        selected[suite] = true
+                        reached = true
                     end
-                end
-                if reads then
-                    selected[suite] = true
-                    reached = true
                 end
             end
         end
         if not reached then
             return nil
-        end
-    end
-    if #changed > 0 then
-        for suite, text in pairs(sources) do
-            if is_suite(suite) and runs_the_cli(suite, text) then
-                selected[suite] = true
-            end
         end
     end
     local out = {}

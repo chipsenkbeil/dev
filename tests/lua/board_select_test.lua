@@ -3,7 +3,6 @@ local board_select = require("dev.board.select")
 local support = require("support")
 
 local LIB = "dotfiles/bin/.local/share/dev/lua/dev/"
-local CLI_SUITES = { "tests/dev/help.bats", "tests/dev/other.bats", "tests/lua/ui_test.lua" }
 
 local function sources()
     return {
@@ -25,35 +24,37 @@ local function sources()
     }
 end
 
-local function with(list, ...)
-    local out = { unpack(list) }
-    for _, path in ipairs({ ... }) do
-        out[#out + 1] = path
-    end
-    table.sort(out)
-    return out
-end
-
-testing.test(
-    "a changed module picks the Lua suites that require it and the suites that run dev",
-    function()
-        local got = board_select.pick(sources(), { LIB .. "text.lua" })
-        testing.eq(got, with(CLI_SUITES, "tests/lua/text_test.lua"))
-    end
-)
+testing.test("a changed module picks the Lua suites that require it", function()
+    local got = board_select.pick(sources(), { LIB .. "text.lua" })
+    testing.eq(got, { "tests/lua/text_test.lua" })
+end)
 
 testing.test("a changed module picks the suites that require it through another module", function()
     local got = board_select.pick(sources(), { LIB .. "fs.lua" })
-    testing.eq(got, with(CLI_SUITES, "tests/lua/board_test.lua", "tests/lua/cmd_test.lua"))
+    testing.eq(
+        got,
+        { "tests/lua/board_test.lua", "tests/lua/cmd_test.lua", "tests/lua/ui_test.lua" }
+    )
 end)
 
 testing.test(
     "a changed module picks the suites that load it through a concatenated require",
     function()
         local got = board_select.pick(sources(), { LIB .. "drv/apt.lua" })
-        testing.eq(got, with(CLI_SUITES, "tests/lua/driver_test.lua"))
+        testing.eq(got, { "tests/lua/driver_test.lua" })
     end
 )
+
+testing.test("a changed module picks only the suites that load it", function()
+    local all = sources()
+    for i = 1, 50 do
+        all["tests/dev/cli" .. i .. ".bats"] = "run dev help"
+        all["tests/lua/cli" .. i .. "_test.lua"] = 'local support = require("support")'
+    end
+    local got = board_select.pick(all, { LIB .. "text.lua" })
+    testing.ok(#got < 40)
+    testing.eq(got, { "tests/lua/text_test.lua" })
+end)
 
 testing.test("a changed suite alone picks only itself", function()
     local got = board_select.pick(sources(), { "tests/lua/text_test.lua" })
@@ -62,30 +63,29 @@ end)
 
 testing.test("a module and a suite pick both", function()
     local got = board_select.pick(sources(), { LIB .. "text.lua", "tests/lua/board_test.lua" })
-    testing.eq(got, with(CLI_SUITES, "tests/lua/board_test.lua", "tests/lua/text_test.lua"))
+    testing.eq(got, { "tests/lua/board_test.lua", "tests/lua/text_test.lua" })
 end)
 
 testing.test(
-    "a changed module picks a suite that requires dev.testenv or reads its source",
+    "a changed module leaves out a suite that only runs dev or reads its source",
     function()
         local all = sources()
         all["tests/lua/env_test.lua"] = 'local env = require("dev.testenv")'
         all["tests/lua/reads_test.lua"] = 'local text = fs.read(dir .. "/text.lua")'
         local got = board_select.pick(all, { LIB .. "text.lua" })
-        testing.eq(
-            got,
-            with(
-                CLI_SUITES,
-                "tests/lua/env_test.lua",
-                "tests/lua/reads_test.lua",
-                "tests/lua/text_test.lua"
-            )
-        )
+        testing.eq(got, { "tests/lua/text_test.lua" })
     end
 )
 
 testing.test("a file that is not a Lua module leaves the map unsure", function()
     testing.eq(board_select.pick(sources(), { LIB .. "text.lua", "docs/dev/modules.md" }), nil)
+end)
+
+testing.test("a change that touches a non-Lua file runs the whole suite", function()
+    for _, path in ipairs({ "src/main.rs", "Cargo.toml", ".dev/verb.lua", ".dev/__helper.sh" }) do
+        testing.eq(board_select.pick(sources(), { LIB .. "text.lua", path }), nil)
+        testing.eq(board_select.pick(sources(), { path }), nil)
+    end
 end)
 
 testing.test("a test helper leaves the map unsure", function()
