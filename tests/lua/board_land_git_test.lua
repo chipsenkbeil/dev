@@ -300,6 +300,48 @@ testing.test("git recheck skips rows on an unchanged patch", function()
     testing.ok(problem and problem:find("recheck row failed", 1, true), tostring(problem))
 end)
 
+testing.test(
+    "git recheck narrows a plain remote test row to the suites the change covers",
+    function()
+        local root = with_origin({
+            ["a/lua/m.lua"] = "return 1\n",
+            ["tests/lua/m_test.lua"] = 'require("m")\n',
+        })
+        git(root, "checkout", "-q", "-b", "work")
+        write(root, "a/lua/m.lua", "return 2\n")
+        git(root, "commit", "-q", "-a", "-m", "feat: m")
+        local checked = head(root)
+        write(root, "a/lua/m.lua", "return 3\n")
+        git(root, "commit", "-q", "-a", "--amend", "-m", "feat: m")
+        local ran = {}
+        local original = check.run
+        check.run = function(opts)
+            ran[#ran + 1] = { run = opts.run, argv = opts.argv }
+            return { result = check.Result.PASS, run_id = "-", run = opts.run, tail = "" }
+        end
+        local problem = land.recheck_problem({
+            root = root,
+            commit = checked,
+            card = "abc12345",
+            rows = { "dev --remote lint", "dev --remote test" },
+            note = function() end,
+        })
+        check.run = original
+        testing.eq(problem, nil)
+        testing.eq(ran[1].argv, { "dev", "--remote", "lint" })
+        testing.eq(ran[2].run, "dev --remote test")
+        testing.eq(ran[2].argv, { "dev", "--remote", "test", "--", "tests/lua/m_test.lua" })
+    end
+)
+
+testing.test("git card_touched names both paths of a rename", function()
+    local body = string.rep("line of the module\n", 20)
+    local root = repo({ ["a/lua/old.lua"] = body, ["keep.txt"] = "k\n" })
+    git(root, "mv", "a/lua/old.lua", "a/lua/new.lua")
+    git(root, "commit", "-q", "-m", "refactor: rename")
+    testing.eq(land.card_touched(root), { "a/lua/new.lua", "a/lua/old.lua" })
+end)
+
 testing.test("a malformed recheck row prints its reason with one period", function()
     local cases = {
         { row = " ", reason = "A checks row is blank." },

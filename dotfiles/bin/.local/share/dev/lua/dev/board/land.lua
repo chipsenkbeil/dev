@@ -5,6 +5,7 @@ local fs = require("dev.fs")
 local dev_remote = require("dev.remote")
 local push = require("dev.cmd.push")
 local review = require("dev.board.review")
+local board_select = require("dev.board.select")
 local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 
@@ -798,6 +799,9 @@ local function git_paths(root, rev, opts)
         local path = words[i + (moved and 2 or 1)]
         if path and (not only_added or (kind ~= "M" and kind ~= "T" and kind ~= "D")) then
             set[path] = true
+            if moved and opts.with_sources then
+                set[words[i + 1]] = true
+            end
         end
         i = i + (moved and 3 or 2)
     end
@@ -815,6 +819,18 @@ function M.added(root, rev)
     local ADDED_TEMPLATE = 'self.diff().files().filter(|f| f.status() != "modified" && '
         .. 'f.status() != "removed").map(|f| f.target().path() ++ "\\n").join("")'
     return sorted_paths(root, rev, ADDED_TEMPLATE)
+end
+
+---List the files the working-copy commit touches, a moved or copied file counting at both paths.
+---@param root string the project root
+---@return string[]? paths the sorted paths, nil when they could not be read
+function M.card_touched(root)
+    if vcs.backend(root) == vcs.GIT then
+        return git_paths(root, "HEAD", { with_sources = true })
+    end
+    local template = 'self.diff().files().map(|f| f.source().path() ++ "\\n" ++ '
+        .. 'f.target().path() ++ "\\n").join("")'
+    return sorted_paths(root, "@", template)
 end
 
 ---List the files a commit touches, a moved or copied file counting at its new path.
@@ -1150,11 +1166,17 @@ function M.recheck_problem(opts)
     end
     local ran = {}
     for i, argv in ipairs(argvs) do
-        opts.note(string.format("Rechecking row %d of %d with `%s`.", i, #argvs, rows[i]))
+        local narrowed, count = board_select.narrow(opts.root, argv, function()
+            return M.card_touched(opts.root)
+        end)
+        local narrowing = count > 0 and string.format(", narrowed to %d suites", count) or ""
+        opts.note(
+            string.format("Rechecking row %d of %d with `%s`%s.", i, #argvs, rows[i], narrowing)
+        )
         ran[i] = check.run({
             root = opts.root,
             run = rows[i],
-            argv = argv,
+            argv = narrowed,
             seconds = check.DEFAULT_SECONDS,
             env = {
                 [dev_remote.VERB_ENV] = dev_remote.Verb.CHECK,

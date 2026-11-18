@@ -423,6 +423,25 @@ luajit.` or names neomutt and tmux. A leading `./` and a trailing slash are
 dropped from a path first. `dev test` alone runs every bats file, `*_test.sh`
 and `test-*.sh` script and `*_test.lua` suite.
 
+`dev board check` and the `dev board land` recheck narrow a plain
+`dev --remote test` row, one with no words after it, to the suites that cover
+the working-copy change (`dev.board.select`). This is the selection rule:
+
+- A touched suite is picked itself.
+- A touched Lua module picks every Lua suite that requires it, directly,
+  through the modules that require it, or through a concatenated require such
+  as `require("dev.pkg." .. name)`, and every Lua suite whose text names the
+  file, since it reads the source. It also picks every bats and shell suite and
+  every Lua suite that requires `support` or `dev.testenv` or names a fixture,
+  because those drive the `dev` command and reach modules by no require.
+- A touched file that is not a Lua module or a suite, a touched test helper,
+  or a touched module that no Lua suite reaches leaves the whole suite running.
+- A moved or copied file counts at both its old and its new path.
+
+The recorded row stays the card's own plain row, so the checks fingerprint does
+not change. A row that names suites and every other row run as written, and
+`dev board ship` runs its release rows whole.
+
 The suites run in parallel:
 
 - The worker pool is the core count from `nproc` or `sysctl -n hw.ncpu`.

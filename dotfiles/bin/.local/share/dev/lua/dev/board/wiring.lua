@@ -9,6 +9,7 @@ local land = require("dev.board.land")
 local remote = require("dev.remote")
 local render = require("dev.board.render")
 local runner = require("dev.board.runner")
+local board_select = require("dev.board.select")
 local scm = require("dev.scm")
 local standalone = require("dev.standalone")
 local store = require("dev.board.store")
@@ -201,6 +202,11 @@ local function check_rows(opts)
         local baseline = check.baseline(card.checks, argvs)
         commands, argvs, skipped = baseline.commands, baseline.argvs, baseline.skipped
     end
+    argvs = board_select.narrow_rows(backend.root, commands, argvs, function()
+        return land.card_touched(backend.root)
+    end, function(row, count)
+        verb.note(string.format("Row %d narrowed to %d suites.", row, count))
+    end)
     local env = {
         [remote.VERB_ENV] = remote.Verb.CHECK,
         [remote.CARD_ENV] = short,
