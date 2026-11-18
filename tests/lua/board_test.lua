@@ -3677,37 +3677,79 @@ testing.test(
         local card = colored("green")
         card.claimant = "project-run/a"
         local backend = fake({ card })
-        for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local result = cmd_board.run("review", {
-                "cccccccc",
-                "--kind",
-                kind,
-                "--by",
-                "project-run/a",
-                "--rev",
-                "@",
-                "--verdict",
-                "clean",
-            }, backend)
-            testing.eq(result.code, 1)
-            testing.ok(
-                result.message:find(
-                    "is claimed by project-run/a. project-run/a cannot review its own change",
-                    1,
-                    true
-                ),
-                result.message
-            )
-            testing.ok(
-                result.message:find(" A reviewer other than project-run/a must record it", 1, true),
-                result.message
-            )
-        end
+        as_agent("", function()
+            for _, kind in ipairs({ "code", "style", "recheck" }) do
+                local result = cmd_board.run("review", {
+                    "cccccccc",
+                    "--kind",
+                    kind,
+                    "--by",
+                    "project-run/a",
+                    "--rev",
+                    "@",
+                    "--verdict",
+                    "clean",
+                }, backend)
+                testing.eq(result.code, 1)
+                testing.ok(
+                    result.message:find(
+                        "is claimed by project-run/a. project-run/a cannot review its own change",
+                        1,
+                        true
+                    ),
+                    result.message
+                )
+                testing.ok(
+                    result.message:find(
+                        " A reviewer other than project-run/a must record it",
+                        1,
+                        true
+                    ),
+                    result.message
+                )
+            end
+        end)
         for _, call in ipairs(backend.calls) do
             testing.eq(call[1], "comments")
         end
     end
 )
+
+local function review_by(backend, by)
+    return cmd_board.run("review", {
+        "cccccccc",
+        "--kind",
+        "code",
+        "--by",
+        by,
+        "--rev",
+        "@",
+        "--verdict",
+        "clean",
+    }, backend)
+end
+
+testing.test("review refuses a --by that is not the caller's name", function()
+    local backend = fake({ colored("green") })
+    as_agent("dotfiles/reviewer", function()
+        local result = review_by(backend, "dotfiles/other")
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("cannot record a review by dotfiles/other", 1, true))
+    end)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("review records under the caller's own name, or any name with none set", function()
+    local backend = fake({ colored("green") })
+    as_agent("dotfiles/reviewer", function()
+        local result = review_by(backend, "dotfiles/reviewer")
+        testing.ok(not result.message:find("cannot record a review", 1, true), result.message)
+    end)
+    as_agent("", function()
+        local result = review_by(backend, "dotfiles/other")
+        testing.ok(not result.message:find("cannot record a review", 1, true), result.message)
+    end)
+end)
 
 testing.test("--as in any position leaves the text and the reason alone", function()
     local card = colored("green")

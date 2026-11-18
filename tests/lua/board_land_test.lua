@@ -460,7 +460,7 @@ local function approve_reviews(project, id)
             "@",
             "--verdict",
             "clean",
-        }))
+        }, { DEV_AGENT = "rev" }))
     end
 end
 
@@ -998,7 +998,7 @@ if has_jj then
                     "@",
                     "--verdict",
                     verdict,
-                }))
+                }, { DEV_AGENT = by }))
             end
             judge("picky", "needs-work")
             refused(project, id, { "code review by picky", "needs-work" })
@@ -1076,7 +1076,7 @@ if has_jj then
                 "@",
                 "--verdict",
                 "clean",
-            })
+            }, { DEV_AGENT = "dotfiles/builder" })
             testing.eq(code, 1, out)
             testing.ok(
                 out:find("A reviewer other than dotfiles/builder must record it", 1, true),
@@ -1098,10 +1098,7 @@ if has_jj then
                 "clean",
             }, { DEV_AGENT = "dotfiles/builder" })
             testing.eq(code, 1, out)
-            testing.ok(
-                out:find("A reviewer other than dotfiles/builder must record it", 1, true),
-                out
-            )
+            testing.ok(out:find("dotfiles/builder cannot record a review by rev", 1, true), out)
         end
         testing.eq(#comments(project.home, id), before)
         must(dev(project, {
@@ -1116,7 +1113,7 @@ if has_jj then
             "@",
             "--verdict",
             "clean",
-        }))
+        }, { DEV_AGENT = "rev" }))
         local list = comments(project.home, id)
         testing.eq(#list, before + 1)
         testing.ok(list[#list].body:find("dev-review: kind=code by=rev", 1, true), list[#list].body)
@@ -1175,7 +1172,7 @@ if has_jj then
             "@",
             "--verdict",
             "clean",
-        }))
+        }, { DEV_AGENT = "rev" }))
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 0, out)
     end)
@@ -2207,7 +2204,7 @@ if has_jj then
                 "@",
                 "--verdict",
                 "clean",
-            }))
+            }, { DEV_AGENT = "rev" }))
             must(dev(project, { "board", "check", id }))
             must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
@@ -3095,7 +3092,7 @@ if has_jj then
             "@",
             "--verdict",
             "needs-work",
-        }))
+        }, { DEV_AGENT = "rev2" }))
         trunk_moves(project, { ["lib/extra.txt"] = "extra\n" })
         rebased_and_checked(project, id)
         refused(project, id, { "The code review by rev2", "says needs-work" })
@@ -3335,7 +3332,7 @@ local function git_approve(project)
             "HEAD",
             "--verdict",
             "clean",
-        }))
+        }, { DEV_AGENT = "rev" }))
     end
     must(git_dev(project, { "board", "check", id }))
     must(git_dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))

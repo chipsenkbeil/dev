@@ -24,6 +24,7 @@ local function dev(root, home, args, cwd)
         XDG_STATE_HOME = home .. "/state",
         JJ_USER = "t",
         JJ_EMAIL = "t@example.com",
+        DEV_AGENT = "",
     }
     return support.dev(root, args, { env = env, cwd = cwd })
 end

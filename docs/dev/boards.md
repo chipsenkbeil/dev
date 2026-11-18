@@ -2607,7 +2607,10 @@ Who may record:
   so a claim that lapsed does not free its holder to review.
 - The message names the claimant and says a reviewer other than it must record
   the review.
-- An unclaimed card takes any NAME.
+- A caller whose `DEV_AGENT` or `--agent` is set is refused (exit 1) when NAME
+  names someone else, and nothing is recorded. A review goes under the caller's
+  own name, as an outcome tick does. With neither set, NAME is taken as given.
+- An unclaimed card takes any NAME that rule allows.
 - The reviewer records its own review with its final verdict: `clean` for
   CLEAN, `minor` for MINOR ISSUES and `needs-work` for NEEDS WORK. It is the
   recorder the board allowance for `review` covers.

@@ -2705,12 +2705,22 @@ function commands.review(backend, args)
     if not by then
         return why
     end
+    local named = agent_name()
+    if named and named ~= by then
+        return failure(
+            string.format(
+                "%s cannot record a review by %s. A review is recorded under the caller's own name.",
+                named,
+                by
+            )
+        )
+    end
     local card, err = find_card(backend, words[1])
     if not card then
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
-    local caller = agent_name() or claimant()
+    local caller = named or claimant()
     local past, comments_why = backend:comments(card.id)
     if not past then
         return failure(comments_why)
