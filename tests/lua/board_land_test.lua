@@ -1628,6 +1628,78 @@ if has_jj then
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
+    local CARRY_SCRIPT = [=[
+local ctx = ...
+local board = require("dev.board")
+local scm = require("dev.scm")
+
+local found = assert(board.find(scm.workspace(ctx.root)))
+local card = assert(found:find_card(ctx.args[1]))
+local ok, why = card:carry_proof()
+print("carry: " .. tostring(ok) .. " " .. tostring(why))
+]=]
+
+    local function carry_project()
+        local project = jj_project()
+        assert(fs.write(project.root .. "/.dev/carry.lua", CARRY_SCRIPT), "write failed")
+        return project
+    end
+
+    local function move_to_release(project, id)
+        return dev(project, { "board", "move", id, support.COLUMN_NAME.RELEASE })
+    end
+
+    testing.test("carry_proof writes the records a rebased commit lacks", function()
+        local project = carry_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        testing.ok(head(project.root) ~= before, "the rebase must rewrite the commit")
+        local out, code = move_to_release(project, id)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("No run of `dev board check`", 1, true), out)
+        out = dev(project, { "carry", id })
+        testing.ok(out:find("carry: true", 1, true), out)
+        local records = 0
+        for _, comment in ipairs(comments(project.home, id)) do
+            if comment.body:find(head(project.root), 1, true) then
+                records = records + 1
+            end
+        end
+        testing.eq(records, 3)
+    end)
+
+    testing.test("a card moves to Release through the guard after carry_proof", function()
+        local project = carry_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out = dev(project, { "carry", id })
+        testing.ok(out:find("carry: true", 1, true), out)
+        local written = #comments(project.home, id)
+        out = dev(project, { "carry", id })
+        testing.ok(out:find("carry: true", 1, true), out)
+        testing.eq(#comments(project.home, id), written)
+        out = move_to_release(project, id)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE, out)
+    end)
+
+    testing.test("carry_proof writes nothing for a commit whose patch differs", function()
+        local project = carry_project()
+        local id = review_ready(project)
+        assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local before = #comments(project.home, id)
+        local out = dev(project, { "carry", id })
+        testing.ok(out:find("carry: nil", 1, true), out)
+        testing.eq(#comments(project.home, id), before)
+        local moved, code = move_to_release(project, id)
+        testing.eq(code, 1, moved)
+        testing.ok(column_of(project.home, id) ~= support.COLUMN_NAME.RELEASE)
+    end)
+
     local function squashed_parent(project)
         stack_on_parent(project, { args = { "-m", "test: parent" }, body = "mid\n" })
         local id = verified_card(project)

@@ -1,3 +1,4 @@
+local claims = require("dev.board.claims")
 local text = require("dev.text")
 
 ---The board seam: the column names, the card helpers and the one interface the
@@ -13,6 +14,21 @@ end
 -- dev.board.wiring requires this module, so the require waits for the first call
 local function wiring()
     return require("dev.board.wiring")
+end
+
+-- dev.board.land requires this module, so the require waits for the first call
+local function land_module()
+    return require("dev.board.land")
+end
+
+-- dev.board.check requires this module, so the require waits for the first call
+local function check_module()
+    return require("dev.board.check")
+end
+
+-- dev.board.review requires this module, so the require waits for the first call
+local function review_module()
+    return require("dev.board.review")
 end
 
 ---@class dev.board.claim.Opts
@@ -1395,6 +1411,125 @@ function CardHandle:land_problem()
         return nil
     end
     return table.concat(problems, " ")
+end
+
+---Copy the rows of the newest passing run recorded at a commit, under the card's own commands.
+---@param comments {body: string}[] the card's comments, oldest first
+---@param at {commit: string, rows: string[]} the checked commit and the card's checks rows
+---@return dev.board.check.Row[]? rows the copied rows, nil when no record at the commit fits
+local function copied_check(comments, at)
+    local check = check_module()
+    for i = #comments, 1, -1 do
+        local record = check.parse(comments[i].body)
+        if
+            record
+            and record.mode == check.Mode.RUN
+            and record.commit == at.commit
+            and #record.rows == #at.rows
+        then
+            local copied = {}
+            for n, row in ipairs(record.rows) do
+                copied[n] = {
+                    run = at.rows[n],
+                    result = row.result,
+                    run_id = row.run_id,
+                    reason = row.reason,
+                }
+            end
+            return copied
+        end
+    end
+end
+
+---Write the review records of a checked commit anew for another commit of the same change.
+---@param comments {body: string}[] the card's comments, oldest first
+---@param carried string the checked commit
+---@param state dev.board.check.State the commit the records are written for
+---@return string[] bodies the record bodies, one per review that carries a verdict
+local function copied_reviews(comments, carried, state)
+    local review = review_module()
+    local bodies = {}
+    for _, comment in ipairs(comments) do
+        local record = review.parse(comment.body)
+        if record and record.commit == carried and record.verdict then
+            bodies[#bodies + 1] = review.record(
+                record.kind,
+                record.by,
+                { commit = state.commit, change = state.change },
+                record.verdict
+            )
+        end
+    end
+    return bodies
+end
+
+---Write the card's check and reviews onto the commit the working copy holds.
+---
+---A rebase after `dev board check` gives the commit a new id, and the guard on a move into Release
+---or Done wants a record at the commit it reads. This finds the checked commit `dev land` would
+---carry the records over from, with the same rules, and notes a copy of its check and reviews for
+---the working-copy commit. Call it after the rebase and before the push, since a jj merge leaves
+---the working copy empty. It writes nothing when the commit has its own records, and the guard
+---stays as strict as before.
+---@return boolean? ok true when the commit is proven now, by its own records or by a carry
+---@return string? message why no record was written
+function CardHandle:carry_proof()
+    local backend = self.board.backend
+    local root = backend.root
+    local land = land_module()
+    local state, why = land.state(root)
+    if not state then
+        return nil, text.sentence(why)
+    end
+    local comments, message = backend:comments(self.card.id)
+    if not comments then
+        return nil, text.sentence(message)
+    end
+    local rows = self.card.checks or {}
+    local carried, carry_why, check_only = land.carry({
+        root = root,
+        comments = comments,
+        state = state,
+        rows = rows,
+    })
+    if not carried then
+        if carry_why then
+            return nil, carry_why
+        end
+        local lacking = land.missing_reviews(comments, state, root)
+        local unproven = land.checks_problem(comments, state, rows)
+        if #lacking == 0 and not unproven then
+            return true
+        end
+        return nil, unproven or lacking[1]
+    end
+    local held = claims.read(self.card.id)
+    local fence = held and held.fence
+    local function write(body)
+        local noted, why_not = backend:note(self.card.id, body, fence)
+        if not noted then
+            return text.sentence(why_not)
+        end
+    end
+    local copied = copied_check(comments, { commit = carried, rows = rows })
+    if not copied then
+        return nil, "The checked commit's record could not be read."
+    end
+    local failed = write(check_module().record(state, copied, false))
+    if failed then
+        return nil, failed
+    end
+    if check_only then
+        local lacking = land.missing_reviews(comments, state, root)
+        return #lacking == 0 or nil, lacking[1]
+    end
+    for _, body in ipairs(copied_reviews(comments, carried, state)) do
+        failed = write(body)
+        if failed then
+            return nil, failed
+        end
+    end
+    return true
 end
 
 ---Move the card to a column.

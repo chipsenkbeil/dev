@@ -2786,6 +2786,20 @@ onto trunk and lands it, with none of the board steps. A project's
 `.dev/land.lua` replaces `dev land` whole, as any `.dev` script replaces a
 built-in, and owns its own turn, `done` note and move.
 
+An override that rebases before it pushes changes the commit id, so the
+guard on its move into Release or Done finds no check or review record at
+the pushed commit. The override calls `card:carry_proof()` on the card
+`board.find(workspace):find_card(id)` returns, after its rebase and before
+its push (a jj merge leaves the working copy empty). It carries the records
+by the rules of `dev land`: the change id is the same, the interdiff is
+empty and the rebase left no conflict. It notes a copy of the check and the
+reviews for the working-copy commit and returns `true`, or `nil` and the
+reason when nothing carries. It writes nothing when the commit has its own
+records. The override then reads `workspace:state()` before the merge and
+passes it to `move_to_release` or `move_to_done`. The guard is unchanged, so
+a commit whose patch differs from the checked one still gets no record and
+the move is refused.
+
 `dev board land CARD [CARD...] [--wait SECONDS]` takes the landing turn and
 lands the card's change on trunk.
 

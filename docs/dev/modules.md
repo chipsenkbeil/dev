@@ -43,12 +43,13 @@ The luajit modules of `dev`, one per item.
   size label, the table lines and the `dev.board.Backend` interface the
   commands call. It is also the board half of dev's public API for verbs.
   `board.find(workspace)` returns a board with `find_card`, `release_column`
-  and `done_column`, and a card found on it has `land_problem`, `move_to`,
-  `move_to_release` and `move_to_done`. `land_problem` returns why the card
-  cannot land, from its column, claimant, outcomes, check and reviews, or nil,
-  and lands nothing. `move_to` into Release or Done refuses a card its check,
-  reviews and outcomes do not prove, read at the working-copy commit or at the
-  state a caller passes. A verb calls them in its own order.
+  and `done_column`, and a card found on it has `land_problem`, `carry_proof`,
+  `move_to`, `move_to_release` and `move_to_done`. `land_problem` returns why
+  the card cannot land, from its column, claimant, outcomes, check and reviews,
+  or nil, and lands nothing. `carry_proof` writes the card's check and reviews
+  onto a rebased commit. `move_to` into Release or Done refuses a card its
+  check, reviews and outcomes do not prove, read at the working-copy commit or
+  at the state a caller passes. A verb calls them in its own order.
 - `dev.scm`: the source control half of that API, a new module over `dev.vcs`
   and `dev.board.land`. `scm.workspace(root)` returns a workspace with `name`,
   `is_dirty`, `touched`, `holds`, `state`, `rebase` and `merge_into_trunk`.
