@@ -628,7 +628,7 @@ M.DEFAULT_NAMES = {
 ---@field progress string the column of cards being worked, where a move keeps a claim's loop alive
 ---@field review string the column of cards waiting for review
 ---@field verify string the column of cards waiting for a verifier
----@field release string the column of cards waiting to reach main and go live
+---@field release string the column of cards on main, not yet deployed or installed
 ---@field blocked string the column of cards that wait on the owner
 ---@field done string? the mapped column of finished cards, nil when the config names none
 ---@field finished string[] the names of the columns the backend marks finished, in board order
