@@ -57,6 +57,8 @@ local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
 local STAMP_CHARS = 19
 local PAGE_LIMIT = 500
 local FORBIDDEN = 403
+local NO_SEAT = "the task has no such seat"
+local SEAT_ROLE = "reviewer"
 local PERMISSION_DENIED = "permission_denied"
 local EXCEEDS_GRANT = "exceeds_grant"
 local TOKEN_EXPIRED = "token_expired"
@@ -1230,6 +1232,44 @@ function Backend:note(id, body, fence, opts)
         author = opts and opts.author,
     }, fence)
     if not made then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:seat_verdict(id, seat, name, verdict, revision)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local base = "/api/tasks/" .. id .. "/seats"
+    local taken, status, doc
+    taken, message, status, doc = self:__request("POST", base .. "/take", {
+        seat = seat,
+        name = name,
+    })
+    if not taken and status == NOT_FOUND and type(doc) == "table" and doc.message == NO_SEAT then
+        taken, message, status, doc =
+            self:__request("POST", base, { name = seat, role = SEAT_ROLE })
+        if taken then
+            taken, message, status, doc =
+                self:__request("POST", base .. "/take", { seat = seat, name = name })
+        end
+    end
+    if not taken then
+        if type(doc) == "table" and doc.code then
+            message = message .. " (" .. doc.code .. ")"
+        end
+        return nil, message
+    end
+    local answered
+    answered, message = self:__request("POST", base .. "/verdict", {
+        seat = seat,
+        name = name,
+        verdict = verdict,
+        revision = revision,
+    })
+    if not answered then
         return nil, message
     end
     return true

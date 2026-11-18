@@ -2896,8 +2896,23 @@ function commands.review(backend, args)
     if card.claimant then
         wiring.renew_claim(backend, card, card.claimant)
     end
-    local held = claims.read(card.id)
     local ok
+    local warnings
+    if backend.seat_verdict then
+        ok, message =
+            backend:seat_verdict(card.id, kind, by, review.SEAT_VERDICTS[verdict], rev.commit)
+        if not ok then
+            warnings = {
+                string.format(
+                    "The %s seat of card %s was NOT set, so Pomb holds no seat verdict for this review. %s The review is still recorded on the card.",
+                    kind,
+                    short,
+                    sentence(message)
+                ),
+            }
+        end
+    end
+    local held = claims.read(card.id)
     ok, message = backend:note(
         card.id,
         review.record(kind, by, rev, verdict),
@@ -2921,6 +2936,7 @@ function commands.review(backend, args)
             short,
             rev.commit:sub(1, COMMIT_CHARS)
         ),
+        warnings = warnings,
     }
 end
 

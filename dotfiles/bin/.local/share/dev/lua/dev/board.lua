@@ -132,6 +132,10 @@ end
 ---@field note fun(self: dev.board.Backend, id: string, body: string, fence: integer?,
 ---   opts: dev.board.note.Opts?): boolean?, string? a comment added to the card, of kind agent
 ---   unless opts names one, checked against the claim's fence when one is given
+---@field seat_verdict (fun(self: dev.board.Backend, id: string, seat: string, name: string,
+---   verdict: string, revision: string): boolean?, string?)? the seat named SEAT taken by NAME and
+---   answered with `approved` or `changes_needed` at the revision, or nil and Pomb's refusal, nil
+---   on a board with no seats
 ---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?):
 ---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
 ---   needs:human, or nil and Pomb's refusal

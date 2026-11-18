@@ -2659,8 +2659,19 @@ When the comment cannot be written:
 clean|minor|needs-work` records that NAME reviewed the commit REV with that
 verdict.
 
-The record is one `status` comment on the card that begins with a reserved
-first line and has no other:
+On a Pomb board the review first sets the card's reviewer seat. NAME takes the
+seat named after the kind (`code`, `style` or `recheck`), which `review` adds to
+the card with the `reviewer` role when the card lacks it, and answers it:
+`clean` and `minor` send `approved`, `needs-work` sends `changes_needed`, and
+the revision is the full commit id. Pomb refuses a seat to the card's live
+owner (`owner_seat`, which compares credentials and never names) and to a second
+holder (`seat_held`), so a reviewer on the runner's token is refused while the
+claim lives. A refused seat call prints one warning to standard error that names
+Pomb's code and says the seat was not set, and the review is still recorded and
+the command exits 0. The local board has no seats and keeps only the comment.
+
+The comment stays for landing to read. It is one `status` comment on the
+card that begins with a reserved first line and has no other:
 
 ```
 dev-review: kind=code by=<NAME> commit=<full commit id> change=<change id, - in git> verdict=<clean|minor|needs-work>

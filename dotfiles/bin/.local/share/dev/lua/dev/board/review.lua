@@ -22,6 +22,13 @@ M.VERDICT_FLAG = "--verdict"
 ---The verdicts in the order help lists them.
 M.VERDICTS = { M.Verdict.CLEAN, M.Verdict.MINOR, M.Verdict.NEEDS_WORK }
 
+---The seat verdict each review verdict records.
+M.SEAT_VERDICTS = {
+    [M.Verdict.CLEAN] = "approved",
+    [M.Verdict.MINOR] = "approved",
+    [M.Verdict.NEEDS_WORK] = "changes_needed",
+}
+
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ "\\n"'
 local NO_CHANGE = "-"
 

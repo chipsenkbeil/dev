@@ -422,6 +422,164 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     testing.ok(result.message:find("Curl exit 28", 1, true), result.message)
 end)
 
+local function seat_backend(root, refusal)
+    local card = {
+        id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name = "Card",
+        column = support.COLUMN_NAME.PROGRESS,
+        size = "unsized",
+        labels = {},
+        checks = {},
+        outcomes = {},
+    }
+    local backend = { root = root, seats = {}, notes = {} }
+    function backend:done_columns()
+        return { support.COLUMN_NAME.DONE }
+    end
+    function backend:cards()
+        return { card }
+    end
+    function backend:comments()
+        return {}
+    end
+    function backend:seat_verdict(id, seat, name, verdict, revision)
+        self.seats[#self.seats + 1] =
+            { id = id, seat = seat, name = name, verdict = verdict, revision = revision }
+        if refusal then
+            return nil, refusal
+        end
+        return true
+    end
+    function backend:note(_, body)
+        self.notes[#self.notes + 1] = body
+        return true
+    end
+    return backend
+end
+
+local function review_as(backend, kind, verdict)
+    return require("dev.cmd.board").run(
+        "review",
+        { "11111111", "--kind", kind, "--by", "r", "--rev", "HEAD", "--verdict", verdict },
+        backend
+    )
+end
+
+testing.test("board_review_clean_sets_seat_approved_with_revision", function()
+    local root, _, head = git_root()
+    for _, verdict in ipairs({ "clean", "minor" }) do
+        local backend = seat_backend(root)
+        local result = review_as(backend, "style", verdict)
+        testing.eq(result.code, nil, result.message)
+        testing.eq(#backend.seats, 1)
+        testing.eq(backend.seats[1].seat, "style")
+        testing.eq(backend.seats[1].name, "r")
+        testing.eq(backend.seats[1].verdict, "approved")
+        testing.eq(backend.seats[1].revision, head)
+    end
+end)
+
+testing.test("board_review_needs_work_sets_changes_needed", function()
+    local root = git_root()
+    local backend = seat_backend(root)
+    local result = review_as(backend, "code", "needs-work")
+    testing.eq(result.code, nil, result.message)
+    testing.eq(backend.seats[1].seat, "code")
+    testing.eq(backend.seats[1].verdict, "changes_needed")
+end)
+
+testing.test("board_review_reports_a_refused_seat", function()
+    local root = git_root()
+    local backend = seat_backend(
+        root,
+        "pomb answered 409: the task's owner cannot take a seat on it (owner_seat)"
+    )
+    local result = review_as(backend, "code", "clean")
+    testing.eq(result.code, nil)
+    testing.ok(result.output:find("recorded code review by r", 1, true), result.output)
+    testing.eq(#result.warnings, 1)
+    testing.ok(result.warnings[1]:find("owner_seat", 1, true), result.warnings[1])
+    testing.ok(result.warnings[1]:find("seat of card", 1, true), result.warnings[1])
+    testing.eq(#backend.notes, 1)
+end)
+
+testing.test("board_review_still_writes_dev_review_comment", function()
+    local root, _, head = git_root()
+    local backend = seat_backend(root)
+    local result = review_as(backend, "code", "clean")
+    testing.eq(result.code, nil, result.message)
+    testing.eq(backend.notes, {
+        "dev-review: kind=code by=r commit=" .. head .. " change=- verdict=clean",
+    })
+end)
+
+local function pomb_seats(answers)
+    local backend = assert(require("dev.board.pomb").new({
+        url = "https://pomb.example",
+        token = "pass:x",
+        name = "mine",
+    }))
+    backend.calls = {}
+    function backend:__load()
+        return true
+    end
+    function backend:__request(method, path, body)
+        self.calls[#self.calls + 1] = { method, path, body }
+        local answer = table.remove(answers, 1) or { true }
+        return answer[1], answer[2], answer[3], answer[4]
+    end
+    return backend
+end
+
+local NO_SEAT = { nil, "pomb answered 404", 404, { message = "the task has no such seat" } }
+
+testing.test("seat_verdict takes the seat then posts the verdict and revision", function()
+    local backend = pomb_seats({})
+    testing.eq(backend:seat_verdict("t1", "code", "r", "approved", "abc"), true)
+    testing.eq(backend.calls, {
+        { "POST", "/api/tasks/t1/seats/take", { seat = "code", name = "r" } },
+        {
+            "POST",
+            "/api/tasks/t1/seats/verdict",
+            { seat = "code", name = "r", verdict = "approved", revision = "abc" },
+        },
+    })
+end)
+
+testing.test("seat_verdict adds a missing seat and takes it again", function()
+    local backend = pomb_seats({ NO_SEAT })
+    testing.eq(backend:seat_verdict("t1", "style", "r", "changes_needed", "abc"), true)
+    testing.eq(#backend.calls, 4)
+    testing.eq(backend.calls[2], {
+        "POST",
+        "/api/tasks/t1/seats",
+        { name = "style", role = "reviewer" },
+    })
+    testing.eq(backend.calls[3][2], "/api/tasks/t1/seats/take")
+    testing.eq(backend.calls[4][3].verdict, "changes_needed")
+end)
+
+testing.test("seat_verdict adds no seat for another 404 and stops at each refusal", function()
+    local other = { nil, "pomb answered 404", 404, { message = "task not found" } }
+    local backend = pomb_seats({ other })
+    local ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
+    testing.eq(ok, nil)
+    testing.eq(message, "pomb answered 404")
+    testing.eq(#backend.calls, 1)
+
+    backend = pomb_seats({ { nil, "pomb answered 409", 409, { code = "owner_seat" } } })
+    ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
+    testing.eq({ ok, message, #backend.calls }, { nil, "pomb answered 409 (owner_seat)", 1 })
+
+    backend = pomb_seats({ NO_SEAT, { nil, "add refused" } })
+    ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
+    testing.eq({ ok, message, #backend.calls }, { nil, "add refused", 2 })
+
+    backend = pomb_seats({ { true }, { nil, "verdict refused" } })
+    ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
+    testing.eq({ ok, message, #backend.calls }, { nil, "verdict refused", 2 })
+end)
+
 if has_jj then
     local function jj(root, ...)
         local argv = { "jj", "--no-pager", "--color", "never", "-R", root, ... }
