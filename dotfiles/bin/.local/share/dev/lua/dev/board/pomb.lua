@@ -3,6 +3,7 @@ local board_limits = require("dev.board.limits")
 local box = require("dev.cmd.box")
 local claims = require("dev.board.claims")
 local dev_os = require("dev.os")
+local fs = require("dev.fs")
 local json = require("dev.json")
 local project = require("dev.project")
 local store = require("dev.board.store")
@@ -334,11 +335,13 @@ end
 ---@param seconds integer? the whole request's `--max-time`, 30 when nil
 ---@param file string? a file to send as the `file` part of a multipart body, in place of a JSON
 ---   body
+---@param save string? a file for curl to write the answer body to, which a refusal's body is read
+---   back from
 ---@return any? doc the decoded answer
 ---@return string? message why the call failed
 ---@return integer? status the HTTP status when pomb refused the call
 ---@return any? answer the decoded body of a refused call
-function Backend:__request(method, path, body, fence, seconds, file)
+function Backend:__request(method, path, body, fence, seconds, file, save)
     if not self.__secret then
         local token, message
         if not self.__opts.lead then
@@ -389,6 +392,10 @@ function Backend:__request(method, path, body, fence, seconds, file)
         argv[#argv + 1] = "-H"
         argv[#argv + 1] = "If-Owner-Fence: " .. string.format("%d", fence)
     end
+    if save then
+        argv[#argv + 1] = "-o"
+        argv[#argv + 1] = save
+    end
     if body then
         argv[#argv + 1] = "--data-raw"
         argv[#argv + 1] = assert(json.encode(body))
@@ -406,6 +413,11 @@ function Backend:__request(method, path, body, fence, seconds, file)
     local text, hint, status = out:match("^(.*)\nretry%-after:([^\n]*)\n(%d+)$")
     if not text then
         text, status = out:match("^(.*)\n(%d+)$")
+    end
+    local number = tonumber(status)
+    if save and number and number >= HTTP_ERROR then
+        text = fs.read(save) or ""
+        fs.remove(save)
     end
     local doc
     if text == "" then
@@ -427,7 +439,7 @@ function Backend:__request(method, path, body, fence, seconds, file)
             self:__cooldown(tonumber(hint) or type(doc) == "table" and tonumber(doc.retry_after))
         if pause then
             dev_os.nap(pause)
-            return self:__request(method, path, body, fence, seconds, file)
+            return self:__request(method, path, body, fence, seconds, file, save)
         end
     end
     local expired = status == UNAUTHORIZED and type(doc) == "table" and doc.code == TOKEN_EXPIRED
@@ -436,7 +448,7 @@ function Backend:__request(method, path, body, fence, seconds, file)
         local fresh = filed()
         if fresh and fresh ~= self.__secret then
             self.__secret = fresh
-            return self:__request(method, path, body, fence, seconds, file)
+            return self:__request(method, path, body, fence, seconds, file, save)
         end
     end
     if status == UNAUTHORIZED and self.__issued then
@@ -445,7 +457,7 @@ function Backend:__request(method, path, body, fence, seconds, file)
     if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
         self.__healed = true
         self.__secret = nil
-        return self:__request(method, path, body, fence, seconds, file)
+        return self:__request(method, path, body, fence, seconds, file, save)
     end
     if expired then
         return nil, unavailable(EXPIRED), status, doc
@@ -1520,11 +1532,12 @@ end
 ---@param method string the HTTP method
 ---@param path string the path under the server's URL
 ---@param file string? a file to send as the multipart body
+---@param save string? a file to write the answer body to
 ---@return any? doc the decoded answer
 ---@return string? message why the call failed
 ---@return integer? status the HTTP status when pomb refused the call
 ---@return any? answer the decoded body of a refused call
-function Backend:__patient(method, path, file)
+function Backend:__patient(method, path, file, save)
     local busy_code = "busy"
     local busy_status = 503
     local busy_tries = 3
@@ -1532,7 +1545,8 @@ function Backend:__patient(method, path, file)
     local upload_seconds = 600
     local doc, message, status, answer
     for tries = 1, busy_tries do
-        doc, message, status, answer = self:__request(method, path, nil, nil, upload_seconds, file)
+        doc, message, status, answer =
+            self:__request(method, path, nil, nil, upload_seconds, file, save)
         local busy = status == busy_status and type(answer) == "table" and answer.code == busy_code
         if doc or not busy or tries == busy_tries then
             break
@@ -1552,6 +1566,19 @@ function Backend:attachments(id)
         found[#found + 1] = { id = row.id, name = row.name, size = row.size }
     end
     return found
+end
+
+function Backend:download(id, attachment, path)
+    local done, message = self:__patient(
+        "GET",
+        "/api/tasks/" .. id .. "/attachments/" .. attachment .. "/file",
+        nil,
+        path
+    )
+    if not done then
+        return nil, message
+    end
+    return true
 end
 
 function Backend:attach(id, path)

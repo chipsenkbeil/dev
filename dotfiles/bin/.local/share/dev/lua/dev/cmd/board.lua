@@ -3785,6 +3785,66 @@ function commands.detach(backend, args)
     }
 end
 
+function commands.download(backend, args)
+    local flags, words = parse(args, { ["--out"] = true })
+    if not flags then
+        return words
+    end
+    if #words ~= 2 then
+        return usage("needs a card and an attachment id or name")
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local held, message = backend:attachments(card.id)
+    if not held then
+        return failure(message)
+    end
+    local matches = {}
+    for _, attachment in ipairs(held) do
+        if attachment.id:sub(1, #words[2]) == words[2] or attachment.name == words[2] then
+            matches[#matches + 1] = attachment
+        end
+    end
+    if #matches == 0 then
+        return failure("The card holds no attachment with the id or name " .. words[2] .. ".")
+    end
+    if #matches > 1 then
+        return failure(words[2] .. " matches more than one attachment.")
+    end
+    local match = matches[1]
+    local name = fs.basename(match.name)
+    if name == "" or name == "." or name == ".." then
+        return failure("The attachment's name " .. match.name .. " cannot name a file.")
+    end
+    local dir = flags["--out"]
+    if dir and not fs.is_dir(dir) then
+        return failure(dir .. " is not a directory.")
+    end
+    if not dir then
+        dir, message = fs.mktemp({ prefix = "dev-board-download", dir = true })
+        if not dir then
+            return failure(message)
+        end
+    end
+    local path = fs.join(dir, name)
+    local part = fs.join(dir, "." .. name .. ".part")
+    local ok
+    ok, message = backend:download(card.id, match.id, part)
+    if not ok then
+        fs.remove(part)
+        return failure(message)
+    end
+    fs.remove(path)
+    ok, message = fs.move(part, path)
+    if not ok then
+        fs.remove(part)
+        return failure(message)
+    end
+    return { output = path }
+end
+
 function commands.boards(backend, args)
     if #args > 0 then
         return usage("unknown argument " .. args[1])

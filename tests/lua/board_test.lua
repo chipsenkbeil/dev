@@ -10296,6 +10296,64 @@ testing.test(
     end
 )
 
+testing.test("download saves the bytes under the name and prints the path", function()
+    local root, home = sandbox()
+    attach_files(root)
+    local out_dir = support.tempdir()
+    local out, code =
+        dev(root, home, { "board", "download", "11111111-a", "abcd", "--out", out_dir })
+    testing.eq(code, 0, out)
+    testing.eq(out, out_dir .. "/old.png\n")
+    testing.eq(fs.read(out_dir .. "/old.png"), "bytes of the file")
+    local calls = read(root, "calls")
+    testing.ok(calls:find("-X GET", 1, true), calls)
+    testing.ok(
+        calls:find(
+            "/api/tasks/" .. ID_A .. "/attachments/abcdef12-0000-4000-8000-000000000001/file",
+            1,
+            true
+        ),
+        calls
+    )
+    testing.ok(calls:find("-o " .. out_dir .. "/.old.png.part", 1, true), calls)
+    testing.ok(not calls:find(TOKEN, 1, true), "token in argv")
+    out, code = dev(root, home, { "board", "download", "11111111-a", "old.png" })
+    testing.eq(code, 0, out)
+    local saved = out:gsub("\n$", "")
+    testing.ok(saved:find("/old.png$"), saved)
+    testing.eq(fs.read(saved), "bytes of the file")
+end)
+
+testing.test("download refuses an unknown or ambiguous attachment and a bad out dir", function()
+    local root, home = sandbox()
+    attach_files(root)
+    local second = ',{"id":"abcdef12-0000-4000-8000-000000000002","name":"b.png","size":1}]'
+    assert(fs.write(root .. "/attachments.json", (ATTACHED:gsub("%]$", second))))
+    local out, code = dev(root, home, { "board", "download", "11111111-a", "abcd" })
+    testing.eq(code, 1)
+    testing.ok(out:find("matches more than one attachment", 1, true), out)
+    out, code = dev(root, home, { "board", "download", "11111111-a", "ffff" })
+    testing.eq(code, 1)
+    testing.ok(out:find("holds no attachment with the id or name ffff.", 1, true), out)
+    out, code = dev(root, home, { "board", "download", "11111111-a", "b.png", "--out", "/no/dir" })
+    testing.eq(code, 1)
+    testing.ok(out:find("/no/dir is not a directory.", 1, true), out)
+end)
+
+testing.test("download reports Pomb's refusal and keeps a file already there", function()
+    local root, home = sandbox()
+    attach_files(root)
+    assert(fs.write(root .. "/file_status", "404"))
+    local out_dir = support.tempdir()
+    assert(fs.write(out_dir .. "/old.png", "mine"))
+    local out, code =
+        dev(root, home, { "board", "download", "11111111-a", "abcd", "--out", out_dir })
+    testing.eq(code, 1)
+    testing.ok(out:find("pomb answered 404: no such file", 1, true), out)
+    testing.eq(fs.read(out_dir .. "/old.png"), "mine")
+    testing.eq(#fs.list(out_dir), 1)
+end)
+
 local PLAIN_ADD =
     { "--problem", "x", "--change", "x", "--out-of-scope", "y", "--size", "1", "--done-when", "a" }
 

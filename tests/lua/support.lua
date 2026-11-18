@@ -327,6 +327,21 @@ case "$last" in
         ;;
     esac
     ;;
+*/attachments/*/file)
+    out=
+    prev=
+    for arg; do
+        if [ "$prev" = "-o" ]; then out=$arg; fi
+        prev=$arg
+    done
+    if [ -f "$ROOT/file_status" ]; then status=$(cat "$ROOT/file_status"); fi
+    if [ "$status" -ge 400 ]; then
+        printf '%s' '{"code":"not_found","message":"no such file"}' >"$out"
+    else
+        printf 'bytes of the file' >"$out"
+    fi
+    body=
+    ;;
 */attachments/*)
     body=
     if [ -f "$ROOT/detach_body" ]; then

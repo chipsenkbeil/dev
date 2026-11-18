@@ -396,6 +396,13 @@ return {
         desc = "Upload files to a Pomb card",
     },
     {
+        words = { "board", "download" },
+        handler = "lua",
+        flags = "--out",
+        usage = "dev board download CARD ATTACHMENT [--out DIR]",
+        desc = "Save a card's attachment and print its path",
+    },
+    {
         words = { "board", "attachments" },
         handler = "lua",
         usage = "dev board attachments CARD",

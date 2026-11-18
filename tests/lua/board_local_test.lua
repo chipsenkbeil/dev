@@ -3977,6 +3977,7 @@ testing.test("attach, attachments and detach refuse plainly on a local board", f
         { "board", "attach", a, file },
         { "board", "attachments", a },
         { "board", "detach", a, "abcd" },
+        { "board", "download", a, "abcd" },
     }) do
         local out, code = dev(root, home, args)
         testing.eq(code, 1, out)

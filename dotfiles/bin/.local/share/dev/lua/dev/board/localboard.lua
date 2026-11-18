@@ -465,6 +465,10 @@ local function remove_link(holder, kind, target_id)
     return false
 end
 
+function Backend:download()
+    return nil, NO_ATTACHMENTS
+end
+
 function Backend:attachments()
     return nil, NO_ATTACHMENTS
 end

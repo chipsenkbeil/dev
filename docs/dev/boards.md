@@ -1211,12 +1211,16 @@ file of that name, so a rerun uploads nothing twice.
 `attachments CARD` lists the card's files, one line each with the id prefix, the
 size in bytes and the name, or `No attachments.` `detach CARD ID` removes the
 attachment whose id starts with ID and prints `detached <id prefix> <name>`.
+`download CARD ATTACHMENT [--out DIR]` saves the attachment under its name in
+DIR, a new directory in the system temp dir by default, and prints the path.
+ATTACHMENT is an id prefix or a name from `attachments`. One that matches none
+or several exits 1.
 
 dev checks no size and no type. Pomb enforces its own limits and dev prints its
 refusal as Pomb words it. A 503 `busy` answer is retried after a short nap.
 
 A token without `attachments.delete` gets the permission message, and agents do
-not detach. A local board refuses all three with
+not detach. A local board refuses all four with
 `a local board holds no attachments`. None of them is queued while Pomb is
 unreachable.
 
@@ -2111,6 +2115,20 @@ to OTHER (a card of this board, or `BOARD:PREFIX`).
 - It prints `<id prefix>  <size>  <name>` for each, in the order Pomb lists
   them, else `No attachments.`
 - Listing is its own verb, to keep `show` at one request.
+- A local board refuses it.
+
+### download
+
+`dev board download CARD ATTACHMENT [--out DIR]` saves one attachment.
+
+- ATTACHMENT is an id prefix or an exact name from `attachments`. A word that
+  matches none or several exits 1.
+- It sends `GET /api/tasks/{id}/attachments/{attachment_id}/file` and has curl
+  write the body to DIR under the attachment's name. The token goes to curl on
+  standard input, as in every request, so no argv holds it.
+- DIR is `--out`, which must be an existing directory, else a new directory in
+  the system temp dir.
+- It prints the saved path.
 - A local board refuses it.
 
 ### detach
