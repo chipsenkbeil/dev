@@ -4777,6 +4777,81 @@ testing.test("stale leaves a card whose cross-board blocker has not started", fu
     end
 end)
 
+local UMBRELLA_HEADING = "umbrella in Backlog, a child started:"
+
+local function umbrella_board(umbrella_column, child_column)
+    local cards, times = aged({ umbrella_column, child_column }, { 1, 1 })
+    local backend = fake(cards, times)
+    function backend:family(id)
+        if id == cards[2].id then
+            return { parent = { id = cards[1].id, name = cards[1].name } }
+        end
+        return {}
+    end
+    return backend, cards
+end
+
+testing.test(
+    "stale lists a Backlog umbrella whose child is in progress, review or verify",
+    function()
+        for _, started in ipairs({
+            support.COLUMN_NAME.PROGRESS,
+            support.COLUMN_NAME.REVIEW,
+            support.COLUMN_NAME.VERIFY,
+        }) do
+            local backend, cards = umbrella_board(support.COLUMN_NAME.BACKLOG, started)
+            local output = cmd_board.run("stale", {}, backend, NOW).output
+            testing.ok(output:find(UMBRELLA_HEADING .. "\n", 1, true), output)
+            testing.ok(
+                output:find(cards[1].name .. " (child 00000002 in " .. started .. ")", 1, true),
+                output
+            )
+        end
+    end
+)
+
+testing.test("stale lists a Backlog umbrella whose children are done", function()
+    local backend, cards = umbrella_board(support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.DONE)
+    cards[1].epic = { done = 1, total = 2 }
+    local output = cmd_board.run("stale", {}, backend, NOW).output
+    testing.ok(output:find(UMBRELLA_HEADING .. "\n", 1, true), output)
+    testing.ok(output:find(cards[1].name .. " (1 of 2 children done)", 1, true), output)
+end)
+
+testing.test("stale leaves an umbrella whose children have not started", function()
+    for _, idle in ipairs({ support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.READY }) do
+        local backend = umbrella_board(support.COLUMN_NAME.BACKLOG, idle)
+        local output = cmd_board.run("stale", {}, backend, NOW).output
+        testing.ok(not output:find("umbrella", 1, true), output)
+    end
+end)
+
+testing.test("stale leaves an umbrella that is already in progress", function()
+    local backend = umbrella_board(support.COLUMN_NAME.PROGRESS, support.COLUMN_NAME.PROGRESS)
+    local output = cmd_board.run("stale", {}, backend, NOW).output
+    testing.ok(not output:find("umbrella", 1, true), output)
+end)
+
+testing.test("stale warns when the epic of a started card cannot be read", function()
+    local backend, cards = umbrella_board(support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.PROGRESS)
+    function backend:family()
+        return nil, "pomb is down"
+    end
+    local output = cmd_board.run("stale", {}, backend, NOW).output
+    testing.ok(
+        output:find(
+            "Could not read the epic of "
+                .. cards[2].id
+                .. " "
+                .. cards[2].name
+                .. ": pomb is down.",
+            1,
+            true
+        ),
+        output
+    )
+end)
+
 testing.test("stale warns when the other board cannot be read and still finishes", function()
     local backend, cards = across(support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.PROGRESS)
     backend.held = { { kind = "blocked_by", id = cards[1].id, board = "gone" } }

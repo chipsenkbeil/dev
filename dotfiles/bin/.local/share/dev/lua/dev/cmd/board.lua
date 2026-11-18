@@ -4765,6 +4765,66 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         append(lines, begun_warnings)
     end
+    local function umbrella_rows()
+        local running = { [roles.progress] = true, [roles.review] = true, [roles.verify] = true }
+        local backlog, why_started = {}, {}
+        for _, card in ipairs(cards) do
+            if card.column == roles.backlog and not card.done then
+                backlog[card.id] = card
+                if card.epic and card.epic.done > 0 then
+                    why_started[card.id] = card.epic.done
+                        .. " of "
+                        .. card.epic.total
+                        .. " children done"
+                end
+            end
+        end
+        local warnings = {}
+        for _, card in ipairs(cards) do
+            if running[card.column] and not card.done then
+                local family, why = backend:family(card.id)
+                if not family then
+                    warnings[#warnings + 1] = warning(
+                        "could not read the epic of "
+                            .. card.id
+                            .. " "
+                            .. card.name
+                            .. ": "
+                            .. tostring(why)
+                    )
+                elseif family.parent and backlog[family.parent.id] then
+                    local parent_id = family.parent.id
+                    why_started[parent_id] = why_started[parent_id]
+                        or "child " .. card.id:sub(1, board.MIN_PREFIX) .. " in " .. card.column
+                end
+            end
+        end
+        local rows = {}
+        for id, reason in pairs(why_started) do
+            local card = backlog[id]
+            local at = entered[id] and box.parse_time(entered[id]) or now
+            rows[#rows + 1] = {
+                id = id,
+                column = card.column,
+                size = card.size,
+                name = card.name .. " (" .. reason .. ")",
+                days = math.floor((now - at) / box.SECONDS_PER_DAY),
+                at = at,
+            }
+        end
+        return rows, warnings
+    end
+    local umbrellas, umbrella_warnings = umbrella_rows()
+    table.sort(umbrellas, oldest)
+    if #umbrellas > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "umbrella in Backlog, a child started:"
+        append(lines, stale_rows(umbrellas))
+    end
+    if #umbrella_warnings > 0 then
+        lines[#lines + 1] = ""
+        append(lines, umbrella_warnings)
+    end
     local iced, iced_undated = icebox_rows(backend, cards, entered, icebox_limit, now)
     if #iced > 0 then
         lines[#lines + 1] = ""

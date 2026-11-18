@@ -1275,6 +1275,12 @@ These sections follow, each listed apart from the stale cards:
   `stale` cannot read becomes a `Could not read blocker` line and the rest
   still prints. Every warning line `stale` prints is a capitalised sentence
   with a final period.
+- `umbrella in Backlog, a child started:`: a Backlog card that has a child in
+  In Progress, Review or Verify, or a Done child, with its days in column and
+  the child or the done count beside its name. An umbrella moves to In Progress
+  when its first child starts, and `stale` lists the ones that did not. A
+  started card whose epic `stale` cannot read becomes a `Could not read the
+  epic` line and the rest still prints.
 - `for the owner (needs:human):`: every card with the `needs:human` label in
   Blocked or Icebox, at any age, with its column and days in column. It never
   appears among the stale ones (it waits on the owner, not on an agent).
