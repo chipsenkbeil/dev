@@ -86,10 +86,11 @@ local KILL_GRACE_SECS = 1
 local POLL_SECS = 0.1
 local MICROS_PER_SEC = 1000000
 local TIMED_WRAPPER = table.concat({
-    'set -m; exec 3<&0; { eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } 3<&- & pid=$!;',
-    '( read -r _ <&3; [ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
+    'trap "" INT TERM HUP; set -m; exec 3<&0;',
+    '{ trap - INT TERM HUP; eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } 3<&- & pid=$!;',
+    '( trap - INT TERM HUP; read -r _ <&3; [ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
     'rm -rf -- "$3" ) >/dev/null 2>&1 & watcher=$!;',
-    'exec 2>/dev/null; echo $pid $watcher >"$3/pids.tmp"; mv "$3/pids.tmp" "$3/pids"; wait $watcher',
+    'trap - INT TERM HUP; exec 2>/dev/null; echo $pid $watcher >"$3/pids.tmp"; mv "$3/pids.tmp" "$3/pids"; wait $watcher',
 }, " ")
 
 ---@alias dev.os.Kind "file"|"dir"|"link"|"other"

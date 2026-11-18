@@ -576,6 +576,40 @@ testing.test("capture_timed cleans up when its process is killed", function()
     cleans_up_after("-KILL", 8)
 end)
 
+local function wrapper_pid(marker)
+    local out = dev_os.capture({ "sh", "-c", "ps -axo pid=,args=" })
+    for pid, args in out:gmatch("(%d+)%s+([^\n]*)") do
+        if args:find("^sh %-c") and args:find("set -m", 1, true) and args:find(marker, 1, true) then
+            return pid
+        end
+    end
+end
+
+testing.test("capture_timed leaves no command running when its wrapper is terminated", function()
+    local tmp = assert(fs.mktemp({ dir = true }))
+    local marker = "sleep " .. unique_secs(12)
+    local caller = launch_capture_timed(marker, tmp)
+    local wrapper
+    testing.ok(
+        wait_until(function()
+            wrapper = wrapper_pid(marker)
+            return wrapper ~= nil
+        end),
+        "the wrapper should be running"
+    )
+    dev_os.run({ "kill", "-TERM", wrapper }, { stderr = "null" })
+    dev_os.run({ "kill", "-KILL", caller }, { stderr = "null" })
+    local gone = wait_until(function()
+        return not process_listed(marker)
+    end)
+    local removed = wait_until(function()
+        return dir_empty(tmp)
+    end)
+    fs.remove(tmp, { recursive = true })
+    testing.ok(gone, "no process of the command should survive")
+    testing.ok(removed, "the temporary directory should be removed")
+end)
+
 local function children_of(marker)
     local out = dev_os.capture({ "sh", "-c", "ps -axo pid=,ppid=,args=" })
     local owners, found = {}, {}
