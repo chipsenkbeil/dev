@@ -393,7 +393,7 @@ local function board_card(doc, id)
 end
 
 local function board_doc(home)
-    local text = assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")
+    local text = assert(fs.read(support.board_file(home, "mine")), "read failed")
     return assert(json.decode(text), "decode failed")
 end
 
@@ -701,7 +701,7 @@ if has_jj then
         ffi.C.setenv("XDG_STATE_HOME", home .. "/state", 1)
         local backend = localboard.new({
             name = "mine",
-            path = home .. "/state/dev/boards/mine.json",
+            path = support.board_file(home, "mine"),
             private = true,
         })
         backend.roles = { icebox = support.COLUMN_NAME.ICEBOX }
@@ -1420,7 +1420,7 @@ if has_jj then
         testing.eq(code, 1, out)
         testing.ok(out:find("No code review", 1, true), out)
         testing.ok(
-            not fs.read(project.home .. "/state/dev/boards/mine.json")
+            not fs.read(support.board_file(project.home, "mine"))
                 :find("dev-turn: holder=dotfiles/lander", 1, true)
         )
         testing.eq(turn_holder(project.home), nil)
@@ -1711,7 +1711,7 @@ if has_jj then
         assert(
             fs.write(
                 project.root .. "/bin/snap",
-                '#!/bin/sh\ncp "$XDG_STATE_HOME/dev/boards/mine.json" "$SNAPSHOT"\n'
+                '#!/bin/sh\ncp "' .. support.board_file(project.home, "mine") .. '" "$SNAPSHOT"\n'
             ),
             "write failed"
         )
@@ -1783,7 +1783,7 @@ if has_jj then
         assert(
             fs.write(
                 project.root .. "/bin/snap",
-                '#!/bin/sh\ncp "$XDG_STATE_HOME/dev/boards/mine.json" "$SNAPSHOT"\n'
+                '#!/bin/sh\ncp "' .. support.board_file(project.home, "mine") .. '" "$SNAPSHOT"\n'
             ),
             "write failed"
         )
@@ -2642,7 +2642,7 @@ if has_jj then
             local commit = head(project.root)
             local out, code = dev(project, { "board", "land", id }, {
                 LAND_TRUNK = LAND_TRUNK_KEEP,
-                BREAK_BOARD = project.home .. "/state/dev/boards/mine.json",
+                BREAK_BOARD = support.board_file(project.home, "mine"),
             })
             testing.eq(code, 1, out)
             testing.ok(
@@ -2899,7 +2899,7 @@ if has_jj then
         local doc = board_doc(project.home)
         local short = store.stamp(store.now() + SHORT_CLAIM_SECONDS)
         board_card(doc, id).claim.expires_at = short
-        local path = project.home .. "/state/dev/boards/mine.json"
+        local path = support.board_file(project.home, "mine")
         assert(fs.write(path, json.encode(doc)), "write failed")
         return short
     end

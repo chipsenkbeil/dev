@@ -31,7 +31,7 @@ local function dev(tree, args, extra)
 end
 
 local function column_of(home, id)
-    local text = assert(fs.read(home .. "/state/dev/boards/mine.json"), "read failed")
+    local text = assert(fs.read(support.board_file(home, "mine")), "read failed")
     local doc = assert(json.decode(text), "decode failed")
     for _, card in ipairs(doc.cards) do
         if card.id:sub(1, #id) == id then

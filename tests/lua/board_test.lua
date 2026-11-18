@@ -11075,7 +11075,7 @@ testing.test("move wait gives up at its timeout with the full status", function(
 end)
 
 local function local_card_state(home, id)
-    local doc = assert(json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"))))
+    local doc = assert(json.decode(assert(fs.read(support.board_file(home, "mine")))))
     for _, card in ipairs(doc.cards) do
         if card.id:sub(1, #id) == id then
             return card

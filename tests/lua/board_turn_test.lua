@@ -36,7 +36,7 @@ local function board_home()
         env = { HOME = home, XDG_STATE_HOME = home .. "/state" },
     })
     assert(code == 0, out)
-    support.drop_turn_card(home .. "/state/dev/boards/mine.json")
+    support.drop_turn_card(support.board_file(home, "mine"))
     return home
 end
 
@@ -48,7 +48,7 @@ local function backend_at(home)
     end
     local backend = localboard.new({
         name = "mine",
-        path = home .. "/state/dev/boards/mine.json",
+        path = support.board_file(home, "mine"),
         private = true,
     })
     backend.roles = board.roles(nil, {})

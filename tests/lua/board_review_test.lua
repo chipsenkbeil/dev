@@ -36,7 +36,7 @@ end
 
 local function card_in(root, home)
     must(dev(root, home, { "board", "init" }))
-    support.drop_turn_card(home .. "/state/dev/boards/mine.json")
+    support.drop_turn_card(support.board_file(home, "mine"))
     local out = dev(root, home, {
         "board",
         "add",
@@ -72,7 +72,7 @@ local function git_root()
 end
 
 local function comments(home)
-    local doc = assert(json.decode(assert(fs.read(home .. "/state/dev/boards/mine.json"))))
+    local doc = assert(json.decode(assert(fs.read(support.board_file(home, "mine")))))
     return doc.cards[1].comments or {}
 end
 
@@ -198,7 +198,7 @@ testing.test(
         must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
         testing.eq(#comments(home), 1)
         testing.eq(comments(home)[1].body, "dev-claim: by=dotfiles/builder")
-        local file = home .. "/state/dev/boards/mine.json"
+        local file = support.board_file(home, "mine")
         local doc = assert(json.decode(assert(fs.read(file))))
         doc.cards[1].claim.expires_at = "2000-01-01T00:00:00Z"
         assert(fs.write(file, assert(json.encode(doc))))
@@ -690,7 +690,7 @@ if has_jj then
         testing.eq(#comments(home), 2)
 
         -- Add a newer check record for the other change and expect it to rule
-        local file = home .. "/state/dev/boards/mine.json"
+        local file = support.board_file(home, "mine")
         local doc = assert(json.decode(assert(fs.read(file))))
         local record = {}
         for key, value in pairs(doc.cards[1].comments[1]) do

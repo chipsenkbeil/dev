@@ -396,8 +396,8 @@ local function local_board(config)
     end
     local out, code = dev({ "board", "init" })
     testing.eq(code, 0, out)
-    support.drop_turn_card(home .. "/state/dev/boards/mine.json")
-    return dev, home .. "/state/dev/boards/mine.json"
+    support.drop_turn_card(support.board_file(home, "mine"))
+    return dev, support.board_file(home, "mine")
 end
 
 local LOCAL = '[board]\nbackend = "local"\nname = "mine"\n'

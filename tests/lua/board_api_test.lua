@@ -109,9 +109,7 @@ end
 
 local function column_of(home, id)
     local doc = assert(
-        json.decode(
-            assert(fs.read(home .. "/state/dev/boards/" .. BOARD .. ".json"), "read failed")
-        ),
+        json.decode(assert(fs.read(support.board_file(home, BOARD)), "read failed")),
         "decode failed"
     )
     for _, listed in ipairs(doc.cards) do

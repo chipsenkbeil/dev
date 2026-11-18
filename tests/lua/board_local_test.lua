@@ -52,12 +52,12 @@ local function local_board(project)
     local out, code = dev(root, home, { "board", "init" })
     testing.eq(code, 0, out)
     local tracked = root .. "/.dev/board.json"
-    support.drop_turn_card(fs.exists(tracked) and tracked or home .. "/state/dev/boards/mine.json")
+    support.drop_turn_card(fs.exists(tracked) and tracked or support.board_file(home, "mine"))
     return root, home
 end
 
 local function file_of(home)
-    return home .. "/state/dev/boards/mine.json"
+    return support.board_file(home, "mine")
 end
 
 local function document(path)
@@ -2115,7 +2115,7 @@ testing.test("a tracked path keeps the board in the project, readable by everyon
     })
     prefix_of(out)
     testing.ok(fs.exists(root .. "/.dev/board.json"))
-    testing.eq(fs.exists(home .. "/state/dev/boards/mine.json"), false)
+    testing.eq(fs.exists(support.board_file(home, "mine")), false)
     testing.eq(document(root .. "/.dev/board.json").cards[1].name, "Tracked")
     testing.ok(mode(root .. "/.dev/board.json") ~= "600", "not private")
     local text = assert(fs.read(root .. "/.dev/board.json"))
