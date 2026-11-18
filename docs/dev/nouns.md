@@ -7,6 +7,10 @@
 A script replaces a built-in of the same name, and `dev help -a` marks it
 `(override)`. A script that matches no built-in is a local verb.
 
+`dev land` is the one land verb, so a project's `.dev/land.lua` replaces the
+built-in whole and owns its own turn, landed note and move to the release
+column. `dev help land` marks it `(override)`.
+
 Every verb that works in a repository supports jj when the repo uses it and git
 otherwise, a worktree included. That holds for a project script and for a
 built-in alike, and a new verb ships with both.

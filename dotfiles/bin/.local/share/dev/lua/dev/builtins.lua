@@ -73,6 +73,14 @@ return {
         group = "Share it",
     },
     {
+        words = { "land" },
+        handler = "lua",
+        flags = "--card --wait",
+        usage = "dev land [--card CARD] [--wait SECONDS]",
+        desc = "Land the workspace's card, or its change with no board",
+        group = "Share it",
+    },
+    {
         words = { "sync" },
         handler = "lua",
         flags = "--check --yes -y",

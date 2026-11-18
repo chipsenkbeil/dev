@@ -1,0 +1,87 @@
+local board = require("dev.board")
+local cmd_board = require("dev.cmd.board")
+local config = require("dev.config")
+local scm = require("dev.scm")
+local text = require("dev.text")
+local verb = require("dev.verb")
+
+local CARD_FLAG = "--card"
+local WAIT_FLAG = "--wait"
+
+---@class dev.cmd.land
+local M = {}
+
+local function parse(ctx)
+    local flags = {}
+    local i = 1
+    while i <= #ctx.args do
+        local word = ctx.args[i]
+        if word ~= CARD_FLAG and word ~= WAIT_FLAG then
+            verb.usage_error(ctx, "Unknown argument " .. word .. ".")
+        end
+        local value = ctx.args[i + 1]
+        if value == nil then
+            verb.usage_error(ctx, "The " .. word .. " flag needs a value.")
+        end
+        flags[word] = value
+        i = i + 2
+    end
+    return flags
+end
+
+local function land_plain(ctx, workspace, flags)
+    if flags[CARD_FLAG] or flags[WAIT_FLAG] then
+        verb.usage_error(
+            ctx,
+            "The " .. CARD_FLAG .. " and " .. WAIT_FLAG .. " flags need a project with a board."
+        )
+    end
+    local _, problem = workspace:rebase()
+    if problem then
+        verb.note(text.sentence(problem))
+        return 1
+    end
+    local ok, output = workspace:merge_into_trunk()
+    verb.relay(output)
+    return ok and 0 or 1
+end
+
+---Land the change of the workspace dev runs in.
+---
+---In a project with a board the workspace's name is the card, and the `board land` command lands it
+---with its records, turn, note and move. A project with no board gets a rebase onto trunk and a
+---land of the change. A `.dev/land.lua` replaces all of it.
+---@param ctx dev.Ctx the verb's context
+---@return integer code the exit code
+function M.run(ctx)
+    local flags = parse(ctx)
+    local workspace = scm.workspace(ctx.root)
+    if config.get(ctx.root, "board.backend") == nil then
+        return land_plain(ctx, workspace, flags)
+    end
+    local found, message = board.find(workspace)
+    if not found then
+        verb.note(text.sentence(message))
+        return 1
+    end
+    local card, why = found:find_card(flags[CARD_FLAG] or workspace:name())
+    if not card then
+        local named = flags[CARD_FLAG] and ""
+            or "Cannot land the workspace " .. workspace:name() .. " as a card. "
+        verb.note(named .. text.sentence(why))
+        return 1
+    end
+    local landing = {}
+    for key, value in pairs(ctx) do
+        landing[key] = value
+    end
+    landing.name = "board land"
+    landing.args = { card.card.id }
+    if flags[WAIT_FLAG] then
+        landing.args[#landing.args + 1] = WAIT_FLAG
+        landing.args[#landing.args + 1] = flags[WAIT_FLAG]
+    end
+    return cmd_board.handlers["board land"](landing)
+end
+
+return M

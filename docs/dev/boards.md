@@ -27,7 +27,7 @@ dev board checks 8af0e001 "dev --remote lint" "dev --remote test"
 dev board check 8af0e001
 dev board check 8af0e001 --expect-fail --timeout 2400
 dev board review 8af0e001 --kind code --by reviewer --rev @
-dev board land 8af0e001
+dev land --card 8af0e001
 dev board allow 8af0e001 test-edits ci-edits
 dev board allow 8af0e001 none
 dev board tests 8af0e001 one_should_be_one tests::two
@@ -561,7 +561,7 @@ Every card in every column is fair game for an agent unless it is labelled
     outcomes from the ci logs while the card sits here.
 - Verify: the verifier's tick of the last open outcome moves the card here, so
   Review holds only ci and reviews and Verify only verified work. A plain move
-  from Review to Verify is refused. Then `dev board land` lands it and moves
+  from Review to Verify is refused. Then `dev land` lands it and moves
   the card to Release, or to Done when `[board.land] deploys` is not true.
   - dev board land merges a card once Verify passes.
     A card's change stays unmerged until land merges it.
@@ -2670,6 +2670,15 @@ The result:
 - `review` does not judge the verdict. `land` does.
 
 ### land
+
+`dev land [--card CARD] [--wait SECONDS]` is the one land verb, and runners use
+nothing else. Run in the workspace `dev ws new` made, it reads the card id from
+the workspace's directory name and hands the card to `dev board land`, which
+does the landing below. A workspace whose name is no card on the board is
+refused and nothing lands. In a project with no board it rebases the change
+onto trunk and lands it, with none of the board steps. A project's
+`.dev/land.lua` replaces `dev land` whole, as any `.dev` script replaces a
+built-in, and owns its own turn, `done` note and move.
 
 `dev board land CARD [CARD...] [--wait SECONDS]` takes the landing turn and
 lands the card's change on trunk.

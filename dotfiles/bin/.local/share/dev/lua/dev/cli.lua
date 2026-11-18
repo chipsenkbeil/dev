@@ -5,6 +5,7 @@ local config = require("dev.config")
 local connect = require("dev.cmd.connect")
 local follow = require("dev.cmd.follow")
 local init = require("dev.cmd.init")
+local land = require("dev.cmd.land")
 local misc = require("dev.cmd.misc")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
@@ -27,7 +28,13 @@ local MAX_LEVEL = 2
 local INTERRUPTED = dev_os.SIGNAL_EXIT_BASE + 2
 local ROOT_REFUSAL = "As root, dev runs only `dev tools install` and `dev tools check`.\n"
 local SHARE = project.share
-local VCS_HANDLERS = { push = push.run, pull = pull.run, sync = sync.run, follow = follow.run }
+local VCS_HANDLERS = {
+    push = push.run,
+    pull = pull.run,
+    sync = sync.run,
+    follow = follow.run,
+    land = land.run,
+}
 local NOT_TAKEN = {
     push = function(arg)
         return arg:sub(1, 1) == "-" and arg ~= "--tag"

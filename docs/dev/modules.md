@@ -13,6 +13,9 @@ The luajit modules of `dev`, one per item.
   `dev help <verb>` prints for them.
 - `dev.cmd.misc`: `deploy`, `guide` and `bootstrap`.
 - `dev.cmd.tools`: `tools install` and `tools check`.
+- `dev.cmd.land`: `land`, which reads the card from the workspace name through
+  `dev.scm` and `dev.board` and hands it to the `board land` command, or lands
+  a plain change when the project has no board.
 - `dev.cmd.box`: the `box` subcommands, the time-left text and the `ci box`
   call.
 - `dev.cmd.connect`: `connect` and `box connect`.

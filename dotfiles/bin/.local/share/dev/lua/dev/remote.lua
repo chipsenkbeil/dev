@@ -19,6 +19,7 @@ local MACHINE_VERBS = {
     push = true,
     pull = true,
     follow = true,
+    land = true,
     guide = true,
     connect = true,
 }

@@ -13,6 +13,7 @@ Share it
   push                  Push the trunk or current branch to the remote of record
   pull                  Fetch the remote and rebase local work onto it
   follow                Move the main checkout onto trunk
+  land                  Land the workspace's card, or its change with no board
   board                 Read and update the project's board
 
 Set up a machine or project
