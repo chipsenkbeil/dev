@@ -1,7 +1,8 @@
 local dev_os = require("dev.os")
 local kinds = require("dev.pkg.kinds")
+local note = require("dev.verb").note
 
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 local Channel, NO_PROBE_BINARY = kinds.Channel, kinds.NO_PROBE_BINARY
 
 local PACKAGE_WORD = "^[A-Za-z0-9@._+][A-Za-z0-9@._+%-]*$"
@@ -97,7 +98,7 @@ local function print_tail(path, from)
         lines[#lines + 1] = line
     end
     for i = math.max(1, #lines - FAILURE_TAIL_LINES + 1), #lines do
-        stderr:write("      ", lines[i], "\n")
+        note("      " .. lines[i])
     end
 end
 
@@ -250,7 +251,7 @@ end
 ---@param line string the command as `line` printed it
 ---@return integer code 1
 function M.failed(row, line)
-    stderr:write("  ! ", row.name, ': "', line, '" failed\n')
+    note("  ! " .. row.name .. ': "' .. line .. '" failed')
     M.flush_failure()
     return 1
 end

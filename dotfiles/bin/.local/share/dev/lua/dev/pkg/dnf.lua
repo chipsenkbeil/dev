@@ -1,8 +1,9 @@
 local dev_os = require("dev.os")
 local kinds = require("dev.pkg.kinds")
 local lib = require("dev.pkg.lib")
+local note = require("dev.verb").note
 
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 local Channel, Verb = kinds.Channel, kinds.Verb
 
 ---@class dev.pkg.dnf
@@ -50,7 +51,7 @@ function M.install(row, opts)
     end
     local cmds = plan(row, { verb = verb })
     if not cmds then
-        stderr:write("  ! ", row.name, ': unknown dnf channel "', row.channel, '", skipping\n')
+        note("  ! " .. row.name .. ': unknown dnf channel "' .. row.channel .. '", skipping')
         return 1
     end
     if opts.dry_run then

@@ -1,8 +1,9 @@
 local dev_os = require("dev.os")
 local kinds = require("dev.pkg.kinds")
 local lib = require("dev.pkg.lib")
+local note = require("dev.verb").note
 
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 local Channel = kinds.Channel
 
 local INSTALLED_STATUS = "^install ok installed"
@@ -68,7 +69,7 @@ function M.install(row, opts)
         return lib.skip(row, "already installed via apt")
     end
     if row.channel ~= Channel.BARE then
-        stderr:write("  ! ", row.name, ': unknown apt channel "', row.channel, '", skipping\n')
+        note("  ! " .. row.name .. ': unknown apt channel "' .. row.channel .. '", skipping')
         return 1
     end
     local cmds = plan(row, verb)

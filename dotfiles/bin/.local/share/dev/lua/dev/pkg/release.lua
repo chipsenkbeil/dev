@@ -2,8 +2,9 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local lib = require("dev.pkg.lib")
 local manifest = require("dev.pkg.manifest")
+local note = require("dev.verb").note
 
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 
 local NO_PATH = "-"
 local SHA256_LENGTH = 64
@@ -215,7 +216,7 @@ local function place(source, dest, opts)
 end
 
 local function fail(row, message)
-    stderr:write("  ! ", row.name, ": ", message, "\n")
+    note("  ! " .. row.name .. ": " .. message)
     return 1
 end
 

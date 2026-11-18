@@ -6,8 +6,9 @@ local lib = require("dev.pkg.lib")
 local release = require("dev.pkg.release")
 local script = require("dev.pkg.script")
 local system = require("dev.pkg.system")
+local note = require("dev.verb").note
 
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 local Channel, Scope, NO_PROBE_BINARY = kinds.Channel, kinds.Scope, kinds.NO_PROBE_BINARY
 local parse_cell, valid_package = lib.parse_cell, lib.valid_package
 
@@ -106,7 +107,7 @@ local function load_rows(opts, manager)
     local rows = text and manifest.parse(text)
     local column = rows and manifest.column(rows, manager)
     if not column then
-        stderr:write('Manager column "', manager, '" not found in ', opts.manifest, " header.\n")
+        note('Manager column "' .. manager .. '" not found in ' .. opts.manifest .. " header.")
         return nil
     end
     return rows, column
@@ -115,7 +116,7 @@ end
 local function select_rows(rows, select_opts)
     local selected, err = manifest.select(rows, select_opts)
     if not selected then
-        stderr:write(err, "\n")
+        note(err)
     end
     return selected
 end
@@ -135,7 +136,7 @@ local function load_driver(name)
     if kinds.DRIVERS[name] then
         return require("dev.pkg." .. name)
     end
-    stderr:write("No driver named ", name, ".\n")
+    note("No driver named " .. name .. ".")
 end
 
 local function check_script_row(opts, name, package)
@@ -201,7 +202,7 @@ end
 function M.check(opts)
     local manager = detect_manager()
     if not manager then
-        stderr:write("No supported package manager is detected on this OS.\n")
+        note("No supported package manager is detected on this OS.")
         return 1
     end
     local driver = system
@@ -220,7 +221,7 @@ function M.check(opts)
         return 1
     end
     if opts.group ~= nil and (opts.group == "" or #selected == 0) then
-        stderr:write("unknown group: ", opts.group, "\n")
+        note("unknown group: " .. opts.group)
         return 2
     end
     local missing = false
@@ -268,7 +269,7 @@ local function install_row(state, row)
     local name = printable(row.name)
     local wrong = misplaced(state.manager, parsed)
     if wrong then
-        stderr:write("  ! ", name, ": ", wrong, "\n")
+        note("  ! " .. name .. ": " .. wrong)
         state.failed[#state.failed + 1] = name
         return
     end
@@ -278,7 +279,7 @@ local function install_row(state, row)
     end
     local refused = refusal(row, parsed)
     if refused then
-        stderr:write("  ! ", name, ": refusing the package or repo ", refused, " in the manifest\n")
+        note("  ! " .. name .. ": refusing the package or repo " .. refused .. " in the manifest")
         state.failed[#state.failed + 1] = name
         return
     end
@@ -307,7 +308,7 @@ end
 function M.install(opts)
     local manager = detect_manager()
     if not manager then
-        stderr:write("No supported package manager is detected on this OS.\n")
+        note("No supported package manager is detected on this OS.")
         return 1
     end
     local all_rows, column = load_rows(opts, manager)
@@ -325,7 +326,7 @@ function M.install(opts)
             rows = select_rows(all_rows, { column = column, group = opts.group })
         end
         if not rows or #rows == 0 then
-            stderr:write("unknown group: ", opts.group, "\n")
+            note("unknown group: " .. opts.group)
             return 2
         end
     end
@@ -336,9 +337,9 @@ function M.install(opts)
     for _, name in ipairs(opts.names) do
         if not in_rows[name] then
             if in_all[name] then
-                stderr:write("tool ", name, " is not in group ", opts.group, "\n")
+                note("tool " .. name .. " is not in group " .. opts.group)
             else
-                stderr:write("unknown tool: ", name, "\n")
+                note("unknown tool: " .. name)
             end
             return 2
         end
@@ -358,7 +359,7 @@ function M.install(opts)
         )
     end
     if #state.failed > 0 then
-        stderr:write("install failed: ", table.concat(state.failed, " "), "\n")
+        note("install failed: " .. table.concat(state.failed, " "))
         return 1
     end
     return 0
@@ -366,7 +367,7 @@ end
 
 local function need_value(args, i)
     if i + 1 > #args then
-        stderr:write(args[i], " needs a value\n")
+        note(args[i] .. " needs a value")
         return false
     end
     return true
@@ -382,7 +383,7 @@ local function parse_check(args, opts)
             opts[args[i] == "--manifest" and "manifest" or "group"] = args[i + 1]
             i = i + 2
         else
-            stderr:write("unknown arg: ", args[i], "\n")
+            note("unknown arg: " .. args[i])
             return false
         end
     end
@@ -410,14 +411,14 @@ local function parse_install(args, opts)
             end
             local value = args[i + 1]
             if arg == "--scope" and value ~= Scope.SYSTEM and value ~= Scope.USER then
-                stderr:write("--scope takes system or user, got ", value, "\n")
+                note("--scope takes system or user, got " .. value)
                 return false
             end
             local key = arg:sub(3):gsub("%-", "_")
             opts[key] = value
             i = i + 2
         elseif arg:sub(1, 1) == "-" then
-            stderr:write("unknown arg: ", arg, "\n")
+            note("unknown arg: " .. arg)
             return false
         else
             opts.names[#opts.names + 1] = arg
@@ -425,7 +426,7 @@ local function parse_install(args, opts)
         end
     end
     if opts.force and #opts.names == 0 then
-        stderr:write("--force needs at least one tool name\n")
+        note("--force needs at least one tool name")
         return false
     end
     return true
@@ -479,7 +480,7 @@ function M.main(argv, defaults)
     elseif sub == "install" then
         return parse_install(args, opts) and M.install(opts) or 2
     end
-    stderr:write("unknown subcommand: ", sub, "\n")
+    note("unknown subcommand: " .. sub)
     stdout:write(USAGE)
     return 2
 end

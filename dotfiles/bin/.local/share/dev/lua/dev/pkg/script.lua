@@ -1,8 +1,9 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local lib = require("dev.pkg.lib")
+local note = require("dev.verb").note
 
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 
 local LUA_SUFFIX = "%.lua$"
 local URL = "^https?://"
@@ -88,7 +89,7 @@ local function install_remote(row, opts, cell)
         })
     end
     if not dev_os.which("curl") then
-        stderr:write("  ! ", row.name, ": curl is required to fetch ", cell.source, "\n")
+        note("  ! " .. row.name .. ": curl is required to fetch " .. cell.source)
         return 1
     end
     stdout:write("  + installing ", row.name, " (script: ", cell.source, ")...\n")
@@ -97,7 +98,7 @@ local function install_remote(row, opts, cell)
         return 1
     end
     if lib.run({ "curl", "-fsSL", cell.source, "-o", tmp }, opts) ~= 0 then
-        stderr:write("  ! ", row.name, ": failed to download ", cell.source, "\n")
+        note("  ! " .. row.name .. ": failed to download " .. cell.source)
         fs.remove(tmp)
         return 1
     end

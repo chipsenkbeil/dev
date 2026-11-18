@@ -2,8 +2,9 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local kinds = require("dev.pkg.kinds")
 local lib = require("dev.pkg.lib")
+local note = require("dev.verb").note
 
-local stdout, stderr = io.stdout, io.stderr
+local stdout = io.stdout
 local Channel = kinds.Channel
 
 local DEFAULT_BUILD_USER = "aurbuild"
@@ -62,7 +63,7 @@ local function prepare_build_user(user, opts)
         return true
     end
     if lib.run({ "useradd", "-m", "-s", "/bin/bash", user }, opts) ~= 0 then
-        stderr:write("  ! could not create AUR build user ", user, "\n")
+        note("  ! could not create AUR build user " .. user)
         return false
     end
     return true
@@ -78,7 +79,7 @@ local function build_as_root(row, build)
     dev_os.run({ "chown", "-R", user, build.tmp })
     local clone = { "sudo", "-u", user, "git", "clone", "--depth", "1", url, dir }
     if lib.run(clone, build.opts) ~= 0 then
-        stderr:write("  ! ", row.name, ": could not clone ", url, "\n")
+        note("  ! " .. row.name .. ": could not clone " .. url)
         return false
     end
     fs.mkdir(SUDOERS_DIR, { parents = true })
@@ -88,7 +89,7 @@ local function build_as_root(row, build)
         { "sudo", "-u", user, "makepkg", "-si", "--noconfirm" }
     )
     if lib.run(guarded, { log_file = build.opts.log_file, cwd = dir }) ~= 0 then
-        stderr:write("  ! ", row.name, ": makepkg failed\n")
+        note("  ! " .. row.name .. ": makepkg failed")
         return false
     end
     return true
@@ -98,12 +99,12 @@ local function build_as_user(row, build)
     local url = aur_url(row)
     local dir = build.tmp .. "/" .. row.package
     if lib.run({ "git", "clone", "--depth", "1", url, dir }, build.opts) ~= 0 then
-        stderr:write("  ! ", row.name, ": could not clone ", url, "\n")
+        note("  ! " .. row.name .. ": could not clone " .. url)
         return false
     end
     local makepkg = { "makepkg", "-si", "--noconfirm" }
     if lib.run(makepkg, { log_file = build.opts.log_file, cwd = dir }) ~= 0 then
-        stderr:write("  ! ", row.name, ": makepkg failed\n")
+        note("  ! " .. row.name .. ": makepkg failed")
         return false
     end
     return true
@@ -111,7 +112,7 @@ end
 
 local function install_from_aur(row, opts)
     if lib.run(lib.privileged(BUILD_PREREQUISITES), opts) ~= 0 then
-        stderr:write("  ! ", row.name, ": could not install AUR build prerequisites\n")
+        note("  ! " .. row.name .. ": could not install AUR build prerequisites")
         return 1
     end
     local tmp = fs.mktemp({ dir = true })
@@ -175,7 +176,7 @@ function M.install(row, opts)
         stdout:write("  + installing ", row.name, " from the AUR...\n")
         return install_from_aur(row, opts)
     end
-    stderr:write("  ! ", row.name, ': unknown pacman channel "', row.channel, '", skipping\n')
+    note("  ! " .. row.name .. ': unknown pacman channel "' .. row.channel .. '", skipping')
     return 1
 end
 
