@@ -2972,6 +2972,22 @@ Carrying a check and reviews across a rebase:
 - The done note then adds that the check and reviews were carried over from the
   checked commit.
 
+Carrying a check across a squash:
+
+When no commit carries by the rules above, `land` also carries the check alone
+from a commit of the same change id with a passing run whose tree equals the
+landing commit's tree, as after a squash of an unlanded parent into the change.
+The checked commit may sit on a parent that is not on trunk, and the commit's
+parent must be the current trunk.
+
+- The reviews do not carry, as a review of the child alone never saw the
+  squashed parent's diff. The refusal names the carried check, then each review
+  still lacking, and the reviews are recorded again at the landing commit.
+- A squash that changes the tree keeps the check stale.
+- The carry is tried when the check or the reviews are lacking.
+- The done note then says that the check was carried over, with no mention of
+  the reviews.
+
 The settings:
 
 - `deploys = true` under `[board.land]` makes `land` move the card to Release,

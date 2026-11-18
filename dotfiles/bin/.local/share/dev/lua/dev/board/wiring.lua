@@ -391,6 +391,7 @@ end
 ---@return string[] problems the reasons, empty when none apply
 ---@return dev.board.check.State? state the commit to land, nil when it could not be read
 ---@return string? carried the commit whose check and reviews carry over, nil when none do
+---@return boolean? check_only true when only the check carries, over an equal tree
 local function land_problems(backend, card, who)
     local problems = card_problems(backend, card, who)
     local state, message = land.state(backend.root)
@@ -417,17 +418,29 @@ local function land_problems(backend, card, who)
     end
     local lacking = land.missing_reviews(who.comments, state)
     local unproven = land.checks_problem(who.comments, state, card.checks)
-    local carried, carry_why
-    if #lacking > 0 then
-        carried, carry_why = land.carry({
+    local carried, carry_why, check_only
+    if #lacking > 0 or unproven then
+        carried, carry_why, check_only = land.carry({
             root = backend.root,
             comments = who.comments,
             state = state,
             rows = card.checks,
         })
-        if carried then
+        if (#lacking == 0 and not check_only) or (check_only and not unproven) then
+            carried, carry_why, check_only = nil, nil, nil
+        end
+        if carried and check_only then
+            unproven = nil
+            lacking = land.missing_reviews(who.comments, state, backend.root)
+            if #lacking > 0 then
+                problems[#problems + 1] = string.format(
+                    "The check at commit %s carries over to this commit, which has the same tree. Its reviews do not carry over.",
+                    land.short(carried)
+                )
+            end
+        elseif carried then
             lacking, unproven = {}, nil
-        else
+        elseif #lacking > 0 then
             lacking = land.missing_reviews(who.comments, state, backend.root)
             if carry_why then
                 problems[#problems + 1] = carry_why
@@ -452,7 +465,7 @@ local function land_problems(backend, card, who)
             problems[#problems + 1] = moved
         end
     end
-    return problems, state, carried
+    return problems, state, carried, check_only
 end
 
 ---@class dev.board.wiring.await_turn.Opts
@@ -505,6 +518,7 @@ end
 ---@class dev.board.wiring.Prepared
 ---@field state dev.board.check.State the commit that was checked and rebased onto trunk
 ---@field carried string? the commit whose check and reviews carry over
+---@field check_only boolean? true when only the check carries over
 ---@field companions dev.board.Card[] the other cards that land with it, each read after the rebase
 
 ---@class dev.board.wiring.land_prepare.Opts
@@ -596,7 +610,7 @@ local function land_prepare(opts)
         return failure(message)
     end
     local rebase_note = rebased and "\nThe change was rebased onto trunk." or ""
-    local problems, state, carried =
+    local problems, state, carried, check_only =
         land_problems(backend, card, { name = name, comments = fresh, untaken = not hold })
     if #problems > 0 then
         return failure(
@@ -623,10 +637,11 @@ local function land_prepare(opts)
         end
         local who = { name = name, comments = other_comments, untaken = not hold }
         local other_problems = card_problems(backend, other, who)
-        local other_carried
+        local other_carried, other_check_only
         if #other_problems == 0 then
             local other_state
-            other_problems, other_state, other_carried = land_problems(backend, other, who)
+            other_problems, other_state, other_carried, other_check_only =
+                land_problems(backend, other, who)
             if not other_state and #other_problems == 0 then
                 other_problems[1] = "The commit to land could not be read."
             end
@@ -642,7 +657,9 @@ local function land_prepare(opts)
                     .. rebase_note
             )
         end
+        local full = (carried and not check_only) or (other_carried and not other_check_only)
         carried = carried or other_carried
+        check_only = carried ~= nil and not full
         others[#others + 1] = other
     end
     if carried and hold then
@@ -676,7 +693,7 @@ local function land_prepare(opts)
             "Card " .. short .. " cannot land for these reasons.\n  - " .. unchecked .. rebase_note
         )
     end
-    return nil, { state = state, carried = carried, companions = others }
+    return nil, { state = state, carried = carried, check_only = check_only, companions = others }
 end
 
 ---@class dev.board.wiring.land_held.Opts
@@ -710,6 +727,7 @@ local function land_held(opts)
         return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
     end
     local state, carried = opts.prepared.state, opts.prepared.carried
+    local check_only = opts.prepared.check_only
     local now, bad = land.state(backend.root)
     if not now then
         return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
@@ -790,7 +808,13 @@ local function land_held(opts)
             commit
         )
     end
-    if carried then
+    if carried and check_only then
+        text = string.format(
+            "%s The check was carried over from commit %s: the change id is the same and the tree is identical.",
+            text,
+            land.short(carried)
+        )
+    elseif carried then
         text = string.format(
             "%s The check and reviews were carried over from commit %s: the change id is the same, the interdiff is empty, and the rebase left no conflict.",
             text,

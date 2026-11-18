@@ -1628,6 +1628,51 @@ if has_jj then
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
+    local function squashed_parent(project)
+        stack_on_parent(project, { args = { "-m", "test: parent" }, body = "mid\n" })
+        local id = verified_card(project)
+        local checked_at = head(project.root)
+        jj(project.root, "squash", "--from", "@-", "--into", "@", "--use-destination-message")
+        testing.ok(head(project.root) ~= checked_at, "the squash must rewrite the commit")
+        return id, checked_at
+    end
+
+    testing.test("land carries the check across a squash that leaves the tree identical", function()
+        local project = jj_project()
+        local id, checked_at = squashed_parent(project)
+        local out = refused(project, id, {
+            "The check at commit " .. checked_at:sub(1, 12) .. " carries over",
+            "The code review is of an earlier commit",
+            "The style review is of an earlier commit",
+        })
+        testing.eq(out:find("No run of `dev board check`", 1, true), nil, out)
+        approve_reviews(project, id)
+        local landed, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, landed)
+        local list = comments(project.home)
+        local carried = "The check was carried over from commit " .. checked_at:sub(1, 12)
+        testing.ok(list[#list].body:find(carried, 1, true), list[#list].body)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("land keeps the check stale after a squash that changes the tree", function()
+        local project = jj_project()
+        local id = squashed_parent(project)
+        assert(fs.write(project.root .. "/extra.txt", "extra\n"), "write failed")
+        local out = refused(project, id, { "No run of `dev board check`" })
+        testing.eq(out:find("carries over", 1, true), nil, out)
+    end)
+
+    testing.test("land keeps the reviews stale after a squash and says so", function()
+        local project = jj_project()
+        local id = squashed_parent(project)
+        refused(project, id, {
+            "Its reviews do not carry over.",
+            "The code review is of an earlier commit",
+            "The style review is of an earlier commit",
+        })
+    end)
+
     testing.test("land reads trunk before and under the turn, and after the land", function()
         local project = jj_project()
         local id = review_ready(project)

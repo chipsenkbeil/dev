@@ -901,6 +901,78 @@ end
 ---@field state dev.board.check.State the commit that would land
 ---@field rows string[] the card's checks rows
 
+local function rebase_carry(opts)
+    local root, comments, state, rows = opts.root, opts.comments, opts.state, opts.rows
+    local candidates, unmet = checked_commits(root, comments, state, rows)
+    if #candidates == 0 then
+        return nil, unmet
+    end
+    local moved = M.trunk_problem(root)
+    if moved then
+        return nil, moved, true
+    end
+    local newest_problem
+    for _, commit in ipairs(candidates) do
+        local problem, failed_read = carry_problem(root, state, commit)
+        if not problem then
+            return commit
+        end
+        if failed_read then
+            return nil, problem, true
+        end
+        newest_problem = newest_problem or problem
+    end
+    return nil, newest_problem
+end
+
+local function same_tree(root, commit, state)
+    if vcs.backend(root) == vcs.GIT then
+        local old = git_out(root, "rev-parse", commit .. "^{tree}")
+        local new = git_out(root, "rev-parse", state.commit .. "^{tree}")
+        if old == nil or new == nil then
+            return nil
+        end
+        return old == new
+    end
+    local out = jj_out(root, "diff", "--from", commit, "--to", "@", "--name-only")
+    if out == nil then
+        return nil
+    end
+    return out == ""
+end
+
+local function tree_carry(opts)
+    local root, comments, state, rows = opts.root, opts.comments, opts.state, opts.rows
+    local seen = {}
+    for i = #comments, 1, -1 do
+        local record = check.parse(comments[i].body)
+        if
+            record
+            and record.mode == check.Mode.RUN
+            and record.change == state.change
+            and record.commit ~= state.commit
+            and not seen[record.commit]
+        then
+            seen[record.commit] = true
+            local at = { commit = record.commit, change = state.change }
+            if not M.checks_problem(comments, at, rows) then
+                local same = same_tree(root, record.commit, state)
+                if same == nil then
+                    return nil,
+                        string.format(
+                            "%s could not compare the checked commit %s with this one.",
+                            tool_name(root),
+                            M.short(record.commit)
+                        )
+                end
+                if same then
+                    return record.commit
+                end
+            end
+        end
+    end
+end
+
 ---Find a checked commit whose check and reviews a rebased commit may keep.
 ---
 ---The rule holds when all of these are true:
@@ -915,11 +987,17 @@ end
 ---reason, unless a jj read fails, which refuses at once naming that read. A commit with a check
 ---record of its own, readable or not, never carries. When every checked commit lacks a passing
 ---check or a review, the problem names the newest one and what it lacks.
+---
+---A commit with a passing check, whatever its parent and reviews, also carries its check alone
+---when its tree equals the landing commit's tree and the change id is the same, as after a squash
+---of an unlanded parent into the change. The reviews do not carry then. The third value is true
+---for that carry.
 ---@param opts dev.board.land.Opts the project, the card's records and the landing commit
 ---@return string? commit the checked commit the records carry over from
 ---@return string? problem why it is refused, nil when it carries or no commit was checked
+---@return boolean? check_only true when only the check carries and the reviews stay stale
 function M.carry(opts)
-    local root, comments, state, rows = opts.root, opts.comments, opts.state, opts.rows
+    local root, comments, state = opts.root, opts.comments, opts.state
     for _, comment in ipairs(comments) do
         local own = check.parse(comment.body)
         if
@@ -929,26 +1007,22 @@ function M.carry(opts)
             return nil
         end
     end
-    local candidates, unmet = checked_commits(root, comments, state, rows)
-    if #candidates == 0 then
-        return nil, unmet
+    local commit, problem, stop = rebase_carry(opts)
+    if commit or stop then
+        return commit, problem
     end
-    local moved = M.trunk_problem(root)
-    if moved then
-        return nil, moved
+    local same, read_problem = tree_carry(opts)
+    if read_problem then
+        return nil, read_problem
     end
-    local newest_problem
-    for _, commit in ipairs(candidates) do
-        local problem, failed_read = carry_problem(root, state, commit)
-        if not problem then
-            return commit
+    if same then
+        local moved = M.trunk_problem(root)
+        if moved then
+            return nil, moved
         end
-        if failed_read then
-            return nil, problem
-        end
-        newest_problem = newest_problem or problem
+        return same, nil, true
     end
-    return nil, newest_problem
+    return nil, problem
 end
 
 local CONFIG_PATH = ".dev/config.toml"
