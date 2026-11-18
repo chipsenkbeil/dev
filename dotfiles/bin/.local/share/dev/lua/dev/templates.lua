@@ -164,6 +164,9 @@ function M.manifest(dir, kind)
     for _, name in ipairs(roots) do
         out[#out + 1] = { dest = name, src = dir .. "/" .. name }
     end
+    if set == RUST_SET then
+        out[#out + 1] = { dest = "stylua.toml", src = dir .. "/../lua/stylua.toml" }
+    end
     out[#out + 1] = { dest = "sgconfig.yml", src = dir .. "/ast-grep/sgconfig.yml" }
     for _, name in ipairs(scripts) do
         out[#out + 1] = { dest = ".dev/" .. name, src = dir .. "/" .. name }

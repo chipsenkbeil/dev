@@ -285,6 +285,7 @@ testing.test("the manifest names Lua verbs and the shared library for both sets"
         testing.ok(has(rust, name), name)
     end
     testing.ok(has(rust, ".dev/lua/lintset.lua"))
+    testing.ok(has(rust, "stylua.toml"))
     local lua = dests(assert(templates.dir(Kind.LUA), "no template dir"), Kind.LUA)
     testing.ok(has(lua, ".dev/lint.lua") and has(lua, ".dev/fmt.lua"))
     testing.ok(not has(lua, ".dev/test.lua"))
@@ -455,6 +456,10 @@ testing.test("a Rust project synced from scratch passes sync --check", function(
     for _, name in ipairs({ "lint", "fmt", "test" }) do
         testing.ok(fs.is_file(root .. "/.dev/" .. name .. ".lua"), name)
     end
+    testing.eq(
+        fs.read(root .. "/stylua.toml"),
+        fs.read(assert(templates.dir(Kind.LUA)) .. "/stylua.toml")
+    )
     out, code = support.dev(root, { "sync", "--check" })
     testing.ok(code == 0, out)
     testing.eq(out, "up to date\n")

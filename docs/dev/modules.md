@@ -244,7 +244,8 @@ card's bookmark.
 
 - `dev.templates`: the lint set directory and its manifest. The manifest
   names the Lua lint, fmt and test verbs and the shared
-  `.dev/lua/lintset.lua`. It also holds `skip_pending`, which leaves a
+  `.dev/lua/lintset.lua`, and for Rust the shared `stylua.toml`. It also
+  holds `skip_pending`, which leaves a
   project's Lua verbs unwritten while any of its bash verbs exists, the
   rendering that keeps the project's text below the `lint.lua` and `deny.toml`
   markers, the `[workspace.lints]` block, the library-register attribute and

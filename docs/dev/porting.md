@@ -234,7 +234,9 @@ end
 
 `dev init` and `dev sync` write the Rust and Lua lint sets as Lua verbs:
 `.dev/lint.lua`, `.dev/fmt.lua` and, for Rust, `.dev/test.lua`. The code they
-share is in `.dev/lua/lintset.lua` (`require("lintset")`).
+share is in `.dev/lua/lintset.lua` (`require("lintset")`). A Rust project also
+gets the shared `stylua.toml`, and its `fmt` and `lint` verbs run stylua over
+the Lua under `.dev` and `.ci` only, which `lint:dev_lua()` lists.
 
 They write no `.sh` file. The templates live in the style skill's `lint/`
 folder.
@@ -251,6 +253,7 @@ Inside the chunk, `lint` is the run:
 - `lint:fail(name, message)`
 - `lint:have(binary, install, name)`
 - `lint:files(globs)`
+- `lint:dev_lua()`
 - `lint:grep(pattern, files)`
 
 `ctx` is the verb context and `lint.root` the project root.

@@ -252,6 +252,59 @@ else
     assert_eq "a second dev fmt changes nothing" "$(cat "$rust/src/period.rs")" "$before"
     rm "$rust/src/period.rs" "$rust/.dev/fmt.lua"
 
+    # A stylua stub that logs each call, fails --check on a file holding UNFORMATTED, and rewrites it otherwise
+    mkdir -p "$TMP/stylua-stub" "$rust/.ci" "$rust/scripts"
+    cat >"$TMP/stylua-stub/stylua" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"$STYLUA_LOG"
+check=0
+bad=0
+for arg in "$@"; do
+    [ "$arg" = --check ] && check=1
+done
+for arg in "$@"; do
+    [ -f "$arg" ] || continue
+    case "$arg" in *.toml) continue ;; esac
+    if grep -q UNFORMATTED "$arg"; then
+        if [ "$check" = 1 ]; then
+            bad=1
+        else
+            sed 's/UNFORMATTED/formatted/' "$arg" >"$arg.tmp" && mv "$arg.tmp" "$arg"
+        fi
+    fi
+done
+exit "$bad"
+EOF
+    chmod +x "$TMP/stylua-stub/stylua"
+    stylua_path="$TMP/stylua-stub:$full_path"
+    stylua_log="$TMP/stylua-calls"
+    : >"$stylua_log"
+    cp "$STYLE/rust/fmt.lua" "$rust/.dev/fmt.lua"
+    cp "$STYLE/lua/stylua.toml" "$rust/stylua.toml"
+    printf 'local a = UNFORMATTED\n' >"$rust/.dev/x.lua"
+    printf 'local a = UNFORMATTED\n' >"$rust/.ci/y.lua"
+    printf 'local a = UNFORMATTED\n' >"$rust/src/other.lua"
+    printf 'local a = UNFORMATTED\n' >"$rust/scripts/z.lua"
+
+    out="$(style_lint "$rust" "$stylua_path" DEV_REMOTE=0 STYLUA_LOG="$stylua_log")"
+    assert_contains "the rust set fails unformatted .dev and .ci Lua" "$out" "These checks failed: stylua."
+    assert_contains "the rust set checks with the root stylua.toml" "$(cat "$stylua_log")" "--check --config-path stylua.toml"
+    assert_contains "the rust set checks the .dev Lua" "$(cat "$stylua_log")" ".dev/x.lua"
+    assert_contains "the rust set checks the .ci Lua" "$(cat "$stylua_log")" ".ci/y.lua"
+    assert_not_contains "the rust set leaves Lua under src out of the check" "$(cat "$stylua_log")" "src/other.lua"
+    assert_not_contains "the rust set leaves Lua under scripts out of the check" "$(cat "$stylua_log")" "scripts/z.lua"
+
+    (cd "$rust" && env PATH="$stylua_path" DEV_REMOTE=0 STYLUA_LOG="$stylua_log" bash "$DEV" fmt >/dev/null 2>&1)
+    assert_eq "dev fmt formats the .dev Lua of a rust project" "$(cat "$rust/.dev/x.lua")" "local a = formatted"
+    assert_eq "dev fmt formats the .ci Lua of a rust project" "$(cat "$rust/.ci/y.lua")" "local a = formatted"
+    assert_eq "dev fmt leaves Lua under src byte for byte unchanged" "$(cat "$rust/src/other.lua")" "local a = UNFORMATTED"
+    assert_eq "dev fmt leaves Lua under scripts byte for byte unchanged" "$(cat "$rust/scripts/z.lua")" "local a = UNFORMATTED"
+    out="$(style_lint "$rust" "$stylua_path" DEV_REMOTE=0 STYLUA_LOG="$stylua_log")"
+    assert_not_contains "the rust set passes once the .dev and .ci Lua is formatted" "$out" "These checks failed"
+    assert_eq "dev lint leaves Lua under src byte for byte unchanged" "$(cat "$rust/src/other.lua")" "local a = UNFORMATTED"
+    rm "$rust/.dev/x.lua" "$rust/.dev/fmt.lua" "$rust/.ci/y.lua" "$rust/src/other.lua" "$rust/scripts/z.lua" "$rust/stylua.toml"
+    rmdir "$rust/.ci"
+
     printf 'pub fn run() {\n    // First line\n    // second line\n    // third line\n    flush();\n}\n' >"$rust/src/runs.rs"
     out="$(style_lint "$rust" "$full_path")"
     assert_contains "comment runs warns and passes: the warning line" "$out" "src/runs.rs:2: 3 consecutive comment lines"
@@ -306,7 +359,7 @@ else
     assert_contains "a missing cargo-sort fails under CI" "$out" "Tool cargo-sort not found. The cargo sort check cannot run."
     assert_contains "a missing cargo-deny fails under CI" "$out" "Tool cargo-deny not found. The cargo deny check cannot run."
     assert_contains "a missing nightly rustfmt fails under CI" "$out" "Tool nightly rustfmt not found. The cargo fmt check cannot run."
-    assert_contains "the CI failure lists each skipped check" "$out" "These checks failed: cargo fmt, ast-grep scan, cargo sort, cargo deny."
+    assert_contains "the CI failure lists each skipped check" "$out" "These checks failed: cargo fmt, stylua, ast-grep scan, cargo sort, cargo deny."
 
     printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\npublish = false\n' >"$rust/Cargo.toml"
     out="$(style_lint "$rust" "$bare_path")"
