@@ -42,6 +42,31 @@ function M.drain(file)
     return file:read("*a")
 end
 
+---The author and committer a test's git commits carry.
+M.GIT_IDENT = {
+    GIT_AUTHOR_NAME = "t",
+    GIT_AUTHOR_EMAIL = "t@example.com",
+    GIT_COMMITTER_NAME = "t",
+    GIT_COMMITTER_EMAIL = "t@example.com",
+}
+
+---Run git in a directory with the test identity and no signing, failing the test when git fails.
+---@param dir string the repository directory
+---@param ... string the git arguments
+function M.git(dir, ...)
+    local argv = { "git", "-C", dir, "-c", "commit.gpgsign=false", ... }
+    local code = dev_os.run(argv, { stdout = "null", stderr = "null", env = M.GIT_IDENT })
+    assert(code == 0, "git failed: " .. table.concat({ ... }, " "))
+end
+
+---Resolve a name to a commit in a repository.
+---@param dir string the repository directory
+---@param name string a ref or revision
+---@return string sha the full commit id
+function M.rev(dir, name)
+    return (dev_os.capture({ "git", "-C", dir, "rev-parse", name }):match("^(%x+)"))
+end
+
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"

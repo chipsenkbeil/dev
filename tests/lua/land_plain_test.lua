@@ -3,22 +3,9 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
-local IDENT = {
-    GIT_AUTHOR_NAME = "t",
-    GIT_AUTHOR_EMAIL = "t@example.com",
-    GIT_COMMITTER_NAME = "t",
-    GIT_COMMITTER_EMAIL = "t@example.com",
-}
-
-local function git(dir, ...)
-    local argv = { "git", "-C", dir, "-c", "commit.gpgsign=false", ... }
-    local code = dev_os.run(argv, { stdout = "null", stderr = "null", env = IDENT })
-    assert(code == 0, "git failed: " .. table.concat({ ... }, " "))
-end
-
-local function rev(dir, name)
-    return (dev_os.capture({ "git", "-C", dir, "rev-parse", name }):match("^(%x+)"))
-end
+local IDENT = support.GIT_IDENT
+local git = support.git
+local rev = support.rev
 
 local function project()
     local root = support.sandbox({ [".dev/config.toml"] = "" }, {})

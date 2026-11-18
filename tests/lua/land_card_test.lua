@@ -5,25 +5,13 @@ local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
 
-local GIT_IDENT = {
-    GIT_AUTHOR_NAME = "t",
-    GIT_AUTHOR_EMAIL = "t@example.com",
-    GIT_COMMITTER_NAME = "t",
-    GIT_COMMITTER_EMAIL = "t@example.com",
-}
+local GIT_IDENT = support.GIT_IDENT
+local git = support.git
+local rev = support.rev
 
 local function must(first, second)
     local code = type(first) == "number" and first or second
     assert(code == 0, tostring(first))
-end
-
-local function git(dir, ...)
-    local argv = { "git", "-C", dir, "-c", "commit.gpgsign=false", ... }
-    must(dev_os.run(argv, { stdout = "null", stderr = "null", env = GIT_IDENT }))
-end
-
-local function rev(dir, name)
-    return (dev_os.capture({ "git", "-C", dir, "rev-parse", name }):match("^(%x+)"))
 end
 
 local function dev(tree, args, extra)
