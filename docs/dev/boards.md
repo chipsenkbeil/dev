@@ -1859,10 +1859,11 @@ this project's board, from a fresh `GET /api/boards/{id}`.
 - A second word is exit 2.
 
 A card with the `trunk-blocker` label skips these limits. `take` and `move` do
-not refuse it at a column or group limit, and `move` adds `force: true` to the
-Pomb move request, which makes Pomb skip the limits too. A move of any other
-card sends no `force`. Only a card whose change unblocks every landing carries
-the label, and the owner's standing exemption decides which one that is.
+not refuse it at a column or group limit, and `move` adds `?force=true` to the
+Pomb move URL (the only place Pomb reads it), which makes Pomb skip the limits
+too. A move of any other card sends no `force`. Only a card whose change
+unblocks every landing carries the label, and the owner's standing exemption
+decides which one that is.
 
 The limits let through at most one trunk-blocker card at a time. While another
 card in the group's columns carries the label, a second one is checked against

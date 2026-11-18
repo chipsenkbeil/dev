@@ -1477,7 +1477,7 @@ function Backend:move(id, column, opts)
         return nil, unavailable("the board has no " .. column .. " column")
     end
     opts = opts or {}
-    local body = { column_id = target, position = opts.position or TOP, force = opts.force }
+    local body = { column_id = target, position = opts.position or TOP }
     if opts.lane then
         body.swimlane_id = self:__lane_id(opts.lane)
         if not body.swimlane_id then
@@ -1485,8 +1485,12 @@ function Backend:move(id, column, opts)
         end
     end
     local moved, status, doc
-    moved, message, status, doc =
-        self:__request("POST", "/api/tasks/" .. id .. "/move", body, opts.fence)
+    moved, message, status, doc = self:__request(
+        "POST",
+        "/api/tasks/" .. id .. "/move" .. (opts.force and "?force=true" or ""),
+        body,
+        opts.fence
+    )
     if not moved then
         if status == CONFLICT and type(doc) == "table" and doc.code == LIMIT_REACHED then
             return nil, present(doc.message) or message, FULL

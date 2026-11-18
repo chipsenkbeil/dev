@@ -327,7 +327,9 @@ testing.test("take and move accept a trunk-blocker card at the group limit", fun
     testing.ok(out:find("took dddddddd", 1, true), out)
     out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 0, out)
-    testing.ok(read(box, "calls"):find('"force":true', 1, true), read(box, "calls"))
+    local calls = read(box, "calls")
+    testing.ok(calls:find("/move?force=true", 1, true), calls)
+    testing.eq(calls:find('"force"', 1, true), nil)
 end)
 
 testing.test("a second trunk-blocker card at the group limit is refused", function()
