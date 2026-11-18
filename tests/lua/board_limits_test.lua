@@ -330,6 +330,25 @@ testing.test("take and move accept a trunk-blocker card at the group limit", fun
     testing.ok(read(box, "calls"):find('"force":true', 1, true), read(box, "calls"))
 end)
 
+testing.test("a second trunk-blocker card at the group limit is refused", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export({
+            { "a", ID.PROGRESS, TASK, { board.TRUNK_BLOCKER } },
+            { "b", ID.REVIEW, TASK },
+            { "c", ID.VERIFY, TASK },
+            { "d", ID.READY, TASK, { board.TRUNK_BLOCKER } },
+        }),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 1, out)
+    testing.eq(out, IN_FLIGHT)
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
+    testing.eq(code, 3, out)
+    testing.eq(read(box, "calls"):find("/move", 1, true), nil)
+end)
+
 testing.test("a card with another label is still refused at the group limit", function()
     local box = sandbox({
         project = POMB,

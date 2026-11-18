@@ -46,28 +46,49 @@ local function holding(cards, card, columns)
     return held
 end
 
+local function another_blocker(cards, card, limits)
+    local columns = {}
+    for _, group in ipairs(limits.groups) do
+        for _, name in ipairs(group.columns) do
+            columns[#columns + 1] = name
+        end
+    end
+    for _, other in ipairs(holding(cards, card, columns)) do
+        if board.labelled(other, board.TRUNK_BLOCKER) then
+            return true
+        end
+    end
+    return false
+end
+
 ---Say why `card` may not enter `target`, when a Pomb limit forbids it. A card that carries the
----trunk-blocker label is never refused.
+---trunk-blocker label skips every limit while no other card in a limit group carries it.
 ---
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card the caller is about to move
 ---@param target string the column it moves to
 ---@return string? message the refusal naming the cards, or the read failure, nil when the move fits
 function M.refusal(backend, card, target)
-    -- A trunk-blocker card skips every limit, so it is never refused
-    if board.labelled(card, board.TRUNK_BLOCKER) then
-        return nil
+    -- Note whether the card is a trunk-blocker, which skips the limits
+    local blocker = board.labelled(card, board.TRUNK_BLOCKER)
+
+    -- A limit that cannot be read must stop the move, since a guess could overfill a column, but
+    -- never a trunk-blocker card
+    local limits, message = backend:limits()
+    local cards
+    if limits then
+        cards, message = backend:cards()
+    end
+    if not cards then
+        if blocker then
+            return nil
+        end
+        return message
     end
 
-    -- A limit that cannot be read must stop the move, since a guess could overfill a column
-    local limits, message = backend:limits()
-    if not limits then
-        return message
-    end
-    local cards
-    cards, message = backend:cards()
-    if not cards then
-        return message
+    -- Only the first trunk-blocker card skips the limits, a second one counts like any card
+    if blocker and not another_blocker(cards, card, limits) then
+        return nil
     end
 
     -- A column's own limit counts the cards already in it, so a card staying put is never refused

@@ -1863,6 +1863,10 @@ Pomb move request, which makes Pomb skip the limits too. A move of any other
 card sends no `force`. Only a card whose change unblocks every landing carries
 the label, and the owner's standing exemption decides which one that is.
 
+The limits let through at most one trunk-blocker card at a time. While another
+card in the group's columns carries the label, a second one is checked against
+the limits like any card, so a full group refuses it.
+
 `dev board limits --set N` sets the limit of the group that holds the In
 Progress, Review and Verify columns on this project's board.
 
