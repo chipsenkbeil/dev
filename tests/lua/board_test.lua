@@ -11632,6 +11632,9 @@ local function proof_backend(parts)
     local backend = fake({ card })
     backend.root = "/proof"
     backend.listed = {}
+    if parts.landed then
+        backend.listed[#backend.listed + 1] = { body = "Landed commit abcdef1234 on trunk." }
+    end
     if parts.check then
         local rows = { { run = "dev test", result = check.Result.PASS, run_id = "ab12" } }
         backend.listed[#backend.listed + 1] = { body = check.record(PROOF, rows, false) }
@@ -11692,14 +11695,78 @@ testing.test("a move into Done without a passing check is refused", function()
     testing.ok(result.message:find("dev board check", 1, true), result.message)
 end)
 
-local function empty_move(backend)
+local function empty_move(backend, column, holds)
     local opts = {
+        holds = holds,
         state = function()
             return nil, "The working-copy commit is empty. There is no change to land."
         end,
     }
-    return cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.DONE }, opts)
+    return cmd_board.move(backend, { "cccccccc", column or support.COLUMN_NAME.DONE }, opts)
 end
+
+local function trunk_holds()
+    return true
+end
+
+local function trunk_lacks()
+    return false
+end
+
+for _, column in ipairs({ support.COLUMN_NAME.DONE, support.COLUMN_NAME.RELEASE }) do
+    testing.test("a landed card moves to " .. column .. " with an empty working copy", function()
+        local backend = proof_backend({ ticked = true, landed = true })
+        local result = empty_move(backend, column, trunk_holds)
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to " .. column)
+    end)
+end
+
+testing.test("a landed card asks whether trunk holds the commit its note names", function()
+    local backend = proof_backend({ ticked = true, landed = true })
+    local asked
+    local result = empty_move(backend, nil, function(_, commit, rev)
+        asked = { commit = commit, rev = rev }
+        return true
+    end)
+    testing.eq(result.code, nil)
+    testing.eq(asked.commit, "abcdef1234")
+    testing.eq(asked.rev, "trunk()")
+end)
+
+testing.test("a card whose notes cannot be read is refused with an empty working copy", function()
+    local backend = proof_backend({ ticked = true, landed = true })
+    backend.listed_error = "no notes"
+    local result = empty_move(backend, nil, trunk_holds)
+    testing.eq(result.code, 1)
+end)
+
+testing.test(
+    "a card whose landed commit is not on trunk is refused with an empty working copy",
+    function()
+        local backend = proof_backend({ ticked = true, landed = true })
+        local result = empty_move(backend, nil, trunk_lacks)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("There is no change to land", 1, true), result.message)
+    end
+)
+
+testing.test("a card with no landed note is refused with an empty working copy", function()
+    local backend = proof_backend({ ticked = true })
+    local result = empty_move(backend, nil, trunk_holds)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("There is no change to land", 1, true), result.message)
+end)
+
+testing.test(
+    "a landed card with an unticked outcome is refused with an empty working copy",
+    function()
+        local backend = proof_backend({ landed = true })
+        local result = empty_move(backend, nil, trunk_holds)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("1 of 1 outcomes are unticked", 1, true), result.message)
+    end
+)
 
 testing.test("a card labelled no-change moves to Done with an empty working copy", function()
     local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })

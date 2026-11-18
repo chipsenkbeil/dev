@@ -1579,6 +1579,13 @@ local function move_once(backend, args, opts)
         and not (opts and (opts.landed or opts.drop))
         and not board.labelled(card, board.TRUNK_BLOCKER)
         and not (to_done and board.labelled(card, board.NO_CHANGE))
+    if proving and guards.landed_on_trunk(backend, card, opts) then
+        local refused = guards.done_refusal(card, column)
+        if refused then
+            return to_done and unqueued(refused) or refused
+        end
+        proving = false
+    end
     if proving then
         local refused = guards.proof_refusal(backend, card, column, opts)
         if refused then
@@ -1743,6 +1750,8 @@ end
 ---@field landed boolean? skips the proof of a move into Release or Done that land already checked
 ---@field state (fun(root: string): dev.board.check.State?, string?)? reads the commit the proof
 ---   of a move into Release or Done covers, `land.state` when nil
+---@field holds (fun(root: string, commit: string, rev: string): boolean)? says whether
+---   trunk holds a card's landed commit, `land.holds` when nil
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
 

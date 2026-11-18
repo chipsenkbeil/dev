@@ -441,6 +441,27 @@ M.unqueued = unqueued
 M.agent_name = agent_name
 M.stage_refusal = stage_refusal
 M.row_refusal = row_refusal
+---Say whether the commit a card's land note names is already on trunk.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param opts {holds: (fun(root: string, commit: string, rev: string): boolean)?}? `holds` reads
+---   the ancestry, `land.holds` when nil
+---@return boolean landed true when trunk holds the landed commit
+local function landed_on_trunk(backend, card, opts)
+    local root = backend.root
+    local holds = opts and opts.holds
+    if not root or not (holds or vcs.backend(root)) then
+        return false
+    end
+    local comments = backend:comments(card.id)
+    local commit = comments and land.landed_commit(comments)
+    if not commit then
+        return false
+    end
+    return (holds or land.holds)(root, commit, vcs.backend(root) == vcs.GIT and "HEAD" or "trunk()")
+end
+
+M.landed_on_trunk = landed_on_trunk
 M.workspace_refusal = workspace_refusal
 M.other_home = other_home
 M.on_board = on_board
