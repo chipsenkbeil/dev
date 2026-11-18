@@ -2266,6 +2266,25 @@ local function split_ticker(args)
     return args
 end
 
+---Refuse an outcome change on a card in a column the board locks.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card whose outcomes change
+---@param what string the change, as the refusal names it
+---@return dev.cmd.board.Result? refusal nil when the card's outcomes may change
+local function outcomes_locked_refusal(backend, card, what)
+    local rows, why = backend:columns()
+    if not rows then
+        return unqueued(
+            failure("Cannot read the board's columns to check its outcome lock: " .. tostring(why))
+        )
+    end
+    local locked = require("dev.board.outcome_lock").refusal(rows, card.column, what)
+    if locked then
+        return unqueued(failure(locked))
+    end
+    return nil
+end
+
 local function convert_outcomes(backend, card, opts)
     local fence = opts.fence
     local prefix = card.id:sub(1, board.MIN_PREFIX)
@@ -2415,6 +2434,10 @@ function commands.outcome(backend, args)
         if refused then
             return refused
         end
+        refused = outcomes_locked_refusal(backend, card, CONVERT_FLAG)
+        if refused then
+            return refused
+        end
         local held = claims.read(card.id)
         return convert_outcomes(backend, card, { fence = held and held.fence, flag = ticker_flag })
     elseif not mode then
@@ -2482,17 +2505,19 @@ function commands.outcome(backend, args)
         if refused then
             return refused
         end
+        refused = outcomes_locked_refusal(
+            backend,
+            card,
+            mode == OutcomeMode.ADD and "adding an outcome" or mode
+        )
+        if refused then
+            return refused
+        end
     elseif mode == OutcomeMode.TICK then
         local refused
         refused, ticker = guards.tick_refused(card, ticker_flag)
         if refused then
             return refused
-        end
-    end
-    if mode == OutcomeMode.DELETE then
-        local locked = require("dev.board.outcome_lock").refusal(backend.roles, card.column)
-        if locked then
-            return unqueued(failure(locked))
         end
     end
     local held = claims.read(card.id)

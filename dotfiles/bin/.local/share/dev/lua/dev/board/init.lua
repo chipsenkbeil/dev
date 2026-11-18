@@ -168,6 +168,16 @@ local function columns_step(layout, state, say)
         { column = roles.release, name = "release" },
     }) do
         local column = present[stage.column:lower()]
+        if column.outcomes_locked == false then
+            local ok, message, changed = layout:lock_outcomes(column.id)
+            if not ok then
+                return nil, message
+            end
+            if changed then
+                say("locked the outcomes of " .. column.name)
+                state.changes = state.changes + 1
+            end
+        end
         if not column.stage then
             local ok, message, changed = layout:set_stage(column.id, stage.name)
             if not ok then

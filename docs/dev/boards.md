@@ -1087,17 +1087,19 @@ A queued tick keeps the name it resolved, so a later sync records the same
 ticker.
 
 `outcome CARD --delete N --reason TEXT [--as NAME]` removes the Nth outcome
-(`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) from a card in Blocked,
-Backlog or Icebox. Outcomes are fixed from Ready on.
+(`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) from a card in a column
+the board leaves unlocked.
 
-A card is refused with exit 1 naming the column, with nothing written or queued,
-when it sits in:
-
-- a column mapped to the ready, progress, review, verify or release role
-- a finished column
-- a column outside the role map
-
-The roles come from `[board.columns]` and `is_done`, never from a column name.
+The outcome lock is a per-column board setting, `outcomes_locked` on Pomb. It
+refuses an add, `--convert`, `--rename` and `--delete` on a card in a locked
+column. The refusal is exit 1, names the column, says to move the card to
+Backlog first, and writes or queues nothing. `--tick` and `--untick` work in
+every column. `dev board init` turns the lock on for the Ready, In Progress,
+Review, Verify and Release columns and leaves Icebox and Backlog unlocked, and
+a rerun changes nothing. A human switches the lock on or off per column in the
+board's column rules. The command reads the setting on every call and names no
+column itself. A board that cannot be read refuses the change. A local board has
+no such setting, so it locks nothing.
 
 Only the lead deletes an outcome. A `DEV_AGENT` whose role segment is not lead
 is refused with exit 1 and nothing written, before any backend call. A runner,

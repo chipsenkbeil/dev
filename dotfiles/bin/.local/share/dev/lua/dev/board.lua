@@ -68,6 +68,8 @@ end
 ---@field is_done boolean whether a card in it counts as finished
 ---@field wip_limit integer? how many cards it holds at most, nil when it has no limit, and always
 ---   nil on a local board
+---@field outcomes_locked boolean? whether the board refuses outcome changes on a card in it, nil
+---   when the backend sends no such key and always nil on a local board
 
 ---@class dev.board.OutcomeFields
 ---@field name string? the new wording of the outcome
@@ -289,6 +291,8 @@ end
 ---   made the one of cards waiting on an answer, third value true when it changed one
 ---@field set_stage fun(self: dev.board.Layout, id: string, stage: string): boolean?, string?,
 ---   boolean? a column given a stage, third value true when it wrote one
+---@field lock_outcomes fun(self: dev.board.Layout, id: string): boolean?, string?, boolean? a column
+---   that refuses outcome changes, third value true when it wrote the lock
 ---@field set_color fun(self: dev.board.Layout, id: string, fields: table<string, any>): boolean?,
 ---   string? a colour's label, description, default flag or enabled flag
 ---@field add_highlights fun(self: dev.board.Layout, wanted: dev.board.Highlight[]): string[]|false|
@@ -316,6 +320,8 @@ end
 ---@field is_blocked boolean? whether it holds the cards waiting on an answer, nil when the backend
 ---   sends no such key
 ---@field stage string? the stage the column holds, nil when it holds none
+---@field outcomes_locked boolean? whether the board refuses outcome changes on a card in it, nil
+---   when the backend sends no such key
 
 ---@class dev.board.LayoutColor
 ---@field id string the colour's id

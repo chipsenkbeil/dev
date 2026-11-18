@@ -129,6 +129,9 @@ local function fake_layout(opts)
             if column.is_blocked == nil and not opts.without_blocked then
                 column.is_blocked = false
             end
+            if column.outcomes_locked == nil then
+                column.outcomes_locked = false
+            end
         end
         return copy({
             columns = columns,
@@ -202,6 +205,15 @@ local function fake_layout(opts)
         for _, column in ipairs(state.columns) do
             if column.id == id then
                 column.stage = stage
+            end
+        end
+        return true, nil, true
+    end
+    function layout:lock_outcomes(id)
+        write("lock_outcomes", id)
+        for _, column in ipairs(state.columns) do
+            if column.id == id then
+                column.outcomes_locked = true
             end
         end
         return true, nil, true
@@ -614,12 +626,14 @@ local STAGE_OF = {
 local function column_json(name)
     local stage = STAGE_OF[name]
     return string.format(
-        '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s,"stage":%s}',
+        '{"id":"col-%s","name":"%s","wip_limit":null,"is_done":%s,"is_blocked":%s,"stage":%s,'
+            .. '"outcomes_locked":%s}',
         name:gsub(" ", ""),
         name,
         name == support.COLUMN_NAME.DONE and "true" or "false",
         name == support.COLUMN_NAME.BLOCKED and "true" or "false",
-        stage and '"' .. stage .. '"' or "null"
+        stage and '"' .. stage .. '"' or "null",
+        stage and "true" or "false"
     )
 end
 local function detail()
@@ -1623,6 +1637,51 @@ testing.test("init sets the five stages on columns that hold none and says each"
         )
     end
     testing.eq(writes(root), #STAGE_CALLS)
+end)
+
+testing.test("init locks outcomes on the working and stage columns and says each", function()
+    local root, home, tmp = sandbox()
+    local unlocked = detail():gsub('"outcomes_locked":true', '"outcomes_locked":false')
+    assert(fs.write(root .. "/detail.json", unlocked))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    for _, call in ipairs(STAGE_CALLS) do
+        testing.ok(
+            calls_of(root):find(
+                '--data-raw {"outcomes_locked":true} https://pomb.example/api/columns/' .. call.id,
+                1,
+                true
+            ),
+            calls_of(root)
+        )
+        testing.ok(out:find("locked the outcomes of " .. call.column .. "\n", 1, true), out)
+    end
+    testing.eq(writes(root), #STAGE_CALLS)
+end)
+
+testing.test(
+    "init locks outcomes on the working and stage columns and a rerun changes nothing",
+    function()
+        local layout = fake_layout({ columns = template_columns() })
+        local _, message, lines = run(layout)
+        testing.eq(message, nil)
+        local text = table.concat(lines, "\n")
+        testing.ok(
+            text:find("locked the outcomes of " .. support.COLUMN_NAME.PROGRESS, 1, true),
+            text
+        )
+        local again, _, said = run(layout)
+        testing.eq(again, 0)
+        testing.eq(said, {})
+    end
+)
+
+testing.test("init sends no outcome lock write when every lock is set", function()
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(out:find("locked the outcomes", 1, true), nil)
+    testing.eq(writes(root), 0)
 end)
 
 testing.test("init sends no stage write when every stage is set", function()

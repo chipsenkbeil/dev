@@ -66,6 +66,9 @@ local function fake(cards, times, finished)
         for _, name in ipairs(backend.limited or {}) do
             rows[#rows + 1] = { name = name, is_done = false, wip_limit = 2 }
         end
+        for _, name in ipairs(backend.locked or {}) do
+            rows[#rows + 1] = { name = name, is_done = false, outcomes_locked = true }
+        end
         return rows
     end
     function backend:entered()
@@ -3545,75 +3548,118 @@ local function card_in(column)
     return card
 end
 
-testing.test("outcome delete refuses a card in a ready-role column", function()
+local LOCKED_COLUMNS = {
+    support.COLUMN_NAME.READY,
+    support.COLUMN_NAME.PROGRESS,
+    support.COLUMN_NAME.REVIEW,
+    support.COLUMN_NAME.VERIFY,
+    support.COLUMN_NAME.RELEASE,
+}
+
+local function locked_fake(column, locked)
+    local backend = fake({ card_in(column) })
+    backend.locked = locked or LOCKED_COLUMNS
+    return backend
+end
+
+local function outcome_run(backend, args)
+    local result
+    as_agent(LEAD, function()
+        result = cmd_board.run("outcome", args, backend)
+    end)
+    return result
+end
+
+local function refused_in_locked(result, column)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find(column, 1, true), result.message)
+    testing.ok(result.message:find("locks outcomes", 1, true), result.message)
+    testing.ok(result.message:find("Move the card to Backlog first", 1, true), result.message)
+    testing.eq(result.unqueued, true)
+end
+
+testing.test("an outcome add in a locked column is refused with the column named", function()
+    for _, column in ipairs(LOCKED_COLUMNS) do
+        local backend = locked_fake(column)
+        refused_in_locked(outcome_run(backend, { "cccccccc", "A", "new", "outcome" }), column)
+        testing.eq(#writes(backend), 0)
+        backend = locked_fake(column)
+        refused_in_locked(outcome_run(backend, { "cccccccc", "--convert" }), column)
+        testing.eq(#writes(backend), 0)
+    end
+end)
+
+testing.test("outcome rename and delete in a locked column are refused", function()
+    for _, column in ipairs(LOCKED_COLUMNS) do
+        local backend = locked_fake(column)
+        local renamed =
+            outcome_run(backend, { "cccccccc", "--rename", "1", "New", "--reason", "why" })
+        refused_in_locked(renamed, column)
+        testing.ok(renamed.message:find("rename is refused", 1, true), renamed.message)
+        refused_in_locked(delete_in(backend, "cccccccc"), column)
+        testing.eq(#writes(backend), 0)
+    end
+end)
+
+testing.test("outcome add rename and delete work in an unlocked column", function()
     for _, column in ipairs({
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.BLOCKED,
+        "QA",
+    }) do
+        local backend = locked_fake(column)
+        testing.eq(
+            outcome_run(backend, { "cccccccc", "A", "new", "outcome" }).output,
+            "outcome cccccccc 3 added"
+        )
+        testing.eq(
+            outcome_run(backend, { "cccccccc", "--rename", "1", "New", "--reason", "why" }).output,
+            "outcome cccccccc 1 reworded"
+        )
+        testing.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
+    end
+end)
+
+testing.test("outcome tick and untick work in every column", function()
+    for _, column in ipairs({
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.PROGRESS,
         support.COLUMN_NAME.REVIEW,
         support.COLUMN_NAME.VERIFY,
         support.COLUMN_NAME.RELEASE,
     }) do
-        local backend = fake({ card_in(column) })
-        local result = delete_in(backend, "cccccccc")
-        testing.eq(result.code, 1)
-        testing.ok(result.message:find(column, 1, true), result.message)
-        testing.ok(result.message:find("fixed from Ready on", 1, true), result.message)
-        testing.eq(result.unqueued, true)
-        testing.eq(#writes(backend), 0)
+        local backend = locked_fake(column)
+        local ticked = cmd_board.run("outcome", { "cccccccc", "--tick", "1" }, backend)
+        testing.eq(ticked.output, "outcome cccccccc 1 ticked", column)
+        local unticked = cmd_board.run("outcome", { "cccccccc", "--untick", "1" }, backend)
+        testing.eq(unticked.output, "outcome cccccccc 1 unticked", column)
     end
 end)
 
-testing.test("outcome delete refuses a card in a finished column", function()
-    for _, column in ipairs({ support.COLUMN_NAME.DONE, "Archive" }) do
-        local backend = fake({ card_in(column) }, nil, { support.COLUMN_NAME.DONE, "Archive" })
-        local result = delete_in(backend, "cccccccc")
-        testing.eq(result.code, 1)
-        testing.ok(result.message:find(column, 1, true), result.message)
+testing.test("outcome change reads the board's lock on its own column names", function()
+    local custom = "Next"
+    local cased = "Parked"
+    for _, column in ipairs({ custom, cased:lower(), "QA" }) do
+        local backend = locked_fake(column, { custom, cased, "QA" })
+        refused_in_locked(delete_in(backend, "cccccccc"), column)
         testing.eq(#writes(backend), 0)
     end
+    local backend = locked_fake(support.COLUMN_NAME.READY, { custom })
+    testing.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
 end)
 
-testing.test("outcome delete reads the renamed role columns", function()
-    local map = { ready = "Next", progress = "Doing", review = "Looking", done = "Shipped" }
-    for _, column in ipairs({ "Next", "Doing", "Looking", "Shipped" }) do
-        local backend = fake({ card_in(column) }, nil, { "Shipped" })
-        backend.column_map = map
-        local result = delete_in(backend, "cccccccc")
-        testing.eq(result.code, 1, column)
-        testing.ok(result.message:find(column, 1, true), result.message)
-        testing.eq(#writes(backend), 0)
+testing.test("outcome change refuses when the board's columns cannot be read", function()
+    local backend = locked_fake(support.COLUMN_NAME.BACKLOG)
+    function backend:columns()
+        return nil, "pomb is down"
     end
-    for _, column in ipairs({ support.COLUMN_NAME.READY, support.COLUMN_NAME.PROGRESS }) do
-        local backend = fake({ card_in(column) }, nil, { "Shipped" })
-        backend.column_map = map
-        testing.eq(delete_in(backend, "cccccccc").code, 1, column)
-        testing.eq(#writes(backend), 0)
-    end
-end)
-
-testing.test("outcome delete refuses an unmapped column", function()
-    local backend = fake({ card_in("QA") })
-    local result = delete_in(backend, "cccccccc")
+    local result = outcome_run(backend, { "cccccccc", "A", "new", "outcome" })
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("QA", 1, true), result.message)
-    testing.ok(result.message:find("fixed from Ready on", 1, true), result.message)
-    testing.eq(result.unqueued, true)
+    testing.ok(result.message:find("pomb is down", 1, true), result.message)
     testing.eq(#writes(backend), 0)
-end)
-
-testing.test("outcome delete allows renamed blocked and backlog columns", function()
-    local map = { blocked = "Parked", backlog = "Someday" }
-    for _, column in ipairs({ "Parked", "parked", "SOMEDAY" }) do
-        local backend = fake({ card_in(column) })
-        backend.column_map = map
-        testing.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
-    end
-    for _, column in ipairs({ support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.BACKLOG }) do
-        local backend = fake({ card_in(column) })
-        backend.column_map = map
-        testing.eq(delete_in(backend, "cccccccc").code, 1, column)
-        testing.eq(#writes(backend), 0)
-    end
 end)
 
 testing.test("outcome delete is allowed in Blocked and Backlog", function()
@@ -6175,7 +6221,8 @@ end)
 testing.test(
     "outcome delete refuses a non-lead name before any request and a locked column before the DELETE",
     function()
-        local root, home = sandbox({ export = SUBTASKS_EXPORT, user = LEAD_USER })
+        local locked = DETAIL:gsub('"name":"Ready"', '"name":"Ready","outcomes_locked":true')
+        local root, home = sandbox({ export = SUBTASKS_EXPORT, user = LEAD_USER, detail = locked })
         local out, code = dev(
             root,
             home,

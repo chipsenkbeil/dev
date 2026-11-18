@@ -1,23 +1,24 @@
----The columns where a card's outcomes may be deleted, read from the board's resolved roles.
+---The columns where the board locks a card's outcomes, read from the board's own column setting.
 ---@class dev.board.outcome_lock
 local M = {}
 
-local ALLOWED_ROLES = { "blocked", "backlog", "icebox" }
-
----Name the refusal of an outcome delete on a card outside the columns that allow one.
----@param roles dev.board.Roles the board's resolved columns
+---Name the refusal of an outcome change on a card in a column the board locks.
+---@param rows dev.board.ColumnRow[] the board's columns
 ---@param column string the column the card sits in
----@return string? message the refusal, nil when the card may lose an outcome
-function M.refusal(roles, column)
+---@param what string the change, as the refusal names it
+---@return string? message the refusal, nil when the card's outcomes may change
+function M.refusal(rows, column, what)
     local lowered = column:lower()
-    for _, role in ipairs(ALLOWED_ROLES) do
-        if roles[role]:lower() == lowered then
-            return nil
+    for _, row in ipairs(rows) do
+        if row.outcomes_locked == true and row.name:lower() == lowered then
+            return "The card is in "
+                .. column
+                .. ", where the board locks outcomes, so "
+                .. what
+                .. " is refused. Move the card to Backlog first."
         end
     end
-    return "the card is in "
-        .. column
-        .. ", where outcomes are fixed from Ready on, so --delete is refused"
+    return nil
 end
 
 return M

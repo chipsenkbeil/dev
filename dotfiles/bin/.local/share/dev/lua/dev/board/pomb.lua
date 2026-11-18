@@ -1821,10 +1821,15 @@ function Backend:columns(name)
     end
     local rows = {}
     for _, column in ipairs(detail.columns) do
+        local locked = column.outcomes_locked
+        if type(locked) ~= "boolean" then
+            locked = nil
+        end
         rows[#rows + 1] = {
             name = column.name,
             is_done = column.is_done == true,
             wip_limit = type(column.wip_limit) == "number" and column.wip_limit or nil,
+            outcomes_locked = locked,
         }
     end
     return rows
@@ -2432,12 +2437,17 @@ function Backend:read()
         if type(stage) ~= "string" or stage == "" then
             stage = nil
         end
+        local locked = column.outcomes_locked
+        if type(locked) ~= "boolean" then
+            locked = nil
+        end
         columns[#columns + 1] = {
             id = column.id,
             name = column.name,
             is_done = column.is_done == true,
             is_blocked = blocked,
             stage = stage,
+            outcomes_locked = locked,
         }
     end
     for _, color in ipairs(palette) do
@@ -2656,6 +2666,14 @@ end
 
 function Backend:set_stage(id, stage)
     local done, message = self:__request("PATCH", "/api/columns/" .. id, { stage = stage })
+    if not done then
+        return nil, message
+    end
+    return true, nil, true
+end
+
+function Backend:lock_outcomes(id)
+    local done, message = self:__request("PATCH", "/api/columns/" .. id, { outcomes_locked = true })
     if not done then
         return nil, message
     end

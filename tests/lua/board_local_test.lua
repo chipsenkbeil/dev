@@ -1501,7 +1501,7 @@ testing.test("outcome delete on a local board needs no lead token", function()
     testing.eq(#document(file_of(home)).cards[1].outcomes, 1)
 end)
 
-testing.test("outcome delete refuses from Ready on on a local board", function()
+testing.test("outcome delete works in any column on a local board, which has no lock", function()
     local root, home = local_board()
     local out, code = dev(root, home, {
         "board",
@@ -1535,9 +1535,9 @@ testing.test("outcome delete refuses from Ready on on a local board", function()
         { "board", "outcome", a, "--delete", "1", "--reason", "never possible" },
         lead
     )
-    testing.eq(code, 1, out)
-    testing.ok(out:find("Ready", 1, true) and out:find("fixed from Ready on", 1, true), out)
-    testing.eq(#document(file_of(home)).cards[1].outcomes, 3)
+    testing.eq(code, 0, out)
+    testing.eq(out, "outcome " .. a .. " 1 deleted\n")
+    testing.eq(#document(file_of(home)).cards[1].outcomes, 2)
 end)
 
 testing.test("a local board converts a v1 checklist into outcomes and ticks", function()

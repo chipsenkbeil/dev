@@ -1240,6 +1240,10 @@ function Backend:set_stage()
     return true, nil, false
 end
 
+function Backend:lock_outcomes()
+    return true, nil, false
+end
+
 function Backend:set_color(id, fields)
     return self:__update(function(doc)
         local color = find_by_id(doc.colors, id)
