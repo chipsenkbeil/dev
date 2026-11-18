@@ -9,6 +9,7 @@ local land = require("dev.board.land")
 local remote = require("dev.remote")
 local render = require("dev.board.render")
 local runner = require("dev.board.runner")
+local scm = require("dev.scm")
 local standalone = require("dev.standalone")
 local store = require("dev.board.store")
 local turn = require("dev.board.turn")
@@ -523,7 +524,7 @@ local function land_prepare(opts)
     if not state_ok then
         return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
     end
-    local rebased, why = land.rebase(backend.root)
+    local rebased, why = scm.workspace(backend.root):rebase()
     if rebased == nil then
         return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
     end
@@ -642,7 +643,7 @@ local function land_held(opts)
                 .. table.concat(current, "\n  - ")
         )
     end
-    local rebased, why = land.rebase(backend.root)
+    local rebased, why = scm.workspace(backend.root):rebase()
     if rebased == nil then
         return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
     end
@@ -685,7 +686,7 @@ local function land_held(opts)
         return lost
     end
     local in_git = vcs.backend(backend.root) == vcs.GIT
-    local landed, output = land.run(backend.root)
+    local landed, output = scm.workspace(backend.root):merge_into_trunk()
     if not landed then
         return failure(
             "Card "

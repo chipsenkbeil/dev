@@ -5004,6 +5004,17 @@ local function settings(ctx)
     }
 end
 
+---Build the backend of the board a project root configures.
+---@param root string the project root
+---@return dev.board.Backend? backend the board's backend
+---@return string? message why there is none
+function M.backend_at(root)
+    if config.get(root, "board.backend") == nil then
+        return nil, "The project at " .. root .. " has no `[board]` section."
+    end
+    return M.open(settings({ root = root }))
+end
+
 local function has_section(root)
     local text = fs.exists(root .. "/.dev/config.toml") and fs.read(root .. "/.dev/config.toml")
     local tree = text and toml.parse(text)

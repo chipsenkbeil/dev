@@ -35,7 +35,14 @@ The luajit modules of `dev`, one per item.
   result into output and an exit code.
 - `dev.board`: the column names and short forms, the card-id prefix match, the
   size label, the table lines and the `dev.board.Backend` interface the
-  commands call.
+  commands call. It is also the board half of dev's public API for verbs.
+  `board.find(workspace)` returns a board with `find_card`, `release_column`
+  and `done_column`, and a card found on it has `move_to`, `move_to_release`
+  and `move_to_done`. A verb calls them in its own order.
+- `dev.scm`: the source control half of that API, a new module over `dev.vcs`
+  and `dev.board.land`. `scm.workspace(root)` returns a workspace with `name`,
+  `is_dirty`, `touched`, `holds`, `rebase` and `merge_into_trunk`. `board land`
+  runs on it.
 - `dev.board.render`: the color terminal table and summary `board ls` prints.
 - `dev.board.guards`: the refusals and guards the `board` verbs run before they
   act, and the usage and failure results they return.

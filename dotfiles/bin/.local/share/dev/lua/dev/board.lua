@@ -5,6 +5,11 @@ local text = require("dev.text")
 ---@class dev.board
 local M = {}
 
+-- dev.cmd.board requires this module, so the require waits for the first call
+local function cmd_board()
+    return require("dev.cmd.board")
+end
+
 ---@class dev.board.claim.Opts
 ---@field ttl integer the seconds a Pomb grab or a lease claim lasts
 ---@field fence integer? the caller's live fence, which renews the claim it names
@@ -1258,6 +1263,86 @@ function M.table_lines(rows)
         lines[r] = table.concat(parts, text.GAP):gsub(" +$", "")
     end
     return lines
+end
+
+---A project's board, which a verb finds from a workspace.
+---@class dev.board.Board
+---@field backend dev.board.Backend the backend behind it
+local Board = {}
+Board.__index = Board
+
+---One card on a board.
+---@class dev.board.CardHandle
+---@field board dev.board.Board the board it is on
+---@field card dev.board.Card the card
+local CardHandle = {}
+CardHandle.__index = CardHandle
+
+---Find the board a workspace's project configures.
+---@param workspace dev.scm.Workspace the checkout a verb works in
+---@return dev.board.Board? found the board
+---@return string? message why the project has none
+function M.find(workspace)
+    local backend, message = cmd_board().backend_at(workspace.root)
+    if not backend then
+        return nil, message
+    end
+    M.retarget(backend, backend.column_map, backend.root, backend:done_columns() or {})
+    return setmetatable({ backend = backend }, Board)
+end
+
+---Find the card an id or a unique prefix of one names.
+---@param word string the id or a prefix of at least 8 characters
+---@return dev.board.CardHandle? card the card
+---@return string? message why no card matched
+function Board:find_card(word)
+    local cards, message = self.backend:cards()
+    if not cards then
+        return nil, message
+    end
+    local card, why = M.resolve(cards, word)
+    if not card then
+        return nil, why
+    end
+    return setmetatable({ board = self, card = card }, CardHandle)
+end
+
+---Name the column a landed card waits in for a deploy.
+---@return string column the release column
+function Board:release_column()
+    return self.backend.roles.release
+end
+
+---Name the column a finished card moves to.
+---@return string column the done column
+function Board:done_column()
+    return self.backend.roles:done_column()
+end
+
+---Move the card to a column.
+---@param column string the column's name
+---@return boolean? ok true when the card moved
+---@return string? message why it did not
+function CardHandle:move_to(column)
+    local result = cmd_board().move(self.board.backend, { self.card.id, column })
+    if result.code then
+        return nil, result.message
+    end
+    return true
+end
+
+---Move the card to the release column.
+---@return boolean? ok true when the card moved
+---@return string? message why it did not
+function CardHandle:move_to_release()
+    return self:move_to(self.board:release_column())
+end
+
+---Move the card to the done column.
+---@return boolean? ok true when the card moved
+---@return string? message why it did not
+function CardHandle:move_to_done()
+    return self:move_to(self.board:done_column())
 end
 
 return M
