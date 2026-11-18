@@ -263,8 +263,9 @@ return {
     {
         words = { "board", "status" },
         handler = "lua",
-        usage = "dev board status",
-        desc = "Print the board's backend and name",
+        flags = "--all",
+        usage = "dev board status [--all]",
+        desc = "Print the board's backend and name, or every needs:human card with --all",
     },
     {
         words = { "board", "init" },

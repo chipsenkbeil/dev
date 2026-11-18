@@ -175,6 +175,9 @@ end
 ---   backend's refusal, as for a card that is already an epic
 ---@field family fun(self: dev.board.Backend, id: string): dev.board.Family?, string? the card's
 ---   epic and the count of its children
+---@field needs_human fun(self: dev.board.Backend): dev.board.HumanCard[]?, string[]|string? every
+---   card labelled needs:human on the boards the token sees, newest column entry first, with the
+---   names of the boards whose cards the token could not read, or nil and a message
 ---@field other_board fun(self: dev.board.Backend, name: string): dev.board.Backend?, string? the
 ---   backend of another board on the same server, or nil and a message
 ---@field boards fun(self: dev.board.Backend): string[]?, string? the names of the boards the token
@@ -215,8 +218,27 @@ end
 ---@class dev.board.Family
 ---@field parent {id: string, name: string}? the epic the card is part of
 ---@field epic boolean whether the card is an epic, Pomb's kind epic or a card with children
----@field children {done: integer, total: integer}? how many of the card's children are done, nil
----   when it has none
+---@field children dev.board.Children? how many of the card's children are done, nil when it has
+---   none
+
+---@class dev.board.Children
+---@field done integer how many children are done
+---@field total integer how many children there are
+---@field items dev.board.Child[]? each child, when the backend lists them
+
+---@class dev.board.Child
+---@field id string the child's full id
+---@field name string the child's title
+---@field board string? the name of the child's board, nil on the epic's own board
+---@field column string? the name of the child's column
+---@field done boolean whether the child is done
+
+---@class dev.board.HumanCard
+---@field board string the name of the card's board
+---@field id string the card's full id
+---@field epic string the epic's name, `-` for none or unreadable
+---@field name string the card's title
+---@field entered string when the card entered its column, as an RFC 3339 stamp, empty when unknown
 
 ---@class dev.board.note.Opts
 ---@field kind string? the comment's kind, lowercase

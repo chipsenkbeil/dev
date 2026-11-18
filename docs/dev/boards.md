@@ -1692,9 +1692,24 @@ non-hidden row is missing from that listing.
 
 ### status
 
-`dev board status` prints the board the config names, with no network.
+`dev board status` prints the board the config names, with no network unless
+`--all` is given.
 
 - It prints `backend: pomb` and `board: <name>` from the config.
+
+`dev board status --all` then asks Pomb for every card labelled `needs:human`
+on the boards the token sees, the one inbox across boards.
+
+- It pages `GET /api/search?q=label:needs:human&limit=100` and follows
+  `next_cursor` until the reply holds none, then reads each hit's task for its
+  epic name and `column_entered_at` (`created_at` when that is absent).
+- It prints one line per card: board, id prefix (8 characters), epic (`-` for
+  none) and name, aligned, the card that entered its column last first. With no
+  such card it prints `No cards.`
+- A card whose task Pomb will not read is still listed, with `-` for its epic,
+  and one more line `unreadable: <board>, <board>` names the boards the token
+  could not read, in name order.
+- A local board has no other boards and prints `No cards.`
 
 ### init
 
@@ -2394,7 +2409,10 @@ The layout, top to bottom:
 - On a Pomb board, `link: <url>/t/<card id>` under that line, the link that
   opens the card. A local board has no host and prints none.
 - On a child, `parent: <id prefix> <name>` under the `ls` line. On an epic,
-  `kind: epic, N open` above it and `children: N of M done`.
+  `kind: epic, N open` above it and `children: N of M done`. On a Pomb board,
+  one line follows for each child in the task's `children` list:
+  `- [<board>] <id prefix> <name> (<column>)`. A child on another board carries
+  that board's name in brackets, and one on the epic's own board has none.
 - A blank line and the description (`no description` when empty), from the same
   `/export-data` read `ls` makes.
 - `done when:` and one `- [x] <outcome>` or `- [ ] <outcome>` line per outcome

@@ -1058,6 +1058,16 @@ local function kin_lines(family)
             .. " of "
             .. family.children.total
             .. " done\n"
+        for _, child in ipairs(family.children.items or {}) do
+            lines = lines
+                .. "- "
+                .. (child.board and "[" .. child.board .. "] " or "")
+                .. child.id:sub(1, board.MIN_PREFIX)
+                .. " "
+                .. child.name
+                .. (child.column and " (" .. child.column .. ")" or "")
+                .. "\n"
+        end
     end
     return lines
 end
@@ -5668,8 +5678,36 @@ M.handlers["board token revoke"] = function(ctx)
     return 0
 end
 
+function Owner.print_needs_human(found)
+    local backend, message = M.open(found)
+    if not backend then
+        verb.die(message)
+    end
+    local rows, unreadable = backend:needs_human()
+    if not rows then
+        verb.die(sentence(unreadable))
+    end
+    if #rows == 0 then
+        verb.say("No cards.")
+    else
+        local cells = {}
+        for i, row in ipairs(rows) do
+            cells[i] = { row.board, row.id:sub(1, board.MIN_PREFIX), row.epic, row.name }
+        end
+        verb.say(table.concat(board.table_lines(cells), "\n"))
+    end
+    if #unreadable > 0 then
+        verb.say("unreadable: " .. table.concat(unreadable, ", "))
+    end
+end
+
 M.handlers["board status"] = function(ctx)
-    verb.no_args(ctx)
+    local flags, extra = parse(ctx.args, { ["--all"] = SWITCH })
+    if not flags then
+        verb.usage_error(ctx, extra.message)
+    elseif #extra > 0 then
+        verb.usage_error(ctx, "unknown argument " .. extra[1])
+    end
     local found = settings(ctx)
     print("backend: " .. found.backend)
     print("board: " .. found.name)
@@ -5688,6 +5726,9 @@ M.handlers["board status"] = function(ctx)
                 print("queued: " .. left)
             end
         end
+    end
+    if flags["--all"] then
+        Owner.print_needs_human(found)
     end
     return 0
 end

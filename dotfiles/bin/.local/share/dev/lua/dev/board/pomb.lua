@@ -1790,8 +1790,89 @@ function Backend:family(id)
     family.epic = epic_counts(task) ~= nil
     if type(task.children_total) == "number" and task.children_total > 0 then
         family.children = { done = task.children_done or 0, total = task.children_total }
+        if type(task.children) == "table" and #task.children > 0 then
+            local items = {}
+            local own = self:__board_id()
+            local names
+            for _, child in ipairs(task.children) do
+                local home = present(child.board_id)
+                local home_name
+                if home and own and home ~= own then
+                    if not names then
+                        names = {}
+                        for _, entry in ipairs(self:__request("GET", "/api/boards") or {}) do
+                            names[entry.id] = entry.name
+                        end
+                    end
+                    home_name = present(names[home])
+                end
+                items[#items + 1] = {
+                    id = tostring(child.id),
+                    name = tostring(child.name),
+                    board = home_name,
+                    column = present(child.column_name),
+                    done = child.done == true,
+                }
+            end
+            family.children.items = items
+        end
     end
     return family
+end
+
+local HUMAN_QUERY = "/api/search?q=label:needs:human&limit=100"
+local NO_EPIC = "-"
+
+local function epic_name(task)
+    for _, key in ipairs({ "parent", "umbrella" }) do
+        local epic = task[key]
+        if type(epic) == "table" and present(epic.name) then
+            return tostring(epic.name)
+        end
+        if type(epic) == "string" and epic ~= "" then
+            return epic
+        end
+    end
+    return NO_EPIC
+end
+
+function Backend:needs_human()
+    local hits = {}
+    local cursor
+    repeat
+        local page, message =
+            self:__request("GET", HUMAN_QUERY .. (cursor and "&cursor=" .. cursor or ""))
+        if not page then
+            return nil, message
+        end
+        for _, hit in ipairs(page.items or {}) do
+            hits[#hits + 1] = hit
+        end
+        cursor = present(page.next_cursor)
+    until cursor == nil
+    local rows, unreadable, seen = {}, {}, {}
+    for _, hit in ipairs(hits) do
+        local board_name = present(hit.board_name) or "?"
+        local task = self:__request("GET", "/api/tasks/" .. hit.task_id)
+        local row =
+            { board = board_name, id = hit.task_id, name = hit.name, epic = NO_EPIC, entered = "" }
+        if task then
+            row.epic = epic_name(task)
+            row.entered = present(task.column_entered_at) or present(task.created_at) or ""
+        elseif not seen[board_name] then
+            seen[board_name] = true
+            unreadable[#unreadable + 1] = board_name
+        end
+        rows[#rows + 1] = row
+    end
+    table.sort(rows, function(a, b)
+        if a.entered ~= b.entered then
+            return a.entered > b.entered
+        end
+        return a.id < b.id
+    end)
+    table.sort(unreadable)
+    return rows, unreadable
 end
 
 function Backend:boards()

@@ -557,6 +557,10 @@ function Backend:family(id)
     return family
 end
 
+function Backend:needs_human()
+    return {}, {}
+end
+
 function Backend:wait()
     return nil, "a local board has nothing to wait on"
 end
