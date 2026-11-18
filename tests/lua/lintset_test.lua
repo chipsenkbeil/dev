@@ -193,14 +193,28 @@ testing.test("the closing note names each failed check once", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("standalone warns without failing the lint", function()
+testing.test("standalone fails the lint on a .sh outside .dev/standalone", function()
     local root = support.tempdir()
     assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir failed")
     assert(fs.write(root .. "/.dev/x.sh", "#!/bin/sh\n"), "fixture setup failed")
     local lint = lint_for(root)
     lint:standalone()
-    testing.eq(lint.failed, {})
-    testing.eq(lint:finish(), 0)
+    testing.eq(lint.failed, { "standalone shell" })
+    testing.eq(lint:finish(), 1)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("standalone fails the lint on a bad standalone header", function()
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/.dev/standalone", { parents = true }), "mkdir failed")
+    assert(
+        fs.write(root .. "/.dev/standalone/x.sh", "#!/bin/sh\n# runs somewhere\n"),
+        "fixture setup failed"
+    )
+    local lint = lint_for(root)
+    lint:standalone()
+    testing.eq(lint.failed, { "standalone shell" })
+    testing.eq(lint:finish(), 1)
     fs.remove(root, { recursive = true })
 end)
 

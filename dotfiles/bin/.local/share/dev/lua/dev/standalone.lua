@@ -78,15 +78,6 @@ function M.problems(root)
     return lines
 end
 
----Pass each problem line of a project to a function, in order.
----@param root string absolute project root
----@param emit fun(line: string) called once for each problem line
-function M.warn(root, emit)
-    for _, line in ipairs(M.problems(root)) do
-        emit(line)
-    end
-end
-
 ---Name why a landing that adds files may not land without the owner's label.
 ---@param added string[] the paths the landing commit adds
 ---@param labels string[] the labels of the card

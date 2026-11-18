@@ -144,12 +144,11 @@ absent`, and `<where>` is one of `production server`, `test sandbox` or
 `GitHub Actions`. The list is `M.WHERE` in `dev/standalone.lua`, and widening it
 is a dotfiles change.
 
-`dev lint` warns on a `.sh` file anywhere else under `.dev` and on a
-standalone script with a bad line 2. It warns and exits 0 today while some
-projects still have shell verbs to port.
+`dev lint` fails on a `.sh` file anywhere else under `.dev` and on a
+standalone script with a bad line 2. It names each file and exits 1.
 
 The one exemption is a hidden helper named `.dev/__*.sh`. AGENTS.md sanctions
-that path for a raw script a verb needs, so the lint does not warn on it.
+that path for a raw script a verb needs, so the lint does not fail on it.
 
 Adding a file under `.dev/standalone/` is a deliberate choice. `dev board land`
 refuses the commit unless the card carries the `standalone-ok` label, and only

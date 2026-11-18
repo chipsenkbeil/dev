@@ -149,7 +149,10 @@ local lua_files = checks.lua_files(root)
 lint_lua(lua_files, checks.template_files(root))
 
 verb.say("> standalone shell")
-require("dev.standalone").warn(root, verb.note)
+for _, line in ipairs(require("dev.standalone").problems(root)) do
+    verb.note(line)
+    failed = true
+end
 
 if dev_os.which("ast-grep") then
     local sets = fs.join(root, checks.lint_dir, "..")

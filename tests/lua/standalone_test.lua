@@ -12,7 +12,7 @@ local function project(files)
     return root
 end
 
-testing.test("standalone warns on a .sh outside .dev/standalone", function()
+testing.test("standalone reports a .sh outside .dev/standalone", function()
     local root = project({ [".dev/x.sh"] = "#!/bin/sh\n", [".dev/n/y.sh"] = "#!/bin/sh\n" })
     testing.eq(standalone.problems(root), {
         ".dev/n/y.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
@@ -27,7 +27,7 @@ testing.test("standalone passes a hidden __ helper under .dev", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("standalone warns on a nested __ shell under .dev", function()
+testing.test("standalone reports a nested __ shell under .dev", function()
     local root = project({ [".dev/verbs/__x.sh"] = "#!/bin/sh\n" })
     testing.eq(standalone.problems(root), {
         ".dev/verbs/__x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
@@ -35,20 +35,7 @@ testing.test("standalone warns on a nested __ shell under .dev", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("warn passes each problem line to the function it is given", function()
-    local root = project({ [".dev/x.sh"] = "#!/bin/sh\n", [".dev/n/y.sh"] = "#!/bin/sh\n" })
-    local lines = {}
-    standalone.warn(root, function(line)
-        lines[#lines + 1] = line
-    end)
-    testing.eq(lines, {
-        ".dev/n/y.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
-        ".dev/x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
-    })
-    fs.remove(root, { recursive = true })
-end)
-
-testing.test("standalone warns on a bad line 2", function()
+testing.test("standalone reports a bad line 2", function()
     local root = project({ [".dev/standalone/x.sh"] = "#!/bin/sh\n# runs somewhere\n" })
     testing.eq(standalone.problems(root), {
         ".dev/standalone/x.sh: line 2 must read: # standalone: runs on <where>, where dev is absent",
@@ -56,7 +43,7 @@ testing.test("standalone warns on a bad line 2", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("standalone warns on an unknown where", function()
+testing.test("standalone reports an unknown where", function()
     local root = project({
         [".dev/standalone/x.sh"] = "#!/bin/sh\n# standalone: runs on my laptop, where dev is absent\n",
     })
