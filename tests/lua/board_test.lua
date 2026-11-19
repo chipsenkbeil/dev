@@ -9192,7 +9192,7 @@ testing.test("take prints the card with every comment in full after the claim", 
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111, fence 7"), out)
-    testing.ok(out:find("\n\n11111111  Ready  1 Pomodoro  docs  First\n", 1, true), out)
+    testing.ok(out:find("\n\n11111111  In Progress  1 Pomodoro  docs  First\n", 1, true), out)
     testing.ok(out:find("first\n", 1, true) and out:find("line", 1, true), out)
     testing.ok(out:find("mine? no", 1, true), out)
     dev(root, home, { "board", "release", "11111111-a" })

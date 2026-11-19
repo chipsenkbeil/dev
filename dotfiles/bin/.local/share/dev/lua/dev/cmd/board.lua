@@ -4693,6 +4693,18 @@ function commands.take(backend, args)
     if not fence then
         return result
     end
+    if card.column == stages.ready then
+        local moved, stuck = backend:move(card.id, stages.progress, {
+            fence = fence,
+            force = board.labelled(card, board.TRUNK_BLOCKER) or nil,
+        })
+        if not moved then
+            claims.stop(card.id)
+            backend:release(card.id, fence)
+            return failure(stuck)
+        end
+        card.column = stages.progress
+    end
     local unclocked = require("dev.board.clock").follow(backend, card, card.column, claimant(name))
     if unclocked then
         verb.note(

@@ -1657,6 +1657,8 @@ picks its open run card up with `dev board run`). Otherwise park again.
 `take` claims a card so no other agent picks it up, and starts a loop that keeps
 the claim alive. The claim lasts 900 seconds. The loop renews it every 5 minutes
 with curl, so it costs no model turns and outlives the shell that started it.
+A Ready card moves to In Progress with the claim. A card in any other column
+keeps its column.
 
 The claimant is the name from `take --as NAME`, else the `DEV_AGENT`
 environment variable, else `dev@<host>:<session>`. The session is

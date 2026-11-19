@@ -1916,6 +1916,73 @@ testing.test(
     end
 )
 
+local function planned_in(root, home, name, column)
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        name,
+        "--column",
+        column,
+        "--size",
+        "1",
+        "--description",
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--checks",
+        "dev test",
+    })
+    testing.eq(code, 0, out)
+    return prefix_of(out)
+end
+
+local function column_of(doc, card)
+    for _, column in ipairs(doc.columns) do
+        if column.id == card.column_id then
+            return column.name
+        end
+    end
+end
+
+testing.test("take of a Ready card leaves it In Progress under the named claim", function()
+    local root, home = local_board()
+    local a = planned_in(root, home, "Alpha", Column.READY)
+    local out, code = dev(root, home, { "board", "take", a, "--as", "r/one" })
+    testing.eq(code, 0, out)
+    local doc = document(file_of(home))
+    local card = card_named(doc, "Alpha")
+    testing.eq(column_of(doc, card), support.COLUMN_NAME.PROGRESS)
+    testing.eq(card.claim.claimant, "r/one")
+end)
+
+testing.test("take of a card in Review renews the claim and leaves the column", function()
+    local root, home = local_board()
+    local a = planned_in(root, home, "Alpha", Column.REVIEW)
+    local out, code = dev(root, home, { "board", "take", a, "--as", "r/one" })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "take", a, "--as", "r/one" })
+    testing.eq(code, 0, out)
+    local doc = document(file_of(home))
+    local card = card_named(doc, "Alpha")
+    testing.eq(column_of(doc, card), support.COLUMN_NAME.REVIEW)
+    testing.eq(card.claim.claimant, "r/one")
+end)
+
+testing.test("take of a Backlog card leaves it in Backlog", function()
+    local root, home = local_board()
+    local a = planned_in(root, home, "Alpha", Column.BACKLOG)
+    local out, code = dev(root, home, { "board", "take", a, "--as", "r/one" })
+    testing.eq(code, 0, out)
+    local doc = document(file_of(home))
+    local card = card_named(doc, "Alpha")
+    testing.eq(column_of(doc, card), support.COLUMN_NAME.BACKLOG)
+    testing.eq(card.claim.claimant, "r/one")
+end)
+
 testing.test("move out of progress releases the claim and warns about nothing", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
@@ -2288,7 +2355,7 @@ testing.test("take holds a claim with an expiry and no loop, and release gives i
     testing.eq(out:find("took " .. a .. ", fence 1, held for 50m\n\n", 1, true), 1, out)
     out = dev(root, home, { "board", "release", a })
     testing.eq(out, "released " .. a .. ", fence 1\n")
-    out = dev(root, home, { "board", "next" })
+    out = dev(root, home, { "board", "ls", "--column", Column.PROGRESS })
     testing.ok(out:find("Card", 1, true), out)
     out = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
     testing.eq(out:find("took " .. a .. ", fence 2, held for 50m\n\n", 1, true), 1, out)
@@ -2389,7 +2456,7 @@ testing.test("an expired claim does not block the card", function()
     local doc = document(file_of(home))
     doc.cards[1].claim.expires_at = "2020-01-01T00:00:00Z"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
-    local out = dev(root, home, { "board", "next" })
+    local out = dev(root, home, { "board", "ls", "--column", Column.PROGRESS })
     testing.ok(out:find("Card", 1, true), out)
     out = dev(root, home, { "board", "note", a, "still works" })
     testing.eq(out, "noted " .. a .. "\n")
