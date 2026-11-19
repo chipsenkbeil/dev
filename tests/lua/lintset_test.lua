@@ -128,6 +128,25 @@ testing.test("files lists a jj checkout with jj file list, not ignored files", f
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("dev_lua lists the Lua under .dev and .ci with skip_hidden set", function()
+    local root = support.tempdir()
+    for _, dir in ipairs({ ".dev", ".ci", ".claude", "src" }) do
+        assert(fs.mkdir(root .. "/" .. dir, { parents = true }), "mkdir failed")
+    end
+    assert(fs.write(root .. "/.dev/a.lua", ""), "fixture setup failed")
+    assert(fs.write(root .. "/.ci/b.lua", ""), "fixture setup failed")
+    assert(fs.write(root .. "/.claude/c.lua", ""), "fixture setup failed")
+    assert(fs.write(root .. "/src/d.lua", ""), "fixture setup failed")
+    assert(dev_os.run({ "git", "-C", root, "init", "-q" }) == 0, "git init failed")
+    local lint = lint_for(root)
+    lint.skip_hidden = true
+    local files = lint:dev_lua()
+    table.sort(files)
+    testing.eq(files, { ".ci/b.lua", ".dev/a.lua" })
+    testing.eq(lint.skip_hidden, true)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("files rg fallback honours gitignore without a git repository", function()
     if not dev_os.which("rg") then
         print("skip - rg is not installed")
