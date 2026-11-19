@@ -3092,11 +3092,11 @@ Carrying a check and reviews across a rebase:
   all of these hold:
   - the commit's parent is the current trunk
   - the checked commit sat on one ancestor of that trunk, where an empty
-    undescribed parent that is not a merge is skipped to the commit below it
-    (jj only)
+    undescribed parent that is not a merge is skipped to the commit below it (jj
+    only)
   - `jj interdiff` between the checked commit and the landing one is empty (in
-    a git project, a `git merge-tree` of the two patches that gives the landing
-    commit's tree)
+    a git project, a `git merge-tree` of the two patches that gives the
+    landing commit's tree)
   - the rebase left no conflict
 - In a git project no change id is read. The checked commit carries when it has
   a single parent, that parent is an ancestor of the landing commit's parent,
@@ -3104,11 +3104,11 @@ Carrying a check and reviews across a rebase:
 - A trunk commit that touched the same files does not stop the carry. The
   release run tests the whole batch and catches a clash the rebase cannot see.
 - The carry is tried whenever reviews are lacking, even when another refusal
-  stands (an unticked outcome, the wrong column), to list in the refusal only
-  what still blocks the landing.
-- A different change id, a non-empty interdiff or a review never recorded at the
-  checked commit keeps the plain refusals, and any jj read that fails refuses
-  too.
+  stands (an unticked outcome, the wrong column), to list in the refusal
+  only what still blocks the landing.
+- A different change id, a non-empty interdiff or a review never recorded at
+  the checked commit keeps the plain refusals, and any jj read that fails
+  refuses too.
 - When no commit carries, the refusal gives the reason for the newest one,
   unless a jj read fails first, which refuses at once and names that read.
 - A checked commit that lacks a passing check or a review of its own, such as a
