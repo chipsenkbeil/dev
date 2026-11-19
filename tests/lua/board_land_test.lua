@@ -3419,9 +3419,12 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test("turn refuses a hold kept past its cap and frees the turn", function()
+        -- Hold the turn on a verified card
         local project = jj_project()
         local id = in_verify(project)
         must(dev(project, { "board", "turn", id, "--hold", tostring(HELD_LEASE_SECONDS) }))
+
+        -- Fake a clock past the cap and shorten the cap
         local backend, restore = board_at(project.home)
         backend.root = project.root
         local now, cap = store.now, turn.MAX_HOLD_SECONDS
@@ -3430,6 +3433,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             return later
         end
         turn.MAX_HOLD_SECONDS = TURN_CAP_SECONDS
+
+        -- Request the turn as the lander, then restore the fakes
         local previous = os.getenv("DEV_AGENT") or ""
         ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
         local ok, result =
@@ -3438,10 +3443,14 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         turn.MAX_HOLD_SECONDS = cap
         store.now = now
         restore()
+
+        -- Refuse the request and free the turn
         assert(ok, result)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("the most it may be kept", 1, true), result.message)
         testing.eq(turn_holder(project.home), nil)
+
+        -- Let another agent take the freed turn
         local out, code = dev(project, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" })
         testing.eq(code, 0, out)
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/other")
