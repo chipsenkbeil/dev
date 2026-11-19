@@ -213,8 +213,14 @@ local function connect_failed(raw)
     if type(message) ~= "string" then
         message = out
     end
-    message = message:match("\nerror:[^\n]*") or message:match("^[^\n]*")
-    message = message:gsub("^\n", "")
+    local shown = message:match("^[^\n]*")
+    for line in message:gmatch("[^\n]+") do
+        if line:find("^error:") then
+            shown = line
+            break
+        end
+    end
+    message = shown
     if message ~= "" then
         verb.note("dev connect: " .. message:gsub("[^\32-\126]", " "))
     end

@@ -273,6 +273,17 @@ testing.test("a temporary file that cannot be made still lets the picker list bo
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("a failing ci ssh config prints the first of several error lines", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.config.err", "error: first\nerror: second\n"))
+    assert(fs.write(root .. "/ssh.config.rc", "1\n"))
+    local out, code = support.dev(root, { "connect", "vm1" }, env())
+    testing.eq(code, 1)
+    testing.ok(out:find("dev connect: error: first", 1, true), out)
+    testing.ok(not out:find("error: second", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("a failing ci ssh config prints the error line after a warning", function()
     local root = sandbox()
     assert(fs.write(root .. "/ssh.config.err", "warning: stale host key\nerror: cannot write\n"))
