@@ -66,8 +66,8 @@ local function git_out(root, ...)
     return out
 end
 
-local function interdiff(root, commit)
-    return jj_out(root, "interdiff", "--from", commit, "--to", "@", "--name-only")
+local function interdiff(root, commit, target)
+    return jj_out(root, "interdiff", "--from", commit, "--to", target, "--name-only")
 end
 
 local function identical(root, commit, state)
@@ -83,7 +83,7 @@ local function identical(root, commit, state)
         local tree = git_out(root, "rev-parse", state.commit .. "^{tree}")
         return merged ~= nil and tree ~= nil and merged:match("^%x+") == tree:match("^%x+")
     end
-    return interdiff(root, commit) == ""
+    return interdiff(root, commit, state.commit) == ""
 end
 
 local function same_patch(root, state)
@@ -853,7 +853,7 @@ local function carry_problem(root, state, commit)
             label
         )
     end
-    local differs = interdiff(root, commit)
+    local differs = interdiff(root, commit, state.commit)
     if differs == nil then
         return string.format(
             "The `jj` command could not compare the checked commit %s with this one.",
