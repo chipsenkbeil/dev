@@ -4259,6 +4259,63 @@ testing.test("the claimant cannot delete an outcome under any name it is given",
     end)
 end)
 
+local PLANNER = "dotfiles/planner"
+
+local function claimed_card()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.claimant = "dotfiles/implementer/a"
+    return card
+end
+
+testing.test("planner edit on a claimed card is refused", function()
+    local backend = fake({ claimed_card() })
+    as_agent(PLANNER, function()
+        local result = cmd_board.run(
+            "outcome",
+            { "cccccccc", "--rename", "1", "New", "--reason", "x" },
+            backend
+        )
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find("claimed by dotfiles/implementer/a", 1, true),
+            result.message
+        )
+        testing.ok(result.message:find("Move the card to Backlog", 1, true), result.message)
+        for _, call in ipairs(backend.calls) do
+            testing.eq(call[1], "comments")
+        end
+    end)
+end)
+
+testing.test("planner checks on a claimed card is refused", function()
+    local backend = fake({ claimed_card() })
+    as_agent(PLANNER, function()
+        local result = cmd_board.run("checks", { "cccccccc", "dev test" }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find("claimed by dotfiles/implementer/a", 1, true),
+            result.message
+        )
+        for _, call in ipairs(backend.calls) do
+            testing.eq(call[1], "comments")
+        end
+    end)
+end)
+
+testing.test("lead edits a claimed card", function()
+    local backend = fake({ claimed_card() })
+    as_agent(LEAD, function()
+        local result = cmd_board.run(
+            "outcome",
+            { "cccccccc", "--rename", "1", "New", "--reason", "x" },
+            backend
+        )
+        testing.eq(result.code, nil)
+        testing.eq(cmd_board.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
+    end)
+end)
+
 local function released_by(name, claimant)
     local card = colored("green")
     card.claimant = claimant
@@ -4357,7 +4414,7 @@ testing.test("a name that never claimed the card and the lead can still change i
         testing.eq(result.code, nil)
     end)
     backend = released_by("lead", "lead")
-    as_agent("lead", function()
+    as_agent(LEAD, function()
         local result = cmd_board.run(
             "outcome",
             { "cccccccc", "--rename", "1", "New", "--reason", "x" },
@@ -4514,7 +4571,9 @@ testing.test("convert refuses a claimant's ticks but moves an unticked checklist
         testing.eq(call[1], "comments")
     end
     card.description = V1
-    result = cmd_board.run("outcome", { "cccccccc", "--convert" }, backend)
+    as_agent(LEAD, function()
+        result = cmd_board.run("outcome", { "cccccccc", "--convert" }, backend)
+    end)
     testing.ok(not (result.message or ""):find("claimed", 1, true), result.message)
     testing.eq(backend.calls[#backend.calls][1], "add_outcome")
 end)
@@ -8153,7 +8212,12 @@ end)
 testing.test("checks patches the task's checks field whole, with the claim's fence", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
-    local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint", "dev test" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "checks", "11111111-a", "dev lint", "dev test" },
+        { agent = LEAD }
+    )
     testing.eq(code, 0, out)
     testing.eq(out, "set checks 11111111, 2 rows\n")
     local calls = read(root, "calls")

@@ -458,11 +458,25 @@ local function tick_refused(card, flag)
     return nil, ticker
 end
 
----Refuse a change by an agent that claimed the card now or before.
+---Check whether a name is the lead or carries no role at a terminal.
+---@param name string the agent name
+---@param interactive boolean? whether stdin is a terminal, nil to read it
+---@return boolean lead true when the name may run lead-only verbs
+local function is_lead(name, interactive)
+    if not name:find("/", 1, true) then
+        if interactive == nil then
+            return dev_os.isatty(0)
+        end
+        return interactive
+    end
+    return name:match("^[^/]*/([^/]*)") == "lead"
+end
+
+---Refuse a change to a claimed card by an agent that claimed it now or before, or is not the lead.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@param opts {what: string, as: string?} the change refused and the name given with the flag
----@return dev.cmd.board.Result? err the refusal, nil when no claimant is the caller
+---@return dev.cmd.board.Result? err the refusal, nil when the caller may change the card
 local function claimant_refused(backend, card, opts)
     local names = {}
     local given, env = opts.as, os.getenv("DEV_AGENT")
@@ -472,7 +486,8 @@ local function claimant_refused(backend, card, opts)
     if env and env:find("/", 1, true) then
         names[#names + 1] = env
     end
-    if #names == 0 then
+    local held_by_other = card.claimant and not is_lead(env or "")
+    if #names == 0 and not held_by_other then
         return nil
     end
     local past, why = backend:comments(card.id)
@@ -495,20 +510,17 @@ local function claimant_refused(backend, card, opts)
             )
         end
     end
-end
-
----Check whether a name is the lead or carries no role at a terminal.
----@param name string the agent name
----@param interactive boolean? whether stdin is a terminal, nil to read it
----@return boolean lead true when the name may run lead-only verbs
-local function is_lead(name, interactive)
-    if not name:find("/", 1, true) then
-        if interactive == nil then
-            return dev_os.isatty(0)
-        end
-        return interactive
+    if held_by_other then
+        return failure(
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " is claimed by "
+                .. card.claimant
+                .. ". Only the lead may "
+                .. opts.what
+                .. " while it is claimed. Move the card to Backlog or ask the lead."
+        )
     end
-    return name:match("^[^/]*/([^/]*)") == "lead"
 end
 
 ---@enum dev.board.guards.Refusal
