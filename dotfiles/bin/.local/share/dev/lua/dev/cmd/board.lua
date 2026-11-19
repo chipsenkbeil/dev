@@ -3491,6 +3491,18 @@ function commands.land(backend, args)
     if not backend.root then
         return failure("`dev board land` needs the project's root.")
     end
+    local own = config.get(backend.root, "board.land.verb")
+    if type(own) == "string" and own ~= "" then
+        return failure(
+            string.format(
+                "This repo lands cards with `%s`, so `dev board land` refuses to land card %s. "
+                    .. "Run `%s` instead.",
+                own,
+                short,
+                own
+            )
+        )
+    end
     local list, message = backend:comments(card.id)
     if not list then
         return failure(message)

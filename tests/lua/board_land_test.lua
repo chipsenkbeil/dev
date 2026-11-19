@@ -1006,6 +1006,25 @@ if has_jj then
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.REVIEW)
     end)
 
+    testing.test(
+        "land refuses a repo that names its own land command and pushes nothing",
+        function()
+            local project = jj_project('\n[board.land]\nverb = "dev release land"\n')
+            local id = verified_card(project)
+            local out = refused(project, id, { "`dev release land`", "refuses to land card" })
+            testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
+            testing.eq(out:find("Run `dev release land` instead.", 1, true) ~= nil, true)
+        end
+    )
+
+    testing.test("land still lands a repo whose land verb is empty", function()
+        local project = jj_project('\n[board.land]\nverb = ""\n')
+        local id = verified_card(project)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+    end)
+
     testing.test("land moves a verified card to Release when the project deploys", function()
         local project = jj_project("\n[board.land]\ndeploys = true\n")
         local id = verified_card(project)

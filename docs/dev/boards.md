@@ -3252,6 +3252,11 @@ The settings:
 - `deploys = true` under `[board.land]` makes `land` move the card to Release,
   where it waits until it is live. Without it `land` moves the card to Done.
   This repo sets it.
+- `board.land.verb` names the repo's own land command, as the words to type.
+  When it is a non-empty string, `dev board land` and `dev land`
+  refuse before any turn, push or move and print that command, to keep a
+  runner from skipping the repo's own land checks. Without it both land as
+  usual.
 - `deployed` under `[board.land]` lists path globs, where `**` crosses a slash
   and `*` and `?` stay inside one path segment. When it is set with
   `deploys = true`, `land` moves a card to Release only when its change touches
