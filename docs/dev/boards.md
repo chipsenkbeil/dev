@@ -899,8 +899,8 @@ The refusals for a card that lacks these:
 
 An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7, except
 that a card with children needs none. An epic with every child Done closes with
-its own outcomes open, and `move CHILD done` prints the epic's id and that it
-can close now when it moves the last open child.
+its own outcomes open, whatever their count, and `move CHILD done` prints the
+epic's id and that it can close now when it moves the last open child.
 
 Sizing is part of planning, so a card also cannot enter Ready as red. `move CARD
 ready` refuses a card that is unsized (white or no colour) or red, more than 3
@@ -1391,8 +1391,9 @@ The rules:
 - A Done card gets the size and outcome checks only, and a Done card labelled
   `discarded` needs no outcome.
 - An epic with no children needs 1 to 3 outcomes. A card with children needs
-  none, and 1 to 3 if it has any. Lint reads the children of every card it
-  checks for outcomes.
+  none, and 1 to 3 if it has any, except a Done epic with every child Done,
+  which has no count limit. Lint reads the children of every card it checks for
+  outcomes.
 - With `--strict`, a Done card also needs the three v4 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.

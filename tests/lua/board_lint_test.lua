@@ -194,7 +194,7 @@ testing.test("lint lets a Done epic with every child Done close without outcomes
     testing.eq(result.output, "No findings.")
 end)
 
-testing.test("lint holds a Done epic with every child Done to 1 to 3 outcomes", function()
+testing.test("lint leaves a Done epic with every child Done and four outcomes alone", function()
     local cards = {
         card(1, NAME.DONE, {
             outcomes = {
@@ -211,9 +211,7 @@ testing.test("lint holds a Done epic with every child Done to 1 to 3 outcomes", 
         return { children = { done = 2, total = held.children[id] } }
     end
     local result = cmd_board.run("lint", {}, fake)
-    testing.eq(findings(result.output), {
-        "00000001 Done lacks 1 to 3 Done when outcomes for an epic, not 4",
-    })
+    testing.eq(findings(result.output), { "No findings." })
 end)
 
 testing.test("lint gives an epic no claimant exemption", function()

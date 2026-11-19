@@ -1533,15 +1533,39 @@ testing.test("an epic with no children needs outcomes to close", function()
     end
 end)
 
-testing.test("an epic with every child Done still needs 3 or fewer outcomes to close", function()
+local function four_outcomes(done)
+    return {
+        { id = "s1", name = "a", done = done },
+        { id = "s2", name = "b", done = done },
+        { id = "s3", name = "c", done = done },
+        { id = "s4", name = "d", done = done },
+    }
+end
+
+testing.test("an epic with every child Done and four ticked outcomes closes", function()
     local card = planned()
     card.epic = { done = 3, total = 3 }
-    card.outcomes = {
-        { id = "s1", name = "a", done = true },
-        { id = "s2", name = "b", done = true },
-        { id = "s3", name = "c", done = true },
-        { id = "s4", name = "d", done = true },
-    }
+    card.outcomes = four_outcomes(true)
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+    testing.eq(result.output, "moved cccccccc to Done")
+end)
+
+testing.test("an epic with every child Done and four unticked outcomes closes", function()
+    local card = planned()
+    card.epic = { done = 3, total = 3 }
+    card.outcomes = four_outcomes(false)
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+    testing.eq(result.output, "moved cccccccc to Done")
+end)
+
+testing.test("an epic with an open child and four outcomes is refused", function()
+    local card = planned()
+    card.epic = { done = 1, total = 3 }
+    card.outcomes = four_outcomes(true)
     local backend = fake({ card })
     backend.kin = { children = card.epic }
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)

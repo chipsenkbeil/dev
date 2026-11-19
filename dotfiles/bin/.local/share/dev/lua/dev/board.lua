@@ -1262,7 +1262,11 @@ function M.unplanned(card)
             if card.children == 0 then
                 missing[#missing + 1] = "Done when outcomes"
             end
-        elseif (card.children > 0 or card.epic) and card.outcomes > M.MAX_EPIC_OUTCOMES then
+        elseif
+            (card.children > 0 or card.epic)
+            and card.outcomes > M.MAX_EPIC_OUTCOMES
+            and not card.closing
+        then
             missing[#missing + 1] = epic_outcomes_text(card.outcomes)
         end
     end
