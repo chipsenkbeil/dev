@@ -1370,7 +1370,8 @@ end
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card, whose claimant this sets when it takes the claim
 ---@param column string the column the card moves to
----@return dev.cmd.board.Result? refused the failure, nil when nothing applied or the claim was taken
+---@return dev.cmd.board.Result? refused the failure, nil when nothing applied or the claim was
+---   taken
 ---@return boolean? retaken true when the claim was taken again, after the note rule passed
 local function retake_lapsed(backend, card, column)
     local stages = backend.stages

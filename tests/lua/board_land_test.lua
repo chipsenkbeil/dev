@@ -458,6 +458,11 @@ local function column_of(home, id)
     return "?"
 end
 
+local function rename_workspace(root, name)
+    local argv = { "jj", "-R", root, "workspace", "rename", name }
+    must(dev_os.run(argv, { stdout = "null", stderr = "null", env = IDENT }))
+end
+
 local function new_card(project)
     must(dev(project, { "board", "init" }))
     local out = dev(project, {
@@ -478,8 +483,7 @@ local function new_card(project)
     local id = assert(out:match("added (%x+)"), out)
     must(dev(project, { "board", "checks", id, "true" }))
     if fs.is_dir(project.root .. "/.jj") then
-        local rename = { "jj", "-R", project.root, "workspace", "rename", id }
-        must(dev_os.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
+        rename_workspace(project.root, id)
     end
     return id
 end
@@ -583,8 +587,7 @@ local CARD_PREFIX = CARD_ID:sub(1, 8)
 local function fake_backend(root, card)
     local backend = { root = root, column_map = {}, notes = {} }
     if root and fs.is_dir(root .. "/.jj") then
-        local rename = { "jj", "-R", root, "workspace", "rename", CARD_PREFIX }
-        must(dev_os.run(rename, { stdout = "null", stderr = "null", env = IDENT }))
+        rename_workspace(root, CARD_PREFIX)
     end
     card = card or {}
     local view = {
