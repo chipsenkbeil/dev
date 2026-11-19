@@ -3,6 +3,7 @@ local board_limits = require("dev.board.limits")
 local box = require("dev.cmd.box")
 local claims = require("dev.board.claims")
 local dev_os = require("dev.os")
+local dev_text = require("dev.text")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local project = require("dev.project")
@@ -15,8 +16,8 @@ local KEYCHAIN_SCRIPT = "/board/keychain.sh"
 local KEYCHAIN_SOURCE = "keychain"
 local UNAUTHORIZED = 401
 local ISSUED_VARIABLE = "DEV_BOARD_TOKEN"
-local ISSUED_REFUSED = "the issued token in DEV_BOARD_TOKEN was refused by pomb"
-local FILE_REFUSED = "the role token file for DEV_AGENT was refused by pomb"
+local ISSUED_REFUSED = "The issued token in DEV_BOARD_TOKEN was refused by Pomb."
+local FILE_REFUSED = "The role token file for DEV_AGENT was refused by Pomb."
 local FILE_EXPIRED =
     "The role token file for DEV_AGENT expired. Mint it again with `dev board token mint`."
 local AGENT_VARIABLE = "DEV_AGENT"
@@ -26,7 +27,7 @@ local CONFLICT = 409
 local LIMIT_REACHED = "wip_limit_reached"
 local NOT_FOUND = 404
 local UNKNOWN_ROLE = "unknown_role"
-local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text"
+local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text."
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = 30
 local WAIT_SECONDS = 50
@@ -50,7 +51,7 @@ local TOP = 0
 local COMMENT_KIND = board.ACTOR.AGENT
 local DEFAULT_AUTHOR = "api-token"
 local ACTORS = { user = board.ACTOR.HUMAN, api_token = board.ACTOR.AGENT }
-local BAD_REF = "the token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml"
+local BAD_REF = "The token must be pass:<entry> in [board.pomb] of ~/.config/dev/config.toml."
 local KEEPALIVE_SCRIPT = "/board/keepalive.sh"
 local TEMPLATE = "agent project"
 local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
@@ -67,7 +68,7 @@ local QUOTA_EXCEEDED = "quota_exceeded"
 local TOKEN_EXPIRED = "token_expired"
 local WHOAMI_PATH = "/api/v1/auth/whoami"
 local PERMISSIONS_PATH = "/api/v1/auth/permissions"
-local EXPIRED = "the role token expired; mint it again from its issuer"
+local EXPIRED = "The role token expired; mint it again from its issuer."
 local ROLES_PATH = "/api/v1/agent-roles/standard"
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
@@ -143,7 +144,7 @@ local Backend = {}
 Backend.__index = Backend
 
 local function unavailable(reason)
-    return "board unavailable: " .. reason
+    return "Board unavailable: " .. dev_text.sentence(reason)
 end
 
 local function listed(list, word)
@@ -2552,7 +2553,10 @@ function Backend:mint(role, name, hours)
     if not ok then
         local undone, why = self:revoke(name)
         if not undone then
-            return nil, "Cannot keep the token: " .. message .. ". It stays issued: " .. why .. "."
+            return nil,
+                "Cannot keep the token: " .. message .. ". It stays issued: " .. dev_text.sentence(
+                    why
+                )
         end
         if not undone.revoked then
             return nil, "Cannot keep the token: " .. message .. ". Pomb listed no token to revoke."
@@ -2600,8 +2604,7 @@ function Backend:revoke(name)
     local ok
     ok, message = tokenfile.remove(name)
     if not ok then
-        local why = message:gsub("^%l", string.upper)
-        return nil, "Revoked the token. " .. why .. "."
+        return nil, "Revoked the token. " .. dev_text.sentence(message)
     end
     return { revoked = revoked }
 end

@@ -605,7 +605,7 @@ testing.test(
     function()
         local layout = fake_layout({ columns = template_columns() })
         function layout:set_color()
-            return nil, "board unavailable: pomb answered 403: insufficient_scope"
+            return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
         end
         local changes, message, lines = run(layout)
         testing.eq(changes, nil)
@@ -1355,7 +1355,7 @@ testing.test("a token that may not enable colours leaves them and carries on", f
     local set_color = layout.set_color
     function layout:set_color(id, fields)
         if fields.enabled ~= nil then
-            return nil, "board unavailable: pomb answered 403: insufficient_scope"
+            return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
         end
         return set_color(self, id, fields)
     end
@@ -1458,7 +1458,7 @@ testing.test("agent-roles-exceeds-grant: a board the init token does not hold is
     })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 1)
-    testing.ok(out:find("the token does not hold board demo (board-1)", 1, true), out)
+    testing.ok(out:find("The token does not hold board demo (board-1)", 1, true), out)
     testing.ok(out:find("add the board to the token", 1, true), out)
     testing.eq(out:find("--admin", 1, true), nil)
     local after = {}
@@ -1559,12 +1559,13 @@ testing.test(
         local layout = fake_layout({ columns = template_columns() })
         function layout:set_color()
             return nil,
-                "board unavailable: pomb answered 403: "
+                "Board unavailable: Pomb answered 403: "
                     .. "this token lacks the boards.write permission "
-                    .. "on every board; use a token that has it"
+                    .. "on every board; use a token that has it."
         end
         local _, message = run(layout)
         testing.ok(message:find("run `dev board init --admin`", 1, true), message)
+        testing.eq(message:find("..", 1, true), nil, message)
         function layout:set_color()
             return nil,
                 "board unavailable: this token has the boards.write permission but is not assigned "
@@ -1872,7 +1873,7 @@ testing.test("init says to use --admin when Pomb refuses the limit group", funct
         return {}
     end
     function layout:add_limit_group()
-        return nil, "board unavailable: pomb answered 403: insufficient_scope"
+        return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
     end
     local changes, message = run(layout)
     testing.eq(changes, nil)

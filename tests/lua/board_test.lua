@@ -6382,7 +6382,7 @@ testing.test("a locked store fails at once and curl never runs", function()
     local root, home = sandbox({ locked = true })
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("Board unavailable: pass is locked", 1, true), out)
+    testing.ok(out:find("Board unavailable: Pass is locked", 1, true), out)
     testing.eq(read(root, "calls"):find("curl", 1, true), nil)
 end)
 
@@ -6653,7 +6653,7 @@ testing.test("a cached token Pomb refuses stays reported when the delete fails",
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("pomb answered 401", 1, true), out)
+    testing.ok(out:find("Pomb answered 401", 1, true), out)
     testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
 end)
 
@@ -6667,7 +6667,7 @@ testing.test("a token read fresh from pass that Pomb refuses is not retried", fu
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("pomb answered 401", 1, true), out)
+    testing.ok(out:find("Pomb answered 401", 1, true), out)
     testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
@@ -6788,7 +6788,7 @@ testing.test("an http error reports the server's message", function()
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("Board unavailable: pomb answered 403: nope", 1, true), out)
+    testing.ok(out:find("Board unavailable: Pomb answered 403: nope", 1, true), out)
 end)
 
 testing.test("an unreachable server reports the curl exit", function()
@@ -6797,9 +6797,58 @@ testing.test("an unreachable server reports the curl exit", function()
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.ok(
-        out:find("Board unavailable: cannot reach https://pomb.example (curl exit 7)", 1, true),
+        out:find("Board unavailable: Cannot reach https://pomb.example (curl exit 7)", 1, true),
         out
     )
+end)
+
+testing.test("pomb refusals are full sentences", function()
+    local root, home = sandbox()
+    executable(root .. "/bin/curl", "#!/bin/sh\ncat >/dev/null\nexit 7\n")
+    local script = string.format(
+        "package.path = %q; local pomb = require('dev.board.pomb'); "
+            .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
+            .. "local _, message = b:whoami(); print(message)",
+        support.absolute_path()
+    )
+    local out, code = dev_os.capture({ "luajit", "-e", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            HOME = home,
+            ROOT = root,
+            DEV_PASS_LOCK = root .. "/pass.lock",
+        },
+        stderr = "stdout",
+    })
+    testing.eq(code, 0, out)
+    testing.eq(out, "Board unavailable: Cannot reach https://pomb.example (curl exit 7).\n")
+end)
+
+testing.test("unreachable classifies each refusal as before", function()
+    local always = {
+        "Board unavailable: cannot reach https://p (curl exit 5).",
+        "Board unavailable: cannot reach https://p (curl exit 6).",
+        "Board unavailable: cannot reach https://p (curl exit 7).",
+        "Board unavailable: pass timed out.",
+        "Board unavailable: pass is locked or has no entry secrets/worker.",
+    }
+    local only_idempotent = {
+        "Board unavailable: cannot reach https://p (curl exit 28).",
+        "Board unavailable: pomb answered 502: bad gateway.",
+        "Board unavailable: pomb answered 503: down.",
+        "Board unavailable: pomb answered 504: slow.",
+        "Board unavailable: pomb sent an answer dev cannot read.",
+    }
+    for _, message in ipairs(always) do
+        testing.eq(pomb.unreachable(message, false), true, message)
+        testing.eq(pomb.unreachable(message, true), true, message)
+    end
+    for _, message in ipairs(only_idempotent) do
+        testing.eq(pomb.unreachable(message, false), false, message)
+        testing.eq(pomb.unreachable(message, true), true, message)
+    end
+    testing.eq(pomb.unreachable("Board unavailable: Pomb answered 403: nope.", true), false)
+    testing.eq(pomb.unreachable(nil, true), false)
 end)
 
 local SUBTASKS_CARD = {
@@ -7947,7 +7996,7 @@ testing.test("a board with no colour of the size asked for is reported", functio
     )
     local out, code = dev(root, home, { "board", "size", "11111111-a", "1" })
     testing.eq(code, 1)
-    testing.ok(out:find("Board unavailable: the board has no yellow colour", 1, true), out)
+    testing.ok(out:find("Board unavailable: The board has no yellow colour", 1, true), out)
     out, code = dev(root, home, { "board", "size", "11111111-a", "7" })
     testing.eq(code, 2)
 end)
@@ -8824,7 +8873,7 @@ testing.test("a nonexistent column on the board is reported", function()
         "a",
     })
     testing.eq(code, 1)
-    testing.ok(out:find("the board has no Backlog column", 1, true), out)
+    testing.ok(out:find("The board has no Backlog column", 1, true), out)
 end)
 
 testing.test("board refuses --remote like the other machine-local nouns", function()
@@ -8874,7 +8923,7 @@ testing.test("a non-JSON answer from the server is reported as unreadable", func
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("Board unavailable: pomb sent an answer dev cannot read", 1, true), out)
+    testing.ok(out:find("Board unavailable: Pomb sent an answer dev cannot read", 1, true), out)
 end)
 
 testing.test("a note may begin with a dash", function()
@@ -10190,7 +10239,7 @@ testing.test("a release the server refuses keeps the state so it can be retried"
     curl_with(root, "*/owner/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 1)
-    testing.ok(out:find("pomb answered 503", 1, true), out)
+    testing.ok(out:find("Pomb answered 503", 1, true), out)
     testing.eq(fs.exists(state_file(home)), true)
     executable(root .. "/bin/curl", CURL)
     _, code = dev(root, home, { "board", "release", "11111111-a" })
@@ -10241,7 +10290,7 @@ testing.test("a permission_denied with no board says the token lacks it everywhe
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: pomb answered 403: this token lacks the tasks.edit permission "
+        "Board unavailable: Pomb answered 403: this token lacks the tasks.edit permission "
             .. "on every board; use a token that has it.\n"
     )
 end)
@@ -10257,7 +10306,7 @@ testing.test("a permission_denied with a board says the board is not assigned", 
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: this token has the tasks.edit permission but is not assigned "
+        "Board unavailable: This token has the tasks.edit permission but is not assigned "
             .. "to board board-9; add the board to the token.\n"
     )
 end)
@@ -10284,7 +10333,7 @@ testing.test("role-refusal-denied names the refused permission and the role", fu
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: pomb answered 403: this token (role implementer) lacks the "
+        "Board unavailable: Pomb answered 403: this token (role implementer) lacks the "
             .. "tasks.edit permission on every board; use a token that has it.\n"
     )
 end)
@@ -10300,7 +10349,7 @@ testing.test("role-refusal-exceeds-grant names the refused action and the role",
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: pomb answered 403: the implementer role cannot tasks.bin.\n"
+        "Board unavailable: Pomb answered 403: the implementer role cannot tasks.bin.\n"
     )
 end)
 
@@ -10313,7 +10362,7 @@ testing.test("role-refusal-norole keeps the refusal text with no role named", fu
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "Board unavailable: pomb answered 403: too much.\n")
+    testing.eq(out, "Board unavailable: Pomb answered 403: too much.\n")
 end)
 
 testing.test("role-refusal-expired says the role token expired and to mint it again", function()
@@ -10325,7 +10374,7 @@ testing.test("role-refusal-expired says the role token expired and to mint it ag
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "Board unavailable: the role token expired; mint it again from its issuer.\n")
+    testing.eq(out, "Board unavailable: The role token expired; mint it again from its issuer.\n")
 end)
 
 testing.test("an insufficient_scope 403 still reports the server's message", function()
@@ -10339,7 +10388,7 @@ testing.test("an insufficient_scope 403 still reports the server's message", fun
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: pomb answered 403: insufficient token scope: needs admin.\n"
+        "Board unavailable: Pomb answered 403: insufficient token scope: needs admin.\n"
     )
 end)
 
@@ -10355,7 +10404,7 @@ testing.test("a board missing from a token's assigned boards gets its own messag
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: pomb lists no board named dotfiles for this token, which is "
+        "Board unavailable: Pomb lists no board named dotfiles for this token, which is "
             .. "assigned only to Other; if the board exists, add it to the token.\n"
     )
 end)
@@ -10368,7 +10417,7 @@ testing.test("a missing board stays plain on a token that sees every board", fun
 ]])
         local out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 1)
-        testing.eq(out, "Board unavailable: pomb has no board named dotfiles.\n")
+        testing.eq(out, "Board unavailable: Pomb has no board named dotfiles.\n")
     end
 end)
 
@@ -10646,7 +10695,7 @@ testing.test("wait returns the oldest cursor of a 410", function()
     local result = waiting(root, home, "'1'", "410")
     testing.eq(result.got, nil)
     testing.eq(result.oldest, "41")
-    testing.ok(result.message:find("pomb answered 410: too old", 1, true), result.message)
+    testing.ok(result.message:find("Pomb answered 410: too old", 1, true), result.message)
 end)
 
 testing.test("wait gives curl a max-time above the wait's timeout", function()
@@ -10664,7 +10713,7 @@ testing.test("wait surfaces too_many_waits as a 429 and keeps no cursor", functi
     local result = waiting(root, home, "'7'", "429")
     testing.eq(result.got, nil)
     testing.eq(result.oldest, nil)
-    testing.ok(result.message:find("pomb answered 429: end one", 1, true), result.message)
+    testing.ok(result.message:find("Pomb answered 429: end one", 1, true), result.message)
     testing.eq(result.refused, true)
 end)
 
@@ -10734,7 +10783,7 @@ end)
 testing.test("a 429 past the retry cap fails with the rate limit message", function()
     local result = rate_limited(9, "1")
     testing.eq(result.name, nil)
-    testing.eq(result.message, "board unavailable: pomb answered 429: slow down")
+    testing.eq(result.message, "Board unavailable: Pomb answered 429: slow down.")
     testing.eq(result.naps, { 1, 1, 1 })
     testing.eq(result.calls, 4)
 end)
@@ -12171,7 +12220,7 @@ testing.test("attach gives up on a busy answer that stays", function()
     assert(fs.write(root .. "/busy", "9"))
     local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
     testing.eq(code, 1)
-    testing.ok(out:find("pomb answered 503", 1, true), out)
+    testing.ok(out:find("Pomb answered 503", 1, true), out)
     testing.eq(fs.read(root .. "/post_n"), "3\n")
 end)
 
@@ -12272,7 +12321,7 @@ testing.test("download reports Pomb's refusal and keeps a file already there", f
     local out, code =
         dev(root, home, { "board", "download", "11111111-a", "abcd", "--out", out_dir })
     testing.eq(code, 1)
-    testing.ok(out:find("pomb answered 404: no such file", 1, true), out)
+    testing.ok(out:find("Pomb answered 404: no such file", 1, true), out)
     testing.eq(fs.read(out_dir .. "/old.png"), "mine")
     testing.eq(#fs.list(out_dir), 1)
 end)

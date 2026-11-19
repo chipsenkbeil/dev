@@ -128,7 +128,7 @@ function M.remove(name)
     local ok
     ok, message = fs.remove(path)
     if not ok then
-        return nil, "cannot delete " .. path
+        return nil, "Cannot delete " .. path .. "."
     end
     return true
 end

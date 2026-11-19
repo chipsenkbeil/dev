@@ -297,7 +297,7 @@ testing.test("column sends the flags to Pomb as a PATCH of the column id", funct
 end)
 
 testing.test("column prints the permission message for a Pomb 403", function()
-    local backend = column_backend("pomb answered 403")
+    local backend = column_backend("Board unavailable: Pomb answered 403: nope.")
     local result = cmd_board.run("column", { "Release", "--blocked", "on" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Pomb refused the change", 1, true), result.message)

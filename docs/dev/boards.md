@@ -98,7 +98,7 @@ the token to another server.
 
 `token` names a `pass` entry. dev runs `pass show` under a 10 second timeout
 with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`. A locked
-store fails at once with `board unavailable: pass is locked or has no entry
+store fails at once with `Board unavailable: Pass is locked or has no entry
 ...` instead of waiting on a prompt.
 
 `board/passlock.sh` runs `pass` under one kernel file lock on
@@ -143,8 +143,8 @@ current `DEV_AGENT`, then `pass` as above.
 A 401 under either role token is refused, with no retry and no fallback to
 the `pass` token. The refusal says:
 
-- `the issued token in DEV_BOARD_TOKEN was refused by pomb` for the variable.
-- `the role token file for DEV_AGENT was refused by pomb` for the file.
+- `The issued token in DEV_BOARD_TOKEN was refused by Pomb.` for the variable.
+- `The role token file for DEV_AGENT was refused by Pomb.` for the file.
 
 An expired file is refused the same way, with ``The role token file for
 DEV_AGENT expired. Mint it again with `dev board token mint`.``
@@ -411,9 +411,9 @@ What it lays out:
   - The post needs `roles.grant` and a board the token holds.
     The lead token can run init once the roles exist, as the post is then
     skipped. A `permission_denied` is shown with the missing permission, and an
-    `exceeds_grant` as `board unavailable: the token (role R) does not hold
+    `exceeds_grant` as `Board unavailable: The token (role R) does not hold
     board X (ID), so it cannot be granted the standard roles; add the board to
-    the token`, with nothing created.
+    the token.` with nothing created.
   - When the refused permission is `roles.grant`, `init` prints ``The agent
     roles are left for `dev board init --admin`.``, counts no change and goes
     on to the later steps, the lane step included. Any other refusal still
@@ -426,7 +426,7 @@ What it lays out:
     lacks the tasks.edit permission`.
   - A token with no role gets the plain text with no role named.
   - A 401 with the code `token_expired`, matched on the code and never the
-    message, prints `the role token expired; mint it again from its issuer`.
+    message, prints `The role token expired; mint it again from its issuer.`
 - palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`, red
   `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps
   its colour in every column, so the colour is the only record of its size.
@@ -499,10 +499,10 @@ dev prints two messages for the new refusal:
   sign-in does not change the assignment.
 
 A board missing from `GET /api/boards` on a token assigned only some boards
-is reported as `board unavailable: pomb lists no board named X for this token,
-which is assigned only to NAMES; if the board exists, add it to the token`. On a
-token that sees every board it stays `board unavailable: pomb has no board named
-X`.
+is reported as `Board unavailable: Pomb lists no board named X for this token,
+which is assigned only to NAMES; if the board exists, add it to the token.` On a
+token that sees every board it stays `Board unavailable: Pomb has no board named
+X.`
 
 `init --admin` accepts the sign-in in either case:
 
@@ -1082,7 +1082,7 @@ found by its value in the board's palette, never by its label, so it works
 before and after `dev board init` names the labels.
 
 A Pomb board missing the colour fails with
-`board unavailable: the board has no yellow colour`, and a local board with
+`Board unavailable: The board has no yellow colour.`, and a local board with
 ``The board has no yellow colour. Run `dev board init`.``
 
 `outcome CARD TEXT` appends a Done when outcome to a card that already exists
@@ -2318,7 +2318,7 @@ to OTHER (a card of this board, or `BOARD:PREFIX`).
 - A 403 `permission_denied` for `links.delete` that names no board exits 1 as
   `Pomb kept the link`, and leaves the link in place.
 - The change is not queued while Pomb is unreachable (exit 1,
-  `board unavailable`).
+  `Board unavailable`).
 - A local board removes the link from the card that holds it.
 
 ### attach
@@ -3694,8 +3694,8 @@ The write:
   this machine holds one.
 - The colour id comes from the palette (`/colors`) by its `value`, never its
   label.
-- A board without the colour is `board unavailable: the board has no <colour>
-  colour` (exit 1).
+- A board without the colour is `Board unavailable: The board has no <colour>
+  colour.` (exit 1).
 
 ### time
 
@@ -4138,8 +4138,8 @@ The output:
 
 A card another agent owns:
 
-- It is `owner_held`, printed as `board unavailable: pomb answered 409: task
-  owned by NAME until TIME` (exit 1).
+- It is `owner_held`, printed as `Board unavailable: Pomb answered 409: task
+  owned by NAME until TIME.` (exit 1).
 - No loop starts.
 
 The claim note:
@@ -4633,14 +4633,14 @@ Writes:
   `oldest_cursor`.
 - a local board's `wait` is `nil, "A local board has nothing to wait on."`.
 
-A curl failure is `board unavailable: cannot reach <url> (curl exit N)`. An
-HTTP error is `board unavailable: pomb answered <status>: <message>`.
+A curl failure is `Board unavailable: Cannot reach <url> (curl exit N).` An
+HTTP error is `Board unavailable: Pomb answered <status>: <message>.`
 
-The backend messages quoted in this doc are the raw text a backend returns.
-`failure()` in `board/guards.lua` turns a single-line message into a sentence
-before `dev board` prints it, so the user reads `Board unavailable: ...` with a
-closing period. A message with a newline, or one that ends in `?` or `!`, is
-printed as written.
+The Pomb backend writes every refusal as a full sentence itself, through
+`text.sentence`. The other backend messages quoted in this doc are the raw text a
+backend returns. `failure()` in `board/guards.lua` turns a single-line message
+into a sentence before `dev board` prints it, with a closing period. A message
+with a newline, or one that ends in `?` or `!`, is printed as written.
 
 ### How init runs
 
@@ -4794,17 +4794,17 @@ The approver may grant a lower scope, so `GET /api/v1/auth/whoami` must say
 A 403 with `code` `permission_denied` reads as follows. Each message is two
 clauses joined by a semicolon or a plain `but`:
 
-- `board_id` null: `pomb answered 403: this token lacks the <permission>
+- `board_id` null: `Pomb answered 403: this token lacks the <permission>
   permission on every board`, a semicolon and `use a token that has it`. The
   `--admin` hint applies.
-- `board_id` set: `this token has the <permission> permission but is not
+- `board_id` set: `This token has the <permission> permission but is not
   assigned to board <id>`, a semicolon and `add the board to the token`. No
   hint applies.
 
-A board absent from `/api/boards` reads `board unavailable: pomb lists no board
+A board absent from `/api/boards` reads `Board unavailable: Pomb lists no board
 named X for this token, which is assigned only to NAMES; if the board exists,
-add it to the token` when `whoami` returns a `boards` list, else `board
-unavailable: pomb has no board named X`.
+add it to the token.` when `whoami` returns a `boards` list, else `Board
+unavailable: Pomb has no board named X.`
 
 ### Reading the token
 
@@ -4813,8 +4813,8 @@ On a miss in the Keychain, `board/passlock.sh` reads the token with
 
 - environment: `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`.
 - stdin: none, so a locked store fails at once with
-  `board unavailable: pass is locked or has no entry <entry>`. A timeout says
-  `board unavailable: pass timed out`.
+  `Board unavailable: Pass is locked or has no entry <entry>.` A timeout says
+  `Board unavailable: Pass timed out.`
 - a token with any character outside `A-Za-z0-9._~+/=-` is refused without
   being shown.
 

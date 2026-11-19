@@ -70,13 +70,13 @@ end
 
 local function needs_admin(message)
     local NEEDS_ADMIN = "pomb answered 403"
-    return message:find(NEEDS_ADMIN, 1, true) ~= nil
+    return message:lower():find(NEEDS_ADMIN, 1, true) ~= nil
 end
 
 local function advise(message)
     local ADMIN_HINT = ". This token may not change this board, so run `dev board init --admin`."
     if needs_admin(message) then
-        return message .. ADMIN_HINT
+        return (message:gsub("%.$", "")) .. ADMIN_HINT
     end
     return message
 end

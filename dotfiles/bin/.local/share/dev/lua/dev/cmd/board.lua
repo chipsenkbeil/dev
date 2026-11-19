@@ -4383,7 +4383,7 @@ end
 ---@param message string the backend's reason
 ---@return dev.cmd.board.Result result the failure
 local function board_edit_failure(message)
-    if message:find("pomb answered 403", 1, true) then
+    if message:lower():find("pomb answered 403", 1, true) then
         return failure(
             "Pomb refused the change. This token may not edit the board, "
                 .. "so use a lead token, which holds columns.edit."
