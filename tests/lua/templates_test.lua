@@ -201,6 +201,22 @@ testing.test("render keeps the project's text below the deny.toml and lint.lua m
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("line 2 of every lint template verb ends in a period", function()
+    for _, kind in ipairs({ Kind.LUA, Kind.RUST }) do
+        local dir = assert(templates.dir(kind), "no template dir")
+        for _, name in ipairs(assert(fs.list(dir))) do
+            if name:match("%.lua$") then
+                local text = assert(fs.read(dir .. "/" .. name), "read failed")
+                local second = text:match("^[^\n]*\n([^\n]*)")
+                testing.ok(
+                    second and second:match("%.$"),
+                    kind .. "/" .. name .. ": " .. tostring(second)
+                )
+            end
+        end
+    end
+end)
+
 testing.test("channel falls back to the lint set's pin, not the installed compiler", function()
     local root = support.sandbox({}, {})
     local dir = assert(templates.dir(Kind.RUST), "no template dir")
