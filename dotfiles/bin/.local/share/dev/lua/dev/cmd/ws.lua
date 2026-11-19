@@ -185,7 +185,7 @@ end
 local function remote_trunk(root, remote)
     local ref, err = vcs.remote_trunk(root, remote)
     if ref == nil then
-        return nil, sentence(err)
+        return nil, string.format('Could not name the trunk of the remote: "%s".', err)
     end
     return ref
 end
@@ -197,7 +197,7 @@ local function fetch_trunk(ctx)
     end
     local found, why = forge.resolve(ctx.root)
     if not found then
-        return sentence("trunk cannot be compared: " .. why)
+        return string.format('The trunk cannot be compared: "%s".', why)
     end
     local argv = vcs.base(ctx.root, backend, { quiet = true })
     if backend == vcs.JJ then
@@ -1157,7 +1157,7 @@ end
 local function finished_cards(root)
     local finished, why = cmd_board.finished(root)
     if not finished then
-        verb.say("Skipped the card test. " .. sentence(why))
+        verb.say(string.format('Skipped the card test: "%s".', why))
     end
     return finished
 end
