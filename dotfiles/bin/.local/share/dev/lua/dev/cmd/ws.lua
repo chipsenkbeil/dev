@@ -365,7 +365,13 @@ M.handlers["ws new"] = function(ctx)
     end
     local made, why = fs.mkdir(fs.dirname(path), { parents = true })
     if not made then
-        verb.die(sentence(why))
+        verb.die(
+            string.format(
+                'Could not make the folder %s. The mkdir command said: "%s".',
+                fs.dirname(path),
+                why
+            )
+        )
     end
     if vcs.backend(ctx.root) == vcs.JJ then
         local refresh = vcs.with(vcs.base(ctx.root, vcs.JJ), "workspace", "update-stale")
@@ -385,7 +391,13 @@ M.handlers["ws new"] = function(ctx)
     if argv == nil then
         made, why = fs.mkdir(path)
         if not made then
-            verb.die(sentence(why))
+            verb.die(
+                string.format(
+                    'Could not make the folder %s. The mkdir command said: "%s".',
+                    path,
+                    why
+                )
+            )
         end
     else
         verb.show(ctx, argv)
@@ -711,7 +723,8 @@ local function purge(dir)
             if removed then
                 purged[#purged + 1] = "Purged " .. path .. " from the trash."
             else
-                purged[#purged + 1] = sentence("Could not purge " .. path .. ": " .. err)
+                purged[#purged + 1] =
+                    string.format('Could not purge %s. The rm command said: "%s".', path, err)
             end
         end
     end

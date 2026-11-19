@@ -314,6 +314,23 @@ testing.test("new outside a project refuses and makes no workspace", function()
     testing.eq(fs.exists(env.env.DEV_WS_ROOT), false)
 end)
 
+testing.test("ws new says it could not make the folder", function()
+    -- Make the parent of the target a plain file
+    local root, path, env, log = setup("jj")
+    assert(fs.mkdir(fs.dirname(fs.dirname(path)), { parents = true }))
+    assert(fs.write(fs.dirname(path), "not a folder"))
+
+    -- Create the workspace under a parent that cannot be a folder
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect a sentence of ws that names the folder and quotes the mkdir message
+    local prefix = "Could not make the folder " .. fs.dirname(path) .. '. The mkdir command said: "'
+    testing.eq(code, 1)
+    testing.eq(out:sub(1, #prefix), prefix)
+    testing.eq(out:sub(-3), '".\n')
+    testing.eq(fs.exists(log), true)
+end)
+
 testing.test("new refuses a path that exists", function()
     -- Make the workspace folder before the command does
     local root, path, env, log = setup("jj")
