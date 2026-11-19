@@ -1,3 +1,4 @@
+local abandon = require("dev.cmd.abandon")
 local board = require("dev.cmd.board")
 local box = require("dev.cmd.box")
 local complete = require("dev.complete")
@@ -30,6 +31,7 @@ local INTERRUPTED = dev_os.SIGNAL_EXIT_BASE + 2
 local ROOT_REFUSAL = "As root, dev runs only `dev tools install` and `dev tools check`.\n"
 local SHARE = project.share
 local VCS_HANDLERS = {
+    abandon = abandon.run,
     push = push.run,
     pull = pull.run,
     sync = sync.run,

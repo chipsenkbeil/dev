@@ -61,6 +61,14 @@ return {
         group = "Share it",
     },
     {
+        words = { "abandon" },
+        handler = "lua",
+        flags = "--reason",
+        usage = "dev abandon CHANGE_ID [--reason TEXT]",
+        desc = "Abandon an open Gerrit change by its Change-Id",
+        group = "Share it",
+    },
+    {
         words = { "pull" },
         handler = "lua",
         desc = "Fetch the remote and rebase local work onto it",

@@ -200,3 +200,91 @@ testing.test("git branches and remotes list what git has", function()
     testing.eq(vcs.remotes(root, "git"), { "origin" })
     fs.remove(root, { recursive = true })
 end)
+
+local SSH_STUB = [[#!/bin/sh
+echo "$*" >>"$STUB_LOG"
+case "$*" in
+*" query "*) cat "$STUB_QUERY" ;;
+esac
+]]
+
+local OPEN_ROW = table.concat({
+    '{"id":"I1","status":"NEW","currentPatchSet":{"number":2,"revision":"abc123"}}',
+    '{"type":"stats","rowCount":1}',
+    "",
+}, "\n")
+
+local function abandon_fixture(row)
+    local root = repo({ { "gerrit", "ssh://c@g.example:29418/proj/sub.git" } })
+    local bin = root .. "/bin"
+    assert(fs.mkdir(bin, { parents = true }))
+    assert(fs.write(bin .. "/ssh", SSH_STUB))
+    assert(dev_os.run({ "chmod", "755", bin .. "/ssh" }) == 0, "chmod failed")
+    assert(fs.write(root .. "/query", row))
+    local env = { STUB_LOG = root .. "/log", STUB_QUERY = root .. "/query" }
+    return root, env
+end
+
+local function calls(root)
+    return fs.read(root .. "/log") or ""
+end
+
+testing.test("abandon.sends.the.query.then.the.review.abandon", function()
+    local root, env = abandon_fixture(OPEN_ROW)
+    local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
+    testing.eq(code, 0, out)
+    local want = "-o BatchMode=yes -p 29418 c@g.example gerrit query --format=JSON "
+        .. "--current-patch-set project:proj/sub change:I1\n"
+        .. "-o BatchMode=yes -p 29418 c@g.example gerrit review --abandon abc123\n"
+    testing.eq(calls(root), want)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("abandon.sends.the.reason.as.the.message", function()
+    local root, env = abandon_fixture(OPEN_ROW)
+    local out, code = support.dev(
+        root,
+        { "abandon", "I1", "--reason", "it's stale" },
+        { env = env }
+    )
+    testing.eq(code, 0, out)
+    local want = [[gerrit review --abandon --message 'it'\''s stale' abc123]]
+    testing.eq(calls(root):find(want, 1, true) ~= nil, true, calls(root))
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("abandon.refuses.a.change.that.is.not.open", function()
+    local merged = OPEN_ROW:gsub("NEW", "MERGED")
+    local cases = {
+        { row = merged, want = "Change I1 is MERGED, not NEW." },
+        { row = '{"type":"stats","rowCount":0}\n', want = "Gerrit has no change I1" },
+    }
+    for _, case in ipairs(cases) do
+        local root, env = abandon_fixture(case.row)
+        local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
+        testing.eq(code, 1, out)
+        testing.eq(out:find(case.want, 1, true) ~= nil, true, out)
+        testing.eq(calls(root):find("review", 1, true), nil, calls(root))
+        fs.remove(root, { recursive = true })
+    end
+end)
+
+testing.test("abandon.picks.the.open.row.among.several.branches", function()
+    local merged = '{"id":"I1","status":"MERGED","currentPatchSet":{"revision":"old000"}}\n'
+    local root, env = abandon_fixture(merged .. OPEN_ROW)
+    local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
+    testing.eq(code, 0, out)
+    testing.eq(calls(root):find("--abandon abc123", 1, true) ~= nil, true, calls(root))
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("abandon.refuses.a.forge.that.is.not.gerrit", function()
+    local root, env = abandon_fixture(OPEN_ROW)
+    git(root, "config", "forge.kind", "plain")
+    git(root, "remote", "add", "origin", LOCAL)
+    local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
+    testing.eq(code, 1, out)
+    testing.eq(out:find("only a gerrit change can be abandoned", 1, true) ~= nil, true, out)
+    testing.eq(calls(root), "")
+    fs.remove(root, { recursive = true })
+end)

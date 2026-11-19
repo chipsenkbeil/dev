@@ -28,6 +28,26 @@ dev push --tag v1.2.0 --tag batch-7
 dev help push
 ```
 
+## dev abandon
+
+`dev abandon CHANGE_ID` abandons an open change on the project's Gerrit, for a
+draft that was pushed and is no longer wanted. `--reason TEXT` sends TEXT as
+the abandon message.
+
+It refuses a forge that is not gerrit with exit 1. It reads
+`remote.<remote of record>.url`, which must be `ssh://[user@]host[:port]/project`,
+and runs over `ssh -o BatchMode=yes -p PORT HOST`. Gerrit's `review` command
+takes a revision and not a Change-Id, so dev first runs
+`gerrit query --format=JSON --current-patch-set` for the change. A change that
+is missing or not NEW exits 1 and sends no review call. Otherwise dev sends
+`gerrit review --abandon [--message TEXT] REVISION` with the current patch
+set's revision. It never restores a change.
+
+```
+dev abandon I8473b95934b5732ac55d26311a706c9c2bde9940
+dev abandon I8473b95934b5732ac55d26311a706c9c2bde9940 --reason "superseded"
+```
+
 ## The forge setting
 
 The forge is `gerrit`, `github` or `plain`. dev takes the first of:
