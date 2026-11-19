@@ -609,14 +609,14 @@ local function finish_companion(opts)
     end
 end
 
----Rebase the change onto trunk, check what may land and rerun the recheck rows, with no turn taken.
----@param opts dev.board.wiring.land_prepare.Opts the card and the hold the caller already has
----@return dev.cmd.board.Result? result the refusal, nil when the change may go to the turn
----@return dev.board.wiring.Prepared? prepared the commit the turn lands
-local function land_prepare(opts)
-    local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold
+---Renew the claim, check the card still lands and rebase the change onto trunk.
+---@param backend dev.board.Backend the board backend
+---@param card dev.board.Card the card that lands
+---@param name string the caller's agent name
+---@return dev.cmd.board.Result? refused the refusal, nil when the rebase ran
+---@return boolean? rebased true when the rebase moved the change
+local function land_rebase(backend, card, name)
     local short = card.id:sub(1, board.MIN_PREFIX)
-    local message
     renew_claim(backend, card, name)
     local current = card_problems(backend, card, { name = name, comments = {} })
     if #current > 0 then
@@ -627,15 +627,30 @@ local function land_prepare(opts)
                 .. table.concat(current, "\n  - ")
         )
     end
-    local state_ok, bad = land.state(backend.root)
-    if not state_ok then
-        return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
-    end
     local rebased, why, notes = scm.workspace(backend.root):rebase()
     if rebased == nil then
         return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
     end
     note_all(notes)
+    return nil, rebased
+end
+
+---Rebase the change onto trunk, check what may land and rerun the recheck rows, with no turn taken.
+---@param opts dev.board.wiring.land_prepare.Opts the card and the hold the caller already has
+---@return dev.cmd.board.Result? result the refusal, nil when the change may go to the turn
+---@return dev.board.wiring.Prepared? prepared the commit the turn lands
+local function land_prepare(opts)
+    local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local message
+    local state_ok, bad = land.state(backend.root)
+    if not state_ok then
+        return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
+    end
+    local refused, rebased = land_rebase(backend, card, name)
+    if refused then
+        return refused
+    end
     local fresh
     fresh, message = backend:comments(card.id)
     if not fresh then
@@ -744,21 +759,10 @@ local function land_held(opts)
     local backend, card, name, hold = opts.backend, opts.card, opts.name, opts.hold
     local short = card.id:sub(1, board.MIN_PREFIX)
     local message
-    renew_claim(backend, card, name)
-    local current = card_problems(backend, card, { name = name, comments = {} })
-    if #current > 0 then
-        return failure(
-            "Card "
-                .. short
-                .. " cannot land for these reasons.\n  - "
-                .. table.concat(current, "\n  - ")
-        )
+    local stopped, rebased = land_rebase(backend, card, name)
+    if stopped then
+        return stopped
     end
-    local rebased, why, notes = scm.workspace(backend.root):rebase()
-    if rebased == nil then
-        return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
-    end
-    note_all(notes)
     local state, carried = opts.prepared.state, opts.prepared.carried
     local check_only = opts.prepared.check_only
     local now, bad = land.state(backend.root)

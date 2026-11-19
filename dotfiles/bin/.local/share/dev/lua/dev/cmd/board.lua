@@ -3449,7 +3449,7 @@ function commands.land(backend, args)
     if message then
         return failure("Card " .. short .. " cannot land. " .. message)
     end
-    local kept = hold
+    local held_early = hold
     local main = config.get(backend.root, "board.land.deploys") ~= true
         and follow.main(backend.root)
     for _ = 1, MAX_LAND_ATTEMPTS do
@@ -3463,19 +3463,19 @@ function commands.land(backend, args)
             card = current,
             companions = companions,
             name = name,
-            hold = kept,
+            hold = held_early,
         })
         if refused then
-            if kept and refused.code and not refused.lost then
+            if held_early and refused.code and not refused.lost then
                 refused.message = refused.message .. wiring.kept_note(short)
                 return refused
             end
-            if kept then
-                turn.release(backend, kept)
+            if held_early then
+                turn.release(backend, held_early)
             end
             return refused
         end
-        hold = kept
+        hold = held_early
         if not hold then
             hold, message = wiring.await_turn({
                 backend = backend,
@@ -3528,7 +3528,7 @@ function commands.land(backend, args)
             .. " cannot land. Trunk moved during each of "
             .. MAX_LAND_ATTEMPTS
             .. " rechecks. Nothing was pushed."
-            .. (kept and wiring.kept_note(short) or "")
+            .. (held_early and wiring.kept_note(short) or "")
     )
 end
 
