@@ -338,8 +338,8 @@ It prints one line per change, and `Board X already follows the standard.
 Nothing changed.` when there is none.
 
 Every warning goes to standard error, like an error, and standard output keeps
-the change lines that another tool may read. The warnings are the `kept
-column`, `kept card` and `wears the disabled colour` lines, the two lines that
+the change lines that another tool may read. The warnings are the `Kept
+column`, `Kept card` and `wears the disabled colour` lines, the two lines that
 leave the agent roles (`not checked` and `left for --admin`), the line that
 leaves the colours enabled and the line that names an unlisted first lane.
 
@@ -368,7 +368,7 @@ What it lays out:
     it. A local board has no stages and says nothing.
   - A rerun changes nothing.
   - A column it does not know stays, comes after Done and is reported as
-    `kept column "X", which is not part of the standard board`.
+    `Kept column "X", which is not part of the standard board.`
 - lanes: the names in the `lanes` list of `[board]` in `.dev/config.toml`, in
   list order.
   - `init` makes each lane the board lacks at the end of the lane order, one
@@ -393,9 +393,9 @@ What it lays out:
     only. When each of the six standard keys (a role's `standard` field) sits
     on a role whose `boards` list holds this board, it posts nothing and
     prints `agent roles unchanged`. A failed read counts as not granted, and
-    when the post is then refused for `roles.grant`, `init` prints `agent roles
-    not checked, the roles list could not be read` with the read's failure in
-    place of the line that leaves the roles for `--admin`.
+    when the post is then refused for `roles.grant`, `init` prints `Agent roles
+    not checked, since the roles list could not be read` with the read's
+    failure in place of the line that leaves the roles for `--admin`.
   - Otherwise it posts `{"boards":[board id]}` to Pomb's
     `/api/v1/agent-roles/standard` right after the columns.
   - It prints `created agent roles` with the names the reply lists, or
@@ -4526,7 +4526,7 @@ The name and the config:
    standard columns come first in the order Icebox, Backlog, Ready,
    In Progress, Review, Verify, Release, Blocked, Done and any other column
    follows, kept and reported on every run as
-   `kept column "X", which is not part of the standard board`.
+   `Kept column "X", which is not part of the standard board.`
 3. Grant the agent roles.
 4. Define the checks field when the board lacks it.
 5. Name the palette through `PATCH /api/boards/{id}/colors/{color_id}`. The
@@ -4574,8 +4574,8 @@ Details by step:
   first. It prints one line per colour (`enabled white`, `disabled orange`)
   and never deletes a colour.
 - worn colours: each card that wears a disabled colour is one line,
-  `card <id prefix> wears the disabled colour orange, left as it is`, on every
-  run, with the card's colour untouched.
+  `Card <id prefix> wears the disabled colour orange and was left as it is.`,
+  on every run, with the card's colour untouched.
 - admin-only colours: Pomb keeps `enabled` admin-only. A 403 on it prints one
   line, ``Left the colours enabled as they are, since this token may not change
   them. Run `dev board init --admin`.`` The run carries on instead of exiting

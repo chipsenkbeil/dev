@@ -515,9 +515,9 @@ testing.test("a column init does not recognise is reported and kept where it was
     local layout = fake_layout({ columns = columns })
     local _, message, lines, warnings = run(layout)
     testing.eq(message, nil)
-    testing.eq(warnings, { 'kept column "Someday", which is not part of the standard board' })
+    testing.eq(warnings, { 'Kept column "Someday", which is not part of the standard board.' })
     for _, line in ipairs(lines) do
-        testing.eq(line:find("kept column", 1, true), nil, line)
+        testing.eq(line:find("Kept column", 1, true), nil, line)
     end
     testing.eq(layout.state.columns[#layout.state.columns].name, "Someday")
     testing.eq(layout.state.columns[#layout.state.columns].id, "col-odd")
@@ -527,7 +527,7 @@ testing.test("a column init does not recognise is reported and kept where it was
     local _, _, second, second_warnings = run(layout)
     testing.eq(second, {})
     testing.eq(#second_warnings, 1)
-    testing.ok(second_warnings[1]:find("kept column", 1, true))
+    testing.ok(second_warnings[1]:find("Kept column", 1, true))
     testing.eq(#layout.state.writes > 0, true)
 end)
 
@@ -577,8 +577,8 @@ testing.test(
                 or joined:find('renamed card dddddddd to "Chosen"$'),
             joined
         )
-        testing.eq(joined:find("kept card", 1, true), nil, joined)
-        testing.ok(table.concat(warnings, "\n"):find("kept card ffffffff", 1, true), warnings[1])
+        testing.eq(joined:find("Kept card", 1, true), nil, joined)
+        testing.ok(table.concat(warnings, "\n"):find("Kept card ffffffff", 1, true), warnings[1])
         local again = run(layout)
         testing.eq(again, 0)
     end
@@ -1330,7 +1330,7 @@ testing.test("a card wearing a disabled colour is reported on every run and left
         cards = { { id = "aaaaaaaa-1", name = "Odd", color_id = "orange-id" } },
     })
     local _, _, lines, warnings = run(layout)
-    local report = "card aaaaaaaa wears the disabled colour orange, left as it is"
+    local report = "Card aaaaaaaa wears the disabled colour orange and was left as it is."
     testing.eq(warnings, { report })
     testing.eq(lines[#lines] ~= report, true)
     testing.eq(layout.state.cards[1].color_id, "orange-id")
@@ -2059,7 +2059,7 @@ testing.test("init-lead-roles-read-fails-names-the-failure", function()
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
     testing.ok(
-        out:find("agent roles not checked, the roles list could not be read: ", 1, true),
+        out:find("Agent roles not checked, since the roles list could not be read: ", 1, true),
         out
     )
     testing.ok(out:find("settings.read", 1, true), out)

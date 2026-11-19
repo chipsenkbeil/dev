@@ -199,7 +199,9 @@ local function columns_step(layout, state, say)
         if not used[column.id] then
             want[#want + 1] = column
             state.warn(
-                "kept column " .. quoted(column.name) .. ", which is not part of the standard board"
+                "Kept column "
+                    .. quoted(column.name)
+                    .. ", which is not part of the standard board."
             )
         end
     end
@@ -232,7 +234,9 @@ local function roles_step(layout, state, say)
     local created, message, missing = layout:add_roles()
     if created == nil then
         if missing == "roles.unreadable" then
-            state.warn("agent roles not checked, the roles list could not be read: " .. message)
+            state.warn(
+                "Agent roles not checked, since the roles list could not be read: " .. message
+            )
             return true
         end
         if missing == "roles.grant" then
@@ -398,11 +402,11 @@ local function worn_step(_, state)
         local value = card.color_id and off[card.color_id]
         if value then
             state.warn(
-                "card "
+                "Card "
                     .. card.id:sub(1, board.MIN_PREFIX)
                     .. " wears the disabled colour "
                     .. value
-                    .. ", left as it is"
+                    .. " and was left as it is."
             )
         end
     end
@@ -415,9 +419,9 @@ local function strip_step(layout, state, say)
         local stripped, value = M.split_size(card.name)
         if stripped and stripped == "" then
             state.warn(
-                "kept card "
+                "Kept card "
                     .. card.id:sub(1, board.MIN_PREFIX)
-                    .. ", whose name is only a size word"
+                    .. ", whose name is only a size word."
             )
         elseif stripped then
             local fields = { name = stripped }
