@@ -290,6 +290,14 @@ function M.missing_reviews(comments, state, root)
     return missing
 end
 
+---Build the key of a review slot from its kind and the kind it rechecks.
+---@param kind string a review kind
+---@param of string? the kind a recheck covers
+---@return string key
+local function slot_key(kind, of)
+    return kind .. "/" .. (of or "")
+end
+
 ---List the reviews at a commit whose latest verdict of their kind is needs-work.
 ---@param comments {body: string}[] the card's comments, oldest first
 ---@param state dev.board.check.State the commit that would land
@@ -301,13 +309,13 @@ function M.refused_reviews(comments, state, root)
     for _, comment in ipairs(comments) do
         local record = review.parse(comment.body)
         if record and record.change == state.change and same(record.commit) then
-            latest[record.kind .. "/" .. (record.of or "")] = record
+            latest[slot_key(record.kind, record.of)] = record
         end
     end
     local refused = {}
-    local slots = { review.Kind.CODE .. "/", review.Kind.STYLE .. "/" }
+    local slots = { slot_key(review.Kind.CODE), slot_key(review.Kind.STYLE) }
     for _, of in ipairs(review.OF_KINDS) do
-        slots[#slots + 1] = review.Kind.RECHECK .. "/" .. of
+        slots[#slots + 1] = slot_key(review.Kind.RECHECK, of)
     end
     for _, slot in ipairs(slots) do
         local record = latest[slot]
