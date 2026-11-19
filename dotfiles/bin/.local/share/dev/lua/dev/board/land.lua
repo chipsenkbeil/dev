@@ -1511,7 +1511,7 @@ end
 local function git_run(root)
     local found, why = forge.resolve(root)
     if not found then
-        return false, why
+        return false, "Trunk cannot be pushed. " .. sentence(why)
     end
     local ref, read_why = vcs.remote_trunk(root, found.remote)
     if not ref then

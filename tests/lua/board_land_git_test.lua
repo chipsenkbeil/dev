@@ -475,6 +475,20 @@ testing.test("land.git.run pushes HEAD to trunk and refuses a rejected push", fu
     end)
 end)
 
+testing.test("land.git.run names a bad forge kind in a sentence", function()
+    landing_env(function()
+        local root = work_behind_trunk()
+        local before = os.getenv("JJ_FORGE") or ""
+        ffi.C.setenv("JJ_FORGE", "bogus", 1)
+        local ran, landed, out = pcall(land.run, root)
+        ffi.C.setenv("JJ_FORGE", before, 1)
+        assert(ran, landed)
+        testing.eq(landed, false)
+        testing.ok(out:find("^Trunk cannot be pushed%. Forge must be gerrit"), out)
+        testing.ok(out:find("%.$"), out)
+    end)
+end)
+
 testing.test("land.git.settled_commit names a checked commit only once trunk holds it", function()
     landing_env(function()
         local root = work_behind_trunk()
