@@ -6252,7 +6252,7 @@ testing.test("a token read fresh from pass that Pomb refuses is not retried", fu
     testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
-local function keepalive(root, ticks, tick_time)
+local function keepalive(root, ticks, tick_time, tokenfile)
     return "bash "
         .. SHARE
         .. "keepalive.sh "
@@ -6262,6 +6262,7 @@ local function keepalive(root, ticks, tick_time)
         .. " https://pomb.example Agents/x "
         .. tick_time
         .. " dotfiles/x 900"
+        .. (tokenfile and " " .. tokenfile or "")
 end
 
 testing.test("the keep-alive loop drops a refused cached token", function()
@@ -11067,6 +11068,39 @@ testing.test(
         testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
     end
 )
+
+local function keepalive_token_file(expires, env)
+    local root = sandbox()
+    local file = root .. "/role-token"
+    assert(fs.write(file, "pomb_FILEtoken0123456789\n" .. expires .. "\n"))
+    assert(fs.write(root .. "/state", "fence=7\n"))
+    shell(root, root .. "/pass.lock", (env or "") .. keepalive(root, 1, 0, file), "600")
+    return root
+end
+
+testing.test("keepalive-token-file sends the file token and never reads pass", function()
+    local root = keepalive_token_file(0)
+    testing.ok(
+        read(root, "stdin"):find("Bearer pomb_FILEtoken0123456789", 1, true),
+        read(root, "stdin")
+    )
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    root = keepalive_token_file(os.time() + 3600)
+    testing.ok(read(root, "stdin"):find("Bearer pomb_FILEtoken0123456789", 1, true))
+end)
+
+testing.test("keepalive-token-file loses to DEV_BOARD_TOKEN", function()
+    local root = keepalive_token_file(0, "DEV_BOARD_TOKEN=" .. ISSUED .. " ")
+    testing.ok(read(root, "stdin"):find("Bearer " .. ISSUED, 1, true), read(root, "stdin"))
+    testing.eq(read(root, "stdin"):find("FILEtoken", 1, true), nil)
+end)
+
+testing.test("keepalive-token-file expired never falls back to pass", function()
+    local root = keepalive_token_file(os.time() - 10)
+    testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    testing.eq(read(root, "stdin"):find("Bearer", 1, true), nil)
+    testing.eq(read(root, "calls"):find("curl", 1, true), nil)
+end)
 
 testing.test(
     "move to review on a board with In Review and no Review names dev board init",

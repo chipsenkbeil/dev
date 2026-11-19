@@ -2305,6 +2305,7 @@ function Backend:keepalive(id, fence, ticks, state, name)
     if not entry then
         return nil, BAD_REF
     end
+    local tokenfile_path = tokenfile.path(name) or ""
     local out, code = dev_os.capture({
         "sh",
         "-c",
@@ -2321,6 +2322,7 @@ function Backend:keepalive(id, fence, ticks, state, name)
         string.format("%d", claims.TICK_SECONDS),
         name,
         string.format("%d", claims.TTL_SECONDS),
+        tokenfile_path,
     }, { unset = CHILD_UNSET, stderr = "null" })
     local pid = tonumber(out:match("%d+"))
     if code ~= 0 or not pid then

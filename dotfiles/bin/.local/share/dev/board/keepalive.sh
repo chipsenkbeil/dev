@@ -10,6 +10,7 @@ entry=$6
 tick=$7
 name=$8
 lease=$9
+tokenfile=${10:-}
 here=$(cd "$(dirname "$0")" && pwd)
 
 sleeper=
@@ -30,6 +31,18 @@ while [ "$n" -lt "$ticks" ]; do
     grep -qx "fence=$fence" "$state" 2>/dev/null || exit 0
     if [ -n "${DEV_BOARD_TOKEN:-}" ]; then
         read_out=$DEV_BOARD_TOKEN
+    elif [ -n "$tokenfile" ] && [ -f "$tokenfile" ]; then
+        read_out=
+        expires=
+        {
+            IFS= read -r read_out
+            IFS= read -r expires
+        } <"$tokenfile"
+        case $expires in
+        '' | *[!0-9]*) read_out= ;;
+        0) ;;
+        *) [ "$expires" -gt "$(date +%s)" ] || read_out= ;;
+        esac
     else
         read_out=$(bash "$here/passlock.sh" "$entry")
     fi
