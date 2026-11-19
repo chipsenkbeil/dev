@@ -152,7 +152,7 @@ local function comments(backend, events, since, skip)
             and not skip[event.task_id]
         then
             if not cards then
-                local list, message = backend:cards()
+                local list, message = backend:cards({ summary = true })
                 if not list then
                     return nil, message
                 end
@@ -182,7 +182,7 @@ end
 ---@return string[]? lines one line per card that left, nil when the board could not be read
 ---@return string? why the reason the board could not be read
 local function departed(backend, sat)
-    local cards, message = backend:cards()
+    local cards, message = backend:cards({ summary = true })
     if not cards then
         return nil, message
     end
@@ -207,7 +207,7 @@ end
 ---@return table<string, string>? sat the column of each card in Blocked or Icebox
 ---@return string? why the reason the board could not be read
 local function sitting(backend, stages)
-    local cards, message = backend:cards()
+    local cards, message = backend:cards({ summary = true })
     if not cards then
         return nil, message
     end

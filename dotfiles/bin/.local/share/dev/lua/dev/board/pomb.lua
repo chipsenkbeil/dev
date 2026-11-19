@@ -57,6 +57,7 @@ local TEMPLATE = "agent project"
 local UTC_STAMP = "!%Y-%m-%dT%H:%M:%S"
 local STAMP_CHARS = 19
 local PAGE_LIMIT = 500
+local SUMMARY_LIMIT = 1000
 local FORBIDDEN = 403
 local NO_SEAT = "the task has no such seat"
 local SEAT_ROLE = "reviewer"
@@ -911,14 +912,49 @@ function Backend:__export(id)
     return doc
 end
 
-function Backend:cards()
+---Read every task of the board's paged list, which leaves out the description, the outcomes and
+---the colour.
+---@private
+---@param id string the board's id
+---@return table<string, any>[]? tasks the tasks of every page
+---@return string? message why a page could not be read
+function Backend:__summaries(id)
+    local tasks = {}
+    local cursor
+    repeat
+        local page, message = self:__request(
+            "GET",
+            "/api/boards/"
+                .. id
+                .. "/tasks?limit="
+                .. SUMMARY_LIMIT
+                .. (cursor and "&cursor=" .. cursor or "")
+        )
+        if not page then
+            return nil, message
+        end
+        for _, task in ipairs(page.items) do
+            tasks[#tasks + 1] = task
+        end
+        cursor = present(page.next_cursor)
+    until cursor == nil
+    return tasks
+end
+
+function Backend:cards(opts)
     local ok, message = self:__load()
     if not ok then
         return nil, message
     end
-    local doc
-    doc, message = self:__export(self.__detail.id)
-    if not doc then
+    local source
+    if opts and opts.summary then
+        source, message = self:__summaries(self.__detail.id)
+    else
+        local doc
+        doc, message = self:__export(self.__detail.id)
+        source = doc and doc.tasks
+    end
+    if not source then
         return nil, message
     end
     local order = {}
@@ -930,7 +966,7 @@ function Backend:cards()
         lanes[lane.id] = index
     end
     local tasks = {}
-    for _, task in ipairs(doc.tasks) do
+    for _, task in ipairs(source) do
         tasks[#tasks + 1] = task
     end
     table.sort(tasks, function(a, b)

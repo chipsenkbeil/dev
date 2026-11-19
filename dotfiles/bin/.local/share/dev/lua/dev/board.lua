@@ -95,6 +95,10 @@ end
 
 ---@alias dev.board.FieldValue string|string[]|table<string, any>[]|dev.json.Null
 
+---@class dev.board.cards.Opts
+---@field summary boolean? read the paged task list, which leaves out the description, the outcomes
+---   and the colour
+
 ---@class dev.board.Backend
 ---@field describe fun(self: dev.board.Backend): string the backend and board, as `status` prints
 ---   them
@@ -109,8 +113,9 @@ end
 ---@field timed boolean? whether the board keeps time entries, false on a local board
 ---@field card fun(self: dev.board.Backend, id: string): dev.board.Card?, string? the card with that
 ---   id, or nil and a message
----@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order,
----   or nil and a message
+---@field cards fun(self: dev.board.Backend, opts: dev.board.cards.Opts?): dev.board.Card[]?,
+---   string? every card in column order, or nil and a message, from the paged task list when
+---   `summary` is set
 ---@field lanes fun(self: dev.board.Backend): string[]?, string? the names of the lanes in board
 ---   order, empty on a board with fewer than two lanes, or nil and a message
 ---@field has_field fun(self: dev.board.Backend, key: string): boolean?, string? whether the board

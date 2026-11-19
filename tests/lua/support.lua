@@ -381,6 +381,24 @@ function M.column_id(column)
     return "col-" .. column
 end
 
+---Build one row of Pomb's paged task list as the endpoint sends it.
+---@param id string the task's id
+---@param name string the task's name
+---@param column string the column constant the task sits in
+---@param position integer the task's position in its column
+---@return string json the row object
+local function summary_row(id, name, column, position)
+    return '{"id":"'
+        .. id
+        .. '","name":"'
+        .. name
+        .. '","column_id":"'
+        .. M.column_id(column)
+        .. '","swimlane_id":null,"position":'
+        .. position
+        .. ',"labels":["docs"],"claim":null}'
+end
+
 ---Build the fake `curl` script that answers Pomb's routes from the files in `$ROOT`.
 ---@param first_id string id of the card the task routes answer for
 ---@param second_id string id of the card the second page of the card list holds
@@ -401,6 +419,12 @@ case "$last" in
 */export-data) body=$(cat "$ROOT/export.json") ;;
 */tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. second_id .. [[","column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
 */tasks\?limit=500) body='{"items":[{"id":"]] .. first_id .. [[","column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
+*/tasks\?limit=1000*) body='{"items":[]] .. summary_row(first_id, "First", M.Column.READY, 1) .. "," .. summary_row(
+        second_id,
+        "Second",
+        M.Column.READY,
+        2
+    ) .. "," .. summary_row(links_id, "Early", M.Column.BACKLOG, 1) .. [[],"next_cursor":null}' ;;
 */tasks\?*) body='{"items":[{"id":"]] .. first_id .. [["}],"next_cursor":null}' ;;
 */attachments)
     body=$(cat "$ROOT/attachments.json")

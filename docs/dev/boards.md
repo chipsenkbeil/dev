@@ -4439,6 +4439,14 @@ Reads:
 - `stale` pages through `/tasks?limit=500`, following `next_cursor` with
   `&cursor=`, for `column_entered_at`. It takes the rest from `/export-data`.
 - `ls` reads `/export-data`, which alone carries each card's colour.
+- The departed, sitting and comments waits and the `--before` and `--after`
+  anchor of `add` read the paged `/tasks?limit=1000` list, following
+  `next_cursor`. They use only a card's column, lane, labels and name.
+  `Backend:cards` takes an opts table for this, and `{ summary = true }` picks
+  the list. The list holds no owner or child counts, so a summary card has no
+  claimant. The turn lookup and the claimed filters of the wait verbs keep the
+  cached `/export-data`, as does every other read. A local board ignores the
+  opts.
 - `next` asks `/tasks?limit=1&ready=true&claimed=false&column_id=<Ready>` and
   reads the card for its colour.
 

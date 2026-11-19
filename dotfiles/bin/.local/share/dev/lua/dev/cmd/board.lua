@@ -755,7 +755,7 @@ local function add_card(backend, args, held)
         end
         position = 0
         if anchor_word then
-            local cards, why = backend:cards()
+            local cards, why = backend:cards({ summary = true })
             if not cards then
                 return failure(why)
             end

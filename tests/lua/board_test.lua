@@ -9554,6 +9554,77 @@ testing.test("a pomb write drops the cached export so the next read fetches it a
     testing.eq(fetches, 2)
 end)
 
+local function paged_summaries(root)
+    executable(root .. "/bin/curl_base", CURL)
+    local function item(id, name, column)
+        return '{"id":"'
+            .. id
+            .. '","name":"'
+            .. name
+            .. '","column_id":"'
+            .. column
+            .. '","swimlane_id":null,"position":1,"labels":["docs"],"claim":null}'
+    end
+    executable(
+        root .. "/bin/curl",
+        "#!/bin/sh\nfor last; do :; done\n"
+            .. 'case "$last" in\n'
+            .. "*/tasks\\?limit=1000\\&cursor=c2) body='"
+            .. '{"items":['
+            .. item(ID_C, "Early", BACKLOG_COLUMN)
+            .. '],"next_cursor":null}\' ;;\n'
+            .. "*/tasks\\?limit=1000) body='"
+            .. '{"items":['
+            .. item(ID_A, "First", READY_COLUMN)
+            .. ","
+            .. item(ID_B, "Second", READY_COLUMN)
+            .. '],"next_cursor":"c2"}\' ;;\n'
+            .. '*) exec "$ROOT/bin/curl_base" "$@" ;;\n'
+            .. "esac\n"
+            .. 'printf \'curl %s\\n\' "$*" >>"$ROOT/calls"\n'
+            .. "cat >/dev/null\n"
+            .. "printf '%s\\n%s' \"$body\" 200\n"
+    )
+end
+
+testing.test("a summary card list follows the cursor across pages", function()
+    local root, home = sandbox()
+    paged_summaries(root)
+    export_fetches(
+        root,
+        home,
+        "local cards = assert(b:cards({summary = true})); assert(#cards == 3, #cards); "
+            .. "assert(cards[1].name == 'Early'); assert(cards[2].column == 'Ready'); "
+            .. "assert(cards[2].description == nil)"
+    )
+    local calls = read(root, "calls")
+    testing.ok(
+        calls:find("/tasks?limit=1000 ", 1, true) or calls:find("/tasks?limit=1000\n", 1, true)
+    )
+    testing.ok(calls:find("/tasks?limit=1000&cursor=c2", 1, true), calls)
+end)
+
+testing.test("summary cards read no export request", function()
+    local root, home = sandbox()
+    paged_summaries(root)
+    local fetches = export_fetches(root, home, "assert(b:cards({summary = true}))")
+    testing.eq(fetches, 0)
+end)
+
+testing.test("detail cards keep outcomes and the description without the summary flag", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local fetches = export_fetches(
+        root,
+        home,
+        "local cards = assert(b:cards()); local found; "
+            .. "for _, card in ipairs(cards) do if card.id == '"
+            .. ID_A
+            .. "' then found = card end end; "
+            .. "assert(#found.outcomes == 3); assert(found.description:find('## Problem', 1, true))"
+    )
+    testing.eq(fetches, 1)
+end)
+
 testing.test("a pomb export read after a pause with no write fetches it again", function()
     local root, home = sandbox()
     local fetches = export_fetches(
@@ -11641,6 +11712,7 @@ testing.test("add --before places the card directly above CARD", function()
     testing.eq(backlog_names(root, home), { "One", "Two", "Mid", "Three" })
     local _, status, calls = pomb_placed({ "--before", "11111111-b" })
     testing.eq(status, 0)
+    testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
     testing.ok(calls:find('"position":1', 1, true), calls)
 end)
 
