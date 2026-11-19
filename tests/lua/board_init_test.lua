@@ -3,6 +3,7 @@ local board = require("dev.board")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local init = require("dev.board.init")
+local pomb = require("dev.board.pomb")
 local support = require("support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
@@ -33,7 +34,6 @@ local function turn_row(column)
 end
 local LANES_DIE =
     "The `lanes` setting of `[board]` must be a list of lane names in `.dev/config.toml`."
-local STANDARD_ROLES = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 
 local function copy(value)
     if type(value) ~= "table" then
@@ -148,8 +148,8 @@ local function fake_layout(opts)
         end
         local created = {}
         if #state.roles == 0 then
-            state.roles = copy(STANDARD_ROLES)
-            created = copy(STANDARD_ROLES)
+            state.roles = copy(pomb.STANDARD_ROLE_KEYS)
+            created = copy(pomb.STANDARD_ROLE_KEYS)
         end
         return created
     end
@@ -1778,7 +1778,7 @@ end)
 
 local function granted_roles(skip)
     local rows = {}
-    for index, key in ipairs({ "planner", "implementer", "reviewer", "verifier", "release", "lead" }) do
+    for index, key in ipairs(pomb.STANDARD_ROLE_KEYS) do
         if key ~= skip then
             rows[#rows + 1] = '{"id":"role-'
                 .. index

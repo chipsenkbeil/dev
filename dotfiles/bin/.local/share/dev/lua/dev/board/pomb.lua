@@ -69,7 +69,6 @@ local WHOAMI_PATH = "/api/v1/auth/whoami"
 local PERMISSIONS_PATH = "/api/v1/auth/permissions"
 local EXPIRED = "the role token expired; mint it again from its issuer"
 local ROLES_PATH = "/api/v1/agent-roles/standard"
-local STANDARD_ROLE_KEYS = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
 local SUBTASKS_DELETE = "subtasks.delete"
@@ -108,6 +107,10 @@ local M = {}
 
 ---The most hours Pomb lets a role token live.
 M.MAX_TOKEN_HOURS = 8
+
+---The keys of the standard agent roles a board grants.
+---@type string[]
+M.STANDARD_ROLE_KEYS = { "planner", "implementer", "reviewer", "verifier", "release", "lead" }
 
 ---@enum dev.board.pomb.Reason
 M.Reason = { BAD_URL = "bad_url" }
@@ -2834,7 +2837,7 @@ function Backend:__roles_granted(board_id)
             end
         end
     end
-    for _, key in ipairs(STANDARD_ROLE_KEYS) do
+    for _, key in ipairs(M.STANDARD_ROLE_KEYS) do
         if not held[key] then
             return false
         end
