@@ -363,6 +363,50 @@ testing.test(
     end
 )
 
+testing.test("stale marks a local needs:human card whose newest comment is the owner's", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", Column.ICEBOX })))
+    local out, code = dev(root, home, { "board", "label", a, board.NEEDS_HUMAN })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "note", a, "which way" })
+    testing.eq(code, 0, out)
+    local doc = document(file_of(home))
+    doc.cards[1].comments[1].who = "human"
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    out = dev(root, home, { "board", "stale" })
+    testing.ok(out:find("(answered, waiting for your move)", 1, true), out)
+end)
+
+testing.test("stale lists a local card the owner moved out of Blocked", function()
+    local root, home = local_board()
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Moved",
+        "--column",
+        Column.READY,
+        "--size",
+        "1",
+        "--description",
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--checks",
+        "dev test",
+    })))
+    local doc = document(file_of(home))
+    doc.cards[1].labels = { board.NEEDS_HUMAN }
+    doc.cards[1].entered_at = "2020-01-01T00:00:00Z"
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    local out = dev(root, home, { "board", "stale" })
+    testing.ok(out:find("moved by the owner, remove needs:human:", 1, true), out)
+    testing.ok(out:find(a .. "  Ready  ", 1, true), out)
+end)
+
 testing.test("answer posts the quote and frees a local needs:human card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", Column.ICEBOX })))
@@ -515,6 +559,41 @@ testing.test("rename sets a local card's title and refuses a blank one", functio
     out, code = dev(root, home, { "board", "rename", a, " " })
     testing.eq(code, 2, out)
     testing.eq(document(file_of(home)).cards[1].name, "Better title")
+end)
+
+testing.test("next --column backlog and icebox skip a claimed card", function()
+    local root, home = local_board()
+    for _, column in ipairs({ Column.BACKLOG, Column.ICEBOX }) do
+        local function planned(name)
+            local out, code = dev(root, home, {
+                "board",
+                "add",
+                name,
+                "--column",
+                column,
+                "--size",
+                "1",
+                "--problem",
+                "x",
+                "--change",
+                "x",
+                "--out-of-scope",
+                "y",
+                "--done-when",
+                "a",
+            })
+            testing.eq(code, 0, out)
+            return prefix_of(out)
+        end
+        local claimed = planned("Claimed " .. column)
+        local free = planned("Free " .. column)
+        local out, code = dev(root, home, { "board", "take", claimed })
+        testing.eq(code, 0, out)
+        out, code = dev(root, home, { "board", "next", "--column", column })
+        testing.eq(code, 0, out)
+        testing.ok(out:find(free, 1, true) and out:find("Free " .. column, 1, true), out)
+        testing.eq(out:find(claimed, 1, true), nil)
+    end
 end)
 
 testing.test("discard notes the reason, labels the card and moves it to Done", function()
