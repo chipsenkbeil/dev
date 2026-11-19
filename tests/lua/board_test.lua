@@ -19,7 +19,7 @@ local support = require("support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
 local OLD_TOKEN = "pomb_OLDtoken9876543210"
-local FROZEN_NAP_SECS = 3
+local FROZEN_NAP_SECS = 1
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
