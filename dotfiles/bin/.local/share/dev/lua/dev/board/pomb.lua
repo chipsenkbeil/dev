@@ -31,6 +31,7 @@ local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text"
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = 30
 local WAIT_SECONDS = 50
+local EXPORT_FRESH_SECONDS = 2
 local WAIT_MARGIN_SECONDS = 10
 local GONE = 410
 local CURSOR_EXPIRED = "cursor_expired"
@@ -121,6 +122,7 @@ M.MAX_TOKEN_HOURS = 8
 ---@class dev.board.pomb.Backend: dev.board.Backend, dev.board.Layout
 ---@field private __opts dev.board.pomb.Opts the server, token reference and board name
 ---@field private __secret string? the token, nil until the first request
+---@field private __exports table<string, {at: integer, doc: table<string, any>}>? decoded export per board id, held 2 seconds and dropped by any write or wait
 ---@field private __healed boolean? nil until a refused Keychain token is replaced
 ---@field private __who string|false|nil the token's role name, false when it has none, nil until asked
 ---@field private __filed boolean? true when the token came from the role token file
@@ -352,6 +354,9 @@ end
 ---@return integer? status the HTTP status when pomb refused the call
 ---@return any? answer the decoded body of a refused call
 function Backend:__request(method, path, body, fence, seconds, file, save)
+    if method ~= "GET" then
+        self.__exports = nil
+    end
     if not self.__secret then
         local token, message
         if not self.__opts.lead then
@@ -380,6 +385,7 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     local argv = {
         "curl",
         "-sS",
+        "--compressed",
         "--connect-timeout",
         CONNECT_SECONDS,
         "--max-time",
@@ -884,13 +890,32 @@ function Backend:__card(task)
     }
 end
 
+---Read a board's export, reusing it for 2 seconds unless a write or a wait drops it.
+---@private
+---@param id string the board's id
+---@return table<string, any>? doc the decoded export, shared by every reader
+---@return string? message why the call failed
+function Backend:__export(id)
+    self.__exports = self.__exports or {}
+    local held = self.__exports[id]
+    if held and os.time() - held.at < EXPORT_FRESH_SECONDS then
+        return held.doc
+    end
+    local doc, message = self:__request("GET", "/api/boards/" .. id .. "/export-data")
+    if not doc then
+        return nil, message
+    end
+    self.__exports[id] = { at = os.time(), doc = doc }
+    return doc
+end
+
 function Backend:cards()
     local ok, message = self:__load()
     if not ok then
         return nil, message
     end
     local doc
-    doc, message = self:__request("GET", "/api/boards/" .. self.__detail.id .. "/export-data")
+    doc, message = self:__export(self.__detail.id)
     if not doc then
         return nil, message
     end
@@ -1430,7 +1455,7 @@ function Backend:history(id)
         return nil, message
     end
     local doc
-    doc, message = self:__request("GET", "/api/boards/" .. self.__detail.id .. "/export-data")
+    doc, message = self:__export(self.__detail.id)
     if not doc then
         return nil, message
     end
@@ -2183,6 +2208,7 @@ local function escaped(word)
 end
 
 function Backend:wait(after, kinds, timeout)
+    self.__exports = nil
     local loaded, message = self:__load()
     if not loaded then
         return nil, message
@@ -2617,7 +2643,7 @@ function Backend:read()
         return nil, message
     end
     local export
-    export, message = self:__request("GET", "/api/boards/" .. id .. "/export-data")
+    export, message = self:__export(id)
     if not export then
         return nil, message
     end

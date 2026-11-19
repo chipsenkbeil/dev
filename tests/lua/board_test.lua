@@ -9490,6 +9490,65 @@ testing.test("the pomb card read of a missing task returns nil and names the tas
     testing.eq(read(root, "calls"):find("export-data", 1, true), nil)
 end)
 
+local function export_fetches(root, home, steps)
+    local script = string.format(
+        "package.path = %q; local pomb = require('dev.board.pomb'); "
+            .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
+            .. "%s",
+        support.absolute_path(),
+        steps
+    )
+    local out, code = dev_os.capture({ "luajit", "-e", script }, {
+        env = {
+            PATH = root .. "/bin:" .. os.getenv("PATH"),
+            HOME = home,
+            ROOT = root,
+            DEV_PASS_LOCK = root .. "/pass.lock",
+        },
+        stderr = "stdout",
+    })
+    testing.eq(code, 0, out)
+    local _, fetches = read(root, "calls"):gsub("export%-data", "")
+    return fetches
+end
+
+testing.test("one pomb backend reads the export once across cards and history", function()
+    local root, home = sandbox()
+    local fetches = export_fetches(
+        root,
+        home,
+        string.format("assert(b:cards()); assert(b:history(%q)); assert(b:cards())", ID_A)
+    )
+    testing.eq(fetches, 1)
+end)
+
+testing.test("a pomb write drops the cached export so the next read fetches it again", function()
+    local root, home = sandbox()
+    local fetches = export_fetches(
+        root,
+        home,
+        string.format("assert(b:cards()); assert(b:note(%q, 'hello')); assert(b:cards())", ID_A)
+    )
+    testing.eq(fetches, 2)
+end)
+
+testing.test("a pomb export read after a pause with no write fetches it again", function()
+    local root, home = sandbox()
+    local fetches = export_fetches(
+        root,
+        home,
+        "assert(b:cards()); local now = os.time; os.time = function() return now() + 30 end; assert(b:cards())"
+    )
+    testing.eq(fetches, 2)
+end)
+
+testing.test("every pomb request asks curl for a compressed answer", function()
+    local root, home = sandbox()
+    export_fetches(root, home, "assert(b:cards())")
+    local calls = read(root, "calls")
+    testing.ok(calls:find("curl -sS --compressed ", 1, true), calls)
+end)
+
 testing.test("ls adds no holder column while nobody holds a claim", function()
     local cards = sample()
     local result = cmd_board.run("ls", {}, fake(cards))
@@ -9846,6 +9905,17 @@ local function wait_route(root, reply)
         )
     )
 end
+
+testing.test("a pomb wait drops the cached export so the next read fetches it again", function()
+    local root, home = sandbox()
+    wait_route(root, '{"cursor":"9","events":[]}')
+    local fetches = export_fetches(
+        root,
+        home,
+        "assert(b:cards()); assert(b:wait('7', nil, 1)); assert(b:cards())"
+    )
+    testing.eq(fetches, 2)
+end)
 
 testing.test("wait returns the events oldest first with column names and the cursor", function()
     local root, home = sandbox()
