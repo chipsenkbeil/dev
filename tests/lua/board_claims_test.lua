@@ -112,6 +112,14 @@ local function take_stub(card)
     function stub:cards()
         return { card }
     end
+    function stub:card(id)
+        for _, listed in ipairs(self:cards()) do
+            if listed.id == id then
+                return listed
+            end
+        end
+        return nil, "no card " .. id
+    end
     function stub:claim(_, _, opts)
         return (opts.fence or 0) + 1
     end

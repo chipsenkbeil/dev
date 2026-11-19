@@ -610,6 +610,14 @@ local function fake_backend(root, card)
     function backend:cards()
         return { view }
     end
+    function backend:card(id)
+        for _, listed in ipairs(self:cards()) do
+            if listed.id == id then
+                return listed
+            end
+        end
+        return nil, "no card " .. id
+    end
     function backend:comments()
         return {}
     end
@@ -2918,6 +2926,14 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
                         card.color = nil
                     end
                     return list
+                end
+                local single = backend.card
+                function backend:card(...)
+                    local found, message = single(self, ...)
+                    if found and has_landed(project) then
+                        found.color = nil
+                    end
+                    return found, message
                 end
             end)
             testing.eq(result.code, 1, result.message)

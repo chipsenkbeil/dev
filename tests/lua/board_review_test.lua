@@ -503,6 +503,14 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     function backend:cards()
         return { card }
     end
+    function backend:card(id)
+        for _, listed in ipairs(self:cards()) do
+            if listed.id == id then
+                return listed
+            end
+        end
+        return nil, "no card " .. id
+    end
     function backend:comments()
         return {}
     end
@@ -536,6 +544,14 @@ local function seat_backend(root, refusal, reason)
     end
     function backend:cards()
         return { card }
+    end
+    function backend:card(id)
+        for _, listed in ipairs(self:cards()) do
+            if listed.id == id then
+                return listed
+            end
+        end
+        return nil, "no card " .. id
     end
     function backend:comments()
         return {}
