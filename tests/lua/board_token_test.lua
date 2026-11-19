@@ -43,6 +43,9 @@ case "$last" in
     *"-X GET"*) [ -f "$ROOT/list.json" ] && body=$(cat "$ROOT/list.json") ;;
     esac
     status=$(cat "$ROOT/children_status" 2>/dev/null || echo 200)
+    case "$*" in
+    *"-X POST"*) [ -f "$ROOT/post_status" ] && status=$(cat "$ROOT/post_status") ;;
+    esac
     ;;
 *) body='{}' ;;
 esac
@@ -616,3 +619,88 @@ testing.test(
         testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
     end
 )
+
+local function renewing(root)
+    assert(
+        fs.write(
+            root .. "/list.json",
+            '[{"id":"tok-other","name":"dotfiles/reviewer/other/1"},{"id":"'
+                .. CHILD_ID
+                .. '","name":"'
+                .. NAME
+                .. '"}]'
+        )
+    )
+    assert(fs.write(root .. "/calls", ""))
+end
+
+local function renew(root, home)
+    return dev(
+        root,
+        home,
+        { "board", "token", "mint", "--role", "implementer", "--as", NAME, "--renew" }
+    )
+end
+
+testing.test("token mint renew replaces a live token and never deletes its file", function()
+    local root, home = minted()
+    local path = filed_path(home)
+    assert(fs.write(root .. "/children.json", (CREATED:gsub(RAW, NEW))))
+    renewing(root)
+
+    -- Renew once and expect the delete before the issue
+    local out, code = renew(root, home)
+    testing.ok(code == 0, out)
+    local calls = read(root, "calls")
+    local deleting = calls:find("/api/v1/auth/tokens/children/" .. CHILD_ID .. "\n", 1, true)
+    local posting = calls:find("-X POST", 1, true)
+    testing.ok(deleting and posting and deleting < posting, calls)
+    testing.eq(calls:find("tok-other", 1, true), nil, calls)
+    testing.eq(filed_path(home), path)
+    testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+
+    -- Refuse the issue after the delete and keep the file
+    assert(fs.write(root .. "/post_status", "409"))
+    assert(fs.write(root .. "/children.json", '{"code":"name_taken","message":"taken"}'))
+    out, code = renew(root, home)
+    testing.ok(code == 1, out)
+    testing.ok(out:find("The old token was already deleted", 1, true), out)
+    testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+end)
+
+testing.test("token mint renew with no live token still mints", function()
+    local root, home = minted()
+    assert(
+        fs.write(root .. "/list.json", '[{"id":"tok-other","name":"dotfiles/reviewer/other/1"}]')
+    )
+    assert(fs.write(root .. "/calls", ""))
+    local out, code = renew(root, home)
+    testing.ok(code == 0, out)
+    testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil, read(root, "calls"))
+    testing.ok(read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
+end)
+
+testing.test("token mint renew issues nothing when the delete fails", function()
+    local root, home = minted()
+    local path = filed_path(home)
+    renewing(root)
+    assert(fs.write(root .. "/revoke_status", "403"))
+    assert(fs.write(root .. "/revoke.json", '{"code":"permission_denied","message":"no"}'))
+    local out, code = renew(root, home)
+    testing.ok(code == 1, out)
+    testing.eq(read(root, "calls"):find("-X POST", 1, true), nil, read(root, "calls"))
+    testing.eq(fs.read(path), RAW .. "\n" .. EXPIRES .. "\n")
+end)
+
+testing.test("token mint without renew still refuses a live name and deletes nothing", function()
+    local root, home = minted()
+    local path = filed_path(home)
+    renewing(root)
+    assert(fs.write(root .. "/children_status", "409"))
+    assert(fs.write(root .. "/children.json", '{"code":"name_taken","message":"taken"}'))
+    local out, code = mint(root, home)
+    testing.ok(code == 1, out)
+    testing.ok(out:find("Another token already has the name " .. NAME, 1, true), out)
+    testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil, read(root, "calls"))
+    testing.eq(fs.read(path), RAW .. "\n" .. EXPIRES .. "\n")
+end)

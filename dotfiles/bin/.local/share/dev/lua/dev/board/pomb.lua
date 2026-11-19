@@ -2483,17 +2483,24 @@ local function plural(list)
     return #list > 0 and table.concat(list, ", ") or "none"
 end
 
+---@class dev.board.pomb.mint.Opts
+---@field hours integer? the token's lifetime in hours, `M.MAX_TOKEN_HOURS` when nil
+---@field renew boolean? whether to delete the live token of the name on Pomb first, keeping its
+---   file until the new token replaces it
+
 ---Issue a role token as a child of the token in use and keep it in the file of
 ---`name`, deleting the expired token files on the way.
 ---
 ---The token goes to the file and nowhere else.
 ---@param role string the agent role's name
 ---@param name string the agent name to issue as, the `DEV_AGENT` of the runner
----@param hours integer? the token's lifetime in hours, `M.MAX_TOKEN_HOURS` when nil
+---@param opts dev.board.pomb.mint.Opts? the lifetime and whether to renew a live token
 ---@return {role: string, label: string, expires: integer}? issued what was issued, without the
 ---   token
 ---@return string? message why nothing was issued
-function Backend:mint(role, name, hours)
+function Backend:mint(role, name, opts)
+    opts = opts or {}
+    local hours = opts.hours
     local roles, message = self:__request("GET", ROLES_LIST_PATH)
     if not roles then
         return nil, message
@@ -2511,6 +2518,14 @@ function Backend:mint(role, name, hours)
         return nil,
             "Pomb has no agent role named " .. role .. ". The roles are " .. plural(names) .. "."
     end
+    local deleted = false
+    if opts.renew then
+        local dropped, why = self:__drop_child(name)
+        if dropped == nil then
+            return nil, why
+        end
+        deleted = dropped
+    end
     local reply, status, doc
     reply, message, status, doc = self:__request(
         "POST",
@@ -2520,27 +2535,32 @@ function Backend:mint(role, name, hours)
     local code = type(doc) == "table" and doc.code or nil
     local refusal = type(doc) == "table" and present(doc.message) or ""
     local limit = refusal:match("(%d+) hours at most")
+    local failed
     if status == HTTP_ERROR and limit then
-        return nil,
-            "Pomb refused the lifetime. The owner allows "
-                .. limit
-                .. " hours at most. Pass a lower --hours."
+        failed = "Pomb refused the lifetime. The owner allows "
+            .. limit
+            .. " hours at most. Pass a lower --hours."
     elseif status == CONFLICT then
-        return nil,
-            "Another token already has the name "
-                .. name
-                .. ". Pick another --as or wait for that token to expire."
+        failed = "Another token already has the name "
+            .. name
+            .. ". Pick another --as or wait for that token to expire."
     elseif status == HTTP_ERROR and code == UNKNOWN_ROLE then
-        return nil, "Pomb has no agent role named " .. role .. "."
+        failed = "Pomb has no agent role named " .. role .. "."
     elseif status == FORBIDDEN and code == EXCEEDS_GRANT then
-        return nil,
-            "The token in use cannot issue the "
-                .. role
-                .. " role: it asks for more than this token holds or the role is granted on a board this token lacks ("
-                .. (present(doc.message) or "no message")
-                .. ")."
+        failed = "The token in use cannot issue the "
+            .. role
+            .. " role: it asks for more than this token holds or the role is granted on a board this token lacks ("
+            .. (present(doc.message) or "no message")
+            .. ")."
     elseif not reply then
-        return nil, message
+        failed = message
+    end
+    if failed then
+        if deleted then
+            failed = dev_text.sentence(failed)
+                .. " The old token was already deleted, so mint again without --renew."
+        end
+        return nil, failed
     end
     local raw = type(reply) == "table" and present(reply.raw_token)
     if not raw or not raw:find(TOKEN_PATTERN) then
@@ -2570,16 +2590,13 @@ function Backend:mint(role, name, hours)
     }
 end
 
----Revoke the child token of the token in use that was issued as `name`, and
----delete the file of `name`.
----
----A name that no live child holds, or a token Pomb no longer knows, leaves
----nothing to revoke, and the file goes all the same. Pomb refusing the revoke
----keeps the file.
+---Delete the child token of the token in use that was issued as `name` on
+---Pomb, and leave its file alone.
 ---@param name string the agent name the token was issued as
----@return {revoked: boolean}? done whether a token was revoked, false when none was left
+---@return boolean? revoked whether a token was deleted, false when none was left
 ---@return string? message why it failed
-function Backend:revoke(name)
+---@private
+function Backend:__drop_child(name)
     local children, message = self:__request("GET", CHILDREN_PATH)
     if not children then
         return nil, message
@@ -2600,6 +2617,23 @@ function Backend:revoke(name)
         elseif status ~= NOT_FOUND then
             return nil, message
         end
+    end
+    return revoked
+end
+
+---Revoke the child token of the token in use that was issued as `name`, and
+---delete the file of `name`.
+---
+---A name that no live child holds, or a token Pomb no longer knows, leaves
+---nothing to revoke, and the file goes all the same. Pomb refusing the revoke
+---keeps the file.
+---@param name string the agent name the token was issued as
+---@return {revoked: boolean}? done whether a token was revoked, false when none was left
+---@return string? message why it failed
+function Backend:revoke(name)
+    local revoked, message = self:__drop_child(name)
+    if revoked == nil then
+        return nil, message
     end
     local ok
     ok, message = tokenfile.remove(name)

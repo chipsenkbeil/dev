@@ -208,6 +208,12 @@ Only a live or suspended token of that name, matched without regard to case,
 gets a 409 `name_taken`. The verb refuses by naming NAME and leaves the file
 as it was.
 
+`dev board token mint --role ROLE --as NAME --renew` renews a live token in
+one call. It deletes the live token of NAME on Pomb first and then issues the
+new one, and it never deletes the file of NAME, so a reviewer that reads the
+file between the two steps still finds a token. The new token replaces the
+file once it is issued. Without `--renew` a live name is still refused.
+
 A request refused with `token_expired` for the token it read from that file
 reads the file once more:
 
