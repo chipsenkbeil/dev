@@ -1116,6 +1116,39 @@ if has_jj then
         end
     )
 
+    testing.test(
+        "land refuses a needs-work style review and a needs-work recheck of either kind",
+        function()
+            local cases = {
+                { kind = "style", by = "style-picky", label = "style review" },
+                {
+                    kind = "recheck",
+                    of = "code",
+                    by = "code-recheck-picky",
+                    label = "recheck review",
+                },
+                {
+                    kind = "recheck",
+                    of = "style",
+                    by = "style-recheck-picky",
+                    label = "recheck review",
+                },
+            }
+            for _, case in ipairs(cases) do
+                local project = jj_project()
+                local id = verified_card(project)
+                must(
+                    record_review(
+                        project,
+                        id,
+                        { kind = case.kind, of = case.of, by = case.by, verdict = "needs-work" }
+                    )
+                )
+                refused(project, id, { case.label .. " by " .. case.by, "needs-work" })
+            end
+        end
+    )
+
     testing.test("a failed jj land leaves the card in Verify and exits non-zero", function()
         local project = jj_project()
         local id = verified_card(project)
