@@ -249,9 +249,9 @@ function M.missing_reviews(comments, state, root)
             reviews[#reviews + 1] = record
         end
     end
-    local function has_kind(kind, matches)
+    local function has_kind(kind, matches, of)
         for _, record in ipairs(reviews) do
-            if record.kind == kind and matches(record.commit) then
+            if record.kind == kind and record.of == of and matches(record.commit) then
                 return true
             end
         end
@@ -262,12 +262,11 @@ function M.missing_reviews(comments, state, root)
             return true
         end)
     end
-    local function has_here(kind)
-        return has_kind(kind, same)
+    local function has_here(kind, of)
+        return has_kind(kind, same, of)
     end
-    local rechecked = has_here(review.Kind.RECHECK)
     local missing = {}
-    for _, kind in ipairs({ review.Kind.CODE, review.Kind.STYLE }) do
+    for _, kind in ipairs(review.OF_KINDS) do
         if not has_here(kind) then
             if not has_any(kind) then
                 missing[#missing + 1] = string.format(
@@ -276,12 +275,13 @@ function M.missing_reviews(comments, state, root)
                     state.change,
                     kind
                 )
-            elseif not rechecked then
+            elseif not has_here(review.Kind.RECHECK, kind) then
                 missing[#missing + 1] = string.format(
                     "The %s review is of an earlier commit than %s. "
-                        .. "Record a recheck with `dev board review --kind recheck --rev @`.",
+                        .. "Record a recheck with `dev board review --kind recheck --of %s --rev @`.",
                     kind,
-                    M.short(state.commit)
+                    M.short(state.commit),
+                    kind
                 )
             end
         end
@@ -300,16 +300,20 @@ function M.refused_reviews(comments, state, root)
     for _, comment in ipairs(comments) do
         local record = review.parse(comment.body)
         if record and record.change == state.change and same(record.commit) then
-            latest[record.kind] = record
+            latest[record.kind .. "/" .. (record.of or "")] = record
         end
     end
     local refused = {}
-    for _, kind in ipairs(review.KINDS) do
-        local record = latest[kind]
+    local slots = { review.Kind.CODE .. "/", review.Kind.STYLE .. "/" }
+    for _, of in ipairs(review.OF_KINDS) do
+        slots[#slots + 1] = review.Kind.RECHECK .. "/" .. of
+    end
+    for _, slot in ipairs(slots) do
+        local record = latest[slot]
         if record and record.verdict == review.Verdict.NEEDS_WORK then
             refused[#refused + 1] = string.format(
                 "The %s review by %s at commit %s says needs-work. Fix it and record a new review.",
-                kind,
+                record.kind,
                 record.by,
                 M.short(state.commit)
             )

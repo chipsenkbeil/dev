@@ -151,8 +151,15 @@ local function checked(commit, mode, rows)
     return { body = head .. "\n" .. table.concat(lines, "\n") }
 end
 
-local function reviewed(kind, commit)
-    return { body = "dev-review: kind=" .. kind .. " by=r commit=" .. commit .. " change=chg" }
+local function reviewed(kind, commit, of)
+    return {
+        body = "dev-review: kind="
+            .. kind
+            .. " by=r commit="
+            .. commit
+            .. " change=chg"
+            .. (of and (" of=" .. of) or ""),
+    }
 end
 
 local STATE = { commit = COMMIT, change = "chg" }
@@ -245,7 +252,13 @@ end)
 
 local function judged(kind, commit, opts)
     return {
-        body = review.record(kind, opts.by, { commit = commit, change = "chg" }, opts.verdict),
+        body = review.record(
+            kind,
+            opts.by,
+            { commit = commit, change = "chg" },
+            opts.verdict,
+            opts.of
+        ),
     }
 end
 
@@ -260,7 +273,7 @@ testing.test("refused_reviews names the reviewer whose latest verdict is needs-w
     testing.eq(#refused, 1)
     testing.ok(refused[1]:find("style review by r2", 1, true), refused[1])
     testing.ok(refused[1]:find("needs-work", 1, true), refused[1])
-    local recheck = judged("recheck", COMMIT, { by = "r3", verdict = "needs-work" })
+    local recheck = judged("recheck", COMMIT, { by = "r3", verdict = "needs-work", of = "code" })
     refused = land.refused_reviews({ recheck }, STATE)
     testing.ok(refused[1]:find("recheck review by r3", 1, true), refused[1])
     local code_needs = judged("code", COMMIT, { by = "r1", verdict = "needs-work" })
@@ -275,10 +288,27 @@ testing.test("a review of an earlier commit needs a recheck at the landing commi
     local missing = land.missing_reviews(old, STATE)
     testing.eq(#missing, 2)
     testing.ok(missing[1]:find("earlier commit", 1, true), missing[1])
-    old[#old + 1] = reviewed("recheck", OTHER)
+    old[#old + 1] = reviewed("recheck", OTHER, "code")
     testing.eq(#land.missing_reviews(old, STATE), 2)
-    old[#old + 1] = reviewed("recheck", COMMIT)
+    old[#old + 1] = reviewed("recheck", COMMIT, "code")
+    old[#old + 1] = reviewed("recheck", COMMIT, "style")
     testing.eq(land.missing_reviews(old, STATE), {})
+end)
+
+testing.test("missing_reviews counts a recheck only for the kind it names", function()
+    local old = { reviewed("code", OTHER), reviewed("style", OTHER) }
+    old[#old + 1] = reviewed("recheck", COMMIT, "code")
+    local missing = land.missing_reviews(old, STATE)
+    testing.eq(#missing, 1)
+    testing.ok(missing[1]:find("The style review is of an earlier commit", 1, true), missing[1])
+    testing.ok(missing[1]:find("--kind recheck --of style", 1, true), missing[1])
+    local bare = { reviewed("code", OTHER), reviewed("style", OTHER), reviewed("recheck", COMMIT) }
+    testing.eq(#land.missing_reviews(bare, STATE), 2)
+    local lifted = { judged("recheck", COMMIT, { by = "r", verdict = "needs-work", of = "style" }) }
+    lifted[#lifted + 1] = judged("recheck", COMMIT, { by = "r", verdict = "clean", of = "code" })
+    local refused = land.refused_reviews(lifted, STATE)
+    testing.eq(#refused, 1)
+    testing.ok(refused[1]:find("recheck review by r", 1, true), refused[1])
 end)
 
 testing.test("checks_problem counts only the newest passing run at the commit", function()
@@ -1139,19 +1169,23 @@ if has_jj then
         must(dev(project, { "board", "take", id, "--as", "dotfiles/builder" }))
         local before = #comments(project.home, id)
         for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local out, code = dev(project, {
-                "board",
-                "review",
-                id,
-                "--kind",
-                kind,
-                "--by",
-                "dotfiles/builder",
-                "--rev",
-                "@",
-                "--verdict",
-                "clean",
-            }, { DEV_AGENT = "dotfiles/builder" })
+            local out, code = dev(
+                project,
+                support.with_of(kind, {
+                    "board",
+                    "review",
+                    id,
+                    "--kind",
+                    kind,
+                    "--by",
+                    "dotfiles/builder",
+                    "--rev",
+                    "@",
+                    "--verdict",
+                    "clean",
+                }),
+                { DEV_AGENT = "dotfiles/builder" }
+            )
             testing.eq(code, 1, out)
             testing.ok(
                 out:find("A reviewer other than dotfiles/builder must record it", 1, true),
@@ -1159,19 +1193,23 @@ if has_jj then
             )
         end
         for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local out, code = dev(project, {
-                "board",
-                "review",
-                id,
-                "--kind",
-                kind,
-                "--by",
-                "rev",
-                "--rev",
-                "@",
-                "--verdict",
-                "clean",
-            }, { DEV_AGENT = "dotfiles/builder" })
+            local out, code = dev(
+                project,
+                support.with_of(kind, {
+                    "board",
+                    "review",
+                    id,
+                    "--kind",
+                    kind,
+                    "--by",
+                    "rev",
+                    "--rev",
+                    "@",
+                    "--verdict",
+                    "clean",
+                }),
+                { DEV_AGENT = "dotfiles/builder" }
+            )
             testing.eq(code, 1, out)
             testing.ok(out:find("dotfiles/builder cannot record a review by rev", 1, true), out)
         end
@@ -1235,21 +1273,25 @@ if has_jj then
         assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
         must(dev(project, { "board", "check", id }))
         refused(project, id, { "earlier commit than", "dev board review --kind recheck" })
-        must(dev(project, {
-            "board",
-            "review",
-            id,
-            "--kind",
-            "recheck",
-            "--by",
-            "rev",
-            "--rev",
-            "@",
-            "--verdict",
-            "clean",
-        }, { DEV_AGENT = "rev" }))
-        local out, code = dev(project, { "board", "land", id })
-        testing.eq(code, 0, out)
+        for _, of in ipairs({ "code", "style" }) do
+            must(dev(project, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                "recheck",
+                "--of",
+                of,
+                "--by",
+                "rev",
+                "--rev",
+                "@",
+                "--verdict",
+                "clean",
+            }, { DEV_AGENT = "rev" }))
+            local out, code = dev(project, { "board", "land", id })
+            testing.eq(code == 0, of == "style", out)
+        end
     end)
 
     testing.test("land rebases onto trunk under the turn when trunk has moved", function()

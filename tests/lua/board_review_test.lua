@@ -241,19 +241,23 @@ testing.test(
         doc.cards[1].claim.expires_at = "2000-01-01T00:00:00Z"
         assert(fs.write(file, assert(json.encode(doc))))
         for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local out, code = dev(root, home, {
-                "board",
-                "review",
-                id,
-                "--kind",
-                kind,
-                "--by",
-                "dotfiles/builder",
-                "--rev",
-                "HEAD",
-                "--verdict",
-                "clean",
-            })
+            local out, code = dev(
+                root,
+                home,
+                support.with_of(kind, {
+                    "board",
+                    "review",
+                    id,
+                    "--kind",
+                    kind,
+                    "--by",
+                    "dotfiles/builder",
+                    "--rev",
+                    "HEAD",
+                    "--verdict",
+                    "clean",
+                })
+            )
             testing.eq(code, 1, out)
             testing.ok(
                 out:find(
@@ -302,19 +306,22 @@ testing.test("review refuses a default-named claimant when DEV_AGENT is unset", 
     end
     must(run("dotfiles/builder", { "board", "take", id }))
     for _, kind in ipairs({ "code", "style", "recheck" }) do
-        local out, code = run("dotfiles/builder", {
-            "board",
-            "review",
-            id,
-            "--kind",
-            kind,
-            "--by",
-            "dotfiles/other",
-            "--rev",
-            "HEAD",
-            "--verdict",
-            "clean",
-        })
+        local out, code = run(
+            "dotfiles/builder",
+            support.with_of(kind, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                kind,
+                "--by",
+                "dotfiles/other",
+                "--rev",
+                "HEAD",
+                "--verdict",
+                "clean",
+            })
+        )
         testing.eq(code, 1, out)
         testing.ok(out:find("cannot review its own change", 1, true), out)
     end
@@ -334,6 +341,58 @@ testing.test("review refuses a default-named claimant when DEV_AGENT is unset", 
     })
     testing.eq(code, 0, out)
     testing.eq(#comments(home), 2)
+end)
+
+testing.test("review recheck needs of code or style, and of goes with no other kind", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    local function review_args(kind, of)
+        local args = {
+            "board",
+            "review",
+            id,
+            "--kind",
+            kind,
+            "--by",
+            "r",
+            "--rev",
+            "HEAD",
+            "--verdict",
+            "clean",
+        }
+        if of then
+            args[#args + 1] = "--of"
+            args[#args + 1] = of
+        end
+        return args
+    end
+    local out, code = dev(root, home, review_args("recheck"))
+    testing.eq(code, 2, out)
+    testing.ok(out:find("A recheck needs --of code|style", 1, true), out)
+    out, code = dev(root, home, review_args("recheck", "recheck"))
+    testing.eq(code, 2, out)
+    out, code = dev(root, home, review_args("code", "code"))
+    testing.eq(code, 2, out)
+    testing.ok(out:find("The --of flag goes only with --kind recheck", 1, true), out)
+    testing.eq(#comments(home), 0)
+    out, code = dev(root, home, review_args("recheck", "style"))
+    testing.eq(code, 0, out)
+    testing.eq(#comments(home), 1)
+end)
+
+testing.test("review recheck record carries of and parse reads it back", function()
+    local review = require("dev.board.review")
+    local rev = { commit = "abc123", change = "chg" }
+    local body = review.record("recheck", "r", rev, "clean", "style")
+    testing.eq(
+        body,
+        "dev-review: kind=recheck by=r commit=abc123 change=chg of=style verdict=clean"
+    )
+    local record = review.parse(body)
+    testing.eq(record.of, "style")
+    testing.eq(record.kind, "recheck")
+    testing.eq(record.verdict, "clean")
+    testing.eq(review.parse(review.record("code", "r", rev, "clean")).of, nil)
 end)
 
 testing.test(
@@ -649,6 +708,8 @@ if has_jj then
                 id,
                 "--kind",
                 "recheck",
+                "--of",
+                "code",
                 "--by",
                 "r",
                 "--rev",
@@ -663,7 +724,7 @@ if has_jj then
                     .. commit
                     .. " change="
                     .. change
-                    .. " verdict=clean"
+                    .. " of=code verdict=clean"
             )
             out, code = dev(root, home, {
                 "board",

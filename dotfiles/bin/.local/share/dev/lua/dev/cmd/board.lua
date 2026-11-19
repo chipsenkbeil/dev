@@ -2970,10 +2970,13 @@ function commands.check(backend, args)
 end
 
 function commands.review(backend, args)
-    local flags, words = parse(
-        args,
-        { [KIND_FLAG] = true, [BY_FLAG] = true, [REV_FLAG] = true, [review.VERDICT_FLAG] = true }
-    )
+    local flags, words = parse(args, {
+        [KIND_FLAG] = true,
+        [BY_FLAG] = true,
+        [REV_FLAG] = true,
+        [review.VERDICT_FLAG] = true,
+        [review.OF_FLAG] = true,
+    })
     if not flags then
         return words
     end
@@ -2990,6 +2993,20 @@ function commands.review(backend, args)
         return usage(
             "Unknown kind " .. kind .. ". The kinds are " .. table.concat(review.KINDS, ", ") .. "."
         )
+    end
+    local of = flags[review.OF_FLAG]
+    if kind == review.Kind.RECHECK then
+        if not of or not index_of(review.OF_KINDS, of) then
+            return usage(
+                "A recheck needs "
+                    .. review.OF_FLAG
+                    .. " "
+                    .. table.concat(review.OF_KINDS, "|")
+                    .. "."
+            )
+        end
+    elseif of then
+        return usage("The " .. review.OF_FLAG .. " flag goes only with --kind recheck.")
     end
     local verdict = flags[review.VERDICT_FLAG]
     if not index_of(review.VERDICTS, verdict) then
@@ -3089,7 +3106,7 @@ function commands.review(backend, args)
     local held = claims.read(card.id)
     ok, message = backend:note(
         card.id,
-        review.record(kind, by, rev, verdict),
+        review.record(kind, by, rev, verdict, of),
         held and held.fence,
         { kind = board.NoteKind.STATUS }
     )

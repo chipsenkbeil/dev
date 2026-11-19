@@ -339,6 +339,18 @@ M.COLUMN_NAME = {
     VERIFY = "Verify",
 }
 
+---Add the `--of code` a recheck review needs to the arguments of a `review` call.
+---@param kind string the review kind
+---@param args string[] the arguments
+---@return string[] args the same list, with `--of code` appended for a recheck
+function M.with_of(kind, args)
+    if kind == "recheck" then
+        args[#args + 1] = "--of"
+        args[#args + 1] = "code"
+    end
+    return args
+end
+
 ---Walk a card to Review through In Progress and the status note.
 ---
 ---Stops at the first step that exits non-zero.

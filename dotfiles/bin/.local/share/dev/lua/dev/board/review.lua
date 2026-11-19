@@ -12,6 +12,12 @@ M.Kind = { CODE = "code", STYLE = "style", RECHECK = "recheck" }
 ---The review kinds `review --kind` accepts, in the order help lists them.
 M.KINDS = { M.Kind.CODE, M.Kind.STYLE, M.Kind.RECHECK }
 
+---The flag that names the review a recheck rechecks.
+M.OF_FLAG = "--of"
+
+---The kinds a recheck can name with `--of`.
+M.OF_KINDS = { M.Kind.CODE, M.Kind.STYLE }
+
 ---The names of the verdicts `review --verdict` accepts.
 ---@enum dev.board.review.Verdict
 M.Verdict = { CLEAN = "clean", MINOR = "minor", NEEDS_WORK = "needs-work" }
@@ -86,15 +92,17 @@ end
 ---@param by string the reviewer's name
 ---@param rev dev.board.review.Rev the commit reviewed
 ---@param verdict string one of `VERDICTS`
+---@param of string? the kind a recheck rechecks, one of `OF_KINDS`
 ---@return string text the comment body, which is one line that begins with the reserved prefix
-function M.record(kind, by, rev, verdict)
+function M.record(kind, by, rev, verdict, of)
     return string.format(
-        "%s kind=%s by=%s commit=%s change=%s verdict=%s",
+        "%s kind=%s by=%s commit=%s change=%s%s verdict=%s",
         board.REVIEW_PREFIX,
         kind,
         by,
         rev.commit,
         rev.change,
+        of and (" of=" .. of) or "",
         verdict
     )
 end
@@ -105,11 +113,17 @@ end
 ---@field commit string the full commit id reviewed
 ---@field change string the change id, `-` in a git project
 ---@field verdict string? one of `VERDICTS`, nil in a record written before verdicts
+---@field of string? the kind a recheck rechecks, nil on any other record
 
 ---Read a comment that `record` wrote.
 ---@param body string the comment body
 ---@return dev.board.review.Record? record nil when the body is not a record
 function M.parse(body)
+    local of
+    body = body:gsub(" of=(%S+)", function(value)
+        of = value
+        return ""
+    end, 1)
     local prefix, kind, by, commit, change, verdict =
         body:match("^(%S+) kind=(%S+) by=(%S+) commit=(%x+) change=(%S+) verdict=(%S+)$")
     if not prefix then
@@ -119,7 +133,7 @@ function M.parse(body)
     if prefix ~= board.REVIEW_PREFIX then
         return nil
     end
-    return { kind = kind, by = by, commit = commit, change = change, verdict = verdict }
+    return { kind = kind, by = by, commit = commit, change = change, verdict = verdict, of = of }
 end
 
 return M

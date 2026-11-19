@@ -2762,8 +2762,8 @@ When the comment cannot be written:
 ### review
 
 `dev board review CARD --kind code|style|recheck --by NAME --rev REV --verdict
-clean|minor|needs-work` records that NAME reviewed the commit REV with that
-verdict.
+clean|minor|needs-work [--of code|style]` records that NAME reviewed the commit
+REV with that verdict. A recheck names the review it rechecks with `--of`.
 
 On a Pomb board the review first sets the card's reviewer seat. NAME takes the
 seat named after the kind (`code`, `style` or `recheck`), and answers it. The
@@ -2787,10 +2787,17 @@ card that begins with a reserved first line and has no other:
 dev-review: kind=code by=<NAME> commit=<full commit id> change=<change id, - in git> verdict=<clean|minor|needs-work>
 ```
 
+A recheck record carries `of=code` or `of=style` between `change=` and
+`verdict=`. No other kind has it.
+
 The flags:
 
 - All four are required. A missing one, an unknown kind or an unknown verdict
   is exit 2, and the message lists the kinds or the verdicts.
+- `--of code|style` is required with `--kind recheck` and refused with any other
+  kind (exit 2). `land` counts a recheck only for the kind it names, so a code
+  recheck leaves the style review missing, and a recheck record with no `of`
+  covers nothing.
 - A record written before verdicts has no `verdict=` and is read as it was.
 - REV is a jj revset in a jj project and a git revision in a git one. It must
   name exactly one commit, so a revset of many commits, a word that starts with
@@ -2928,7 +2935,8 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   review of an earlier commit of the change counts when `jj interdiff` between
   that commit and the landing one is empty, so a clean rebase keeps its reviews
   and its check. Any other earlier commit counts only with a
-  `recheck` recorded at the landing commit.
+  `recheck` of that kind (`--of code` or `--of style`) recorded at the landing
+  commit.
 - No `code`, `style` or `recheck` review at the landing commit (or at an
   earlier commit of the change with the same empty interdiff) has `needs-work`
   as its latest verdict. The refusal names the kind and the reviewer, and a

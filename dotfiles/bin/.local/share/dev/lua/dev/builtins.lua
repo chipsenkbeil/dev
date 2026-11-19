@@ -496,8 +496,8 @@ return {
     {
         words = { "board", "review" },
         handler = "lua",
-        flags = "--kind --by --rev --verdict",
-        usage = "dev board review CARD --kind code|style|recheck --by NAME --rev REV --verdict clean|minor|needs-work",
+        flags = "--kind --by --rev --verdict --of",
+        usage = "dev board review CARD --kind code|style|recheck --by NAME --rev REV --verdict clean|minor|needs-work [--of code|style]",
         desc = "Record that NAME reviewed a commit of the card",
     },
     {

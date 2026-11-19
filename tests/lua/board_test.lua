@@ -4066,17 +4066,21 @@ testing.test(
         local backend = fake({ card })
         as_agent("", function()
             for _, kind in ipairs({ "code", "style", "recheck" }) do
-                local result = cmd_board.run("review", {
-                    "cccccccc",
-                    "--kind",
-                    kind,
-                    "--by",
-                    "project-run/a",
-                    "--rev",
-                    "@",
-                    "--verdict",
-                    "clean",
-                }, backend)
+                local result = cmd_board.run(
+                    "review",
+                    support.with_of(kind, {
+                        "cccccccc",
+                        "--kind",
+                        kind,
+                        "--by",
+                        "project-run/a",
+                        "--rev",
+                        "@",
+                        "--verdict",
+                        "clean",
+                    }),
+                    backend
+                )
                 testing.eq(result.code, 1)
                 testing.ok(
                     result.message:find(

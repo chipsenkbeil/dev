@@ -1500,7 +1500,8 @@ local function copied_reviews(comments, carried, state)
                 record.kind,
                 record.by,
                 { commit = state.commit, change = state.change },
-                record.verdict
+                record.verdict,
+                record.of
             )
         end
     end
