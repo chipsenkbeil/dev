@@ -381,14 +381,16 @@ end
 
 local function board_card(doc, id)
     for _, card in ipairs(doc.cards) do
-        if id and card.id:sub(1, #id) == id then
+        if id then
+            if card.id:sub(1, #id) == id then
+                return card
+            end
+        elseif card.name ~= turn.NAME then
             return card
         end
     end
-    for _, card in ipairs(doc.cards) do
-        if card.name ~= turn.NAME then
-            return card
-        end
+    if id then
+        error("no card starts with " .. id, 2)
     end
 end
 
@@ -397,12 +399,19 @@ local function board_doc(home)
     return assert(json.decode(text), "decode failed")
 end
 
+local function read_card(home, id)
+    local doc = board_doc(home)
+    return doc, board_card(doc, id)
+end
+
 local function comments(home, id)
-    return board_card(board_doc(home), id).comments or {}
+    local _, card = read_card(home, id)
+    return card.comments or {}
 end
 
 local function claim_of(home, id)
-    return board_card(board_doc(home), id).claim
+    local _, card = read_card(home, id)
+    return card.claim
 end
 
 local function landed_calls(log)
@@ -410,8 +419,7 @@ local function landed_calls(log)
 end
 
 local function column_of(home, id)
-    local doc = board_doc(home)
-    local card = board_card(doc, id)
+    local doc, card = read_card(home, id)
     for _, column in ipairs(doc.columns) do
         if column.id == card.column_id then
             return column.name
@@ -3865,6 +3873,14 @@ testing.test("land.git.worktree.keeps.a.locked worktree and says why", function(
     end)
     local reason = path .. " is a locked git worktree. Run git worktree unlock first."
     testing.ok(out:find("Kept the workspace. " .. reason, 1, true), out)
+end)
+
+testing.test("land.test.card.lookup.fails.naming.an.id that matches no card", function()
+    local doc = { cards = { { id = "abc123", name = "Card" } } }
+    testing.eq(board_card(doc, "abc").id, "abc123")
+    testing.raises(function()
+        board_card(doc, "zzz999")
+    end, "no card starts with zzz999")
 end)
 
 testing.test("land.git.worktree.keeps.one.beside.a.prunable sibling and says why", function()
