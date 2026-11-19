@@ -105,15 +105,15 @@ testing.test("init lays out the nine columns and the palette and is idempotent",
     testing.eq(code, 0, out)
     testing.ok(out:find("created board mine with no template", 1, true), out)
     for _, column in ipairs({
-        "Icebox",
-        "Backlog",
-        "Ready",
-        "In Progress",
-        "Review",
-        "Verify",
-        "Release",
-        "Blocked",
-        "Done",
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
     }) do
         testing.ok(out:find("added column " .. column, 1, true), out)
     end
@@ -126,15 +126,15 @@ testing.test("init lays out the nine columns and the palette and is idempotent",
         names[#names + 1] = column.name
     end
     testing.eq(names, {
-        "Icebox",
-        "Backlog",
-        "Ready",
-        "In Progress",
-        "Review",
-        "Verify",
-        "Release",
-        "Blocked",
-        "Done",
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.DONE,
     })
     testing.eq(doc.columns[9].is_done, true)
     local labels = {}
@@ -269,7 +269,7 @@ testing.test("add, ls, next, move, size and label work on a local board", functi
     })
     testing.eq(code, 0, out)
     local a = prefix_of(out)
-    testing.ok(out:find("Ready", 1, true), out)
+    testing.ok(out:find(support.COLUMN_NAME.READY, 1, true), out)
     out = dev(root, home, {
         "board",
         "add",
@@ -541,7 +541,7 @@ testing.test("discard notes the reason, labels the card and moves it to Done", f
     testing.eq(card.comments[1].kind, "decision")
     testing.eq(card.comments[1].body, "Not needed")
     testing.eq(card.labels[1], "discarded")
-    out = dev(root, home, { "board", "ls", "--column", "Done" })
+    out = dev(root, home, { "board", "ls", "--column", Column.DONE })
     testing.ok(out:find(a, 1, true), out)
 end)
 
@@ -591,7 +591,7 @@ testing.test("discard closes an unplanned Icebox card given a reason", function(
     local card = document(file_of(home)).cards[1]
     testing.eq(card.comments[1].body, "Answered")
     testing.eq(card.labels[1], "discarded")
-    out = dev(root, home, { "board", "ls", "--column", "Done" })
+    out = dev(root, home, { "board", "ls", "--column", Column.DONE })
     testing.ok(out:find(a, 1, true), out)
 end)
 
@@ -695,7 +695,7 @@ testing.test(
         out, code = dev(root, home, { "board", "discard", b, "--reason", "Not needed" })
         testing.eq(code, 0, out)
         testing.eq(out, "discarded " .. b .. "\n")
-        out = dev(root, home, { "board", "ls", "--column", "Done" })
+        out = dev(root, home, { "board", "ls", "--column", Column.DONE })
         testing.ok(out:find(b, 1, true), out)
     end
 )
@@ -1208,7 +1208,10 @@ testing.test("a local board refuses what the needs:human and epic rules forbid",
     })))
     local out, code = dev(root, home, { "board", "label", card, "needs:human" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("Blocked or Icebox", 1, true), out)
+    testing.ok(
+        out:find(support.COLUMN_NAME.BLOCKED .. " or " .. support.COLUMN_NAME.ICEBOX, 1, true),
+        out
+    )
     dev(root, home, { "board", "move", card, Column.BLOCKED })
     out, code = dev(root, home, { "board", "label", card, "needs:human" })
     testing.eq(code, 0, out)
@@ -3202,14 +3205,14 @@ testing.test("a local board with renamed columns works through the project map",
         names[#names + 1] = column.name
     end
     testing.eq(names, {
-        "Icebox",
+        support.COLUMN_NAME.ICEBOX,
         "Inbox",
         "Next",
         "Doing",
-        "Review",
-        "Verify",
-        "Release",
-        "Blocked",
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.VERIFY,
+        support.COLUMN_NAME.RELEASE,
+        support.COLUMN_NAME.BLOCKED,
         "Shipped",
     })
     testing.eq(doc.columns[9].is_done, true)
