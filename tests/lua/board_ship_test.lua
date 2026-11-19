@@ -1,5 +1,8 @@
 local testing = require("dev.testing")
+local board = require("dev.board")
+local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
+local localboard = require("dev.board.localboard")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -180,6 +183,40 @@ if dev_os.which("jj") then
         testing.ok(out:find("shipped 2 cards", 1, true), out)
         testing.ok(out:find("left in Release", 1, true), out)
         testing.ok(out:find(open:sub(1, 4), 1, true), out)
+    end)
+
+    testing.test("ship lists a card moved with no done note and exits 1", function()
+        local root, home = project()
+        must(dev(root, home, { "board", "init" }))
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        local backend = localboard.new({
+            name = BOARD,
+            path = support.board_file(home, BOARD),
+            private = true,
+        })
+        backend.root = root
+        backend.stages = board.stages(nil, {})
+        backend.note = function()
+            return nil, "the board refused the note"
+        end
+        local result = cmd_board.run("ship", { "--", "true" }, backend)
+        testing.eq(result.code, 1, result.message)
+        testing.ok(
+            result.message:find("moved to Done with no done note, write it by hand:", 1, true),
+            result.message
+        )
+        testing.ok(
+            result.message:find(
+                id:sub(1, board.MIN_PREFIX) .. " First (the board refused the note)",
+                1,
+                true
+            ),
+            result.message
+        )
+        local column, comments = state(home, id)
+        testing.eq(column, support.COLUMN_NAME.DONE)
+        testing.eq(#done_notes(comments), 0)
     end)
 
     local function push_file(root, path, text)
