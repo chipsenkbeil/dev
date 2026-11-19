@@ -2691,6 +2691,18 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.eq(turn_holder(project.home), nil)
     end)
 
+    testing.test(
+        "land refuses a rebase of its own that leaves conflicts and frees the turn",
+        function()
+            local project = jj_project()
+            local id = review_ready(project)
+            trunk_moves(project, { ["shared.txt"] = "a\nb\nc\nd\ne\nf\nX\n" })
+            refused(project, id, { "The working-copy commit has conflicts" })
+            testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.verify)
+            testing.eq(turn_holder(project.home), nil)
+        end
+    )
+
     testing.test("land refuses a remote of record that is not a remote of the project", function()
         local project = jj_project()
         local id = verified_card(project)
