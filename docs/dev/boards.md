@@ -222,7 +222,8 @@ for itself, and dispatch's own re-mint is a separate matter.
 `dev board move EPIC done` on a Pomb board reads the card with the worker
 token first. When the card is an epic and the column is the Done column, dev
 opens the board again with `[board.pomb] lead_token`, as `delete` does, and
-sends the move with it, and never queues it when Pomb is unreachable. Pomb grants `epics.manage` to the `lead` preset alone.
+sends the move with it, and never queues it when Pomb is unreachable. Pomb
+grants `epics.manage` to the `lead` preset alone.
 A `DEV_AGENT` that is not a lead is refused with `Only the lead closes an
 epic. DEV_AGENT NAME is not a lead name, whose role segment is lead. Ask the
 lead.` before the move goes out, and an unset `lead_token` exits 1 naming
@@ -1043,9 +1044,9 @@ from another token or from before Pomb 0.5.7 answers 403, and dev says
 A deleted comment is gone for good (Pomb keeps no recycle bin for comments).
 
 `ls` on a colour terminal prints a summary line
-(`12 cards · 3 backlog · 2 ready`), a size legend and a table. In the table the
-size is dots (one yellow, two green, three blue, four red, three dim hollow ones
-for unsized) and the outcomes are a `▰▱` meter with `2/4`.
+(`12 cards · 3 backlog · 2 ready`), a size legend and a table. In the table
+the size is dots (one yellow, two green, three blue, four red, three dim
+hollow ones for unsized) and the outcomes are a `▰▱` meter with `2/4`.
 
 `ls --group` draws one block per column instead, with the column's name and card
 count as its heading. `--column`, `--label` and `--size` filter both layouts,
@@ -1418,9 +1419,9 @@ A project makes `--strict` its default with a `[board.lint]` table in
 strict = true
 ```
 
-The same table can list the checks rows every card must hold. The required setting
-is a list of commands, and a card row satisfies one when it equals it or
-starts with it and a space, so `dev --remote test -- tests/lua/x_test.lua`
+The same table can list the checks rows every card must hold. The required
+setting is a list of commands, and a card row satisfies one when it equals it
+or starts with it and a space, so `dev --remote test -- tests/lua/x_test.lua`
 counts as `dev --remote test`. `dev board lint` reports an open card in Ready,
 In Progress or Review that lacks a listed row, and `dev board move CARD ready`
 refuses it. An epic and a card with children are skipped. A `required` that is
@@ -1621,8 +1622,8 @@ The usual roles are `lead`, `runner`, `planner`, `implementer`, `code-examiner`,
 `style-examiner`, `recheck-examiner`, `verifier`, `land`, `release` and `check`.
 
 A grab on a Pomb card sends the role part of that name as the owner's `role`,
-so `dotfiles/implementer/f5f0e007` sends `implementer`. A name with no role part,
-such as the default `dev@<host>:<session>`, sends no role.
+so `dotfiles/implementer/f5f0e007` sends `implementer`. A name with no role
+part, such as the default `dev@<host>:<session>`, sends no role.
 
 A name of another shape is refused with
 `An agent name is <repo>/<role>[/<card>], got NAME.` (exit 2). That happens when
@@ -3022,7 +3023,8 @@ Asking for the turn:
 - A card in the wrong column, with an open outcome or claimed by another agent
   is refused before the turn is asked for.
 - `land` then asks for the turn for up to `--wait` seconds, none by default, and
-  when it stays taken, refuses with `The landing turn is held by NAME since STAMP.`
+  when it stays taken, refuses with
+  `The landing turn is held by NAME since STAMP.`
 - Cards wait in the order they asked. A card with a wait writes a
   `dev-turn: ask` note with the time its wait ends, plus 10 seconds, before it
   asks for the turn. Only the first live ask in line may take it, except a
@@ -3144,10 +3146,10 @@ The settings:
 - `checks` under `[board.release]` lists the commands `dev board ship` runs once
   when it gets none after `--`, one plain command per row.
 - `recheck` under `[board.land]` lists the commands `land` reruns itself, one
-  plain command per row. `ship` checks the whole batch, and `land` retests only when
-  the carried patch changed. After a conflict-free rebase the change's patch is
-  compared with the checked commit's patch, both read as a diff with its
-  context lines and without hunk headers and blob ids. When they are equal,
+  plain command per row. `ship` checks the whole batch, and `land` retests only
+  when the carried patch changed. After a conflict-free rebase the change's
+  patch is compared with the checked commit's patch, both read as a diff with
+  its context lines and without hunk headers and blob ids. When they are equal,
   whatever files trunk touched, `land` keeps the check and the reviews and runs
   no row. When they differ, `land` runs each row on the landing commit before
   it takes the landing turn, in order. A row that fails refuses the land with
@@ -4384,8 +4386,8 @@ malformed:
 
 - `queue.count` and `queue.list` answer `<path>:<line>: <reason>` (the line
   from the parse error's offset, or `<path>: entry N is not a queued command`).
-- `dev board sync` prints `<that sentence> The queue is left in place.` and exits
-  1.
+- `dev board sync` prints `<that sentence> The queue is left in place.` and
+  exits 1.
 - every other Pomb command (`status` included) prints the same line on
   standard error, replays nothing, runs normally and leaves the file
   untouched, so a bad queue never blocks a read.
