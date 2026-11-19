@@ -885,6 +885,7 @@ function Backend:__card(task)
     return {
         epic = epic_counts(task),
         responsible = responsible_of(task),
+        due = type(task.due_at) == "string" and task.due_at:match("^%d%d%d%d%-%d%d%-%d%d") or nil,
         kind = task.kind == board.Kind.EPIC and board.Kind.EPIC or board.Kind.TASK,
         checks = runs_of(task),
         allow = field_names(task, board.ALLOW_FIELD),
@@ -1702,6 +1703,15 @@ function Backend:set_size(id, color, fence)
     end
     local done
     done, message = self:__request("PATCH", "/api/tasks/" .. id, { color_id = color_id }, fence)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
+function Backend:set_due(id, date, fence)
+    local value = date or json.null
+    local done, message = self:__request("PATCH", "/api/tasks/" .. id, { due_at = value }, fence)
     if not done then
         return nil, message
     end

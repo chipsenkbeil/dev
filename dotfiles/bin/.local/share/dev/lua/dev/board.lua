@@ -52,6 +52,7 @@ end
 ---@field claim_fence integer? the fence of that claim, nil when no claim is live
 ---@field responsible string? the session that is responsible, or `member ID` for a member account,
 ---   nil when none is set
+---@field due string? the card's due date as `YYYY-MM-DD`, nil when none is set
 ---@field kind string? `epic` for an epic, `task` otherwise
 ---@field epic {done: integer, total: integer}? the children of an epic, nil when the card is not
 ---   one
@@ -135,6 +136,9 @@ end
 ---@field set_size fun(self: dev.board.Backend, id: string, color: string, fence: integer?):
 ---   boolean?, string? the card given the palette colour of that value, checked against the claim's
 ---   fence when one is given
+---@field set_due fun(self: dev.board.Backend, id: string, date: string?, fence: integer?):
+---   boolean?, string? the card's due date set to that `YYYY-MM-DD` date, or cleared when the date
+---   is nil, checked against the claim's fence when one is given
 ---@field set_labels fun(self: dev.board.Backend, id: string, labels: string[], fence: integer?):
 ---   boolean?, string? the card's whole label list replaced, checked against the claim's fence when
 ---   one is given

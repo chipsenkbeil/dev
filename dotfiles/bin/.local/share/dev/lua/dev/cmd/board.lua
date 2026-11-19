@@ -173,6 +173,7 @@ local QUEUE_RULES = {
     link = { idempotent = true },
     epic = { idempotent = false },
     responsible = { idempotent = true },
+    due = { idempotent = true },
     edit = { idempotent = true },
     rename = { idempotent = true },
     checks = { idempotent = true },
@@ -1197,6 +1198,9 @@ local function card_view(backend, card)
     end
     if card.responsible then
         kin = "responsible: " .. card.responsible .. "\n" .. kin
+    end
+    if card.due then
+        kin = "due: " .. card.due .. "\n" .. kin
     end
     local description = (card.description or ""):match("^%s*(.-)%s*$")
     if #card.outcomes > 0 then
@@ -3972,6 +3976,52 @@ function commands.responsible(backend, args)
         return { output = "set " .. short .. " responsible " .. name }
     end
     return { output = "cleared " .. short .. " responsible" }
+end
+
+---Tell whether a word is a real calendar date written `YYYY-MM-DD`.
+---@param word string the word to test
+---@return boolean valid whether the word names a date that exists
+local function calendar_date(word)
+    local year, month, day = word:match("^(%d%d%d%d)-(%d%d)-(%d%d)$")
+    if not year then
+        return false
+    end
+    local at =
+        os.time({ year = tonumber(year), month = tonumber(month), day = tonumber(day), hour = 12 })
+    return at ~= nil and os.date("%Y-%m-%d", at) == word
+end
+
+function commands.due(backend, args)
+    local flags, words = parse(args, { ["--clear"] = SWITCH })
+    if not flags then
+        return words
+    end
+    if
+        #words < 1
+        or #words > 2
+        or (flags["--clear"] and #words ~= 1)
+        or (#words == 1 and not flags["--clear"])
+    then
+        return usage("Needs a card, and a YYYY-MM-DD date or --clear.")
+    end
+    local date = words[2]
+    if date and not calendar_date(date) then
+        return usage("The date is written YYYY-MM-DD and must exist.")
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local held = claims.read(card.id)
+    local ok, message = backend:set_due(card.id, date, held and held.fence)
+    if not ok then
+        return failure(message)
+    end
+    if date then
+        return { output = "set " .. short .. " due " .. date }
+    end
+    return { output = "cleared " .. short .. " due" }
 end
 
 function commands.delete(backend, args)

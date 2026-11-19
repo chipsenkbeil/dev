@@ -2209,6 +2209,21 @@ session responsible for a card.
   the name on the card.
 - A write made while Pomb is unreachable is queued and replays safely.
 
+### due
+
+`dev board due CARD (DATE | --clear)` sets or clears a card's due date.
+
+- `DATE` is `YYYY-MM-DD` and must be a real calendar day. Anything else exits 2
+  before any request.
+- `DATE` sends `PATCH /api/tasks/{id}` with `{"due_at": "DATE"}`, the bare
+  date, which Pomb makes due at the board's due time in its own zone. It
+  prints `set <id prefix> due DATE`. `--clear` sends `null` and prints
+  `cleared <id prefix> due`.
+- `show` prints a `due:` line while a date is set. A local board stores the
+  date on the card.
+- A write made while Pomb is unreachable is queued and replays safely.
+- dev sets no reminder on the date.
+
 ### link
 
 `dev board link CARD KIND OTHER` links a card to another.

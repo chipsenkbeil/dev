@@ -235,6 +235,7 @@ local function card_view(doc, card, index)
     return {
         epic = child_counts(doc, card, index),
         responsible = card.responsible,
+        due = card.due,
         kind = card.kind == board.Kind.EPIC and board.Kind.EPIC or board.Kind.TASK,
         id = card.id,
         name = card.name,
@@ -997,6 +998,17 @@ function Backend:set_size(id, color, fence)
             return nil, "The board has no " .. color .. " colour. Run `dev board init`."
         end
         card.color_id = found.id
+        return true
+    end)
+end
+
+function Backend:set_due(id, date, fence)
+    return self:__update(function(doc)
+        local card, message = card_of(doc, id, fence)
+        if not card then
+            return nil, message
+        end
+        card.due = date
         return true
     end)
 end
