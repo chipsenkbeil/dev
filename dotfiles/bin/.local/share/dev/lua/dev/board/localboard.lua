@@ -849,6 +849,10 @@ function Backend:answer(id, choice, quote, fence)
     end)
 end
 
+function Backend:history()
+    return nil, "A local board keeps no history."
+end
+
 function Backend:comments(id)
     local doc, message = self:__read()
     if not doc then

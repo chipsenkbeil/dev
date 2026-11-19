@@ -455,6 +455,12 @@ return {
         desc = "List a card's comments",
     },
     {
+        words = { "board", "history" },
+        handler = "lua",
+        usage = "dev board history CARD",
+        desc = "List who moved a card and with which token",
+    },
+    {
         words = { "board", "show" },
         handler = "lua",
         flags = "--board",

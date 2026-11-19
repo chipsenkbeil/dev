@@ -1409,6 +1409,37 @@ function Backend:answer(id, choice, quote, fence)
     return true
 end
 
+function Backend:history(id)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local doc
+    doc, message = self:__request("GET", "/api/boards/" .. self.__detail.id .. "/export-data")
+    if not doc then
+        return nil, message
+    end
+    for _, task in ipairs(doc.tasks) do
+        if task.id == id then
+            local raw = task.history or {}
+            local found = {}
+            for index = #raw, 1, -1 do
+                local event = raw[index]
+                found[#found + 1] = {
+                    at = present(event.created_at) or "",
+                    kind = present(event.kind) or "",
+                    from = present(event.from),
+                    to = present(event.to),
+                    actor = present(event.actor) or "unknown",
+                    token = present(event.token_name),
+                }
+            end
+            return found
+        end
+    end
+    return nil, "The board has no card " .. id .. "."
+end
+
 function Backend:comments(id)
     local list, message = self:__request("GET", "/api/tasks/" .. id .. "/comments")
     if not list then

@@ -1041,6 +1041,21 @@ function commands.notes(backend, args)
     return { output = comment_lines(list) }
 end
 
+function commands.history(backend, args)
+    if #args ~= 1 then
+        return usage("Needs a card.")
+    end
+    local card, err = find_card(backend, args[1])
+    if not card then
+        return err
+    end
+    local events, message = backend:history(card.id)
+    if not events then
+        return failure(message)
+    end
+    return { output = render.history(events) }
+end
+
 ---@param family dev.board.Family
 ---@return string
 local function kin_lines(family)

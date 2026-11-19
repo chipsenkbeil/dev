@@ -274,6 +274,9 @@ function M.pomb_export_task(task)
     if task.fields then
         extra = extra .. ',"fields":' .. task.fields
     end
+    if task.history then
+        extra = extra .. ',"history":' .. task.history
+    end
     return '{"id":"'
         .. task.id
         .. '","name":"'

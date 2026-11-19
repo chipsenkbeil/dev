@@ -2436,6 +2436,18 @@ How it reads outcomes:
   the minute in UTC and the first line of the body.
 - It prints `no comments` when there are none.
 
+### history
+
+`dev board history CARD` lists the card's history events, newest first, from
+the `history` of the card in `GET /api/boards/{id}/export-data`.
+
+- Each line holds, aligned, the time to the minute in UTC, the event's kind,
+  the change as `FROM -> TO` (`-` for none), the actor (`admin` for a person,
+  `api-token` for a token) and the token's name (`-` for a browser session or
+  the server).
+- It prints `no history` when there are no events.
+- A local board keeps no history, so the verb exits 1 there.
+
 ### show
 
 `dev board show CARD [--board B]` prints a whole card, so an agent reads it

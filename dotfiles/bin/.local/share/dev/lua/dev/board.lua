@@ -168,6 +168,8 @@ end
 ---   owner's quote, so Pomb moves the card to that choice's column, or nil and a message
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the
 ---   card's comments, oldest first
+---@field history fun(self: dev.board.Backend, id: string): dev.board.HistoryEvent[]?, string? the
+---   card's history events, newest first
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string):
 ---   boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string?
@@ -274,6 +276,14 @@ end
 ---@field position integer? the zero-based place in the column and lane, the top when nil
 ---@field lane string? the name of the lane to move the card to, its own lane when nil
 ---@field force boolean? whether Pomb skips the column and group limits, true for a trunk-blocker
+
+---@class dev.board.HistoryEvent
+---@field at string when it happened, as an RFC 3339 stamp
+---@field kind string what it records, such as `moved`
+---@field from string? the value it replaced, when it changed one
+---@field to string? the value it set, when it changed one
+---@field actor string who caused it, the account name or `api-token`
+---@field token string? the name of the token that made it, nil for a browser session
 
 ---@class dev.board.Comment
 ---@field id string the comment's full id

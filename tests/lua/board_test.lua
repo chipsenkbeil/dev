@@ -8020,6 +8020,58 @@ testing.test("notes, note --edit and note --delete reach pomb's comment routes",
     testing.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
 end)
 
+local HISTORY = '[{"id":"e1","kind":"created","detail":"Created","actor":"admin",'
+    .. '"created_at":"2026-11-17T08:00:00Z"},'
+    .. '{"id":"e2","kind":"moved","detail":"Moved","actor":"api-token",'
+    .. ('"created_at":"2026-11-18T09:30:12Z","from":"%s","to":"%s",'):format(
+        support.COLUMN_NAME.READY,
+        PROGRESS_NAME
+    )
+    .. '"token_name":"dotfiles/implementer/x"},'
+    .. '{"id":"e3","kind":"moved","detail":"Moved","actor":"admin",'
+    .. ('"created_at":"2026-11-18T10:00:00Z","from":"%s","to":"%s"}]'):format(
+        PROGRESS_NAME,
+        support.COLUMN_NAME.REVIEW
+    )
+
+testing.test("history prints each entry newest first with its actor and token name", function()
+    local root, home = sandbox({ export = export_with_first_card({ history = HISTORY }) })
+    local out, code = dev(root, home, { "board", "history", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        table.concat({
+            ("2026-11-18 10:00  moved    %s -> %s  admin      -"):format(
+                PROGRESS_NAME,
+                support.COLUMN_NAME.REVIEW
+            ),
+            ("2026-11-18 09:30  moved    %s -> %s   api-token  dotfiles/implementer/x"):format(
+                support.COLUMN_NAME.READY,
+                PROGRESS_NAME
+            ),
+            "2026-11-17 08:00  created  -                      admin      -",
+            "",
+        }, "\n")
+    )
+    out, code = dev(root, home, { "board", "history" })
+    testing.eq(code, 2, out)
+    out, code = dev(root, home, { "board", "history", "deadbeef" })
+    testing.eq(code, 1, out)
+end)
+
+testing.test(
+    "history shows a dash for a browser move and none for a card without events",
+    function()
+        local root, home = sandbox({ export = export_with_first_card({ history = HISTORY }) })
+        local out = dev(root, home, { "board", "history", "11111111-a" })
+        local browser = out:match(("[^\n]+%s[^\n]*"):format(support.COLUMN_NAME.REVIEW))
+        testing.ok(browser:find("admin      %-$"), browser)
+        root, home = sandbox({ export = export_with_first_card({ history = "[]" }) })
+        out = dev(root, home, { "board", "history", "11111111-a" })
+        testing.eq(out, "no history\n")
+    end
+)
+
 testing.test("a 403 on a comment says it is not yours and exits 1", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "dddddddd", "x" })

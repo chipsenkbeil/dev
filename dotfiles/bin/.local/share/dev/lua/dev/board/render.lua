@@ -239,6 +239,25 @@ function M.ls(screen, cards, opts)
     return lines
 end
 
+---Format a card's history as aligned rows, one per event.
+---@param events dev.board.HistoryEvent[] the events, newest first
+---@return string text the rows, or `no history` when there are none
+function M.history(events)
+    if #events == 0 then
+        return "no history"
+    end
+    local rows = {}
+    for index, event in ipairs(events) do
+        local change = "-"
+        if event.from or event.to then
+            change = (event.from or "-") .. " -> " .. (event.to or "-")
+        end
+        local stamp = event.at:sub(1, 16):gsub("T", " ")
+        rows[index] = { stamp, event.kind, change, event.actor, event.token or "-" }
+    end
+    return table.concat(board.table_lines(rows), "\n")
+end
+
 M.count_text = count_text
 
 return M
