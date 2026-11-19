@@ -954,6 +954,8 @@ testing.test("ship.reverts.suspects.newest.landed.first.by.short.commit.id", fun
     local newer = git_head(root)
     local old_id = git_release_card(root, home, "Older", older:sub(1, 12), READY_OUTCOMES)
     local new_id = git_release_card(root, home, "Newer", newer:sub(1, 12), READY_OUTCOMES)
+    local other = git_push_commit(root, "bystander")
+    local other_id = git_release_card(root, home, "Bystander", other:sub(1, 12), READY_OUTCOMES)
     must(dev(root, home, { "board", "checks", old_id, READY_CHECKS }))
     must(dev(root, home, { "board", "checks", new_id, READY_CHECKS }))
     local echo = "echo FAIL g_test.txt; exit 1"
@@ -962,7 +964,40 @@ testing.test("ship.reverts.suspects.newest.landed.first.by.short.commit.id", fun
     testing.eq(code, 1, out)
     testing.ok(state(home, new_id) == support.COLUMN_NAME.READY, out)
     testing.ok(state(home, old_id) == support.COLUMN_NAME.READY, out)
+    testing.eq((state(home, other_id)), support.COLUMN_NAME.RELEASE)
     testing.eq(out:find("conflicts with later changes", 1, true), nil)
+end)
+
+local function red_count(home, id)
+    local count = 0
+    for _, comment in ipairs(select(2, state(home, id))) do
+        if comment.body:find("^Ship went red") then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+testing.test("ship.names.no.suspect.when.every.card.matches", function()
+    local root, home = git_project(0)
+    must(dev(root, home, { "board", "init" }))
+    local first = git_push_commit(root, "g_test")
+    assert(fs.write(root .. "/g_test.txt", "g_test\nmore\n"), "write failed")
+    git(root, "commit", "-q", "-am", "second edit")
+    git(root, "push", "-q", "origin", "master")
+    local second = git_head(root)
+    local a_id = git_release_card(root, home, "First", first:sub(1, 12), READY_OUTCOMES)
+    local b_id = git_release_card(root, home, "Second", second:sub(1, 12), READY_OUTCOMES)
+    local echo = "echo FAIL g_test.txt; exit 1"
+    local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Every landed card matches the failing files", 1, true), out)
+    testing.eq(out:find("First red", 1, true), nil)
+    dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    testing.eq((state(home, a_id)), support.COLUMN_NAME.RELEASE)
+    testing.eq((state(home, b_id)), support.COLUMN_NAME.RELEASE)
+    testing.eq(red_count(home, a_id), 0)
+    testing.eq(red_count(home, b_id), 0)
 end)
 
 testing.test("ship.in.a.git.project.refuses.a.head.off.the.rev", function()

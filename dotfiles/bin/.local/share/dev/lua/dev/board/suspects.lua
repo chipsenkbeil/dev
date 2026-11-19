@@ -105,6 +105,9 @@ function M.lines(root, failed, entries)
             end
         end
     end
+    if #entries > 1 and #named == #entries then
+        return { "Every landed card matches the failing files, so no suspect is named." }, {}
+    end
     return lines, named
 end
 

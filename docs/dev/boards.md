@@ -3481,6 +3481,8 @@ A failed command:
   that would have shipped are listed.
 - When no card in the batch touched a failing file, the list says so. When the
   row printed no `FAIL` line, it says that instead.
+- When a batch of two or more cards matches in full, the list says so and names
+  no suspect, so no card is noted or reverted on that evidence.
 - The first red ship writes a `Ship went red` note on each named card, with the
   time and the failing cases, the `not ok - NAME` lines under each failing
   file, or the file's path when it printed none. A card keeps that note until
