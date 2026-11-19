@@ -155,7 +155,7 @@ local function claim_card(backend, card, name)
         return failure(message)
     end
     claims.stop(card.id)
-    local fresh = card.claimant ~= who
+    local fresh = not (held and held.fence == fence)
     local past, why = backend:comments(card.id)
     local ok
     if past and fresh then

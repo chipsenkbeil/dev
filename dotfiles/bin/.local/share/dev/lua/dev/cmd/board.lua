@@ -1304,6 +1304,7 @@ end
 ---@param card dev.board.Card the card, whose claimant this sets when it takes the claim
 ---@param column string the column the card moves to
 ---@return dev.cmd.board.Result? refused the failure, nil when nothing applied or the claim was taken
+---@return boolean? retaken true when the claim was taken again, after the note rule passed
 local function retake_lapsed(backend, card, column)
     local stages = backend.stages
     if card.column ~= stages.progress or column == stages.progress or card.claimant then
@@ -1332,7 +1333,7 @@ local function retake_lapsed(backend, card, column)
         card.claimant = nil
         return result
     end
-    return nil
+    return nil, true
 end
 
 ---Refuse a card whose size cannot enter Ready.
@@ -1666,7 +1667,7 @@ local function move_once(backend, args, opts)
             return runner.full(refused.message)
         end
     end
-    local lapsed = retake_lapsed(backend, card, column)
+    local lapsed, retaken = retake_lapsed(backend, card, column)
     if lapsed then
         return lapsed
     end
@@ -1674,7 +1675,7 @@ local function move_once(backend, args, opts)
     if skipped then
         return skipped
     end
-    local missing_note = unnoted(backend, card, column)
+    local missing_note = not retaken and unnoted(backend, card, column)
     if missing_note then
         return missing_note
     end

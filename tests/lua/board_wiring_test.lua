@@ -193,7 +193,7 @@ end)
 local function claim_stub(fails)
     local stub = { released = 0 }
     function stub:claim(_, _, opts)
-        return (opts.fence or 0) + 1
+        return opts.fence or 1
     end
     function stub:comments()
         if fails == "comments" then
@@ -224,7 +224,7 @@ testing.test("take keeps a renewed claim when the comments cannot be read", func
     local stub = claim_stub("comments")
     local result, fence = runner.claim_card(stub, card, "dotfiles/a")
     testing.eq(result.code, nil)
-    testing.eq(fence, 4)
+    testing.eq(fence, 3)
     testing.eq(stub.released, 0)
     testing.ok(result.output:find("pomb is down", 1, true), result.output)
 end)

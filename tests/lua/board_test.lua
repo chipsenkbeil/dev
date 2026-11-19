@@ -3,6 +3,7 @@ local ffi = require("ffi")
 local testing = require("dev.testing")
 local board = require("dev.board")
 local check = require("dev.board.check")
+local claims = require("dev.board.claims")
 local role_clock = require("dev.board.clock")
 local review = require("dev.board.review")
 local box = require("dev.cmd.box")
@@ -12,6 +13,7 @@ local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 local json = require("dev.json")
 local pomb = require("dev.board.pomb")
+local runner = require("dev.board.runner")
 local ui = require("dev.ui")
 local support = require("support")
 
@@ -12143,4 +12145,52 @@ testing.test("stale lists a running clock", function()
         result.output:find("clocks running:\n00000001  implementer  30 min", 1, true) ~= nil,
         true
     )
+end)
+
+local function claim_counter(fence_of)
+    local stub = { notes = 0 }
+    function stub:claim(_, _, opts)
+        return fence_of(opts)
+    end
+    function stub:comments()
+        return {}
+    end
+    function stub:note()
+        self.notes = self.notes + 1
+        return true
+    end
+    function stub:keepalive()
+        return 0
+    end
+    return stub
+end
+
+testing.test("claim_card writes one dev-claim record for a second take under one name", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local stub = claim_counter(function(opts)
+        return opts.fence or 1
+    end)
+    local card = { id = "cccc3333", size = "1 Pomodoro" }
+    local _, first = runner.claim_card(stub, card, "dotfiles/a")
+    card.claimant = "dotfiles/a"
+    local _, second = runner.claim_card(stub, card, "dotfiles/a")
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(first, 1)
+    testing.eq(second, 1)
+    testing.eq(stub.notes, 1)
+end)
+
+testing.test("claim_card writes a record when the claim lapsed after the fetch", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local stub = claim_counter(function()
+        return 4
+    end)
+    local card = { id = "cccc3333", size = "1 Pomodoro", claimant = "dotfiles/a" }
+    assert(claims.write({ card = card.id, fence = 3 }))
+    local _, fence = runner.claim_card(stub, card, "dotfiles/a")
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(fence, 4)
+    testing.eq(stub.notes, 1)
 end)
