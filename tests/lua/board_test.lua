@@ -12124,7 +12124,7 @@ testing.test("attach prints Pomb's refusal as Pomb words it and checks no size o
     )
     local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
     testing.eq(code, 1)
-    testing.ok(out:find("New.png: the task holds its most attachments", 1, true), out)
+    testing.ok(out:find("new.png: the task holds its most attachments", 1, true), out)
 end)
 
 testing.test("attach keeps uploading the other files after Pomb refuses one", function()
@@ -13111,6 +13111,10 @@ testing.test("failure capitalizes a single-line message and adds the missing per
     local result = guards.failure("pomb answered 409: task owned by someone")
     testing.eq(result.message, "Pomb answered 409: task owned by someone.")
     testing.eq(result.code, 1)
+end)
+
+testing.test("failure keeps a message that starts with new.png lowercase", function()
+    testing.eq(guards.failure("new.png is missing").message, "new.png is missing.")
 end)
 
 testing.test("failure leaves a multi-line message as written", function()

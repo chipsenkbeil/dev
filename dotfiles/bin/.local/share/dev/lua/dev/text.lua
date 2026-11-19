@@ -99,11 +99,16 @@ function M.trim(s)
     return (s:gsub("%s+$", ""))
 end
 
----Turn a message into a sentence that starts with a capital and ends with a period.
+---Turn a message into a sentence that ends with a period and starts with a capital.
+---A first word that looks like an identifier (a path, a flag, a dotted name) keeps its case.
 ---@param s string the message
 ---@return string sentence the message, trimmed
 function M.sentence(s)
-    s = M.trim(s):gsub("^%l", string.upper)
+    s = M.trim(s)
+    local first = s:match("^%S+") or ""
+    if not (first:find("[/`_%-]") or first:find("%w%.%w")) then
+        s = s:gsub("^%l", string.upper)
+    end
     if not s:find("%.$") then
         s = s .. "."
     end
