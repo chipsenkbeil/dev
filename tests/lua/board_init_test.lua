@@ -2087,6 +2087,25 @@ testing.test("init-lead-roles-read-fails-names-the-failure", function()
     testing.eq(roles_posts(root) ~= nil, true, calls_of(root))
 end)
 
+testing.test("init-lead-roles-list-that-is-not-a-list-names-the-fallback", function()
+    local root, home, tmp = sandbox({
+        project = LANES_PROJECT,
+        roles = NO_ROLES_GRANT,
+        rolelist = '"nope"',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find(
+            "Agent roles not checked, since the roles list could not be read: "
+                .. "Pomb sent a roles list dev cannot read.",
+            1,
+            true
+        ),
+        out
+    )
+end)
+
 testing.test("init-lead-roles-missing-after-a-read-still-names-the-admin-step", function()
     local root, home, tmp = sandbox({
         project = LANES_PROJECT,

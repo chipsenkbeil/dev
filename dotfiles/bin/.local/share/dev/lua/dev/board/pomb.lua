@@ -2939,7 +2939,7 @@ end
 function Backend:__roles_granted(board_id)
     local rows, message = self:__request("GET", ROLES_LIST_PATH)
     if type(rows) ~= "table" then
-        return false, message or "pomb sent a roles list dev cannot read"
+        return false, message or "Pomb sent a roles list dev cannot read."
     end
     local held = {}
     for _, row in ipairs(rows) do
