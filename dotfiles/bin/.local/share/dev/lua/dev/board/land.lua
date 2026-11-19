@@ -278,7 +278,8 @@ function M.missing_reviews(comments, state, root)
             elseif not has_here(review.Kind.RECHECK, kind) then
                 missing[#missing + 1] = string.format(
                     "The %s review is of an earlier commit than %s. "
-                        .. "Record a recheck with `dev board review --kind recheck --of %s --rev @`.",
+                        .. "Record a recheck with "
+                        .. "`dev board review --kind recheck --of %s --rev @`.",
                     kind,
                     M.short(state.commit),
                     kind

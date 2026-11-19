@@ -838,7 +838,7 @@ function M.summarize(rows, expect_fail)
     return passed, passed == #rows, errors
 end
 
----Hash a list of checks rows to show whether they changed.
+---Sum a list of checks rows into a value that differs when a row changes.
 ---@param commands string[] the card's checks rows in order
 ---@return string sum eight lowercase hex digits
 function M.fingerprint(commands)
@@ -855,7 +855,7 @@ end
 
 ---Write the comment that records a run.
 ---
----A reason line is cut to 120 bytes and left out once the comment would pass 4800 bytes.
+---A reason line is left out when it would push the comment past its 4800-byte budget.
 ---@param state dev.board.check.State the commit the rows ran on
 ---@param rows dev.board.check.Row[] the finished rows
 ---@param expect_fail boolean whether every row was meant to fail
