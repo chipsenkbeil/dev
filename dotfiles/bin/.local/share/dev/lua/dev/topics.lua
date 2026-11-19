@@ -97,6 +97,9 @@ local function command_error(reg, line)
     for _, flag in ipairs(reg:flags(path)) do
         valid[flag] = true
     end
+    for _, flag in ipairs(reg:shadowed_flags(path)) do
+        valid[flag] = true
+    end
     for j = i + 1, #words do
         local word = words[j]
         if COMMAND_END[word] or word:sub(1, 1) == "#" then
@@ -171,8 +174,8 @@ end
 ---be `# <name>: <summary>`, its name may not clash
 ---with a built-in topic or a verb, and each backticked `dev ...` span or
 ---fenced `dev ...` line must name a real verb or subcommand and only flags
----`Registry:flags` lists. A script whose flags line declares `-h` or `--help`
----is a problem too.
+---`Registry:flags` or `Registry:shadowed_flags` lists. A script whose flags line declares
+---`-h` or `--help` is a problem too.
 ---@param reg dev.Registry the project's registry, whose warnings are ignored
 ---@return dev.topics.Problem[] problems the problems in the order they were found
 function M.check(reg)

@@ -558,7 +558,8 @@ and takes no argument.
 
 `.dev/sync.lua` is the project's `dev sync`. It wins over the built-in
 lint-template `dev sync`, so `dev __flags sync` offers none of `--check` and
-`--yes`.
+`--yes`. The topic check still accepts those built-in flags
+(`Registry:shadowed_flags`), so a topic can name `dev sync --check`.
 
 It takes `SYNC_DST` (`user@host`) and `SYNC_PATH` (the remote folder,
 `dotfiles` by default) from the `KEY=value` arguments, then the environment.

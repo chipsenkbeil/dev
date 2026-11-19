@@ -520,4 +520,19 @@ function Registry:flags(words)
     return flags
 end
 
+---List the flags of the built-in row a project script replaces.
+---@param words string[] the command words
+---@return string[] flags the built-in row's flags, empty unless a script of kind `override` answers
+---   to the words
+function Registry:shadowed_flags(words)
+    local row = self:find(words)
+    local flags = {}
+    if row and row.kind == "override" then
+        for flag in (self.builtin[row.name].flags or ""):gmatch("%S+") do
+            flags[#flags + 1] = flag
+        end
+    end
+    return flags
+end
+
 return M
