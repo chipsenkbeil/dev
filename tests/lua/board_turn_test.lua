@@ -136,7 +136,7 @@ testing.test("a stretched turn outlasts its first lease", function()
     testing.eq(assert(turn.holder(backend)).name, "alpha")
 end)
 
-testing.test("a stretch restores the holders own lease", function()
+testing.test("a stretch restores the holder's own lease", function()
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
@@ -145,7 +145,7 @@ testing.test("a stretch restores the holders own lease", function()
     testing.eq(first.lease, LEASE_SECONDS)
 end)
 
-testing.test("a stretch keeps a hold longer lease", function()
+testing.test("a stretch keeps a hold's longer lease", function()
     local backend = backend_at(board_home())
     local LONG_HOLD_SECONDS = 6
     local SHORT_STRETCH_SECONDS = 3

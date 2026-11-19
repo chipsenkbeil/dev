@@ -1769,10 +1769,13 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test("land reads trunk before and under the turn, and after the land", function()
+        -- Move trunk over an unrelated file and rebase the reviewed change onto it
         local project = jj_project()
         local id = review_ready(project)
         trunk_moves(project, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(project.root)
+
+        -- Land it with a log of every trunk read
         local reads = support.tempdir() .. "/fetch.log"
         local out, code = dev(
             project,
@@ -1780,6 +1783,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_LOG = reads }
         )
         testing.eq(code, 0, out)
+
+        -- Check the carried check note and the four reads
         local list = comments(project.home)
         testing.ok(list[#list].body:find("carried over", 1, true), list[#list].body)
         testing.eq(fs.read(reads), "fetch\nfetch\nfetch\nfetch\n")
@@ -1790,17 +1795,23 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end
 
     testing.test("land reruns the recheck rows when trunk changes the patch's context", function()
+        -- Set up a recheck row that leaves a marker
         local marker = support.tempdir() .. "/rechecked"
         local project = recheck_project("touch " .. marker)
+
+        -- Move trunk near the patch and rebase onto it
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
+
+        -- Land it and look for the marker
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(fs.is_file(marker), "the recheck row never ran")
     end)
 
     testing.test("land takes no turn while the recheck rows run", function()
+        -- Set up a recheck row that copies the board while it runs
         local snapshot = support.tempdir() .. "/board.json"
         local project = recheck_project("bin/snap")
         assert(
@@ -1811,6 +1822,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             "write failed"
         )
         must(dev_os.run({ "chmod", "755", project.root .. "/bin/snap" }))
+
+        -- Move trunk near the patch and land onto it
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
@@ -1820,6 +1833,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             { LAND_TRUNK = LAND_TRUNK_KEEP, SNAPSHOT = snapshot }
         )
         testing.eq(code, 0, out)
+
+        -- Check that the board copy shows the turn free and nobody holds it now
         local doc = assert(json.decode(assert(fs.read(snapshot))), "decode failed")
         for _, card in ipairs(doc.cards) do
             if card.name == turn.NAME then
@@ -1830,6 +1845,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test("land runs the recheck rows with DEV_CI_PRIORITY set to 1", function()
+        -- Set up a recheck row that writes its priority variable to a file
         local mark = support.tempdir() .. "/priority"
         local project = recheck_project("bin/prio")
         local body = table.concat({
@@ -1839,6 +1855,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         }, "\n")
         assert(fs.write(project.root .. "/bin/prio", body), "write failed")
         must(dev_os.run({ "chmod", "755", project.root .. "/bin/prio" }))
+
+        -- Move trunk near the patch and land onto it
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
@@ -1848,6 +1866,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             { LAND_TRUNK = LAND_TRUNK_KEEP, MARK = mark }
         )
         testing.eq(code, 0, out)
+
+        -- Check the row saw priority 1
         testing.eq(fs.read(mark), "1")
     end)
 
@@ -1873,6 +1893,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end
 
     testing.test("land keeps a held turn and stretches it for the recheck", function()
+        -- Set up a recheck row that copies the board while it runs
         local snapshot = support.tempdir() .. "/board.json"
         local project = recheck_project("bin/snap")
         assert(
@@ -1883,6 +1904,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             "write failed"
         )
         must(dev_os.run({ "chmod", "755", project.root .. "/bin/snap" }))
+
+        -- Hold the turn, then land onto a moved trunk
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
@@ -1893,6 +1916,8 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             { LAND_TRUNK = LAND_TRUNK_KEEP, SNAPSHOT = snapshot }
         )
         testing.eq(code, 0, out)
+
+        -- Check the board copy still shows a hold stretched past the lease
         local doc = assert(json.decode(assert(fs.read(snapshot))), "decode failed")
         local claim
         for _, card in ipairs(doc.cards) do
@@ -1908,13 +1933,18 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test("land refuses after trunk moves in every recheck", function()
+        -- Set up a row that moves trunk on every run
         local runs = support.tempdir() .. "/runs"
         local project = counting_project(runs, "always")
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
+
+        -- Land and expect the refusal
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 1, out)
+
+        -- Check five runs, no push and no turn left held
         testing.ok(out:find("Trunk moved during each of 5 rechecks", 1, true), out)
         testing.eq(fs.read(runs), string.rep("run\n", 5))
         testing.eq(fs.read(project.log), nil)
@@ -1922,14 +1952,19 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test("land rechecks again when trunk moves during the recheck", function()
+        -- Set up a row that moves trunk on its first run only
         local runs = support.tempdir() .. "/runs"
         local project = counting_project(runs, "once")
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
+
+        -- Land and expect two runs
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(fs.read(runs), "run\nrun\n")
+
+        -- Check that both the moved trunk and the change landed
         local log = dev_os.capture({ "git", "-C", project.bare, "log", "master", "--format=%s" })
         testing.ok(log:find("moved", 1, true), log)
         testing.ok(log:find("feat: work", 1, true), log)
@@ -1937,64 +1972,90 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test("land pushes after one recheck when trunk stays put", function()
+        -- Set up a row that leaves trunk alone
         local runs = support.tempdir() .. "/runs"
         local project = counting_project(runs, false)
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
+
+        -- Land and expect one run
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(fs.read(runs), "run\n")
+
+        -- Check the card is Done
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("a failed recheck row refuses the land and leaves trunk alone", function()
+        -- Set up a recheck row that fails and move trunk near the patch
         local project = recheck_project("false")
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
+
+        -- Land and expect the refusal naming the row
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("recheck row failed. Nothing was pushed.", 1, true), out)
         testing.ok(out:find("fail - false", 1, true), out)
+
+        -- Check nothing was pushed and the card stays in Verify
         testing.eq(fs.read(project.log), nil)
         testing.eq(column_of(project.home), board.DEFAULT_NAMES.verify)
     end)
 
     testing.test("land skips the recheck rows over unrelated trunk files", function()
+        -- Set up a recheck row that leaves a marker and move trunk far from the patch
         local marker = support.tempdir() .. "/rechecked"
         local project = recheck_project("touch " .. marker)
         local id = review_ready(project)
         trunk_moves(project, { ["docs.txt"] = "docs\n", ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
         rebase_onto_trunk(project.root)
+
+        -- Land it
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
+
+        -- Check the row never ran and the card is Done
         testing.ok(not fs.is_file(marker), "the recheck row ran")
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("land skips the recheck when the check sits on the current trunk", function()
+        -- Set up a recheck row that leaves a marker and review the change on current trunk
         local marker = support.tempdir() .. "/rechecked"
         local project = recheck_project("touch " .. marker)
         local id = review_ready(project)
+
+        -- Land it with trunk unmoved
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
+
+        -- Check the row never ran
         testing.ok(not fs.is_file(marker), "the recheck row ran")
     end)
 
     testing.test("land reruns trunk's recheck rows when the change empties its own", function()
+        -- Set up a recheck row on trunk and a change that empties it
         local marker = support.tempdir() .. "/rechecked"
         local project = recheck_project("touch " .. marker)
         assert(fs.write(project.root .. "/.dev/config.toml", NARROWED), "write failed")
+
+        -- Move trunk near the patch and rebase onto it
         local id = review_ready(project)
         trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
         rebase_onto_trunk(project.root)
+
+        -- Land it and look for the marker
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(fs.is_file(marker), "trunk's recheck row never ran")
     end)
 
     testing.test("land ignores a recheck row the change adds to its own config", function()
+        -- Give the change a config that adds a failing recheck row
         local project = jj_project()
         assert(
             fs.write(
@@ -2003,9 +2064,13 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             ),
             "write failed"
         )
+
+        -- Move trunk over an unrelated file and rebase onto it
         local id = review_ready(project)
         trunk_moves(project, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(project.root)
+
+        -- Land it and check the row never failed the land
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.ok(not out:find("recheck row failed", 1, true), out)
