@@ -91,6 +91,24 @@ local function seat_refusal(reason, why, seat)
     return sentence(why)
 end
 
+---Write why a claim was not released.
+---@param reason dev.board.ReleaseReason? the reason the backend named
+---@param why string the backend's message
+---@param detail string? the holder or the card id the backend named
+---@param fence integer? the fence of the release
+---@return string message the text
+local function release_refusal(reason, why, detail, fence)
+    local Reason = board.ReleaseReason
+    if reason == Reason.HELD_BY_MEMBER then
+        return "The card is held by " .. detail .. ". Only that member can release it in Pomb."
+    elseif reason == Reason.NO_CARD then
+        return "The board has no card " .. detail .. "."
+    elseif reason == Reason.NOT_HELD then
+        return "The claim on " .. detail .. " is not held with fence " .. tostring(fence) .. "."
+    end
+    return sentence(why)
+end
+
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
 local index_of = runner.index_of
@@ -1787,9 +1805,13 @@ local function move_once(backend, args, opts)
     end
     if own_claim and column ~= stages.progress and column ~= stages.blocked then
         claims.stop(card.id)
-        local released, why = backend:release(card.id, held and held.fence)
+        local release_fence = held and held.fence
+        local released, why, why_reason, why_detail = backend:release(card.id, release_fence)
         if not released then
-            verb.note("Moved, but the claim was not released. " .. sentence(why))
+            verb.note(
+                "Moved, but the claim was not released. "
+                    .. release_refusal(why_reason, why, why_detail, release_fence)
+            )
         end
     end
     local result = { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
@@ -2301,9 +2323,12 @@ function commands.ask(backend, args)
     end
     if held then
         claims.stop(card.id)
-        local released, why = backend:release(card.id, held.fence)
+        local released, why, why_reason, why_detail = backend:release(card.id, held.fence)
         if not released then
-            verb.note("Asked, but the claim was not released. " .. sentence(why))
+            verb.note(
+                "Asked, but the claim was not released. "
+                    .. release_refusal(why_reason, why, why_detail, held.fence)
+            )
         end
     end
     return { output = "asked " .. card.id:sub(1, board.MIN_PREFIX) }

@@ -1134,18 +1134,22 @@ function Backend:claim(id, claimant, opts)
 end
 
 function Backend:release(id, fence)
-    return self:__update(function(doc)
+    local reason
+    local done, why = self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
         if not card then
+            reason = board.ReleaseReason.NO_CARD
             return nil, "The board has no card " .. id .. "."
         end
         if not card.claim or (fence and card.claim.fence ~= fence) then
+            reason = board.ReleaseReason.NOT_HELD
             return nil,
                 "The claim on " .. id .. " is not held with fence " .. tostring(fence) .. "."
         end
         card.claim = nil
         return true
     end)
+    return done, why, reason, reason and id
 end
 
 function Backend:keepalive()

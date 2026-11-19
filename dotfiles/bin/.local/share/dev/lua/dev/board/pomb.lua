@@ -2349,7 +2349,10 @@ function Backend:release(id, fence)
         return true
     end
     if task.owner.holder.kind == board.ACTOR.HUMAN then
-        return nil, "The card is held by " .. name .. ". Only that member can release it in Pomb."
+        return nil,
+            "The card is held by " .. name .. ". Only that member can release it in Pomb.",
+            board.ReleaseReason.HELD_BY_MEMBER,
+            name
     end
     local done
     done, message = self:__request(

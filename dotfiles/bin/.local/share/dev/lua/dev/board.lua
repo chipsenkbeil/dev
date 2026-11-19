@@ -232,8 +232,9 @@ end
 ---@field claim fun(self: dev.board.Backend, id: string, claimant: string,
 ---   opts: dev.board.claim.Opts): integer?, string? the fence of the owner grab, renewed when the
 ---   caller's live fence is given
----@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string? the
----   owner lease ended
+---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string?,
+---   dev.board.ReleaseReason?, string? the owner lease ended, or nil, a message, and for a fixed
+---   refusal its reason and the detail the message names (the holder, or the card id)
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer,
 ---   state: string, name: string): integer?, string? the pid of a detached loop that renews the
 ---   owner lease every tick until the state file loses the fence or the ticks run out
@@ -433,6 +434,10 @@ M.MoveReason = { FULL = "full", NO_COLUMN = "no_column", NO_LANE = "no_lane" }
 ---The reason a seat verdict names beside its message when the card lacks the seat.
 ---@enum dev.board.SeatReason
 M.SeatReason = { NO_SEAT = "no_seat" }
+
+---The reasons a claim release names beside its message when the refusal is a fixed one.
+---@enum dev.board.ReleaseReason
+M.ReleaseReason = { HELD_BY_MEMBER = "held_by_member", NO_CARD = "no_card", NOT_HELD = "not_held" }
 
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"

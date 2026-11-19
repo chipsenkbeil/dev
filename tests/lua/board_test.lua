@@ -9285,6 +9285,31 @@ testing.test("a release the server refuses after a move warns and the move succe
     testing.eq(fs.exists(state_file(home)), false)
 end)
 
+testing.test("a release refused for a card a person holds is written from its reason", function()
+    local root, home = sandbox({ export = PLANNED_DONE_EXPORT })
+    dev(root, home, { "board", "take", "11111111-a" })
+    local person = (
+        TASK:gsub(
+            '"labels":%["docs"%]',
+            '"labels":["docs"],"owner":{"holder":{"kind":"human","id":7},'
+                .. '"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}',
+            1
+        )
+    )
+    assert(fs.write(root .. "/task.json", person))
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find(
+            "Moved, but the claim was not released. The card is held by member 7. "
+                .. "Only that member can release it in Pomb.",
+            1,
+            true
+        ),
+        out
+    )
+end)
+
 testing.test("move into progress keeps the loop and the state", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })

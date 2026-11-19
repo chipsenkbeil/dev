@@ -3156,6 +3156,16 @@ testing.test("a local board keeps a card with no checks row out of Ready", funct
     testing.eq(out:find("checks field", 1, true), nil)
 end)
 
+testing.test("a release names the reason a missing card or an unheld claim is refused", function()
+    local _, home = local_board()
+    local backend = localboard.new({ name = "mine", path = file_of(home), private = true })
+    local card = assert(backend:add("held", support.COLUMN_NAME.ICEBOX, {}))
+    local ok, _, reason, detail = backend:release("no-such-card", 1)
+    testing.eq({ ok, reason, detail }, { nil, board.ReleaseReason.NO_CARD, "no-such-card" })
+    ok, _, reason, detail = backend:release(card.id, 1)
+    testing.eq({ ok, reason, detail }, { nil, board.ReleaseReason.NOT_HELD, card.id })
+end)
+
 testing.test("an add with once returns the open card of that name and adds none", function()
     -- Open the board file as a backend
     local _, home = local_board()
