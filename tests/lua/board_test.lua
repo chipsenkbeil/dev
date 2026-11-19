@@ -7428,7 +7428,7 @@ end)
 
 local EPIC_TASK = '{"id":"' .. ID_A .. '","kind":"epic","children_total":3,"children_done":%d}'
 
-testing.test("epic_next_skips_open_child", function()
+testing.test("next skips an epic that has an open child", function()
     local root, home = sandbox({ task = EPIC_TASK:format(1) })
     for _, args in ipairs({
         { "board", "next" },
@@ -7444,7 +7444,7 @@ testing.test("epic_next_skips_open_child", function()
     testing.ok(out:find("First", 1, true), out)
 end)
 
-testing.test("epic_ls_marks", function()
+testing.test("ls marks an epic and its children", function()
     local export = EXPORT:gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
@@ -9359,7 +9359,7 @@ testing.test(
     end
 )
 
-testing.test("epic_done_children_claim", function()
+testing.test("an epic whose children are done is claimed like any card", function()
     local root, home = sandbox({
         export = PLANNED_EXPORT,
         task = EPIC_TASK:format(3),

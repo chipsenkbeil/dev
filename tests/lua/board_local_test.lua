@@ -4432,7 +4432,7 @@ testing.test("epic_local_move", function()
     testing.ok(out:find("[epic 1 of 1 open] Epic", 1, true), out)
 end)
 
-testing.test("epic_local_next", function()
+testing.test("next on a local board skips an epic with an open child", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of((dev(root, home, {
