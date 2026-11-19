@@ -641,8 +641,8 @@ least one `name<TAB>summary` line. Guide then reads its commands from
 
 A question goes to `scribe guide-answer --profile guide`, with prompts in
 `dotfiles/scribe/.config/scribe/prompts/guide-*.md`. The answer is checked
-against the live help, with one `warning:` line per made-up subcommand or
-flag.
+against the live help, with one line per made-up subcommand or flag, in
+the form `` `span`: problem ``.
 
 Documentation over `GUIDE_BUDGET` characters (default 60000) takes a second
 model call, `guide-pick`, to choose the subcommands to read.
