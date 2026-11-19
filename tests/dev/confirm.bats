@@ -342,7 +342,7 @@ dash_holding_launcher() {
     process_gone 'sleep 7.655'
 }
 
-@test "ctrl-c exits 130 within a second when the launcher died before writing its pid" {
+@test "a dead launcher exits 130 within a second with no key sent" {
     [ -n "$(bash -c 'echo $EPOCHREALTIME')" ] || skip "bash has no EPOCHREALTIME"
     local LIMIT_MS=1000
     mkdir -p "$BATS_TEST_TMPDIR/deadbin"
