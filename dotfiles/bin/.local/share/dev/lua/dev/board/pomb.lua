@@ -121,6 +121,7 @@ M.MAX_TOKEN_HOURS = 8
 ---@field private __opts dev.board.pomb.Opts the server, token reference and board name
 ---@field private __secret string? the token, nil until the first request
 ---@field private __healed boolean? nil until a refused Keychain token is replaced
+---@field private __who string|false|nil the token's role name, false when it has none, nil until asked
 ---@field private __filed boolean? true when the token came from the role token file
 ---@field private __limited {tries: integer, waited: number}? retries used and seconds waited
 ---@field private __reread boolean? true once an expired file token has been looked up again
@@ -2784,10 +2785,11 @@ function Backend:add_roles()
     reply, message, status, doc = self:__request("POST", ROLES_PATH, { boards = { id } })
     if not reply then
         if status == FORBIDDEN and type(doc) == "table" and doc.code == EXCEEDS_GRANT then
+            local role = self:__role()
             return nil,
                 unavailable(
                     "the token"
-                        .. (self:__role() and (" (role " .. self:__role() .. ")") or "")
+                        .. (role and (" (role " .. role .. ")") or "")
                         .. " does not hold board "
                         .. self.__opts.name
                         .. " ("
