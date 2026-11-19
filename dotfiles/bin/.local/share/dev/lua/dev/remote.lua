@@ -22,6 +22,11 @@ local MACHINE_VERBS = {
     land = true,
     guide = true,
     connect = true,
+    clean = true,
+    purge = true,
+    list = true,
+    skills = true,
+    stow = true,
 }
 local MACHINE_NOUNS =
     { tools = true, box = true, board = true, ws = true, pi = true, antinote = true }

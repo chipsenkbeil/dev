@@ -257,5 +257,5 @@ Verbs that act on this machine exit 2 with `dev <verb>: runs on this machine
 only, so --remote does not apply`, whatever the runner.
 
 - install, uninstall, restow, sync, setup, fmt, fetch, help, init, push, pull,
-  follow, land, guide and connect
+  follow, land, guide, connect, clean, purge, list, skills and stow
 - every subcommand of tools, box, board, ws, pi and antinote

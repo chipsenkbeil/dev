@@ -994,7 +994,7 @@ assert_contains "--remote maps a subcommand to the job noun.sub" "$(log)" "[--jo
 out="$(cirun "$cip" widget --remote zap 2>&1)"
 assert_eq "--remote with an unknown subcommand exits 2" "$?" "2"
 assert_contains "--remote with an unknown subcommand names it" "$out" "unknown subcommand zap"
-for verb in install uninstall restow sync setup fmt fetch help init push pull; do
+for verb in install uninstall restow sync setup fmt fetch help init push pull clean purge list skills stow; do
     out="$(cirun "$cip" --remote "$verb" 2>&1)"
     assert_eq "--remote refuses $verb with 2" "$?" "2"
     assert_contains "--remote names the refused verb $verb" "$out" "dev $verb: runs on this machine only, so --remote does not apply"
