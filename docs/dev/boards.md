@@ -2523,6 +2523,10 @@ description and prints `edited <id prefix>`.
 - Empty text, an unreadable file, a missing card argument or an extra word is
   exit 2. An unknown card is exit 1.
 - A card labelled `needs:human` is refused (exit 1).
+- A text with a line that is exactly `done when:`, `checks:`, `allow:`,
+  `tests:` or `files:`, the blocks `show` prints from the card's fields, is
+  refused (exit 1). The outcomes and checks have their own verbs,
+  `dev board outcome` and `dev board checks`.
 - `--board B` replaces the description of the card on the Pomb board named `B`
   from any repo, looked up as `add --board` looks it up. A local board
   refuses it (exit 1), and a missing name is exit 2.

@@ -1083,6 +1083,27 @@ function M.compose(problem, change, out_of_scope, source)
     return table.concat(parts, "\n")
 end
 
+---The card fields that render as a block of list lines, in the order of the rendering.
+M.BLOCK_FIELDS = { "checks", "allow", "tests", "files" }
+
+---The outcomes block name and the block names of the list fields, which a description never holds.
+local RENDERED_BLOCKS = { ["done when:"] = true }
+for _, field in ipairs(M.BLOCK_FIELDS) do
+    RENDERED_BLOCKS[field .. ":"] = true
+end
+
+---Find the first line of a description that is exactly a rendered block name.
+---@param description string? the card's description
+---@return string? line the block line, nil when the text holds none
+function M.rendered_blocks(description)
+    for line in (description or ""):gmatch("[^\n]+") do
+        if RENDERED_BLOCKS[line] then
+            return line
+        end
+    end
+    return nil
+end
+
 ---List what a card lacks of card format v3 outside Icebox: each missing heading, and Problem text.
 ---@param description string? the card's description
 ---@return string[] missing the problems, empty when the card follows the format outside Icebox

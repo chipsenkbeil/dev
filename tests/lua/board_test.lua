@@ -1199,6 +1199,29 @@ testing.test("edit --board refuses a board that is not there", function()
     testing.eq(#backend.calls, 1)
 end)
 
+testing.test("edit refuses a text that holds a rendered block", function()
+    local backend = fake(sample())
+    local text = table.concat({
+        "## Problem",
+        "words",
+        "",
+        "done when:",
+        "- [ ] one (check: x)",
+        "",
+    }, "\n")
+    local result = cmd_board.run("edit", { "11111111-a", text }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("`dev board outcome`", 1, true), result.message)
+    testing.ok(result.message:find("`dev board checks`", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("rendered_blocks finds a whole block line and ignores prose", function()
+    testing.eq(board.rendered_blocks("a\nchecks:\n- x"), "checks:")
+    testing.eq(board.rendered_blocks("see the checks: row and done when: it ends"), nil)
+    testing.eq(board.rendered_blocks(nil), nil)
+end)
+
 testing.test("edit outside Icebox refuses a text that drops a v3 section", function()
     local backend = fake(sample())
     local result = cmd_board.run("edit", { "11111111-a", "## Problem\nnew plan" }, backend)

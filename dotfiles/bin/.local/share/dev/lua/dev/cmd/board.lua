@@ -1096,7 +1096,7 @@ local function card_view(backend, card)
         outcomes = "done when:\n" .. table.concat(lines, "\n") .. "\n\n"
     end
     local blocks = ""
-    for _, field in ipairs({ "checks", "allow", "tests", "files" }) do
+    for _, field in ipairs(board.BLOCK_FIELDS) do
         local names = card[field]
         if names and #names > 0 then
             blocks = blocks .. field .. ":\n- " .. table.concat(names, "\n- ") .. "\n\n"
@@ -2787,6 +2787,15 @@ function commands.edit(backend, args)
     local held_back = owner_holds(card)
     if held_back then
         return held_back
+    end
+    local rendered = board.rendered_blocks(args[2])
+    if rendered then
+        return failure(
+            "The text holds the rendered line `"
+                .. rendered
+                .. "`. The outcomes and checks have their own verbs, `dev board outcome`"
+                .. " and `dev board checks`."
+        )
     end
     if card.column ~= backend.stages.icebox then
         local missing = board.backlog_missing(args[2])
