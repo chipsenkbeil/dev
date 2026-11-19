@@ -136,6 +136,19 @@ local function limited(backend, card, target)
     return message and failure(message)
 end
 
+---Stop the keepalive of a claim, release the claim at its fence and fail with `message`.
+---
+---@param backend dev.board.Backend the board
+---@param id string the card id
+---@param fence integer the fence of the claim
+---@param message string why the claim was abandoned
+---@return dev.cmd.board.Result result the message and the exit code
+local function abandon_claim(backend, id, fence, message)
+    claims.stop(id)
+    backend:release(id, fence)
+    return failure(message)
+end
+
 ---Claim a card and start the keepalive that renews the claim.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card to claim
@@ -165,8 +178,10 @@ local function claim_card(backend, card, name)
     local warning = ""
     if not past then
         if fresh then
-            backend:release(card.id, fence)
-            return failure(
+            return abandon_claim(
+                backend,
+                card.id,
+                fence,
                 "the claim on " .. card.id:sub(1, board.MIN_PREFIX) .. " was dropped: " .. why
             )
         end
@@ -178,22 +193,17 @@ local function claim_card(backend, card, name)
     local state = { card = card.id, fence = fence }
     ok, message = claims.write(state)
     if not ok then
-        backend:release(card.id, fence)
-        return failure(message)
+        return abandon_claim(backend, card.id, fence, message)
     end
     local pid
     pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id), who)
     if not pid then
-        claims.stop(card.id)
-        backend:release(card.id, fence)
-        return failure(message)
+        return abandon_claim(backend, card.id, fence, message)
     end
     state.pid = pid
     ok, message = claims.write(state)
     if not ok then
-        claims.stop(card.id)
-        backend:release(card.id, fence)
-        return failure(message)
+        return abandon_claim(backend, card.id, fence, message)
     end
     if pid == 0 then
         return {

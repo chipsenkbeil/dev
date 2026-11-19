@@ -212,6 +212,9 @@ local function claim_stub(fails)
         return true
     end
     function stub:keepalive()
+        if fails == "keepalive" then
+            return nil, "keepalive refused"
+        end
         return 0
     end
     return stub
@@ -273,4 +276,15 @@ testing.test("take releases a first claim when the note or the comments fail", f
         testing.eq(stub.released, 1)
         testing.ok(result.message:find("was dropped", 1, true), result.message)
     end
+end)
+
+testing.test("take releases the claim when the keepalive cannot start", function()
+    backend_at(board_home())
+    local card = { id = "cccc3333", size = "1 Pomodoro" }
+    local stub = claim_stub("keepalive")
+    local result, fence = runner.claim_card(stub, card, "dotfiles/a")
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "Keepalive refused.")
+    testing.eq(fence, nil)
+    testing.eq(stub.released, 1)
 end)
