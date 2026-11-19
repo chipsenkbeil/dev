@@ -283,11 +283,21 @@ local function wait_line(event, opts)
     end
 end
 
+---@alias dev.cmd.board.wait.Random fun(): number
+
+---Work out the pause before a retry, doubled per step up to the cap and cut by a random fraction.
+---@param step integer how many retries came before this one
+---@param random dev.cmd.board.wait.Random a number in [0, 1) that spreads the pause
+---@return number seconds
+local function backoff_pause(step, random)
+    local pause = math.min(WAIT_RETRY_SECONDS * 2 ^ step, WAIT_LIMITED_MAX_SECONDS)
+    return pause * (1 - WAIT_JITTER * random())
+end
+
 ---@class dev.cmd.board.wait.Opts
 ---@field stem string the path the cursor files start with, one per `--for` mode
 ---@field nap fun(seconds: number)? sleeps between retries, `dev.os.nap` when nil
----@field random (fun(): number)? a number in [0, 1) that spreads the pause, entropy from the system
----   when nil
+---@field random dev.cmd.board.wait.Random? spreads the pause, entropy from the system when nil
 ---@field notice fun(line: string)? prints the one line about too many open waits, standard error
 ---   when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
@@ -476,17 +486,14 @@ function M.wait(backend, args, opts)
                 told = true
                 notice(WAIT_LIMITED_NOTICE)
             end
-            local pause = math.min(WAIT_RETRY_SECONDS * 2 ^ limited, WAIT_LIMITED_MAX_SECONDS)
+            nap(backoff_pause(limited, random))
             limited = limited + 1
-            nap(pause * (1 - WAIT_JITTER * random()))
         elseif unread or pomb.unreachable(message, true) then
             failures = failures + 1
             if failures >= WAIT_RETRIES then
                 return flush(failure(message))
             end
-            local pause =
-                math.min(WAIT_RETRY_SECONDS * 2 ^ (failures - 1), WAIT_LIMITED_MAX_SECONDS)
-            nap(pause * (1 - WAIT_JITTER * random()))
+            nap(backoff_pause(failures - 1, random))
         else
             return flush(failure(message))
         end
