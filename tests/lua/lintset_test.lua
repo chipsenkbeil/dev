@@ -231,6 +231,18 @@ testing.test("the closing note names each failed check once", function()
     fs.remove(root, { recursive = true })
 end)
 
+local function quiet_finish(lint)
+    local original = verb.note
+    local notes = {}
+    verb.note = function(text)
+        notes[#notes + 1] = text
+    end
+    local ok, code = pcall(lint.finish, lint)
+    verb.note = original
+    assert(ok, code)
+    return code, notes
+end
+
 testing.test("standalone fails the lint on a .sh outside .dev/standalone", function()
     local root = support.tempdir()
     assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir failed")
@@ -238,7 +250,9 @@ testing.test("standalone fails the lint on a .sh outside .dev/standalone", funct
     local lint = lint_for(root)
     lint:standalone()
     testing.eq(lint.failed, { "standalone shell" })
-    testing.eq(lint:finish(), 1)
+    local code, notes = quiet_finish(lint)
+    testing.eq(code, 1)
+    testing.eq(notes, { "These checks failed: standalone shell." })
     fs.remove(root, { recursive = true })
 end)
 
@@ -252,7 +266,9 @@ testing.test("standalone fails the lint on a bad standalone header", function()
     local lint = lint_for(root)
     lint:standalone()
     testing.eq(lint.failed, { "standalone shell" })
-    testing.eq(lint:finish(), 1)
+    local code, notes = quiet_finish(lint)
+    testing.eq(code, 1)
+    testing.eq(notes, { "These checks failed: standalone shell." })
     fs.remove(root, { recursive = true })
 end)
 
