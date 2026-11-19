@@ -137,6 +137,56 @@ local function mode_of(path)
     return bit.band(fs.stat(path).mode, tonumber("777", 8))
 end
 
+testing.test("token mint sends expires_in_hours 8 by default", function()
+    local root, home = sandbox()
+    local out, code = mint(root, home)
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find('"expires_in_hours":8', 1, true), read(root, "calls"))
+end)
+
+testing.test("token mint --hours 3 sends 3 and --hours 9 is a usage error", function()
+    -- Send an explicit lifetime through to Pomb
+    local root, home = sandbox()
+    local out, code = dev(
+        root,
+        home,
+        { "board", "token", "mint", "--role", "implementer", "--as", NAME, "--hours", "3" }
+    )
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "calls"):find('"expires_in_hours":3', 1, true), read(root, "calls"))
+
+    -- Refuse a lifetime outside 1 to 8 before any request
+    root, home = sandbox()
+    for _, bad in ipairs({ "9", "0", "x" }) do
+        out, code = dev(
+            root,
+            home,
+            { "board", "token", "mint", "--role", "implementer", "--as", NAME, "--hours", bad }
+        )
+        testing.eq(code, 2, out)
+        testing.ok(out:find("--hours takes a whole number from 1 to 8", 1, true), out)
+    end
+
+    -- Make no call to Pomb for a refused lifetime
+    testing.eq(read(root, "calls"), "")
+end)
+
+testing.test("token mint names --hours when Pomb refuses the lifetime", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/children_status", "400"))
+    assert(
+        fs.write(
+            root .. "/children.json",
+            '{"message":"the owner allows this token\'s children 4 hours at most"}'
+        )
+    )
+    local out, code = mint(root, home)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("refused the lifetime", 1, true), out)
+    testing.ok(out:find("4 hours at most", 1, true), out)
+    testing.ok(out:find("--hours", 1, true), out)
+end)
+
 testing.test("token-mint-issue finds the role id by name and issues the child as NAME", function()
     local root, home = sandbox()
     local out, code = mint(root, home)

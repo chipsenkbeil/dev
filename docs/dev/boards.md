@@ -153,14 +153,16 @@ DEV_AGENT expired. Mint it again with `dev board token mint`.``
 
 `dev board token mint --role ROLE --as NAME` gives a runner a role token when
 a lead starts it by hand. It prints the role, the `agent-N` label and the
-expiry, never the token. Pomb sets the expiry: one hour by default, at most
-eight, and never past the lead's own.
+expiry, never the token. `--hours N` sets the lifetime, from 1 to 8 hours and
+8 by default. Pomb still caps it at the owner's limit for the lead's children
+and never past the lead's own expiry. When Pomb refuses the lifetime as above
+that limit, the verb says so and names `--hours`.
 
 The verb makes two calls:
 
 - `GET /api/v1/agent-roles` reads the role's id by name.
-- `POST /api/v1/auth/tokens/children` with `{name, role_id}` and the lead
-  token (`lead_token`) issues the token.
+- `POST /api/v1/auth/tokens/children` with `{name, role_id,
+  expires_in_hours}` and the lead token (`lead_token`) issues the token.
 
 The token goes to a file named by a SHA-256 hash of NAME, mode 0600, in a
 directory of mode 0700. The directory is `$XDG_RUNTIME_DIR/dev/tokens` when

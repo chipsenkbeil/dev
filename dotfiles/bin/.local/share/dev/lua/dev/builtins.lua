@@ -399,8 +399,8 @@ return {
     {
         words = { "board", "token", "mint" },
         handler = "lua",
-        flags = "--role --as",
-        usage = "dev board token mint --role ROLE --as NAME",
+        flags = "--role --as --hours",
+        usage = "dev board token mint --role ROLE --as NAME [--hours N]",
         desc = "Issue a role token to a runner the lead starts by hand",
     },
     {

@@ -104,6 +104,9 @@ local CHECKS_DEFINITION = {
 ---@class dev.board.pomb
 local M = {}
 
+---The most hours Pomb lets a role token live.
+M.MAX_TOKEN_HOURS = 8
+
 ---@class dev.board.pomb.Opts
 ---@field url string the server's base URL
 ---@field token string? `pass:<entry>`, where the token is kept, unneeded when `authorize` gives one
@@ -2336,10 +2339,11 @@ end
 ---The token goes to the file and nowhere else.
 ---@param role string the agent role's name
 ---@param name string the agent name to issue as, the `DEV_AGENT` of the runner
+---@param hours integer? the token's lifetime in hours, `M.MAX_TOKEN_HOURS` when nil
 ---@return {role: string, label: string, expires: integer}? issued what was issued, without the
 ---   token
 ---@return string? message why nothing was issued
-function Backend:mint(role, name)
+function Backend:mint(role, name, hours)
     local roles, message = self:__request("GET", ROLES_LIST_PATH)
     if not roles then
         return nil, message
@@ -2357,10 +2361,20 @@ function Backend:mint(role, name)
         return nil, "pomb has no agent role named " .. role .. ", the roles are " .. plural(names)
     end
     local reply, status, doc
-    reply, message, status, doc =
-        self:__request("POST", CHILDREN_PATH, { name = name, role_id = id })
+    reply, message, status, doc = self:__request(
+        "POST",
+        CHILDREN_PATH,
+        { name = name, role_id = id, expires_in_hours = hours or M.MAX_TOKEN_HOURS }
+    )
     local code = type(doc) == "table" and doc.code or nil
-    if status == CONFLICT then
+    local refusal = type(doc) == "table" and present(doc.message) or ""
+    local limit = refusal:match("(%d+) hours at most")
+    if status == HTTP_ERROR and limit then
+        return nil,
+            "pomb refused the lifetime. The owner allows "
+                .. limit
+                .. " hours at most. Pass a lower --hours"
+    elseif status == CONFLICT then
         return nil,
             "another token already has the name "
                 .. name

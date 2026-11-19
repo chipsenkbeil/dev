@@ -5971,7 +5971,7 @@ local function open_lead(ctx, action, permission)
 end
 
 M.handlers["board token mint"] = function(ctx)
-    local flags, extra = parse(ctx.args, { ["--role"] = true, ["--as"] = true })
+    local flags, extra = parse(ctx.args, { ["--role"] = true, ["--as"] = true, ["--hours"] = true })
     if not flags then
         verb.usage_error(ctx, extra.message)
     elseif #extra > 0 then
@@ -5979,8 +5979,14 @@ M.handlers["board token mint"] = function(ctx)
     elseif not flags["--role"] or not flags["--as"] or flags["--as"] == "" then
         verb.usage_error(ctx, "needs --role ROLE and --as NAME")
     end
+    local hours = flags["--hours"]
+        and flags["--hours"]:match("^%d+$")
+        and tonumber(flags["--hours"])
+    if flags["--hours"] and (not hours or hours < 1 or hours > pomb.MAX_TOKEN_HOURS) then
+        verb.usage_error(ctx, "--hours takes a whole number from 1 to " .. pomb.MAX_TOKEN_HOURS)
+    end
     local backend = open_lead(ctx, "mints a role token")
-    local issued, message = backend:mint(flags["--role"], flags["--as"])
+    local issued, message = backend:mint(flags["--role"], flags["--as"], hours)
     if not issued then
         verb.die(sentence(message))
     end
