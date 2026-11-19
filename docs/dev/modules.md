@@ -215,7 +215,10 @@ workspace and the main worktree are never listed.
 A folder with changes not in a commit, and the workspace dev runs in, are kept
 and each gets a `Kept` line, as does a git worktree that is locked or sits
 beside a prunable one. A folder that jj or git cannot read is kept too,
-and its line ends with the first line of their error. Ignored files do not
+and its line ends with the first line of their error. A workspace whose folder
+exists and whose name is not the short id of a Done card gets a `Left workspace
+NAME alone.` line (`worktree` for git) and counts in the closing `Left N items
+alone`, in a dry run and a real one. Ignored files do not
 count as changes, as with `ws rm`. A project with no board, or a board that cannot be read, skips the
 card test and says so. A board setting that is invalid stops prune with exit 1
 before any change. `dev.cmd.board.finished(root)` lists the Done short ids.

@@ -1349,7 +1349,8 @@ testing.test("prune forgets a jj workspace named for a done card", function()
                 .. " to "
                 .. trashed(env, root, DONE_ID)
                 .. ".",
-            "Pruned 1 workspace and 0 heads. Left 0 items alone."
+            "Left workspace " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
+            "Pruned 1 workspace and 0 heads. Left 1 item alone."
         )
     )
     testing.eq(
@@ -1360,6 +1361,58 @@ testing.test("prune forgets a jj workspace named for a done card", function()
     -- Expect the done folder gone and the open one kept
     testing.eq(fs.exists(done), false)
     testing.eq(fs.exists(open .. "/file"), true)
+end)
+
+testing.test("prune dry-run names a jj workspace that is not a done card as left alone", function()
+    -- Seed a board with one open card and a folder for it
+    local root, dir, env, log = prune_setup("jj")
+    seed_board(root, env, { { id = OPEN_ID } })
+    local open = folder(dir, OPEN_ID)
+    env.env.WORKSPACES = table.concat({ "default", OPEN_ID }, "\n")
+    env.env.ROOTS = OPEN_ID .. " " .. open
+
+    -- Dry-run the prune over the open card's workspace
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect the workspace named as left alone and counted
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Left workspace " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
+            "Would prune 0 workspaces and 0 heads. Left 1 item alone."
+        )
+    )
+
+    -- Expect no jj command and the folder kept
+    testing.eq(fs.read(log) or "", "")
+    testing.eq(fs.exists(open .. "/file"), true)
+end)
+
+testing.test("prune leaves a git worktree that is not a done card alone", function()
+    -- Seed a board with one open card and a worktree folder for it
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = OPEN_ID } })
+    local open = dir .. OPEN_ID
+    assert(fs.mkdir(open, { parents = true }))
+    assert(fs.write(open .. "/.git", "gitdir: elsewhere\n"))
+    env.env.WORKTREES = worktrees(root, open)
+
+    -- Prune so the open card's worktree is named and kept
+    local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the worktree named as left alone and nothing removed
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Left worktree " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
+            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Pruned 0 worktrees and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.read(log) or "", "")
+    testing.eq(fs.exists(open .. "/.git"), true)
 end)
 
 testing.test("prune abandons an empty jj head no workspace or bookmark holds", function()
@@ -1960,8 +2013,9 @@ testing.test(
                     .. ". Git worktree prune would also drop the record of "
                     .. sibling
                     .. ", which git marks prunable. Run git worktree prune first.",
+                "Left worktree sibling alone. Its name is not the id of a done card.",
                 "Git keeps no empty heads, so only worktrees are pruned.",
-                "Would prune 0 worktrees and 0 heads. Left 1 item alone."
+                "Would prune 0 worktrees and 0 heads. Left 2 items alone."
             )
         )
 

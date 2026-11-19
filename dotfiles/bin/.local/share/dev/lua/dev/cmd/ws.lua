@@ -971,6 +971,7 @@ end
 local function plan_workspaces(root, found, finished)
     local steps = {}
     local ordered = {}
+    local leftover = {}
     local here = fs.realpath(root)
     for _, space in ipairs(found) do
         local step = { name = space.name, path = space.path }
@@ -986,12 +987,29 @@ local function plan_workspaces(root, found, finished)
                 step.note = "it is the workspace dev runs in"
                 steps[#steps + 1] = step
             end
+        elseif finished then
+            leftover[#leftover + 1] = step
         end
     end
     for _, step in ipairs(steps) do
         ordered[#ordered + 1] = step
     end
-    return ordered
+    return ordered, leftover
+end
+
+local function leave_workspaces(label, leftover)
+    for _, step in ipairs(leftover) do
+        verb.say(
+            sentence(
+                "Left "
+                    .. label
+                    .. " "
+                    .. step.name
+                    .. " alone. Its name is not the id of a done card"
+            )
+        )
+    end
+    return #leftover
 end
 
 local function workspace_line(label, step, opts)
@@ -1176,9 +1194,10 @@ M.handlers["ws prune"] = function(ctx)
     end
 
     local found = backend == vcs.JJ and jj_workspaces(ctx.root) or git_worktrees(ctx.root)
-    local steps = plan_workspaces(ctx.root, found, finished_cards(ctx.root))
+    local steps, leftover = plan_workspaces(ctx.root, found, finished_cards(ctx.root))
     local pruned, left, failure, freed =
         prune_workspaces(ctx, steps, { backend = backend, dry = dry })
+    left = left + leave_workspaces(backend == vcs.JJ and "workspace" or "worktree", leftover)
 
     local abandoned = 0
     if backend == vcs.JJ then
