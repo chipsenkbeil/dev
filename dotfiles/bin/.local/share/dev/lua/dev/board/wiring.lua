@@ -407,7 +407,7 @@ end
 ---@return string[] problems the reasons, empty when none apply
 ---@return dev.board.check.State? state the commit to land, nil when it could not be read
 ---@return string? carried the commit whose check and reviews carry over, nil when none do
----@return boolean? check_only true when only the check carries, over an equal tree
+---@return boolean? check_only true when only the check carries and the reviews are judged apart
 local function land_problems(backend, card, who)
     local problems = card_problems(backend, card, who)
     local state, message = land.state(backend.root)
@@ -442,7 +442,7 @@ local function land_problems(backend, card, who)
             state = state,
             rows = card.checks,
         })
-        if (#lacking == 0 and not check_only) or (check_only and not unproven) then
+        if check_only and not unproven then
             carried, carry_why, check_only = nil, nil, nil
         end
         if carried and check_only then
@@ -450,7 +450,7 @@ local function land_problems(backend, card, who)
             lacking = land.missing_reviews(who.comments, state, backend.root)
             if #lacking > 0 then
                 problems[#problems + 1] = string.format(
-                    "The check at commit %s carries over to this commit, which has the same tree. Its reviews do not carry over.",
+                    "The check at commit %s carries over to this commit. Its reviews do not carry over.",
                     land.short(carried)
                 )
             end
@@ -847,7 +847,7 @@ local function land_held(opts)
     end
     if carried and check_only then
         text = string.format(
-            "%s The check was carried over from commit %s: the change id is the same and the tree is identical.",
+            "%s The check was carried over from commit %s: the change id is the same and its patch is unchanged.",
             text,
             land.short(carried)
         )

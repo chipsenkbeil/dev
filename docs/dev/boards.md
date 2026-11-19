@@ -3180,18 +3180,25 @@ Carrying a check and reviews across a rebase:
   and its patch is identical to the landing commit's patch.
 - A trunk commit that touched the same files does not stop the carry. The
   release run tests the whole batch and catches a clash the rebase cannot see.
-- The carry is tried whenever reviews are lacking, even when another refusal
-  stands (an unticked outcome, the wrong column), to list in the refusal
-  only what still blocks the landing.
+- The carry is tried whenever reviews or the check are lacking, even when
+  another refusal stands (an unticked outcome, the wrong column), to list in
+  the refusal only what still blocks the landing. It carries the check too when
+  the landing commit's reviews already hold, as by a recheck there.
 - A different change id, a non-empty interdiff or a review never recorded at
   the checked commit keeps the plain refusals, and any jj read that fails
   refuses too.
 - When no commit carries, the refusal gives the reason for the newest one,
   unless a jj read fails first, which refuses at once and names that read.
-- A checked commit that lacks a passing check or a review of its own, such as a
-  code review that was never recorded at it, never reaches the tests above. The
-  refusal then reads `The check at commit X cannot carry over to this commit.`
-  and names what that commit lacks.
+- A checked commit that lacks a passing check never reaches the tests above.
+  The refusal then reads `The check at commit X cannot carry over to this
+  commit.` and names what that commit lacks.
+- A checked commit with a passing check but no reviews of its own, such as one
+  whose reviews sit at an earlier commit, carries the check alone from a commit
+  with no reviews, after every commit that holds both and under the same four
+  rules. The refusal then names the carried check and each review the landing
+  commit still lacks, where a review at an interdiff-identical earlier commit
+  or a recheck at the landing commit counts. A non-empty interdiff keeps the
+  plain no-check refusal.
 - The done note then adds that the check and reviews were carried over from the
   checked commit.
 

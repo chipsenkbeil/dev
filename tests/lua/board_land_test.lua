@@ -2551,22 +2551,55 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         end
     )
 
+    local function checked_past_reviews(project)
+        local id = new_card(project)
+        to_verify(project, id)
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        approve_reviews(project, id)
+        assert(fs.write(project.root .. "/other.txt", "other\n"), "write failed")
+        must(dev(project, { "board", "check", id }))
+        return id, head(project.root)
+    end
+
     testing.test(
-        "land does not carry a checked commit whose reviews sit at a different patch",
+        "land carries only the check of a commit whose reviews sit at a different patch",
         function()
             local project = jj_project()
-            local id = new_card(project)
-            to_verify(project, id)
-            must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
-            approve_reviews(project, id)
-            assert(fs.write(project.root .. "/other.txt", "other\n"), "write failed")
-            must(dev(project, { "board", "check", id }))
+            local id, at_check = checked_past_reviews(project)
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
             rebase_onto_trunk(project.root)
-            local out = refused(project, id, { "No run of `dev board check`" })
-            testing.eq(out:find("carried over", 1, true), nil, out)
+            local out = refused(project, id, {
+                "The check at commit " .. at_check:sub(1, 12) .. " carries over",
+                "The code review is of an earlier commit",
+            })
+            testing.eq(out:find("No run of `dev board check`", 1, true), nil, out)
         end
     )
+
+    testing.test("land carries a check from a commit with no reviews", function()
+        local project = jj_project()
+        local id, at_check = checked_past_reviews(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        for _, of in ipairs({ "code", "style" }) do
+            must(record_review(project, id, { kind = "recheck", of = of, by = "re-" .. of }))
+        end
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.ok(code == 0, out)
+        local list = comments(project.home)
+        local carried = "carried over from commit " .. at_check:sub(1, 12)
+        testing.ok(list[#list].body:find(carried, 1, true), list[#list].body)
+    end)
+
+    testing.test("land refuses a check with no reviews across a changed patch", function()
+        local project = jj_project()
+        local id = checked_past_reviews(project)
+        assert(fs.write(project.root .. "/more.txt", "more\n"), "write failed")
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local out = refused(project, id, { "No run of `dev board check`" })
+        testing.eq(out:find("carried over", 1, true), nil, out)
+    end)
 
     testing.test("land names the newest checked commit when no candidate carries", function()
         local project = jj_project()
@@ -2675,7 +2708,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     )
 
     testing.test(
-        "land does not carry a review that was never recorded at the checked commit",
+        "land carries only the check when a review was never recorded at the checked commit",
         function()
             local project = jj_project()
             trunk_moves(project, { ["shared.txt"] = SHARED })
@@ -2690,11 +2723,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             rebase_onto_trunk(project.root)
             local out = refused(project, id, { "No style review of change" })
             testing.ok(
-                out:find(
-                    "The check at commit " .. at_check:sub(1, 12) .. " cannot carry over",
-                    1,
-                    true
-                ),
+                out:find("The check at commit " .. at_check:sub(1, 12) .. " carries over", 1, true),
                 out
             )
             local _, repeats = out:gsub("No style review of change", "")

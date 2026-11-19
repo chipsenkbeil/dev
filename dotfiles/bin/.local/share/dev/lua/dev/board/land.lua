@@ -722,7 +722,7 @@ local function uncarried_problem(opts)
 end
 
 local function checked_commits(root, comments, state, rows)
-    local found, seen, why = {}, {}, nil
+    local found, partial, seen, why = {}, {}, {}, nil
     for i = #comments, 1, -1 do
         local record = check.parse(comments[i].body)
         if
@@ -747,12 +747,15 @@ local function checked_commits(root, comments, state, rows)
                         M.short(record.commit),
                         problem
                     )
+                if not M.checks_problem(comments, at, rows) then
+                    partial[#partial + 1] = record.commit
+                end
             else
                 found[#found + 1] = record.commit
             end
         end
     end
-    return found, why
+    return found, partial, why
 end
 
 local function git_carry_problem(root, state, commit)
@@ -1072,8 +1075,8 @@ end
 
 local function rebase_carry(opts)
     local root, comments, state, rows = opts.root, opts.comments, opts.state, opts.rows
-    local candidates, unmet = checked_commits(root, comments, state, rows)
-    if #candidates == 0 then
+    local candidates, partial, unmet = checked_commits(root, comments, state, rows)
+    if #candidates == 0 and #partial == 0 then
         return nil, unmet
     end
     local moved = M.trunk_problem(root)
@@ -1090,6 +1093,18 @@ local function rebase_carry(opts)
             return nil, problem, true
         end
         newest_problem = newest_problem or problem
+    end
+    for _, commit in ipairs(partial) do
+        local problem, failed_read = carry_problem(root, state, commit)
+        if not problem then
+            return commit, nil, nil, true
+        end
+        if failed_read then
+            return nil, problem, true
+        end
+    end
+    if #candidates == 0 then
+        return nil, unmet
     end
     return nil, newest_problem
 end
@@ -1158,10 +1173,14 @@ end
 ---record of its own, readable or not, never carries. When every checked commit lacks a passing
 ---check or a review, the problem names the newest one and what it lacks.
 ---
+---A commit with a passing check but no reviews of its own carries its check alone under the same
+---rules, tried after every commit that holds both. The reviews then count only as the landing
+---commit's own records and interdiff-identical ones.
+---
 ---A commit with a passing check, whatever its parent and reviews, also carries its check alone
 ---when its tree equals the landing commit's tree and the change id is the same, as after a squash
 ---of an unlanded parent into the change. The reviews do not carry then. The third value is true
----for that carry.
+---for either carry.
 ---@param opts dev.board.land.Opts the project, the card's records and the landing commit
 ---@return string? commit the checked commit the records carry over from
 ---@return string? problem why it is refused, nil when it carries or no commit was checked
@@ -1177,9 +1196,9 @@ function M.carry(opts)
             return nil
         end
     end
-    local commit, problem, stop = rebase_carry(opts)
+    local commit, problem, stop, check_only = rebase_carry(opts)
     if commit or stop then
-        return commit, problem
+        return commit, problem, check_only
     end
     local same, read_problem = tree_carry(opts)
     if read_problem then
