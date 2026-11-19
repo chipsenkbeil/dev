@@ -5301,6 +5301,21 @@ testing.test("stale lists an unclaimed in-flight card quiet for a day", function
     )
 end)
 
+testing.test("stale lists a stale in-flight card once", function()
+    local cards, times = aged({ support.COLUMN_NAME.PROGRESS }, { 10 })
+    local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+    testing.eq(result.output, "00000001  In Progress  10d  unsized  Card 1")
+    testing.ok(not result.output:find(FLIGHT_HEAD, 1, true), result.output)
+end)
+
+testing.test("stale keeps an undated in-flight card off the flight list", function()
+    local cards, times = aged({ support.COLUMN_NAME.PROGRESS }, { 2 })
+    times[cards[1].id] = nil
+    local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+    testing.eq(result.output, "No stale cards.\n\nCould not date " .. cards[1].id .. " Card 1.")
+    testing.ok(not result.output:find(FLIGHT_HEAD, 1, true), result.output)
+end)
+
 testing.test("stale keeps a claimed or recently commented card off the flight list", function()
     local cards, times = flight_cards()
     cards[1].claimant = "dotfiles/implementer/a"
