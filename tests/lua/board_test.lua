@@ -9021,9 +9021,22 @@ testing.test("move out of progress stops the loop and sends the fence", function
     testing.eq(heartbeats(root), after)
 end)
 
-testing.test("take refuses a Backlog card with no checks row", function()
+testing.test("take of a Backlog card with no checks row takes it", function()
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+end)
+
+testing.test("take of a Ready card with no checks row is refused", function()
+    local export = export_with_first_card({
+        column_id = support.column_id(support.Column.READY),
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
         fields = "{}",

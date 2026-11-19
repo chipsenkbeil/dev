@@ -4484,7 +4484,7 @@ function commands.take(backend, args)
             return shaped
         end
     end
-    if card.claimant == nil and before_work(stages, card) then
+    if card.claimant == nil and card.column == stages.ready then
         local shape, why_family = family_shape(backend, card)
         if not shape then
             return failure(why_family)
