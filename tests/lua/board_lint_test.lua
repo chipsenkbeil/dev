@@ -111,6 +111,23 @@ testing.test("lint reports one line per rule a card breaks and exits 1", functio
     })
 end)
 
+testing.test("lint open skips done cards and a named card", function()
+    local cards = {
+        card(1, NAME.BACKLOG, { color = false }),
+        card(2, NAME.DONE, { outcomes = outcomes(2) }),
+    }
+    testing.eq(findings(cmd_board.run("lint", { "--open" }, backend(cards)).output), {
+        "00000001 Backlog lacks a size",
+    })
+    testing.eq(findings(cmd_board.run("lint", {}, backend(cards)).output), {
+        "00000001 Backlog lacks a size",
+        "00000002 Done 1 of 3 outcomes unticked",
+    })
+    testing.eq(findings(cmd_board.run("lint", { "--open", "00000002" }, backend(cards)).output), {
+        "00000002 Done 1 of 3 outcomes unticked",
+    })
+end)
+
 testing.test(
     "lint flags an empty Change or Out of scope and a Change: line under Problem",
     function()

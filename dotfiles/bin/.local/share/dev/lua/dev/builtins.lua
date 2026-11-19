@@ -601,9 +601,9 @@ return {
     },
     {
         words = { "board", "lint" },
-        flags = "--strict",
+        flags = "--strict --open",
         handler = "lua",
-        usage = "dev board lint [CARD] [--strict]",
+        usage = "dev board lint [CARD] [--strict] [--open]",
         desc = "Report every card, or just CARD, that breaks the board's rules",
     },
     {

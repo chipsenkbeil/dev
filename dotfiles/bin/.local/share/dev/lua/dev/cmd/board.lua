@@ -137,6 +137,7 @@ local SWITCH = guards.SWITCH
 local MAX_WAIT_SECONDS = 86400
 local MAX_LAND_ATTEMPTS = 5
 local STRICT_FLAG = "--strict"
+local OPEN_FLAG = "--open"
 local RESERVED_NOTE = "A note cannot begin with "
     .. board.CHECK_PREFIX
     .. ", which `dev board check` writes, "
@@ -4430,7 +4431,7 @@ function commands.stale(backend, args, now)
 end
 
 function commands.lint(backend, args)
-    local flags, words = parse(args, { [STRICT_FLAG] = SWITCH })
+    local flags, words = parse(args, { [STRICT_FLAG] = SWITCH, [OPEN_FLAG] = SWITCH })
     if not flags then
         return words
     end
@@ -4438,6 +4439,7 @@ function commands.lint(backend, args)
         return usage("Takes at most one card.")
     end
     local strict = flags[STRICT_FLAG] == true
+    local open_only = flags[OPEN_FLAG] == true and not words[1]
     local required, bad = required_rows(backend)
     if bad then
         return bad
@@ -4455,6 +4457,15 @@ function commands.lint(backend, args)
     end
     local rows = {}
     local fixable = false
+    if open_only then
+        local kept = {}
+        for _, card in ipairs(cards) do
+            if not card.done then
+                kept[#kept + 1] = card
+            end
+        end
+        cards = kept
+    end
     for _, card in ipairs(cards) do
         local facts = {
             comments = function()
