@@ -1992,6 +1992,9 @@ Progress, Review and Verify columns on this project's board.
   it has. `--before` and `--after` put the card in the lane of `CARD`, and a
   `--lane` that names another lane is a usage error.
 - It prints `added <id prefix> <column>`.
+- A name word that starts with `dev `, `rg ` or `! ` reads as a checks row
+  given without its own `--checks`, and `add` refuses it with a usage error
+  (exit 2) before it makes the card.
 - `--size` gives the card the colour of the size, as `size` does.
 - Each `--label L` (repeatable, duplicates dropped) gives it a label.
 - Unless the column is Icebox, the description is given the three card format

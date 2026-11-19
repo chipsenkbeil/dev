@@ -653,6 +653,24 @@ testing.test("add --checks refuses the rows checks refuses and writes nothing", 
     end
 end)
 
+testing.test("add refuses a name word that reads as a checks row", function()
+    for _, row in ipairs({ "rg -n X FILE", "dev --remote lint", "! rg -n X FILE" }) do
+        local backend = fake(sample())
+        local result = cmd_board.run("add", {
+            "X",
+            "--problem",
+            "x",
+            "--checks",
+            "dev --remote test -- tests/lua/board_test.lua",
+            row,
+        }, backend)
+        testing.eq(result.code, 2)
+        testing.ok(result.message:find("--checks", 1, true), result.message)
+        testing.ok(result.message:find(row, 1, true), result.message)
+        testing.eq(#backend.calls, 0)
+    end
+end)
+
 testing.test("add --board files on the named board and leaves this one alone", function()
     local backend = fake(sample())
     local sibling = fake(sample())

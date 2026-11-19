@@ -581,6 +581,13 @@ local function link_blockers(backend, card, blockers)
     return nil
 end
 
+---Tell whether a name word reads as a checks row left without its own --checks flag.
+---@param word string one word of the card name
+---@return boolean reads true when the word starts like a checks row
+local function looks_like_a_checks_row(word)
+    return word:find("^dev ") ~= nil or word:find("^rg ") ~= nil or word:find("^! ") ~= nil
+end
+
 ---Add a card, and record in `held` whether the parsed flags hold the --id-only switch.
 ---@param backend dev.board.Backend the board to add the card to
 ---@param args string[] the arguments after `add`
@@ -622,6 +629,15 @@ local function add_card(backend, args, held)
     end
     if #words == 0 then
         return usage("Needs a card name.")
+    end
+    for _, word in ipairs(words) do
+        if looks_like_a_checks_row(word) then
+            return usage(
+                "The name word "
+                    .. word
+                    .. " reads as a checks row. Give each row its own --checks flag."
+            )
+        end
     end
     held.id_only = flags[ID_ONLY_FLAG]
     if flags["--board"] then
