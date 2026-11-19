@@ -317,6 +317,21 @@ local function builtin_commands(ctx, row)
 end
 
 local function verb_text(ctx, reg, c, opts)
+    ---Global flags with their descriptions
+    local GLOBAL_FLAG_HELP = {
+        { "-v", "print each command before it runs" },
+        { "-vv", "also trace every line of dev and of each bash script" },
+        { "--remote", "run this command on a remote runner, see `dev help remote`" },
+        {
+            "--local",
+            "run this command here, whatever the default is "
+                .. "(refused for a ci verb under DEV_AGENT)",
+        },
+        { "--detach", "with --remote, start the job and return" },
+        { "--priority", "with --remote, start the job ahead of normal ci jobs" },
+        { "-C DIR", "run as if dev started in DIR" },
+        { "--agent NAME", "export DEV_AGENT=NAME to the command" },
+    }
     local words, short = opts.words, opts.short
     local name = table.concat(words, " ")
     local row = reg:find(words)
@@ -368,21 +383,6 @@ local function verb_text(ctx, reg, c, opts)
             out[#out + 1] = "  " .. line .. "\n"
         end
     end
-    ---Global flags with their descriptions
-    local GLOBAL_FLAG_HELP = {
-        { "-v", "print each command before it runs" },
-        { "-vv", "also trace every line of dev and of each bash script" },
-        { "--remote", "run this command on a remote runner, see `dev help remote`" },
-        {
-            "--local",
-            "run this command here, whatever the default is "
-                .. "(refused for a ci verb under DEV_AGENT)",
-        },
-        { "--detach", "with --remote, start the job and return" },
-        { "--priority", "with --remote, start the job ahead of normal ci jobs" },
-        { "-C DIR", "run as if dev started in DIR" },
-        { "--agent NAME", "export DEV_AGENT=NAME to the command" },
-    }
     local width = 0
     for _, flag in ipairs(GLOBAL_FLAG_HELP) do
         width = math.max(width, #flag[1])
