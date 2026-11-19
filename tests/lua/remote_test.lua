@@ -669,6 +669,19 @@ testing.test("run label keeps check and release labels in a terminal", function(
     end)
 end)
 
+testing.test("run label names a check run even under an agent DEV_AGENT", function()
+    local remote = require("dev.remote")
+    local root = setup()
+    with_empty_home(function()
+        local agent = "dotfiles/implementer/d9f0e004"
+        local check =
+            { DEV_AGENT = agent, DEV_CI_VERB = remote.Verb.CHECK, DEV_CI_CARD = "d9f0e004" }
+        testing.eq(remote.run_label(root, check, { tty = false }), "p/check/d9f0e004")
+        testing.eq(remote.run_label(root, check, { tty = true }), "p/check/d9f0e004")
+        testing.eq(remote.run_label(root, { DEV_AGENT = agent }, { tty = false }), nil)
+    end)
+end)
+
 testing.test("--remote ci run label is unset when run from a real terminal", function()
     local root, base = setup()
     if dev_os.name() ~= "Linux" then

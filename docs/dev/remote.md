@@ -176,15 +176,17 @@ A run dev starts on ci carries a `DEV_AGENT` label, which `ci ps -o run,by`
 shows in the BY column. The one exception is a terminal run with no
 `DEV_CI_VERB`.
 
-A caller's non-empty `DEV_AGENT` is kept. Otherwise the label is
+A check run carries the check label even when DEV_AGENT is set. For any
+other verb a caller's non-empty `DEV_AGENT` is kept. Otherwise the label is
 `<repo>/<verb>`, or `<repo>/<verb>/<card>` when `DEV_CI_CARD` is set.
 
 The verb is `DEV_CI_VERB` and defaults to `remote`. The repo is `[board] name`
 or the project directory name.
 
-`dev board check` sets both variables, so with `DEV_AGENT` unset its runs read
-`<repo>/check/<card>`. `dev board land` requires `DEV_AGENT`, so a run under
-land keeps the caller's label and never reads `<repo>/land/<card>`.
+`dev board check` sets both variables, so its runs read `<repo>/check/<card>`
+whatever `DEV_AGENT` holds. `dev board land` requires `DEV_AGENT` and sets no
+land verb, so it never reads `<repo>/land/<card>`. Its recheck rows run as
+check runs and carry the check label.
 
 A repo's own release verb exports `DEV_CI_VERB=release` and `DEV_CI_CARD`
 before it calls `dev --remote`.

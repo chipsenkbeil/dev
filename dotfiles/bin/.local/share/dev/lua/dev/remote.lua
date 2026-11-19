@@ -196,17 +196,21 @@ end
 
 ---Choose the `DEV_AGENT` label for a run dev starts on ci.
 ---
----A caller's non-empty `DEV_AGENT` wins, a bare run from a terminal carries none,
----and any other run is labelled by its verb and card.
+---A check run is always labelled by its verb and card. Otherwise a caller's non-empty
+---`DEV_AGENT` wins, a bare run from a terminal carries none, and any other run is
+---labelled by its verb and card.
 ---@param root string the project root
 ---@param env table<string, string?> `DEV_AGENT`, `DEV_CI_VERB` and `DEV_CI_CARD`
 ---@param opts dev.remote.run_label.Opts
 ---@return string? name the label to set, or nil to set none
 function M.run_label(root, env, opts)
+    local verb_name = env.DEV_CI_VERB
+    if verb_name == M.Verb.CHECK then
+        return label(root, verb_name, env.DEV_CI_CARD)
+    end
     if env.DEV_AGENT ~= nil and env.DEV_AGENT ~= "" then
         return nil
     end
-    local verb_name = env.DEV_CI_VERB
     if verb_name == nil or verb_name == "" then
         if opts.tty then
             return nil
