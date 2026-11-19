@@ -403,10 +403,15 @@ local function dev(project, args, extra)
         LAND_MSG = "stub land",
         REAL_JJ = dev_os.which("jj"),
     }
+    local cwd
     for name, value in pairs(extra or {}) do
-        env[name] = value
+        if name == "cwd" then
+            cwd = value
+        else
+            env[name] = value
+        end
     end
-    return support.dev(project.root, args, { env = env })
+    return support.dev(project.root, args, { env = env, cwd = cwd })
 end
 
 local function board_card(doc, id)
@@ -1589,6 +1594,16 @@ if has_jj then
             })
         end
     )
+
+    testing.test("land refuses a template change from a subdirectory", function()
+        local project = jj_project()
+        local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
+        local subdirectory = project.root .. "/" .. TEMPLATE_DIR
+        refused(project, id, {
+            "The lint-set template calls dev.fs.exists, which .dev/baked.txt",
+            "have infra rebake the ci images, then land the template change",
+        }, { cwd = subdirectory })
+    end)
 
     testing.test(
         "land refuses a template change when the dev change is already on trunk",
