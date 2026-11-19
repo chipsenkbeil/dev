@@ -95,7 +95,8 @@ M.share = SHARE
 
 ---Find the clone of the dotfiles repository that holds this copy of dev.
 ---
----`DOTFILES` names it for a user, never for root.
+---`DOTFILES` names it for a user, never for root. A dev running from the installed snapshot has no
+---clone above it, so the launcher's `DEV_CHECKOUT` names the clone it started from.
 ---@return string root absolute path of the clone
 function M.dotfiles_root()
     local env = os.getenv("DOTFILES")
@@ -103,6 +104,10 @@ function M.dotfiles_root()
         return env
     end
     local root = SHARE:match("^(.*)/dotfiles/bin/%.local/share/dev$")
+    local checkout = os.getenv("DEV_CHECKOUT")
+    if not root and checkout and checkout ~= "" and dev_os.getuid() ~= 0 then
+        return checkout
+    end
     if not root then
         stderr:write("dev: cannot find the dotfiles clone from ", SHARE, "\n")
         os.exit(1)

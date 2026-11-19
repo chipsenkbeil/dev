@@ -76,6 +76,11 @@ assert_eq "a named suite exits 0" "$rc" "0"
 assert_line "a named suite runs only that suite" "$out" "PASS tests/a/pass_test.sh"
 assert_line "a named suite is the only one counted" "$out" "1 passed, 0 failed, 0 skipped"
 
+mkdir -p "$TMP/tests/env"
+printf '%s\n' "[ \"\$DEV_FROM\" = checkout ]" >"$TMP/tests/env/from_test.sh"
+out="$(cd "$TMP" && DEV_FROM='' "$DEV" test tests/env/from_test.sh 2>&1)"
+assert_line "a suite runs with DEV_FROM=checkout" "$out" "PASS tests/env/from_test.sh"
+
 out="$(cd "$TMP" && "$DEV" test tests/a/pass_test.sh tests/a/runs.bats 2>&1)"
 assert_line "two named suites are both counted" "$out" "2 passed, 0 failed, 0 skipped"
 

@@ -521,7 +521,10 @@ The install family is `.dev/lua/dotfiles/packages.lua`:
   calls after it use that prefix's binary.
 - the stow flag table: `--no-folding` for `gpg`, `ssh`, `bin` and `pi`, plus
   `--ignore='settings\.json'` for `pi`.
-- the per-package hooks: `gpg`, `ssh`, `antinote`, `pi`, `claude` and `jj`.
+- the per-package hooks: `bin`, `gpg`, `ssh`, `antinote`, `pi`, `claude` and
+  `jj`. The `bin` hook publishes dev's snapshot with `dotfiles.snapshot`, which
+  copies `share/dev` to a new version directory under
+  `$XDG_STATE_HOME/dev/snapshot/versions` and renames a link over `current`.
 
 Any `dotfiles/<app>/` directory is automatically installable. The `pi` and
 `antinote` hooks call `dotfiles.pi` and `dotfiles.antinote` in process.

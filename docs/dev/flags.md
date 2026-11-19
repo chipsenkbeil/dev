@@ -385,6 +385,24 @@ The launcher decides this in bash from the words after the `-v` and
 The launcher resolves its own real path into `DEV_SELF`. An enabled
 `DEV_REMOTE` is anything but empty, `0`, `no` or `false`.
 
+### Which copy of dev runs
+
+A user's launcher runs dev from the installed snapshot when
+`${XDG_STATE_HOME:-~/.local/state}/dev/snapshot/current` holds a `main.lua`
+and an `ORIGIN` file naming the clone that launcher belongs to. It resolves
+that link once, hands luajit the real version directory and exports
+`DEV_CHECKOUT`, the clone it started from, for the verbs that read the
+repository. A checkout update therefore never shows a running dev half-written
+code. `dev install bin` publishes the snapshot: it copies `share/dev` into a new
+`versions/` directory, then renames a link over `current`, so the swap is one
+step. The newest three versions stay.
+
+The launcher runs the checkout copy instead when `DEV_FROM=checkout` is set
+(`dev test` sets it for every suite), when no snapshot exists yet or it came
+from another clone, and always for root. A landing is live only after
+`dev install bin`. When a landing changed a `dev.*` module that the install
+verb itself needs, run `DEV_FROM=checkout dev install bin`.
+
 ### bootstrap
 
 `bootstrap` as the first word runs `bootstrap.sh` from the dotfiles clone,

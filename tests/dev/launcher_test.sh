@@ -307,6 +307,79 @@ assert_eq "root without luajit, DEV_REMOTE=1 exits 2" "$?" "2"
 assert_eq "root without luajit, DEV_REMOTE=1 gets the root refusal" "$out" "$ROOT_REFUSAL"
 ran_nothing "root without luajit, DEV_REMOTE"
 
+SNAPHOME="$TMP/snaphome"
+SNAP="$SNAPHOME/.local/state/dev/snapshot"
+for version in v1 v2; do
+    mkdir -p "$SNAP/versions/$version/lua"
+    printf 'return "%s"\n' "$version" >"$SNAP/versions/$version/lua/mod.lua"
+    printf '%s\n' "$REPO" >"$SNAP/versions/$version/ORIGIN"
+    cat >"$SNAP/versions/$version/main.lua" <<'LUA'
+local here = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$")
+package.path = here .. "/lua/?.lua"
+local snap = os.getenv("SNAP")
+if os.getenv("SWAP") then
+    assert(os.rename(snap .. "/current.new", snap .. "/current"))
+end
+print(require("mod"))
+LUA
+done
+V1_REAL="$(cd -P "$SNAP/versions/v1" && pwd -P)"
+snap_dev() {
+    env -u XDG_STATE_HOME -u DEV_FROM HOME="$SNAPHOME" SNAP="$SNAP" PATH="$TMP/realjit:$NOLUA" "$@"
+}
+snap_rec() {
+    env -u XDG_STATE_HOME -u DEV_FROM HOME="$SNAPHOME" PATH="$RECORDER:$NOLUA" "$@"
+}
+
+rm -f "$ARGS_OUT"
+snap_rec "$DEV" help >/dev/null 2>&1
+assert_eq "with no snapshot luajit gets the checkout main.lua" "$(cat "$ARGS_OUT")" "$SHARE_MAIN help"
+
+ln -s versions/v1 "$SNAP/current"
+rm -f "$ARGS_OUT" "$ENV_OUT"
+snap_rec "$DEV" help >/dev/null 2>&1
+assert_eq "a snapshot gives luajit its resolved version directory" "$(cat "$ARGS_OUT")" "$V1_REAL/main.lua help"
+assert_eq "a snapshot run still reports the checkout launcher as DEV_SELF" "$(grep '^DEV_SELF=' "$ENV_OUT")" "DEV_SELF=$DEV"
+assert_eq "a snapshot run names the checkout it came from" "$(grep '^DEV_CHECKOUT=' "$ENV_OUT")" "DEV_CHECKOUT=$REPO"
+
+rm -f "$ARGS_OUT"
+snap_rec DEV_FROM=checkout "$DEV" help >/dev/null 2>&1
+assert_eq "DEV_FROM=checkout runs the checkout copy" "$(cat "$ARGS_OUT")" "$SHARE_MAIN help"
+
+LC_CHECKOUT="$(cd "$(dirname "$LC_REC")/../../../.." && pwd -P)"
+printf '%s\n' "$LC_CHECKOUT" >"$SNAP/versions/v1/ORIGIN"
+rm -f "$ARGS_OUT"
+env -u XDG_STATE_HOME -u DEV_FROM HOME="$SNAPHOME" PATH="$RECORDER:$NOLUA" "$LC_REC" help >/dev/null 2>&1
+assert_eq "a user's launcher takes a snapshot published from its checkout" "$(cat "$ARGS_OUT")" "$V1_REAL/main.lua help"
+rm -f "$ARGS_OUT"
+env -u XDG_STATE_HOME -u DEV_FROM HOME="$SNAPHOME" PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_REC" help >/dev/null 2>&1
+assert_eq "root ignores the snapshot" "$(cat "$ARGS_OUT")" "$SHARE_MAIN help"
+printf '%s\n' "$REPO" >"$SNAP/versions/v1/ORIGIN"
+
+printf '%s\n' "$TMP/elsewhere" >"$SNAP/versions/v1/ORIGIN"
+rm -f "$ARGS_OUT"
+snap_rec "$DEV" help >/dev/null 2>&1
+assert_eq "a snapshot published from another checkout is ignored" "$(cat "$ARGS_OUT")" "$SHARE_MAIN help"
+printf '%s\n' "$REPO" >"$SNAP/versions/v1/ORIGIN"
+
+rm -f "$ARGS_OUT"
+env -u DEV_FROM HOME="$SNAPHOME" XDG_STATE_HOME=relative/state PATH="$RECORDER:$NOLUA" "$DEV" help >/dev/null 2>&1
+assert_eq "a relative XDG_STATE_HOME falls back to the home state directory" "$(cat "$ARGS_OUT")" "$V1_REAL/main.lua help"
+
+SNAP3="$TMP/home3/.local/state/dev/snapshot"
+mkdir -p "$SNAP3/versions"
+cp -R "$REPO/dotfiles/bin/.local/share/dev/." "$SNAP3/versions/v3"
+printf '%s\n' "$REPO" >"$SNAP3/versions/v3/ORIGIN"
+ln -s versions/v3 "$SNAP3/current"
+out="$(cd "$REPO" && env -u XDG_STATE_HOME -u DEV_FROM -u DOTFILES HOME="$TMP/home3" PATH="$TMP/realjit:$PATH" "$DEV" help overview 2>&1)"
+assert_contains "dev from a snapshot finds the clone through DEV_CHECKOUT" "$out" "This repo holds the owner's dotfiles"
+
+ln -s versions/v2 "$SNAP/current.new"
+out="$(SWAP=1 snap_dev "$DEV" help 2>&1)"
+assert_eq "a run whose snapshot is swapped under it loads every module from its own version" "$out" "v1"
+out="$(snap_dev "$DEV" help 2>&1)"
+assert_eq "the next run starts on the swapped snapshot" "$out" "v2"
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1

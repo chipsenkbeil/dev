@@ -233,7 +233,9 @@ local function start(index, suite)
     for _, word in ipairs(suite.argv) do
         argv[#argv + 1] = word
     end
-    local pid = dev_os.capture(argv, { env = { TMPDIR = suite.tmp } })
+    local pid = dev_os.capture(argv, {
+        env = { TMPDIR = suite.tmp, DEV_FROM = "checkout" },
+    })
     suite.pid = pid:match("%d+")
     suite.started = true
 end

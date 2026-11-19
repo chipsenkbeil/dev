@@ -75,6 +75,18 @@ for dir in ${chdirs[@]+"${chdirs[@]}"}; do
     }
 done
 share=$(cd -P "$(dirname "$DEV_SELF")/../share/dev" && pwd -P)
+if [ "$luajit" = luajit ] && [ "${DEV_FROM:-}" != checkout ] && [ -n "${HOME:-}" ]; then
+    case "${XDG_STATE_HOME:-}" in
+    /*) state=$XDG_STATE_HOME ;;
+    *) state=$HOME/.local/state ;;
+    esac
+    checkout=$(cd "$(dirname "$DEV_SELF")/../../../.." && pwd -P)
+    if version=$(cd -P "$state/dev/snapshot/current" 2>/dev/null && pwd -P) &&
+        [ -f "$version/main.lua" ] && [ "$(cat "$version/ORIGIN" 2>/dev/null)" = "$checkout" ]; then
+        share=$version
+        export DEV_CHECKOUT=$checkout
+    fi
+fi
 
 remote_flag=0
 case "${DEV_REMOTE:-}" in
