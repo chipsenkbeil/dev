@@ -248,6 +248,20 @@ testing.test("single_plan.refuses several rows and a row that is no ci job", fun
     testing.eq(check.single_plan({ "! dev --remote lint" }, { lint }), nil)
 end)
 
+testing.test("a land with a claim left elsewhere sends no release", function()
+    backend_at(board_home())
+    local stub = claim_stub()
+    testing.eq(claims.finish(stub, "dddd4444", nil), nil)
+    testing.eq(stub.released, 0)
+end)
+
+testing.test("a land with a local claim sends the release with its fence", function()
+    backend_at(board_home())
+    local stub = claim_stub()
+    testing.eq(claims.finish(stub, "dddd4444", { card = "dddd4444", fence = 3 }), true)
+    testing.eq(stub.released, 1)
+end)
+
 testing.test("take releases a first claim when the note or the comments fail", function()
     backend_at(board_home())
     for _, fails in ipairs({ "note", "comments" }) do

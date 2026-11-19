@@ -105,6 +105,21 @@ local function alive(pid)
     return out:find(LOOP_MARK, 1, true) ~= nil
 end
 
+---End a landed card's claim, sending a release only when the claim file held a fence.
+---@param backend dev.board.Backend the board backend
+---@param card string the card's full id
+---@param held dev.board.claims.State? the claim state read before the landing
+---@return boolean? sent true when the release went, false when it failed, nil when no fence exists
+---@return string? stuck why the release failed
+function M.finish(backend, card, held)
+    M.stop(card)
+    if not held then
+        return nil
+    end
+    local released, stuck = backend:release(card, held.fence)
+    return released and true or false, stuck
+end
+
 ---Stop a card's loop and forget its claim state.
 ---@param card string the card's full id
 ---@return dev.board.claims.State? state what was kept, nil when the card had no state

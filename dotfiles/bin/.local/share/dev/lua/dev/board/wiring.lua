@@ -544,6 +544,25 @@ end
 ---@field name string the caller's agent name
 ---@field hold dev.board.turn.Turn? a hold the caller already has, stretched for the recheck
 
+---End a landed card's claim, or say that it stays when no local claim holds a fence to send.
+---@param backend dev.board.Backend the board backend
+---@param card dev.board.Card the landed card, read after its move
+---@param held dev.board.claims.State? the local claim file of the card
+local function release_landed(backend, card, held)
+    local sent, stuck = claims.finish(backend, card.id, held)
+    if sent == nil then
+        verb.note(
+            string.format(
+                "Landed, and the card stays claimed by %s until the claim lapses "
+                    .. "or its owner releases it.",
+                card.claimant
+            )
+        )
+    elseif not sent then
+        verb.note("Landed, but the claim was not released. " .. dev_text.sentence(stuck))
+    end
+end
+
 ---@alias dev.board.wiring.MoveFn fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result
 
 ---@class dev.board.wiring.finish_companion.Opts
@@ -586,11 +605,7 @@ local function finish_companion(opts)
     end
     local left = backend:card(other.id)
     if left and left.claimant then
-        claims.stop(other.id)
-        local released, stuck = backend:release(other.id, held and held.fence)
-        if not released then
-            verb.note("Landed, but the claim was not released. " .. dev_text.sentence(stuck))
-        end
+        release_landed(backend, left, held)
     end
 end
 
@@ -874,11 +889,7 @@ local function land_held(opts)
     end
     local left = not first_problem and backend:card(card.id)
     if left and left.claimant then
-        claims.stop(card.id)
-        local released, stuck = backend:release(card.id, held and held.fence)
-        if not released then
-            verb.note("Landed, but the claim was not released. " .. dev_text.sentence(stuck))
-        end
+        release_landed(backend, left, held)
     end
     local together = ""
     local unfinished = {}
