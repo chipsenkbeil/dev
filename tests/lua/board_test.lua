@@ -9252,11 +9252,11 @@ end)
 
 testing.test("a move out of blocked ends the owner lease", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
+    assert(fs.write(root .. "/freeze", ""))
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 1
     end))
-    assert(fs.write(root .. "/freeze", ""))
     local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BLOCKED })
     testing.eq(code, 0, out)
