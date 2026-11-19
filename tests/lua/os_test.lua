@@ -38,11 +38,11 @@ cd "$1" || exit 97
 luajit "$3" term >"$1/out" 2>&1 &
 pid=$!
 i=0
-while [ ! -e "$1/ready" ] && [ "$i" -lt "$4" ]; do sleep 0.1; i=$((i + 1)); done
+while [ ! -e "$1/ready" ] && [ "$i" -lt "$4" ]; do sleep $5; i=$((i + 1)); done
 if [ ! -e "$1/ready" ]; then kill -KILL "$pid"; wait "$pid"; exit 99; fi
 kill -"$2" "$pid"
 i=0
-while kill -0 "$pid" 2>/dev/null && [ "$i" -lt "$4" ]; do sleep 0.1; i=$((i + 1)); done
+while kill -0 "$pid" 2>/dev/null && [ "$i" -lt "$4" ]; do sleep $5; i=$((i + 1)); done
 if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; wait "$pid"; exit 98; fi
 wait "$pid"
 ]]
@@ -790,6 +790,7 @@ local function kill_child(root, signal)
         signal,
         MAIN,
         tostring(WAIT_TICKS),
+        WAIT_POLL_SECS,
     }, { env = child_env(root) })
     return code
 end
