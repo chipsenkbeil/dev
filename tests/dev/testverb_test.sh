@@ -117,6 +117,16 @@ else
     printf 'skip - neomutt and tmux are on PATH, so no suite is skipped here\n'
 fi
 
+NOLUA="$TMP/nolua"
+mkdir -p "$NOLUA/.dev/lua/dotfiles" "$NOLUA/tests/lua"
+cp "$REPO/.dev/lua/dotfiles/checks.lua" "$NOLUA/.dev/lua/dotfiles/"
+sed 's/which("luajit")/which("luajit-not-installed")/' "$REPO/.dev/test.lua" >"$NOLUA/.dev/test.lua"
+printf 'return\n' >"$NOLUA/tests/lua/some_test.lua"
+out="$(cd "$NOLUA" && "$DEV" test tests/lua/some_test.lua 2>&1)"
+rc=$?
+assert_eq "a tests/lua suite skipped without luajit exits 2" "$rc" "2"
+assert_line "a tests/lua suite skipped without luajit is named as skipped here" "$out" "dev test: tests/lua/some_test.lua is skipped here. It needs luajit."
+
 printf 'exit 0\n' >"$TMP/tests/a/sp ace_test.sh"
 out="$(cd "$TMP" && "$DEV" test "tests/a/sp ace_test.sh" 2>&1)"
 assert_line "a path with a space is one word" "$out" "PASS tests/a/sp ace_test.sh"
