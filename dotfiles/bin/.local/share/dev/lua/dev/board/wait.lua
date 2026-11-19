@@ -111,7 +111,7 @@ local function read_cursor(path)
 end
 
 local function lead_cards(backend, stages, label)
-    local cards, message = backend:cards()
+    local cards, message = backend:cards({ summary = true })
     if not cards then
         return nil, message
     end
@@ -227,7 +227,7 @@ end
 ---   not be read
 ---@return string? why the reason the board could not be read
 local function stage_cards(backend, column)
-    local cards, message = backend:cards()
+    local cards, message = backend:cards({ summary = true })
     if not cards then
         return nil, message
     end

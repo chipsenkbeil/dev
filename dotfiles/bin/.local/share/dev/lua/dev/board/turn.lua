@@ -123,7 +123,7 @@ local function lookup(backend, opts)
             return card
         end
     end
-    local cards, message = backend:cards()
+    local cards, message = backend:cards({ summary = true })
     if not cards then
         return nil, message
     end

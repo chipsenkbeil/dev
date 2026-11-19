@@ -4634,12 +4634,12 @@ Reads:
 - `ls` reads `/export-data`, which alone carries each card's colour.
 - The departed, sitting and comments waits and the `--before` and `--after`
   anchor of `add` read the paged `/tasks?limit=1000` list, following
-  `next_cursor`. They use only a card's column, lane, labels and name.
-  `Backend:cards` takes an opts table for this, and `{ summary = true }` picks
-  the list. The list holds no owner or child counts, so a summary card has no
-  claimant. The turn lookup and the claimed filters of the wait verbs keep the
-  cached `/export-data`, as does every other read. A local board ignores the
-  opts.
+  `next_cursor`. So do the turn lookup and the stage and lead waits. They use
+  a card's column, lane, labels, name, claimant, claim fence and epic child
+  counts. `Backend:cards` takes an opts table for this, and `{ summary = true }`
+  picks the list. Each list row carries the card's `owner`, whose `fence` is the
+  claim fence, and its `children_total` and `children_done`. Every other read
+  keeps the cached `/export-data`. A local board ignores the opts.
 - A single-card verb resolves its card word against that list, then reads the
   one card from `/api/tasks/ID`. A full-length id skips the list when the card
   sits in a column of this board, and the id of a card on another board falls

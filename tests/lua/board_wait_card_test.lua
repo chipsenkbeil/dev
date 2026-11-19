@@ -1,8 +1,12 @@
 local testing = require("dev.testing")
 local board = require("dev.board")
 local cmd_board = require("dev.cmd.board")
+local support = require("support")
 
 local CARD_ID = "5af0e005-0000-4000-8000-000000000005"
+local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+local READY = "Ready"
+local BLOCKED = "Blocked"
 local REVIEW = board.REVIEW_PREFIX .. " by=x kind=code verdict=PASS"
 
 ---Make a backend that serves one card, whose state each read takes from `script`.
@@ -123,4 +127,76 @@ end)
 testing.test("wait --card refuses --for beside it", function()
     local result = wait_card({ {} }, { "--card", CARD_ID:sub(1, 8), "--for", "ready" })
     testing.ok(result.message:find("not both", 1, true), tostring(result.message))
+end)
+
+---Make a backend that lists cards only as a summary, with one wait reply that names `events`.
+---@param cards dev.board.Card[] the cards the summary lists
+---@param events {kind: string, task_id: string, column: string}[] the events of the one reply
+---@return dev.board.Backend backend
+---@return {summary: integer, export: integer} seen how many listings were summaries and exports
+local function summary_only(cards, events)
+    local seen = { summary = 0, export = 0 }
+    local replies = { { cursor = "1", events = {} }, { cursor = "2", events = events } }
+    local backend = {}
+    function backend:wait()
+        return table.remove(replies, 1)
+    end
+    function backend:cards(opts)
+        if opts and opts.summary then
+            seen.summary = seen.summary + 1
+            return cards
+        end
+        seen.export = seen.export + 1
+        return nil, "the export was read"
+    end
+    function backend:blocked()
+        return false
+    end
+    function backend:columns()
+        return {}
+    end
+    return backend, seen
+end
+
+local function wait_for(backend, mode)
+    return cmd_board.wait(backend, { "--for", mode }, {
+        stem = support.tempdir() .. "/wait",
+        nap = function() end,
+        random = function()
+            return 0
+        end,
+    })
+end
+
+testing.test("wait --for ready lists the unclaimed cards from the summary", function()
+    local backend, seen = summary_only({
+        { id = CARD_ID, column = READY },
+        { id = ID_B, column = READY, claimant = "x" },
+    }, {
+        { kind = "task_added", task_id = CARD_ID, column = READY },
+        { kind = "task_added", task_id = ID_B, column = READY },
+    })
+    local result = wait_for(backend, "ready")
+    testing.eq(result.output, "added 5af0e005 to Ready")
+    testing.eq(seen.export, 0)
+    testing.ok(seen.summary > 0)
+end)
+
+testing.test("wait --for lead skips an epic with open children by its summary counts", function()
+    local backend, seen = summary_only({
+        {
+            id = CARD_ID,
+            column = BLOCKED,
+            labels = { "needs:lead" },
+            epic = { done = 1, total = 2 },
+        },
+        { id = ID_B, column = BLOCKED, labels = { "needs:lead" }, epic = { done = 2, total = 2 } },
+    }, {
+        { kind = "task_updated", task_id = CARD_ID, column = BLOCKED },
+        { kind = "task_updated", task_id = ID_B, column = BLOCKED },
+    })
+    local result = wait_for(backend, "lead")
+    testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
+    testing.eq(seen.export, 0)
+    testing.ok(seen.summary > 0)
 end)

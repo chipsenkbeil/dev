@@ -1360,3 +1360,54 @@ testing.test("ending the Pomb turn releases its owner with the fence", function(
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
     testing.ok(released:find('"name":"alpha"', 1, true), released)
 end)
+
+testing.test("a Pomb turn card is listed from the task list, never the export", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        testing.eq(turn.holder(backend), nil)
+    end)
+    local calls = fs.read(root .. "/calls")
+    testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
+    testing.eq(calls:find("export-data", 1, true), nil)
+end)
+
+testing.test("a summary row with an owner fence gives the turn card's claim fence", function()
+    local root = pomb_root()
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":[{"id":"'
+                .. ID_A
+                .. '","name":"landing turn","column_id":"'
+                .. ICEBOX_ID
+                .. '","position":1,"labels":[],"owner":{"holder":{"kind":"agent","name":"alpha"},'
+                .. '"lease_expires_at":null,"live":true,"fence":7}}]}'
+        )
+    )
+    assert(fs.write(root .. "/comments.json", hold_record(7)))
+    on_pomb(root, function(backend)
+        local cards = assert(backend:cards({ summary = true }))
+        testing.eq(cards[1].claimant, "alpha")
+        testing.eq(cards[1].claim_fence, 7)
+        testing.eq(assert(turn.held(backend, "alpha", "aaaa1111")).fence, 7)
+    end)
+end)
+
+testing.test("a summary row with child counts gives the card its epic counts", function()
+    local root = pomb_root()
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":[{"id":"'
+                .. ID_A
+                .. '","name":"parent","column_id":"'
+                .. ICEBOX_ID
+                .. '","position":1,"labels":[],"kind":"epic","children_total":2,'
+                .. '"children_done":1}]}'
+        )
+    )
+    on_pomb(root, function(backend)
+        local cards = assert(backend:cards({ summary = true }))
+        testing.eq(cards[1].epic, { done = 1, total = 2 })
+    end)
+end)
