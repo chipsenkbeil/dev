@@ -64,6 +64,14 @@ testing.test(
     end
 )
 
+testing.test("verbose_count counts the v letters and --verbose, and nothing else", function()
+    testing.eq(registry.verbose_count("-v"), 1)
+    testing.eq(registry.verbose_count("-vv"), 2)
+    testing.eq(registry.verbose_count("-vvv"), 3)
+    testing.eq(registry.verbose_count("--verbose"), 1)
+    testing.eq(registry.verbose_count("plain"), nil)
+end)
+
 testing.test("DESCRIPTION supplies a noun's description", function()
     local root = make_project()
     assert(fs.write(root .. "/.dev/n/DESCRIPTION", "The n noun\nsecond line\n"))

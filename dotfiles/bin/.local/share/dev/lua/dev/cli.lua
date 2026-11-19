@@ -105,6 +105,7 @@ local function parse(argv)
     local env = os.getenv("DEV_REMOTE") or ""
     parsed.env_local = env == "0" or env == "no" or env == "false"
     for i, word in ipairs(argv) do
+        local verbosity = registry.verbose_count(word)
         if word == "--" then
             parsed.after = #argv - i
             parsed.dashed = true
@@ -112,8 +113,8 @@ local function parse(argv)
                 parsed.args[#parsed.args + 1] = argv[j]
             end
             break
-        elseif word == "--verbose" then
-            count = count + 1
+        elseif verbosity then
+            count = count + verbosity
         elseif word == "--remote" then
             parsed.remote = true
             flag_remote = true
@@ -123,8 +124,6 @@ local function parse(argv)
             parsed.detach = true
         elseif word == "--priority" then
             parsed.priority = true
-        elseif word:find("^%-v+$") then
-            count = count + #word - 1
         else
             parsed.args[#parsed.args + 1] = word
         end

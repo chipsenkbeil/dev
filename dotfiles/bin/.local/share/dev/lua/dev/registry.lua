@@ -67,11 +67,24 @@ M.GLOBAL_FLAGS = GLOBAL_FLAGS
 ---The global flags that take a value, the word after one of them being its value.
 M.VALUE_FLAGS = value_set
 
+---Count the verbosity a word adds, one for `--verbose` and one per `v` of a run such as `-vv`.
+---@param word string the word to check
+---@return integer? count nil when the word is no verbosity flag
+function M.verbose_count(word)
+    if word == "--verbose" then
+        return 1
+    end
+    if word:find("^%-v+$") then
+        return #word - 1
+    end
+    return nil
+end
+
 ---Check whether a word is a global flag that takes no value, any run of `v` included.
 ---@param word string the word to check
 ---@return boolean bare true for a bare global flag
 function M.is_bare(word)
-    return bare_set[word] == true or word:find("^%-v+$") ~= nil
+    return bare_set[word] == true or M.verbose_count(word) ~= nil
 end
 
 local function glob_names(dir)
