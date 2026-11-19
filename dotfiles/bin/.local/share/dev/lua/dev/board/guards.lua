@@ -489,21 +489,14 @@ local function is_lead(name)
     return name:match("^[^/]*/([^/]*)") == "lead"
 end
 
+---@enum dev.board.guards.Refusal
+local Refusal = { NOT_LEAD = "not_lead" }
+
 ---Refuse a lead-only verb run under another agent name.
----@param action string? what the lead does, nil for deleting a card
----@return dev.cmd.board.Result? err the refusal, nil when the caller is a lead
-local function delete_refusal(action)
-    local name = os.getenv("DEV_AGENT") or ""
-    if not is_lead(name) then
-        return failure(
-            "Only the lead "
-                .. (action or "deletes a card")
-                .. ". DEV_AGENT "
-                .. name
-                .. " is not a lead name, whose role segment is lead. Ask the lead"
-                .. (action and "" or ", with the card and the reason")
-                .. "."
-        )
+---@return dev.board.guards.Refusal? reason `NOT_LEAD` when the caller is not a lead, nil otherwise
+local function delete_refusal()
+    if not is_lead(os.getenv("DEV_AGENT") or "") then
+        return Refusal.NOT_LEAD
     end
 end
 
@@ -553,5 +546,6 @@ M.tick_refused = tick_refused
 M.claimant_refused = claimant_refused
 M.is_lead = is_lead
 M.delete_refusal = delete_refusal
+M.Refusal = Refusal
 
 return M

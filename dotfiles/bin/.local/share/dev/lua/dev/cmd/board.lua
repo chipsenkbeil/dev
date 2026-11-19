@@ -42,6 +42,26 @@ local function sentence(text)
     end
     return text
 end
+
+---The sentence for each reason `pomb.new` refuses with
+local POMB_REFUSALS = {
+    [pomb.Reason.BAD_URL] = "The `url` setting of `[board.pomb]` must be an http or "
+        .. "https address in ~/.config/dev/config.toml.",
+}
+
+---Write the refusal of a verb that only a lead runs.
+---@param action string? what the lead does, nil for deleting a card
+---@return string message the sentence
+local function not_lead_message(action)
+    return "Only the lead "
+        .. (action or "deletes a card")
+        .. ". DEV_AGENT "
+        .. (os.getenv("DEV_AGENT") or "")
+        .. " is not a lead name, whose role segment is lead. Ask the lead"
+        .. (action and "" or ", with the card and the reason")
+        .. "."
+end
+
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
 local index_of = runner.index_of
@@ -3775,9 +3795,8 @@ function commands.delete(backend, args)
     if #words ~= 1 or reason == nil or reason:find("^%s*$") then
         return usage("Needs a card and --reason TEXT.")
     end
-    local refused = guards.delete_refusal()
-    if refused then
-        return refused
+    if guards.delete_refusal() == guards.Refusal.NOT_LEAD then
+        return failure(not_lead_message())
     end
     if not backend.bin then
         return failure(NO_BIN)
@@ -4423,14 +4442,14 @@ local function open_backend(settings, token)
             private = true,
         })
     end
-    local backend, message = pomb.new({
+    local backend, reason = pomb.new({
         url = config.user("board.pomb.url"),
         token = config.user("board.pomb." .. token),
         name = settings.name,
         lead = token == LEAD_TOKEN_KEY,
     })
     if not backend then
-        return nil, sentence(message)
+        return nil, POMB_REFUSALS[reason]
     end
     return backend
 end
@@ -4584,11 +4603,12 @@ M.handlers["board init"] = function(ctx)
                 .. "Set it to `pass:<entry>` or run with `--admin`."
         )
     end
-    local backend, message = pomb.new(opts)
+    local backend, reason = pomb.new(opts)
     if not backend then
-        verb.die(sentence(message))
+        verb.die(POMB_REFUSALS[reason])
     end
     backend.stages = board.stages(column_map(ctx.root))
+    local message
     if admin then
         local secret
         secret, message = device.pair({
@@ -4747,9 +4767,8 @@ local function open_board(ctx)
 end
 
 local function open_lead(ctx, action, permission)
-    local refused = guards.delete_refusal(action)
-    if refused then
-        verb.die(sentence(refused.message))
+    if guards.delete_refusal() == guards.Refusal.NOT_LEAD then
+        verb.die(not_lead_message(action))
     end
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then

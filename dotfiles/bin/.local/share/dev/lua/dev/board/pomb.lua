@@ -109,6 +109,9 @@ local M = {}
 ---The most hours Pomb lets a role token live.
 M.MAX_TOKEN_HOURS = 8
 
+---@enum dev.board.pomb.Reason
+M.Reason = { BAD_URL = "bad_url" }
+
 ---@class dev.board.pomb.Opts
 ---@field url string the server's base URL
 ---@field token string? `pass:<entry>`, where the token is kept, unneeded when `authorize` gives one
@@ -318,11 +321,10 @@ end
 ---Build a Pomb backend.
 ---@param opts dev.board.pomb.Opts the server, the token reference and the board
 ---@return dev.board.Backend? backend the backend
----@return string? message why the options are not usable
+---@return dev.board.pomb.Reason? reason one of `Reason` when the options are not usable
 function M.new(opts)
     if type(opts.url) ~= "string" or not opts.url:find(URL_PATTERN) then
-        return nil,
-            "The `url` setting of `[board.pomb]` must be an http or https address in ~/.config/dev/config.toml."
+        return nil, M.Reason.BAD_URL
     end
     opts.url = opts.url:gsub("/+$", "")
     return setmetatable({ __opts = opts }, Backend)

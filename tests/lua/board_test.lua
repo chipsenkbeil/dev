@@ -4745,6 +4745,13 @@ testing.test("pomb card url joins the host and the card id", function()
     testing.eq(backend:card_url(ID_A), "https://pomb.example/t/" .. ID_A)
 end)
 
+testing.test("pomb new refuses a url that is not http or https with a reason", function()
+    local backend, reason =
+        pomb.new({ url = "ftp://pomb.example", token = "pass:x", name = "dotfiles" })
+    testing.eq(backend, nil)
+    testing.eq(reason, pomb.Reason.BAD_URL)
+end)
+
 testing.test("next counts the comments of the card and how many are the owner's", function()
     local backend = fake(sample())
     backend.listed = {
