@@ -302,6 +302,116 @@ end
 ---   when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
 
+---@class dev.board.wait.CardState
+---@field column string the card's column
+---@field reviews integer how many `dev-review:` comments the card holds
+---@field ticked integer how many outcomes are ticked
+
+---Read the state of one card that `wait_card` compares between polls.
+---@param backend dev.board.Backend the board
+---@param id string the card's full id
+---@return dev.board.wait.CardState? state nil when the board could not be read
+---@return string? why the reason the board could not be read
+local function card_state(backend, id)
+    local card, message = backend:card(id)
+    if not card then
+        return nil, message
+    end
+    local list
+    list, message = backend:comments(id)
+    if not list then
+        return nil, message
+    end
+    local reviews, ticked = 0, 0
+    for _, comment in ipairs(list) do
+        if comment.body:find(board.REVIEW_PREFIX, 1, true) == 1 then
+            reviews = reviews + 1
+        end
+    end
+    for _, outcome in ipairs(card.outcomes or {}) do
+        if outcome.done then
+            ticked = ticked + 1
+        end
+    end
+    return { column = tostring(card.column), reviews = reviews, ticked = ticked }
+end
+
+---Name the readings of one card state as one line, the same line when nothing changed.
+---@param state dev.board.wait.CardState the state to name
+---@return string line the column, the review count and the ticked count
+local function card_line(state)
+    return string.format("%s|%d|%d", state.column, state.reviews, state.ticked)
+end
+
+---Describe what changed between two states of a card.
+---@param id string the card's full id
+---@param was dev.board.wait.CardState the first reading
+---@param now dev.board.wait.CardState the latest reading
+---@return string line one line naming each change
+local function card_change(id, was, now)
+    local parts = {}
+    if now.column ~= was.column then
+        parts[#parts + 1] = "moved to " .. now.column
+    end
+    if now.reviews ~= was.reviews then
+        parts[#parts + 1] = string.format("reviews %d to %d", was.reviews, now.reviews)
+    end
+    if now.ticked ~= was.ticked then
+        parts[#parts + 1] = string.format("ticked outcomes %d to %d", was.ticked, now.ticked)
+    end
+    return id:sub(1, board.MIN_PREFIX) .. " " .. table.concat(parts, ", ")
+end
+
+---Hold until one card changes its column, its review count or its ticked outcome count.
+---
+---The card is polled, paced by the turn poller so the sleep grows while nothing changes. A Pomb
+---that cannot be read is retried like `wait` and fails once ten tries in a row run out.
+---@param backend dev.board.Backend the Pomb board
+---@param word string the card's id or a prefix of it
+---@param opts dev.cmd.board.wait.Opts the sleep and the jitter
+---@return dev.cmd.board.Result result the line naming the change, or a message and the exit code
+function M.wait_card(backend, word, opts)
+    local nap = opts.nap or dev_os.nap
+    local random = opts.random or turn.entropy
+    local poll = turn.poller({ random = random })
+    local id, first
+    local failures = 0
+    while true do
+        local state, message
+        if not id then
+            local cards
+            cards, message = backend:cards({ summary = true })
+            if cards then
+                local found, why = board.resolve(cards, word)
+                if not found then
+                    return failure(why)
+                end
+                id = found.id
+            end
+        end
+        if id then
+            state, message = card_state(backend, id)
+        end
+        if state then
+            failures = 0
+            first = first or state
+            local line = card_line(state)
+            if line ~= card_line(first) then
+                return { output = card_change(id, first, state) }
+            end
+            nap(poll:pace(line))
+        elseif pomb.unreachable(message, true) then
+            failures = failures + 1
+            if failures >= WAIT_RETRIES then
+                return failure(message)
+            end
+            nap(backoff_pause(failures - 1, random))
+        else
+            return failure(message)
+        end
+    end
+end
+
 ---Hold until the board changes in a way the caller asked for.
 ---
 ---The cursor is saved after every reply, and `--for human` saves it when it
@@ -311,19 +421,25 @@ end
 ---is reported once and retried with a pause that doubles from 30 seconds to
 ---5 minutes, spread by a random fraction so sessions do not retry together.
 ---A cursor Pomb no longer holds is replaced and reported as a notice, not an
----error.
+---error. With `--card CARD` it waits on that one card and keeps no cursor.
 ---@param backend dev.board.Backend the Pomb board
 ---@param args string[] the arguments after `wait`
 ---@param opts dev.cmd.board.wait.Opts where the cursor lives and how to sleep
 ---@return dev.cmd.board.Result result the lines for the matching events, or a message and the exit
 ---   code
 function M.wait(backend, args, opts)
-    local flags, words = guards.parse(args, { ["--for"] = true })
+    local flags, words = guards.parse(args, { ["--for"] = true, ["--card"] = true })
     if not flags then
         return words
     end
     if #words > 0 then
-        return usage("Takes no card.")
+        return usage("Takes no card word. Name a card with --card.")
+    end
+    if flags["--card"] then
+        if flags["--for"] then
+            return usage("Takes --card or --for, not both.")
+        end
+        return M.wait_card(backend, flags["--card"], opts)
     end
     local only = flags["--for"]
     if only and not WAIT_FOR_KINDS[only] then

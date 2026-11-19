@@ -641,9 +641,9 @@ return {
     {
         words = { "board", "wait" },
         handler = "lua",
-        flags = "--for",
-        usage = "dev board wait [--for ready|review|verify|release|human|lead|planner]",
-        desc = "Block until the board changes, then print each change",
+        flags = "--for --card",
+        usage = "dev board wait [--for ready|review|verify|release|human|lead|planner | --card CARD]",
+        desc = "Block until the board, or one card, changes, then print each change",
     },
     {
         words = { "bootstrap" },

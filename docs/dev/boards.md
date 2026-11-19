@@ -1595,6 +1595,14 @@ comment is retried like an unreachable Pomb, up to ten tries in a row.
 Any other `--for` value is a usage error. On a local board `wait` prints
 `A local board has nothing to wait on.` and exits 1, and it is never queued.
 
+`--card CARD` waits on one card and cannot be mixed with `--for`. It reads the
+card's column, its count of `dev-review:` comments and its count of ticked
+outcomes, then polls until one of them differs from the first reading and
+prints what changed, such as `5af0e005 moved to Review, ticked outcomes 0 to 1`.
+It keeps no cursor and sees no event stream. The polls start 5 seconds apart
+and back off toward 30 seconds while the card is unchanged, and a failed read
+is retried like an unreachable Pomb below.
+
 The command asks Pomb for events after a cursor and holds each request for up to
 50 seconds. On a quiet board it repeats until a matching event arrives.
 
