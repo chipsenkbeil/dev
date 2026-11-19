@@ -4864,11 +4864,11 @@ testing.test(
     end
 )
 
-testing.test("label adds needs:human only to a card in Blocked or Icebox", function()
+testing.test("label refuses to add needs:human in every column and names dev board ask", function()
     local backend = fake(sample())
     local result = cmd_board.run("label", { "11111111-a", "+needs:human" }, backend)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("Blocked or Icebox", 1, true), result.message)
+    testing.ok(result.message:find("dev board ask", 1, true), result.message)
     testing.eq(#backend.calls, 0)
     local added = cmd_board.run("add", { "Idea", "--label", "needs:human" }, backend)
     testing.eq(added.code, 2)
@@ -4878,8 +4878,30 @@ testing.test("label adds needs:human only to a card in Blocked or Icebox", funct
         cards[1].column = column
         backend = fake(cards)
         result = cmd_board.run("label", { "11111111-a", "needs:human" }, backend)
-        testing.eq(result.output, "labelled 11111111 docs,needs:human")
+        testing.eq(result.code, 1, column)
+        testing.ok(result.message:find("dev board ask", 1, true), result.message)
+        testing.eq(#backend.calls, 0)
     end
+end)
+
+testing.test("ask sends one ask call and no label call", function()
+    local cards = sample()
+    cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
+    local backend = fake(cards)
+    local result = cmd_board.run("ask", {
+        "11111111-a",
+        "--question",
+        "Which?",
+        "--choice",
+        "Ready=Ship it",
+        "--choice",
+        "Icebox=Park it",
+        "--recommend",
+        "1",
+    }, backend)
+    testing.eq(result.output, "asked 11111111")
+    testing.eq(#backend.calls, 1)
+    testing.eq(backend.calls[1][1], "ask")
 end)
 
 testing.test("move to Ready allows an epic and a card without children", function()

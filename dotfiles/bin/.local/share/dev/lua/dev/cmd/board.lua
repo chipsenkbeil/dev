@@ -2304,21 +2304,15 @@ function commands.label(backend, args)
         labels[i] = label
     end
     for _, change in ipairs(edits) do
-        if
-            change.add
-            and change.word == board.NEEDS_HUMAN
-            and not index_of(labels, change.word)
-            and card.column ~= backend.stages.blocked
-            and card.column ~= backend.stages.icebox
-        then
+        if change.add and change.word == board.NEEDS_HUMAN then
             return failure(
                 "Card "
                     .. card.id:sub(1, board.MIN_PREFIX)
-                    .. " is in "
-                    .. card.column
-                    .. ", and "
+                    .. " cannot take "
                     .. board.NEEDS_HUMAN
-                    .. " lives only in Blocked or Icebox. Move it there first."
+                    .. " by label. Pomb locks the card and refuses the question after it."
+                    .. " Run `dev board ask CARD --question TEXT --choice COLUMN=LABEL...` instead,"
+                    .. " which posts the question and sets the label in one write."
             )
         end
         local denied = require("dev.standalone").label_problem(change.word)

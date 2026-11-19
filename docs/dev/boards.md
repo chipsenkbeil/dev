@@ -13,7 +13,7 @@ dev board ls --size 3+
 dev board size 8af0e001 1
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --label needs:lead --label docs
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --checks "dev lint" --checks "dev test"
-dev board label 8af0e001 needs:human --remove needs:lead
+dev board label 8af0e001 --remove needs:lead
 dev board ask 8af0e001 --question "Which way?" --choice "Ready=Take the first" --choice "Icebox=Park it" --recommend 1 --why "Only you can choose"
 dev board answer 8af0e001 --choice 2 --quote "Take the second one."
 dev board stale --days 7
@@ -693,8 +693,9 @@ dev enforces this:
 
 - `edit` and `rename` refuse a card labelled `needs:human`.
 - `move` refuses one headed for another column (exit 1).
-- `label CARD needs:human` and `add --label needs:human` refuse a card outside
-  Blocked and Icebox, so move it there first and add the label after.
+- `label CARD needs:human` refuses every card in every column (exit 1) and names
+  `dev board ask`, which posts the question and sets the label in one write.
+  Removing the label with `label CARD --remove needs:human` stays allowed.
 
 Only you move the card out.
 
