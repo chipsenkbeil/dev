@@ -2205,6 +2205,19 @@ function commands.size(backend, args)
     if not card then
         return err
     end
+    if
+        color == board.SIZES.unsized
+        and (os.getenv("DEV_AGENT") or "") ~= ""
+        and index_of(card.labels, board.NEEDS_HUMAN)
+    then
+        return failure(
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " carries "
+                .. board.NEEDS_HUMAN
+                .. " and keeps the owner's size. Only the owner sets it unsized."
+        )
+    end
     if color == board.SIZES.unsized and card.column ~= backend.stages.icebox then
         return failure(
             "Card "

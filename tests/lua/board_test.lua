@@ -3933,6 +3933,33 @@ local function writes(backend)
     return calls
 end
 
+testing.test("size unsized is refused on a needs:human card for an agent", function()
+    local cards = sample()
+    cards[3].column = support.COLUMN_NAME.ICEBOX
+    cards[3].labels = { board.NEEDS_HUMAN }
+    local backend = fake(cards)
+    as_agent("dotfiles/implementer/95f0e009", function()
+        local result = cmd_board.run("size", { "cccccccc", "unsized" }, backend)
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find(board.NEEDS_HUMAN, 1, true), result.message)
+        testing.eq(#backend.calls, 0)
+    end)
+end)
+
+testing.test("size 2 succeeds on a needs:human card in Blocked and Icebox", function()
+    for _, column in ipairs({ support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.ICEBOX }) do
+        local cards = sample()
+        cards[3].column = column
+        cards[3].labels = { board.NEEDS_HUMAN }
+        local backend = fake(cards)
+        as_agent("dotfiles/implementer/95f0e009", function()
+            local result = cmd_board.run("size", { "cccccccc", "2" }, backend)
+            testing.eq(result.output, "sized cccccccc 2")
+            testing.eq(backend.calls[#backend.calls], { "set_size", ID_C, "green", nil })
+        end)
+    end
+end)
+
 testing.test("outcome delete refuses a name that is not a lead", function()
     local card = colored("green")
     card.outcomes = outcomes(2)
