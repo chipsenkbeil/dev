@@ -7,8 +7,8 @@ local present = json.present
 local SECONDS_PER_MINUTE = 60
 local COMMENT_ACTOR = board.ACTOR.AGENT
 local COMMENT_KIND = board.ACTOR.AGENT
-local NOT_YOURS = "that comment is not yours to change"
-local NO_ATTACHMENTS = "a local board holds no attachments"
+local NOT_YOURS = "That comment is not yours to change."
+local NO_ATTACHMENTS = "A local board holds no attachments."
 local INVERSE = {
     [board.LinkKind.BLOCKED_BY] = board.LinkKind.BLOCKS,
     [board.LinkKind.PARENT] = board.LinkKind.CHILD,
@@ -100,7 +100,7 @@ function Backend:__read()
         return nil, message or missing(self.__opts.path)
     end
     if type(doc) ~= "table" or type(doc.cards) ~= "table" or type(doc.columns) ~= "table" then
-        return nil, self.__opts.path .. " is not a board file"
+        return nil, self.__opts.path .. " is not a board file."
     end
     doc.colors = doc.colors or {}
     doc.swimlanes = doc.swimlanes or {}
@@ -276,12 +276,13 @@ local function fenced(card, fence)
     local claim = live(card.claim)
     if fence and claim and claim.fence ~= fence then
         return nil,
-            "the claim on "
+            "The claim on "
                 .. card.id
                 .. " is held by "
                 .. claim.claimant
                 .. " with fence "
                 .. string.format("%d", claim.fence)
+                .. "."
     end
     return true
 end
@@ -289,7 +290,7 @@ end
 local function card_of(doc, id, fence)
     local card = find_by_id(doc.cards, id)
     if not card then
-        return nil, "the board has no card " .. id
+        return nil, "The board has no card " .. id .. "."
     end
     local ok, message = fenced(card, fence)
     if not ok then
@@ -317,7 +318,7 @@ function Backend:card(id)
     end
     local card = find_by_id(doc.cards, id)
     if not card then
-        return nil, "the board has no card " .. id
+        return nil, "The board has no card " .. id .. "."
     end
     return card_view(doc, card)
 end
@@ -401,7 +402,7 @@ function Backend:link(id, kind, other)
             return nil, message
         end
         if card == target then
-            return nil, "a card cannot be linked to itself"
+            return nil, "A card cannot be linked to itself."
         end
         if kind == board.LinkKind.PARENT then
             local current = epic_of(card)
@@ -417,16 +418,16 @@ function Backend:link(id, kind, other)
                         .. "`."
             end
             if current then
-                return nil, "the card already has an epic"
+                return nil, "The card already has an epic."
             end
             local step, seen = target, {}
             while step and not seen[step.id] do
                 if step == card then
                     return nil,
-                        "the link would make a cycle of epics between " .. card.id:sub(
+                        "The link would make a cycle of epics between " .. card.id:sub(
                             1,
                             board.MIN_PREFIX
-                        ) .. " and " .. target.id:sub(1, board.MIN_PREFIX)
+                        ) .. " and " .. target.id:sub(1, board.MIN_PREFIX) .. "."
                 end
                 seen[step.id] = true
                 local up = epic_of(step)
@@ -441,7 +442,7 @@ function Backend:link(id, kind, other)
             held_kind == board.LinkKind.BLOCKED_BY
             and depends_on(doc, held_target.id, holder.id, {})
         then
-            return nil, "the link would make the cards wait on each other"
+            return nil, "The link would make the cards wait on each other."
         end
         holder.links = holder.links or {}
         for _, existing in ipairs(holder.links) do
@@ -505,7 +506,7 @@ function Backend:unlink(id, kind, other)
             removed = remove_link(target, kind, card.id)
         end
         if not removed then
-            return nil, "the card holds no " .. kind .. " link to " .. other
+            return nil, "The card holds no " .. kind .. " link to " .. other .. "."
         end
         return true
     end)
@@ -518,7 +519,7 @@ function Backend:links(id)
     end
     local card = find_by_id(doc.cards, id)
     if not card then
-        return nil, "the board has no card " .. id
+        return nil, "The board has no card " .. id .. "."
     end
     local found = {}
     local seen = {}
@@ -547,7 +548,7 @@ function Backend:family(id)
     end
     local card = find_by_id(doc.cards, id)
     if not card then
-        return nil, "the board has no card " .. id
+        return nil, "The board has no card " .. id .. "."
     end
     local family = {}
     local epic_id = epic_of(card)
@@ -566,7 +567,7 @@ function Backend:needs_human()
 end
 
 function Backend:wait()
-    return nil, "a local board has nothing to wait on"
+    return nil, "A local board has nothing to wait on."
 end
 
 function Backend:boards()
@@ -575,14 +576,14 @@ end
 
 function Backend:limits(name)
     if name and name ~= self.__opts.name then
-        return nil, "a local board knows only its own limits, so " .. name .. " is not reachable"
+        return nil, "A local board knows only its own limits, so " .. name .. " is not reachable."
     end
     return { columns = {}, units = {}, groups = {} }
 end
 
 function Backend:columns(name)
     if name and name ~= self.__opts.name then
-        return nil, "a local board knows only its own columns, so " .. name .. " is not reachable"
+        return nil, "A local board knows only its own columns, so " .. name .. " is not reachable."
     end
     local doc, message = self:read()
     if not doc then
@@ -596,7 +597,7 @@ function Backend:columns(name)
 end
 
 function Backend:other_board(name)
-    return nil, "a local board links only its own cards, so " .. name .. " is not reachable"
+    return nil, "A local board links only its own cards, so " .. name .. " is not reachable."
 end
 
 function Backend:limit_groups()
@@ -713,7 +714,7 @@ function Backend:add(name, column, opts)
         if opts and opts.lane then
             lane = lane_named(doc, opts.lane)
             if not lane then
-                return nil, "the board has no " .. opts.lane .. " lane"
+                return nil, "The board has no " .. opts.lane .. " lane."
             end
         end
         local color_id
@@ -796,7 +797,7 @@ function Backend:escalate(id, tier, reason, fence)
         end
         local target = board.BLOCKED_LABELS[tier]
         if not target then
-            return nil, "no escalation tier " .. tostring(tier)
+            return nil, "No escalation tier " .. tostring(tier) .. "."
         end
         local labels = {}
         for _, label in ipairs(card.labels) do
@@ -863,7 +864,7 @@ function Backend:comments(id)
     end
     local card = find_by_id(doc.cards, id)
     if not card then
-        return nil, "the board has no card " .. id
+        return nil, "The board has no card " .. id .. "."
     end
     local found = {}
     for _, comment in ipairs(card.comments or {}) do
@@ -883,11 +884,11 @@ end
 local function own_comment(doc, id, comment)
     local card = find_by_id(doc.cards, id)
     if not card then
-        return nil, nil, "the board has no card " .. id
+        return nil, nil, "The board has no card " .. id .. "."
     end
     local found, index = find_by_id(card.comments or {}, comment)
     if not found then
-        return nil, nil, "the card has no comment " .. comment
+        return nil, nil, "The card has no comment " .. comment .. "."
     end
     if found.who ~= COMMENT_ACTOR then
         return nil, nil, NOT_YOURS
@@ -933,7 +934,7 @@ function Backend:move(id, column, opts)
         if opts.lane then
             lane = lane_named(doc, opts.lane)
             if not lane then
-                return nil, "the board has no " .. opts.lane .. " lane"
+                return nil, "The board has no " .. opts.lane .. " lane."
             end
         end
         local _, index = find_by_id(doc.cards, id)
@@ -994,7 +995,7 @@ function Backend:make_epic(id, fence)
             return nil, message
         end
         if card.kind == board.Kind.EPIC then
-            return nil, "the card is already an epic"
+            return nil, "The card is already an epic."
         end
         card.kind = board.Kind.EPIC
         return true
@@ -1076,7 +1077,7 @@ function Backend:set_outcome(id, outcome, fields, fence)
         end
         local row = find_by_id(card.outcomes or {}, outcome)
         if not row then
-            return nil, "the card has no outcome " .. outcome
+            return nil, "The card has no outcome " .. outcome .. "."
         end
         if fields.name ~= nil then
             row.name = fields.name
@@ -1100,7 +1101,7 @@ function Backend:delete_outcome(id, outcome, fence)
                 return true
             end
         end
-        return nil, "the card has no outcome " .. outcome
+        return nil, "The card has no outcome " .. outcome .. "."
     end)
 end
 
@@ -1108,7 +1109,7 @@ function Backend:claim(id, claimant, opts)
     return self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
         if not card then
-            return nil, "the board has no card " .. id
+            return nil, "The board has no card " .. id .. "."
         end
         local held = live(card.claim)
         if held and not (held.fence == opts.fence and held.claimant == claimant) then
@@ -1132,10 +1133,11 @@ function Backend:release(id, fence)
     return self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
         if not card then
-            return nil, "the board has no card " .. id
+            return nil, "The board has no card " .. id .. "."
         end
         if not card.claim or (fence and card.claim.fence ~= fence) then
-            return nil, "the claim on " .. id .. " is not held with fence " .. tostring(fence)
+            return nil,
+                "The claim on " .. id .. " is not held with fence " .. tostring(fence) .. "."
         end
         card.claim = nil
         return true
@@ -1227,7 +1229,7 @@ function Backend:rename_column(id, name)
     return self:__update(function(doc)
         local column = find_by_id(doc.columns, id)
         if not column then
-            return nil, "the board has no column " .. id
+            return nil, "The board has no column " .. id .. "."
         end
         column.name = name
         return true
@@ -1238,7 +1240,7 @@ function Backend:move_column(id, position)
     return self:__update(function(doc)
         local column, index = find_by_id(doc.columns, id)
         if not column then
-            return nil, "the board has no column " .. id
+            return nil, "The board has no column " .. id .. "."
         end
         table.remove(doc.columns, index)
         table.insert(doc.columns, math.min(position + 1, #doc.columns + 1), column)
@@ -1250,7 +1252,7 @@ function Backend:mark_done(id)
     return self:__update(function(doc)
         local column = find_by_id(doc.columns, id)
         if not column then
-            return nil, "the board has no column " .. id
+            return nil, "The board has no column " .. id .. "."
         end
         for _, other in ipairs(doc.columns) do
             other.is_done = other.id == id
@@ -1275,7 +1277,7 @@ function Backend:set_color(id, fields)
     return self:__update(function(doc)
         local color = find_by_id(doc.colors, id)
         if not color then
-            return nil, "the board has no colour " .. id
+            return nil, "The board has no colour " .. id .. "."
         end
         if fields.is_default then
             for _, other in ipairs(doc.colors) do
@@ -1293,7 +1295,7 @@ function Backend:set_card(id, fields)
     return self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
         if not card then
-            return nil, "the board has no card " .. id
+            return nil, "The board has no card " .. id .. "."
         end
         for key, value in pairs(fields) do
             card[key] = value

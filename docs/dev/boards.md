@@ -1274,7 +1274,7 @@ refusal as Pomb words it. A 503 `busy` answer is retried after a short nap.
 
 A token without `attachments.delete` gets the permission message, and agents do
 not detach. A local board refuses all four with
-`a local board holds no attachments`. None of them is queued while Pomb is
+`A local board holds no attachments.`. None of them is queued while Pomb is
 unreachable.
 
 `stale [--days N] [--icebox-days N] [--lead-hours N] [--flight-hours N]` lists
@@ -2185,8 +2185,8 @@ session responsible for a card.
   prefix>`.``
 - Epics nest to any depth and a card has one epic. Pomb answers a second epic
   or a cycle with a `400` (exit 1).
-- A local board refuses the same itself (`the card already has an epic`,
-  `the link would make a cycle of epics between A and B`). Linking the same
+- A local board refuses the same itself (`The card already has an epic.`,
+  `The link would make a cycle of epics between A and B.`). Linking the same
   epic twice changes nothing.
 - `OTHER` is a card of this board (an id or a prefix of 8 hex characters or
   more) or `BOARD:PREFIX` for a card of another board of the same Pomb server.
@@ -4353,7 +4353,7 @@ Behavior:
   write that sends a fence while another fence holds the claim is refused. A
   lapsed claim blocks nothing.
 - comments are of actor `agent`. `note --edit` and `--delete` refuse any other
-  (`that comment is not yours to change`).
+  (`That comment is not yours to change.`).
 - new cards go to the bottom of their column and `move` puts a card at the
   top.
 - `next` is the top unclaimed Ready card.
@@ -4455,7 +4455,7 @@ Writes:
   of a cross-board move).
 - a 410 `cursor_expired` returns nil, the message and the body's
   `oldest_cursor`.
-- a local board's `wait` is `nil, "a local board has nothing to wait on"`.
+- a local board's `wait` is `nil, "A local board has nothing to wait on."`.
 
 A curl failure is `board unavailable: cannot reach <url> (curl exit N)`. An
 HTTP error is `board unavailable: pomb answered <status>: <message>`.

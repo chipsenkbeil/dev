@@ -202,10 +202,10 @@ testing.test("show and note refuse a crossboard --board on a local board", funct
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "show", "11111111", "--board", "other" })
     testing.eq(code, 1, out)
-    testing.eq(out, "a local board links only its own cards, so other is not reachable\n")
+    testing.eq(out, "A local board links only its own cards, so other is not reachable.\n")
     out, code = dev(root, home, { "board", "note", "11111111", "--board", "other", "text" })
     testing.eq(code, 1, out)
-    testing.eq(out, "a local board links only its own cards, so other is not reachable\n")
+    testing.eq(out, "A local board links only its own cards, so other is not reachable.\n")
 end)
 
 testing.test("edit --board reaches the dispatcher and a local board refuses it", function()
@@ -217,7 +217,7 @@ testing.test("edit --board reaches the dispatcher and a local board refuses it",
         { "board", "edit", "11111111", "--board", "other", "--file", root .. "/plan.md" }
     )
     testing.eq(code, 1, out)
-    testing.eq(out, "a local board links only its own cards, so other is not reachable\n")
+    testing.eq(out, "A local board links only its own cards, so other is not reachable.\n")
 end)
 
 testing.test("boards and columns answer for a local board's own name only", function()
@@ -235,7 +235,7 @@ testing.test("boards and columns answer for a local board's own name only", func
     testing.eq(out, columns)
     out, code = dev(root, home, { "board", "columns", "other" })
     testing.eq(code, 1, out)
-    testing.eq(out, "a local board knows only its own columns, so other is not reachable\n")
+    testing.eq(out, "A local board knows only its own columns, so other is not reachable.\n")
     out, code = dev(root, home, { "board", "columns", "mine", "extra" })
     testing.eq(code, 2, out)
     out, code = dev(root, home, { "board", "boards", "extra" })
@@ -801,7 +801,7 @@ testing.test("notes, edit and delete work on a local board and refuse another au
     doc.cards[1].comments[1].who = "human"
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     out = dev(root, home, { "board", "note", a, "--edit", first, "x" })
-    testing.eq(out, "that comment is not yours to change\n")
+    testing.eq(out, "That comment is not yours to change.\n")
 end)
 
 testing.test("note --kind and --as are stored on a local comment and notes prints them", function()
@@ -3192,7 +3192,7 @@ testing.test("wait on a local board answers at once that there is nothing to wai
     local backend = require("dev.board.localboard").new({ name = "mine" })
     local got, message = backend:wait("1", { "task_added" }, 5)
     testing.eq(got, nil)
-    testing.eq(message, "a local board has nothing to wait on")
+    testing.eq(message, "A local board has nothing to wait on.")
 end)
 
 testing.test("a local board with renamed columns works through the project map", function()
@@ -4382,7 +4382,7 @@ testing.test("attach, attachments and detach refuse plainly on a local board", f
     }) do
         local out, code = dev(root, home, args)
         testing.eq(code, 1, out)
-        testing.ok(out:find("a local board holds no attachments", 1, true), out)
+        testing.ok(out:find("A local board holds no attachments.", 1, true), out)
     end
 end)
 
