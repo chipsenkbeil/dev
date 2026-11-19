@@ -617,6 +617,61 @@ testing.test("board_review_reports_a_refused_seat", function()
     testing.eq(#backend.notes, 1)
 end)
 
+local function recheck_of(backend, of)
+    return require("dev.cmd.board").run("review", {
+        "11111111",
+        "--kind",
+        "recheck",
+        "--of",
+        of,
+        "--by",
+        "r",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    }, backend)
+end
+
+testing.test("board_review_recheck_refused_with_seat_held_prints_no_warning", function()
+    local root = git_root()
+    local backend = seat_backend(root, "pomb answered 409: the seat is taken (seat_held)")
+    local result = recheck_of(backend, "style")
+    testing.eq(result.code, nil, result.message)
+    testing.eq(result.warnings, nil)
+    testing.ok(
+        result.output:find(
+            "The recheck seat is already held, so only the card records this review.",
+            1,
+            true
+        ),
+        result.output
+    )
+    testing.eq(#backend.notes, 1)
+end)
+
+testing.test("board_review_warns_on_a_code_review_refused_with_seat_held", function()
+    local root = git_root()
+    local backend = seat_backend(root, "pomb answered 409: the seat is taken (seat_held)")
+    local result = review_as(backend, "code", "clean")
+    testing.eq(result.code, nil)
+    testing.eq(#result.warnings, 1)
+    testing.ok(result.warnings[1]:find("seat_held", 1, true), result.warnings[1])
+    testing.eq(result.output:find("already held", 1, true), nil)
+end)
+
+testing.test("board_review_recheck_refused_with_owner_seat_still_warns", function()
+    local root = git_root()
+    local backend = seat_backend(
+        root,
+        "pomb answered 409: the task's owner cannot take a seat on it (owner_seat)"
+    )
+    local result = recheck_of(backend, "code")
+    testing.eq(result.code, nil, result.message)
+    testing.eq(#result.warnings, 1)
+    testing.ok(result.warnings[1]:find("owner_seat", 1, true), result.warnings[1])
+end)
+
 testing.test("board_review_writes_the_missing_seat_warning_from_its_reason", function()
     local root = git_root()
     local backend = seat_backend(root, "add refused", board.SeatReason.NO_SEAT)

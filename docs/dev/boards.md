@@ -2801,7 +2801,11 @@ is the full commit id. Pomb refuses a seat to the card's live owner
 holder (`seat_held`), so a reviewer on the runner's token is refused while the
 claim lives. A refused seat call prints one warning to standard error that names
 Pomb's code and says the seat was not set, and the review is still recorded and
-the command exits 0. The local board has no seats and keeps only the comment.
+the command exits 0. A second recheck, which Pomb refuses with `seat_held`
+(the one recheck seat is taken), prints no warning and ends its output with
+`The recheck seat is already held, so only the card records this review.`
+The first recheck's seat verdict stands, and land reads only the review
+comments. The local board has no seats and keeps only the comment.
 
 The comment stays for landing to read. It is one `status` comment on the
 card that begins with a reserved first line and has no other:

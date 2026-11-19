@@ -124,6 +124,7 @@ local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
 local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
+local SEAT_HELD_CODE = "seat_held"
 local WAIT_FLAG = "--wait"
 local SET_FLAG = "--set"
 local ID_ONLY_FLAG = "--id-only"
@@ -3206,11 +3207,18 @@ function commands.review(backend, args)
     end
     local ok
     local warnings
+    local seat_note = ""
     if backend.seat_verdict then
         local refusal
         ok, message, refusal =
             backend:seat_verdict(card.id, kind, by, review.SEAT_VERDICTS[verdict], rev.commit)
-        if not ok then
+        if
+            not ok
+            and kind == review.Kind.RECHECK
+            and (message or ""):find(SEAT_HELD_CODE, 1, true)
+        then
+            seat_note = "\nThe recheck seat is already held, so only the card records this review."
+        elseif not ok then
             local detail = seat_refusal(refusal, message, kind)
             warnings = {
                 string.format(
@@ -3240,11 +3248,12 @@ function commands.review(backend, args)
     end
     return {
         output = string.format(
-            "recorded %s review by %s on %s at commit %s",
+            "recorded %s review by %s on %s at commit %s%s",
             kind,
             by,
             short,
-            rev.commit:sub(1, COMMIT_CHARS)
+            rev.commit:sub(1, COMMIT_CHARS),
+            seat_note
         ),
         warnings = warnings,
     }
