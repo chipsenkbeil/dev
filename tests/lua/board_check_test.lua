@@ -1104,6 +1104,26 @@ if has_jj then
         testing.eq(#comments(home), 0)
     end)
 
+    testing.test("check refuses an empty jj working-copy commit and names its parent", function()
+        local root, home, ws = workspace()
+        local id = card_with(root, home, { "true" })
+        jj(ws, "workspace", "rename", id)
+        local parent = jj(ws, "log", "-r", "@-", "--no-graph", "-T", "change_id"):match("^(%a+)")
+        local out, code = dev(root, home, { "board", "check", id }, ws)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("jj edit " .. parent, 1, true), out)
+        testing.eq(#comments(home), 0)
+    end)
+
+    testing.test("check --expect-fail still runs on an empty jj working-copy commit", function()
+        local root, home, ws = workspace()
+        local id = card_with(root, home, { "false" })
+        jj(ws, "workspace", "rename", id)
+        local out, code = dev(root, home, { "board", "check", id, "--expect-fail" }, ws)
+        testing.eq(code, 0, out)
+        testing.eq(#comments(home), 1)
+    end)
+
     testing.test(
         "in a jj workspace the working-copy commit is the commit, edits included",
         function()
@@ -1134,6 +1154,7 @@ if has_jj then
         local root, home, ws = workspace()
         local id = card_with(root, home, { "touch made" })
         jj(ws, "workspace", "rename", id)
+        assert(fs.write(ws .. "/edited", "x"))
         local out, code = dev(root, home, { "board", "check", id }, ws)
         testing.eq(code, 1, out)
         testing.ok(out:find("changed while the checks ran", 1, true), out)

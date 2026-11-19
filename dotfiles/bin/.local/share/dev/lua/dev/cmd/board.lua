@@ -3200,6 +3200,10 @@ function commands.check(backend, args)
     if not before then
         return failure(message)
     end
+    local empty = not opts.expect_fail and check.empty_refusal(backend.root)
+    if empty then
+        return failure(empty)
+    end
     return wiring.check_rows({
         name = agent_name(),
         backend = backend,

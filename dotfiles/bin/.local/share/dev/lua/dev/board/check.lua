@@ -88,6 +88,8 @@ local RG_VALUE_FLAGS = {
 ---The rg flags that supply the pattern
 local RG_PATTERN_FLAGS = { ["-e"] = true, ["-f"] = true, ["--regexp"] = true, ["--file"] = true }
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "conflict", "clean")'
+local JJ_EMPTY_TEMPLATE =
+    'if(empty, "empty", "full") ++ " " ++ parents.map(|parent| parent.change_id()).join(" ")'
 local SHOWN_LINES = 12
 local NO_CHANGE = "-"
 local NO_RUN = "-"
@@ -380,6 +382,39 @@ function M.state(root)
         return jj_state(root)
     end
     return git_state(root)
+end
+
+---Refuse a jj working-copy commit that holds no change.
+---
+---A result recorded on an empty commit cannot land. `land` refuses that commit.
+---@param root string the project root
+---@return string? message why the check cannot run there, nil when it can
+function M.empty_refusal(root)
+    local backend = vcs.require(root)
+    if backend ~= vcs.JJ then
+        return nil
+    end
+    local out, code = dev_os.capture(
+        vcs.with(
+            vcs.base(root, vcs.JJ, { quiet = true }),
+            "log",
+            "-r",
+            "@",
+            "--no-graph",
+            "-T",
+            JJ_EMPTY_TEMPLATE
+        ),
+        { stderr = "null" }
+    )
+    local shape, parent = out:match("^(%a+) ?(%a*)\n?$")
+    if code ~= 0 or shape ~= "empty" then
+        return nil
+    end
+    local message = "The working-copy commit is empty, so a result recorded on it cannot land."
+    if parent ~= "" then
+        message = message .. " Run `jj edit " .. parent .. "` and check that change."
+    end
+    return message
 end
 
 local function last_line(output)

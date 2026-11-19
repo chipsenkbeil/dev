@@ -2775,6 +2775,10 @@ The result belongs to one commit:
 - In a git project the tree must match `HEAD`, and a dirty one is refused
   (exit 1) with the count of changed paths.
 - A conflicted jj working copy is refused too.
+- A `check` refuses an empty working-copy commit in a jj project, with exit 1,
+  and names `jj edit` with the parent change (`land` refuses that commit).
+  `--expect-fail` is not refused (a card is filed with a baseline run from a
+  fresh workspace).
 - dev names the commit before the first row and again after the last. A result
   whose two commits differ was run on a tree that moved, so it is not recorded
   (exit 1).
