@@ -810,4 +810,37 @@ if has_jj then
         out, code = review("@")
         testing.eq(code, 0, out)
     end)
+
+    testing.test("review names dev board check when the card holds another change", function()
+        local root, home = setup()
+        must(
+            dev_os.run(
+                { "jj", "git", "init", root },
+                { stdout = "null", stderr = "null", env = IDENT }
+            )
+        )
+        jj(root, "commit", "-m", "base")
+        local id = card_in(root, home)
+        local function review(rev)
+            return dev(root, home, {
+                "board",
+                "review",
+                id,
+                "--kind",
+                "code",
+                "--by",
+                "r",
+                "--rev",
+                rev,
+                "--verdict",
+                "clean",
+            })
+        end
+        local out, code = review("@-")
+        testing.eq(code, 0, out)
+
+        out, code = review("@")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("`dev board check` at this commit", 1, true), out)
+    end)
 end

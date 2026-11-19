@@ -3077,7 +3077,7 @@ function commands.review(backend, args)
     if recorded and recorded ~= rev.change then
         return failure(
             string.format(
-                "Card %s records change %s but this commit is change %s. Run `dev board review` from the change's workspace.",
+                "Card %s records change %s but this commit is change %s. Run `dev board review` from the change's workspace, or run `dev board check` at this commit first to re-point the card.",
                 short,
                 recorded,
                 rev.change
