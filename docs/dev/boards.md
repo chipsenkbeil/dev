@@ -2749,11 +2749,15 @@ clean|minor|needs-work` records that NAME reviewed the commit REV with that
 verdict.
 
 On a Pomb board the review first sets the card's reviewer seat. NAME takes the
-seat named after the kind (`code`, `style` or `recheck`), which `review` adds to
-the card with the `reviewer` role when the card lacks it, and answers it:
-`clean` and `minor` send `approved`, `needs-work` sends `changes_needed`, and
-the revision is the full commit id. Pomb refuses a seat to the card's live
-owner (`owner_seat`, which compares credentials and never names) and to a second
+seat named after the kind (`code`, `style` or `recheck`), and answers it. The
+claimant's own token creates the three seats with the `reviewer` role when it
+first takes the card (the reviewer role cannot add a task seat). A renewal and
+the landing turn add none. A card whose seats were never created, or whose
+create was refused, lacks the seat, and `review` then tries to add it and names
+the missing seat and the take in its warning when Pomb refuses. `clean` and
+`minor` send `approved`, `needs-work` sends `changes_needed`, and the revision
+is the full commit id. Pomb refuses a seat to the card's live owner
+(`owner_seat`, which compares credentials and never names) and to a second
 holder (`seat_held`), so a reviewer on the runner's token is refused while the
 claim lives. A refused seat call prints one warning to standard error that names
 Pomb's code and says the seat was not set, and the review is still recorded and

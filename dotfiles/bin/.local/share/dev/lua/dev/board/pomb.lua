@@ -59,6 +59,7 @@ local PAGE_LIMIT = 500
 local FORBIDDEN = 403
 local NO_SEAT = "the task has no such seat"
 local SEAT_ROLE = "reviewer"
+local REVIEW_SEATS = { "code", "style", "recheck" }
 local PERMISSION_DENIED = "permission_denied"
 local EXCEEDS_GRANT = "exceeds_grant"
 local TOKEN_EXPIRED = "token_expired"
@@ -1275,7 +1276,7 @@ function Backend:seat_verdict(id, seat, name, verdict, revision)
         return nil, message
     end
     local base = "/api/tasks/" .. id .. "/seats"
-    local taken, status, doc
+    local taken, status, doc, add_refused
     taken, message, status, doc = self:__request("POST", base .. "/take", {
         seat = seat,
         name = name,
@@ -1283,10 +1284,19 @@ function Backend:seat_verdict(id, seat, name, verdict, revision)
     if not taken and status == NOT_FOUND and type(doc) == "table" and doc.message == NO_SEAT then
         taken, message, status, doc =
             self:__request("POST", base, { name = seat, role = SEAT_ROLE })
+        add_refused = not taken
         if taken then
             taken, message, status, doc =
                 self:__request("POST", base .. "/take", { seat = seat, name = name })
         end
+    end
+    if add_refused then
+        return nil,
+            string.format(
+                "The card has no %s seat and this token cannot add one (%s). The claim adds the seats, so take the card with dev board take first.",
+                seat,
+                message
+            )
     end
     if not taken then
         if type(doc) == "table" and doc.code then
@@ -2239,7 +2249,8 @@ function Backend:claim(id, claimant, opts)
             return nil, message
         end
     end
-    if not owner then
+    local fresh = not owner
+    if fresh then
         owner, message = self:__request("POST", path, grab)
     end
     if not owner then
@@ -2248,6 +2259,15 @@ function Backend:claim(id, claimant, opts)
     local taken = present(owner.fence)
     if type(taken) ~= "number" then
         return nil, unavailable("pomb sent an owner with no fence")
+    end
+    if fresh and not opts.lease then
+        for _, seat in ipairs(REVIEW_SEATS) do
+            self:__request(
+                "POST",
+                "/api/tasks/" .. id .. "/seats",
+                { name = seat, role = SEAT_ROLE }
+            )
+        end
     end
     return taken
 end

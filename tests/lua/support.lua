@@ -502,6 +502,18 @@ case "$last" in
         body='{"holder":{"kind":"agent","name":"x"},"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}'
     fi
     ;;
+*/seats/take)
+    if [ -f "$ROOT/no_seat" ]; then
+        body='{"message":"the task has no such seat"}'
+        status=404
+    fi
+    ;;
+*/seats)
+    if [ -f "$ROOT/seat_refused" ]; then
+        body='{"code":"permission_denied","message":"the role cannot add a seat"}'
+        status=403
+    fi
+    ;;
 *) body='{"ok":true}' ;;
 esac
 printf '%s\n%s' "$body" "$status"

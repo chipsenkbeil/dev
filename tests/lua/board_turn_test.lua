@@ -1259,6 +1259,59 @@ testing.test("taking the turn on Pomb grabs the owner with the turn lease", func
     testing.ok(owner:find('"name":"alpha"', 1, true), owner)
 end)
 
+local function seat_calls(root)
+    local seats = {}
+    local route = "/api/tasks/" .. ID_A .. "/seats"
+    for line in (fs.read(root .. "/calls") or ""):gmatch("[^\n]+") do
+        if line:sub(-#route) == route then
+            seats[#seats + 1] = line
+        end
+    end
+    return seats
+end
+
+testing.test("a fresh claim on a Pomb card adds its code, style and recheck seats", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900 }), 7)
+    end)
+    local seats = seat_calls(root)
+    testing.eq(#seats, 3)
+    for index, name in ipairs({ "code", "style", "recheck" }) do
+        testing.ok(seats[index]:find('"name":"' .. name .. '"', 1, true), seats[index])
+        testing.ok(seats[index]:find('"role":"reviewer"', 1, true), seats[index])
+    end
+end)
+
+testing.test("a renewed claim and a turn lease add no seat", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900, fence = 7 }), 7)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900, lease = true }), 7)
+    end)
+    testing.eq(#seat_calls(root), 0)
+end)
+
+testing.test("a claim still succeeds when Pomb refuses a seat", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/seat_refused", "1"))
+    on_pomb(root, function(backend)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900 }), 7)
+    end)
+end)
+
+testing.test("a review names the seat the card lacks when Pomb refuses to add it", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/no_seat", "1"))
+    assert(fs.write(root .. "/seat_refused", "1"))
+    on_pomb(root, function(backend)
+        local ok, message = backend:seat_verdict(ID_A, "style", "r", "approved", "abc")
+        testing.eq(ok, nil)
+        testing.ok(message:find("The card has no style seat", 1, true), message)
+        testing.ok(message:find("dev board take", 1, true), message)
+    end)
+end)
+
 testing.test("renewing the Pomb turn sends its fence as If-Owner-Fence", function()
     local root = pomb_root()
     on_pomb(root, function(backend)

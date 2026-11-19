@@ -611,7 +611,9 @@ testing.test("seat_verdict adds no seat for another 404 and stops at each refusa
 
     backend = pomb_seats({ NO_SEAT, { nil, "add refused" } })
     ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
-    testing.eq({ ok, message, #backend.calls }, { nil, "add refused", 2 })
+    testing.eq({ ok, #backend.calls }, { nil, 2 })
+    testing.ok(message:find("The card has no code seat", 1, true), message)
+    testing.ok(message:find("add refused", 1, true), message)
 
     backend = pomb_seats({ { true }, { nil, "verdict refused" } })
     ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
