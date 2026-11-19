@@ -135,8 +135,10 @@ function M.card(card, opts)
     end
     local column = card.column
     local discarded = board.labelled(card, board.DISCARDED)
+    local dropped = card.done and discarded
+    local landed = card.done and not discarded
     local open = not card.done and column ~= stages.icebox
-    local need_outcomes = not (discarded and card.done) and not card.outcomes_unreadable
+    local need_outcomes = not dropped and not card.outcomes_unreadable
     local kids, kids_why
     local function children()
         if not kids then
@@ -166,7 +168,7 @@ function M.card(card, opts)
             sections = sectioned,
         })
         for _, item in ipairs(missing) do
-            if item ~= "a size" or not (discarded and card.done) then
+            if item ~= "a size" or not dropped then
                 add("lacks " .. item, item == "a size")
             end
         end
@@ -244,7 +246,7 @@ function M.card(card, opts)
     if column == stages.progress and not card.claimant and not board.labelled(card, board.RUN) then
         add("in progress with no claimant")
     end
-    if card.done and not discarded then
+    if landed then
         local found, why = children()
         if not found then
             return nil, why
@@ -254,13 +256,13 @@ function M.card(card, opts)
             add(unfinished .. " of " .. found.total .. " children open")
         end
     end
-    if card.done and not discarded and not card.outcomes_unreadable then
+    if landed and not card.outcomes_unreadable then
         local unticked_rule = unticked(card)
         if unticked_rule then
             add(unticked_rule)
         end
     end
-    if card.done and not discarded then
+    if landed then
         local comments, why = facts.comments()
         if not comments then
             return nil, why
