@@ -17,6 +17,8 @@ local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
 local PLANNED = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
 local JUDGED = "done (reviewer judgement)"
+local YELLOW_ID = "yellow-id"
+local BLUE_ID = "blue-id"
 
 local function setup(project)
     local root = support.sandbox({ [".dev/config.toml"] = project }, {})
@@ -2430,8 +2432,12 @@ local DETAIL = '{"id":"board-1","name":"dotfiles","columns":['
     .. '{"id":"col-backlog","name":"Backlog"},{"id":"col-ready","name":"Ready"},'
     .. '{"id":"col-progress","name":"In Progress"},'
     .. '{"id":"col-review","name":"Review"},{"id":"col-done","name":"Done"}]}'
-local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"},'
-    .. '{"id":"blue-id","value":"blue","label":"3 Pomodori"},'
+local COLORS = '[{"id":"'
+    .. YELLOW_ID
+    .. '","value":"yellow","label":"1 Pomodoro"},'
+    .. '{"id":"'
+    .. BLUE_ID
+    .. '","value":"blue","label":"3 Pomodori"},'
     .. '{"id":"white-id","value":"white","label":"Unsized"}]'
 local EXPORT = '{"tasks":['
     .. support.pomb_export_task({
@@ -2455,7 +2461,7 @@ local WORKING_EXPORT = '{"tasks":['
         id = ID_A,
         name = "First",
         column_id = support.column_id(Column.PROGRESS),
-        color_id = "yellow-id",
+        color_id = YELLOW_ID,
         description = "## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
         subtasks = '[{"id":"s1","name":"a (reviewer judgement)","done":false},'
             .. '{"id":"s2","name":"b (reviewer judgement)","done":false},'
@@ -2597,7 +2603,7 @@ testing.test("a queued discard replays its move without the outcome check", func
         id = ID_A,
         name = "First",
         column_id = READY_COLUMN,
-        color_id = "yellow-id",
+        color_id = YELLOW_ID,
         description = "## Problem\\nx\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
         subtasks = '[{"id":"s1","name":"Never works","done":false}]',
     }) .. "]}"))
@@ -4056,8 +4062,8 @@ local function sized_pomb()
             '{"items":[{"id":"' .. big .. '"},{"id":"' .. small .. '"}],"next_cursor":null}'
         )
     )
-    assert(fs.write(root .. "/big.json", task(big, "Big", "blue-id")))
-    assert(fs.write(root .. "/small.json", task(small, "Small", "yellow-id")))
+    assert(fs.write(root .. "/big.json", task(big, "Big", BLUE_ID)))
+    assert(fs.write(root .. "/small.json", task(small, "Small", YELLOW_ID)))
     return root, home, big:sub(1, 8), small:sub(1, 8)
 end
 
