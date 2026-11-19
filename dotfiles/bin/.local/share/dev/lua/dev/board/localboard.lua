@@ -180,18 +180,20 @@ local function epic_of(card)
     end
 end
 
-local function children_of(doc, id)
-    local found = {}
+local function child_index(doc)
+    local index = {}
     for _, other in ipairs(doc.cards) do
-        if epic_of(other) == id then
-            found[#found + 1] = other
+        local epic = epic_of(other)
+        if epic then
+            index[epic] = index[epic] or {}
+            table.insert(index[epic], other)
         end
     end
-    return found
+    return index
 end
 
-local function child_counts(doc, card)
-    local children = children_of(doc, card.id)
+local function child_counts(doc, card, index)
+    local children = (index or child_index(doc))[card.id] or {}
     if #children == 0 and card.kind ~= board.Kind.EPIC then
         return nil
     end
@@ -226,12 +228,12 @@ local function lane_named(doc, name)
     end
 end
 
-local function card_view(doc, card)
+local function card_view(doc, card, index)
     local color = card.color_id and find_by_id(doc.colors, card.color_id)
     local column = find_by_id(doc.columns, card.column_id)
     local claim = live(card.claim)
     return {
-        epic = child_counts(doc, card),
+        epic = child_counts(doc, card, index),
         responsible = card.responsible,
         kind = card.kind == board.Kind.EPIC and board.Kind.EPIC or board.Kind.TASK,
         id = card.id,
@@ -305,8 +307,9 @@ function Backend:cards()
         return nil, message
     end
     local cards = {}
+    local index = child_index(doc)
     for _, card in ipairs(ordered(doc)) do
-        cards[#cards + 1] = card_view(doc, card)
+        cards[#cards + 1] = card_view(doc, card, index)
     end
     return cards
 end
