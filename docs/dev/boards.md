@@ -4107,8 +4107,8 @@ A group limit:
 - The refusal reads `N cards are in flight in In Progress, Review and Verify
   (ID, ID, ID), at the limit of L. Land one first.` (exit 1 for `take`, 3 for
   `move`).
-- Cards in other columns do not count, and neither do epics or the card being
-  moved.
+- Cards in other columns do not count, and neither do epics, run cards or the
+  card being moved.
 
 Pomb's own limits:
 

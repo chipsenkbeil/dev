@@ -298,6 +298,22 @@ testing.test("an epic in the group is not counted", function()
     dev(box, { "board", "release", "dddddddd" }, "")
 end)
 
+testing.test("a run card in the group is not counted", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":2}]' }),
+        export = export({
+            { "a", ID.PROGRESS, TASK },
+            { "b", ID.REVIEW, TASK },
+            { "c", ID.VERIFY, TASK, { board.RUN } },
+            { "d", ID.READY, TASK },
+        }),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 0, out)
+    dev(box, { "board", "release", "dddddddd" }, "")
+end)
+
 testing.test("move refuses a card entering a full group and names the cards", function()
     local box = sandbox({
         project = POMB,

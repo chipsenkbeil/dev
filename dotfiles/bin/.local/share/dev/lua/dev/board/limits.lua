@@ -39,7 +39,12 @@ local function holding(cards, card, columns)
     end
     local held = {}
     for _, other in ipairs(cards) do
-        if other.id ~= card.id and other.kind ~= board.Kind.EPIC and inside[other.column] then
+        if
+            other.id ~= card.id
+            and other.kind ~= board.Kind.EPIC
+            and not board.labelled(other, board.RUN)
+            and inside[other.column]
+        then
             held[#held + 1] = other
         end
     end
