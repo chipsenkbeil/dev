@@ -9594,6 +9594,35 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
     dev(kept_root, kept_home, { "board", "release", "11111111-a" })
 end)
 
+testing.test("ask keeps the owner lease when Pomb refuses the question", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    dev(root, home, { "board", "take", "11111111-a" })
+    testing.ok(wait_until(function()
+        return heartbeats(root) >= 1
+    end))
+    assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
+    local out, code = dev(root, home, {
+        "board",
+        "ask",
+        "11111111-a",
+        "--question",
+        "Which way?",
+        "--choice",
+        "Ready=Ship it",
+        "--choice",
+        "Icebox=Park it",
+        "--recommend",
+        "1",
+    })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("question.why is required", 1, true), out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find('"kind":"question"', 1, true), calls)
+    testing.eq(calls:find("/owner/release", 1, true), nil)
+    testing.eq(fs.exists(state_file(home)), true)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
 testing.test("a move out of blocked ends the owner lease", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/freeze", ""))
