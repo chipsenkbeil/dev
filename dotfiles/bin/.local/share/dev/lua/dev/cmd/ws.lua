@@ -25,6 +25,9 @@ local ADOPT_PARENTS = "coalesce(@ & ::trunk(), @-)"
 ---@enum dev.cmd.ws.Step
 local Step = { GONE = "gone", DONE = "done", KEEP = "keep" }
 
+---@enum dev.cmd.ws.Leave
+local Leave = { ELSEWHERE = "elsewhere" }
+
 local function sentence(text)
     text = text:gsub("^%l", string.upper)
     if not text:find("%.$") then
@@ -999,6 +1002,9 @@ local function plan_workspaces(root, found, finished)
                 step.kind = there == here and Step.KEEP or Step.DONE
                 step.note = "it is the workspace dev runs in"
                 steps[#steps + 1] = step
+            else
+                step.why = Leave.ELSEWHERE
+                leftover[#leftover + 1] = step
             end
         elseif finished then
             leftover[#leftover + 1] = step
@@ -1018,7 +1024,11 @@ local function leave_workspaces(label, leftover)
                     .. label
                     .. " "
                     .. step.name
-                    .. " alone. Its name is not the id of a done card"
+                    .. " alone. "
+                    .. (
+                        step.why == Leave.ELSEWHERE and "Its folder is not where ws new puts it"
+                        or "Its name is not the id of a done card"
+                    )
             )
         )
     end

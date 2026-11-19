@@ -1976,6 +1976,32 @@ testing.test("prune dry-run changes no git worktree", function()
     testing.eq(fs.exists(done .. "/.git"), true)
 end)
 
+testing.test("prune leaves a done card worktree outside the ws new folder alone", function()
+    -- Seed a done card whose worktree sits in a folder other than the one ws new makes
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = DONE_ID, done = true } })
+    local moved = dir .. "elsewhere/" .. DONE_ID
+    assert(fs.mkdir(moved, { parents = true }))
+    assert(fs.write(moved .. "/.git", "gitdir: elsewhere\n"))
+    env.env.WORKTREES = worktrees(root, moved)
+
+    -- Dry-run the prune to check the worktree is named and counted
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect a Left line with the folder reason and nothing removed
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Left worktree " .. DONE_ID .. " alone. Its folder is not where ws new puts it.",
+            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Would prune 0 worktrees and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.exists(log), false)
+    testing.eq(fs.exists(moved .. "/.git"), true)
+end)
+
 testing.test("prune dry-run keeps a locked git worktree of a done card", function()
     -- Seed a done card with a worktree folder and mark the worktree locked
     local root, dir, env, log = prune_setup("git")

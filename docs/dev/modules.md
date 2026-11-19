@@ -222,9 +222,11 @@ beside a prunable one. A folder that jj or git cannot read is kept too,
 and its line ends with the first line of their error. A workspace whose folder
 exists and whose name is not the short id of a Done card gets a `Left workspace
 NAME alone.` line (`worktree` for git) and counts in the closing `Left N items
-alone`, in a dry run and a real one. Ignored files do not
-count as changes, as with `ws rm`. A project with no board, or a board that cannot be read, skips the
-card test and says so. A board setting that is invalid stops prune with exit 1
+alone`, in a dry run and a real one. The workspace of a Done card whose
+folder is elsewhere gets the same line, with the reason
+`Its folder is not where ws new puts it.` Ignored files do not count as
+changes, as with `ws rm`. A project with no board, or a board that cannot be
+read, skips the card test and says so. A board setting that is invalid stops prune with exit 1
 before any change. `dev.cmd.board.finished(root)` lists the Done short ids.
 
 A forget, removal or abandon that fails gets a line saying so, and prune goes
