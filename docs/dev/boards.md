@@ -3047,8 +3047,9 @@ The command:
   land that finds the turn held refuses at once and names the holder. With it,
   the land waits up to that many seconds for the turn. Anything else exits 2.
 - It is never queued.
-- When the land fails and its output has `dev sync --check` lines, `differs:`
-  or `missing:` with a path the change does not touch, that is template drift
+- When the land fails and its output has lines from the built-in
+  sync's check mode, `differs:` or `missing:` with a path the change does not
+  touch, that is template drift
   and land adds a sentence after the output. It says a dotfiles template
   changed, not the card, and tells the repo to run `dev sync`, land that as its
   own card and land again.
