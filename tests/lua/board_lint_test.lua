@@ -352,6 +352,32 @@ testing.test(
     end
 )
 
+testing.test("lint flags an outcome that requires the change on main", function()
+    local on_main = { { id = "o1", name = "The change is on main", done = false } }
+    local after = { { id = "o1", name = "It works after land", done = false } }
+    local cards = {
+        card(1, NAME.BACKLOG, { outcomes = on_main }),
+        card(2, NAME.BACKLOG, { outcomes = after }),
+    }
+    testing.eq(findings(cmd_board.run("lint", {}, backend(cards)).output), {
+        "00000001 "
+            .. NAME.BACKLOG
+            .. " outcome requires the change on main: The change is on main",
+        "00000002 " .. NAME.BACKLOG .. " outcome requires the change on main: It works after land",
+    })
+end)
+
+testing.test("lint passes an outcome that does not wait for land", function()
+    local plain = { { id = "o1", name = "The change is reviewed", done = false } }
+    local ticked = { { id = "o1", name = "The change is on main", done = true } }
+    local cards = {
+        card(1, NAME.BACKLOG, { outcomes = plain }),
+        card(2, NAME.BACKLOG, { outcomes = ticked }),
+        card(3, NAME.DONE, { outcomes = ticked }),
+    }
+    testing.eq(findings(cmd_board.run("lint", {}, backend(cards)).output), { "No findings." })
+end)
+
 testing.test("lint flags a Done card with outcomes and an open child", function()
     local fake = backend({ card(1, NAME.DONE) })
     function fake:family()

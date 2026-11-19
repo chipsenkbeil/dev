@@ -24,6 +24,13 @@ M.MAX_WORDS = 400
 ---The actor kind a comment from a token carries.
 local AGENT = board.ACTOR.AGENT
 
+---Tell whether an outcome's text says the change is on main or lands first.
+---@param name string the outcome text
+---@return boolean
+local function waits_for_land(name)
+    return name:find("on main", 1, true) ~= nil or name:find("after land", 1, true) ~= nil
+end
+
 local function word_count(description)
     local count = 0
     if not description then
@@ -223,6 +230,11 @@ function M.card(card, opts)
                 for _, name in ipairs(board.unnamed_checks(card.outcomes, card.checks)) do
                     add("outcome names no deciding check: " .. name)
                 end
+            end
+        end
+        for _, outcome in ipairs(card.outcomes) do
+            if not outcome.done and waits_for_land(outcome.name) then
+                add("outcome requires the change on main: " .. outcome.name)
             end
         end
         if column == stages.ready and card.color == board.SIZES["3+"] then
