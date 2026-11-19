@@ -1470,7 +1470,19 @@ local function retake_lapsed(backend, card, column)
         return failure(why)
     end
     local who = runner.claimant(name)
-    if board.last_claimant(past) ~= who then
+    local last = board.last_claimant(past)
+    if last ~= who then
+        if last and column == stages.review then
+            local short = card.id:sub(1, board.MIN_PREFIX)
+            return failure(
+                string.format(
+                    "The claim of %s lapsed. Take card %s again with `dev board take %s`.",
+                    last,
+                    short,
+                    short
+                )
+            )
+        end
         return nil
     end
     card.claimant = who

@@ -2093,7 +2093,9 @@ testing.test("a move by another name after the lease lapsed is refused", functio
         CLAUDE_SESSION_ID = "other",
     })
     testing.eq(code, 1, out)
-    testing.ok(out:find("It must pass In Progress under a claim first.", 1, true), out)
+    testing.ok(out:find("The claim of ", 1, true), out)
+    testing.ok(out:find(" lapsed. Take card ", 1, true), out)
+    testing.ok(out:find("`dev board take " .. a:sub(1, 8), 1, true), out)
 end)
 
 local function without_claim_state(home)

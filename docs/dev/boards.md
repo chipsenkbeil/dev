@@ -3847,8 +3847,9 @@ The claim:
 - A move out of In Progress of a card whose claim lapsed, as during a long ci
   wait, takes the claim again before the move when the caller is the
   last claimant, the name in the card's newest `dev-claim:` record. The
-  note rule still applies first. Any other name is refused as an unclaimed
-  card is, and a card another claimant holds is not touched.
+  note rule still applies first. Any other name moving the card to Review is
+  refused with `The claim of NAME lapsed.`, NAME the last claimant, and the
+  `dev board take CARD` command. A card another claimant holds is not touched.
 
 The refusals run in this order:
 
