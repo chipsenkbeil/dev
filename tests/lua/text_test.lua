@@ -21,6 +21,15 @@ testing.test("fit cuts by codepoint and keeps escapes", function()
     testing.eq(text.fit("\27[32mééééé\27[0m", 3), "\27[32méé…\27[0m")
 end)
 
+testing.test("fit to width one gives only the ellipsis", function()
+    testing.eq(text.fit("abc", 1), "…")
+end)
+
+testing.test("fit to width zero gives an empty string and keeps escapes", function()
+    testing.eq(text.fit("abc", 0), "")
+    testing.eq(text.fit("\27[32mabc\27[0m", 0), "\27[32m\27[0m")
+end)
+
 testing.test("words splits on any whitespace", function()
     testing.eq(text.words("  a bb\tc\n"), { "a", "bb", "c" })
 end)
