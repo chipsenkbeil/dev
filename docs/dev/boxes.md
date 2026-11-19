@@ -485,18 +485,23 @@ either.
 - ci's ProxyCommand and pinned known_hosts decide the host key, and `--ssh`
   changes nothing.
 
-Each string in `notes` goes to standard error as "dev connect: <note>". A host
-whose name is not 1 to 40 of `a-z`, `0-9` and `-` is skipped with one line.
+Each string in `notes` goes to standard error as "Ci said: <note>". A host
+whose name is not 1 to 40 of `a-z`, `0-9` and `-` is skipped with the note
+"Skipping a connectable with an invalid name.". A host whose `ci-` alias is the
+name of another connectable is skipped with the note "Skipping <name>, because
+its alias <alias> is the name of another connectable.".
 
 A ci that lacks either command exits 2 from `ssh config` or `ssh ls`. That
-makes dev list boxes only, with the note "dev connect: this ci has no ssh
-command, listing boxes only".
+makes dev list boxes only, with the note "This ci has no ssh command, so only
+the boxes are listed.".
 
 Any other non-zero exit prints ci's `error.message` (or the first line of its
 standard error that starts with `error:`, else the first line) as one line,
-"dev connect: <message>". The picker then still offers the boxes, and a name
-that is no box exits with ci's code. On success ci's standard error goes
-through to the terminal unchanged.
+"Ci said: <message>". The picker then still offers the boxes, and a name that
+is no box exits with ci's code. On success ci's standard error goes through to
+the terminal unchanged. When dev cannot make a temporary file for that standard
+error, it prints "Cannot make a temporary path for the standard error of ci."
+and runs ci anyway.
 
 `tests/lua/connect_test.lua` and `tests/dev/box_test.sh` run all of it against
 a fake `ci` and `ssh`.

@@ -77,8 +77,8 @@ testing.test("a named connectable writes the config, lists and execs ssh ci-NAME
     local out, code = support.dev(root, { "connect", "vm1" }, env())
     testing.eq(code, 0)
     testing.eq(calls(root), "ci box ls --json\nci ssh config\nci ssh ls --json\nssh ci-vm1\n")
-    testing.ok(out:find("dev connect: example-box is slow", 1, true), out)
-    testing.ok(out:find("skipping a connectable with an invalid name", 1, true), out)
+    testing.ok(out:find("Ci said: example-box is slow", 1, true), out)
+    testing.ok(out:find("Skipping a connectable with an invalid name.", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
 
@@ -112,7 +112,7 @@ testing.test("a connectable whose alias names another is skipped by name", funct
     assert(fs.write(root .. "/ssh.ls.json", SHADOWED))
     local out, code = support.dev(root, { "connect", "foo" }, env())
     testing.eq(code, 3)
-    local note = "dev connect: skipping foo, its alias ci-foo is the name of another connectable"
+    local note = "Skipping foo, because its alias ci-foo is the name of another connectable."
     local first, last = out:find(note, 1, true)
     testing.ok(first, out)
     testing.eq(out:find(note, last + 1, true), nil)
@@ -138,7 +138,7 @@ testing.test("a connectable whose alias names another is not offered by the pick
         env({ FAKE_TTY = "1", FAKE_PICK = "b1", PICK_LOG = root .. "/picks" })
     )
     testing.eq(code, 0)
-    testing.ok(out:find("skipping foo, its alias ci-foo", 1, true), out)
+    testing.ok(out:find("Skipping foo, because its alias ci-foo", 1, true), out)
     local picks = fs.read(root .. "/picks") or ""
     testing.eq(picks:find("\nfoo\t", 1, true), nil)
     testing.ok(picks:find("\nci-foo\t", 1, true), picks)
@@ -160,7 +160,7 @@ testing.test("a ci without ssh config lists boxes only, with one note", function
     local out, code =
         support.dev(root, { "connect", "--ssh" }, env({ FAKE_TTY = "1", FAKE_PICK = "b1" }))
     testing.eq(code, 0)
-    local note = "this ci has no ssh command, listing boxes only"
+    local note = "This ci has no ssh command, so only the boxes are listed."
     local _, count = out:gsub(note, "")
     testing.eq(count, 1)
     testing.eq(
@@ -177,7 +177,7 @@ testing.test("an older ci that reads config as a box name lists boxes only", fun
     local out, code =
         support.dev(root, { "connect", "--ssh" }, env({ FAKE_TTY = "1", FAKE_PICK = "b1" }))
     testing.eq(code, 0)
-    local note = "this ci has no ssh command, listing boxes only"
+    local note = "This ci has no ssh command, so only the boxes are listed."
     local _, count = out:gsub(note, "")
     testing.eq(count, 1)
     testing.eq(out:find("no box config", 1, true), nil)
@@ -190,7 +190,7 @@ testing.test("a ci with ssh config but no ssh ls lists boxes only, with one note
     local out, code =
         support.dev(root, { "connect", "--ssh" }, env({ FAKE_TTY = "1", FAKE_PICK = "b1" }))
     testing.eq(code, 0)
-    local _, count = out:gsub("this ci has no ssh command, listing boxes only", "")
+    local _, count = out:gsub("This ci has no ssh command, so only the boxes are listed.", "")
     testing.eq(count, 1)
     testing.eq(
         calls(root),
@@ -206,7 +206,7 @@ testing.test("a failing ci ssh ls still lets the picker attach a box", function(
     local out, code =
         support.dev(root, { "connect", "--ssh" }, env({ FAKE_TTY = "1", FAKE_PICK = "b1" }))
     testing.eq(code, 0)
-    testing.ok(out:find("dev connect: hub down", 1, true), out)
+    testing.ok(out:find("Ci said: hub down", 1, true), out)
     testing.ok(calls(root):find("ci ssh b1", 1, true), calls(root))
     fs.remove(root, { recursive = true })
 end)
@@ -217,7 +217,7 @@ testing.test("another ci ssh ls failure prints ci's standard error and keeps its
     assert(fs.write(root .. "/ssh.ls.rc", "7\n"))
     local out, code = support.dev(root, { "connect", "vm1" }, env())
     testing.eq(code, 7)
-    testing.ok(out:find("dev connect: hub down", 1, true), out)
+    testing.ok(out:find("Ci said: hub down", 1, true), out)
     testing.eq(calls(root):find("ssh ci-", 1, true), nil)
     fs.remove(root, { recursive = true })
 end)
@@ -230,7 +230,7 @@ testing.test(
         assert(fs.write(root .. "/ssh.config.rc", "7\n"))
         local out, code = support.dev(root, { "connect", "vm1" }, env())
         testing.eq(code, 7)
-        testing.ok(out:find("dev connect: hub down", 1, true), out)
+        testing.ok(out:find("Ci said: hub down", 1, true), out)
         testing.eq(calls(root), "ci box ls --json\nci ssh config\n")
         fs.remove(root, { recursive = true })
     end
@@ -244,7 +244,7 @@ testing.test(
         local out, code = support.dev(root, { "connect", "vm1" }, env())
         testing.eq(code, 0)
         testing.eq(calls(root), "ci box ls --json\nci ssh config\nci ssh ls --json\nssh ci-vm1\n")
-        testing.ok(out:find("dev connect: example-box is slow", 1, true), out)
+        testing.ok(out:find("Ci said: example-box is slow", 1, true), out)
         testing.ok(out:find("ci: refreshing the session list", 1, true), out)
         fs.remove(root, { recursive = true })
     end
@@ -268,7 +268,7 @@ testing.test("a temporary file that cannot be made still lets the picker list bo
         env({ FAKE_TTY = "1", FAKE_PICK = "b1", TMPDIR = root .. "/missing" })
     )
     testing.eq(code, 0)
-    testing.ok(out:find("dev connect: cannot make a temporary path", 1, true), out)
+    testing.ok(out:find("Cannot make a temporary path", 1, true), out)
     testing.ok(calls(root):find("ci ssh b1", 1, true), calls(root))
     fs.remove(root, { recursive = true })
 end)
@@ -279,7 +279,7 @@ testing.test("a failing ci ssh config prints the first of several error lines", 
     assert(fs.write(root .. "/ssh.config.rc", "1\n"))
     local out, code = support.dev(root, { "connect", "vm1" }, env())
     testing.eq(code, 1)
-    testing.ok(out:find("dev connect: error: first", 1, true), out)
+    testing.ok(out:find("Ci said: error: first", 1, true), out)
     testing.ok(not out:find("error: second", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
@@ -290,6 +290,6 @@ testing.test("a failing ci ssh config prints the error line after a warning", fu
     assert(fs.write(root .. "/ssh.config.rc", "1\n"))
     local out, code = support.dev(root, { "connect", "vm1" }, env())
     testing.eq(code, 1)
-    testing.ok(out:find("dev connect: error: cannot write", 1, true), out)
+    testing.ok(out:find("Ci said: error: cannot write", 1, true), out)
     fs.remove(root, { recursive = true })
 end)

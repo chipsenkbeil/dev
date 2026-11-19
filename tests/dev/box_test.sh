@@ -609,8 +609,8 @@ fx ls "$(lsdoc "$RUNNING")"
 fx ssh.ls '{"protocol":1,"things":[{"name":"-oProxyCommand=x","machine":"m","kind":"host","user":"u","state":"running"},{"name":"ok-vm","machine":"m","kind":"host","user":"u","state":"running"}],"notes":["example-box is unreachable"]}'
 out="$(FAKE_TTY=1 FAKE_PICK=ok-vm box connect 2>&1)"
 assert_not_contains "a connectable with a bad name is not offered" "$(cat "$ITEMS")" "ProxyCommand"
-assert_contains "a bad connectable name is reported" "$out" "skipping a connectable with an invalid name"
-assert_contains "ci's notes are shown" "$out" "dev connect: example-box is unreachable"
+assert_contains "a bad connectable name is reported" "$out" "Skipping a connectable with an invalid name."
+assert_contains "ci's notes are shown" "$out" "Ci said: example-box is unreachable"
 assert_contains "the good connectable still connects" "$(calls)" "ssh ci-ok-vm"
 reset
 fx ls "$(lsdoc "$RUNNING")"
@@ -619,8 +619,8 @@ echo "hub down" >"$FX/ssh.ls.err"
 echo 1 >"$FX/ssh.ls.rc"
 out="$(box connect scratch-vm 2>&1)"
 assert_eq "a failing ci ssh ls exits with ci's code" "$?" "1"
-assert_contains "a failing ci ssh ls prints ci's standard error" "$out" "dev connect: hub down"
-assert_not_contains "a failing ci ssh ls does not print its standard output" "$out" "dev connect: {"
+assert_contains "a failing ci ssh ls prints ci's standard error" "$out" "Ci said: hub down"
+assert_not_contains "a failing ci ssh ls does not print its standard output" "$out" "Ci said: {"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 echo 2 >"$FX/ssh.config.rc"
@@ -629,7 +629,7 @@ assert_eq "an old ci without ssh config still connects a box" "$(calls)" "ci box
 ci ssh config
 ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
-assert_eq "an old ci gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
+assert_eq "an old ci gets one note" "$(printf '%s\n' "$out" | grep -c 'This ci has no ssh command, so only the boxes are listed.')" "1"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 fx ssh.ls '' 2
@@ -640,14 +640,14 @@ ci ssh config
 ci ssh ls --json
 ci box show myproject-k3x --json
 et --ssh-option UserKnownHostsFile=$KH --ssh-option StrictHostKeyChecking=yes -c tmux new -A -s myproject -c $PROJECTS_DIR/myproject user@myproject-k3x"
-assert_eq "a ci with no ssh ls gets one note" "$(printf '%s\n' "$out" | grep -c 'this ci has no ssh command, listing boxes only')" "1"
+assert_eq "a ci with no ssh ls gets one note" "$(printf '%s\n' "$out" | grep -c 'This ci has no ssh command, so only the boxes are listed.')" "1"
 reset
 fx ls "$(lsdoc "$RUNNING")"
 fx ssh.ls '' 1
 echo 'hub unreachable' >"${FX}/ssh.ls.err"
 out="$(FAKE_TTY=1 FAKE_PICK=myproject-k3x box connect 2>&1)"
 assert_eq "a failing ci ssh config or ls still lets the picker attach a box" "$?" "0"
-assert_contains "a failing ci ssh config or ls prints ci's message" "$out" "dev connect: hub unreachable"
+assert_contains "a failing ci ssh config or ls prints ci's message" "$out" "Ci said: hub unreachable"
 assert_contains "a failing ci ssh config or ls still offers the boxes" "$(cat "$ITEMS")" "myproject-k3x"
 assert_contains "the box attaches over et" "$(calls)" "et --ssh-option"
 reset
@@ -656,7 +656,7 @@ fx ssh.ls '' 1
 echo 'hub unreachable' >"${FX}/ssh.ls.err"
 out="$(box connect host-a 2>&1)"
 assert_eq "a named non-box keeps ci's code when ci ssh ls fails" "$?" "1"
-assert_contains "a named non-box prints ci's message" "$out" "dev connect: hub unreachable"
+assert_contains "a named non-box prints ci's message" "$out" "Ci said: hub unreachable"
 reset
 out="$(box connect __new__ 2>&1)"
 assert_eq "connect refuses the new-box sentinel as a name" "$?" "2"

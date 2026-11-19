@@ -222,7 +222,7 @@ local function connect_failed(raw)
     end
     message = shown
     if message ~= "" then
-        verb.note("dev connect: " .. message:gsub("[^\32-\126]", " "))
+        verb.note("Ci said: " .. message:gsub("[^\32-\126]", " "))
     end
 end
 
@@ -249,9 +249,9 @@ end
 ---@return string output what ci wrote to standard output, or its standard error when it failed
 ---@return integer? code exit status of the command
 local function capture_ci(argv)
-    local errfile, reason = fs.mktemp({ prefix = "dev-connect" })
+    local errfile = fs.mktemp({ prefix = "dev-connect" })
     if not errfile then
-        verb.note("dev connect: " .. reason)
+        verb.note("Cannot make a temporary path for the standard error of ci.")
         return dev_os.capture(argv)
     end
     local ok, out, code = pcall(dev_os.capture, argv, { stderr = errfile })
@@ -283,7 +283,7 @@ local function connectables(opts)
         raw, code = capture_ci({ "ci", "ssh", "ls", "--json" })
     end
     if code == NO_CONNECT or old_ci then
-        verb.note("dev connect: this ci has no ssh command, listing boxes only")
+        verb.note("This ci has no ssh command, so only the boxes are listed.")
         return {}
     end
     if code ~= 0 then
@@ -299,7 +299,7 @@ local function connectables(opts)
     end
     for _, note in ipairs(type(doc.notes) == "table" and doc.notes or {}) do
         if type(note) == "string" then
-            verb.note("dev connect: " .. plain(note))
+            verb.note("Ci said: " .. plain(note))
         end
     end
     local found = {}
@@ -308,7 +308,7 @@ local function connectables(opts)
             if safe_name(entry.name) then
                 found[#found + 1] = entry
             else
-                verb.note("dev connect: skipping a connectable with an invalid name")
+                verb.note("Skipping a connectable with an invalid name.")
             end
         end
     end
@@ -321,11 +321,11 @@ local function connectables(opts)
         local reached = alias(entry.name)
         if reached ~= entry.name and listed[reached] then
             verb.note(
-                "dev connect: skipping "
+                "Skipping "
                     .. entry.name
-                    .. ", its alias "
+                    .. ", because its alias "
                     .. reached
-                    .. " is the name of another connectable"
+                    .. " is the name of another connectable."
             )
         else
             kept[#kept + 1] = entry
