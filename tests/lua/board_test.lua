@@ -19,6 +19,7 @@ local support = require("support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
 local OLD_TOKEN = "pomb_OLDtoken9876543210"
+local FROZEN_NAP_SECS = 3
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
@@ -5941,7 +5942,9 @@ local function sandbox(opts)
     executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
     executable(
         root .. "/bin/sleep",
-        '#!/bin/sh\nnap=0.2\n[ -e "$ROOT/freeze" ] && nap=1\nexec '
+        '#!/bin/sh\nnap=0.2\n[ -e "$ROOT/freeze" ] && nap='
+            .. FROZEN_NAP_SECS
+            .. "\nexec "
             .. dev_os.which("sleep")
             .. ' "$nap"\n'
     )
@@ -9213,6 +9216,11 @@ testing.test("a move out of blocked ends the owner lease", function()
     testing.ok(wait_until(function()
         return heartbeats(root) > before
     end))
+    testing.eq(
+        fs.exists(state_file(home)),
+        true,
+        "the keepalive loop lapsed before the second move"
+    )
     out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BACKLOG })
     testing.eq(code, 0, out)
     local released = read(root, "calls"):match("[^\n]*/owner/release\n?")
