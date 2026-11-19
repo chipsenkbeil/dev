@@ -194,6 +194,28 @@ testing.test("lint lets a Done epic with every child Done close without outcomes
     testing.eq(result.output, "No findings.")
 end)
 
+testing.test("lint holds a Done epic with every child Done to 1 to 3 outcomes", function()
+    local cards = {
+        card(1, NAME.DONE, {
+            outcomes = {
+                { id = "o1", name = "a", done = true },
+                { id = "o2", name = "b", done = true },
+                { id = "o3", name = "c", done = true },
+                { id = "o4", name = "d", done = true },
+            },
+        }),
+    }
+    local held = { children = { [cards[1].id] = 2 } }
+    local fake = backend(cards, held)
+    function fake:family(id)
+        return { children = { done = 2, total = held.children[id] } }
+    end
+    local result = cmd_board.run("lint", {}, fake)
+    testing.eq(findings(result.output), {
+        "00000001 Done lacks 1 to 3 Done when outcomes for an epic, not 4",
+    })
+end)
+
 testing.test("lint gives an epic no claimant exemption", function()
     local cards = {
         card(1, NAME.PROGRESS, { claimant = false, outcomes = outcomes(2) }),
