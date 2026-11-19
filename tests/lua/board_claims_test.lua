@@ -195,6 +195,83 @@ testing.test("time stop refuses a card with no running clock", function()
     testing.eq(result.code, 1)
 end)
 
+testing.test("a stop whose claim of the clock file fails logs nothing", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local logged = {}
+    local backend = {}
+    function backend:log_time(id, minutes)
+        logged[#logged + 1] = { id, minutes }
+        return true
+    end
+    local card = { id = CARD, labels = {} }
+    clock.start(card, "reviewer")
+    assert(fs.write(clock.stopping_path(CARD), "taken\n"))
+    local result = clock.stop(backend, card, nil)
+    local kept = clock.read(CARD)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(result.code, 1)
+    testing.eq(logged, {})
+    testing.ok(kept, "the clock was lost")
+end)
+
+testing.test("a start clears a stop's leftover file so the next stop logs", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local logged = {}
+    local backend = {}
+    function backend:log_time(id, minutes)
+        logged[#logged + 1] = { id, minutes }
+        return true
+    end
+    local card = { id = CARD, labels = {} }
+    assert(fs.mkdir(claims.dir(), { parents = true }))
+    assert(fs.write(clock.stopping_path(CARD), "left behind\n"))
+    clock.start(card, "reviewer")
+    local result = clock.stop(backend, card, nil)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(result.code, nil)
+    testing.eq(#logged, 1)
+end)
+
+testing.test("a stop called from inside the first stop's log logs once", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local logged = {}
+    local nested
+    local backend = {}
+    local card = { id = CARD, labels = {} }
+    function backend:log_time(id, minutes)
+        logged[#logged + 1] = { id, minutes }
+        nested = nested or clock.stop(backend, card, nil)
+        return true
+    end
+    clock.start(card, "reviewer")
+    local first = clock.stop(backend, card, nil)
+    local left = clock.read(CARD)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(#logged, 1)
+    testing.eq(nested.code, 1)
+    testing.eq(first.code, nil)
+    testing.eq(left, nil)
+end)
+
+testing.test("a failed log puts the clock back so it keeps running", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local backend = {}
+    function backend:log_time()
+        return nil, "pomb is away"
+    end
+    local card = { id = CARD, labels = {} }
+    clock.start(card, "reviewer")
+    local result = clock.stop(backend, card, nil)
+    local kept = clock.read(CARD)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(result.code, 1)
+    testing.ok(kept, "the clock was lost")
+end)
+
 local function logging_backend()
     local backend = { logged = {}, stages = board.stages({}, { support.COLUMN_NAME.DONE }) }
     function backend:log_time(id, minutes, role)

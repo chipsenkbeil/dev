@@ -5,6 +5,7 @@ local guards = require("dev.board.guards")
 
 local SUFFIX = ".clock"
 local BEAT_SUFFIX = ".beat"
+local STOPPING_SUFFIX = ".stopping"
 local SECONDS_PER_MINUTE = 60
 local START = "start"
 local STOP = "stop"
@@ -63,6 +64,13 @@ function M.path(card)
     return claims.path(card) .. SUFFIX
 end
 
+---Name the file a stop moves the clock to while it logs the stretch.
+---@param card string the card's full id
+---@return string path the file
+function M.stopping_path(card)
+    return M.path(card) .. STOPPING_SUFFIX
+end
+
 ---Read a card's running clock.
 ---@param card string the card's full id
 ---@return dev.board.clock.State? state the clock, nil when none runs
@@ -103,6 +111,7 @@ function M.start(card, role)
             "Card " .. prefix .. " already has a running " .. running.role .. " clock."
         )
     end
+    fs.remove(M.stopping_path(card.id))
     local ok, message = fs.mkdir(claims.dir(), { parents = true })
     if ok then
         ok, message = fs.write(
@@ -162,11 +171,20 @@ function M.stop(backend, card, note, at)
         return guards.failure("Card " .. prefix .. " has no running clock.")
     end
     local minutes = M.minutes((at or M.now()) - running.start)
-    local ok, message = backend:log_time(card.id, minutes, running.role, note)
+    local claimed = M.stopping_path(card.id)
+    local ok, message = fs.move(M.path(card.id), claimed)
     if not ok then
+        return guards.failure("Card " .. prefix .. " has a clock another stop already claimed.")
+    end
+    ok, message = backend:log_time(card.id, minutes, running.role, note)
+    if not ok then
+        local restored, why = fs.move(claimed, M.path(card.id))
+        if not restored then
+            return guards.failure(message .. " The clock could not be put back: " .. why)
+        end
         return guards.failure(message)
     end
-    fs.remove(M.path(card.id))
+    fs.remove(claimed)
     fs.remove(M.beat_path(card.id))
     return { output = "logged " .. minutes .. " minutes as " .. running.role .. " on " .. prefix }
 end
