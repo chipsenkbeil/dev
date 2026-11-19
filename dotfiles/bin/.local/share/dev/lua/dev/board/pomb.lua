@@ -3004,6 +3004,28 @@ function Backend:mark_blocked(id)
     return true, nil, true
 end
 
+---Set flags on the column named `name`.
+---@param name string the column to change
+---@param fields table<string, boolean> the flags to send, by Pomb's column key
+---@return boolean? ok
+---@return string? message why the change failed
+function Backend:set_column(name, fields)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local id = self:__column_id(name)
+    if not id then
+        return nil, "The board has no column " .. name .. "."
+    end
+    local done
+    done, message = self:__request("PATCH", "/api/columns/" .. id, fields)
+    if not done then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:set_stage(id, stage)
     local done, message = self:__request("PATCH", "/api/columns/" .. id, { stage = stage })
     if not done then

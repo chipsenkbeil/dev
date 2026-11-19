@@ -559,6 +559,19 @@ testing.test("limits --set under a lead name sends the lead token", function()
     testing.ok(read(box, "stdin"):find(LEAD_SECRET, 1, true), read(box, "stdin"))
 end)
 
+testing.test("column under a lead name sends the lead token to the column", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "column", NAME.REVIEW, "--blocked", "on" }, LEAD)
+    testing.eq(code, 0, out)
+    testing.ok(read(box, "calls"):find("-X PATCH", 1, true), read(box, "calls"))
+    testing.ok(read(box, "calls"):find("/api/columns/" .. ID.REVIEW, 1, true), read(box, "calls"))
+    testing.ok(read(box, "stdin"):find(LEAD_SECRET, 1, true), read(box, "stdin"))
+end)
+
 testing.test("limits without --set under a lead name sends the worker token", function()
     local box = sandbox({
         project = POMB,

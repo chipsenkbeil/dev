@@ -608,6 +608,10 @@ function Backend:set_limit_group()
     return nil, "A local board has no limit group to set."
 end
 
+function Backend:set_column()
+    return nil, "A local board has no column flags to set."
+end
+
 function Backend:add_checks_field()
     return true
 end

@@ -130,6 +130,8 @@ local COMMIT_CHARS = 12
 local SEAT_HELD_CODE = "seat_held"
 local WAIT_FLAG = "--wait"
 local SET_FLAG = "--set"
+local CLEARS_BLOCKERS_FLAG = "--clears-blockers"
+local BLOCKED_FLAG = "--blocked"
 local ID_ONLY_FLAG = "--id-only"
 local SWITCH = guards.SWITCH
 local MAX_WAIT_SECONDS = 86400
@@ -4267,6 +4269,67 @@ function commands.columns(backend, args)
     return { output = table.concat(lines, "\n") }
 end
 
+---Fail a board edit, naming the lead token when Pomb refused it.
+---@param message string the backend's reason
+---@return dev.cmd.board.Result result the failure
+local function board_edit_failure(message)
+    if message:find("pomb answered 403", 1, true) then
+        return failure(
+            "Pomb refused the change. This token may not edit the board, "
+                .. "so use a lead token, which holds columns.edit."
+        )
+    end
+    return failure(message)
+end
+
+---Column field by flag name
+local COLUMN_SWITCHES = {
+    [CLEARS_BLOCKERS_FLAG] = "clears_blockers",
+    [BLOCKED_FLAG] = "is_blocked",
+}
+
+function commands.column(backend, args)
+    local flags, words = parse(args, { [CLEARS_BLOCKERS_FLAG] = true, [BLOCKED_FLAG] = true })
+    if not flags then
+        return words
+    end
+    if #words ~= 1 then
+        return usage("Needs a column name.")
+    end
+    local fields = {}
+    for flag, field in pairs(COLUMN_SWITCHES) do
+        local value = flags[flag]
+        if value ~= nil then
+            if value ~= "on" and value ~= "off" then
+                return usage("The " .. flag .. " flag takes on or off.")
+            end
+            fields[field] = value == "on"
+        end
+    end
+    if next(fields) == nil then
+        return usage("Needs " .. CLEARS_BLOCKERS_FLAG .. " or " .. BLOCKED_FLAG .. ".")
+    end
+    local rows, message = backend:columns()
+    if not rows then
+        return failure(message)
+    end
+    local name
+    for _, column in ipairs(rows) do
+        if column.name:lower() == words[1]:lower() then
+            name = column.name
+        end
+    end
+    if not name then
+        return failure("The board has no column " .. words[1] .. ".")
+    end
+    local done
+    done, message = backend:set_column(name, fields)
+    if not done then
+        return board_edit_failure(message)
+    end
+    return { output = "Set the flags of " .. name .. "." }
+end
+
 local function set_limit(backend, value, words)
     local limit = value:match("^%d+$") and tonumber(value)
     if not limit or limit < 1 then
@@ -4279,13 +4342,7 @@ local function set_limit(backend, value, words)
     local columns = { stages.progress, stages.review, stages.verify }
     local done, message = backend:set_limit_group(columns, limit)
     if not done then
-        if message:find("pomb answered 403", 1, true) then
-            return failure(
-                "Pomb refused the change. This token may not edit the board, "
-                    .. "so use a lead token, which holds columns.edit."
-            )
-        end
-        return failure(message)
+        return board_edit_failure(message)
     end
     return {
         output = string.format(
@@ -5184,6 +5241,8 @@ for sub in pairs(commands) do
             and settings(ctx).backend == board.Backend.POMB
         then
             backend = open_lead(ctx, "sets a limit", "columns.edit")
+        elseif sub == "column" and settings(ctx).backend == board.Backend.POMB then
+            backend = open_lead(ctx, "sets a column flag", "columns.edit")
         else
             backend, pending = open_board(ctx)
             if

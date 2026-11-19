@@ -1,5 +1,8 @@
 local testing = require("dev.testing")
 local board = require("dev.board")
+local cmd_board = require("dev.cmd.board")
+local localboard = require("dev.board.localboard")
+local pomb = require("dev.board.pomb")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -236,4 +239,92 @@ testing.test("board.find names a project with no board", function()
     local found, message = board.find(scm.workspace(root))
     testing.eq(found, nil)
     testing.ok(message:find("no `[board]` section", 1, true), tostring(message))
+end)
+
+local function column_backend(answer)
+    local backend = {
+        patches = {},
+        column_map = {},
+    }
+    function backend:done_columns()
+        return {}
+    end
+    function backend:columns()
+        return { { name = "Release" }, { name = "Blocked" } }
+    end
+    function backend:set_column(name, fields)
+        self.patches[#self.patches + 1] = { name, fields }
+        if answer then
+            return nil, answer
+        end
+        return true
+    end
+    return backend
+end
+
+testing.test("column sets the clears-blockers flag of the named column", function()
+    local backend = column_backend()
+    local result = cmd_board.run("column", { "release", "--clears-blockers", "on" }, backend)
+    testing.eq(result.code, nil, result.output)
+    testing.eq(backend.patches, { { "Release", { clears_blockers = true } } })
+    result = cmd_board.run("column", { "Release", "--clears-blockers", "off" }, backend)
+    testing.eq(backend.patches[2], { "Release", { clears_blockers = false } })
+end)
+
+testing.test("column sets the blocked flag of the named column", function()
+    local backend = column_backend()
+    local result = cmd_board.run("column", { "Blocked", "--blocked", "on" }, backend)
+    testing.eq(result.code, nil, result.output)
+    testing.eq(backend.patches, { { "Blocked", { is_blocked = true } } })
+end)
+
+testing.test("column sends the flags to Pomb as a PATCH of the column id", function()
+    local backend = assert(pomb.new({ url = "https://pomb.example", name = "mine", token = "t" }))
+    local sent = {}
+    function backend:__load()
+        self.__detail = { columns = { { id = "col-9", name = "Release" } } }
+        return true
+    end
+    function backend:__request(method, path, body)
+        sent = { method, path, body }
+        return {}
+    end
+    testing.eq(backend:set_column("release", { clears_blockers = true }), true)
+    testing.eq(sent, { "PATCH", "/api/columns/col-9", { clears_blockers = true } })
+    local done, message = backend:set_column("Nope", { is_blocked = true })
+    testing.eq(done, nil)
+    testing.eq(message, "The board has no column Nope.")
+end)
+
+testing.test("column prints the permission message for a Pomb 403", function()
+    local backend = column_backend("pomb answered 403")
+    local result = cmd_board.run("column", { "Release", "--blocked", "on" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("Pomb refused the change", 1, true), result.message)
+    testing.ok(result.message:find("columns.edit", 1, true), result.message)
+end)
+
+testing.test("column refuses an unknown name, a bad value and a missing flag", function()
+    local backend = column_backend()
+    local result = cmd_board.run("column", { "Nope", "--blocked", "on" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "The board has no column Nope.")
+    result = cmd_board.run("column", { "Release", "--blocked", "yes" }, backend)
+    testing.eq(result.code, 2)
+    result = cmd_board.run("column", { "Release" }, backend)
+    testing.eq(result.code, 2)
+    result = cmd_board.run("column", {}, backend)
+    testing.eq(result.code, 2)
+    testing.eq(backend.patches, {})
+end)
+
+testing.test("column on a local board is refused with a sentence", function()
+    local backend = column_backend()
+    local own = localboard.new({ name = "mine", path = "unused.json" })
+    function backend:set_column(...)
+        return own:set_column(...)
+    end
+    local result = cmd_board.run("column", { "Release", "--blocked", "on" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "A local board has no column flags to set.")
 end)

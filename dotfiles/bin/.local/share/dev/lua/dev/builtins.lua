@@ -314,6 +314,13 @@ return {
         desc = "List the columns of a board in board order",
     },
     {
+        words = { "board", "column" },
+        handler = "lua",
+        flags = "--clears-blockers --blocked",
+        usage = "dev board column NAME [--clears-blockers on|off] [--blocked on|off]",
+        desc = "Set the clears-blockers or blocked flag of a Pomb column",
+    },
+    {
         words = { "board", "limits" },
         handler = "lua",
         flags = "--set",

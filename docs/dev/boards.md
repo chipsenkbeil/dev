@@ -1912,6 +1912,20 @@ this project's board.
   exit 1.
 - A second word is exit 2.
 
+### column
+
+`dev board column NAME [--clears-blockers on|off] [--blocked on|off]` sets the
+flags of the column named NAME on this project's Pomb board. It matches the
+name in any case and sends `PATCH /api/columns/{id}` with the named flags as
+booleans.
+
+- A flag takes `on` or `off`, and any other value is exit 2.
+- A call with no flag, or with no column name, is exit 2.
+- A name the board does not hold is exit 1 and says so.
+- A local board has no such flags and refuses with exit 1.
+- A Pomb 403 prints the same permission message as `dev board limits --set`,
+  which names the lead token and `columns.edit`.
+
 ### limits
 
 `dev board limits [BOARD]` lists the limits of the board named BOARD, else of
