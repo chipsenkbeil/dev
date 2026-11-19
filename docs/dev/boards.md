@@ -1433,6 +1433,20 @@ no list keeps the rules above:
 required = ["dev --remote lint", "dev --remote test"]
 ```
 
+### landing before starting
+
+A runner lands what passed before it takes a new card. `take` and `move CARD
+progress` are refused while In Progress, Review and Verify together hold the
+group limit, whoever claimed them.
+
+- A board with no limit group is uncapped.
+- Cards in Release do not count.
+- A card labelled `trunk-blocker` skips the limit.
+- The refusal names the cards in the group, so land the first one in Verify
+  whose outcomes are all ticked, or help its runner land it, then take again.
+- The landing turn covers only the rebase and the push, so run `dev board
+  check` and `dev land` without `dev board turn`.
+
 ## Local boards
 
 `backend = "local"` keeps the board in one JSON file, so a project needs no Pomb
