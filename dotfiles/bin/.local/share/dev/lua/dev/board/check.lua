@@ -494,9 +494,9 @@ local function timeout_reason(run_id)
     local doc = code == 0 and json.decode(out) or nil
     local status = type(doc) == "table" and doc.status or nil
     if type(status) ~= "string" then
-        return "the ci run state could not be read at the limit"
+        return "The ci run state could not be read at the limit."
     end
-    return "the ci run was " .. status .. " at the limit and may still finish"
+    return "The ci run was " .. status .. " at the limit and may still finish."
 end
 
 ---Make the `on_text` callback that hands the first `run <id>` line to `on_run_id`.
@@ -559,7 +559,7 @@ function M.run(opts)
     end
     if result == M.Result.TIMEOUT and run_id then
         reason = timeout_reason(run_id)
-        note = note or (reason:sub(1, 1):upper() .. reason:sub(2) .. ".")
+        note = note or reason
     end
     if opts.argv[1] == RG_COMMAND and code == RG_USAGE_EXIT then
         result = M.Result.ERROR
@@ -822,13 +822,13 @@ function M.run_group(opts)
             row.result, row.code, row.reason = M.Result.TIMEOUT, code, reason
             row.tail = tail_of(output)
             if reason then
-                row.tail = reason:sub(1, 1):upper() .. reason:sub(2) .. ".\n" .. row.tail
+                row.tail = reason .. "\n" .. row.tail
             end
         elseif not (found and found.passed) and not (code == 0 and not results) then
             row.result = M.Result.FAIL
             row.code = found and found.code or (code ~= 0 and code or 1)
             if not found then
-                row.reason = run_id and "the ci run state could not be read" or last_line(output)
+                row.reason = run_id and "The ci run state could not be read." or last_line(output)
             end
             row.tail = run_id and found and job_tail(run_id, entry.job) or tail_of(output)
         end

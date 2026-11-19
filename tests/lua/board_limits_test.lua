@@ -616,7 +616,7 @@ testing.test("limits exits 1 with no limit group when the board has none", funct
     })
     local out, code = dev(box, { "board", "limits" }, "")
     testing.eq(code, 1, out)
-    testing.eq(out, "no limit group\n")
+    testing.eq(out, "The board has no limit group.\n")
 end)
 
 testing.test("limits names a column limit with no group and still exits 1", function()
@@ -627,7 +627,7 @@ testing.test("limits names a column limit with no group and still exits 1", func
     })
     local out, code = dev(box, { "board", "limits", "dotfiles" }, "")
     testing.eq(code, 1, out)
-    testing.eq(out, NAME.READY .. ": 5 count\nno limit group\n")
+    testing.eq(out, NAME.READY .. ": 5 count\nThe board has no limit group.\n")
 end)
 
 testing.test("limits names another board and reads its limits", function()

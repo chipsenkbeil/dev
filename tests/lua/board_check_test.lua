@@ -608,14 +608,15 @@ end
 
 testing.test("a timeout row records the state of its ci run", function()
     local body, out = slow_row([[echo '{"status":"running"}']])
-    local reason = "the ci run was running at the limit and may still finish"
+    local reason = "The ci run was running at the limit and may still finish."
     testing.ok(body:find("1 timeout 8cb600\n  " .. reason, 1, true), body)
-    testing.ok(out:find("The ci run was running at the limit", 1, true), out)
+    testing.ok(out:find(reason, 1, true), out)
+    testing.ok(not out:find(reason .. ".", 1, true), out)
 end)
 
 testing.test("a timeout row says when the ci state is unreadable", function()
     local body = slow_row("exit 1")
-    testing.ok(body:find("the ci run state could not be read at the limit", 1, true), body)
+    testing.ok(body:find("The ci run state could not be read at the limit.", 1, true), body)
 end)
 
 local PASSED =
@@ -741,7 +742,7 @@ testing.test("a shared run that outlasts the limit records every row as a timeou
         timeout = "2",
     })
     testing.eq(code, 1, out)
-    local reason = "the ci run was running at the limit and may still finish"
+    local reason = "The ci run was running at the limit and may still finish."
     testing.ok(body:find("1 timeout 8cb600\n  " .. reason, 1, true), body)
     testing.ok(body:find("2 timeout 8cb600\n  " .. reason, 1, true), body)
 end)

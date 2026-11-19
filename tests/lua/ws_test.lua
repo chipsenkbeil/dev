@@ -1353,7 +1353,7 @@ testing.test("prune forgets a jj workspace whose folder is gone", function()
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Forgot workspace gone1. Its folder " .. dir .. "gone1 is gone.",
             "Pruned 1 workspace and 0 heads. Left 0 items alone."
         )
@@ -1469,7 +1469,7 @@ testing.test("prune abandons an empty jj head no workspace or bookmark holds", f
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Abandoned empty head " .. first:sub(1, 12) .. ".",
             "Abandoned empty head 0123456789ab (deploy marker).",
             "Pruned 0 workspaces and 2 heads. Left 0 items alone."
@@ -1496,7 +1496,7 @@ testing.test("prune lists a non-empty jj head and a stale bookmark and changes n
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Left non-empty head cccccccccccc (some work) alone. Nothing holds it.",
             "Left bookmark feat-x alone. It is not on trunk.",
             "Left bookmark old alone. It is not on trunk.",
@@ -1723,7 +1723,7 @@ testing.test("prune dry-run abandons the empty head a forgotten jj workspace fre
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Would forget workspace gone1. Its folder " .. dir .. "gone1 is gone.",
             "Would abandon empty head ffffffffffff.",
             "Would prune 1 workspace and 1 head. Left 0 items alone."
@@ -1749,7 +1749,7 @@ testing.test("prune dry-run lists the non-empty head a forgotten jj workspace fr
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Would forget workspace gone1. Its folder " .. dir .. "gone1 is gone.",
             "Left non-empty head dddddddddddd (chore: bump) alone. Nothing holds it.",
             "Would prune 1 workspace and 0 heads. Left 1 item alone."
@@ -1777,7 +1777,7 @@ testing.test("prune dry-run holds the heads of a jj workspace it does not forget
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Would prune 0 workspaces and 0 heads. Left 0 items alone."
         )
     )
@@ -2131,7 +2131,7 @@ testing.test("prune goes on after a failed removal and exits with its code", fun
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Kept worktree gone1. The git command exited 3.",
             "Kept worktree gone2. The git command exited 3.",
             "Git keeps no empty heads, so only worktrees are pruned.",
@@ -2156,7 +2156,7 @@ testing.test("prune leaves the empty heads when the abandon fails", function()
     testing.eq(
         out,
         lines(
-            'Skipped the card test: "this project has no board".',
+            "Skipped the card test. This project has no board.",
             "Left the empty heads alone. The jj abandon command exited 3.",
             "Pruned 0 workspaces and 0 heads. Left 0 items alone."
         )

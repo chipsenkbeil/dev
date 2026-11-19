@@ -243,7 +243,7 @@ local function filed()
         return nil, FILE_EXPIRED
     end
     if not found.token:find(TOKEN_PATTERN) then
-        return nil, "the token file for DEV_AGENT holds a token that is not plain text"
+        return nil, "The token file for DEV_AGENT holds a token that is not plain text."
     end
     return found.token
 end
@@ -1313,8 +1313,9 @@ function Backend:add(name, column, opts)
                     .. stages.backlog
                     .. " with its outcomes but the move to "
                     .. column
-                    .. " failed: "
+                    .. " failed. Pomb's error was "
                     .. message
+                    .. "."
         end
         task.column_id = final
     end
@@ -1439,7 +1440,7 @@ function Backend:ask(id, question, fence)
     for index, choice in ipairs(question.choices) do
         local column = self:__column_id(choice.column)
         if not column then
-            return nil, "choice " .. index .. " names " .. choice.column .. ", which is no column"
+            return nil, "Choice " .. index .. " names " .. choice.column .. ", which is no column."
         end
         choices = choices or {}
         choices[index] = { label = choice.label, column_id = column }
@@ -1485,7 +1486,7 @@ function Backend:answer(id, choice, quote, fence)
         end
     end
     if #open == 0 then
-        return nil, "the card holds no open question to answer"
+        return nil, "The card holds no open question to answer."
     end
     local texts = {}
     for index, comment in ipairs(open) do
@@ -1881,7 +1882,8 @@ function Backend:attach(id, path)
         return nil, unavailable("pomb sent an answer dev cannot read")
     end
     if type(result.error) == "table" then
-        return nil, present(result.error.message) or present(result.error.code) or "refused"
+        return nil,
+            present(result.error.message) or present(result.error.code) or "Pomb refused it."
     end
     local made = result.attachment
     if type(made) ~= "table" then
@@ -1965,8 +1967,8 @@ function Backend:__drop_link(source, kind, target)
                 and present(doc.board_id) == nil
             then
                 return nil,
-                    "pomb kept the link: this token can delete only the links it created, and this one"
-                        .. " was made by another token or before Pomb 0.5.40"
+                    "Pomb kept the link: this token can delete only the links it created, and this one"
+                        .. " was made by another token or before Pomb 0.5.40."
             end
             return nil, message
         end
@@ -1990,7 +1992,7 @@ function Backend:unlink(id, kind, other)
         end
     end
     if not removed then
-        return nil, "pomb has no " .. kind .. " link from " .. id .. " to " .. other
+        return nil, "Pomb has no " .. kind .. " link from " .. id .. " to " .. other .. "."
     end
     return true
 end
@@ -2225,7 +2227,7 @@ function Backend:add_limit_group(names, limit)
         end
     end
     if #ids ~= #names then
-        return nil, "the board lacks a column of " .. table.concat(names, ", ")
+        return nil, "The board lacks a column of " .. table.concat(names, ", ") .. "."
     end
     local made
     made, message = self:__request(
@@ -2371,7 +2373,7 @@ function Backend:claim(id, claimant, opts)
     if unfinished > 0 then
         return nil,
             string.format(
-                "the card is an epic and cannot be taken: %d of %d children are open",
+                "The card is an epic and cannot be taken. %d of %d children are open.",
                 unfinished,
                 opts.epic.total
             )
@@ -2460,7 +2462,7 @@ function Backend:keepalive(id, fence, ticks, state, name)
     }, { unset = CHILD_UNSET, stderr = "null" })
     local pid = tonumber(out:match("%d+"))
     if code ~= 0 or not pid then
-        return nil, "cannot start the keep-alive loop"
+        return nil, "Cannot start the keep-alive loop."
     end
     return pid
 end
@@ -2494,7 +2496,8 @@ function Backend:mint(role, name, hours)
     end
     if not id then
         table.sort(names)
-        return nil, "pomb has no agent role named " .. role .. ", the roles are " .. plural(names)
+        return nil,
+            "Pomb has no agent role named " .. role .. ". The roles are " .. plural(names) .. "."
     end
     local reply, status, doc
     reply, message, status, doc = self:__request(
@@ -2507,23 +2510,23 @@ function Backend:mint(role, name, hours)
     local limit = refusal:match("(%d+) hours at most")
     if status == HTTP_ERROR and limit then
         return nil,
-            "pomb refused the lifetime. The owner allows "
+            "Pomb refused the lifetime. The owner allows "
                 .. limit
-                .. " hours at most. Pass a lower --hours"
+                .. " hours at most. Pass a lower --hours."
     elseif status == CONFLICT then
         return nil,
-            "another token already has the name "
+            "Another token already has the name "
                 .. name
-                .. ", pick another --as or wait for that token to expire"
+                .. ". Pick another --as or wait for that token to expire."
     elseif status == HTTP_ERROR and code == UNKNOWN_ROLE then
-        return nil, "pomb has no agent role named " .. role
+        return nil, "Pomb has no agent role named " .. role .. "."
     elseif status == FORBIDDEN and code == EXCEEDS_GRANT then
         return nil,
-            "the token in use cannot issue the "
+            "The token in use cannot issue the "
                 .. role
                 .. " role: it asks for more than this token holds or the role is granted on a board this token lacks ("
                 .. (present(doc.message) or "no message")
-                .. ")"
+                .. ")."
     elseif not reply then
         return nil, message
     end
@@ -2586,7 +2589,8 @@ function Backend:revoke(name)
     local ok
     ok, message = tokenfile.remove(name)
     if not ok then
-        return nil, "revoked the token but " .. message
+        local why = message:gsub("^%l", string.upper)
+        return nil, "Revoked the token. " .. why .. "."
     end
     return { revoked = revoked }
 end
@@ -2612,7 +2616,7 @@ function Backend:admin()
     if type(who.permissions) ~= "table" then
         local scope = present(who.scope) or "none"
         if scope ~= ADMIN then
-            return nil, "the approved token has the " .. scope .. " scope, init needs admin"
+            return nil, "The approved token has the " .. scope .. " scope, init needs admin."
         end
         return true
     end
@@ -2636,16 +2640,16 @@ function Backend:admin()
         end
     end
     if wanted == 0 then
-        return nil, "the permission catalog lists no admin preset, so the token cannot be checked"
+        return nil, "The permission catalog lists no admin preset, so the token cannot be checked."
     end
     if #missing > 0 then
         return nil,
-            "the approved token lacks the "
+            "The approved token lacks the "
                 .. table.concat(missing, ", ")
-                .. " permission, init needs the admin preset"
+                .. " permission, init needs the admin preset."
     end
     if who.boards ~= ALL_BOARDS then
-        return nil, "the approved token is assigned only some boards, init needs all of them"
+        return nil, "The approved token is assigned only some boards, init needs all of them."
     end
     return true
 end
@@ -2855,7 +2859,7 @@ function Backend:add_highlights(wanted)
     local current
     current, message = self:__request("GET", path)
     if type(current) ~= "table" then
-        return nil, message or "pomb sent label settings dev cannot read"
+        return nil, message or "Pomb sent label settings that dev cannot read."
     end
     local highlights = type(current.highlights) == "table" and current.highlights or {}
     local held = {}

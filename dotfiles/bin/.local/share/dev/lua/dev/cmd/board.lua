@@ -4402,7 +4402,7 @@ function commands.limits(backend, args)
             .. (group.count and (" (" .. group.count .. " in flight)") or "")
     end
     if #limits.groups == 0 then
-        lines[#lines + 1] = "no limit group"
+        lines[#lines + 1] = "The board has no limit group."
         return { output = table.concat(lines, "\n"), code = FAILURE }
     end
     return { output = table.concat(lines, "\n") }
@@ -4471,21 +4471,22 @@ function commands.lint(backend, args)
             comments = function()
                 local list, why = backend:comments(card.id)
                 if not list then
-                    return nil, "could not read the comments of " .. card.id .. ": " .. why
+                    return nil,
+                        "Could not read the comments of " .. card.id .. ": " .. sentence(why)
                 end
                 return list
             end,
             links = function()
                 local list, why = backend:links(card.id)
                 if not list then
-                    return nil, "could not read the links of " .. card.id .. ": " .. why
+                    return nil, "Could not read the links of " .. card.id .. ": " .. sentence(why)
                 end
                 return list
             end,
             children = function()
                 local family, why = backend:family(card.id)
                 if not family then
-                    return nil, "could not read the family of " .. card.id .. ": " .. why
+                    return nil, "Could not read the family of " .. card.id .. ": " .. sentence(why)
                 end
                 local counts = family.children or { done = 0, total = 0 }
                 return { done = counts.done, total = counts.total, epic = family.epic }
@@ -4912,22 +4913,22 @@ local function description_args(args)
         return nil, words.message
     end
     if #words ~= 1 then
-        return nil, "needs a card, and the description from --file PATH or standard input"
+        return nil, "Needs a card, and the description from --file PATH or standard input."
     end
     local text, message
     if flags["--file"] then
         text, message = fs.read(flags["--file"])
         if not text then
-            return nil, "cannot read " .. flags["--file"] .. ": " .. tostring(message)
+            return nil, "Cannot read " .. flags["--file"] .. ": " .. sentence(tostring(message))
         end
     elseif dev_os.isatty(0) then
-        return nil, "needs the description from --file PATH or standard input"
+        return nil, "Needs the description from --file PATH or standard input."
     else
         text = io.read("*a")
     end
     text = text:gsub("%s+$", "")
     if text == "" then
-        return nil, "the new description is empty"
+        return nil, "The new description is empty."
     end
     if flags["--board"] then
         return { words[1], "--board", flags["--board"], text }
@@ -4987,7 +4988,7 @@ end
 ---@return string? why why the board was not read
 function M.finished(root)
     if config.get(root, "board.backend") == nil then
-        return nil, "this project has no board"
+        return nil, "This project has no board."
     end
     local backend, message = M.open(settings({ root = root }))
     if not backend then

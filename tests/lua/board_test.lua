@@ -8167,7 +8167,7 @@ testing.test("ask names a choice whose column the board lacks and posts nothing"
         "Nowhere=Lost",
     })
     testing.eq(code, 1)
-    testing.ok(out:find("choice 1 names Nowhere, which is no column", 1, true), out)
+    testing.ok(out:find("Choice 1 names Nowhere, which is no column.", 1, true), out)
     testing.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
 end)
 
@@ -8407,8 +8407,8 @@ testing.test(
         testing.eq(code, 1, out)
         testing.eq(
             out,
-            "pomb kept the link: this token can delete only the links it created, and this one"
-                .. " was made by another token or before Pomb 0.5.40\n"
+            "Pomb kept the link: this token can delete only the links it created, and this one"
+                .. " was made by another token or before Pomb 0.5.40.\n"
         )
         testing.ok(
             read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links/l1", 1, true),
@@ -8963,7 +8963,7 @@ testing.test("take refuses an epic with an open child and grabs nothing", functi
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("cannot be taken: 2 of 3 children are open", 1, true), out)
+    testing.ok(out:find("cannot be taken. 2 of 3 children are open.", 1, true), out)
     testing.eq(read(root, "calls"):find("/owner\n", 1, true), nil)
 end)
 

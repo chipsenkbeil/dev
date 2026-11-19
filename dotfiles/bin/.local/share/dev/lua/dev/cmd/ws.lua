@@ -1191,7 +1191,7 @@ end
 local function finished_cards(root)
     local finished, why = cmd_board.finished(root)
     if not finished then
-        verb.say(string.format('Skipped the card test: "%s".', quoted_reason(why)))
+        verb.say(string.format("Skipped the card test. %s", sentence(why)))
     end
     return finished
 end

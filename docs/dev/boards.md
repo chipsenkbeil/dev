@@ -1262,7 +1262,7 @@ card's `parent` link instead.
 
 Pomb lets a token delete only the links it created. A link another token made,
 or one made before Pomb 0.5.40 (which records no creator), gets a 403
-`permission_denied`. dev reports it as `pomb kept the link: ...` and exits 1,
+`permission_denied`. dev reports it as `Pomb kept the link: ...` and exits 1,
 leaving the link in place.
 
 Unlike `link`, `unlink` is not queued while Pomb is unreachable.
@@ -1937,7 +1937,7 @@ this project's board, from a fresh `GET /api/boards/{id}`.
 - It then prints one line per limit group as `COLUMN, COLUMN: N (C in flight)`,
   where C is the group's `count`. A group always counts cards.
 - A board with no limit group is exit 1 and the last line says
-  `no limit group`.
+  `The board has no limit group.`
 - A local board is exit 1.
 - A second word is exit 2.
 
@@ -2083,7 +2083,7 @@ Outcomes:
   Ready without them.
 - A failed move says
   `<id prefix> was added to Backlog with its outcomes but the move to Ready
-  failed: <reason>`.
+  failed. Pomb's error was <reason>.`.
 
 Checks:
 
@@ -2275,7 +2275,7 @@ to OTHER (a card of this board, or `BOARD:PREFIX`).
 - A Pomb board reads `GET /api/tasks/{id}/links` on the holder for the link's
   id and sends `DELETE /api/tasks/{id}/links/{link_id}`.
 - A 403 `permission_denied` for `links.delete` that names no board exits 1 as
-  `pomb kept the link`, and leaves the link in place.
+  `Pomb kept the link`, and leaves the link in place.
 - The change is not queued while Pomb is unreachable (exit 1,
   `board unavailable`).
 - A local board removes the link from the card that holds it.
@@ -2691,7 +2691,7 @@ How a row runs:
   exits 124 or is killed from outside.
 - When a timed-out row printed a ci run id, dev reads the run's state with
   `ci ps RUN --json`. The record puts one reason line under the row, for
-  example `the ci run was running at the limit and may still finish`, or says
+  example `The ci run was running at the limit and may still finish.`, or says
   the state could not be read. The run keeps going, so read it before a rerun.
 - A card with no rows is exit 1.
 
