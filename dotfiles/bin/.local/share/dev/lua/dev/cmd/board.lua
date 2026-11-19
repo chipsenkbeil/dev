@@ -10,6 +10,7 @@ local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 local init = require("dev.board.init")
 local json = require("dev.json")
+local land = require("dev.board.land")
 local lint = require("dev.board.lint")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
@@ -3363,6 +3364,23 @@ function commands.land(backend, args)
                 .. table.concat(all, "\n  - ")
                 .. (kept and wiring.kept_note(short) or "")
         )
+    end
+    local _, empty = land.state(backend.root)
+    if #words == 1 and (vcs.backend(backend.root) == vcs.GIT or empty) then
+        local settled = wiring.settle({
+            backend = backend,
+            card = card,
+            comments = list,
+            name = name,
+            empty = empty,
+            move = function(home, move_words)
+                return move_card(home, move_words, { landed = true })
+            end,
+            clean_up = M.clean_up,
+        })
+        if settled then
+            return settled
+        end
     end
     local companions, companion_err = companion_cards({
         backend = backend,

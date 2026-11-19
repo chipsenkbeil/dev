@@ -1465,6 +1465,26 @@ function M.holds(root, commit, rev)
     return out ~= nil and out:match("^%x+\n") ~= nil
 end
 
+---Read the commit on the remote trunk that a check record's change landed as.
+---@param root string the project root
+---@param record dev.board.check.Record the card's newest run record
+---@return string? commit the full commit id, nil when trunk does not hold the change or a read
+---   failed
+function M.settled_commit(root, record)
+    if vcs.backend(root) ~= vcs.GIT then
+        return M.trunk_commit(root, record.change)
+    end
+    local found = forge.resolve(root)
+    if not found then
+        return nil
+    end
+    local ref = vcs.remote_trunk(root, found.remote)
+    if not ref or not git_out(root, "merge-base", "--is-ancestor", record.commit, ref) then
+        return nil
+    end
+    return record.commit
+end
+
 local function git_run(root)
     local found, why = forge.resolve(root)
     if not found then

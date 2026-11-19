@@ -2917,6 +2917,16 @@ dev board land merges a card once Verify passes.
 A card's change stays unmerged until land merges it.
 `jj land --no-card` is a second merge path, and a forge merge bypasses both.
 
+When a land reached trunk but its board call failed, the card stays in Verify
+and the working copy holds nothing to land. Rerun `dev board land CARD` in the
+same workspace. With a single card, it reads the newest `run` check record
+and, when trunk holds that change (jj fetches trunk first, and git reads the
+remote-tracking branch, so it takes no second fetch), checks
+the reviews, the check and the checks rows at the recorded commit as a land
+does. It then writes the `done` note naming the trunk commit and moves the
+card, and it runs no land and pushes nothing. When trunk does not hold the
+change, or the records fall short, it refuses as before.
+
 After the move, dev board land removes the card's workspace and bookmark.
 A workspace or bookmark it cannot remove is kept, and the output says why.
 

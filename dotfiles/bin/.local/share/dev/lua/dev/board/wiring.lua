@@ -869,10 +869,11 @@ local function land_held(opts)
     local first_problem
     if not noted then
         first_problem = string.format(
-            "Landed commit %s. The done note was NOT written on card %s, and the card was not moved. %s Write the note and move the card to %s by hand.",
+            "Landed commit %s. The done note was NOT written on card %s, and the card was not moved. %s Rerun `dev board land %s` from this workspace to write the note and move the card to %s.",
             commit,
             short,
             dev_text.sentence(message),
+            short,
             target
         )
     else
@@ -932,6 +933,121 @@ local function land_held(opts)
     }
 end
 
+---@class dev.board.wiring.settle.Opts
+---@field backend dev.board.Backend the board backend
+---@field card dev.board.Card the card in Verify
+---@field comments {body: string}[] the card's comments, oldest first
+---@field name string the caller's agent name
+---@field empty string? why the working copy holds nothing to land
+---@field move dev.board.wiring.MoveFn moves the card to its column
+---@field clean_up fun(root: string, short: string): string removes the card's bookmark and workspace
+
+---Finish the board half of a landing whose change already reached trunk.
+---
+---It runs when the working copy holds nothing to land, as after a land whose done note or move
+---failed. The reviews, the check and the checks rows must back the newest checked commit, and
+---trunk must hold that change. No land runs.
+---@param opts dev.board.wiring.settle.Opts the card and its comments
+---@return dev.cmd.board.Result? result nil when no checked change of the card is on trunk
+local function settle(opts)
+    local backend, card = opts.backend, opts.card
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local record
+    for _, comment in ipairs(opts.comments) do
+        local parsed = check.parse(comment.body)
+        if parsed and parsed.mode == check.Mode.RUN then
+            record = parsed
+        end
+    end
+    if not record and opts.empty then
+        return failure(
+            "Card "
+                .. short
+                .. " cannot land. "
+                .. dev_text.sentence(opts.empty)
+                .. " No run of `dev board check` is recorded on the card, so a change already on trunk cannot be matched to it."
+        )
+    end
+    local on_trunk = record and land.settled_commit(backend.root, record)
+    if not on_trunk then
+        return nil
+    end
+    local state = { commit = record.commit, change = record.change }
+    local problems = land.missing_reviews(opts.comments, state)
+    for _, line in ipairs(land.refused_reviews(opts.comments, state)) do
+        problems[#problems + 1] = line
+    end
+    local unproven = land.checks_problem(opts.comments, state, card.checks)
+    if unproven then
+        problems[#problems + 1] = unproven
+    end
+    if #problems > 0 then
+        return failure(
+            "Card "
+                .. short
+                .. " landed on trunk at commit "
+                .. land.short(on_trunk)
+                .. ", but its board half cannot finish for these reasons.\n  - "
+                .. table.concat(problems, "\n  - ")
+        )
+    end
+    local commit = land.short(on_trunk)
+    local text = string.format("Landed commit %s on trunk, run by %s.", commit, opts.name)
+    if record.change ~= "-" then
+        text = string.format(
+            "Landed commit %s (change %s) on trunk, run by %s.",
+            commit,
+            record.change,
+            opts.name
+        )
+    end
+    text = text .. " A rerun of land finished the card after the first land's board call failed."
+    local deploys = config.get(backend.root, "board.land.deploys") == true
+    local deployed = config.get(backend.root, "board.land.deployed")
+    if deploys and type(deployed) == "table" and #deployed > 0 then
+        deploys = land.deploys(land.touched(backend.root, on_trunk), deployed)
+    end
+    local target = deploys and backend.stages.release or backend.stages:done_column()
+    if deploys then
+        text = text .. " It waits in " .. target .. " for the deploy."
+    end
+    local held = claims.read(card.id)
+    local noted, message =
+        backend:note(card.id, text, held and held.fence, { kind = board.NoteKind.DONE })
+    if not noted then
+        return failure(
+            string.format(
+                "Landed commit %s. The done note was NOT written on card %s, and the card was not moved. %s Rerun `dev board land %s` from this workspace to write the note and move the card to %s.",
+                commit,
+                short,
+                dev_text.sentence(message),
+                short,
+                target
+            )
+        )
+    end
+    local moved = opts.move(backend, { card.id, target })
+    if moved.code then
+        return failure(
+            string.format(
+                "Landed commit %s and noted it on card %s. The move to %s failed. %s",
+                commit,
+                short,
+                target,
+                dev_text.sentence(moved.message)
+            )
+        )
+    end
+    local left = backend:card(card.id)
+    if left and left.claimant then
+        release_landed(backend, left, held)
+    end
+    return {
+        output = string.format("settled %s at commit %s and moved it to %s", short, commit, target)
+            .. opts.clean_up(backend.root, short),
+    }
+end
+
 ---Tell the caller its landing turn is still held after a refusal.
 ---@param short string the card's short id
 ---@return string note the text to append to the refusal
@@ -952,6 +1068,7 @@ M.land_problems = land_problems
 M.await_turn = await_turn
 M.land_prepare = land_prepare
 M.land_held = land_held
+M.settle = settle
 M.kept_note = kept_note
 
 return M

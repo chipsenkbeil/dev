@@ -475,6 +475,18 @@ testing.test("land.git.run pushes HEAD to trunk and refuses a rejected push", fu
     end)
 end)
 
+testing.test("land.git.settled_commit names a checked commit only once trunk holds it", function()
+    landing_env(function()
+        local root = work_behind_trunk()
+        assert(land.rebase(root))
+        local record = { commit = head(root), change = "-" }
+        testing.eq(land.settled_commit(root, record), nil)
+        local landed, out = land.run(root)
+        testing.eq(landed, true, out)
+        testing.eq(land.settled_commit(root, record), record.commit)
+    end)
+end)
+
 if dev_os.which("jj") then
     testing.test("a git worktree of a colocated repo reads revisions as git", function()
         landing_env(function()

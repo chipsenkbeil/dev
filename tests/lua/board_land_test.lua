@@ -2954,6 +2954,91 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         end
     )
 
+    local function reached_trunk(project)
+        jj(project.root, "bookmark", "set", "master", "-r", "@")
+        jj(project.root, "git", "push", "--remote", "origin", "--bookmark", "master")
+        jj(project.root, "new")
+    end
+
+    local function trunk_commit(project)
+        return jj(project.root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+    end
+
+    testing.test("a rerun of land finishes a card whose change already reached trunk", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        local commit = head(project.root)
+        reached_trunk(project)
+        local out, code = dev(project, { "board", "land", id })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("settled " .. id, 1, true), out)
+        testing.ok(out:find("at commit " .. commit:sub(1, 12), 1, true), out)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(trunk_commit(project), commit)
+        local list = comments(project.home, id)
+        local last = list[#list]
+        testing.eq(last.kind, KIND_DONE)
+        testing.ok(last.body:find("Landed commit " .. commit:sub(1, 12), 1, true), last.body)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("a rerun of land names a check that did not pass at the landed commit", function()
+        local project = jj_project()
+        local id = new_card(project)
+        must(dev(project, { "board", "checks", id, "false" }))
+        to_verify(project, id)
+        approve_reviews(project, id)
+        local _, failed = dev(project, { "board", "check", id })
+        testing.ok(failed ~= 0, "the check must fail")
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        reached_trunk(project)
+        local out, code = dev(project, { "board", "land", id })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("its board half cannot finish", 1, true), out)
+        testing.ok(out:find("did not pass every row", 1, true), out)
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
+    end)
+
+    testing.test("a rerun of land names the reviews a landed change lacks", function()
+        local project = jj_project()
+        local id = new_card(project)
+        to_verify(project, id)
+        must(dev(project, { "board", "check", id }))
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        reached_trunk(project)
+        local out, code = dev(project, { "board", "land", id })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("its board half cannot finish", 1, true), out)
+        testing.ok(out:find("review", 1, true), out)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
+    end)
+
+    testing.test("a rerun of land names a missing check run on a card in Verify", function()
+        local project = jj_project()
+        local id = new_card(project)
+        to_verify(project, id)
+        approve_reviews(project, id)
+        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        reached_trunk(project)
+        local out, code = dev(project, { "board", "land", id })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("No run of `dev board check` is recorded on the card", 1, true), out)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
+    end)
+
+    testing.test("a rerun of land leaves a card whose change is not on trunk in Verify", function()
+        local project = jj_project()
+        local id = verified_card(project)
+        jj(project.root, "new")
+        local out, code = dev(project, { "board", "land", id })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("The working-copy commit is empty", 1, true), out)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
+    end)
+
     testing.test(
         "a fetch that fails after the land falls back to the commit from before it",
         function()
@@ -3906,6 +3991,26 @@ end
 local function git_remote_master(project)
     return git_rev(project.bare, "refs/heads/master")
 end
+
+testing.test(
+    "land.git.a rerun of land finishes a card whose commit already reached trunk",
+    function()
+        local project = git_project()
+        local id = project.id
+        git_approve(project)
+        local landed = git_rev(project.root, "HEAD")
+        support.git(project.root, "push", "-q", "origin", "HEAD:master")
+        local out, code = git_dev(project, { "board", "land", id })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("settled " .. id, 1, true), out)
+        testing.eq(git_remote_master(project), landed)
+        local list = comments(project.home, id)
+        local note = list[#list]
+        testing.eq(note.kind, board.NoteKind.DONE)
+        testing.ok(note.body:find("Landed commit " .. landed:sub(1, 12), 1, true), note.body)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+    end
+)
 
 testing.test("land.git.lands rebases a card onto fetched trunk and pushes it", function()
     local project = git_project()
