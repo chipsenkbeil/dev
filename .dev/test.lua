@@ -46,13 +46,13 @@ local SERIAL = {
 
 local function record_result(name, code)
     if code == 0 then
-        stdout:write("PASS ", name, "\n")
+        verb.say("PASS " .. name)
         passed = passed + 1
     elseif code == SKIPPED then
-        stdout:write("SKIP ", name, " (every case skipped)\n")
+        verb.say("SKIP " .. name .. " (every case skipped)")
         skipped = skipped + 1
     else
-        stdout:write("FAIL ", name, "\n")
+        verb.say("FAIL " .. name)
         failed = failed + 1
     end
 end
@@ -114,7 +114,7 @@ if dev_os.which("luajit") then
         suites[#suites + 1] = script_suite(file, { "luajit", "tests/lua/run.lua", file })
     end
 else
-    stdout:write("SKIP tests/lua (needs luajit)\n")
+    verb.say("SKIP tests/lua (needs luajit)")
     unavailable[#unavailable + 1] = { dir = "tests/lua", why = "needs luajit" }
 end
 
@@ -127,7 +127,7 @@ if dev_os.which("neomutt") and dev_os.which("tmux") then
     local colors = "dotfiles/neomutt/.config/neomutt/colors.mutt"
     suites[#suites + 1] = script_suite(parse, { "bash", parse, colors })
 else
-    stdout:write("SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)\n")
+    verb.say("SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)")
     unavailable[#unavailable + 1] =
         { dir = "tests/neomutt", why = "needs neomutt and tmux on PATH" }
 end
@@ -272,9 +272,9 @@ end
 
 local function report(suite, code)
     local output = fs.read(suite.out) or ""
-    stdout:write("> ", suite.name, "\n")
+    verb.say("> " .. suite.name)
     if suite.bats or output ~= "" then
-        stdout:write(output, output:sub(-1) == "\n" and "" or "\n")
+        verb.say((output:gsub("\n$", "")))
     end
     if suite.bats and code == 0 and not ran_a_case(output) then
         code = SKIPPED
@@ -331,7 +331,7 @@ if not ok then
     error(err, 0)
 end
 
-stdout:write(string.format("\n%d passed, %d failed, %d skipped\n", passed, failed, skipped))
+verb.say(string.format("\n%d passed, %d failed, %d skipped", passed, failed, skipped))
 stdout:flush()
 if dev_os.getuid() ~= 0 or dev_os.name() ~= "Linux" then
     verb.note(

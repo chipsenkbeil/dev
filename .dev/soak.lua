@@ -91,9 +91,9 @@ local function run_case(case, number, runs)
     local load_line = output:match("load: [^\n]*\n?$") or "load: not recorded"
     local ran = count_ran(output)
     local passed = code == 0 and ran > 0
-    stdout:write(
+    verb.say(
         string.format(
-            "%s %s %d/%d (%d cases) %s\n",
+            "%s %s %d/%d (%d cases) %s",
             passed and "PASS" or "FAIL",
             case.name,
             number,
@@ -103,7 +103,7 @@ local function run_case(case, number, runs)
         )
     )
     if not passed then
-        stdout:write(output, "\n")
+        verb.say(output)
     end
     stdout:flush()
     return passed
@@ -124,7 +124,7 @@ for _, case in ipairs(CASES) do
         end
     end
     failed = failed + (runs - passed)
-    stdout:write(string.format("%s: %d of %d runs passed\n", case.name, passed, runs))
+    verb.say(string.format("%s: %d of %d runs passed", case.name, passed, runs))
 end
-stdout:write(string.format("\n%d runs failed\n", failed))
+verb.say(string.format("\n%d runs failed", failed))
 return failed == 0 and 0 or 1
