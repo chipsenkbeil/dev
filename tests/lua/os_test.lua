@@ -642,12 +642,24 @@ testing.test("capture_timed starts no process while its command runs", function(
         end),
         "the command should be running"
     )
+    testing.ok(
+        wait_until(function()
+            return dev_os.capture({
+                "sh",
+                "-c",
+                [[ls "$1"/dev-timed.*/pids 2>/dev/null]],
+                "sh",
+                tmp,
+            }) ~= ""
+        end),
+        "the wrapper should have finished starting"
+    )
     local WATCH_POLLS = 15
-    local polled, saw_owner = false, false
-    for _ = 1, WATCH_POLLS do
+    local seen, saw_owner = {}, false
+    for poll = 1, WATCH_POLLS do
         local found, owned = children_of(marker)
-        if #found > 0 then
-            polled = true
+        for _, args in ipairs(found) do
+            seen[#seen + 1] = ("poll %d: %s"):format(poll, args)
         end
         saw_owner = saw_owner or owned
         dev_os.run({ "sleep", WAIT_POLL_SECS })
@@ -658,7 +670,7 @@ testing.test("capture_timed starts no process while its command runs", function(
     end)
     fs.remove(tmp, { recursive = true })
     testing.ok(saw_owner, "the probe should see the command's owner row")
-    testing.eq(polled, false)
+    testing.eq(table.concat(seen, "\n"), "")
 end)
 
 local function capture_timed_in(tmp, body, bin)
