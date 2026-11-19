@@ -223,12 +223,12 @@ for itself, and dispatch's own re-mint is a separate matter.
 token first. When the card is an epic and the column is the Done column, dev
 opens the board again with `[board.pomb] lead_token`, as `delete` does, and
 sends the move with it, and never queues it when Pomb is unreachable. Pomb
-grants `epics.manage` to the `lead` preset and above.
-A `DEV_AGENT` that is not a lead is refused with `Only the lead closes an
-epic. DEV_AGENT NAME is not a lead name, whose role segment is lead, and a
-name with no slash counts as the lead only at a terminal. Ask the lead.` before the move goes out, and an unset `lead_token` exits 1 naming
-`epics.manage`. The move still refuses a child that is open and an outcome
-that is unticked, and names the count and the outcomes.
+grants `epics.manage` to the `lead` preset and above. A `DEV_AGENT` that is not
+a lead is refused with `Only the lead closes an epic. DEV_AGENT NAME is not a
+lead name, whose role segment is lead, and a name with no slash counts as the
+lead only at a terminal. Ask the lead.` before the move goes out, and an unset
+`lead_token` exits 1 naming `epics.manage`. The move still refuses a child that
+is open and an outcome that is unticked, and names the count and the outcomes.
 
 ### Ending a role token: token-revoke
 
@@ -2183,9 +2183,8 @@ session responsible for a card.
 - It prints `linked <id prefix> <kind> <other>`.
 - `KIND` is `blocked_by`, `blocks`, `related` or `parent`, else exit 2.
 - `parent` is held by the child and names the epic as `OTHER`, which must be an
-  epic. dev refuses any other card before any request, with
-  ``Card <id prefix> is not an epic. Make it one with `dev board epic <id
-  prefix>`.``
+  epic. dev refuses any other card before any request, with ``Card <id prefix>
+  is not an epic. Make it one with `dev board epic <id prefix>`.``
 - Epics nest to any depth and a card has one epic. Pomb answers a second epic
   or a cycle with a `400` (exit 1).
 - A local board refuses the same itself (`The card already has an epic.`,
