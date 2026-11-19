@@ -391,6 +391,18 @@ testing.test("lint passes an outcome that does not wait for land", function()
     testing.eq(findings(cmd_board.run("lint", {}, backend(cards)).output), { "No findings." })
 end)
 
+testing.test(
+    "lint reports a Done card with an unticked on-main outcome only as unticked",
+    function()
+        local open = { { id = "o1", name = "The change is on main", done = false } }
+        local cards = { card(1, NAME.DONE, { outcomes = open }) }
+        testing.eq(
+            findings(cmd_board.run("lint", {}, backend(cards)).output),
+            { "00000001 Done 1 of 1 outcomes unticked" }
+        )
+    end
+)
+
 testing.test("lint flags a Done card with outcomes and an open child", function()
     local fake = backend({ card(1, NAME.DONE) })
     function fake:family()
