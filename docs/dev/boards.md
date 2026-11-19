@@ -3021,7 +3021,8 @@ remote-tracking branch, so it takes no second fetch), checks
 the reviews, the check and the checks rows at the recorded commit as a land
 does. It then writes the `done` note naming the trunk commit and moves the
 card, and it runs no land and pushes nothing. When trunk does not hold the
-change, or the records fall short, it refuses as before.
+change, it refuses and names the checked commit that trunk lacks. When the
+records fall short, it refuses as before.
 
 After the move, dev board land removes the card's workspace and bookmark.
 A workspace or bookmark it cannot remove is kept, and the output says why.

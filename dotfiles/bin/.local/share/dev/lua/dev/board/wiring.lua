@@ -978,6 +978,17 @@ local function settle(opts)
     end
     local on_trunk = record and land.settled_commit(backend.root, record)
     if not on_trunk then
+        if record and opts.empty then
+            return failure(
+                "Card "
+                    .. short
+                    .. " cannot land. "
+                    .. dev_text.sentence(opts.empty)
+                    .. " Trunk does not hold the change checked at commit "
+                    .. land.short(record.commit)
+                    .. "."
+            )
+        end
         return nil
     end
     local state = { commit = record.commit, change = record.change }
