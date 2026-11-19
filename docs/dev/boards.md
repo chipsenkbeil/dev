@@ -862,15 +862,15 @@ These fail with exit 1 before any move, and no card is touched:
 
 A move that fails partway leaves the cards before it in place.
 
-`add`, `note` and `edit` warn on standard error, and still write, when the prose
+`add` and `edit` warn on standard error, and still write, when the prose
 holds a hex id, a hash or a path, which the v4 format keeps in the Change
 section only. One line names each word.
 
 - A hex id is 7 or more hex characters with a digit and a letter.
 - A path holds a `/` and starts with `~/`, `./` or `/` or ends in an extension.
 - A URL is exempt.
-- Text under `## Change` is not scanned, a note is all prose, an outcome is
-  prose, and `--checks` is never scanned.
+- Text under `## Change` is not scanned, a `note` is never scanned, an outcome
+  is prose, and `--checks` is never scanned.
 
 `note` refuses a comment, with exit 2, when more than half of its words are ids
 and it has at least 4 words. A word is an id when it is a hex id of 7 or more
@@ -4259,18 +4259,17 @@ On a local board:
 
 ### Prose warnings
 
-`add`, `note` and `edit` warn when card prose holds a hex id, a hash or a path.
+`add` and `edit` warn when card prose holds a hex id, a hash or a path.
 The warning goes to standard error with no prefix, and the write still
 happens (exit 0, output unchanged).
 
 - messages: `Card prose holds a hex id or hash: <word>.` and
   `Card prose holds a path: <word>.`, one line per distinct word.
-- scanned: the `--description` of `add`, a new or `--edit`ed `note` text and
-  the text `edit` writes. A `--done-when` outcome counts as prose. Fenced code
-  counts as prose.
+- scanned: the `--description` of `add` and the text `edit` writes. A
+  `--done-when` outcome counts as prose. Fenced code counts as prose.
 - not scanned: text under a `## Change` heading, and the name, `--checks`
-  and `dev board checks` arguments. A note has no headings, so all of it is
-  prose.
+  and `dev board checks` arguments, and the text of a `note`, so a status
+  note may cite a commit id.
 - hex id: a run of 7 or more hex characters with at least one digit and one
   letter (`decade` and `1234567` pass), found in any alphanumeric run of a
   word.

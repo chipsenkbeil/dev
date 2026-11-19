@@ -1009,9 +1009,7 @@ local function edit_note(backend, args)
     if not ok then
         return failure(message)
     end
-    local result = changed("edited", card, comment)
-    result.warnings = board.prose_warnings(text)
-    return result
+    return changed("edited", card, comment)
 end
 
 local function delete_note(backend, args)
@@ -1408,10 +1406,7 @@ function commands.note(backend, args)
     if not ok then
         return failure(message)
     end
-    return {
-        output = "noted " .. card.id:sub(1, board.MIN_PREFIX),
-        warnings = board.prose_warnings(text),
-    }
+    return { output = "noted " .. card.id:sub(1, board.MIN_PREFIX) }
 end
 
 ---Refuse a move that takes a card out of In Progress before its claimant has noted.

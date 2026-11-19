@@ -8741,11 +8741,6 @@ testing.test("prose warnings reach standard error and the write still happens", 
             verb = "POST",
         },
         {
-            args = { "board", "note", "11111111-a", "look", "in", "src/a.lua" },
-            marker = "/comments",
-            verb = "POST",
-        },
-        {
             args = { "board", "edit", "11111111-a" },
             input = "## Problem\nlook in src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
             marker = "description",
@@ -10415,16 +10410,49 @@ testing.test("prose_warnings leaves clean prose, plain words, numbers and URLs a
     testing.eq(board.prose_warnings(""), {})
 end)
 
-testing.test("add, note and edit report prose warnings and still write", function()
-    local backend = fake(sample())
-    local result =
-        cmd_board.run("note", { "cccccccc", "see", "2af0e003", "and", "0ef0e008" }, backend)
+testing.test("note and note --edit with a commit id print no warning", function()
+    local backend = with_comments()
+    local result = cmd_board.run(
+        "note",
+        { "cccccccc", "checked", "at", "commit", "2af0e003", "with", "a", "green", "run" },
+        backend
+    )
     testing.eq(result.output, "noted cccccccc")
-    testing.eq(#result.warnings, 2)
-    testing.eq(#backend.calls, 1)
-    result = cmd_board.run("note", { "cccccccc", "all", "clear" }, backend)
-    testing.eq(#result.warnings, 0)
-    result = cmd_board.run("add", {
+    testing.eq(result.warnings, nil)
+    result = cmd_board.run("note", {
+        "cccccccc",
+        "--edit",
+        "bbbbbbbb",
+        "checked",
+        "at",
+        "commit",
+        "0ef0e008",
+        "with",
+        "a",
+        "green",
+        "run",
+    }, backend)
+    testing.eq(result.output, "edited cccccccc bbbbbbbb")
+    testing.eq(result.warnings, nil)
+end)
+
+testing.test("add with a hex id in its Problem still warns", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("add", {
+        "X",
+        "--description",
+        "## Problem\nbroke at 2af0e003\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
+    testing.eq(result.warnings, { "Card prose holds a hex id or hash: 2af0e003." })
+end)
+
+testing.test("add and edit report prose warnings and still write", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("add", {
         "X",
         "--description",
         "## Problem\nin src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
