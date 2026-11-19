@@ -588,7 +588,7 @@ local function release_landed(backend, card, held)
     end
 end
 
----@alias dev.board.wiring.MoveFn fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result
+---@alias dev.board.wiring.MoveFn fun(b: dev.board.Backend, args: string[]): dev.cmd.board.Result
 
 ---@class dev.board.wiring.finish_companion.Opts
 ---@field backend dev.board.Backend the board backend
