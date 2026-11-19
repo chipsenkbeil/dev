@@ -682,6 +682,21 @@ function M.plan(commands, argvs, list_jobs)
     return { rows = rows, args = args or {} }
 end
 
+---Choose the one row of a one-row card as a plan, to record a run that already started.
+---@param commands string[] the card's checks rows as it holds them
+---@param argvs string[][] the rows' words, without a leading `! `
+---@return dev.board.check.Plan? plan nil unless the card has one plain `dev --remote JOB` row
+function M.single_plan(commands, argvs)
+    if #argvs ~= 1 or commands[1]:match(NEGATED) then
+        return nil
+    end
+    local job, words = M.job_row(argvs[1])
+    if not job then
+        return nil
+    end
+    return { rows = { { index = 1, job = job, run = commands[1] } }, args = words }
+end
+
 ---Read how each job of a ci run ended.
 ---@param run_id string the ci run id
 ---@return table<string, {passed: boolean, code: integer}>? jobs by job name, nil when ci cannot say

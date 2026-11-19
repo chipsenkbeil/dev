@@ -2,6 +2,7 @@ local ffi = require("ffi")
 
 local testing = require("dev.testing")
 local board = require("dev.board")
+local check = require("dev.board.check")
 local claims = require("dev.board.claims")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
@@ -226,6 +227,25 @@ testing.test("take keeps a renewed claim when the comments cannot be read", func
     testing.eq(fence, 4)
     testing.eq(stub.released, 0)
     testing.ok(result.output:find("pomb is down", 1, true), result.output)
+end)
+
+testing.test("single_plan.records the one row of a one-row card", function()
+    local plan = check.single_plan(
+        { "dev --remote test -- tests/a_test.lua" },
+        { { "dev", "--remote", "test", "--", "tests/a_test.lua" } }
+    )
+    testing.eq(plan, {
+        rows = { { index = 1, job = "test", run = "dev --remote test -- tests/a_test.lua" } },
+        args = { "tests/a_test.lua" },
+    })
+end)
+
+testing.test("single_plan.refuses several rows and a row that is no ci job", function()
+    local lint = { "dev", "--remote", "lint" }
+    local test = { "dev", "--remote", "test" }
+    testing.eq(check.single_plan({ "dev --remote lint", "dev --remote test" }, { lint, test }), nil)
+    testing.eq(check.single_plan({ "true" }, { { "true" } }), nil)
+    testing.eq(check.single_plan({ "! dev --remote lint" }, { lint }), nil)
 end)
 
 testing.test("take releases a first claim when the note or the comments fail", function()

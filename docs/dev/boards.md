@@ -2650,9 +2650,10 @@ Rows that share one ci run:
 - `dev board check CARD --run ID` starts no run. It waits on the named run with
   `ci ps ID --watch`, bounded by `--timeout`, and records each row from the
   run's jobs as above. A run that has ended is read at once.
-- `--run` needs a card whose rows share one ci run, takes a hex run id and
-  refuses `--expect-fail`. It refuses, with nothing recorded, a run whose
-  commit differs from the working copy's commit.
+- `--run` needs a card whose rows share one ci run, or a card with one plain
+  `dev --remote JOB` row. It takes a hex run id and refuses `--expect-fail`.
+  It refuses, with nothing recorded, a run whose commit differs from the
+  working copy's commit.
 
 The result belongs to one commit:
 

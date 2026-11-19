@@ -782,6 +782,17 @@ testing.test("check --run refuses --expect-fail and a card with no shared run", 
     testing.ok(out:find("--run has nothing to record", 1, true), out)
 end)
 
+testing.test("check --run records a one-row card from a run that has ended", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        attach = "8cb600",
+        rows = { "dev --remote test -- tests/a_test.lua" },
+    })
+    testing.eq(code, 0, out)
+    testing.ok(log:find("watch 8cb600 --watch", 1, true), log)
+    testing.eq(check.parse(body).rows, { { result = "pass", run_id = "8cb600" } })
+end)
+
 testing.test("plan shares one run only among rows that cover the whole pipeline", function()
     local function jobs(...)
         local names = { ... }

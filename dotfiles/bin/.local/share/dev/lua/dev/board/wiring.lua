@@ -225,6 +225,7 @@ local function check_rows(opts)
         end)
     end
     if flags.run then
+        plan = plan or check.single_plan(commands, argvs)
         if not plan then
             return failure(
                 string.format(
