@@ -12,19 +12,38 @@ M.AFTER_SECONDS = 3600
 ---@enum dev.board.revert.Reason
 M.Reason = { CONFLICT = "conflict", FAILED = "failed" }
 
+local CASE_SEPARATOR = "; "
 local RED_PATTERN = "^Ship went red .*%(epoch (%d+)%)%.$"
 local LANDED_PATTERNS = { "^Landed commit ", "^landed %x+ on ", "^Landed change " }
 
 ---Write the note a red ship leaves on a suspect card.
 ---@param commit string the short commit the ship tested
 ---@param now integer the epoch seconds
+---@param cases string[]? the failing cases the ship printed
 ---@return string text the note
-function M.red_text(commit, now)
+function M.red_text(commit, now, cases)
+    local on = cases and #cases > 0 and (" on " .. table.concat(cases, CASE_SEPARATOR)) or ""
     return string.format(
-        "Ship went red at commit %s with this card a suspect (epoch %d).",
+        "Ship went red at commit %s%s with this card a suspect (epoch %d).",
         commit,
+        on,
         now
     )
+end
+
+---Read the failing cases a red note lists.
+---@param body string the note's text
+---@return string[]? cases the cases, nil when the note lists none
+function M.red_cases(body)
+    local list = body:match("^Ship went red at commit %S+ on (.-) with this card a suspect")
+    if not list then
+        return nil
+    end
+    local cases = {}
+    for case in (list .. CASE_SEPARATOR):gmatch("(.-)" .. CASE_SEPARATOR:gsub("%p", "%%%0")) do
+        cases[#cases + 1] = case
+    end
+    return cases
 end
 
 local function landed(body)
@@ -36,16 +55,31 @@ local function landed(body)
     return false
 end
 
----Read when a card first went red since its newest land note.
+local function shares(listed, cases)
+    if not listed then
+        return true
+    end
+    for _, case in ipairs(listed) do
+        for _, current in ipairs(cases) do
+            if case == current then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+---Read when a card first went red on one of the current cases since its newest land note.
 ---@param comments {body: string}[] the card's comments, oldest first
----@return integer? since the epoch seconds of the first red note, nil when it has none
-function M.red_since(comments)
+---@param cases string[] the failing cases of this ship
+---@return integer? since the epoch seconds of the first such red note, nil when it has none
+function M.red_since(comments, cases)
     local since
     for _, comment in ipairs(comments) do
         local epoch = comment.body:match(RED_PATTERN)
         if landed(comment.body) then
             since = nil
-        elseif epoch and not since then
+        elseif epoch and not since and shares(M.red_cases(comment.body), cases) then
             since = tonumber(epoch)
         end
     end

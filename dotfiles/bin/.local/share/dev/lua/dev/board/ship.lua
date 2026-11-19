@@ -73,7 +73,8 @@ end
 ---Run each command once and stop at the first that fails.
 ---@param backend dev.board.Backend the board
 ---@param runs dev.board.ship.Run[] the commands
----@param name_suspects fun(files: string[]): string[] the lines naming the cards behind a failure
+---@param name_suspects fun(row: dev.board.check.Row): string[] the lines naming the cards behind a
+---failed row
 ---@return dev.cmd.board.Result? err the failure naming the command, nil when every one passed
 local function ship_ran(backend, runs, name_suspects)
     local remote = require("dev.remote")
@@ -89,7 +90,7 @@ local function ship_ran(backend, runs, name_suspects)
         })
         if rows[i].result ~= check.Result.PASS then
             local lines = wiring.check_lines(rows)
-            for _, line in ipairs(name_suspects(rows[i].failed or {})) do
+            for _, line in ipairs(name_suspects(rows[i])) do
                 lines[#lines + 1] = line
             end
             return failure(
@@ -317,20 +318,21 @@ end
 ---@param named dev.board.suspects.Entry[] the suspect cards the failed ship named
 ---@param commit string the full commit the ship tested
 ---@param deps dev.board.ship.Deps the board verbs a revert calls
+---@param cases string[] the failing cases of the ship
 ---@return string[] lines what happened to each suspect
-function Ship.settle(backend, named, commit, deps)
+function Ship.settle(backend, named, commit, deps, cases)
     local revert = require("dev.board.revert")
     local after = tonumber(config.get(backend.root, "board.release.revert_after"))
         or revert.AFTER_SECONDS
     local now = os.time()
     local lines = {}
     for _, entry in ipairs(revert.newest_first(backend.root, named)) do
-        local since = revert.red_since(backend:comments(entry.card.id) or {})
+        local since = revert.red_since(backend:comments(entry.card.id) or {}, cases)
         local said
         if not since then
             local ok, why = backend:note(
                 entry.card.id,
-                revert.red_text(land.short(commit), now),
+                revert.red_text(land.short(commit), now, cases),
                 nil,
                 { kind = board.NoteKind.STATUS }
             )
@@ -348,8 +350,8 @@ end
 
 ---Name the cards of a batch that touched the files a failed release command left failing.
 ---@param backend dev.board.Backend the board
----@param opts { files: string[], rev: string, commit: string } the failing test files the command
----printed, the revset the ship covers and the full commit it names
+---@param opts { files: string[], cases: string[], rev: string, commit: string } the failing test
+---files and cases the command printed, the revset the ship covers and the full commit it names
 ---@param deps dev.board.ship.Deps the board verbs a revert calls
 ---@return string[] lines the suspect list
 function Ship.suspects(backend, opts, deps)
@@ -370,7 +372,7 @@ function Ship.suspects(backend, opts, deps)
         end
     end
     local lines, named = require("dev.board.suspects").lines(backend.root, files, entries)
-    for _, line in ipairs(Ship.settle(backend, named, commit, deps)) do
+    for _, line in ipairs(Ship.settle(backend, named, commit, deps, opts.cases or {})) do
         lines[#lines + 1] = line
     end
     return lines
@@ -406,8 +408,9 @@ function M.ship(backend, args, deps)
             )
         )
     end
-    local failed = ship_ran(backend, runs, function(files)
-        return Ship.suspects(backend, { files = files, rev = rev, commit = commit }, deps)
+    local failed = ship_ran(backend, runs, function(row)
+        local opts = { files = row.failed or {}, cases = row.cases, rev = rev, commit = commit }
+        return Ship.suspects(backend, opts, deps)
     end)
     if failed then
         return failed

@@ -3482,9 +3482,12 @@ A failed command:
 - When no card in the batch touched a failing file, the list says so. When the
   row printed no `FAIL` line, it says that instead.
 - The first red ship writes a `Ship went red` note on each named card, with the
-  time. A card keeps that note until its next land note.
-- A later red ship reverts a named card whose first red note is at least
-  `revert_after` seconds old, the `[board.release]` key that defaults to 3600.
+  time and the failing cases, the `not ok - NAME` lines under each failing
+  file, or the file's path when it printed none. A card keeps that note until
+  its next land note.
+- A later red ship reverts a named card whose first red note on one of the same
+  cases is at least `revert_after` seconds old, the `[board.release]` key that
+  defaults to 3600. A red on other cases is noted afresh and reverts nothing.
   The lead runs it again from a workspace at trunk. `jj revert` or `git revert`
   puts the landed commit's reverse on trunk's side of the working copy, and the
   card goes to Ready with its outcomes unticked and a note.

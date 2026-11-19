@@ -359,6 +359,28 @@ testing.test("check.run hands each ci run id to on_run_id before the row ends", 
     testing.eq(row.run_id, "8cb600")
 end)
 
+testing.test("check.reads.the.failing.case.names", function()
+    local script = table.concat({
+        "echo '> tests/lua/a_test.lua'",
+        "echo 'ok - fine'",
+        "echo 'not ok - first case'",
+        "echo '    detail'",
+        "echo 'not ok - second case'",
+        "echo 'FAIL tests/lua/a_test.lua'",
+        "echo '> tests/lua/b_test.lua'",
+        "echo 'FAIL tests/lua/b_test.lua'",
+        "exit 1",
+    }, "; ")
+    local row = check.run({
+        root = support.tempdir(),
+        run = "row",
+        argv = { "sh", "-c", script },
+        seconds = 30,
+    })
+    testing.eq(row.failed, { "tests/lua/a_test.lua", "tests/lua/b_test.lua" })
+    testing.eq(row.cases, { "first case", "second case", "tests/lua/b_test.lua" })
+end)
+
 testing.test("check records why a row failed without a run", function()
     local root, home, head = git_root()
     local id = card_with(root, home, { "ls dev-board-check-missing-path", "false" })

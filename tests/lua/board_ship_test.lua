@@ -485,9 +485,27 @@ if dev_os.which("jj") then
         return root, home, id
     end
 
-    local function red_ship_again(root, home)
+    local function red_ship_again(root, home, case)
         local echo = "echo FAIL " .. RED_FILE .. "; exit 1"
+        if case then
+            echo = string.format(
+                "echo '> %s'; echo 'not ok - %s'; echo 'FAIL %s'; exit 1",
+                RED_FILE,
+                case,
+                RED_FILE
+            )
+        end
         return dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+    end
+
+    local function red_bodies(home, id)
+        local bodies = {}
+        for _, comment in ipairs(select(2, state(home, id))) do
+            if comment.body:find("^Ship went red") then
+                bodies[#bodies + 1] = comment.body
+            end
+        end
+        return bodies
     end
 
     local function red_notes(home, id)
@@ -528,6 +546,37 @@ if dev_os.which("jj") then
         testing.eq((state(home, id)), support.COLUMN_NAME.READY)
         testing.ok(jj(root, "log", "-r", "@-", "--no-graph", "-T", "description"):find("Revert"))
         testing.eq(dev(root, home, { "board", "show", id }):find("[x]", 1, true), nil)
+    end)
+
+    testing.test("ship.leaves.a.suspect.red.on.a.different.case", function()
+        local root, home, id = red_card(REVERT_NOW)
+        red_ship_again(root, home, "first case")
+        local out, code = red_ship_again(root, home, "other case")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("First red, so the card is noted.", 1, true), out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+        local bodies = red_bodies(home, id)
+        testing.eq(#bodies, 2)
+        testing.ok(bodies[1]:find(" on first case with this card", 1, true), bodies[1])
+        testing.ok(bodies[2]:find(" on other case with this card", 1, true), bodies[2])
+    end)
+
+    testing.test("ship.reverts.a.suspect.red.twice.on.the.same.case", function()
+        local root, home, id = red_card(REVERT_NOW)
+        red_ship_again(root, home, "same case")
+        local out, code = red_ship_again(root, home, "same case")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("The card is back in Ready.", 1, true), out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.READY)
+    end)
+
+    testing.test("ship.keys.a.red.by.its.file.when.no.case.is.printed", function()
+        local root, home, id = red_card(REVERT_NOW)
+        red_ship_again(root, home)
+        local bodies = red_bodies(home, id)
+        testing.ok(bodies[1]:find(" on " .. RED_FILE .. " with this card", 1, true), bodies[1])
+        local out = red_ship_again(root, home)
+        testing.ok(out:find("The card is back in Ready.", 1, true), out)
     end)
 
     testing.test("ship.starts.a.suspect.over.when.it.lands.again", function()

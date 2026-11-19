@@ -111,6 +111,7 @@ M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
 ---@field failed string[]? the paths on the `FAIL PATH` lines the run printed, which the test runner prints
+---@field cases string[]? the `not ok - NAME` names printed under each failing file, or the file's path when it printed none
 ---@field reason string? the last line a failed row printed when it printed no run id
 ---@field refused string? ci's refusal line when the hub refused the run, which no row records
 
@@ -412,6 +413,30 @@ local function failed_files(output)
     return files
 end
 
+local function failed_cases(output, files)
+    local under, header = {}, nil
+    for line in output:gmatch("[^\n]+") do
+        local path = line:match("^> (.+)$")
+        local name = line:match("^not ok %- (.+)$")
+        if path then
+            header = path
+        elseif name and header then
+            under[header] = under[header] or {}
+            table.insert(under[header], name)
+        end
+    end
+    local seen, cases = {}, {}
+    for _, path in ipairs(files) do
+        for _, key in ipairs(under[path] or { path }) do
+            if not seen[key] then
+                seen[key] = true
+                cases[#cases + 1] = key
+            end
+        end
+    end
+    return cases
+end
+
 ---@class dev.board.check.run.Opts
 ---@field root string the project root the row runs in
 ---@field run string the row
@@ -545,6 +570,7 @@ function M.run(opts)
         note = string.format("The row never started (exit %d). Its failure proves nothing.", code)
         reason = reason or last_line(output)
     end
+    local files = failed_files(output)
     return {
         run = opts.run,
         run_id = run_id or NO_RUN,
@@ -553,7 +579,8 @@ function M.run(opts)
         result = result,
         code = code,
         tail = note and (note .. "\n" .. tail_of(output)) or tail_of(output),
-        failed = failed_files(output),
+        failed = files,
+        cases = failed_cases(output, files),
     }
 end
 
