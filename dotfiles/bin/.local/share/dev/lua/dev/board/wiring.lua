@@ -111,6 +111,13 @@ local function renew_claim(backend, card, name, seconds)
     end
 end
 
+---@param notes string[]? the sentences a rebase left about the workspaces it moved
+local function note_all(notes)
+    for _, line in ipairs(notes or {}) do
+        verb.note(line)
+    end
+end
+
 ---@class dev.board.wiring.check_rows.Opts
 ---@field name string? the caller's agent name
 ---@field backend dev.board.Backend the board backend
@@ -608,10 +615,11 @@ local function land_prepare(opts)
     if not state_ok then
         return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
     end
-    local rebased, why = scm.workspace(backend.root):rebase()
+    local rebased, why, notes = scm.workspace(backend.root):rebase()
     if rebased == nil then
         return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
     end
+    note_all(notes)
     local fresh
     fresh, message = backend:comments(card.id)
     if not fresh then
@@ -730,10 +738,11 @@ local function land_held(opts)
                 .. table.concat(current, "\n  - ")
         )
     end
-    local rebased, why = scm.workspace(backend.root):rebase()
+    local rebased, why, notes = scm.workspace(backend.root):rebase()
     if rebased == nil then
         return failure("Card " .. short .. " cannot land. " .. dev_text.sentence(why))
     end
+    note_all(notes)
     local state, carried = opts.prepared.state, opts.prepared.carried
     local check_only = opts.prepared.check_only
     local now, bad = land.state(backend.root)

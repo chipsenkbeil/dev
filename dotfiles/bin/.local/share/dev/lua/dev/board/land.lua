@@ -524,10 +524,85 @@ local function git_rebase(root, remote)
     return true
 end
 
+local function child_workspaces(root)
+    local out = jj_out(
+        root,
+        "log",
+        "-r",
+        "descendants(@) ~ @",
+        "--no-graph",
+        "-T",
+        'working_copies.map(|w| w.name() ++ "\\n").join("")'
+    )
+    if out == nil then
+        return nil
+    end
+    local children, seen = {}, {}
+    for printed in out:gmatch("[^\n]+") do
+        local name = printed
+        if printed:sub(1, 1) == '"' and printed:sub(-1) == '"' then
+            name = printed:sub(2, -2):gsub("\\(.)", "%1")
+        end
+        local path = jj_out(root, "workspace", "root", "--name", name)
+        if path == nil then
+            return nil
+        end
+        if not seen[name] then
+            seen[name] = true
+            local child = { name = name, path = path:gsub("\n$", "") }
+            jj_out(child.path, "log", "-r", "@", "--no-graph", "-T", "''")
+            children[#children + 1] = child
+        end
+    end
+    return children
+end
+
+local UPDATE_STALE = "Run `jj workspace update-stale` there."
+
+local function update_child(root, child)
+    local conflict = jj_out(
+        root,
+        "log",
+        "-r",
+        string.format('"%s"@', (child.name:gsub('[\\"]', "\\%0"))),
+        "--no-graph",
+        "-T",
+        'conflict ++ "\\n"'
+    )
+    if conflict == nil or conflict:find("true", 1, true) then
+        return string.format(
+            "Left the workspace %s at %s alone: its commit has conflicts after the rebase. %s",
+            child.name,
+            child.path,
+            UPDATE_STALE
+        )
+    end
+    local out, code =
+        dev_os.capture(jj(child.path, "workspace", "update-stale"), { stderr = "stdout" })
+    if code ~= 0 then
+        return string.format(
+            "The workspace %s at %s could not be updated. %s %s",
+            child.name,
+            child.path,
+            UPDATE_STALE,
+            out
+        )
+    end
+    return string.format(
+        "Moved the workspace %s at %s onto the rebased commit.",
+        child.name,
+        child.path
+    )
+end
+
 ---Fetch the remote of record and rebase the working-copy change onto trunk when it sits elsewhere.
+---
+---The change's descendants move with it, and each workspace whose working copy sat on it is updated
+---unless its commit has conflicts.
 ---@param root string the project root
 ---@return boolean? rebased true when the change moved, false when it already sat on trunk
 ---@return string? problem why trunk could not be read or the rebase failed
+---@return string[]? notes one sentence for each workspace the rebase moved or left alone
 function M.rebase(root)
     local UNLANDED = "::@- ~ ::trunk()"
     local found, why = forge.resolve(root)
@@ -586,12 +661,20 @@ function M.rebase(root)
             return nil, "The empty parent could not be abandoned. " .. out
         end
     end
+    local children = child_workspaces(root)
+    if children == nil then
+        return nil, "The `jj` command could not read the workspaces that sit on the change."
+    end
     out, code =
-        dev_os.capture(jj(root, "rebase", "-r", "@", "-d", "trunk()"), { stderr = "stdout" })
+        dev_os.capture(jj(root, "rebase", "-s", "@", "-d", "trunk()"), { stderr = "stdout" })
     if code ~= 0 then
         return nil, "The rebase onto trunk failed. " .. out
     end
-    return true
+    local notes = {}
+    for _, child in ipairs(children) do
+        notes[#notes + 1] = update_child(root, child)
+    end
+    return true, nil, notes
 end
 
 local function file_set(out)

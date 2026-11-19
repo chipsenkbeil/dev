@@ -70,6 +70,7 @@ end
 ---Fetch the remote of record and rebase the change onto trunk when it sits elsewhere.
 ---@return boolean? rebased true when the change moved, false when it sat on trunk already
 ---@return string? problem why trunk could not be read or the rebase failed
+---@return string[]? notes one sentence for each workspace the rebase moved or left alone
 function Workspace:rebase()
     return land.rebase(self.root)
 end

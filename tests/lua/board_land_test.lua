@@ -2095,6 +2095,41 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
+    local function child_workspace(project, name, files)
+        local dir = support.tempdir() .. "/" .. name
+        jj(project.root, "workspace", "add", dir, "--name", name, "-r", "@")
+        for path, body in pairs(files or {}) do
+            assert(fs.write(dir .. "/" .. path, body), "write failed")
+        end
+        return dir
+    end
+
+    testing.test("land moves a child workspace onto the rebased commit and names it", function()
+        local project = jj_project()
+        local id = review_ready(project)
+        local dir = child_workspace(project, "my kid", { ["kid.txt"] = "kid\n" })
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Moved the workspace my kid at " .. dir, 1, true), out)
+        local parent = jj(dir, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+        local trunk = jj(dir, "log", "-r", "master", "--no-graph", "-T", "commit_id")
+        testing.eq(parent, trunk)
+        testing.eq(fs.read(dir .. "/kid.txt"), "kid\n")
+    end)
+
+    testing.test("land leaves a child workspace with conflicts alone and names it", function()
+        local project = jj_project()
+        local id = review_ready(project)
+        local dir = child_workspace(project, "kid", { ["docs.txt"] = "child docs\n" })
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        local left = "Left the workspace kid at " .. dir .. " alone: its commit has conflicts"
+        testing.ok(out:find(left, 1, true), out)
+        testing.eq(out:find("Moved the workspace kid", 1, true), nil, out)
+    end)
+
     testing.test("a rebase that leaves a conflict does not carry the check", function()
         local project = jj_project()
         local id = review_ready(project)

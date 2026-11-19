@@ -2940,6 +2940,12 @@ change built with `jj new`) does not count. `land` abandons it, then rebases
 the change onto trunk. A parent with a description or a patch is still
 refused, and a git project still refuses every unlanded parent.
 
+In a jj project the rebase carries the change's descendants with it. Each other
+workspace whose working copy sat on the change is updated onto the rebased
+commit, and `land` names it on standard error. A workspace whose commit has
+conflicts after the rebase is left alone and named, with the
+`jj workspace update-stale` command to run there.
+
 When the newest `dev-check:` record at the commit does not parse and its mode is
 not `expect-fail` (as with one written before rows carried run ids), `land`
 refuses it as unreadable and says to run `dev board check` again, not that no
