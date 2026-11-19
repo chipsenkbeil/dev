@@ -223,7 +223,7 @@ for itself, and dispatch's own re-mint is a separate matter.
 token first. When the card is an epic and the column is the Done column, dev
 opens the board again with `[board.pomb] lead_token`, as `delete` does, and
 sends the move with it, and never queues it when Pomb is unreachable. Pomb
-grants `epics.manage` to the `lead` preset alone.
+grants `epics.manage` to the `lead` preset and above.
 A `DEV_AGENT` that is not a lead is refused with `Only the lead closes an
 epic. DEV_AGENT NAME is not a lead name, whose role segment is lead. Ask the
 lead.` before the move goes out, and an unset `lead_token` exits 1 naming
@@ -285,8 +285,9 @@ works.
 - lead session: `lead_token`, preset `lead`.
   - calls: everything `work` does, plus `boards.create`, `columns.create`,
     `columns.edit`, `columns.reorder`, `fields.create` and `colors.edit` (for
-    `init`), `tasks.bin` (for the `dev board delete` verb), and
-    `subtasks.delete` for `outcome --delete`.
+    `init`), `tasks.bin` (for the `dev board delete` verb),
+    `subtasks.delete` for `outcome --delete`, and
+    `epics.manage` for closing an epic.
   - deletes: `tasks.bin` sends a card to the bin for 30 days, and
     `subtasks.delete` removes any outcome.
 - subagent and runner: `token`, preset `work`.
