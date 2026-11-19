@@ -9417,7 +9417,7 @@ testing.test("move out of progress stops the loop and sends the fence", function
     testing.eq(heartbeats(root), after)
 end)
 
-testing.test("take of a Backlog card with no checks row takes it", function()
+testing.test("take of a Backlog card with no checks row is refused", function()
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
         description = PLANNED_TEXT,
@@ -9426,8 +9426,38 @@ testing.test("take of a Backlog card with no checks row takes it", function()
     })
     local root, home = sandbox({ export = export })
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
-    testing.eq(code, 0, out)
-    testing.ok(out:find("^took 11111111"), out)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+end)
+
+testing.test("take refuses a Backlog card with an outcome that names no check", function()
+    local export = export_with_first_card({
+        column_id = BACKLOG_COLUMN,
+        description = PLANNED_TEXT,
+        subtasks = '[{"id":"sub-a","name":"a","done":false},'
+            .. '{"id":"sub-b","name":"b","done":false},'
+            .. '{"id":"sub-c","name":"c","done":false}]',
+    })
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("names no deciding check", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+end)
+
+testing.test("take refuses a red Backlog card", function()
+    local export = export_with_first_card({
+        column_id = BACKLOG_COLUMN,
+        color_id = "red-id",
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+    })
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is red, more than 3 Pomodori", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
 end)
 
 testing.test("take of a Ready card with no checks row is refused", function()

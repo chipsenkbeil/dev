@@ -57,7 +57,7 @@ local function project()
     git(root, "remote", "add", "origin", bare)
     local main = { root = root, home = home, base = assert(fs.realpath(support.tempdir())) }
     must(dev(main, { "board", "init" }))
-    local out = dev(main, {
+    local args = {
         "board",
         "add",
         "Card",
@@ -69,9 +69,12 @@ local function project()
         "y",
         "--size",
         "1",
-        "--done-when",
-        "It works",
-    })
+    }
+    for _, outcome in ipairs(support.READY_OUTCOMES) do
+        args[#args + 1] = "--done-when"
+        args[#args + 1] = (outcome.name:gsub("%(check: .*%)$", board.JUDGEMENT))
+    end
+    local out = dev(main, args)
     main.id = assert(out:match("added (%x+)"), out)
     must(dev(main, { "board", "checks", main.id, "true" }))
     git(root, "add", "-A")
@@ -113,7 +116,10 @@ local function approve(tree)
         }, { DEV_AGENT = "rev" }))
     end
     must(dev(tree, { "board", "check", id }))
-    must(dev(tree, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+    for number = 1, #support.READY_OUTCOMES do
+        local args = { "board", "outcome", id, "--tick", tostring(number), "--as", "verifier" }
+        must(dev(tree, args))
+    end
 end
 
 testing.test("land.card.lands the card its workspace names", function()

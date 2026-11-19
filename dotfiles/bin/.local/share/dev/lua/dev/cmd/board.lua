@@ -4695,12 +4695,12 @@ function commands.take(backend, args)
             return shaped
         end
     end
-    if card.claimant == nil and card.column == stages.ready then
+    if card.claimant == nil and before_work(stages, card) then
         local shape, why_family = family_shape(backend, card)
         if not shape then
             return failure(why_family)
         end
-        refused = checks_refusal(backend, card, shape.children)
+        refused = size_refusal(card) or ready_refusal(backend, card, shape)
         if refused then
             return refused
         end
