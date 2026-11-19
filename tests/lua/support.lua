@@ -405,6 +405,11 @@ end
 ---@param links_id string id of the card the link routes answer for
 ---@return string script the shell script
 function M.pomb_curl(first_id, second_id, links_id)
+    local summary_rows = table.concat({
+        summary_row(first_id, "First", M.Column.READY, 1),
+        summary_row(second_id, "Second", M.Column.READY, 2),
+        summary_row(links_id, "Early", M.Column.BACKLOG, 1),
+    }, ",")
     return [[#!/bin/sh
 printf 'curl %s\n' "$*" >>"$ROOT/calls"
 cat >"$ROOT/stdin"
@@ -417,14 +422,11 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
-*/tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. second_id .. [[","column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
-*/tasks\?limit=500) body='{"items":[{"id":"]] .. first_id .. [[","column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
-*/tasks\?limit=1000*) body='{"items":[]] .. summary_row(first_id, "First", M.Column.READY, 1) .. "," .. summary_row(
-        second_id,
-        "Second",
-        M.Column.READY,
-        2
-    ) .. "," .. summary_row(links_id, "Early", M.Column.BACKLOG, 1) .. [[],"next_cursor":null}' ;;
+*/tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. second_id .. [[",'\
+'"column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
+*/tasks\?limit=500) body='{"items":[{"id":"]] .. first_id .. [[",'\
+'"column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
+*/tasks\?limit=1000*) body='{"items":[]] .. summary_rows .. [[],"next_cursor":null}' ;;
 */tasks\?*) body='{"items":[{"id":"]] .. first_id .. [["}],"next_cursor":null}' ;;
 */attachments)
     body=$(cat "$ROOT/attachments.json")
@@ -469,7 +471,9 @@ case "$last" in
 */api/tasks/]] .. first_id .. [[)
     body=$(cat "$ROOT/task.json")
     if [ -f "$ROOT/owner_name" ]; then
-        body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true},\"claim\":{\"fence\":7},|")
+        body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\
+\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true},\
+\"claim\":{\"fence\":7},|")
     fi
     case "$*" in
     *"-X PATCH"*)
@@ -531,11 +535,13 @@ case "$last" in
     ;;
 */owner)
     if [ -f "$ROOT/owner_held" ]; then
-        body='{"code":"owner_held","message":"task owned by dotfiles/other until 2999-01-01T00:00:00Z"}'
+        body='{"code":"owner_held","message":"task owned by dotfiles/other '\
+'until 2999-01-01T00:00:00Z"}'
         status=409
     else
         printf '%s' "$*" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' >"$ROOT/owner_name"
-        body='{"holder":{"kind":"agent","name":"x"},"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}'
+        body='{"holder":{"kind":"agent","name":"x"},'\
+'"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}'
     fi
     ;;
 */seats/take)
