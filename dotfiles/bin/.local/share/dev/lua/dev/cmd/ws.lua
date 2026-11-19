@@ -577,10 +577,19 @@ function M.__processes_lsof(dir)
 end
 
 local function processes_inside(dir)
+    local found
     if fs.is_dir("/proc/self") then
-        return M.__processes_proc(dir)
+        found = M.__processes_proc(dir)
+    else
+        found = M.__processes_lsof(dir)
     end
-    return M.__processes_lsof(dir)
+    local kept = {}
+    for _, process in ipairs(found) do
+        if process.command ~= "ssh" then
+            kept[#kept + 1] = process
+        end
+    end
+    return kept
 end
 
 ---@class dev.cmd.ws.remove.Opts

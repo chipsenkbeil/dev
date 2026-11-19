@@ -2163,9 +2163,25 @@ testing.test("prune leaves the empty heads when the abandon fails", function()
     )
 end)
 
-local function start_sleep(dir)
+---@class ws_test.start_sleep.Opts
+---@field name string? sleep when nil, the command name the process runs under
+
+local function start_sleep(dir, opts)
+    local name = opts and opts.name or "sleep"
+    local program = "sleep"
+
+    -- Link sleep under the requested name
+    if name ~= "sleep" then
+        local bin = support.tempdir()
+        local target = dev_os.capture({ "sh", "-c", "command -v sleep" }):gsub("%s", "")
+        local linked = dev_os.run({ "ln", "-s", target, bin .. "/" .. name })
+        assert(linked == 0, "ln cannot link sleep as " .. name)
+        program = bin .. "/" .. name
+    end
+
+    -- Start the process in the folder
     local out = dev_os.capture(
-        { "sh", "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!" },
+        { "sh", "-c", program .. " 60 </dev/null >/dev/null 2>&1 & echo $!" },
         { cwd = dir }
     )
     local pid = out:gsub("%s", "")
@@ -2173,7 +2189,7 @@ local function start_sleep(dir)
     -- Wait until the forked shell has become the sleep
     for _ = 1, SLEEP_POLLS do
         local comm = dev_os.capture({ "ps", "-o", "comm=", "-p", pid }, { stderr = "null" })
-        if comm:find("sleep%s*$") then
+        if comm:find(name .. "%s*$") then
             break
         end
         dev_os.nap(SLEEP_POLL_SECONDS)
@@ -2205,6 +2221,22 @@ testing.test("rm prints the pid and command of a process inside the workspace", 
     testing.eq(errors, "Process " .. pid .. " (sleep) is still inside " .. path .. ".\n")
     testing.eq(fs.exists(path), false)
     testing.eq(running, true)
+end)
+
+testing.test("rm prints no process line for an ssh inside the workspace", function()
+    -- Start a process named ssh in the workspace folder
+    local root, path, env = rm_setup("jj")
+    env.split = true
+    local pid = start_sleep(path, { name = "ssh" })
+
+    -- Remove the workspace while it runs
+    local out, code, errors = support.dev(root, { "ws", "rm", "feat" }, env)
+    stop(pid)
+
+    -- Expect the removal and no warning
+    testing.eq(code, 0, out)
+    testing.eq(errors, "")
+    testing.eq(fs.exists(path), false)
 end)
 
 testing.test("rm prints no process line when no process is inside the workspace", function()
