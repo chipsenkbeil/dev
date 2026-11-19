@@ -946,7 +946,7 @@ end
 ---@field name string the caller's agent name
 ---@field empty string? why the working copy holds nothing to land
 ---@field move dev.board.wiring.MoveFn moves the card to its column
----@field clean_up fun(root: string, short: string): string removes the card's bookmark and workspace
+---@field clean_up fun(root: string, short: string): string removes its bookmark and workspace
 
 ---Finish the board half of a landing whose change already reached trunk.
 ---
