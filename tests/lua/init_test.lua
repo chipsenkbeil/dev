@@ -140,6 +140,18 @@ testing.test("the Rust fmt template names the fmt job and its patch", function()
     testing.eq(header.parse(text, "lua").patch, { job = "fmt", file = "fmt.patch" })
 end)
 
+testing.test("the rust pipeline indents with four spaces", function()
+    local text = pipelines.jobs(true)
+    local number = 0
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        number = number + 1
+        testing.ok(
+            not line:match("^  %S"),
+            "line " .. number .. " is indented by two spaces: " .. line
+        )
+    end
+end)
+
 local function stub(root, name, text)
     assert(fs.write(root .. "/bin/" .. name, text))
     assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. name }) == 0, "chmod failed")
