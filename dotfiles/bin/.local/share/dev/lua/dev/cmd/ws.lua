@@ -185,10 +185,18 @@ local function parse(ctx)
     return name
 end
 
+---Drop one trailing period from a reason so a sentence can quote it.
+---@param reason string the reason a step failed
+---@return string reason the reason with no trailing period
+local function quoted_reason(reason)
+    return (reason:gsub("%.$", ""))
+end
+
 local function remote_trunk(root, remote)
     local ref, err = vcs.remote_trunk(root, remote)
     if ref == nil then
-        return nil, string.format('Could not name the trunk of the remote: "%s".', err)
+        return nil,
+            string.format('Could not name the trunk of the remote: "%s".', quoted_reason(err))
     end
     return ref
 end
@@ -200,7 +208,7 @@ local function fetch_trunk(ctx)
     end
     local found, why = forge.resolve(ctx.root)
     if not found then
-        return string.format('The trunk cannot be compared: "%s".', why)
+        return string.format('The trunk cannot be compared: "%s".', quoted_reason(why))
     end
     local argv = vcs.base(ctx.root, backend, { quiet = true })
     if backend == vcs.JJ then
@@ -347,7 +355,7 @@ local function mkdir_failure(folder, reason)
     return string.format(
         'Could not make the folder %s. The mkdir command said: "%s".',
         folder,
-        reason
+        quoted_reason(reason)
     )
 end
 
@@ -726,8 +734,11 @@ local function purge(dir)
             if removed then
                 purged[#purged + 1] = "Purged " .. path .. " from the trash."
             else
-                purged[#purged + 1] =
-                    string.format('Could not purge %s. The rm command said: "%s".', path, err)
+                purged[#purged + 1] = string.format(
+                    'Could not purge %s. The rm command said: "%s".',
+                    path,
+                    quoted_reason(err)
+                )
             end
         end
     end
@@ -1180,7 +1191,7 @@ end
 local function finished_cards(root)
     local finished, why = cmd_board.finished(root)
     if not finished then
-        verb.say(string.format('Skipped the card test: "%s".', why))
+        verb.say(string.format('Skipped the card test: "%s".', quoted_reason(why)))
     end
     return finished
 end

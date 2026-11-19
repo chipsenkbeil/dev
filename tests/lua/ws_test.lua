@@ -331,6 +331,24 @@ testing.test("ws new says it could not make the folder", function()
     testing.eq(fs.exists(log), true)
 end)
 
+testing.test("ws quotes a reason without a doubled period", function()
+    -- Stub mkdir to fail with a reason that ends in a period
+    local root, path, env = setup("jj")
+    stub(root, "mkdir", "#!/bin/sh\necho 'mkdir stub failed.'\nexit 1\n")
+
+    -- Create the workspace so the first mkdir fails
+    local out, code = support.dev(root, { "ws", "new", "feat" }, env)
+
+    -- Expect one period after the closing quote
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "Could not make the folder "
+            .. fs.dirname(path)
+            .. '. The mkdir command said: "mkdir stub failed".\n'
+    )
+end)
+
 testing.test("new refuses a path that exists", function()
     -- Make the workspace folder before the command does
     local root, path, env, log = setup("jj")
