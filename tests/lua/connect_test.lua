@@ -104,6 +104,47 @@ testing.test("a connectable named ci-NAME execs ssh with that name as its own al
     fs.remove(root, { recursive = true })
 end)
 
+local SHADOWED =
+    [[{"protocol":1,"things":[{"name":"foo","machine":"m","kind":"host","address":"10.0.0.1","user":"dev","state":"running"},{"name":"ci-foo","machine":"m","kind":"host","address":"10.0.0.2","user":"dev","state":"running"}],"notes":[]}]]
+
+testing.test("a connectable whose alias names another is skipped by name", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.ls.json", SHADOWED))
+    local out, code = support.dev(root, { "connect", "foo" }, env())
+    testing.eq(code, 3)
+    local note = "dev connect: skipping foo, its alias ci-foo is the name of another connectable"
+    local first, last = out:find(note, 1, true)
+    testing.ok(first, out)
+    testing.eq(out:find(note, last + 1, true), nil)
+    testing.eq(calls(root):find("ssh ci-", 1, true), nil)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a connectable whose alias names another leaves the other one connecting", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.ls.json", SHADOWED))
+    local _, code = support.dev(root, { "connect", "ci-foo" }, env())
+    testing.eq(code, 0)
+    testing.eq(calls(root), "ci box ls --json\nci ssh config\nci ssh ls --json\nssh ci-foo\n")
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a connectable whose alias names another is not offered by the picker", function()
+    local root = sandbox()
+    assert(fs.write(root .. "/ssh.ls.json", SHADOWED))
+    local out, code = support.dev(
+        root,
+        { "connect", "--ssh" },
+        env({ FAKE_TTY = "1", FAKE_PICK = "b1", PICK_LOG = root .. "/picks" })
+    )
+    testing.eq(code, 0)
+    testing.ok(out:find("skipping foo, its alias ci-foo", 1, true), out)
+    local picks = fs.read(root .. "/picks") or ""
+    testing.eq(picks:find("\nfoo\t", 1, true), nil)
+    testing.ok(picks:find("\nci-foo\t", 1, true), picks)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("a name that is neither a box nor a connectable exits 3", function()
     local root = sandbox()
     local out, code = support.dev(root, { "connect", "nope" }, env())

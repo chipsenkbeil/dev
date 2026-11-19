@@ -306,7 +306,26 @@ local function connectables(opts)
             end
         end
     end
-    return found
+    local listed = {}
+    for _, entry in ipairs(found) do
+        listed[entry.name] = true
+    end
+    local kept = {}
+    for _, entry in ipairs(found) do
+        local reached = alias(entry.name)
+        if reached ~= entry.name and listed[reached] then
+            verb.note(
+                "dev connect: skipping "
+                    .. entry.name
+                    .. ", its alias "
+                    .. reached
+                    .. " is the name of another connectable"
+            )
+        else
+            kept[#kept + 1] = entry
+        end
+    end
+    return kept
 end
 
 ---The cells of a connectable's row in the picker.
