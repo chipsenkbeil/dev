@@ -1337,7 +1337,7 @@ testing.test("rename of a card on an unreadable board still fails with exit 1", 
     end
     local result = cmd_board.run("rename", { "11111111-a", "x" }, backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, "board unavailable")
+    testing.eq(result.message, "Board unavailable.")
 end)
 
 testing.test("discard posts the reason, labels the card and moves it to Done", function()
@@ -1824,10 +1824,10 @@ testing.test("move to Done is never queued when the card cannot be read", functi
         return nil, message
     end
     local result = cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend)
-    testing.eq(result.message, message)
+    testing.eq(result.message, "Board unavailable: cannot reach pomb.example (curl exit 7).")
     testing.eq(result.unqueued, true)
     result = cmd_board.run("move", { "11111111-a", support.Column.REVIEW }, backend)
-    testing.eq(result.message, message)
+    testing.eq(result.message, "Board unavailable: cannot reach pomb.example (curl exit 7).")
     testing.eq(result.unqueued, nil)
 end)
 
@@ -2091,7 +2091,7 @@ testing.test("responsible shows, sets and clears the session and refuses a bad c
     backend.refusal = "pomb answered 403: no"
     result = cmd_board.run("responsible", { "11111111-a", "x" }, backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, "pomb answered 403: no")
+    testing.eq(result.message, "Pomb answered 403: no.")
 end)
 
 local function with_epic()
@@ -2121,7 +2121,7 @@ testing.test("epic turns a card into an epic and prints the refusal as given", f
     backend.refusal = "pomb answered 409: the card holds a live claim"
     result = cmd_board.run("epic", { "11111111-b" }, backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, "pomb answered 409: the card holds a live claim")
+    testing.eq(result.message, "Pomb answered 409: the card holds a live claim.")
     testing.eq(cmd_board.run("epic", {}, backend).code, 2)
     testing.eq(cmd_board.run("epic", { "deadbeef" }, backend).code, 1)
 end)
@@ -3641,7 +3641,7 @@ testing.test("a refused move to Verify writes the missing column from its reason
     local result = cmd_board.run("outcome", { "cccccccc", "--tick", "2" }, backend)
     testing.eq(
         result.message,
-        "outcome cccccccc 2 ticked, but the move to Verify failed. "
+        "Outcome cccccccc 2 ticked, but the move to Verify failed. "
             .. "The board has no Verify column. Run `dev board init`."
     )
 end)
@@ -4301,7 +4301,7 @@ testing.test("a failed comments read refuses the reclaim check with its message"
     as_agent("project-run/b", function()
         local result = cmd_board.run("checks", { "cccccccc", "dev test" }, backend)
         testing.eq(result.code, 1)
-        testing.eq(result.message, "comments are unavailable")
+        testing.eq(result.message, "Comments are unavailable.")
     end)
     for _, call in ipairs(backend.calls) do
         testing.eq(call[1], "comments")
@@ -4616,11 +4616,11 @@ testing.test(
 
 testing.test("answer prints the backend's refusal and exits 1", function()
     local backend = fake(blocked_cards())
-    backend.refusal = "pomb answered 409: the question is answered already"
+    backend.refusal = "pomb answered 409: the question is answered already."
     local result =
         cmd_board.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, backend.refusal)
+    testing.eq(result.message, "Pomb answered 409: the question is answered already.")
 end)
 
 testing.test(
@@ -5014,7 +5014,7 @@ testing.test("next counts the comments of the card and how many are the owner's"
     end
     result = cmd_board.run("next", {}, backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, "no comments for you")
+    testing.eq(result.message, "No comments for you.")
 end)
 
 testing.test("next --column takes Backlog or Icebox and refuses other columns", function()
@@ -5941,7 +5941,7 @@ testing.test("escalate prints the refusal and writes nothing", function()
     backend.refusal = "pomb answered 403: card_locked"
     local result = cmd_board.run("escalate", { "11111111-a", "why" }, backend)
     testing.eq(result.code, 1)
-    testing.eq(result.message, "pomb answered 403: card_locked")
+    testing.eq(result.message, "Pomb answered 403: card_locked.")
     testing.eq(#backend.calls, 1)
     testing.eq(backend.calls[1][1], "escalate")
 end)
@@ -6364,7 +6364,7 @@ testing.test("a locked store fails at once and curl never runs", function()
     local root, home = sandbox({ locked = true })
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("board unavailable: pass is locked", 1, true), out)
+    testing.ok(out:find("Board unavailable: pass is locked", 1, true), out)
     testing.eq(read(root, "calls"):find("curl", 1, true), nil)
 end)
 
@@ -6770,7 +6770,7 @@ testing.test("an http error reports the server's message", function()
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("board unavailable: pomb answered 403: nope", 1, true), out)
+    testing.ok(out:find("Board unavailable: pomb answered 403: nope", 1, true), out)
 end)
 
 testing.test("an unreachable server reports the curl exit", function()
@@ -6779,7 +6779,7 @@ testing.test("an unreachable server reports the curl exit", function()
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.ok(
-        out:find("board unavailable: cannot reach https://pomb.example (curl exit 7)", 1, true),
+        out:find("Board unavailable: cannot reach https://pomb.example (curl exit 7)", 1, true),
         out
     )
 end)
@@ -6926,7 +6926,7 @@ testing.test(
             },
             {
                 body = '{"code":"card_locked","message":"this task carries a locking label, so only the owner can change it"}',
-                want = "pomb locked this card: this task carries a locking label",
+                want = "Pomb locked this card: this task carries a locking label",
             },
         }
         for _, case in ipairs(cases) do
@@ -7928,7 +7928,7 @@ testing.test("a board with no colour of the size asked for is reported", functio
     )
     local out, code = dev(root, home, { "board", "size", "11111111-a", "1" })
     testing.eq(code, 1)
-    testing.ok(out:find("board unavailable: the board has no yellow colour", 1, true), out)
+    testing.ok(out:find("Board unavailable: the board has no yellow colour", 1, true), out)
     out, code = dev(root, home, { "board", "size", "11111111-a", "7" })
     testing.eq(code, 2)
 end)
@@ -8669,10 +8669,10 @@ testing.test("a 403 on a comment says it is not yours and exits 1", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "dddddddd", "x" })
     testing.eq(code, 1)
-    testing.eq(out, "that comment is not yours to change\n")
+    testing.eq(out, "That comment is not yours to change.\n")
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "dddddddd" })
     testing.eq(code, 1)
-    testing.eq(out, "that comment is not yours to change\n")
+    testing.eq(out, "That comment is not yours to change.\n")
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
     testing.eq(code, 1)
     testing.eq(out, "A comment id needs at least 8 hex characters: eeee.\n")
@@ -8688,7 +8688,7 @@ testing.test("a card_locked 403 on a comment says the card is locked and exits 1
     }) do
         local out, code = dev(root, home, args)
         testing.eq(code, 1)
-        testing.ok(out:find("pomb locked this card: locked", 1, true), out)
+        testing.ok(out:find("Pomb locked this card: locked", 1, true), out)
         testing.eq(out:find("not yours", 1, true), nil)
     end
 end)
@@ -8710,7 +8710,7 @@ testing.test("a card_locked 403 on size prints Pomb's reason and exits 1", funct
     locked_curl(root, '*"-X PATCH"*')
     local out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("pomb locked this card: this task carries a locking label", 1, true), out)
+    testing.ok(out:find("Pomb locked this card: this task carries a locking label", 1, true), out)
 end)
 
 testing.test("a card_locked 403 on order prints Pomb's reason and exits 1", function()
@@ -8718,7 +8718,7 @@ testing.test("a card_locked 403 on order prints Pomb's reason and exits 1", func
     locked_curl(root, "*/move*")
     local out, code = dev(root, home, { "board", "order", "11111111-b", "11111111-a" })
     testing.eq(code, 1, out)
-    testing.ok(out:find("pomb locked this card: this task carries a locking label", 1, true), out)
+    testing.ok(out:find("Pomb locked this card: this task carries a locking label", 1, true), out)
 end)
 
 testing.test("prose warnings reach standard error and the write still happens", function()
@@ -8860,7 +8860,7 @@ testing.test("a non-JSON answer from the server is reported as unreadable", func
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("board unavailable: pomb sent an answer dev cannot read", 1, true), out)
+    testing.ok(out:find("Board unavailable: pomb sent an answer dev cannot read", 1, true), out)
 end)
 
 testing.test("a note may begin with a dash", function()
@@ -10191,8 +10191,8 @@ testing.test("a permission_denied with no board says the token lacks it everywhe
     testing.eq(code, 1)
     testing.eq(
         out,
-        "board unavailable: pomb answered 403: this token lacks the tasks.edit permission "
-            .. "on every board; use a token that has it\n"
+        "Board unavailable: pomb answered 403: this token lacks the tasks.edit permission "
+            .. "on every board; use a token that has it.\n"
     )
 end)
 
@@ -10207,8 +10207,8 @@ testing.test("a permission_denied with a board says the board is not assigned", 
     testing.eq(code, 1)
     testing.eq(
         out,
-        "board unavailable: this token has the tasks.edit permission but is not assigned "
-            .. "to board board-9; add the board to the token\n"
+        "Board unavailable: this token has the tasks.edit permission but is not assigned "
+            .. "to board board-9; add the board to the token.\n"
     )
 end)
 
@@ -10234,8 +10234,8 @@ testing.test("role-refusal-denied names the refused permission and the role", fu
     testing.eq(code, 1)
     testing.eq(
         out,
-        "board unavailable: pomb answered 403: this token (role implementer) lacks the "
-            .. "tasks.edit permission on every board; use a token that has it\n"
+        "Board unavailable: pomb answered 403: this token (role implementer) lacks the "
+            .. "tasks.edit permission on every board; use a token that has it.\n"
     )
 end)
 
@@ -10248,7 +10248,10 @@ testing.test("role-refusal-exceeds-grant names the refused action and the role",
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "board unavailable: pomb answered 403: the implementer role cannot tasks.bin\n")
+    testing.eq(
+        out,
+        "Board unavailable: pomb answered 403: the implementer role cannot tasks.bin.\n"
+    )
 end)
 
 testing.test("role-refusal-norole keeps the refusal text with no role named", function()
@@ -10260,7 +10263,7 @@ testing.test("role-refusal-norole keeps the refusal text with no role named", fu
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "board unavailable: pomb answered 403: too much\n")
+    testing.eq(out, "Board unavailable: pomb answered 403: too much.\n")
 end)
 
 testing.test("role-refusal-expired says the role token expired and to mint it again", function()
@@ -10272,7 +10275,7 @@ testing.test("role-refusal-expired says the role token expired and to mint it ag
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "board unavailable: the role token expired; mint it again from its issuer\n")
+    testing.eq(out, "Board unavailable: the role token expired; mint it again from its issuer.\n")
 end)
 
 testing.test("an insufficient_scope 403 still reports the server's message", function()
@@ -10284,7 +10287,10 @@ testing.test("an insufficient_scope 403 still reports the server's message", fun
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "board unavailable: pomb answered 403: insufficient token scope: needs admin\n")
+    testing.eq(
+        out,
+        "Board unavailable: pomb answered 403: insufficient token scope: needs admin.\n"
+    )
 end)
 
 testing.test("a board missing from a token's assigned boards gets its own message", function()
@@ -10299,8 +10305,8 @@ testing.test("a board missing from a token's assigned boards gets its own messag
     testing.eq(code, 1)
     testing.eq(
         out,
-        "board unavailable: pomb lists no board named dotfiles for this token, which is "
-            .. "assigned only to Other; if the board exists, add it to the token\n"
+        "Board unavailable: pomb lists no board named dotfiles for this token, which is "
+            .. "assigned only to Other; if the board exists, add it to the token.\n"
     )
 end)
 
@@ -10312,7 +10318,7 @@ testing.test("a missing board stays plain on a token that sees every board", fun
 ]])
         local out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 1)
-        testing.eq(out, "board unavailable: pomb has no board named dotfiles\n")
+        testing.eq(out, "Board unavailable: pomb has no board named dotfiles.\n")
     end
 end)
 
@@ -10954,7 +10960,7 @@ testing.test("wait --for human prints its held lines before a Pomb failure", fun
         { "--for", "human" },
         { cards = blocked_a() }
     )
-    testing.eq(result.message, MOVED_A .. "\nstop")
+    testing.eq(result.message, MOVED_A .. "\nStop.")
 end)
 
 testing.test("wait --for human prints its held lines before a reply with no cursor", function()
@@ -11036,7 +11042,7 @@ testing.test("wait --for human keeps waiting on a trimmed stream with no moved c
         { oldest = "20" },
         { message = "stop" },
     }, { "--for", "human" }, { cards = cards })
-    testing.eq(result.message, "stop")
+    testing.eq(result.message, "Stop.")
     testing.eq(seen.afters, { "none", "9", "10", "11", "20" })
     testing.eq(fs.read(path .. ".human.cursor"), "20\n")
 end)
@@ -11371,7 +11377,7 @@ testing.test("wait --for human gives up after ten failed comment reads", functio
     })
     testing.eq(result.code, 1)
     testing.ok(
-        result.message:find("could not read the comments of " .. ID_A, 1, true),
+        result.message:find("Could not read the comments of " .. ID_A, 1, true),
         result.message
     )
     testing.eq(#seen.naps, 9)
@@ -11839,7 +11845,7 @@ testing.test("delete shows Pomb's permission_denied and card_locked as they come
         { agent = LEAD }
     )
     testing.eq(code, 1, out)
-    testing.ok(out:find("pomb locked this card: locked", 1, true), out)
+    testing.ok(out:find("Pomb locked this card: locked", 1, true), out)
     testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
 end)
 
@@ -12039,7 +12045,7 @@ testing.test("attach prints Pomb's refusal as Pomb words it and checks no size o
     )
     local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
     testing.eq(code, 1)
-    testing.ok(out:find("new.png: the task holds its most attachments", 1, true), out)
+    testing.ok(out:find("New.png: the task holds its most attachments", 1, true), out)
 end)
 
 testing.test("attach keeps uploading the other files after Pomb refuses one", function()
@@ -13020,4 +13026,21 @@ testing.test("claim_card writes a record when the claim lapsed after the fetch",
     ffi.C.setenv("XDG_STATE_HOME", previous, 1)
     testing.eq(fence, 4)
     testing.eq(stub.notes, 1)
+end)
+
+testing.test("failure capitalizes a single-line message and adds the missing period", function()
+    local result = guards.failure("pomb answered 409: task owned by someone")
+    testing.eq(result.message, "Pomb answered 409: task owned by someone.")
+    testing.eq(result.code, 1)
+end)
+
+testing.test("failure leaves a multi-line message as written", function()
+    local message = "lint failed\nsecond line without a period"
+    testing.eq(guards.failure(message).message, message)
+end)
+
+testing.test("failure leaves a message that already ends in punctuation", function()
+    testing.eq(guards.failure("Already a sentence.").message, "Already a sentence.")
+    testing.eq(guards.failure("Is it done?").message, "Is it done?")
+    testing.eq(guards.failure("Stop now!").message, "Stop now!")
 end)

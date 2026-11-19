@@ -193,6 +193,7 @@ function M.unreachable(message, idempotent)
     if type(message) ~= "string" then
         return false
     end
+    message = message:lower():gsub("%.$", "")
     local reasons = {
         "cannot reach .* %(curl exit [567]%)$",
         "pass timed out",

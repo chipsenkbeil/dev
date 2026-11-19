@@ -2,6 +2,7 @@ local board = require("dev.board")
 local check = require("dev.board.check")
 local land = require("dev.board.land")
 local dev_os = require("dev.os")
+local text = require("dev.text")
 local vcs = require("dev.vcs")
 
 ---The refusals and guards a board change runs before it acts.
@@ -21,10 +22,13 @@ local function usage(message)
     return { message = message, code = USAGE }
 end
 
----Build a failure result.
+---Build a failure result, making a single-line message a full sentence.
 ---@param message string what went wrong
 ---@return dev.cmd.board.Result result the error with the failure code
 local function failure(message)
+    if type(message) == "string" and not message:find("\n") and not message:find("[?!]%s*$") then
+        message = text.sentence(message)
+    end
     return { message = message, code = FAILURE }
 end
 

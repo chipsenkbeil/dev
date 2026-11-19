@@ -2745,7 +2745,7 @@ testing.test("a move to Done is refused and not queued while Pomb is unreachable
     assert(fs.write(root .. "/down", ""))
     local out, code = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), Column.DONE })
     testing.eq(code, 1, out)
-    testing.ok(out:find("board unavailable", 1, true), out)
+    testing.ok(out:find("Board unavailable", 1, true), out)
     testing.eq(fs.exists(queue_path(home)), false)
 end)
 

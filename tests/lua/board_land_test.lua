@@ -1244,7 +1244,7 @@ if has_jj then
         for _, kind in ipairs({ "code", "style", "recheck" }) do
             local out, code = record_review(project, id, { kind = kind, env = "dotfiles/builder" })
             testing.eq(code, 1, out)
-            testing.ok(out:find("dotfiles/builder cannot record a review by rev", 1, true), out)
+            testing.ok(out:find("Dotfiles/builder cannot record a review by rev", 1, true), out)
         end
         testing.eq(#comments(project.home, id), before)
         must(record_review(project, id))
@@ -2839,7 +2839,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         end
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
-        testing.eq(result.message, "board unavailable: comments timed out")
+        testing.eq(result.message, "Board unavailable: comments timed out.")
         testing.eq(backend.notes, {})
     end)
 
@@ -2851,7 +2851,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         end
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
-        testing.eq(result.message, "board unavailable: cards timed out")
+        testing.eq(result.message, "Board unavailable: cards timed out.")
         testing.eq(backend.notes, {})
     end)
 

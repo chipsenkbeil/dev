@@ -4621,6 +4621,12 @@ Writes:
 A curl failure is `board unavailable: cannot reach <url> (curl exit N)`. An
 HTTP error is `board unavailable: pomb answered <status>: <message>`.
 
+The backend messages quoted in this doc are the raw text a backend returns.
+`failure()` in `board/guards.lua` turns a single-line message into a sentence
+before `dev board` prints it, so the user reads `Board unavailable: ...` with a
+closing period. A message with a newline, or one that ends in `?` or `!`, is
+printed as written.
+
 ### How init runs
 
 `init` is deterministic and idempotent. It never deletes a column, a colour or
