@@ -62,6 +62,34 @@ local function not_lead_message(action)
         .. "."
 end
 
+---Write why the move to Verify was refused.
+---@param reason dev.board.MoveReason? the reason the backend named
+---@param why string the backend's message
+---@param column string the column of the move
+---@return string message the text
+local function verify_refusal(reason, why, column)
+    if reason == board.MoveReason.NO_COLUMN then
+        return "The board has no " .. column .. " column. Run `dev board init`."
+    end
+    return sentence(why)
+end
+
+---Write why Pomb refused the seat verdict.
+---@param reason dev.board.SeatReason? the reason the backend named
+---@param why string the backend's message
+---@param seat string the seat of the verdict
+---@return string message the text
+local function seat_refusal(reason, why, seat)
+    if reason == board.SeatReason.NO_SEAT then
+        return string.format(
+            "The card has no %s seat and this token cannot add one (%s). The claim adds the seats, so take the card with dev board take first.",
+            seat,
+            why
+        )
+    end
+    return sentence(why)
+end
+
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
 local index_of = runner.index_of
@@ -1734,7 +1762,7 @@ local function move_once(backend, args, opts)
             closes = parent.id
         end
     end
-    local ok, message, at_limit = backend:move(card.id, column, {
+    local ok, message, refusal = backend:move(card.id, column, {
         fence = held and held.fence,
         lane = lane,
         force = board.labelled(card, board.TRUNK_BLOCKER) or nil,
@@ -1744,7 +1772,7 @@ local function move_once(backend, args, opts)
             claims.stop(card.id)
             backend:release(card.id, held.fence)
         end
-        if at_limit then
+        if refusal == board.MoveReason.FULL then
             return runner.full(runner.limits.REFUSED .. message)
         end
         return to_done and unqueued(failure(message)) or failure(message)
@@ -2792,10 +2820,12 @@ function commands.outcome(backend, args)
             open = open or (i ~= number and not outcome.done)
         end
         if not open then
-            local moved, why = backend:move(card.id, stages.verify, { fence = fence })
+            local moved, why, refusal = backend:move(card.id, stages.verify, { fence = fence })
             if not moved then
                 return failure(
-                    result.output .. ", but the move to Verify failed. " .. sentence(why)
+                    result.output
+                        .. ", but the move to Verify failed. "
+                        .. verify_refusal(refusal, why, stages.verify)
                 )
             end
             result.output = result.output .. "\nmoved " .. prefix .. " to " .. stages.verify
@@ -3135,15 +3165,17 @@ function commands.review(backend, args)
     local ok
     local warnings
     if backend.seat_verdict then
-        ok, message =
+        local refusal
+        ok, message, refusal =
             backend:seat_verdict(card.id, kind, by, review.SEAT_VERDICTS[verdict], rev.commit)
         if not ok then
+            local detail = seat_refusal(refusal, message, kind)
             warnings = {
                 string.format(
                     "The %s seat of card %s was NOT set, so Pomb holds no seat verdict for this review. %s The review is still recorded on the card.",
                     kind,
                     short,
-                    sentence(message)
+                    detail
                 ),
             }
         end

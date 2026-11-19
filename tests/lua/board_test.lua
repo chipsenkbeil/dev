@@ -3482,6 +3482,22 @@ testing.test("ticking the last open outcome moves the card to Verify", function(
     testing.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.VERIFY, nil })
 end)
 
+testing.test("a refused move to Verify writes the missing column from its reason", function()
+    local card = colored("green")
+    card.column = support.COLUMN_NAME.REVIEW
+    card.outcomes = outcomes(2, 1)
+    local backend = fake({ card })
+    function backend:move()
+        return nil, "board unavailable: the board has no Verify column", board.MoveReason.NO_COLUMN
+    end
+    local result = cmd_board.run("outcome", { "cccccccc", "--tick", "2" }, backend)
+    testing.eq(
+        result.message,
+        "outcome cccccccc 2 ticked, but the move to Verify failed. "
+            .. "The board has no Verify column. Run `dev board init`."
+    )
+end)
+
 testing.test("a tick that leaves an outcome open keeps the card in Review", function()
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW

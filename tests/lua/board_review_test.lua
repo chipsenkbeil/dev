@@ -1,4 +1,5 @@
 local testing = require("dev.testing")
+local board = require("dev.board")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -519,7 +520,7 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     testing.ok(result.message:find("Curl exit 28", 1, true), result.message)
 end)
 
-local function seat_backend(root, refusal)
+local function seat_backend(root, refusal, reason)
     local card = {
         id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name = "Card",
@@ -543,7 +544,7 @@ local function seat_backend(root, refusal)
         self.seats[#self.seats + 1] =
             { id = id, seat = seat, name = name, verdict = verdict, revision = revision }
         if refusal then
-            return nil, refusal
+            return nil, refusal, reason
         end
         return true
     end
@@ -598,6 +599,23 @@ testing.test("board_review_reports_a_refused_seat", function()
     testing.ok(result.warnings[1]:find("owner_seat", 1, true), result.warnings[1])
     testing.ok(result.warnings[1]:find("seat of card", 1, true), result.warnings[1])
     testing.eq(#backend.notes, 1)
+end)
+
+testing.test("board_review_writes_the_missing_seat_warning_from_its_reason", function()
+    local root = git_root()
+    local backend = seat_backend(root, "add refused", board.SeatReason.NO_SEAT)
+    local result = review_as(backend, "code", "clean")
+    testing.eq(result.code, nil)
+    testing.eq(#result.warnings, 1)
+    testing.ok(
+        result.warnings[1]:find(
+            "The card has no code seat and this token cannot add one (add refused).",
+            1,
+            true
+        ),
+        result.warnings[1]
+    )
+    testing.ok(result.warnings[1]:find("dev board take first.", 1, true), result.warnings[1])
 end)
 
 testing.test("board_review_still_writes_dev_review_comment", function()
@@ -669,10 +687,12 @@ testing.test("seat_verdict adds no seat for another 404 and stops at each refusa
     testing.eq({ ok, message, #backend.calls }, { nil, "pomb answered 409 (owner_seat)", 1 })
 
     backend = pomb_seats({ NO_SEAT, { nil, "add refused" } })
-    ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
-    testing.eq({ ok, #backend.calls }, { nil, 2 })
-    testing.ok(message:find("The card has no code seat", 1, true), message)
-    testing.ok(message:find("add refused", 1, true), message)
+    local reason
+    ok, message, reason = backend:seat_verdict("t1", "code", "r", "approved", "abc")
+    testing.eq(
+        { ok, message, reason, #backend.calls },
+        { nil, "add refused", board.SeatReason.NO_SEAT, 2 }
+    )
 
     backend = pomb_seats({ { true }, { nil, "verdict refused" } })
     ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")

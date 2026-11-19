@@ -921,19 +921,22 @@ end
 function Backend:move(id, column, opts)
     opts = opts or {}
     local position = opts.position or 0
-    return self:__update(function(doc)
+    local reason
+    local done, why = self:__update(function(doc)
         local card, message = card_of(doc, id, opts.fence)
         if not card then
             return nil, message
         end
         local target = column_named(doc, column)
         if not target then
+            reason = board.MoveReason.NO_COLUMN
             return nil, "The board has no " .. column .. " column. Run `dev board init`."
         end
         local lane
         if opts.lane then
             lane = lane_named(doc, opts.lane)
             if not lane then
+                reason = board.MoveReason.NO_LANE
                 return nil, "The board has no " .. opts.lane .. " lane."
             end
         end
@@ -960,6 +963,7 @@ function Backend:move(id, column, opts)
         end
         return true
     end)
+    return done, why, reason
 end
 
 function Backend:set_size(id, color, fence)

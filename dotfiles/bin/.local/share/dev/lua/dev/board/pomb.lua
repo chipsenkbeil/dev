@@ -24,7 +24,6 @@ local ROLES_LIST_PATH = "/api/v1/agent-roles"
 local CHILDREN_PATH = "/api/v1/auth/tokens/children"
 local CONFLICT = 409
 local LIMIT_REACHED = "wip_limit_reached"
-local FULL = "full"
 local NOT_FOUND = 404
 local UNKNOWN_ROLE = "unknown_role"
 local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text"
@@ -1359,12 +1358,7 @@ function Backend:seat_verdict(id, seat, name, verdict, revision)
         end
     end
     if add_refused then
-        return nil,
-            string.format(
-                "The card has no %s seat and this token cannot add one (%s). The claim adds the seats, so take the card with dev board take first.",
-                seat,
-                message
-            )
+        return nil, message, board.SeatReason.NO_SEAT
     end
     if not taken then
         if type(doc) == "table" and doc.code then
@@ -1600,14 +1594,18 @@ function Backend:move(id, column, opts)
     end
     local target = self:__column_id(column)
     if not target then
-        return nil, unavailable("the board has no " .. column .. " column")
+        return nil,
+            unavailable("the board has no " .. column .. " column"),
+            board.MoveReason.NO_COLUMN
     end
     opts = opts or {}
     local body = { column_id = target, position = opts.position or TOP }
     if opts.lane then
         body.swimlane_id = self:__lane_id(opts.lane)
         if not body.swimlane_id then
-            return nil, unavailable("the board has no " .. opts.lane .. " lane")
+            return nil,
+                unavailable("the board has no " .. opts.lane .. " lane"),
+                board.MoveReason.NO_LANE
         end
     end
     local moved, status, doc
@@ -1619,7 +1617,7 @@ function Backend:move(id, column, opts)
     )
     if not moved then
         if status == CONFLICT and type(doc) == "table" and doc.code == LIMIT_REACHED then
-            return nil, present(doc.message) or message, FULL
+            return nil, present(doc.message) or message, board.MoveReason.FULL
         end
         return nil, message
     end

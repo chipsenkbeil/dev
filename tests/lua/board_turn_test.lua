@@ -1323,10 +1323,9 @@ testing.test("a review names the seat the card lacks when Pomb refuses to add it
     assert(fs.write(root .. "/no_seat", "1"))
     assert(fs.write(root .. "/seat_refused", "1"))
     on_pomb(root, function(backend)
-        local ok, message = backend:seat_verdict(ID_A, "style", "r", "approved", "abc")
+        local ok, _, reason = backend:seat_verdict(ID_A, "style", "r", "approved", "abc")
         testing.eq(ok, nil)
-        testing.ok(message:find("The card has no style seat", 1, true), message)
-        testing.ok(message:find("dev board take", 1, true), message)
+        testing.eq(reason, board.SeatReason.NO_SEAT)
     end)
 end)
 

@@ -162,8 +162,9 @@ end
 ---@field log_time fun(self: dev.board.Backend, id: string, minutes: integer, role: string,
 ---   note: string?): boolean?, string? time logged on the card in the role, or nil and why not
 ---@field seat_verdict (fun(self: dev.board.Backend, id: string, seat: string, name: string,
----   verdict: string, revision: string): boolean?, string?)? the seat named SEAT taken by NAME and
----   answered with `approved` or `changes_needed` at the revision, or nil and Pomb's refusal, nil
+---   verdict: string, revision: string): boolean?, string?, dev.board.SeatReason?)? the seat named
+---   SEAT taken by NAME and answered with `approved` or `changes_needed` at the revision, or nil,
+---   Pomb's refusal and `no_seat` when the card has no such seat and the token cannot add it, nil
 ---   on a board with no seats
 ---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?):
 ---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
@@ -223,8 +224,8 @@ end
 ---   the oldest cursor that still resumes, when Pomb holds too many open waits for the token it
 ---   returns nil, a message, nil and true, and on any other failure nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.move.Opts?):
----   boolean?, string?, string? the card moved to a column, or nil, a message and `full` when Pomb
----   refuses it at a limit
+---   boolean?, string?, dev.board.MoveReason? the card moved to a column, or nil, a message and
+---   `full` when Pomb refuses it at a limit, `no_column` or `no_lane` when the board lacks it
 ---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the
 ---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
 ---   board with none, or nil and a message
@@ -424,6 +425,14 @@ M.CHECKS_RUN = "run"
 ---The actors a comment or an owner can be, by role.
 ---@type {AGENT: string, HUMAN: string}
 M.ACTOR = { AGENT = "agent", HUMAN = "human" }
+
+---The reasons a move names beside its message when the refusal is a fixed one.
+---@enum dev.board.MoveReason
+M.MoveReason = { FULL = "full", NO_COLUMN = "no_column", NO_LANE = "no_lane" }
+
+---The reason a seat verdict names beside its message when the card lacks the seat.
+---@enum dev.board.SeatReason
+M.SeatReason = { NO_SEAT = "no_seat" }
 
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"
