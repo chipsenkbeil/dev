@@ -2096,6 +2096,8 @@ function Backend:columns(name)
         rows[#rows + 1] = {
             name = column.name,
             is_done = column.is_done == true,
+            clears_blockers = column.clears_blockers == true,
+            is_blocked = column.is_blocked == true,
             wip_limit = type(column.wip_limit) == "number" and column.wip_limit or nil,
             outcomes_locked = locked,
         }

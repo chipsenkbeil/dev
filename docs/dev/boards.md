@@ -1899,7 +1899,9 @@ line.
 this project's board.
 
 - It prints one per line in board order, with ` (done)` after a column that
-  finishes a card (`GET /api/boards/{id}`, `columns`).
+  finishes a card, then ` (clears blockers)` after one whose `clears_blockers`
+  flag is set, then ` (blocked)` after one whose `is_blocked` flag is set
+  (`GET /api/boards/{id}`, `columns`).
 - A board the token does not see is exit 1 and says no board has that name.
 - A local board answers only for its own name and refuses any other with
   exit 1.

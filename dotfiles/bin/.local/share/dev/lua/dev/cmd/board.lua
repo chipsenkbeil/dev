@@ -121,6 +121,8 @@ local claimant = runner.claimant
 local claim_card = runner.claim_card
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
+local CLEARS_BLOCKERS_MARK = " (clears blockers)"
+local BLOCKED_MARK = " (blocked)"
 local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
 local STAMP_CHARS = 16
@@ -4254,7 +4256,10 @@ function commands.columns(backend, args)
     end
     local lines = {}
     for i, column in ipairs(rows) do
-        lines[i] = column.name .. (column.is_done and DONE_MARK or "")
+        lines[i] = column.name
+            .. (column.is_done and DONE_MARK or "")
+            .. (column.clears_blockers and CLEARS_BLOCKERS_MARK or "")
+            .. (column.is_blocked and BLOCKED_MARK or "")
     end
     return { output = table.concat(lines, "\n") }
 end

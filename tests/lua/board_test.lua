@@ -6156,6 +6156,33 @@ testing.test("boards lists every board the token sees and columns reads one by n
     testing.eq(code, 2, out)
 end)
 
+testing.test("columns marks a column that clears blockers or is blocked", function()
+    local root, home = sandbox()
+    assert(
+        fs.write(
+            root .. "/boards.json",
+            '[{"id":"board-1","name":"dotfiles","archived":false},'
+                .. '{"id":"board-2","name":"General","archived":false}]'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/general.json",
+            '{"id":"board-2","name":"General","swimlanes":[],"columns":['
+                .. '{"id":"c1","name":"Todo"},'
+                .. '{"id":"c2","name":"Released","clears_blockers":true},'
+                .. '{"id":"c3","name":"Stuck","is_blocked":true},'
+                .. '{"id":"c4","name":"Finished","is_done":true,"clears_blockers":true}]}'
+        )
+    )
+    local out, code = dev(root, home, { "board", "columns", "General" })
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        "Todo\nReleased (clears blockers)\nStuck (blocked)\nFinished (done) (clears blockers)\n"
+    )
+end)
+
 testing.test("the board name defaults to the project directory", function()
     local root, home = sandbox({ project = '[board]\nbackend = "pomb"\n' })
     local out = dev(root, home, { "board", "status" })
