@@ -484,7 +484,9 @@ function M.wait(backend, args, opts)
             if failures >= WAIT_RETRIES then
                 return flush(failure(message))
             end
-            nap(WAIT_RETRY_SECONDS)
+            local pause =
+                math.min(WAIT_RETRY_SECONDS * 2 ^ (failures - 1), WAIT_LIMITED_MAX_SECONDS)
+            nap(pause * (1 - WAIT_JITTER * random()))
         else
             return flush(failure(message))
         end

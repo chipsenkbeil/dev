@@ -10966,6 +10966,25 @@ testing.test("wait retries Pomb being unreachable, then gives up after ten in a 
     testing.eq(#seen.naps, 9)
 end)
 
+testing.test(
+    "wait.retry.backs.off by doubling to the bound and resets after a good read",
+    function()
+        local down = { message = "board unavailable: cannot reach https://p (curl exit 7)" }
+        local replies = {}
+        for i = 1, 6 do
+            replies[i] = down
+        end
+        replies[7] = got("5", { kind = "task_updated", task_id = ID_A })
+        local result, seen = waited(replies, {})
+        testing.eq(result.output, "updated 11111111")
+        testing.eq(seen.naps, { 30, 60, 120, 240, 300, 300 })
+        replies =
+            { down, down, got("5"), down, got("6", { kind = "task_updated", task_id = ID_A }) }
+        result, seen = waited(replies, {})
+        testing.eq(seen.naps, { 30, 60, 30 })
+    end
+)
+
 local function limited()
     return { message = "board unavailable: pomb answered 429: end one", refused = true }
 end
@@ -11677,6 +11696,9 @@ end
 local function ticking(naps)
     local clock = 0
     return {
+        random = function()
+            return 0
+        end,
         nap = function(seconds)
             naps[#naps + 1] = seconds
             clock = clock + seconds
@@ -11717,12 +11739,27 @@ testing.test("move wait retries a full column until room frees", function()
     local result = cmd_board.move(backend, args, ticking(naps))
     testing.eq(result.code, nil)
     testing.eq(result.output, "moved cccccccc to " .. support.COLUMN_NAME.REVIEW)
-    testing.eq(naps, { 15, 15 })
+    testing.eq(naps, { 5, 7.5 })
     local moves = 0
     for _, call in ipairs(backend.calls) do
         moves = moves + (call[1] == "move" and 1 or 0)
     end
     testing.eq(moves, 1)
+end)
+
+testing.test("waiting.move.backs.off while the column stays full", function()
+    local backend = crowded(100)
+    local naps = {}
+    local args = { "cccccccc", support.Column.REVIEW, "--wait", "600" }
+    cmd_board.move(backend, args, ticking(naps))
+    testing.eq(naps[1], 5)
+    testing.eq(naps[2], 7.5)
+    testing.eq(naps[3], 11.25)
+    for i = 2, #naps - 1 do
+        testing.ok(naps[i] >= naps[i - 1], "the pause shrank at " .. i)
+        testing.ok(naps[i] <= 30, "the pause passed the bound at " .. i)
+    end
+    testing.eq(naps[#naps - 1], 30)
 end)
 
 testing.test("move wait gives up at its timeout with the full status", function()
@@ -11731,7 +11768,7 @@ testing.test("move wait gives up at its timeout with the full status", function(
     local args = { "cccccccc", support.Column.REVIEW, "--wait", "40" }
     local result = cmd_board.move(backend, args, ticking(naps))
     testing.eq(result.code, 3)
-    testing.eq(naps, { 15, 15, 10 })
+    testing.eq(naps, { 5, 7.5, 11.25, 16.25 })
     args[4] = "soon"
     result = cmd_board.move(backend, args)
     testing.eq(result.code, 2)

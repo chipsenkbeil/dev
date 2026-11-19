@@ -1600,7 +1600,8 @@ sat in Blocked or Icebox when it started has left it. It then prints
 `events were trimmed, check the board` after the lines it holds.
 
 An unreachable Pomb (no route, a locked `pass`, a gateway error) is retried
-every 30 seconds. After ten failures in a row `wait` exits 1 with the message.
+after a pause that doubles from 30 seconds to 5 minutes and starts over after a
+good read. After ten failures in a row `wait` exits 1 with the message.
 
 Pomb allows 4 open waits per token and every session shares one, so a fifth
 session gets a 429 with the code `too_many_waits`. That is never a failure.
@@ -3691,8 +3692,9 @@ A full column:
   `wip_limit_reached`, exits 3 and prints the refusal that names the column,
   its cards and its limit (see the limits below).
 - `--wait` is a whole number of seconds up to 86400 and is off by default. With
-  it, the move tries again every 15 seconds until room frees, and gives up at
-  the bound with exit 3 and the last refusal. A usage error is exit 2.
+  it, the move tries again until room frees, after a pause that grows from 5 to
+  30 seconds, and gives up at the bound with exit 3 and the last refusal. A
+  usage error is exit 2.
 - `dev board wait` has no event for a column freeing, so the wait polls the
   move. Each try repeats every check, and a try that takes the claim gives it
   back when Pomb refuses.

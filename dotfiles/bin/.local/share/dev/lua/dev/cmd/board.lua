@@ -1765,6 +1765,7 @@ end
 ---@field holds (fun(root: string, commit: string, rev: string): boolean)? says whether
 ---   trunk holds a card's landed commit, `land.holds` when nil
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
+---@field random dev.board.turn.Random? jitters the sleeps, `turn.entropy` when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
 
 ---Read the `--wait` flag, 0 when it is absent.
@@ -1806,6 +1807,7 @@ local function move_card(backend, args, opts)
     end
     local nap = opts and opts.nap or dev_os.nap
     local clock = opts and opts.now or store.now
+    local poll = turn.poller({ random = opts and opts.random })
     local deadline = clock() + wait
     while true do
         local result = move_once(backend, args, opts)
@@ -1813,7 +1815,7 @@ local function move_card(backend, args, opts)
         if result.code ~= runner.FULL or left <= 0 then
             return result
         end
-        nap(math.min(runner.POLL_SECONDS, left))
+        nap(math.min(poll:pace(runner.FULL), left))
     end
 end
 

@@ -8,9 +8,8 @@ local limits = require("dev.board.limits")
 ---@class dev.board.runner
 ---@field FLAG string the flag that sets a runner's size limit
 ---@field FULL integer the exit code of a move into a full column
----@field POLL_SECONDS integer how long a waiting move naps between tries
 ---@field limits dev.board.limits the in-flight limits Pomb holds
-local M = { FLAG = "--max-size", FULL = 3, POLL_SECONDS = 15, limits = limits }
+local M = { FLAG = "--max-size", FULL = 3, limits = limits }
 
 local usage = guards.usage
 local failure = guards.failure
