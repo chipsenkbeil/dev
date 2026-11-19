@@ -1289,6 +1289,9 @@ local function note_opts(args)
         return nil,
             usage("The " .. args[i] .. " flag takes no " .. KIND_FLAG .. " or " .. AS_FLAG .. ".")
     end
+    if args[i] and args[i]:find("^%-%-%a") then
+        return nil, usage("Unknown flag " .. args[i] .. ".")
+    end
     local words = { args[1] }
     for j = i, #args do
         words[#words + 1] = args[j]
