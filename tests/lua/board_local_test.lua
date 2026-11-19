@@ -1971,7 +1971,10 @@ testing.test("move to Review refuses a card that is not in progress under a clai
         local a = card_in(root, home, column)
         local out, code = dev(root, home, { "board", "move", a, Column.REVIEW })
         testing.eq(code, 1, out)
-        testing.ok(out:find("cannot move to Review from", 1, true), out)
+        testing.ok(
+            out:find("cannot move to " .. support.COLUMN_NAME.REVIEW .. " from", 1, true),
+            out
+        )
         testing.ok(out:find("It must pass In Progress under a claim first.", 1, true), out)
         out = dev(root, home, { "board", "ls", "--column", Column.REVIEW })
         testing.eq(out, "No cards.\n")
@@ -2076,7 +2079,10 @@ testing.test("move to Verify refuses a card that is not in Review", function()
     for _, id in ipairs({ backlog, ready, working }) do
         local out, code = dev(root, home, { "board", "move", id, Column.VERIFY })
         testing.eq(code, 1, out)
-        testing.ok(out:find("cannot move to Verify from", 1, true), out)
+        testing.ok(
+            out:find("cannot move to " .. support.COLUMN_NAME.VERIFY .. " from", 1, true),
+            out
+        )
         testing.ok(out:find("It must pass Review first.", 1, true), out)
     end
     local out = dev(root, home, { "board", "ls", "--column", Column.VERIFY })
@@ -2118,7 +2124,17 @@ testing.test("on a local board a plain move from Review to Verify is refused", f
     local a = in_review(root, home)
     local out, code = dev(root, home, { "board", "move", a, Column.VERIFY })
     testing.eq(code, 1, out)
-    testing.ok(out:find("cannot move to Verify from Review", 1, true), out)
+    testing.ok(
+        out:find(
+            "cannot move to "
+                .. support.COLUMN_NAME.VERIFY
+                .. " from "
+                .. support.COLUMN_NAME.REVIEW,
+            1,
+            true
+        ),
+        out
+    )
     testing.ok(out:find("verifier's tick of its last open outcome", 1, true), out)
     out = dev(root, home, { "board", "ls", "--column", Column.VERIFY })
     testing.eq(out, "No cards.\n")
@@ -4128,7 +4144,14 @@ testing.test("epic_local_move", function()
     dev(root, home, { "board", "link", child, "parent", epic })
     local out, code = dev(root, home, { "board", "move", epic, Column.DONE })
     testing.eq(code, 1, out)
-    testing.ok(out:find("is an epic and cannot enter Done, a done column", 1, true), out)
+    testing.ok(
+        out:find(
+            "is an epic and cannot enter " .. support.COLUMN_NAME.DONE .. ", a done column",
+            1,
+            true
+        ),
+        out
+    )
     testing.ok(out:find("1 of 1 children are open", 1, true), out)
     out, code = support.to_review(function(args)
         return dev(root, home, args)

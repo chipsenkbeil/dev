@@ -2923,7 +2923,11 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             testing.eq(result.code, 1, result.message)
             testing.ok(result.message:find("The move to Done failed.", 1, true), result.message)
             testing.ok(
-                result.message:find("is not planned and cannot enter Done", 1, true),
+                result.message:find(
+                    "is not planned and cannot enter " .. support.COLUMN_NAME.DONE,
+                    1,
+                    true
+                ),
                 result.message
             )
             testing.ok(result.message:find("It lacks a size.", 1, true), result.message)
