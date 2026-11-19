@@ -616,12 +616,7 @@ local function fake_backend(root, card)
         return { view }
     end
     function backend:card(id)
-        for _, listed in ipairs(self:cards()) do
-            if listed.id == id then
-                return listed
-            end
-        end
-        return nil, "no card " .. id
+        return support.listed_card(self, id)
     end
     function backend:comments()
         return {}

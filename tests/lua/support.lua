@@ -36,6 +36,20 @@ function M.drop_turn_card(path)
     assert(fs.write(path, json.encode(doc)))
 end
 
+---Look a card up in a fake backend's own list.
+---@param backend { cards: fun(self: any): table<string, any>[] } the fake to search
+---@param id string the card id
+---@return table<string, any>? card the card with that id
+---@return string? message why no card was found
+function M.listed_card(backend, id)
+    for _, listed in ipairs(backend:cards()) do
+        if listed.id == id then
+            return listed
+        end
+    end
+    return nil, "no card " .. id
+end
+
 ---Put a card in a column of a local board file, the way a landed card arrives, so the proof guard
 ---on a move into Release or Done never reads it.
 ---@param path string the local board file

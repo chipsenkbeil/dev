@@ -969,12 +969,7 @@ testing.test("a result that cannot be written is never reported as recorded", fu
         return { card }
     end
     function backend:card(id)
-        for _, listed in ipairs(self:cards()) do
-            if listed.id == id then
-                return listed
-            end
-        end
-        return nil, "no card " .. id
+        return support.listed_card(self, id)
     end
     function backend:note()
         return nil, "curl exit 28"
