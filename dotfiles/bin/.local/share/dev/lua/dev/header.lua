@@ -5,6 +5,7 @@
 ---@field runs_local boolean whether a `local` line is present
 ---@field positional boolean whether a `positional` line is present
 ---@field fetch dev.header.Fetch? the job and file named by the `fetch` line
+---@field patch dev.header.Fetch? the job and file named by the `patch` line
 ---@field flags string[] words of the `flags:` line, with `-h` and `--help` dropped
 ---@field long string[] the whole comment block, minus the marker lines
 ---@field warnings string[] one message per reserved flag the `flags:` line declared
@@ -21,6 +22,7 @@ local RESERVED_FLAGS = { ["-h"] = true, ["--help"] = true }
 local function marker(line)
     return line:find("^# *group:")
         or line:find("^# *fetch +%S+ +%S+ *$")
+        or line:find("^# *patch +%S+ +%S+ *$")
         or line:find("^# *hidden *$")
         or line:find("^# *local *$")
         or line:find("^# *positional *$")
@@ -89,14 +91,17 @@ local function flag_words(lines, name)
 end
 
 local function placement(lines)
-    local group, hidden, runs_local, positional, fetch = "", false, false, false, nil
+    local group, hidden, runs_local, positional, fetch, patch = "", false, false, false, nil, nil
     for number, line in ipairs(lines) do
         local value = line:match("^# *group: *(.*)$")
         local job, file = line:match("^# *fetch +(%S+) +(%S+) *$")
+        local patch_job, patch_file = line:match("^# *patch +(%S+) +(%S+) *$")
         if value and group == "" then
             group = value
         elseif job and not fetch then
             fetch = { job = job, file = file }
+        elseif patch_job and not patch then
+            patch = { job = patch_job, file = patch_file }
         elseif line:find("^# *hidden *$") then
             hidden = true
         elseif line:find("^# *local *$") then
@@ -107,7 +112,7 @@ local function placement(lines)
             break
         end
     end
-    return group, hidden, runs_local, positional, fetch
+    return group, hidden, runs_local, positional, fetch, patch
 end
 
 local function split_lines(text)
@@ -137,8 +142,8 @@ end
 ---
 ---A shell header is the comment block after the shebang. A Lua header is one
 ---leading `--[[ ... ]]` block holding the same lines. The first comment line
----is the description, and the `group:`, `hidden`, `local`, `positional`, `fetch JOB FILE`
----and `flags:` lines set the rest.
+---is the description, and the `group:`, `hidden`, `local`, `positional`, `fetch JOB FILE`,
+---`patch JOB FILE` and `flags:` lines set the rest.
 ---@param text string contents of the script
 ---@param kind "sh"|"lua" language of the script
 ---@param name string? script path, named in warnings
@@ -146,7 +151,7 @@ end
 function M.parse(text, kind, name)
     local lines = kind == "lua" and lua_block(text) or split_lines(text .. "\n")
     local flags, warnings = flag_words(lines, name or "script")
-    local group, hidden, runs_local, positional, fetch = placement(lines)
+    local group, hidden, runs_local, positional, fetch, patch = placement(lines)
     return {
         desc = first_comment(lines),
         group = group ~= "" and group or nil,
@@ -154,6 +159,7 @@ function M.parse(text, kind, name)
         runs_local = runs_local,
         positional = positional,
         fetch = fetch,
+        patch = patch,
         flags = flags,
         long = comment_block(lines),
         warnings = warnings,
