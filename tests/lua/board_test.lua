@@ -5425,6 +5425,27 @@ testing.test("time refuses bad minutes and a missing role with a usage error", f
     testing.eq(#backend.calls, 0)
 end)
 
+testing.test("time start refuses a needs:human card and a second clock on one card", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local cards = sample()
+    cards[2].labels = { "needs:human" }
+    local backend = fake(cards)
+    local first = cmd_board.run("time", { "start", "11111111-a", "--as", "planner" }, backend)
+    local second = cmd_board.run("time", { "start", "11111111-a", "--as", "reviewer" }, backend)
+    local human = cmd_board.run("time", { "start", "11111111-b", "--as", "planner" }, backend)
+    local bare = cmd_board.run("time", { "start", "11111111-a" }, backend)
+    local stopped = cmd_board.run("time", { "stop", "11111111-a" }, backend)
+    local again = cmd_board.run("time", { "stop", "11111111-a" }, backend)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(first.output, "started the planner clock on 11111111")
+    testing.eq(second.code, 1)
+    testing.eq(human.code, 1)
+    testing.eq(bare.code, 2)
+    testing.eq(stopped.output, "logged 1 minutes as planner on 11111111")
+    testing.eq(again.code, 1)
+end)
+
 testing.test("time prints the refusal of the backend", function()
     local backend = fake(sample())
     backend.refusal = "A local board holds no time entries."

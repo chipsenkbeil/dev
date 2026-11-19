@@ -3518,6 +3518,24 @@ The write:
 - A local board refuses with `A local board holds no time entries. Log time on
   a Pomb board.` (exit 1).
 
+`dev board time start CARD --as ROLE` starts a clock on this machine and
+prints `started the <role> clock on <id prefix>`. dev keeps the card, the role
+and the start time in a `<card>.clock` file beside the claim state. Models
+cannot measure elapsed time, so the clock is dev's.
+
+`dev board time stop CARD [--note TEXT]` logs the stretch and removes the
+clock. It logs the elapsed time as whole minutes, rounded and held within 1 to
+1440, under the role the clock started with, and prints the same `logged` line
+as the plain form. `stop` takes no `--as`.
+
+The refusals, all exit 1 unless stated:
+
+- `start` on a `needs:human` card.
+- `start` on a card with a running clock.
+- `start` with no `--as` or a blank one is exit 2.
+- `stop` on a card with no running clock.
+- A refused log keeps the clock running.
+
 ### note
 
 `dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT` adds a comment

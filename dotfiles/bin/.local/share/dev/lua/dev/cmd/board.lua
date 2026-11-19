@@ -2038,20 +2038,25 @@ end
 
 function commands.time(backend, args)
     local NOTE_FLAG = "--note"
-    local MAX_LOG_MINUTES = 1440
+    local clock = require("dev.board.clock")
     local flags, positional = parse(args, { [AS_FLAG] = true, [NOTE_FLAG] = true })
     if not flags then
         return positional
+    end
+    if clock.WORDS[positional[1]] then
+        return clock.run(backend, positional, flags[AS_FLAG], flags[NOTE_FLAG], function(word)
+            return find_card(backend, word)
+        end)
     end
     if #positional ~= 2 then
         return usage("Needs a card and the minutes.")
     end
     local minutes = positional[2]:match("^%d+$") and tonumber(positional[2])
-    if not minutes or minutes < 1 or minutes > MAX_LOG_MINUTES then
-        return usage("The minutes are a whole number from 1 to " .. MAX_LOG_MINUTES .. ".")
+    if not minutes or minutes < 1 or minutes > clock.MAX_MINUTES then
+        return usage("The minutes are a whole number from 1 to " .. clock.MAX_MINUTES .. ".")
     end
-    local role = flags[AS_FLAG] and flags[AS_FLAG]:match("^%s*(.-)%s*$")
-    if not role or role == "" or role:find("%c") then
+    local role = clock.role(flags[AS_FLAG])
+    if not role then
         return usage("The " .. AS_FLAG .. " flag needs the role the time was logged in.")
     end
     local card, err = find_card(backend, positional[1])

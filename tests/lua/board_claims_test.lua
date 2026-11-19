@@ -2,6 +2,7 @@ local ffi = require("ffi")
 
 local testing = require("dev.testing")
 local claims = require("dev.board.claims")
+local clock = require("dev.board.clock")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
@@ -61,4 +62,50 @@ testing.test("replace stops the old loop and records the new pid", function()
     testing.ok(new_running, "the new loop was stopped")
     testing.eq(state.pid, new)
     testing.eq(state.fence, 4)
+end)
+
+testing.test("time start keeps a running clock and time stop logs it and removes it", function()
+    -- Point the state at a scratch home and fake the clock and the backend
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local now = clock.now
+    local logged = {}
+    local backend = {}
+    function backend:log_time(id, minutes, role, note)
+        logged[#logged + 1] = { id, minutes, role, note }
+        return true
+    end
+    local card = { id = CARD, labels = {} }
+
+    -- Start at one time, stop 25 minutes later
+    clock.now = function()
+        return 1000
+    end
+    local started = clock.start(card, "reviewer")
+    local ticking = clock.read(CARD)
+    clock.now = function()
+        return 1000 + 25 * 60
+    end
+    local stopped = clock.stop(backend, card, "looked")
+    local left = clock.read(CARD)
+
+    -- Restore the environment
+    clock.now = now
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+
+    -- Check the clock ran, logged under its role and is gone
+    testing.eq(started.output, "started the reviewer clock on 11111111")
+    testing.eq(ticking.role, "reviewer")
+    testing.eq(ticking.start, 1000)
+    testing.eq(logged, { { CARD, 25, "reviewer", "looked" } })
+    testing.eq(stopped.output, "logged 25 minutes as reviewer on 11111111")
+    testing.eq(left, nil)
+end)
+
+testing.test("time stop refuses a card with no running clock", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local result = clock.stop({}, { id = CARD }, nil)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(result.code, 1)
 end)
