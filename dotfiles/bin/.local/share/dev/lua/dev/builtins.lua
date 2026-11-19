@@ -413,6 +413,12 @@ return {
         desc = "Move a card to Pomb's recycle bin with the lead token",
     },
     {
+        words = { "board", "restore" },
+        handler = "lua",
+        usage = "dev board restore CARD",
+        desc = "Bring a card back from Pomb's recycle bin",
+    },
+    {
         words = { "board", "token" },
         noun = true,
         desc = "Give a runner a Pomb role token: mint, and end it with revoke",

@@ -233,6 +233,14 @@ local function fake(cards, times, finished)
         calls[#calls + 1] = { "bin", id }
         return true
     end
+    function backend:binned()
+        calls[#calls + 1] = { "binned" }
+        return backend.in_bin or {}
+    end
+    function backend:restore(id)
+        calls[#calls + 1] = { "restore", id }
+        return "Ready"
+    end
     function backend:family(id)
         calls[#calls + 1] = { "family", id }
         return backend.kin or {}
@@ -12006,6 +12014,69 @@ testing.test("delete shows Pomb's permission_denied and card_locked as they come
     testing.eq(code, 1, out)
     testing.ok(out:find("Pomb locked this card: locked", 1, true), out)
     testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
+end)
+
+local RESTORED_TEXT = "restored 11111111 to Ready. The links the delete dropped stay dropped."
+    .. " Add them again with `dev board link`."
+
+testing.test("restore brings a binned card back and says its links stay dropped", function()
+    local backend = fake(sample())
+    backend.in_bin = { { id = ID_A, name = "Gone", restores_to = "Ready" } }
+    local result = cmd_board.run("restore", { "11111111" }, backend)
+    testing.eq(result.output, RESTORED_TEXT)
+    testing.eq(backend.calls, { { "binned" }, { "restore", ID_A } })
+end)
+
+testing.test("restore refuses a card that is not in the bin", function()
+    local backend = fake(sample())
+    backend.in_bin = { { id = ID_A, name = "Gone", restores_to = "Ready" } }
+    local result = cmd_board.run("restore", { "cccccccc" }, backend)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "No card in the bin starts with cccccccc.")
+    testing.eq(backend.calls, { { "binned" } })
+end)
+
+testing.test("restore needs one card and a backend with a bin", function()
+    local backend = fake(sample())
+    testing.eq(cmd_board.run("restore", {}, backend).code, 2)
+    testing.eq(cmd_board.run("restore", { "11111111", "x" }, backend).code, 2)
+    backend.restore = nil
+    local result = cmd_board.run("restore", { "11111111" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("keeps no recycle bin", 1, true), result.message)
+end)
+
+testing.test("restore reads the bin and posts the restore with the ordinary token", function()
+    local root, home = sandbox()
+    assert(
+        fs.write(
+            root .. "/bin.json",
+            '{"retention_days":30,"permanent_delete":false,"tasks":[{"id":"'
+                .. ID_A
+                .. '","name":"Gone","location":"Review","restores_to":"Ready"}]}'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/restore.json",
+            '{"id":"' .. ID_A .. '","column_id":"col-ready","column_name":"Ready"}'
+        )
+    )
+    local out, code = dev(root, home, { "board", "restore", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.eq(out, RESTORED_TEXT .. "\n")
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/boards/board-1/bin", 1, true), calls)
+    testing.ok(calls:find("-X POST", 1, true), calls)
+    testing.ok(calls:find("/api/bin/" .. ID_A .. "/restore", 1, true), calls)
+    testing.ok(calls:find("pass show secrets/worker/token/pomb", 1, true), calls)
+end)
+
+testing.test("restore on a local board says it has no bin", function()
+    local root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "scratch"\n' })
+    local out, code = dev(root, home, { "board", "restore", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("keeps no recycle bin", 1, true), out)
 end)
 
 local ISSUED = "pomb_ISSUEDrole0123456789"

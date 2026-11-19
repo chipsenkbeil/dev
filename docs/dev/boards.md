@@ -2400,6 +2400,23 @@ the lead.
 - The change is not queued while Pomb is unreachable.
 - Emptying the bin and deleting from it stay with the owner.
 
+### restore
+
+`dev board restore CARD` brings a card back from Pomb's recycle bin, with the
+ordinary token (Pomb asks only `tasks.edit` of it).
+
+- It reads the binned cards from `GET /api/boards/{id}/bin`, resolves the id
+  prefix among them, sends `POST /api/bin/{id}/restore` and prints
+  `restored <id prefix> to <column>`.
+- A card that is not in the bin exits 1 with `No card in the bin starts with
+  ID.`
+- A local board has no bin and exits 1.
+- The output always adds that the links the delete dropped stay dropped and are
+  added again with `dev board link` (Pomb keeps no record of which ones
+  they were).
+- A card whose old column is gone comes back to the board's first column.
+- Listing the bin and emptying it are not verbs.
+
 ### stale
 
 `dev board stale` takes `--days N`, `--icebox-days N`, `--lead-hours N` and

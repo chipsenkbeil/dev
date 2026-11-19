@@ -3128,6 +3128,27 @@ function Backend:bin(id)
     return true
 end
 
+function Backend:binned()
+    local board_id, message = self:__board_id()
+    if not board_id then
+        return nil, message
+    end
+    local doc
+    doc, message = self:__request("GET", "/api/boards/" .. board_id .. "/bin")
+    if not doc then
+        return nil, message
+    end
+    return doc.tasks or {}
+end
+
+function Backend:restore(id)
+    local doc, message = self:__request("POST", "/api/bin/" .. id .. "/restore")
+    if not doc then
+        return nil, message
+    end
+    return doc.column_name
+end
+
 function Backend:set_card(id, fields)
     local done, message = self:__request("PATCH", "/api/tasks/" .. id, fields)
     if not done then

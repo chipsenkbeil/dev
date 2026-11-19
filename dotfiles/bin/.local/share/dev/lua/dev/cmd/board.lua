@@ -152,6 +152,7 @@ local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
 local NO_BIN = "This board keeps no recycle bin. Dev cannot delete a card from it."
+local NO_RESTORE = "This board keeps no recycle bin. Dev cannot restore a card to it."
 local KIND_FLAG = "--kind"
 local BY_FLAG = "--by"
 local REV_FLAG = "--rev"
@@ -4124,6 +4125,35 @@ function commands.delete(backend, args)
         return failure(message)
     end
     return { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to the bin" }
+end
+
+function commands.restore(backend, args)
+    if #args ~= 1 then
+        return usage("Needs a card.")
+    end
+    if not backend.restore then
+        return failure(NO_RESTORE)
+    end
+    local binned, message = backend:binned()
+    if not binned then
+        return failure(message)
+    end
+    local item, why = board.resolve(binned, args[1], "card in the bin")
+    if not item then
+        return failure(why)
+    end
+    local column
+    column, message = backend:restore(item.id)
+    if not column then
+        return failure(message)
+    end
+    return {
+        output = "restored "
+            .. item.id:sub(1, board.MIN_PREFIX)
+            .. " to "
+            .. column
+            .. ". The links the delete dropped stay dropped. Add them again with `dev board link`.",
+    }
 end
 
 function commands.unlink(backend, args)

@@ -192,6 +192,10 @@ end
 ---   one of the caller's own comments deleted, or nil and a message
 ---@field bin? fun(self: dev.board.Backend, id: string): boolean?, string? the card moved to the
 ---   recycle bin, or nil and a message when the backend refuses
+---@field binned? fun(self: dev.board.Backend): {id: string, name: string, restores_to: string}[]?,
+---   string? the cards waiting in the recycle bin, or nil and a message
+---@field restore? fun(self: dev.board.Backend, id: string): string?, string? the name of the column
+---   the binned card came back to, or nil and a message
 ---@field link fun(self: dev.board.Backend, id: string, kind: string, other: string): boolean?,
 ---   string? a link of that kind
 ---   (`blocked_by`, `blocks`, `related` or `parent`, which names the other card as the epic) from
