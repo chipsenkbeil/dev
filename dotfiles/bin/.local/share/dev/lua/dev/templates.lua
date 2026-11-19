@@ -8,6 +8,8 @@ local M = {}
 local BASE = "dotfiles/claude/.claude/skills/style/lint"
 local LINT_MARKER = "-- --- project-specific checks below ---"
 local DENY_MARKER = "# --- project-specific entries below (dev sync keeps them) ---"
+local TEST_MARKER = "-- --- project-specific tests below ---"
+local TEST_RETURN = "return code"
 local LINTS_TABLE = "^%[workspace%.lints"
 local LINT_RETURN = "return lint:finish()"
 local LIB_DEST = ".dev/lua/lintset.lua"
@@ -184,18 +186,21 @@ function M.manifest(dir, kind)
     return out
 end
 
----Take the project's own checks below the marker in a project's `.dev/lint.lua`.
+---Take the project's own lines below the marker in one of a project's `.dev` scripts.
 ---@param root string the project root
----@return string tail the checks followed by a blank line, or an empty string
-local function lint_tail(root)
-    local text = fs.read(root .. "/.dev/lint.lua")
-    local tail = text and after_marker(text, LINT_MARKER)
+---@param script string the script's name in `.dev`
+---@param marker string the marker line
+---@param final string the script's closing line, which the tail never holds
+---@return string tail the lines followed by a blank line, or an empty string
+local function script_tail(root, script, marker, final)
+    local text = fs.read(root .. "/.dev/" .. script)
+    local tail = text and after_marker(text, marker)
     if not tail then
         return ""
     end
     tail = strip(tail)
     local last = tail:match("[^\n]*$")
-    if last == LINT_RETURN then
+    if last == final then
         tail = strip(tail:sub(1, #tail - #last))
     end
     tail = tail:gsub("^\n+", "")
@@ -291,11 +296,11 @@ function M.lint_unbound(text)
     return unbound
 end
 
-local function lint_head(content)
+local function script_head(content, marker)
     local out = {}
     for _, line in ipairs(lines_of(content)) do
         out[#out + 1] = line
-        if line == LINT_MARKER then
+        if line == marker then
             break
         end
     end
@@ -434,7 +439,15 @@ function M.render(root, opts)
         content = replace(content, "  - rules", "  - .dev/ast-grep/rules")
         content = replace(content, "testDir: rule-test", "testDir: .dev/ast-grep/rule-test")
     elseif dest == ".dev/lint.lua" then
-        content = lint_head(content) .. "\n\n" .. lint_tail(root) .. LINT_RETURN
+        content = script_head(content, LINT_MARKER)
+            .. "\n\n"
+            .. script_tail(root, "lint.lua", LINT_MARKER, LINT_RETURN)
+            .. LINT_RETURN
+    elseif dest == ".dev/test.lua" and kind == Kind.RUST then
+        content = script_head(content, TEST_MARKER)
+            .. "\n\n"
+            .. script_tail(root, "test.lua", TEST_MARKER, TEST_RETURN)
+            .. TEST_RETURN
     elseif dest == "deny.toml" then
         content = strip(deny_text(root, content))
     elseif dest == "rust-toolchain.toml" then
