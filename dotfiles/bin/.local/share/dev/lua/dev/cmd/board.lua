@@ -1,5 +1,5 @@
 local board = require("dev.board")
-local box = require("dev.cmd.box")
+local board_setup = require("dev.board.setup")
 local check = require("dev.board.check")
 local claims = require("dev.board.claims")
 local config = require("dev.config")
@@ -10,22 +10,23 @@ local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 local init = require("dev.board.init")
 local json = require("dev.json")
-local land = require("dev.board.land")
 local lint = require("dev.board.lint")
 local localboard = require("dev.board.localboard")
 local pomb = require("dev.board.pomb")
 local queue = require("dev.board.queue")
 local render = require("dev.board.render")
 local review = require("dev.board.review")
+local runcard = require("dev.board.runcard")
 local runner = require("dev.board.runner")
+local ship = require("dev.board.ship")
+local stale = require("dev.board.stale")
 local store = require("dev.board.store")
 local text_width = require("dev.text").width
-local templates = require("dev.templates")
-local toml = require("dev.toml")
 local turn = require("dev.board.turn")
 local ui = require("dev.ui")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
+local board_wait = require("dev.board.wait")
 local wiring = require("dev.board.wiring")
 
 local NO_BOARD = "This project has no board."
@@ -49,22 +50,14 @@ local claimant = runner.claimant
 local claim_card = runner.claim_card
 local OWNER_MARK = " (owner)"
 local DONE_MARK = " (done)"
-local NAME_PATTERN = '^[^%c"\\]+$'
-local NAME_CHARS = 100
 local ADMIN_SCOPE = "admin"
 local CLIENT_CHARS = 80
----Todo file names under the project root
-local TODO_FILES = { "TODO.md", "docs/TODO.md" }
-local STALE_DAYS = 7
-local ICEBOX_DAYS = 30
-local LEAD_HOURS = 1
-local FLIGHT_HOURS = 24
 local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local WAIT_FLAG = "--wait"
 local SET_FLAG = "--set"
 local ID_ONLY_FLAG = "--id-only"
-local SWITCH = "switch"
+local SWITCH = guards.SWITCH
 local MAX_WAIT_SECONDS = 86400
 local MAX_LAND_ATTEMPTS = 5
 local STRICT_FLAG = "--strict"
@@ -85,11 +78,7 @@ local REV_FLAG = "--rev"
 local GROUP_FLAG = "--group"
 local AS_FLAG = guards.AS_FLAG
 local REASON_FLAG = "--reason"
-local RUN_END_FLAG = "--end"
-local RUN_ORDERS_FLAG = "--orders"
-local RUN_NAME = "run "
 local HUMAN_ACTOR = "human"
-local ANSWERED_NOTE = " (answered, waiting for your move)"
 local LOCAL_NAME_PATTERN = "^[%w][%w._-]*$"
 local PATH_PATTERN = "^[%w._][%w._/-]*$"
 local QUEUED_NOTICE = "queued: Pomb unreachable, will sync"
@@ -170,33 +159,7 @@ end
 ---   a board uses
 local M = { handlers = {} }
 
-local function parse(args, takes, many)
-    local flags, positional = {}, {}
-    local i = 1
-    while i <= #args do
-        local arg = args[i]
-        i = i + 1
-        if takes[arg] == SWITCH then
-            flags[arg] = true
-        elseif takes[arg] then
-            if i > #args then
-                return nil, usage("The " .. arg .. " flag needs a value.")
-            end
-            if many and many[arg] then
-                flags[arg] = flags[arg] or {}
-                table.insert(flags[arg], args[i])
-            else
-                flags[arg] = args[i]
-            end
-            i = i + 1
-        elseif #arg > 1 and arg:sub(1, 1) == "-" then
-            return nil, usage("Unknown flag " .. arg .. ".")
-        else
-            positional[#positional + 1] = arg
-        end
-    end
-    return flags, positional
-end
+local parse = guards.parse
 
 local function named_column(backend, word)
     local column = backend.stages:column(word)
@@ -2188,35 +2151,7 @@ function commands.label(backend, args)
     return { output = "labelled " .. card.id:sub(1, board.MIN_PREFIX) .. " " .. shown }
 end
 
-local Owner = { SETTLE_SECONDS = 60 }
-
----Check whether the newest comment on a card is the owner's.
----
----A card in Done never counts. Without `since`, a comment of any age counts.
----@param backend dev.board.Backend the board
----@param card dev.board.Card the card
----@param since integer? the time in seconds since the epoch, only a comment newer than it counts
----@return boolean? answered whether the newest comment is the owner's, nil when they could not be
----   read
----@return string? why the reason the comments could not be read
-function Owner.commented(backend, card, since)
-    if card.done then
-        return false
-    end
-    local list = backend:comments(card.id)
-    if not list then
-        return nil, "could not read the comments of " .. card.id .. " " .. card.name
-    end
-    local newest = list[#list]
-    if newest == nil or newest.actor ~= HUMAN_ACTOR then
-        return false
-    end
-    if since == nil then
-        return true
-    end
-    local at = box.parse_time(newest.at)
-    return at ~= nil and at > since
-end
+local Owner = {}
 
 function commands.ask(backend, args)
     local fields = { ["--question"] = "text", ["--recommend"] = "recommended", ["--why"] = "why" }
@@ -2255,7 +2190,7 @@ function commands.ask(backend, args)
         return err
     end
     if index_of(card.labels, board.NEEDS_HUMAN) then
-        local answered, why = Owner.commented(backend, card)
+        local answered, why = board_wait.commented(backend, card)
         if answered == nil then
             return failure(why)
         end
@@ -2877,10 +2812,14 @@ function commands.rename(backend, args)
         end
     end
     local name = table.concat(args, " ", 2)
-    if not name:find("%S") or #name > NAME_CHARS or not name:find(NAME_PATTERN) then
+    if
+        not name:find("%S")
+        or #name > board_setup.NAME_CHARS
+        or not name:find(board_setup.NAME_PATTERN)
+    then
         return usage(
             "A title is one line of up to "
-                .. NAME_CHARS
+                .. board_setup.NAME_CHARS
                 .. " characters, with no quotes or backslashes."
         )
     end
@@ -3438,406 +3377,12 @@ function commands.land(backend, args)
     )
 end
 
----@class dev.cmd.board.ShipRun
----@field argv string[] the command's words
----@field run string the command as one line
-
----Read the commands a ship runs: the words after `--`, else the `[board.release]` checks rows.
----@param backend dev.board.Backend the board
----@param args string[] the arguments, with a `--` in front of any command
----@return dev.cmd.board.ShipRun[]? runs the commands, nil on a refusal
----@return dev.cmd.board.Result? err the refusal
-local function ship_runs(backend, args)
-    local split = index_of(args, "--")
-    if split and split > 1 then
-        return nil, usage("Takes no argument before --, only the release command after it.")
-    end
-    if split then
-        if #args == 1 then
-            return nil, usage("Needs a command after --.")
-        end
-        local argv = { unpack(args, 2) }
-        return { { argv = argv, run = table.concat(argv, " ") } }
-    end
-    if #args > 0 then
-        return nil, usage("Takes the release command after --, not " .. args[1] .. ".")
-    end
-    local rows = config.get(backend.root, "board.release.checks")
-    if rows == nil then
-        return nil, usage("Needs a release command after --, or checks rows under [board.release].")
-    end
-    if type(rows) ~= "table" or #rows == 0 then
-        return nil, failure("The `[board.release]` checks must be a list of commands.")
-    end
-    local runs = {}
-    for i, row in ipairs(rows) do
-        if type(row) ~= "string" then
-            return nil, failure("Row " .. i .. " of the `[board.release]` checks is not a string.")
-        end
-        local argv, why = check.argv(row)
-        if not argv then
-            return nil,
-                failure("Row " .. i .. " of the `[board.release]` checks cannot run. " .. why)
-        end
-        runs[i] = { argv = argv, run = row }
-    end
-    return runs
-end
-
----Run each command once and stop at the first that fails.
----@param backend dev.board.Backend the board
----@param runs dev.cmd.board.ShipRun[] the commands
----@param name_suspects fun(files: string[]): string[] the lines naming the cards behind a failure
----@return dev.cmd.board.Result? err the failure naming the command, nil when every one passed
-local function ship_ran(backend, runs, name_suspects)
-    local remote = require("dev.remote")
-    local rows = {}
-    for i, one in ipairs(runs) do
-        verb.note(string.format("Running row %d of %d with `%s`.", i, #runs, one.run))
-        rows[i] = check.run({
-            root = backend.root,
-            run = one.run,
-            argv = one.argv,
-            seconds = check.DEFAULT_SECONDS,
-            env = { [remote.VERB_ENV] = remote.Verb.RELEASE, [remote.PRIORITY_ENV] = "1" },
-        })
-        if rows[i].result ~= check.Result.PASS then
-            local lines = wiring.check_lines(rows)
-            for _, line in ipairs(name_suspects(rows[i].failed or {})) do
-                lines[#lines + 1] = line
-            end
-            return failure(
-                string.format(
-                    "The release command `%s` failed. No card moved.\n%s",
-                    one.run,
-                    table.concat(lines, "\n")
-                )
-            )
-        end
-    end
-end
-
-local Ship = { DEFAULT_REV = "trunk()" }
-
----Split `--rev REV` off the words before `--`.
----@param args string[] the ship arguments
----@return string? rev the revision, the default when no flag was given, nil on a refusal
----@return string[]|dev.cmd.board.Result rest the other arguments, or the refusal
-function Ship.rev(args)
-    local flag = "--rev"
-    local split = index_of(args, "--") or (#args + 1)
-    local rev, rest = Ship.DEFAULT_REV, {}
-    local i = 1
-    while i <= #args do
-        if i < split and args[i] == flag then
-            if i + 1 >= split then
-                return nil, usage("The " .. flag .. " flag needs a value.")
-            end
-            rev = args[i + 1]
-            i = i + 2
-        else
-            rest[#rest + 1] = args[i]
-            i = i + 1
-        end
-    end
-    return rev, rest
-end
-
----Say why a Release card cannot ship at a revision.
----@param backend dev.board.Backend the board
----@param card dev.board.Card the Release card
----@param commit string the commit the ship covers
----@param name string what to call that revision
----@return string? reason why it stays, nil when it may move
----@return string? landed the card's landed commit when it may move
-function Ship.reason(backend, card, commit, name)
-    if guards.done_refusal(card, backend.stages:done_column()) then
-        return "an outcome is not ticked"
-    end
-    local comments = backend:comments(card.id)
-    local landed = comments and land.landed_commit(comments)
-    if not landed then
-        return "no landed commit in its notes"
-    end
-    if not land.holds(backend.root, landed, commit) then
-        return "landed commit " .. land.short(landed) .. " is not in " .. name
-    end
-    return nil, landed
-end
-
----Name the dev sync templates the landed commits of a batch changed.
----@param root string the project root
----@param landed string[] the landed commits of the shipped cards
----@return string[] lines the heading and one line per changed template, empty when none changed
-local function ship_templates(root, landed)
-    local set = {}
-    for _, commit in ipairs(landed) do
-        for _, path in ipairs(land.touched(root, commit) or {}) do
-            set[path] = true
-        end
-    end
-    local paths = {}
-    for path in pairs(set) do
-        paths[#paths + 1] = path
-    end
-    local synced = templates.changed(paths)
-    if #synced == 0 then
-        return {}
-    end
-    local lines = { "The dev sync templates changed. Synced repos run dev sync:" }
-    for _, path in ipairs(synced) do
-        lines[#lines + 1] = "  " .. path
-    end
-    return lines
-end
-
----Move every Release card the shipped revision holds to Done, each with a done note.
----@param backend dev.board.Backend the board
----@param cards dev.board.Card[] the Release cards
----@param rev string the revset the ship covers
----@param commit string the full commit the revset names
----@return string[] lines what moved and what stayed
----@return boolean ok false when a note or a move failed
-local function ship_batch(backend, cards, rev, commit)
-    local name = rev == Ship.DEFAULT_REV and "trunk" or rev
-    local text = string.format("Shipped in %s, commit %s.", name, land.short(commit))
-    local moved, kept, stranded, ok = {}, {}, {}, true
-    local landed_commits = {}
-    for _, card in ipairs(cards) do
-        local short = card.id:sub(1, board.MIN_PREFIX)
-        local reason, landed = Ship.reason(backend, card, commit, name)
-        if landed then
-            landed_commits[#landed_commits + 1] = landed
-        end
-        if reason then
-            kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. reason .. ")"
-        else
-            local result = move_card(backend, { card.id, backend.stages:done_column() })
-            local moved_ok = result ~= nil and not result.code
-            local noted, why = moved_ok, nil
-            if moved_ok then
-                noted, why = backend:note(card.id, text, nil, { kind = board.NoteKind.DONE })
-            end
-            if moved_ok and noted then
-                moved[#moved + 1] = "  " .. short .. " " .. card.name
-            elseif moved_ok then
-                ok = false
-                stranded[#stranded + 1] = "  "
-                    .. short
-                    .. " "
-                    .. card.name
-                    .. " ("
-                    .. (why or "the note was not written")
-                    .. ")"
-            else
-                ok = false
-                kept[#kept + 1] = "  "
-                    .. short
-                    .. " "
-                    .. card.name
-                    .. " ("
-                    .. (result and result.message or why)
-                    .. ")"
-            end
-        end
-    end
-    local lines = {
-        string.format(
-            "shipped %s at %s commit %s",
-            count_text(#moved, "card"),
-            name,
-            land.short(commit)
-        ),
-    }
-    for _, line in ipairs(moved) do
-        lines[#lines + 1] = line
-    end
-    if #kept > 0 then
-        lines[#lines + 1] = "left in " .. backend.stages.release .. ":"
-        for _, line in ipairs(kept) do
-            lines[#lines + 1] = line
-        end
-    end
-    if #stranded > 0 then
-        lines[#lines + 1] = "moved to "
-            .. backend.stages:done_column()
-            .. " with no done note, write it by hand:"
-        for _, line in ipairs(stranded) do
-            lines[#lines + 1] = line
-        end
-    end
-    for _, line in ipairs(ship_templates(backend.root, landed_commits)) do
-        lines[#lines + 1] = line
-    end
-    return lines, ok
-end
-
----Note each red suspect, and revert the landed commit of one that stayed red past `revert_after`.
----@param backend dev.board.Backend the board
----@param named dev.board.suspects.Entry[] the suspect cards the failed ship named
----@param commit string the full commit the ship tested
----@return string[] lines what happened to each suspect
-function Ship.settle(backend, named, commit)
-    local revert = require("dev.board.revert")
-    local after = tonumber(config.get(backend.root, "board.release.revert_after"))
-        or revert.AFTER_SECONDS
-    local now = os.time()
-    local lines = {}
-    for _, entry in ipairs(revert.newest_first(backend.root, named)) do
-        local since = revert.red_since(backend:comments(entry.card.id) or {})
-        local said
-        if not since then
-            local ok, why = backend:note(
-                entry.card.id,
-                revert.red_text(land.short(commit), now),
-                nil,
-                { kind = board.NoteKind.STATUS }
-            )
-            said = ok and "First red, so the card is noted."
-                or ("First red, but the note failed. " .. tostring(why))
-        elseif now - since < after then
-            said = string.format("Red for %d seconds. Reverted after %d.", now - since, after)
-        else
-            said = Ship.requeue(backend, entry, now - since)
-        end
-        lines[#lines + 1] = "  " .. entry.label .. ": " .. said
-    end
-    return lines
-end
-
----Revert a suspect's landed commit, unmark its outcomes and send its card back to Ready.
----@param backend dev.board.Backend the board
----@param entry dev.board.suspects.Entry the suspect
----@param seconds integer how long it has been red
----@return string said what happened, as sentences
-function Ship.requeue(backend, entry, seconds)
-    local revert = require("dev.board.revert")
-    local short = land.short(entry.landed)
-    local ok, reason, detail = revert.apply(backend.root, entry.landed)
-    if not ok then
-        if reason == revert.Reason.CONFLICT then
-            return "The revert of " .. short .. " conflicts with later changes, so it is left."
-        end
-        return "The revert of " .. short .. " failed. " .. tostring(detail)
-    end
-    for number, outcome in ipairs(entry.card.outcomes) do
-        if outcome.done then
-            local untick =
-                commands.outcome(backend, { entry.card.id, "--untick", tostring(number) })
-            if untick.code then
-                return string.format(
-                    "Reverted %s, but outcome %d stays ticked. The card stays in %s. %s",
-                    short,
-                    number,
-                    backend.stages.release,
-                    untick.message
-                )
-            end
-        end
-    end
-    backend:note(
-        entry.card.id,
-        string.format(
-            "Reverted landed commit %s after the batch stayed red for %d seconds. "
-                .. "Land the revert, then ship again.",
-            short,
-            seconds
-        ),
-        nil,
-        { kind = board.NoteKind.DECISION }
-    )
-    local moved = move_card(backend, { entry.card.id, backend.stages.ready })
-    if moved.code then
-        return string.format(
-            "Reverted %s, but the move to Ready was refused. The card stays in %s. %s",
-            short,
-            backend.stages.release,
-            moved.message
-        )
-    end
-    return "Reverted " .. short .. ". The card is back in Ready."
-end
-
----Name the cards of a batch that touched the files a failed release command left failing.
----@param backend dev.board.Backend the board
----@param opts { files: string[], rev: string, commit: string } the failing test files the command
----printed, the revset the ship covers and the full commit it names
----@return string[] lines the suspect list
-function Ship.suspects(backend, opts)
-    local files, commit = opts.files, opts.commit
-    local name = opts.rev == Ship.DEFAULT_REV and "trunk" or opts.rev
-    local cards = backend:cards() or {}
-    local entries = {}
-    for _, card in ipairs(cards) do
-        if card.column == backend.stages.release then
-            local reason, landed = Ship.reason(backend, card, commit, name)
-            if not reason and landed then
-                entries[#entries + 1] = {
-                    label = card.id:sub(1, board.MIN_PREFIX) .. " " .. card.name,
-                    landed = landed,
-                    card = card,
-                }
-            end
-        end
-    end
-    local lines, named = require("dev.board.suspects").lines(backend.root, files, entries)
-    for _, line in ipairs(Ship.settle(backend, named, commit)) do
-        lines[#lines + 1] = line
-    end
-    return lines
-end
-
 function commands.ship(backend, args)
-    local rev, rest = Ship.rev(args)
-    if not rev then
-        return rest
-    end
-    local runs, err = ship_runs(backend, rest)
-    if not runs then
-        return err
-    end
-    if not backend.root then
-        return failure("`dev board ship` needs the project's root.")
-    end
-    local commit = land.fetched_commit(backend.root, rev)
-    if not commit then
-        return failure("Revision " .. rev .. " does not name one commit. No card moved.")
-    end
-    if not land.same_tree(backend.root, commit) then
-        return failure(
-            string.format(
-                "The working copy is not at %s, so a release command would test another tree. "
-                    .. "Run `dev board ship` from a workspace at that revision. No card moved.",
-                land.short(commit)
-            )
-        )
-    end
-    local failed = ship_ran(backend, runs, function(files)
-        return Ship.suspects(backend, { files = files, rev = rev, commit = commit })
-    end)
-    if failed then
-        return failed
-    end
-    local cards, message = backend:cards()
-    if not cards then
-        return failure(message)
-    end
-    local waiting = {}
-    for _, card in ipairs(cards) do
-        if card.column == backend.stages.release then
-            waiting[#waiting + 1] = card
-        end
-    end
-    local lines, ok = ship_batch(backend, waiting, rev, commit)
-    local main = follow.main(backend.root)
-    if main then
-        lines[#lines + 1] = follow.launch(main, commit)
-    end
-    local text = table.concat(lines, "\n")
-    if not ok then
-        return failure(text)
-    end
-    return { output = text }
+    return ship.ship(backend, args, {
+        move_card = move_card,
+        outcome = commands.outcome,
+        count_text = count_text,
+    })
 end
 
 function commands.turn(backend, args)
@@ -4580,613 +4125,8 @@ function commands.links(backend, args)
     return { output = link_rows(list) }
 end
 
-local function append(lines, more)
-    for _, line in ipairs(more) do
-        lines[#lines + 1] = line
-    end
-end
-
-local function warning(text)
-    local bare = text:gsub("%.$", "")
-    return bare:sub(1, 1):upper() .. bare:sub(2) .. "."
-end
-
----Check whether `next` would skip an unclaimed card: a run card, an epic with an open child, or a
----card an open card blocks.
----@param backend dev.board.Backend the board
----@param card dev.board.Card the card
----@return boolean? skipped, string? why nil with the reason when the board could not be read
-local function skipped_by_next(backend, card)
-    if board.labelled(card, board.RUN) or board.open_children(card.epic) > 0 then
-        return true
-    end
-    return backend:blocked(card.id)
-end
-
-local function stale_rows(cards)
-    local rows = {}
-    for _, card in ipairs(cards) do
-        rows[#rows + 1] = {
-            card.id:sub(1, board.MIN_PREFIX),
-            card.column,
-            card.hours and card.hours .. "h" or card.days .. "d",
-            card.size,
-            card.name .. (card.answered and ANSWERED_NOTE or ""),
-        }
-    end
-    return board.table_lines(rows)
-end
-
-local function whole_limit(flag, value, opts)
-    if not value then
-        return opts.default
-    end
-    local limit = value:find("^%d+$") and tonumber(value)
-    if not limit or limit < 1 then
-        return nil,
-            usage(
-                "The "
-                    .. flag
-                    .. " flag needs a whole number of "
-                    .. opts.unit
-                    .. ", 1 or more: "
-                    .. value
-                    .. "."
-            )
-    end
-    return limit
-end
-
-local function icebox_latest(backend, card, stamp, limit, now)
-    local latest = stamp and box.parse_time(stamp)
-    if not latest then
-        return nil, warning("could not date " .. card.id .. " " .. card.name)
-    end
-    if (now - latest) / box.SECONDS_PER_DAY < limit then
-        return nil
-    end
-    local list = backend:comments(card.id)
-    if not list then
-        return nil, warning("could not read the comments of " .. card.id .. " " .. card.name)
-    end
-    for _, comment in ipairs(list) do
-        local at = box.parse_time(comment.at)
-        if not at then
-            return nil, warning("could not read the comments of " .. card.id .. " " .. card.name)
-        end
-        latest = math.max(latest, at)
-    end
-    return latest
-end
-
-local function icebox_rows(backend, cards, entered, limit, now)
-    local found, undated = {}, {}
-    for _, card in ipairs(cards) do
-        if
-            card.column == backend.stages.icebox
-            and index_of(card.labels, board.NEEDS_HUMAN) == nil
-            and not board.is_turn_card(card)
-        then
-            local latest, skipped = icebox_latest(backend, card, entered[card.id], limit, now)
-            if skipped then
-                undated[#undated + 1] = skipped
-            elseif latest then
-                local days = math.floor((now - latest) / box.SECONDS_PER_DAY)
-                if days >= limit then
-                    found[#found + 1] = {
-                        id = card.id,
-                        column = card.column,
-                        size = card.size,
-                        name = card.name,
-                        days = days,
-                        at = latest,
-                    }
-                end
-            end
-        end
-    end
-    table.sort(undated)
-    table.sort(found, function(a, b)
-        if a.at ~= b.at then
-            return a.at < b.at
-        end
-        return a.id < b.id
-    end)
-    return found, undated
-end
-
-local function flight_rows(backend, cards, entered, limit, now)
-    local stages = backend.stages
-    local flying = { [stages.progress] = true, [stages.review] = true, [stages.verify] = true }
-    local days = limit * box.SECONDS_PER_HOUR / box.SECONDS_PER_DAY
-    local found = {}
-    for _, card in ipairs(cards) do
-        if flying[card.column] and not card.claimant and not card.done then
-            local latest = icebox_latest(backend, card, entered[card.id], days, now)
-            if latest then
-                local hours = math.floor((now - latest) / box.SECONDS_PER_HOUR)
-                if hours >= limit then
-                    found[#found + 1] = {
-                        id = card.id,
-                        column = card.column,
-                        size = card.size,
-                        name = card.name,
-                        hours = hours,
-                        at = latest,
-                    }
-                end
-            end
-        end
-    end
-    table.sort(found, function(a, b)
-        if a.at ~= b.at then
-            return a.at < b.at
-        end
-        return a.id < b.id
-    end)
-    return found
-end
-
-local function started_rows(backend, cards, entered, now)
-    local stages = backend.stages
-    local started = { [stages.progress] = true, [stages.review] = true }
-    local waiting = { [stages.backlog] = true, [stages.ready] = true }
-    local found, warnings, others = {}, {}, {}
-    for _, card in ipairs(cards) do
-        local list
-        if waiting[card.column] and not card.done then
-            local why
-            list, why = backend:links(card.id)
-            if not list then
-                warnings[#warnings + 1] = warning(
-                    "could not read the links of "
-                        .. card.id
-                        .. " "
-                        .. card.name
-                        .. ": "
-                        .. tostring(why)
-                )
-            end
-        end
-        for _, link in ipairs(list or {}) do
-            if link.kind == "blocked_by" and link.board then
-                local target = link.board .. ":" .. link.id:sub(1, board.MIN_PREFIX)
-                local other = others[link.board]
-                if other == nil then
-                    local opened, message = backend:other_board(link.board)
-                    other = opened or { failed = message }
-                    others[link.board] = other
-                end
-                local blocker, message
-                if not other.failed then
-                    blocker, message = other:card(link.id)
-                end
-                if other.failed or not blocker then
-                    warnings[#warnings + 1] = warning(
-                        "could not read blocker "
-                            .. target
-                            .. " of "
-                            .. card.id
-                            .. " "
-                            .. card.name
-                            .. ": "
-                            .. tostring(other.failed or message)
-                    )
-                elseif started[blocker.column] then
-                    local at = entered[card.id] and box.parse_time(entered[card.id]) or now
-                    found[#found + 1] = {
-                        id = card.id,
-                        column = card.column,
-                        size = card.size,
-                        name = card.name
-                            .. " (blocked by "
-                            .. target
-                            .. " in "
-                            .. blocker.column
-                            .. ")",
-                        days = math.floor((now - at) / box.SECONDS_PER_DAY),
-                        at = at,
-                    }
-                end
-            end
-        end
-    end
-    return found, warnings
-end
-
 function commands.stale(backend, args, now)
-    local flags, extra = parse(args, {
-        ["--days"] = true,
-        ["--icebox-days"] = true,
-        ["--lead-hours"] = true,
-        ["--flight-hours"] = true,
-    })
-    if not flags then
-        return extra
-    end
-    if #extra > 0 then
-        return usage("Unknown argument " .. extra[1] .. ".")
-    end
-    local limit, refusal =
-        whole_limit("--days", flags["--days"], { default = STALE_DAYS, unit = "days" })
-    if not limit then
-        return refusal
-    end
-    local icebox_limit
-    icebox_limit, refusal = whole_limit(
-        "--icebox-days",
-        flags["--icebox-days"],
-        { default = ICEBOX_DAYS, unit = "days" }
-    )
-    if not icebox_limit then
-        return refusal
-    end
-    local lead_limit
-    lead_limit, refusal = whole_limit(
-        "--lead-hours",
-        flags["--lead-hours"],
-        { default = LEAD_HOURS, unit = runner.limits.HOURS }
-    )
-    if not lead_limit then
-        return refusal
-    end
-    local flight_limit
-    flight_limit, refusal = whole_limit(
-        "--flight-hours",
-        flags["--flight-hours"],
-        { default = FLIGHT_HOURS, unit = runner.limits.HOURS }
-    )
-    if not flight_limit then
-        return refusal
-    end
-    local cards, message = backend:cards()
-    if not cards then
-        return failure(message)
-    end
-    local entered
-    entered, message = backend:entered()
-    if not entered then
-        return failure(message)
-    end
-    now = now or store.now()
-    local stages = backend.stages
-    local found, owner, moved, undated, unsized, commented = {}, {}, {}, {}, {}, {}
-    local lead, planner, nobody = {}, {}, {}
-    local candidates = {}
-    for _, card in ipairs(cards) do
-        if
-            card.column == stages.blocked
-            and not card.done
-            and not index_of(card.labels, board.NEEDS_HUMAN)
-            and not index_of(card.labels, board.NEEDS_LEAD)
-            and not index_of(card.labels, board.NEEDS_PLANNER)
-        then
-            local at = entered[card.id] and box.parse_time(entered[card.id])
-            if not at then
-                undated[#undated + 1] = warning("could not date " .. card.id .. " " .. card.name)
-            else
-                nobody[#nobody + 1] = {
-                    id = card.id,
-                    column = card.column,
-                    size = card.size,
-                    name = card.name,
-                    days = math.floor((now - at) / box.SECONDS_PER_DAY),
-                    at = at,
-                }
-            end
-        end
-        local asks = index_of(card.labels, board.NEEDS_LEAD) and lead
-            or index_of(card.labels, board.NEEDS_PLANNER) and planner
-        if
-            card.column == stages.blocked
-            and not card.done
-            and asks
-            and not index_of(card.labels, board.NEEDS_HUMAN)
-        then
-            local at = entered[card.id] and box.parse_time(entered[card.id])
-            if not at then
-                undated[#undated + 1] = warning("could not date " .. card.id .. " " .. card.name)
-            else
-                local hours = math.floor((now - at) / box.SECONDS_PER_HOUR)
-                if hours >= lead_limit then
-                    local skipped = false
-                    if not card.claimant then
-                        local why
-                        skipped, why = skipped_by_next(backend, card)
-                        if skipped == nil then
-                            return failure(why)
-                        end
-                    end
-                    if not skipped then
-                        asks[#asks + 1] = {
-                            id = card.id,
-                            column = card.column,
-                            size = card.size,
-                            name = card.name,
-                            hours = hours,
-                            at = at,
-                        }
-                    end
-                end
-            end
-        end
-        if card.column ~= stages.icebox and board.has_color(card, board.SIZES.unsized) then
-            unsized[#unsized + 1] = card
-        end
-        local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
-        local held = mine and (card.column == stages.blocked or card.column == stages.icebox)
-        if not held then
-            candidates[#candidates + 1] = card
-        end
-        if mine or (not card.done and stages.stale[card.column]) then
-            local stamp = entered[card.id]
-            if not stamp then
-                undated[#undated + 1] = warning("could not date " .. card.id .. " " .. card.name)
-            else
-                local at = box.parse_time(stamp)
-                if not at then
-                    return failure(
-                        "Pomb sent a column time dev cannot read for card " .. card.id .. "."
-                    )
-                end
-                local days = math.floor((now - at) / box.SECONDS_PER_DAY)
-                if mine or days >= limit then
-                    local item = {
-                        id = card.id,
-                        column = card.column,
-                        size = card.size,
-                        name = card.name,
-                        days = days,
-                        at = at,
-                    }
-                    local into = found
-                    if held then
-                        local answered, why = Owner.commented(backend, card)
-                        if answered == nil then
-                            undated[#undated + 1] = warning(why)
-                        else
-                            item.answered = answered
-                        end
-                        into = owner
-                    elseif mine then
-                        into = moved
-                    end
-                    into[#into + 1] = item
-                end
-            end
-        end
-    end
-    local function oldest(a, b)
-        if a.at ~= b.at then
-            return a.at < b.at
-        end
-        return a.id < b.id
-    end
-    table.sort(found, oldest)
-    table.sort(owner, oldest)
-    table.sort(moved, oldest)
-    table.sort(lead, oldest)
-    table.sort(planner, oldest)
-    table.sort(nobody, oldest)
-    local listed = {}
-    for _, list in ipairs({ found, moved, lead, planner }) do
-        for _, item in ipairs(list) do
-            listed[item.id] = true
-        end
-    end
-    for _, card in ipairs(candidates) do
-        if not listed[card.id] then
-            local spoke, why = Owner.commented(backend, card)
-            if spoke == nil then
-                if card.column ~= stages.icebox then
-                    undated[#undated + 1] = warning(why)
-                end
-            elseif spoke then
-                local at = entered[card.id] and box.parse_time(entered[card.id]) or now
-                commented[#commented + 1] = {
-                    id = card.id,
-                    column = card.column,
-                    size = card.size,
-                    name = card.name,
-                    days = math.floor((now - at) / box.SECONDS_PER_DAY),
-                    at = at,
-                }
-            end
-        end
-    end
-    table.sort(undated)
-    table.sort(commented, oldest)
-    local lines = {}
-    if #found == 0 then
-        lines[1] = "No stale cards."
-    else
-        append(lines, stale_rows(found))
-    end
-    if #owner > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "for the owner (" .. board.NEEDS_HUMAN .. "):"
-        append(lines, stale_rows(owner))
-    end
-    if #lead > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "for a lead (" .. board.NEEDS_LEAD .. "):"
-        append(lines, stale_rows(lead))
-    end
-    if #planner > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "for a planner (" .. board.NEEDS_PLANNER .. "):"
-        append(lines, stale_rows(planner))
-    end
-    if #nobody > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "asks nobody, add a needs label:"
-        append(lines, stale_rows(nobody))
-    end
-    if #moved > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "moved by the owner, remove " .. board.NEEDS_HUMAN .. ":"
-        append(lines, stale_rows(moved))
-    end
-    if #commented > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "newest comment is the owner's:"
-        append(lines, stale_rows(commented))
-    end
-    if #unsized > 0 then
-        local rows = {}
-        for _, card in ipairs(unsized) do
-            rows[#rows + 1] = { card.id:sub(1, board.MIN_PREFIX), card.column, card.name }
-        end
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "unsized outside " .. stages.icebox .. ":"
-        append(lines, board.table_lines(rows))
-    end
-    local todo = {}
-    for _, name in ipairs(TODO_FILES) do
-        if backend.root and fs.is_file(backend.root .. "/" .. name) then
-            todo[#todo + 1] = name
-        end
-    end
-    if #todo > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "todo files, move their items onto cards:"
-        append(lines, todo)
-    end
-    if #undated > 0 then
-        lines[#lines + 1] = ""
-        append(lines, undated)
-    end
-    local flying = flight_rows(backend, cards, entered, flight_limit, now)
-    local quiet = {}
-    for _, item in ipairs(flying) do
-        if not listed[item.id] then
-            quiet[#quiet + 1] = item
-        end
-    end
-    if #quiet > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "in flight, no claim and quiet for " .. flight_limit .. " hours:"
-        append(lines, stale_rows(quiet))
-    end
-    local begun, begun_warnings = started_rows(backend, cards, entered, now)
-    table.sort(begun, oldest)
-    if #begun > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "blocker started on another board:"
-        append(lines, stale_rows(begun))
-    end
-    if #begun_warnings > 0 then
-        lines[#lines + 1] = ""
-        append(lines, begun_warnings)
-    end
-    local ticking, clock_warnings = require("dev.board.clock").sweep(backend, cards, now)
-    if #ticking > 0 then
-        local rows = {}
-        for _, item in ipairs(ticking) do
-            rows[#rows + 1] =
-                { item.id:sub(1, board.MIN_PREFIX), item.role, item.minutes .. " min", item.name }
-        end
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "clocks running:"
-        append(lines, board.table_lines(rows))
-    end
-    if #clock_warnings > 0 then
-        lines[#lines + 1] = ""
-        for _, text in ipairs(clock_warnings) do
-            lines[#lines + 1] = warning(text)
-        end
-    end
-    local function umbrella_rows()
-        local running = { [stages.progress] = true, [stages.review] = true, [stages.verify] = true }
-        local backlog, why_started = {}, {}
-        for _, card in ipairs(cards) do
-            if card.column == stages.backlog and not card.done then
-                backlog[card.id] = card
-                if card.epic and card.epic.done > 0 then
-                    why_started[card.id] = card.epic.done
-                        .. " of "
-                        .. card.epic.total
-                        .. " children done"
-                end
-            end
-        end
-        local warnings = {}
-        for _, card in ipairs(cards) do
-            if running[card.column] and not card.done then
-                local family, why = backend:family(card.id)
-                if not family then
-                    warnings[#warnings + 1] = warning(
-                        "could not read the epic of "
-                            .. card.id
-                            .. " "
-                            .. card.name
-                            .. ": "
-                            .. tostring(why)
-                    )
-                elseif family.parent and backlog[family.parent.id] then
-                    local parent_id = family.parent.id
-                    why_started[parent_id] = why_started[parent_id]
-                        or "child " .. card.id:sub(1, board.MIN_PREFIX) .. " in " .. card.column
-                end
-            end
-        end
-        local rows = {}
-        for id, reason in pairs(why_started) do
-            local card = backlog[id]
-            local at = entered[id] and box.parse_time(entered[id]) or now
-            rows[#rows + 1] = {
-                id = id,
-                column = card.column,
-                size = card.size,
-                name = card.name .. " (" .. reason .. ")",
-                days = math.floor((now - at) / box.SECONDS_PER_DAY),
-                at = at,
-            }
-        end
-        return rows, warnings
-    end
-    local umbrellas, umbrella_warnings = umbrella_rows()
-    table.sort(umbrellas, oldest)
-    if #umbrellas > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "umbrella in Backlog, a child started:"
-        append(lines, stale_rows(umbrellas))
-    end
-    if #umbrella_warnings > 0 then
-        lines[#lines + 1] = ""
-        append(lines, umbrella_warnings)
-    end
-    local closable = {}
-    for _, card in ipairs(cards) do
-        if not card.done and board.children_closed(card.epic) then
-            local at = entered[card.id] and box.parse_time(entered[card.id]) or now
-            closable[#closable + 1] = {
-                id = card.id,
-                column = card.column,
-                size = card.size,
-                name = card.name,
-                days = math.floor((now - at) / box.SECONDS_PER_DAY),
-                at = at,
-            }
-        end
-    end
-    table.sort(closable, oldest)
-    if #closable > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "epic with every child Done, ready to close:"
-        append(lines, stale_rows(closable))
-    end
-    local iced, iced_undated = icebox_rows(backend, cards, entered, icebox_limit, now)
-    if #iced > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "icebox, untouched for " .. icebox_limit .. " days:"
-        append(lines, stale_rows(iced))
-    end
-    if #iced_undated > 0 then
-        lines[#lines + 1] = ""
-        append(lines, iced_undated)
-    end
-    return { output = table.concat(lines, "\n") }
+    return stale.stale(backend, args, now)
 end
 
 function commands.lint(backend, args)
@@ -5399,191 +4339,15 @@ function commands.release(backend, args)
     }
 end
 
-local function run_card_for(cards, name)
-    for _, card in ipairs(cards) do
-        if board.labelled(card, board.RUN) and not card.done and card.name == RUN_NAME .. name then
-            return card
-        end
-    end
-end
-
-local function start_run(backend, name, orders)
-    local RUN_ORDERS_WORDS = 250
-    local RUN_SIZE = "3"
-    local RUN_CHECK = "dev board lint"
-    local quoted, words = {}, 0
-    for line in orders:gmatch("[^\r\n]+") do
-        if line:find("%S") then
-            quoted[#quoted + 1] = "> " .. line:match("^%s*(.-)%s*$")
-        end
-    end
-    for _ in table.concat(quoted, " "):gmatch("%S+") do
-        words = words + 1
-    end
-    if #quoted == 0 then
-        return usage("The " .. RUN_ORDERS_FLAG .. " flag needs the orders.")
-    end
-    if words > RUN_ORDERS_WORDS then
-        return usage(
-            string.format(
-                "The orders are %d words and a run card holds at most %d. "
-                    .. "Keep the rest in a file and name it in the orders.",
-                words,
-                RUN_ORDERS_WORDS
-            )
-        )
-    end
-    local args = {
-        RUN_NAME .. name,
-        "--column",
-        backend.stages.progress,
-        "--size",
-        RUN_SIZE,
-        "--label",
-        board.RUN,
-        "--problem",
-        "A run keeps its orders and resume steps on the board, so a session finds them after compaction.",
-        "--out-of-scope",
-        "The work on other cards; this card holds only the run's state.",
-        "--done-when",
-        "The orders below are carried out " .. board.JUDGEMENT,
-        "--done-when",
-        "Every card the run took is Done or released " .. board.JUDGEMENT,
-        "--done-when",
-        "Anything left over is a card on the board " .. board.JUDGEMENT,
-        "--checks",
-        RUN_CHECK,
-    }
-    for _, line in ipairs(quoted) do
-        args[#args + 1] = "--change"
-        args[#args + 1] = line
-    end
-    local added = commands.add(backend, args)
-    if added.message then
-        return added
-    end
-    local card, err = find_card(backend, added.output:match("^added (%S+)"))
-    if not card then
-        return err
-    end
-    local taken, fence = claim_card(backend, card, name)
-    if not fence then
-        taken.message = sentence(taken.message) .. " `dev board run` claims the new run card again."
-        return taken
-    end
-    local shown = M.run("show", { card.id }, backend)
-    if shown.message then
-        return shown
-    end
-    return {
-        output = "started " .. card.id:sub(1, board.MIN_PREFIX) .. "\n" .. shown.output,
-        warnings = added.warnings,
-    }
-end
-
-local function resume_run(backend, opts)
-    local cards, run, name = opts.cards, opts.run, opts.name
-    local warnings = {}
-    if not run.claimant then
-        local taken, fence = claim_card(backend, run, name)
-        if not fence then
-            warnings[1] = taken.message
-        end
-    end
-    local shown = M.run("show", { run.id }, backend)
-    if shown.message then
-        return shown
-    end
-    local held = {}
-    for _, card in ipairs(cards) do
-        if card.claimant == name and card.id ~= run.id and not card.done then
-            held[#held + 1] = card_line(card)
-        end
-    end
-    local limit = runner.limit()
-    local upcoming, message = backend:next(backend.stages.ready, { max_size = limit })
-    if not upcoming and message then
-        return failure(message)
-    end
-    return {
-        output = table.concat({
-            shown.output,
-            "held by " .. name .. ":",
-            #held > 0 and table.concat(held, "\n") or "nothing",
-            "next:",
-            upcoming and card_line(upcoming) or "no ready cards",
-        }, "\n"),
-        warnings = warnings,
-    }
-end
-
 function commands.run(backend, args)
-    local RUN_USAGE = "Start one with `dev board run --orders TEXT`."
-    local ending, rest = false, {}
-    for _, arg in ipairs(args) do
-        if arg == RUN_END_FLAG then
-            ending = true
-        else
-            rest[#rest + 1] = arg
-        end
-    end
-    local flags, words = parse(rest, { [RUN_ORDERS_FLAG] = true }, { [RUN_ORDERS_FLAG] = true })
-    if not flags then
-        return words
-    end
-    if flags[RUN_ORDERS_FLAG] and #flags[RUN_ORDERS_FLAG] > 1 then
-        return usage("The " .. RUN_ORDERS_FLAG .. " flag takes one value, so give the orders once.")
-    end
-    flags[RUN_ORDERS_FLAG] = flags[RUN_ORDERS_FLAG] and flags[RUN_ORDERS_FLAG][1]
-    if #words > 0 then
-        return usage("Unknown argument " .. words[1] .. ".")
-    end
-    if ending and flags[RUN_ORDERS_FLAG] then
-        return usage(
-            "The " .. RUN_END_FLAG .. " and " .. RUN_ORDERS_FLAG .. " flags do not go together."
-        )
-    end
-    local name, why = agent_name()
-    if why then
-        return why
-    end
-    local session = os.getenv("CLAUDE_SESSION_ID")
-    if not name and (not session or session == "") then
-        return usage("Run needs DEV_AGENT or CLAUDE_SESSION_ID, so the session keeps one name.")
-    end
-    name = claimant(name)
-    if #RUN_NAME + #name > NAME_CHARS then
-        return usage("The session name is too long for a card name.")
-    end
-    local cards, message = backend:cards()
-    if not cards then
-        return failure(message)
-    end
-    local run = run_card_for(cards, name)
-    if flags[RUN_ORDERS_FLAG] then
-        if run then
-            return failure(
-                name
-                    .. " already has the run card "
-                    .. run.id:sub(1, board.MIN_PREFIX)
-                    .. ". Close it with `dev board run "
-                    .. RUN_END_FLAG
-                    .. "` first."
-            )
-        end
-        return start_run(backend, name, flags[RUN_ORDERS_FLAG])
-    end
-    if not run then
-        return failure("There is no open run card for " .. name .. ". " .. RUN_USAGE)
-    end
-    if ending then
-        local closed = M.run("discard", { run.id, "--reason", "the run ended" }, backend)
-        if closed.message then
-            return closed
-        end
-        return { output = "ended " .. run.id:sub(1, board.MIN_PREFIX), warnings = closed.warnings }
-    end
-    return resume_run(backend, { cards = cards, run = run, name = name })
+    return runcard.run(backend, args, {
+        dispatch = M.run,
+        add = commands.add,
+        find_card = find_card,
+        sentence = sentence,
+        card_line = card_line,
+        name_chars = board_setup.NAME_CHARS,
+    })
 end
 
 ---Run one board subcommand against a backend.
@@ -5610,7 +4374,10 @@ local function open_backend(settings, token)
         if settings.path then
             return localboard.new({ name = settings.name, path = settings.path })
         end
-        if not settings.name:find(LOCAL_NAME_PATTERN) or #settings.name > NAME_CHARS then
+        if
+            not settings.name:find(LOCAL_NAME_PATTERN)
+            or #settings.name > board_setup.NAME_CHARS
+        then
             return nil,
                 "A local board's name must be letters, digits, dots, dashes and underscores to name its file. Otherwise set the `path` setting of `[board]`."
         end
@@ -5712,90 +4479,6 @@ function M.backend_at(root)
     return M.open(settings({ root = root }))
 end
 
-local function has_section(root)
-    local text = fs.exists(root .. "/.dev/config.toml") and fs.read(root .. "/.dev/config.toml")
-    local tree = text and toml.parse(text)
-    return type(tree) == "table" and tree.board ~= nil
-end
-
-local function board_name(ctx, flags)
-    local backend = config.get(ctx.root, "board.backend")
-    local name = config.get(ctx.root, "board.name")
-    if backend == nil and has_section(ctx.root) then
-        verb.die('The `[board]` section needs `backend = "pomb"` in `.dev/config.toml`.')
-    end
-    if backend ~= nil and backend ~= board.Backend.POMB then
-        verb.die(
-            'The `backend` setting of `[board]` must be "pomb" or "local" in `.dev/config.toml`.'
-        )
-    end
-    local asked = flags["--name"]
-    if backend == nil then
-        if not asked then
-            verb.die(
-                "This project has no `[board]` section. Pass `--name N` to make a board and write it."
-            )
-        end
-        name = asked
-    else
-        name = name or fs.basename(ctx.root)
-        if asked and asked ~= name then
-            verb.usage_error(
-                ctx,
-                "--name " .. asked .. " is not the [board] name " .. tostring(name)
-            )
-        end
-    end
-    if
-        type(name) ~= "string"
-        or #name == 0
-        or #name > NAME_CHARS
-        or not name:find(NAME_PATTERN)
-    then
-        verb.die("The board's name must be 1 to 100 characters with no quote or backslash.")
-    end
-    return name, backend == nil
-end
-
-local function write_section(root, name)
-    local path = root .. "/.dev/config.toml"
-    local existing = fs.exists(path) and fs.read(path) or ""
-    local gap = existing == "" and "" or (existing:sub(-1) == "\n" and "\n" or "\n\n")
-    local section = '[board]\nbackend = "pomb"\nname = ' .. string.format("%q", name) .. "\n"
-    assert(toml.parse(existing .. gap .. section), ".dev/config.toml would not parse")
-    local ok, message = true, nil
-    if not fs.is_dir(root .. "/.dev") then
-        ok, message = fs.mkdir(root .. "/.dev")
-    end
-    if ok then
-        ok, message = fs.write(path, existing .. gap .. section)
-    end
-    if not ok then
-        verb.die("Cannot write " .. path .. ". " .. sentence(tostring(message)))
-    end
-end
-
-local function host()
-    return (dev_os.capture({ "hostname", "-s" }, { stderr = "null" }):gsub("%s+$", ""))
-end
-
-local function config_lanes(ctx)
-    local lanes = config.get(ctx.root, "board.lanes")
-    if lanes == nil then
-        return {}
-    end
-    local ok = type(lanes) == "table"
-    for _, lane in ipairs(ok and lanes or {}) do
-        ok = ok and type(lane) == "string" and lane ~= ""
-    end
-    if not ok then
-        verb.die(
-            "The `lanes` setting of `[board]` must be a list of lane names in `.dev/config.toml`."
-        )
-    end
-    return lanes
-end
-
 local function init_local(ctx, flags, admin)
     if admin then
         verb.usage_error(ctx, "--admin applies to a Pomb board, not a local one")
@@ -5814,7 +4497,7 @@ local function init_local(ctx, flags, admin)
     local changes
     changes, message = init.run(backend, found.name, verb.say, {
         stages = backend.stages,
-        lanes = config_lanes(ctx),
+        lanes = board_setup.config_lanes(ctx),
         warn_first_lane = false,
     })
     if not changes then
@@ -5852,7 +4535,7 @@ M.handlers["board init"] = function(ctx)
     if config.get(ctx.root, "board.backend") == board.Backend.LOCAL then
         return init_local(ctx, flags, admin)
     end
-    local name, missing = board_name(ctx, flags)
+    local name, missing = board_setup.board_name(ctx, flags)
     local opts = {
         url = config.user("board.pomb.url"),
         token = config.user("board.pomb.lead_token"),
@@ -5874,7 +4557,7 @@ M.handlers["board init"] = function(ctx)
         local secret
         secret, message = device.pair({
             url = opts.url,
-            client_name = ("dev-board-init@" .. host()):sub(1, CLIENT_CHARS),
+            client_name = ("dev-board-init@" .. board_setup.host()):sub(1, CLIENT_CHARS),
             scope = ADMIN_SCOPE,
             say = print,
         })
@@ -5891,14 +4574,14 @@ M.handlers["board init"] = function(ctx)
     local changes
     changes, message = init.run(backend, name, verb.say, {
         stages = backend.stages,
-        lanes = config_lanes(ctx),
+        lanes = board_setup.config_lanes(ctx),
         warn_first_lane = true,
     })
     if not changes then
         verb.die(sentence(message))
     end
     if missing then
-        write_section(ctx.root, name)
+        board_setup.write_section(ctx.root, name, sentence)
         print("wrote [board] to .dev/config.toml")
     end
     print(
@@ -6162,436 +4845,7 @@ M.handlers["board status"] = function(ctx)
     return 0
 end
 
-local WaitFor = {
-    READY = "ready",
-    HUMAN = "human",
-    LEAD = "lead",
-    PLANNER = "planner",
-    REVIEW = "review",
-    VERIFY = "verify",
-    RELEASE = "release",
-}
-WaitFor.STAGES = {
-    [WaitFor.READY] = true,
-    [WaitFor.REVIEW] = true,
-    [WaitFor.VERIFY] = true,
-    [WaitFor.RELEASE] = true,
-}
-local EventKind = {
-    ADDED = "task_added",
-    MOVED = "task_moved",
-    UPDATED = "task_updated",
-    COMMENTED = "comment_added",
-}
----Event kinds a wait watches when it names no stage
-local WAIT_KINDS = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED, EventKind.COMMENTED }
----Event kinds each wait stage watches
-local WAIT_FOR_KINDS = {
-    [WaitFor.READY] = { EventKind.ADDED, EventKind.MOVED },
-    [WaitFor.HUMAN] = { EventKind.MOVED, EventKind.COMMENTED },
-    [WaitFor.LEAD] = { EventKind.ADDED, EventKind.MOVED, EventKind.UPDATED },
-}
-WAIT_FOR_KINDS[WaitFor.PLANNER] = WAIT_FOR_KINDS[WaitFor.LEAD]
-for stage in pairs(WaitFor.STAGES) do
-    WAIT_FOR_KINDS[stage] = WAIT_FOR_KINDS[WaitFor.READY]
-end
-local WAIT_RETRY_SECONDS = 30
-local WAIT_LIMITED_MAX_SECONDS = 300
-local WAIT_JITTER = 0.25
-local WAIT_RETRIES = 10
-local WAIT_TRIMMED = "events were trimmed, check the board"
-local WAIT_LIMITED_NOTICE = "Pomb holds too many open waits for this token. Waiting for one to end."
-
-local function cursor_path(name)
-    return store.dir() .. "/" .. name:gsub("[^%w._-]", "_")
-end
-
-local function read_cursor(path)
-    local text = fs.exists(path) and fs.read(path)
-    text = text and text:gsub("%s+", "")
-    return text ~= "" and text or nil
-end
-
-local function lead_cards(backend, stages, label)
-    local cards, message = backend:cards()
-    if not cards then
-        return nil, message
-    end
-    local waiting = {}
-    for _, card in ipairs(cards) do
-        if
-            card.column == stages.blocked
-            and not card.claimant
-            and index_of(card.labels, label)
-            and not index_of(card.labels, board.NEEDS_HUMAN)
-        then
-            local skipped, why = skipped_by_next(backend, card)
-            if skipped == nil then
-                return nil, why
-            end
-            if not skipped then
-                waiting[card.id] = true
-            end
-        end
-    end
-    return waiting
-end
-
----Find the cards the owner commented on since the wait began.
----@param backend dev.board.Backend the board
----@param events dev.board.Event[] the events of one reply
----@param since integer the time in seconds since the epoch a comment must be newer than
----@param skip table<string, boolean> the ids of the cards already reported, which are not read again
----@return table<string, boolean>? spoke the ids of the cards, nil when the board could not be read
----@return string? why the reason the board could not be read
-function Owner.comments(backend, events, since, skip)
-    local spoke = {}
-    local cards
-    for _, event in ipairs(events) do
-        if
-            event.kind == EventKind.COMMENTED
-            and type(event.task_id) == "string"
-            and not skip[event.task_id]
-        then
-            if not cards then
-                local list, message = backend:cards()
-                if not list then
-                    return nil, message
-                end
-                cards = {}
-                for _, card in ipairs(list) do
-                    cards[card.id] = card
-                end
-            end
-            local card = cards[event.task_id]
-            if card then
-                local found, why = Owner.commented(backend, card, since)
-                if found == nil then
-                    return nil, why
-                end
-                spoke[card.id] = found or nil
-            end
-        end
-    end
-    return spoke
-end
-
----Collect the cards that sat in Blocked or Icebox and have left them or the board.
----
----Remove each departed card from `sat`, so it is reported once.
----@param backend dev.board.Backend the board
----@param sat table<string, string> the column of each card that sat in Blocked or Icebox
----@return string[]? lines one line per card that left, nil when the board could not be read
----@return string? why the reason the board could not be read
-function Owner.departed(backend, sat)
-    local cards, message = backend:cards()
-    if not cards then
-        return nil, message
-    end
-    local now = {}
-    for _, card in ipairs(cards) do
-        now[card.id] = card.column
-    end
-    local lines = {}
-    for id, from in pairs(sat) do
-        if now[id] ~= from then
-            sat[id] = nil
-            lines[#lines + 1] = "moved " .. id:sub(1, board.MIN_PREFIX) .. " out of " .. from
-        end
-    end
-    table.sort(lines)
-    return lines
-end
-
----Collect the cards that sit in Blocked or Icebox.
----@param backend dev.board.Backend the board
----@param stages dev.board.Stages the column names
----@return table<string, string>? sat the column of each card in Blocked or Icebox
----@return string? why the reason the board could not be read
-function Owner.sitting(backend, stages)
-    local cards, message = backend:cards()
-    if not cards then
-        return nil, message
-    end
-    local sat = {}
-    for _, card in ipairs(cards) do
-        if card.column == stages.blocked or card.column == stages.icebox then
-            sat[card.id] = card.column
-        end
-    end
-    return sat
-end
-
----Collect the unclaimed cards of a column.
----@param backend dev.board.Backend the board
----@param column string the column's name
----@return table<string, boolean>? waiting the ids of the unclaimed cards, nil when the board could
----   not be read
----@return string? why the reason the board could not be read
-function Owner.stage_cards(backend, column)
-    local cards, message = backend:cards()
-    if not cards then
-        return nil, message
-    end
-    local waiting = {}
-    for _, card in ipairs(cards) do
-        if card.column == column and not card.claimant then
-            waiting[card.id] = true
-        end
-    end
-    return waiting
-end
-
-local function wait_line(event, opts)
-    local only, stages, leads = opts.only, opts.stages, opts.leads
-    local spoke = opts.spoke
-    local id = event.task_id:sub(1, board.MIN_PREFIX)
-    local added = event.kind == EventKind.ADDED
-    if only == WaitFor.LEAD or only == WaitFor.PLANNER then
-        if leads[event.task_id] then
-            leads[event.task_id] = nil
-            return id .. " is labelled " .. board.BLOCKED_LABELS[only] .. " in " .. stages.blocked
-        end
-    elseif only == WaitFor.HUMAN then
-        if
-            event.kind == EventKind.MOVED
-            and event.from_column == stages.blocked
-            and event.actor == HUMAN_ACTOR
-            and event.at
-            and event.at >= opts.started
-        then
-            return "moved " .. id .. " out of " .. stages.blocked
-        end
-        if event.kind == EventKind.COMMENTED and spoke[event.task_id] then
-            spoke[event.task_id] = nil
-            return "the owner commented on " .. id
-        end
-    elseif WaitFor.STAGES[only] then
-        if
-            event.column == stages[only]
-            and (added or event.kind == EventKind.MOVED)
-            and opts.stage[event.task_id]
-        then
-            return (added and "added " or "moved ") .. id .. " to " .. stages[only]
-        end
-    elseif added then
-        return "added " .. id .. " to " .. tostring(event.column)
-    elseif event.kind == EventKind.MOVED then
-        return "moved " .. id .. " to " .. tostring(event.column or "another board")
-    elseif event.kind == EventKind.UPDATED then
-        return "updated " .. id
-    elseif event.kind == EventKind.COMMENTED then
-        return "commented on " .. id
-    end
-end
-
----@class dev.cmd.board.wait.Opts
----@field stem string the path the cursor files start with, one per `--for` mode
----@field nap fun(seconds: number)? sleeps between retries, `dev.os.nap` when nil
----@field random (fun(): number)? a number in [0, 1) that spreads the pause, entropy from the system
----   when nil
----@field notice fun(line: string)? prints the one line about too many open waits, standard error
----   when nil
----@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
-
----Hold until the board changes in a way the caller asked for.
----
----The cursor is saved after every reply, and `--for human` saves it when it
----prints its held lines, so a restart misses nothing. A Pomb
----that cannot be asked is retried and fails once ten tries in a row run out. A
----refusal for too many open waits on the token is never a failure: the wait
----is reported once and retried with a pause that doubles from 30 seconds to
----5 minutes, spread by a random fraction so sessions do not retry together.
----A cursor Pomb no longer holds is replaced and reported as a notice, not an
----error.
----@param backend dev.board.Backend the Pomb board
----@param args string[] the arguments after `wait`
----@param opts dev.cmd.board.wait.Opts where the cursor lives and how to sleep
----@return dev.cmd.board.Result result the lines for the matching events, or a message and the exit
----   code
-function M.wait(backend, args, opts)
-    local flags, words = parse(args, { ["--for"] = true })
-    if not flags then
-        return words
-    end
-    if #words > 0 then
-        return usage("Takes no card.")
-    end
-    local only = flags["--for"]
-    if only and not WAIT_FOR_KINDS[only] then
-        return usage(
-            "Unknown --for "
-                .. only
-                .. ". The choices are ready, review, verify, release, human, lead and planner."
-        )
-    end
-    local stages = backend.stages or board.stages()
-    local legacy = guards.stage_refusal(backend)
-    if legacy then
-        return legacy
-    end
-    local nap = opts.nap or dev_os.nap
-    local random = opts.random or turn.entropy
-    local notice = opts.notice or stderr_line
-    local limited = 0
-    local told = false
-    local clock = opts.now or store.now
-    local started = clock()
-    local held, touched, last = {}, {}, nil
-    local sat
-    if only == WaitFor.HUMAN then
-        local why
-        sat, why = Owner.sitting(backend, stages)
-        if not sat then
-            return failure(why)
-        end
-    end
-    local path = opts.stem .. "." .. (only or "all") .. ".cursor"
-    local cursor = read_cursor(path)
-    local function flush(result)
-        if #held == 0 then
-            return result
-        end
-        if only == WaitFor.HUMAN then
-            local saved, why = store.write(path, cursor .. "\n", { private = true })
-            if not saved and not result.message then
-                result = failure(why)
-            end
-        end
-        local lines = table.concat(held, "\n")
-        if result.message then
-            return { message = lines .. "\n" .. result.message, code = result.code }
-        end
-        if result.output then
-            lines = lines .. "\n" .. result.output
-        end
-        return { output = lines }
-    end
-    local failures = 0
-    while true do
-        local reply, message, oldest, refused = backend:wait(
-            cursor,
-            WAIT_FOR_KINDS[only] or WAIT_KINDS,
-            last and math.max(1, Owner.SETTLE_SECONDS - (clock() - last))
-        )
-        local leads
-        if reply and board.BLOCKED_LABELS[only] and #reply.events > 0 then
-            local why
-            leads, why = lead_cards(backend, stages, board.BLOCKED_LABELS[only])
-            if not leads then
-                if not pomb.unreachable(why, true) then
-                    return failure(why)
-                end
-                reply, message = nil, why
-            end
-        end
-        local spoke
-        local unread = false
-        if reply and only == WaitFor.HUMAN then
-            local why
-            spoke, why = Owner.comments(backend, reply.events, started, touched)
-            if not spoke then
-                reply, message, unread = nil, why, true
-            end
-        end
-        if reply then
-            failures = 0
-            limited = 0
-            if type(reply.cursor) ~= "string" then
-                return flush(failure("Pomb answered without a cursor."))
-            end
-            local stage
-            if WaitFor.STAGES[only] and #reply.events > 0 then
-                local why
-                stage, why = Owner.stage_cards(backend, stages[only])
-                if not stage then
-                    return failure(why)
-                end
-            end
-            if only ~= WaitFor.HUMAN then
-                local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
-                if not saved then
-                    return flush(failure(why))
-                end
-            end
-            cursor = reply.cursor
-            local lines = {}
-            local matched = false
-            for _, event in ipairs(reply.events) do
-                local line = type(event.task_id) == "string"
-                    and wait_line(event, {
-                        only = only,
-                        stages = stages,
-                        leads = leads,
-                        spoke = spoke,
-                        stage = stage,
-                        started = started,
-                    })
-                if line then
-                    matched = true
-                    if only ~= WaitFor.HUMAN then
-                        lines[#lines + 1] = line
-                    elseif not touched[event.task_id] then
-                        touched[event.task_id] = true
-                        held[#held + 1] = line
-                    end
-                end
-            end
-            if #lines > 0 then
-                return { output = table.concat(lines, "\n") }
-            end
-            if matched then
-                last = clock()
-            end
-            if #held > 0 and not matched then
-                if #reply.events == 0 or clock() - last >= Owner.SETTLE_SECONDS then
-                    return flush({})
-                end
-            end
-        elseif oldest then
-            if only ~= WaitFor.HUMAN or #held == 0 then
-                local saved, why = store.write(path, oldest .. "\n", { private = true })
-                if not saved then
-                    return flush(failure(why))
-                end
-            end
-            if WaitFor.STAGES[only] then
-                cursor = oldest
-            elseif only ~= WaitFor.HUMAN then
-                return flush({ output = WAIT_TRIMMED })
-            else
-                local gone, reason = Owner.departed(backend, sat)
-                if not gone then
-                    return flush(failure(reason))
-                end
-                for _, line in ipairs(gone) do
-                    held[#held + 1] = line
-                end
-                cursor = oldest
-                if #held > 0 then
-                    return flush({ output = WAIT_TRIMMED })
-                end
-            end
-        elseif refused then
-            failures = 0
-            if not told then
-                told = true
-                notice(WAIT_LIMITED_NOTICE)
-            end
-            local pause = math.min(WAIT_RETRY_SECONDS * 2 ^ limited, WAIT_LIMITED_MAX_SECONDS)
-            limited = limited + 1
-            nap(pause * (1 - WAIT_JITTER * random()))
-        elseif unread or pomb.unreachable(message, true) then
-            failures = failures + 1
-            if failures >= WAIT_RETRIES then
-                return flush(failure(message))
-            end
-            nap(WAIT_RETRY_SECONDS)
-        else
-            return flush(failure(message))
-        end
-    end
-end
+M.wait = board_wait.wait
 
 M.handlers["board wait"] = function(ctx)
     local found = settings(ctx)
@@ -6599,7 +4853,7 @@ M.handlers["board wait"] = function(ctx)
         verb.die("A local board has nothing to wait on.")
     end
     local backend = open_board(ctx)
-    local result = M.wait(backend, ctx.args, { stem = cursor_path(found.name) })
+    local result = M.wait(backend, ctx.args, { stem = board_wait.cursor_path(found.name) })
     if result.message then
         if result.code == USAGE then
             verb.usage_error(ctx, result.message)
@@ -6643,55 +4897,16 @@ M.handlers["board sync"] = function(ctx)
     return 0
 end
 
-local function private_project(root)
-    local backend = vcs.backend(root)
-    if not backend then
-        return true
-    end
-    local origin = vcs.config(root, backend, "remote.origin.url")
-    if origin == "" then
-        return true
-    end
-    if not origin:find("github.com", 1, true) then
-        return false
-    end
-    local out, code = dev_os.capture(
-        { "gh", "repo", "view", "--json", "isPrivate", "-q", ".isPrivate" },
-        { cwd = root, stderr = "null" }
-    )
-    return code == 0 and out:find("^true") ~= nil
-end
-
-local function ensure_board(ctx)
-    if config.get(ctx.root, "board.backend") ~= nil then
-        return
-    end
-    if not private_project(ctx.root) then
-        verb.die(
-            "This project has no board and is public or not known to be private. Ask the owner before it gets one. `dev board init --name N` makes it."
-        )
-    end
-    local name = fs.basename(ctx.root)
-    print("This project is private and has no board. Making " .. name .. ".")
-    local making = {}
-    for key, value in pairs(ctx) do
-        making[key] = value
-    end
-    making.args = { "--name", name }
-    local code = M.handlers["board init"](making)
-    if code ~= 0 then
-        os.exit(code)
-    end
-end
-
 for sub in pairs(commands) do
     M.handlers["board " .. sub] = function(ctx)
         if
             sub == "run"
-            and index_of(ctx.args, RUN_ORDERS_FLAG)
-            and not index_of(ctx.args, RUN_END_FLAG)
+            and index_of(ctx.args, runcard.ORDERS_FLAG)
+            and not index_of(ctx.args, runcard.END_FLAG)
         then
-            ensure_board(ctx)
+            board_setup.ensure_board(ctx, function(making)
+                return M.handlers["board init"](making)
+            end)
         end
         local args = ctx.args
         if sub == "edit" then

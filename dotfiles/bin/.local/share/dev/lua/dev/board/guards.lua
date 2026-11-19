@@ -11,6 +11,7 @@ local USAGE = 2
 local FAILURE = 1
 local CLAIMANT_CHARS = 200
 local AS_FLAG = "--as"
+local SWITCH = "switch"
 
 ---Build a usage error result.
 ---@param message string what the caller got wrong
@@ -24,6 +25,40 @@ end
 ---@return dev.cmd.board.Result result the error with the failure code
 local function failure(message)
     return { message = message, code = FAILURE }
+end
+
+---Split a verb's arguments into its flags and its words.
+---@param args string[] the arguments after the verb
+---@param takes table<string, string|boolean> the flags the verb knows, `switch` for a bare flag
+---@param many table<string, boolean>? the flags that may repeat, each kept as a list
+---@return table<string, string|boolean|string[]>? flags the flags given, nil on a usage error
+---@return string[]|dev.cmd.board.Result words the words left, or the usage error
+local function parse(args, takes, many)
+    local flags, positional = {}, {}
+    local i = 1
+    while i <= #args do
+        local arg = args[i]
+        i = i + 1
+        if takes[arg] == SWITCH then
+            flags[arg] = true
+        elseif takes[arg] then
+            if i > #args then
+                return nil, usage("The " .. arg .. " flag needs a value.")
+            end
+            if many and many[arg] then
+                flags[arg] = flags[arg] or {}
+                table.insert(flags[arg], args[i])
+            else
+                flags[arg] = args[i]
+            end
+            i = i + 1
+        elseif #arg > 1 and arg:sub(1, 1) == "-" then
+            return nil, usage("Unknown flag " .. arg .. ".")
+        else
+            positional[#positional + 1] = arg
+        end
+    end
+    return flags, positional
 end
 
 ---Mark a refusal as one a queue must not keep.
@@ -477,6 +512,8 @@ M.FAILURE = FAILURE
 M.CLAIMANT_CHARS = CLAIMANT_CHARS
 M.AS_FLAG = AS_FLAG
 M.usage = usage
+M.parse = parse
+M.SWITCH = SWITCH
 M.failure = failure
 M.unqueued = unqueued
 M.agent_name = agent_name

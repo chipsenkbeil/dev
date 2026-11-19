@@ -3,13 +3,24 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local BOARD_SOURCE = REPO .. "/dotfiles/bin/.local/share/dev/lua/dev/cmd/board.lua"
+local LUA_ROOT = REPO .. "/dotfiles/bin/.local/share/dev/lua/dev/"
+local BOARD_SOURCE = LUA_ROOT .. "cmd/board.lua"
+local MOVED_SOURCES = {
+    LUA_ROOT .. "board/guards.lua",
+    LUA_ROOT .. "board/ship.lua",
+    LUA_ROOT .. "board/runcard.lua",
+    LUA_ROOT .. "board/setup.lua",
+    LUA_ROOT .. "board/stale.lua",
+    LUA_ROOT .. "board/wait.lua",
+}
 
 local function source_lines()
-    local text = assert(fs.read(BOARD_SOURCE))
     local lines = {}
-    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
-        lines[#lines + 1] = line
+    for _, path in ipairs({ BOARD_SOURCE, unpack(MOVED_SOURCES) }) do
+        local text = assert(fs.read(path))
+        for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+            lines[#lines + 1] = line
+        end
     end
     return lines
 end
@@ -43,8 +54,9 @@ end)
 testing.test("no board usage refusal opens with a flag, a variable or a lowercase word", function()
     local sources = {
         BOARD_SOURCE,
-        REPO .. "/dotfiles/bin/.local/share/dev/lua/dev/board/wiring.lua",
-        REPO .. "/dotfiles/bin/.local/share/dev/lua/dev/board/runner.lua",
+        LUA_ROOT .. "board/wiring.lua",
+        LUA_ROOT .. "board/runner.lua",
+        unpack(MOVED_SOURCES),
     }
     local checked = 0
     for _, path in ipairs(sources) do

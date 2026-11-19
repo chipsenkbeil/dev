@@ -59,6 +59,10 @@ The luajit modules of `dev`, one per item.
   act, and the usage and failure results they return.
 - `dev.board.runner`: a runner's size limit and refusals, the full-column result
   and the claim a `take` makes.
+- `dev.board.wait`, `dev.board.ship`, `dev.board.stale`, `dev.board.runcard`,
+  `dev.board.setup`: the `board wait`, `ship`, `stale` and `run` verbs and the
+  board setup helpers, split out of `dev.cmd.board` to keep it below the 200
+  locals LuaJIT allows in one chunk.
 - `dev.board.wiring`: the flag parsing and rows behind `board check`, and the
   landing problems, turn wait and held landing behind `board land`.
 - `dev.board.pomb`: that interface over curl. The token comes from
