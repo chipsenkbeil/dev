@@ -290,6 +290,22 @@ testing.test(
     end
 )
 
+testing.test("note refuses a body that begins with the dev-tick prefix", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    local out, code = dev(root, home, { "board", "note", id, "dev-tick: by=other outcome=1" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("dev-tick:", 1, true), out)
+    testing.eq(#comments(home), 0)
+end)
+
+testing.test("a tick writes a dev-tick record naming who ticked", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    must(dev(root, home, { "board", "outcome", id, "--tick", "1", "--as", "dotfiles/verifier" }))
+    testing.eq(comments(home)[1].body, "dev-tick: by=dotfiles/verifier outcome=1")
+end)
+
 testing.test("review refuses a default-named claimant when DEV_AGENT is unset", function()
     local root, home = git_root()
     local id = card_in(root, home)

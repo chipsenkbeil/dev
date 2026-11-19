@@ -600,7 +600,35 @@ M.TURN_PREFIX = "dev-turn:"
 ---The prefix of the comment a claim writes, which no note may begin with.
 M.CLAIM_PREFIX = "dev-claim:"
 
-local RESERVED_PREFIXES = { M.CHECK_PREFIX, M.REVIEW_PREFIX, M.TURN_PREFIX, M.CLAIM_PREFIX }
+---The prefix of the comment a tick writes, which no note may begin with.
+M.TICK_PREFIX = "dev-tick:"
+
+local RESERVED_PREFIXES =
+    { M.CHECK_PREFIX, M.REVIEW_PREFIX, M.TURN_PREFIX, M.CLAIM_PREFIX, M.TICK_PREFIX }
+
+---The body of the comment that keeps who ticked an outcome.
+---@param name string the ticker's name
+---@param number integer the outcome's number as `dev board show` lists it
+---@return string body the comment body
+function M.tick_record(name, number)
+    return M.TICK_PREFIX .. " by=" .. name .. " outcome=" .. number
+end
+
+---The names that ticked an outcome, read from the card's tick comments.
+---@param comments {body: string}[] the card's comments
+---@return table<string, boolean> names every name with a tick comment
+function M.tickers(comments)
+    local names = {}
+    for _, comment in ipairs(comments) do
+        if comment.body:sub(1, #M.TICK_PREFIX) == M.TICK_PREFIX then
+            local name = comment.body:sub(#M.TICK_PREFIX + 1):match("^ by=(%S+) outcome=%d+$")
+            if name then
+                names[name] = true
+            end
+        end
+    end
+    return names
+end
 
 ---The body of the comment that keeps who took a card after the claim lapses.
 ---@param name string the claimant's name

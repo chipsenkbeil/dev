@@ -705,6 +705,22 @@ testing.test("lint flags a Done card whose builder also reviewed it", function()
     testing.ok(out:find("Done +built and reviewed by the same name: project%-run/aaaa"), out)
 end)
 
+testing.test("lint flags a Done card whose builder also ticked an outcome", function()
+    local out, code = done_card_with("project-run/aaaa", "project-run/rrrr", {
+        records = { board.tick_record("project-run/aaaa", 1) },
+    })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("built and verified by the same name: project%-run/aaaa"), out)
+end)
+
+testing.test("lint stays clean for a verifier who never built the Done card", function()
+    local out, code = done_card_with("project-run/aaaa", "project-run/rrrr", {
+        records = { board.tick_record("project-run/vvvv", 1) },
+    })
+    testing.eq(code, 0, out)
+    testing.eq(out, "No findings.\n")
+end)
+
 testing.test("lint leaves a card still in Review with the same builder and reviewer", function()
     local out, code =
         done_card_with("project-run/aaaa", "project-run/aaaa", { column = NAME.REVIEW })

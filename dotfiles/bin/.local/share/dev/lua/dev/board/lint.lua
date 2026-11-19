@@ -112,6 +112,23 @@ local function overlap(comments)
     end
 end
 
+---Name who both claimed a card and ticked an outcome on it.
+---@param comments dev.board.Comment[] the card's comments
+---@return string? rule the overlapping names, nil when no name played both roles
+local function verified_overlap(comments)
+    local builders = board.claimants(comments)
+    local names = {}
+    for name in pairs(board.tickers(comments)) do
+        if builders[name] then
+            names[#names + 1] = name
+        end
+    end
+    table.sort(names)
+    if #names > 0 then
+        return "built and verified by the same name: " .. table.concat(names, ", ")
+    end
+end
+
 ---List the rules a card breaks.
 ---@param card dev.board.Card the card
 ---@param opts dev.board.lint.Opts the board's columns, the lazy reads and whether Done cards are
@@ -268,6 +285,10 @@ function M.card(card, opts)
             return nil, why
         end
         local shared = overlap(comments)
+        if shared then
+            add(shared)
+        end
+        shared = verified_overlap(comments)
         if shared then
             add(shared)
         end

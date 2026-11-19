@@ -137,9 +137,11 @@ local RESERVED_NOTE = "A note cannot begin with "
     .. board.CHECK_PREFIX
     .. ", which `dev board check` writes, "
     .. board.REVIEW_PREFIX
-    .. ", which `dev board review` writes, or "
+    .. ", which `dev board review` writes, "
     .. board.CLAIM_PREFIX
-    .. ", which taking a card writes."
+    .. ", which taking a card writes, or "
+    .. board.TICK_PREFIX
+    .. ", which ticking an outcome writes."
 local LINK_HELP = table.concat(board.LINK_KINDS, ", ")
 local EDIT_FLAG = "--edit"
 local DELETE_FLAG = "--delete"
@@ -2572,7 +2574,10 @@ local function convert_outcomes(backend, card, opts)
     for _, item in ipairs(items) do
         ticks = ticks or item.done
     end
-    local refused = ticks and guards.tick_refused(card, opts.flag)
+    local refused, ticker
+    if ticks then
+        refused, ticker = guards.tick_refused(card, opts.flag)
+    end
     if refused then
         return refused
     end
@@ -2596,6 +2601,17 @@ local function convert_outcomes(backend, card, opts)
                 backend:set_outcome(card.id, fresh.outcomes[i].id, { done = true }, fence)
             if not ok then
                 return failure(message)
+            end
+            if ticker then
+                ok, message = backend:note(
+                    card.id,
+                    board.tick_record(ticker, i),
+                    fence,
+                    { kind = board.NoteKind.STATUS }
+                )
+                if not ok then
+                    return failure(message)
+                end
             end
         end
     end
@@ -2853,6 +2869,26 @@ function commands.outcome(backend, args)
     ok, message = backend:set_outcome(card.id, card.outcomes[number].id, fields, fence)
     if not ok then
         return failure(message)
+    end
+    if mode == OutcomeMode.TICK and ticker then
+        ok, message = backend:note(
+            card.id,
+            board.tick_record(ticker, number),
+            fence,
+            { kind = board.NoteKind.STATUS }
+        )
+        if not ok then
+            return unqueued(
+                failure(
+                    "Outcome "
+                        .. prefix
+                        .. " "
+                        .. number
+                        .. " was ticked, but its tick record failed. "
+                        .. sentence(message)
+                )
+            )
+        end
     end
     if mode == OutcomeMode.RENAME then
         local body = "Renamed outcome "

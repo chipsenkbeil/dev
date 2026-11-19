@@ -3645,6 +3645,76 @@ testing.test("outcome --rename ends the new text at the first --reason", functio
     testing.ok(backend.calls[2][3]:find("Reason: use --reason flag", 1, true), backend.calls[2][3])
 end)
 
+testing.test("outcome --tick with a name writes the dev-tick record as a status note", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    local result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--tick", "2", "--as", "dotfiles/verifier" },
+        backend
+    )
+    testing.eq(result.code, nil)
+    testing.eq(backend.calls[2], {
+        "note",
+        ID_C,
+        "dev-tick: by=dotfiles/verifier outcome=2",
+        { kind = "status" },
+    })
+end)
+
+testing.test("outcome --tick says the outcome was ticked when its record fails", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    function backend:note()
+        return nil, "board unavailable: cannot reach pomb"
+    end
+    local result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--tick", "2", "--as", "dotfiles/verifier" },
+        backend
+    )
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+    testing.ok(
+        result.message:find("was ticked, but its tick record failed", 1, true),
+        result.message
+    )
+    function backend:note()
+        return nil, "pomb answered 500"
+    end
+    result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--tick", "2", "--as", "dotfiles/verifier" },
+        backend
+    )
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+end)
+
+testing.test("outcome --convert writes a dev-tick record for each outcome it ticks", function()
+    local card = colored("green")
+    card.description = V1:gsub("%[ %]", "[x]")
+    card.outcomes = {}
+    local backend = fake({ card })
+    local add = backend.add_outcome
+    function backend:add_outcome(id, text, fence)
+        card.outcomes[#card.outcomes + 1] = { id = "s" .. (#card.outcomes + 1), name = text }
+        return add(self, id, text, fence)
+    end
+    local result =
+        cmd_board.run("outcome", { "cccccccc", "--convert", "--as", "dotfiles/verifier" }, backend)
+    testing.eq(result.code, nil, result.message)
+    local notes = {}
+    for _, call in ipairs(backend.calls) do
+        if call[1] == "note" then
+            notes[#notes + 1] = call[3]
+        end
+    end
+    testing.eq(notes, { "dev-tick: by=dotfiles/verifier outcome=1" })
+end)
+
 testing.test("outcome --rename names the old text and the reason when the note fails", function()
     local card = colored("green")
     card.outcomes = outcomes(2)

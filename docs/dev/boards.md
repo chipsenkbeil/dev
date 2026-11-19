@@ -1410,6 +1410,10 @@ The rules:
   names in the card's claim records, and the reviewers are the `by` names in its
   review records. Every name in a claim record counts as a builder, whatever
   role it worked in.
+- A Done card that was not discarded names no one as both its builder and a
+  verifier: `built and verified by the same name: NAME`. The verifiers are the
+  names in the card's dev-tick records, which a tick writes (see the dev-tick
+  record under `outcome`).
 
 A card whose outcomes Pomb sent in a shape dev cannot read is reported as
 `outcomes unreadable`, never as having no outcomes.
@@ -1683,8 +1687,8 @@ cannot leave In Progress. Note what you built, tried and learned first with
 dev finds the note by who posted it, never by its text or `--as` label. The note
 is any later comment posted by the same Pomb token as the latest such record for
 the claimant. A comment does not count when its body begins with a prefix a dev
-verb writes (`dev-check:`, `dev-review:`, `dev-turn:`, `dev-claim:`) or its kind
-is decision.
+verb writes (`dev-check:`, `dev-review:`, `dev-turn:`, `dev-claim:`,
+`dev-tick:`) or its kind is decision.
 
 A client that posts through the claim's token satisfies the
 check with any text. A card with no claim record for its claimant is not
@@ -2454,6 +2458,9 @@ size, the v4 sections and the outcomes. It adds these:
   reads `backend:comments` once, takes the names `board.claimants` finds in the
   claim records, and lists each one that `dev.board.review.parse` also finds as
   `by` in a review record, sorted.
+- In Done, unless discarded: `built and verified by the same name: NAMES`. It
+  lists, sorted, each name `board.claimants` finds that `board.tickers` also
+  finds in a dev-tick record.
 
 How it reads outcomes:
 
@@ -4046,6 +4053,17 @@ The claim note:
 - A take by the card's current claimant writes no note. When its comments
   cannot be read, the claim is kept and `take` prints the reason.
 - `note` refuses the `dev-claim:` prefix as it does `dev-check:`.
+
+The dev-tick record:
+
+- A successful `outcome --tick N` by a named ticker then writes a status note
+  `dev-tick: by=NAME outcome=N`, so the ticker's name outlives the tick, which
+  Pomb stores only as a done flag. `outcome --convert` writes one for each
+  outcome it ticks. When the note cannot be written the verb exits 1, says the
+  outcome was ticked and queues nothing, even when Pomb is unreachable, and a
+  tick that would have moved the card to Verify leaves it in Review.
+- `note` refuses the `dev-tick:` prefix as it does `dev-claim:`.
+- Lint reads these records to keep a card's builder and its verifier apart.
 
 The handoff:
 
