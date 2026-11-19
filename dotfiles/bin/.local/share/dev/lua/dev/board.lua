@@ -1183,14 +1183,17 @@ end
 ---   sections, true when nil
 
 ---The refusal for an epic whose outcome count is out of range.
----@param outcomes integer how many outcomes the epic has
----@return string problem the epic rule and the count
-local function epic_outcomes(outcomes)
-    return M.MIN_EPIC_OUTCOMES
+---@param outcomes integer? how many outcomes the epic has, left off the text when nil
+---@return string problem the epic rule, with the count when given
+local function epic_outcomes_text(outcomes)
+    local rule = M.MIN_EPIC_OUTCOMES
         .. " to "
         .. M.MAX_EPIC_OUTCOMES
-        .. " Done when outcomes for an epic, not "
-        .. outcomes
+        .. " Done when outcomes for an epic"
+    if outcomes == nil then
+        return rule
+    end
+    return rule .. ", not " .. outcomes
 end
 
 ---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v3 section with text under
@@ -1221,7 +1224,7 @@ function M.unplanned(card)
                 missing[#missing + 1] = "Done when outcomes"
             end
         elseif (card.children > 0 or card.epic) and card.outcomes > M.MAX_EPIC_OUTCOMES then
-            missing[#missing + 1] = epic_outcomes(card.outcomes)
+            missing[#missing + 1] = epic_outcomes_text(card.outcomes)
         end
     end
     return missing
@@ -1330,13 +1333,10 @@ function M.missing(description, outcomes, children, epic)
     if children > 0 or epic then
         if outcomes == 0 then
             if children == 0 then
-                missing[#missing + 1] = M.MIN_EPIC_OUTCOMES
-                    .. " to "
-                    .. M.MAX_EPIC_OUTCOMES
-                    .. " Done when outcomes for an epic"
+                missing[#missing + 1] = epic_outcomes_text()
             end
         elseif outcomes > M.MAX_EPIC_OUTCOMES then
-            missing[#missing + 1] = epic_outcomes(outcomes)
+            missing[#missing + 1] = epic_outcomes_text(outcomes)
         end
     elseif outcomes == 0 then
         missing[#missing + 1] = M.MIN_OUTCOMES .. " to " .. M.MAX_OUTCOMES .. " Done when outcomes"
