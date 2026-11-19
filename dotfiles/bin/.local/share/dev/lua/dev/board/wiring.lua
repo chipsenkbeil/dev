@@ -735,7 +735,7 @@ end
 ---@field hold dev.board.turn.Turn the landing turn in hand
 ---@field prepared dev.board.wiring.Prepared the rebased and checked commit to push
 ---@field move dev.board.wiring.MoveFn moves the card to its column
----@field clean_up fun(root: string, short: string): string removes the card's bookmark and workspace
+---@field clean_up fun(root: string, short: string): string removes the bookmark and workspace
 
 ---Land the checked commit while the turn is held, or say that trunk moved and nothing was pushed.
 ---@param opts dev.board.wiring.land_held.Opts the card and the turn in hand
