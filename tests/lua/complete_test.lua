@@ -104,3 +104,130 @@ testing.test(
         fs.remove(other, { recursive = true })
     end
 )
+
+local CARDS = table.concat({
+    "11111111  Ready  3 Pomodori  -  first card",
+    "22222222  Icebox  Unsized  -  second card",
+    "",
+}, "\n")
+
+local function sandbox(tools)
+    local root = support.sandbox({}, {})
+    local cache = support.tempdir()
+    for name, body in pairs(tools or {}) do
+        assert(fs.write(root .. "/bin/" .. name, "#!/bin/sh\n" .. body))
+        assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. name }) == 0, "chmod failed")
+    end
+    return root, cache
+end
+
+local function args(root, cache, words, path)
+    local argv = { "__args" }
+    for _, word in ipairs(words) do
+        argv[#argv + 1] = word
+    end
+    return support.dev(root, argv, {
+        env = { XDG_CACHE_HOME = cache, HOME = cache, PATH = path },
+    })
+end
+
+local function cache_file(root, cache)
+    return cache .. "/dev/cards-" .. root:gsub("[^%w]", "_")
+end
+
+local function seed(root, cache, stamp)
+    assert(fs.mkdir(cache .. "/dev", { parents = true }))
+    assert(fs.write(cache_file(root, cache), stamp .. "\n" .. CARDS))
+end
+
+local function wait_for(done)
+    for _ = 1, 50 do
+        if done() then
+            return true
+        end
+        dev_os.nap(0.1)
+    end
+    return false
+end
+
+testing.test("__args completes card ids from a fresh cache after a board subcommand", function()
+    local root, cache = sandbox()
+    seed(root, cache, os.time())
+    local out, code = args(root, cache, { "board", "show" })
+    testing.eq(code, 0, out)
+    local expected = table.concat({
+        "11111111\tReady  3 Pomodori  -  first card",
+        "22222222\tIcebox  Unsized  -  second card",
+        "",
+    }, "\n")
+    testing.eq(out, expected)
+end)
+
+testing.test("__args prints a stale card cache and refreshes it in the background", function()
+    local marker = support.tempdir() .. "/ran"
+    local root, cache =
+        sandbox({ dev = 'echo "$*" >"' .. marker .. '"; echo "33333333  Ready  3  -  new"' })
+    seed(root, cache, os.time() - 600)
+    local out, code = args(root, cache, { "board", "move" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("11111111\t", 1, true), out)
+    testing.ok(wait_for(function()
+        return fs.read(marker) == "-C " .. root .. " board ls\n"
+    end))
+    testing.ok(wait_for(function()
+        return (fs.read(cache_file(root, cache)) or ""):find("33333333", 1, true) ~= nil
+    end))
+end)
+
+testing.test("__args prints nothing for a missing card cache and starts a refresh", function()
+    local root, cache = sandbox({ dev = 'echo "33333333  Ready  3  -  new"' })
+    local out, code = args(root, cache, { "board", "show" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "")
+    testing.ok(wait_for(function()
+        return fs.exists(cache_file(root, cache))
+    end))
+end)
+
+testing.test("__args completes nothing for a board subcommand without a card argument", function()
+    local root, cache = sandbox()
+    seed(root, cache, os.time())
+    testing.eq(args(root, cache, { "board", "ls" }), "")
+    testing.eq(args(root, cache, { "board", "show", "11111111" }), "")
+end)
+
+testing.test("__args takes box, connectable and run ids from ci __complete", function()
+    local root, cache = sandbox({ ci = 'printf "%s-1\\tlabel\\n" "$2"' })
+    testing.eq(args(root, cache, { "box", "delete" }), "boxes-1\tlabel\n")
+    local both = "boxes-1\tlabel\nconnectables-1\tlabel\n"
+    testing.eq(args(root, cache, { "box", "connect" }), both)
+    testing.eq(args(root, cache, { "connect" }), both)
+    testing.eq(args(root, cache, { "ps", "--run" }), "runs-1\tlabel\n")
+end)
+
+testing.test("__args prints nothing and exits 0 when ci fails", function()
+    local root, cache = sandbox({ ci = "echo partial; exit 3" })
+    local out, code = args(root, cache, { "connect" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "")
+end)
+
+testing.test("__args returns within the timeout and prints nothing when ci is slow", function()
+    local root, cache = sandbox({ ci = "echo late; sleep 20" })
+    local started = os.time()
+    local out, code = args(root, cache, { "box", "delete" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "")
+    testing.ok(os.time() - started < 10, "the helper waited " .. os.time() - started .. " seconds")
+end)
+
+testing.test("__args prints nothing and exits 0 when ci is missing", function()
+    local root, cache = sandbox()
+    local luajit = assert(dev_os.which("luajit"))
+    assert(fs.mkdir(root .. "/lua", { parents = true }))
+    assert(fs.symlink(luajit, root .. "/lua/luajit"))
+    local path = root .. "/bin:" .. root .. "/lua:/usr/bin:/bin"
+    local out, code = args(root, cache, { "connect" }, path)
+    testing.eq(code, 0, out)
+    testing.eq(out, "")
+end)

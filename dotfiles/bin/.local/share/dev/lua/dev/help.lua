@@ -29,6 +29,7 @@ local HELPERS = {
     { "__verbs", "List the verbs with their descriptions, for shell completion" },
     { "__subs", "List the subcommands of a noun, for shell completion" },
     { "__flags", "List the flags of a verb, for shell completion" },
+    { "__args", "List the values the next word can take, for shell completion" },
     {
         "__topics check",
         "Check the built-in and project topics against the real verbs and flags",

@@ -296,8 +296,9 @@ card's bookmark.
   that skips dot directories, `node_modules` and `target` and does not follow
   symlinks below the root. `dev.cli.guard` and `dev.verb` turn an
   `interrupted!` error into exit 130 with nothing on standard error.
-- `dev.complete`: the hidden `__verbs`, `__subs` and `__flags` that feed shell
-  completion, and `__topics check`.
+- `dev.complete`: the hidden `__verbs`, `__subs`, `__flags` and `__args` that
+  feed shell completion, and `__topics check`. `__args` reads a card cache and
+  asks `ci __complete`, see `dev help flags`.
 - `dev.topics`: the topic files and the check behind `__topics check`.
 
 ### Test support

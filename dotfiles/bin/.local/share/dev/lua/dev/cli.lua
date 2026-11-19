@@ -57,6 +57,7 @@ local HIDDEN_HELPERS = {
     __verbs = complete.verbs,
     __subs = complete.subs,
     __flags = complete.flags,
+    __args = complete.args,
     ["__topics check"] = complete.check_topics,
 }
 

@@ -457,8 +457,17 @@ with the curated help on standard error (exit 2).
 
 Other modules serve these commands.
 
-- `dev.complete` and `dev.topics`: `__verbs`, `__subs`, `__flags` and
+- `dev.complete` and `dev.topics`: `__verbs`, `__subs`, `__flags`, `__args` and
   `__topics check`.
+  `dev __args WORD...` takes the words from the verb up to the one being typed
+  and prints `value<TAB>label` per line. A card id completes after a `dev board`
+  subcommand that takes a card, from a cache file under `$XDG_CACHE_HOME/dev`
+  that a background `dev board ls` refreshes when it is a minute old, so Tab
+  never waits on Pomb. A box name completes after `dev box show`, `stop`,
+  `resume`, `extend`, `retag` and `delete`, a box or connectable name after
+  `dev connect` and `dev box connect`, and a run id after `--run`. Those come
+  from `ci __complete KIND` under a 3 second limit for each kind. A missing,
+  slow or failing `ci` prints nothing and exits 0.
 - `dev.cmd.types`: the project-type built-ins `lint`, `fmt`, `test`, `build`,
   `run` and `fetch`, in process.
 - `dev.cmd.misc`: `deploy`, `guide` and `bootstrap`.
