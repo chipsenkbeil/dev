@@ -4927,6 +4927,27 @@ testing.test("stale still lists a Release card the owner labelled needs:human", 
     )
 end)
 
+testing.test("stale lists a Release card when the owner commented last", function()
+    local cards, times = aged(
+        { support.COLUMN_NAME.RELEASE, support.COLUMN_NAME.RELEASE },
+        { 40, 40 }
+    )
+    local backend = fake(cards, times)
+    local replies = {
+        [cards[1].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "yes" } },
+        [cards[2].id] = { { actor = "agent", at = "2026-01-01T00:00:00Z", body = "wait" } },
+    }
+    function backend:comments(id)
+        return replies[id] or {}
+    end
+    local output = cmd_board.run("stale", {}, backend, NOW).output
+    testing.eq(
+        output,
+        "No stale cards.\n\nnewest comment is the owner's:\n"
+            .. "00000001  Release  40d  unsized  Card 1"
+    )
+end)
+
 testing.test("stale marks a needs:human card whose newest comment is the owner's", function()
     local human = { "needs:human" }
     local cards, times = aged(
