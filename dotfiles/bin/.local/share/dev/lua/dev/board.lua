@@ -1055,8 +1055,13 @@ function M.mostly_ids(comment)
     return words >= MOSTLY_IDS_MIN_WORDS and ids * 2 > words
 end
 
+local function is_land_line(line)
+    return line:find("^Landed commit %x+ ") ~= nil
+        or line:find("^landed %x+ on [^%s/]+/main") ~= nil
+end
+
 ---Warn about the hex ids, hashes and paths in prose. Text under a `## Change` or `## Source`
----heading is left out, and so is a URL.
+---heading is left out, and so is a URL and a line that starts the way a land note does.
 ---@param prose string? the description or note
 ---@return string[] warnings one line per offending word, in order, without repeats
 function M.prose_warnings(prose)
@@ -1072,7 +1077,7 @@ function M.prose_warnings(prose)
         local name = heading_of(line)
         if name then
             in_change = name == CHANGE or name == M.SOURCE
-        elseif not in_change then
+        elseif not in_change and not is_land_line(line) then
             for raw in line:gmatch("%S+") do
                 local word = raw:gsub("^[%(%[<\"'`]+", ""):gsub("[%)%]>\"'`,;:!?.]+$", "")
                 if is_url(word) then

@@ -10376,6 +10376,18 @@ testing.test(
     end
 )
 
+testing.test("prose_warnings leaves a land line alone", function()
+    testing.eq(board.prose_warnings("Landed commit 2af0e003 on trunk."), {})
+    testing.eq(board.prose_warnings("landed 2af0e003 on dotfiles/main"), {})
+    testing.eq(
+        board.prose_warnings("see 2af0e003\nLanded commit 0ef0e008 on trunk.\nfixed 3bf0e019"),
+        {
+            "Card prose holds a hex id or hash: 2af0e003.",
+            "Card prose holds a hex id or hash: 3bf0e019.",
+        }
+    )
+end)
+
 testing.test("prose_warnings leaves a lone slash command alone", function()
     testing.eq(board.prose_warnings("type /exit or /quit to leave"), {})
     testing.eq(board.prose_warnings("see /etc/hosts, ~/x and /a.lua"), {
