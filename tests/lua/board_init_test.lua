@@ -21,7 +21,8 @@ local STANDARD = {
     support.COLUMN_NAME.DONE,
 }
 
-local UNCHANGED = "agent roles unchanged\n"
+local UNCHANGED_LINE = "agent roles unchanged"
+local UNCHANGED = UNCHANGED_LINE .. "\n"
 
 local function turn_row(column)
     return support.pomb_export_task({
@@ -277,7 +278,7 @@ end
 local function run(layout)
     local lines, warnings = {}, {}
     local changes, message = init.run(layout, "demo", function(line)
-        if line ~= "agent roles unchanged" then
+        if line ~= UNCHANGED_LINE then
             lines[#lines + 1] = line
         end
     end, {
@@ -1418,7 +1419,7 @@ testing.test("agent-roles-create: the step runs once through a layout", function
         end),
         0
     )
-    testing.eq(lines, { "agent roles unchanged" })
+    testing.eq(lines, { UNCHANGED_LINE })
 end)
 
 testing.test("a board with no roles says nothing about them", function()
