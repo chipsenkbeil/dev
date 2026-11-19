@@ -1710,6 +1710,32 @@ if has_jj then
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
+    testing.test("land refuses when the recheck stretch loses the turn", function()
+        local project = jj_project()
+        local id = review_ready(project)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        must(dev(project, { "board", "turn", id }))
+        local backend, restore = board_at(project.home)
+        backend.root = project.root
+        local stretch = turn.stretch
+        turn.stretch = function()
+            return nil, "The turn was lost."
+        end
+        local previous = os.getenv("DEV_AGENT") or ""
+        ffi.C.setenv("DEV_AGENT", "dotfiles/lander", 1)
+        local ok, result = pcall(cmd_board.run, "land", { id }, backend)
+        ffi.C.setenv("DEV_AGENT", previous, 1)
+        turn.stretch = stretch
+        restore()
+        assert(ok, result)
+        testing.eq(result.code, 1, result.message)
+        testing.ok(result.message:find("The turn was lost.", 1, true), result.message)
+        testing.eq(landed_calls(project.log), "")
+        testing.eq(column_of(project.home, id), support.COLUMN_NAME.VERIFY)
+        testing.eq(turn_holder(project.home), nil)
+    end)
+
     local CARRY_SCRIPT = [=[
 local ctx = ...
 local board = require("dev.board")
