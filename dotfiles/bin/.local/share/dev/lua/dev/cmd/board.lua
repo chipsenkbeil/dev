@@ -60,7 +60,8 @@ local function not_lead_message(action)
         .. (action or "deletes a card")
         .. ". DEV_AGENT "
         .. (os.getenv("DEV_AGENT") or "")
-        .. " is not a lead name, whose role segment is lead. Ask the lead"
+        .. " is not a lead name, whose role segment is lead, and a name with no slash counts"
+        .. " as the lead only at a terminal. Ask the lead"
         .. (action and "" or ", with the card and the reason")
         .. "."
 end
@@ -2723,7 +2724,8 @@ function commands.outcome(backend, args)
             return failure(
                 "Only the lead deletes an outcome. DEV_AGENT "
                     .. agent
-                    .. " is not a lead name, whose role segment is lead. "
+                    .. " is not a lead name, whose role segment is lead, and a name with no slash"
+                    .. " counts as the lead only at a terminal. "
                     .. "Ask the lead, with the card, the number and the reason."
             )
         end

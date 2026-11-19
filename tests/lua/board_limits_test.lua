@@ -574,7 +574,7 @@ testing.test("limits --set refuses a local board with a sentence", function()
         detail = detail({}),
         export = export({}),
     })
-    local out, code = dev(box, { "board", "limits", "--set", "6" }, "")
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
     testing.eq(code, 1, out)
     testing.ok(out:find("A local board has no limit group to set.", 1, true), out)
 end)

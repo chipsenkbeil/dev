@@ -96,7 +96,7 @@ local function dev(root, home, args, opts)
         XDG_STATE_HOME = home .. "/state",
         XDG_RUNTIME_DIR = opts.runtime or "",
         CI = "",
-        DEV_AGENT = opts.agent or "",
+        DEV_AGENT = opts.agent or "dotfiles/lead/1",
         DEV_PASS_LOCK = root .. "/pass.lock",
     }
     for name, value in pairs(opts.env or {}) do

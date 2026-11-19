@@ -1,6 +1,7 @@
 local board = require("dev.board")
 local check = require("dev.board.check")
 local land = require("dev.board.land")
+local dev_os = require("dev.os")
 local vcs = require("dev.vcs")
 
 ---The refusals and guards a board change runs before it acts.
@@ -479,12 +480,16 @@ local function claimant_refused(backend, card, opts)
     end
 end
 
----Check whether a name is the lead or carries no role.
+---Check whether a name is the lead or carries no role at a terminal.
 ---@param name string the agent name
+---@param interactive boolean? whether stdin is a terminal, nil to read it
 ---@return boolean lead true when the name may run lead-only verbs
-local function is_lead(name)
+local function is_lead(name, interactive)
     if not name:find("/", 1, true) then
-        return true
+        if interactive == nil then
+            return dev_os.isatty(0)
+        end
+        return interactive
     end
     return name:match("^[^/]*/([^/]*)") == "lead"
 end

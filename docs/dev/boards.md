@@ -178,8 +178,8 @@ environment or prompt. NAME is the claimant name, so it follows
 
 The verb runs only for a lead, and so does `delete`. Both read one helper,
 which counts a `DEV_AGENT` as the lead when its role segment (the second) is
-`lead`, as in `dotfiles/lead`, or when it holds no slash. Any other role is
-refused.
+`lead`, as in `dotfiles/lead`, or when it holds no slash and stdin is a
+terminal. Any other role is refused.
 
 Pomb refuses a name that a live token holds with a 409, and a name frees once
 its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`
@@ -225,8 +225,8 @@ opens the board again with `[board.pomb] lead_token`, as `delete` does, and
 sends the move with it, and never queues it when Pomb is unreachable. Pomb
 grants `epics.manage` to the `lead` preset and above.
 A `DEV_AGENT` that is not a lead is refused with `Only the lead closes an
-epic. DEV_AGENT NAME is not a lead name, whose role segment is lead. Ask the
-lead.` before the move goes out, and an unset `lead_token` exits 1 naming
+epic. DEV_AGENT NAME is not a lead name, whose role segment is lead, and a
+name with no slash counts as the lead only at a terminal. Ask the lead.` before the move goes out, and an unset `lead_token` exits 1 naming
 `epics.manage`. The move still refuses a child that is open and an outcome
 that is unticked, and names the count and the outcomes.
 
@@ -2310,8 +2310,8 @@ the lead.
 - A `DEV_AGENT` that is not a lead name is refused with exit 1 before any token
   is read or any call is made.
 - A lead name has a role segment (the second) of `lead`, as in
-  `dotfiles/lead/CARD/1`, or holds no slash. `token mint` reads the same
-  helper.
+  `dotfiles/lead/CARD/1`, or holds no slash and stdin is a terminal.
+  `token mint` reads the same helper.
 - A local board has no bin and exits 1.
 - Pomb's refusals print as they come. A `permission_denied` 403 names the
   permission and board, and `card_locked` says the card is locked.

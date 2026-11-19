@@ -6709,11 +6709,12 @@ testing.test(
             local out, code = dev(
                 root,
                 home,
-                { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" }
+                { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+                { agent = LEAD }
             )
             testing.eq(code, 1, out)
             testing.ok(out:find(case.want, 1, true), out)
-            testing.eq(read(root, "calls"):find("/comments", 1, true), nil)
+            testing.eq(read(root, "calls"):find("-X POST", 1, true), nil)
             testing.eq(fs.exists(queue_file(home)), false)
         end
     end
@@ -6985,7 +6986,8 @@ testing.test("outcome queues a tick but not an append when the write cannot reac
     out, code = dev(
         root,
         home,
-        { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" }
+        { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+        { agent = LEAD }
     )
     testing.eq(code, 1)
     testing.ok(out:find("curl exit 28", 1, true), out)
@@ -7236,7 +7238,12 @@ testing.test("epic_move_refused_by_settings", function()
         sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail, user = LEAD_USER })
     two_tokens(root)
     for _, column in ipairs({ support.Column.BACKLOG, support.Column.DONE }) do
-        local out, code = dev(root, home, { "board", "move", "11111111-a", column })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "move", "11111111-a", column },
+            { agent = LEAD }
+        )
         testing.eq(code, 1, out)
         testing.ok(out:find("is an epic and cannot enter", 1, true), out)
         testing.ok(out:find("2 of 3 children are open.", 1, true), out)
@@ -7271,7 +7278,12 @@ testing.test("an epic closes when the task read shows every child Done", functio
     local export = PLANNED_DONE_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(3), user = LEAD_USER })
     two_tokens(root)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", support.Column.DONE },
+        { agent = LEAD }
+    )
     testing.eq(code, 0, out)
     testing.ok(
         read(root, "calls"):find("/api/tasks/" .. ID_A .. "/move", 1, true),
@@ -7283,7 +7295,12 @@ testing.test("an epic with an open child in the task read is refused", function(
     local export = PLANNED_DONE_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), user = LEAD_USER })
     two_tokens(root)
-    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", support.Column.DONE },
+        { agent = LEAD }
+    )
     testing.eq(code, 1, out)
     testing.ok(out:find("is an epic and cannot enter", 1, true), out)
     testing.ok(out:find("2 of 3 children are open.", 1, true), out)
@@ -11320,8 +11337,12 @@ testing.test(
     "delete notes the reason, then moves the card to the bin with the lead token",
     function()
         local root, home = sandbox({ user = LEAD_USER })
-        local out, code =
-            dev(root, home, { "board", "delete", "11111111-a", "--reason", "duplicate" })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "delete", "11111111-a", "--reason", "duplicate" },
+            { agent = LEAD }
+        )
         testing.eq(code, 0, out)
         testing.eq(out, "moved 11111111 to the bin\n")
         local calls = read(root, "calls")
@@ -11373,11 +11394,54 @@ testing.test("delete-runner-role refuses a runner name, with no call and no toke
     end
 end)
 
+local FAKE_ENV = "@" .. dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/tests/lua/fake_env.lua"
+
+testing.test("a lead verb refuses an empty or slashless name when stdin is no terminal", function()
+    for _, name in ipairs({ "", "project-lead" }) do
+        local root, home = sandbox({ user = LEAD_USER })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "delete", "11111111-a", "--reason", "x" },
+            { agent = name, env = { LUA_INIT = FAKE_ENV, FAKE_TTY = "0" } }
+        )
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Only the lead deletes a card", 1, true), out)
+        testing.ok(out:find("only at a terminal", 1, true), out)
+        testing.eq(read(root, "calls"), "")
+        root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
+        out, code = dev(
+            root,
+            home,
+            { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+            { agent = name, env = { LUA_INIT = FAKE_ENV, FAKE_TTY = "0" } }
+        )
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Only the lead deletes an outcome", 1, true), out)
+        testing.eq(read(root, "calls"), "")
+    end
+end)
+
+testing.test("a lead verb accepts an empty name when stdin is a terminal", function()
+    local root, home = sandbox({ user = LEAD_USER })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "delete", "11111111-a", "--reason", "duplicate" },
+        { agent = "", env = { LUA_INIT = FAKE_ENV, FAKE_TTY = "1" } }
+    )
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved 11111111 to the bin\n")
+end)
+
 testing.test("lead-name-helper counts a name with no slash or a lead role as the lead", function()
-    testing.eq(guards.is_lead(""), true)
-    testing.eq(guards.is_lead("project-lead"), true)
-    testing.eq(guards.is_lead("dotfiles/lead/82f0e002/1"), true)
-    testing.eq(guards.is_lead("dotfiles/lead"), true)
+    testing.eq(guards.is_lead("", true), true)
+    testing.eq(guards.is_lead("project-lead", true), true)
+    testing.eq(guards.is_lead("", false), false)
+    testing.eq(guards.is_lead("project-lead", false), false)
+    testing.eq(guards.is_lead("dotfiles/lead/82f0e002/1", false), true)
+    testing.eq(guards.is_lead("dotfiles/lead/82f0e002/1", true), true)
+    testing.eq(guards.is_lead("dotfiles/lead", false), true)
     testing.eq(guards.is_lead("dotfiles/implementer/82f0e002/1"), false)
     testing.eq(guards.is_lead("dotfiles/leader/82f0e002/1"), false)
     testing.eq(guards.is_lead("lead/implementer/82f0e002/1"), false)
@@ -11386,12 +11450,22 @@ end)
 
 testing.test("delete without a lead token or on a local board does nothing", function()
     local root, home = sandbox()
-    local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "delete", "11111111-a", "--reason", "x" },
+        { agent = LEAD }
+    )
     testing.eq(code, 1, out)
     testing.ok(out:find("`lead_token` setting of `[board.pomb]` is not set", 1, true), out)
     testing.eq(read(root, "calls"), "")
     root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "scratch"\n' })
-    out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    out, code = dev(
+        root,
+        home,
+        { "board", "delete", "11111111-a", "--reason", "x" },
+        { agent = LEAD }
+    )
     testing.eq(code, 1, out)
     testing.ok(out:find("keeps no recycle bin", 1, true), out)
 end)
@@ -11404,12 +11478,22 @@ testing.test("delete shows Pomb's permission_denied and card_locked as they come
             '{"code":"permission_denied","permission":"tasks.bin","message":"m","board_id":null}'
         )
     )
-    local out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "delete", "11111111-a", "--reason", "x" },
+        { agent = LEAD }
+    )
     testing.eq(code, 1, out)
     testing.ok(out:find("tasks.bin", 1, true), out)
     root, home = sandbox({ user = LEAD_USER })
     assert(fs.write(root .. "/locked", ""))
-    out, code = dev(root, home, { "board", "delete", "11111111-a", "--reason", "x" })
+    out, code = dev(
+        root,
+        home,
+        { "board", "delete", "11111111-a", "--reason", "x" },
+        { agent = LEAD }
+    )
     testing.eq(code, 1, out)
     testing.ok(out:find("labelled needs:human", 1, true), out)
     testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
