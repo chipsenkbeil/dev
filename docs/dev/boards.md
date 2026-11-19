@@ -1620,12 +1620,12 @@ The command asks Pomb for events after a cursor and holds each request for up to
 50 seconds. On a quiet board it repeats until a matching event arrives.
 
 The cursor lives in `~/.local/state/dev/boards/<name>.<mode>.cursor` (`<mode>`
-is `ready`, `human`, `lead` or `all`), readable by you alone and saved after
-every reply. `--for human` saves it only when it prints its held lines, so a
-kill inside the settle window leaves them to print again. A change made while
-no wait was running wakes the next one, except that `--for human` ignores a
-move made, or an owner comment written, before it started. With no cursor file
-the first call starts from now.
+is `ready`, `review`, `verify`, `release`, `human`, `lead`, `planner` or `all`),
+readable by you alone and saved after every reply. `--for human` saves it only
+when it prints its held lines, so a kill inside the settle window leaves them to
+print again. A change made while no wait was running wakes the next one, except
+that `--for human` ignores a move made, or an owner comment written, before it
+started. With no cursor file the first call starts from now.
 
 When Pomb has dropped the events after the stored cursor, `wait` stores the
 oldest one it still has, prints `events were trimmed, check the board` and exits
