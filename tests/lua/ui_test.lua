@@ -219,7 +219,7 @@ testing.test("page survives a pager that quits before it reads the text", functi
     fs.remove(dir, { recursive = true })
 end)
 
-local WARNING = "dev: the pager failed, so the text follows without it\n"
+local WARNING = "The pager failed, so the text follows without it.\n"
 
 testing.test("page prints the text and a warning when the pager command is missing", function()
     local out = page_output(30, { pager = "no-such-pager-command-xyz" })

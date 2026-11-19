@@ -270,7 +270,7 @@ card's bookmark.
   and then `<root>/.dev/config.toml` over it. `config.user("a.b")` reads the
   user file alone. `config.prefer_user(root, key)` reads the user file first
   and the project file second. A malformed file is
-  `dev: <path>:<line>: <reason>` with exit 1, and as root no file is read.
+  `<path>:<line>: <reason>` with exit 1, and as root no file is read.
 - `dev.root`: the command words dev may run as root (`tools install` and
   `tools check`) and the checked manifest copy.
 - `dev.remote`: `--remote`.
@@ -473,7 +473,7 @@ These suites run one at a time beside the pool:
 
 `dev test` prints each suite's output whole with its `PASS`, `FAIL` or `SKIP`
 line in discovery order, then a summary line. When the uid is not 0 or the OS
-is not Linux it ends with ``dev: The real-root cases of tests/dev/root_test.sh
+is not Linux it ends with ``The real-root cases of tests/dev/root_test.sh
 and tests/dev/tools_test.sh were skipped. Run `dev --remote test` for them.``
 
 The real root group of the ci `test` job in `.ci/jobs.lua` runs both files as

@@ -189,9 +189,7 @@ testing.test("--help in a flags line is dropped with the warning", function()
     })
     testing.eq(reg:flags({ "w" }), { "--ok" })
     testing.eq(warned, {
-        "dev: "
-            .. root
-            .. "/.dev/w.sh: the flags line declares --help, which dev reserves before --",
+        root .. "/.dev/w.sh: the flags line declares --help, which dev reserves before --",
     })
     fs.remove(root, { recursive = true })
 end)

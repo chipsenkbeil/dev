@@ -11,18 +11,18 @@ local M = {}
 ---Parse one config file.
 ---@param path string the file
 ---@return table<string, any>? tree the parsed file, an empty table when it does not exist
----@return string? message `dev: <path>:<line>: <reason>` when it is malformed or unreadable
+---@return string? message `<path>:<line>: <reason>` when it is malformed or unreadable
 local function read(path)
     if not fs.exists(path) then
         return {}
     end
     local text, err = fs.read(path)
     if not text then
-        return nil, "dev: " .. path .. ": " .. tostring(err)
+        return nil, path .. ": " .. tostring(err)
     end
     local tree, message = toml.parse(text)
     if not tree then
-        return nil, "dev: " .. path .. ":" .. message
+        return nil, path .. ":" .. message
     end
     return tree
 end
@@ -62,7 +62,7 @@ local function find(root, key, opts)
         local tree, err
         if opts.project_text and path == project then
             tree, err = toml.parse(opts.project_text)
-            err = err and "dev: trunk " .. project .. ":" .. err
+            err = err and "trunk " .. project .. ":" .. err
         else
             tree, err = read(path)
         end
@@ -83,7 +83,7 @@ end
 ---Look up a dotted key such as `remote.runner`.
 ---
 ---The project file wins over the user file. A malformed file ends the process
----with `dev: <path>:<line>: <reason>` and exit 1. As root no file is read.
+---with `<path>:<line>: <reason>` and exit 1. As root no file is read.
 ---@param root string the project root
 ---@param key string dotted key
 ---@return any? value the value, or nil when neither file sets it
@@ -117,7 +117,7 @@ end
 ---
 ---A project file cannot set it, which is how a key that names a server or a
 ---secret stays out of a repository's reach. A malformed file ends the process
----with `dev: <path>:<line>: <reason>` and exit 1. As root no file is read.
+---with `<path>:<line>: <reason>` and exit 1. As root no file is read.
 ---@param key string dotted key
 ---@return any? value the value, or nil when the user file does not set it
 function M.user(key)

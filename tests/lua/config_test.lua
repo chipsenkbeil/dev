@@ -68,7 +68,7 @@ testing.test("get ends with the path, line and exit 1 for a malformed project fi
     local root, home = tree("a = 1\nb = {c = 1}\n", nil)
     local out, code = get(root, home, "a")
     testing.eq(code, 1)
-    testing.ok(out:find("dev: " .. root .. "/.dev/config.toml:2: inline tables", 1, true), out)
+    testing.ok(out:find(root .. "/.dev/config.toml:2: inline tables", 1, true), out)
 end)
 
 testing.test("get validates the user file even when the project sets the key", function()

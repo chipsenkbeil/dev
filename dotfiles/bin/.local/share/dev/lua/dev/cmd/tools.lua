@@ -45,13 +45,13 @@ local function bad_argument(ctx, reg, arg)
 end
 
 local function fail(message)
-    verb.note("dev: " .. message)
+    verb.note(message)
     return 1
 end
 
 local function exec(argv, opts)
     local _, message = dev_os.exec(argv, opts)
-    verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
+    verb.note("Cannot run " .. argv[1] .. ". " .. message)
     return dev_os.EXEC_FAILED
 end
 

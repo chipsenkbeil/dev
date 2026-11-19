@@ -127,7 +127,7 @@ in_pty() {
     printf '#!/bin/sh\nexit 1\n' >"$BATS_TEST_TMPDIR/bin/less"
     PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "bash $DEV help"
     [ "$(cat "$OUT.status")" = 0 ]
-    grep -q 'the pager failed' "$OUT.pty"
+    grep -q 'The pager failed' "$OUT.pty"
     grep -q 'Topics' "$OUT.pty"
     ! grep -q 'filters' "$OUT.pty"
 }

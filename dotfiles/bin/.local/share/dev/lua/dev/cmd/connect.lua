@@ -87,7 +87,7 @@ end
 ---@return integer code the exit code of a command that could not start
 local function exec(argv)
     local _, message = dev_os.exec(argv)
-    verb.note("dev: cannot run " .. argv[1] .. ": " .. message)
+    verb.note("Cannot run " .. argv[1] .. ". " .. message)
     return dev_os.EXEC_FAILED
 end
 
@@ -295,7 +295,7 @@ local function connectables(opts)
     end
     local doc = json.decode((raw:gsub("\n+$", "")))
     if type(doc) ~= "table" then
-        verb.die("dev: ci ssh ls printed no document")
+        verb.die("The `ci ssh ls` command printed no document.")
     end
     for _, note in ipairs(type(doc.notes) == "table" and doc.notes or {}) do
         if type(note) == "string" then

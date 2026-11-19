@@ -85,7 +85,7 @@ local function leave(run, item)
 end
 
 local function die(message)
-    verb.die("dev: " .. tostring(message))
+    verb.die(tostring(message))
 end
 
 local function run_or_exit(run, argv, opts)

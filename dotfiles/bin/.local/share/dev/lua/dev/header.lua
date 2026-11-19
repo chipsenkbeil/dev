@@ -71,7 +71,7 @@ local function flag_words(lines, name)
             for word in rest:gmatch("%S+") do
                 if RESERVED_FLAGS[word] then
                     warnings[#warnings + 1] = string.format(
-                        "dev: %s: the flags line declares %s, which dev reserves before --",
+                        "%s: the flags line declares %s, which dev reserves before --",
                         name,
                         word
                     )

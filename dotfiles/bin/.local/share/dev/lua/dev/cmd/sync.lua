@@ -33,7 +33,7 @@ local function entry_opts(kind, entry, channel)
 end
 
 local function die(message)
-    verb.die("dev: " .. message)
+    verb.die(message)
 end
 
 local function has_marker(text, marker)
@@ -82,7 +82,7 @@ end
 
 local function sync_readme(root, kind, text, check, yes)
     if not text then
-        io.write("dev: no lint templates for ", kind, " projects\n")
+        verb.say("There are no lint templates for " .. kind .. " projects.")
         return 0
     end
     if check then
@@ -278,7 +278,7 @@ function M.run(ctx)
     end
     local code = unbound and 1 or 0
     local function failed(err)
-        verb.note("dev: " .. tostring(err))
+        verb.note(tostring(err))
         code = 1
     end
     for _, entry in ipairs(entries) do

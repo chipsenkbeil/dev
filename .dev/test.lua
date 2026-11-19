@@ -335,7 +335,7 @@ stdout:write(string.format("\n%d passed, %d failed, %d skipped\n", passed, faile
 stdout:flush()
 if dev_os.getuid() ~= 0 or dev_os.name() ~= "Linux" then
     verb.note(
-        "dev: The real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh "
+        "The real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh "
             .. "were skipped. Run `dev --remote test` for them."
     )
 end

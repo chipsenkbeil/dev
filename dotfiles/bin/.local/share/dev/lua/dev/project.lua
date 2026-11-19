@@ -28,7 +28,7 @@ local function physical_cwd()
         if pwd and pwd:sub(1, 1) == "/" then
             where = "The working directory " .. pwd
         end
-        stderr:write("dev: ", where, " cannot be read.\n")
+        stderr:write(where, " cannot be read.\n")
         os.exit(1)
     end
     return path
@@ -109,7 +109,7 @@ function M.dotfiles_root()
         return checkout
     end
     if not root then
-        stderr:write("dev: cannot find the dotfiles clone from ", SHARE, "\n")
+        stderr:write("The dotfiles clone cannot be found from ", SHARE, ".\n")
         os.exit(1)
     end
     return root

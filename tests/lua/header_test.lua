@@ -64,8 +64,8 @@ testing.test("-h and --help are dropped from flags with a warning naming the fil
     local h = header.parse(sh("# Desc.", "# flags: --a -h --help --b"), "sh", "/p/.dev/x.sh")
     testing.eq(h.flags, { "--a", "--b" })
     testing.eq(h.warnings, {
-        "dev: /p/.dev/x.sh: the flags line declares -h, which dev reserves before --",
-        "dev: /p/.dev/x.sh: the flags line declares --help, which dev reserves before --",
+        "/p/.dev/x.sh: the flags line declares -h, which dev reserves before --",
+        "/p/.dev/x.sh: the flags line declares --help, which dev reserves before --",
     })
 end)
 

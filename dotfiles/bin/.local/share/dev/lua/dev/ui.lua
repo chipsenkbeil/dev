@@ -671,7 +671,7 @@ function M.page(content, opts)
     if shown then
         return true
     end
-    stderr:write("dev: the pager failed, so the text follows without it\n")
+    stderr:write("The pager failed, so the text follows without it.\n")
     io.write(opts.fallback or content)
     return false
 end

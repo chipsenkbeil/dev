@@ -205,7 +205,7 @@ own.
 
 The text goes to the pager on a temporary file as its standard input. A pager
 that quits early exits 0. One that is missing or exits non-zero gets
-`dev: the pager failed, so the text follows without it` on standard error, and
+`The pager failed, so the text follows without it.` on standard error, and
 the text prints directly without the filter line.
 
 ## Topics
