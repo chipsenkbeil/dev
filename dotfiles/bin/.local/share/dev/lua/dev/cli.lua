@@ -421,6 +421,9 @@ function M.main(argv)
         stderr:write("The flag `--priority` needs `--remote`.\n")
         os.exit(2)
     end
+    if parsed.local_flag then
+        dev_os.setenv("DEV_LOCAL", "1")
+    end
     root_gate(parsed.args)
     if dev_os.getuid() == 0 then
         run_as_root(parsed)

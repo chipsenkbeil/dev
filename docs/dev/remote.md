@@ -18,6 +18,10 @@ and `0`, `no` and `false` mean `--local`.
 `--remote` and `--local` work anywhere before a `--`. Together they are a usage
 error (exit 2).
 
+`--local` sets `DEV_LOCAL=1` in the environment before any verb runs, to let a
+verb tell that a local run was asked for. Without the flag dev leaves
+`DEV_LOCAL` alone, so a value inherited from an outer dev run still shows.
+
 dev strips `--remote` and `--detach`. The launcher has already entered the
 directory of any `-C DIR`. dev then hands the runner the command words and the
 arguments, untouched, spaces and quotes included. With no `--` every argument

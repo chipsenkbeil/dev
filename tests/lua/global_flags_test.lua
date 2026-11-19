@@ -2,6 +2,7 @@ local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local registry = require("dev.registry")
+local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local DEV_DIR = REPO .. "/dotfiles/bin/.local/share/dev"
@@ -48,6 +49,27 @@ testing.test("the launcher consumes each value flag and reads each remote flag",
     end
     testing.eq(missing(text, wrapped(value, "\n    ", ")\n")), {})
     testing.eq(missing(text, { "--remote | --detach | --priority) remote_flag=1" }), {})
+end)
+
+testing.test("--local exports DEV_LOCAL to a verb and no flag leaves it unset", function()
+    local root = assert(fs.realpath(support.tempdir()))
+    assert(fs.mkdir(root .. "/.dev", { parents = true }))
+    local probe = 'print("DEV_LOCAL=" .. tostring(os.getenv("DEV_LOCAL")))\n'
+    assert(fs.write(root .. "/.dev/probe.lua", probe))
+    assert(dev_os.run({ "chmod", "755", root .. "/.dev/probe.lua" }) == 0, "chmod failed")
+    local function run(args)
+        local argv = { "luajit", DEV_DIR .. "/main.lua" }
+        for _, word in ipairs(args) do
+            argv[#argv + 1] = word
+        end
+        return dev_os.capture(
+            argv,
+            { cwd = root, env = { CI = "", DEV_REMOTE = "0" }, unset = { "DEV_LOCAL" } }
+        )
+    end
+    testing.eq(run({ "--local", "probe" }), "DEV_LOCAL=1\n")
+    testing.eq(run({ "probe" }), "DEV_LOCAL=nil\n")
+    fs.remove(root, { recursive = true })
 end)
 
 testing.test("the Lua dispatcher parses each bare flag the registry lists", function()
