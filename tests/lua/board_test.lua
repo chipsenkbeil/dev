@@ -12634,6 +12634,37 @@ testing.test("board-next-archived-lane", function()
     testing.ok(not out:find(ID_A:sub(1, 8), 1, true), out)
 end)
 
+testing.test("pomb next skips a Ready card whose question is unanswered", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/comments.json", QUESTION_COMMENT:format("null")))
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "No ready cards.\n")
+end)
+
+testing.test("pomb next offers a Ready card whose question is answered", function()
+    local root, home = sandbox()
+    assert(fs.write(root .. "/comments.json", QUESTION_COMMENT:format('{"choice":1}')))
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Ready", 1, true), out)
+end)
+
+testing.test("pomb move to Ready refuses a card with an unanswered question", function()
+    local export = export_with_first_card({
+        column_id = BACKLOG_COLUMN,
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = '{"dev.checks":[{"run":"dev test"}]}',
+    })
+    local root, home = sandbox({ export = export })
+    assert(fs.write(root .. "/comments.json", QUESTION_COMMENT:format("null")))
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.READY })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("unanswered question, comment qqqqqqqq", 1, true), out)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
 testing.test("pomb next falls through to the next lane when one has no card", function()
     local root, home = laned(LANED_TASKS)
     testing.eq(dev_os.run({ "mv", root .. "/bin/curl", root .. "/bin/curl_real" }), 0)

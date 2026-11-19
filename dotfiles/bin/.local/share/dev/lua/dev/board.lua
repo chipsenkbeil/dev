@@ -495,6 +495,24 @@ function M.names(value)
     return names
 end
 
+---Find the newest question comment that nothing answers yet.
+---@param comments dev.board.Comment[] the card's comments, oldest first
+---@return dev.board.Comment? open the newest question, nil when none is open
+function M.open_question(comments)
+    for index = #comments, 1, -1 do
+        local comment = comments[index]
+        if comment.kind == M.NoteKind.QUESTION or comment.question then
+            if comment.question and comment.question.answer then
+                return nil
+            end
+            return comment
+        end
+        if comment.kind == M.NoteKind.DECISION or comment.actor == M.ACTOR.HUMAN then
+            return nil
+        end
+    end
+end
+
 ---Whether a card carries a label.
 ---@param card dev.board.Card the card
 ---@param label string the label to look for

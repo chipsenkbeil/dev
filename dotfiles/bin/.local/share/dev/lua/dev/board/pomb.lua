@@ -1073,7 +1073,8 @@ function Backend:next(column, opts)
     end
     for _, lane_filter in ipairs(filters) do
         local card
-        card, message = self:__next_in(id, ready_filter .. lane_filter, opts)
+        local scope = { filter = ready_filter .. lane_filter, ready = ready_filter ~= "" }
+        card, message = self:__next_in(id, scope, opts)
         if card or message then
             return card, message
         end
@@ -1083,11 +1084,13 @@ end
 ---Find the first card a runner may take in one column, within one lane filter.
 ---@private
 ---@param id string the column's id
----@param filter string the query filters to add
+---@param scope {filter: string, ready: boolean} the query filters to add, and whether the column is
+---   Ready, where an unanswered question skips a card
 ---@param opts dev.board.next.Opts? the options `next` was given
 ---@return dev.board.Card? card the first card that may be taken
 ---@return dev.cmd.board.Result|string? message why the board could not be read
-function Backend:__next_in(id, filter, opts)
+function Backend:__next_in(id, scope, opts)
+    local filter, ready = scope.filter, scope.ready
     local label = opts and opts.label
     local message
     local cursor
@@ -1134,7 +1137,17 @@ function Backend:__next_in(id, filter, opts)
                 and (not label or board.labelled(card, label))
                 and board.fits(card, opts and opts.max_size)
             then
-                return card
+                local comments
+                if not ready then
+                    return card
+                end
+                comments, message = self:comments(item.id)
+                if not comments then
+                    return nil, message
+                end
+                if not board.open_question(comments) then
+                    return card
+                end
             end
         end
         cursor = present(page.next_cursor)

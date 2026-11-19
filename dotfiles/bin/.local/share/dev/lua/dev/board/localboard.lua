@@ -679,7 +679,16 @@ function Backend:next(column, opts)
         then
             local view = card_view(doc, card)
             if board.open_children(view.epic) == 0 and board.fits(view, opts and opts.max_size) then
-                return view
+                if column ~= (self.stages or board.stages()).ready then
+                    return view
+                end
+                local comments, why = self:comments(card.id)
+                if not comments then
+                    return nil, why
+                end
+                if not board.open_question(comments) then
+                    return view
+                end
             end
         end
     end

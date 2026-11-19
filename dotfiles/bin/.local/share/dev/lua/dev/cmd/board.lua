@@ -1620,6 +1620,20 @@ local function ready_refusal(backend, card, shape)
             )
         end
     end
+    local comments, why = backend:comments(card.id)
+    if not comments then
+        return failure(why)
+    end
+    local asked = board.open_question(comments)
+    if asked then
+        return failure(
+            "Card "
+                .. card.id:sub(1, board.MIN_PREFIX)
+                .. " has an unanswered question, comment "
+                .. asked.id:sub(1, board.MIN_PREFIX)
+                .. ", and cannot enter Ready. Answer it with a decision note first."
+        )
+    end
 end
 
 local MOVE_FLAGS = { [runner.FLAG] = true, [WAIT_FLAG] = true, ["--lane"] = true }
