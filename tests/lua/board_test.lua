@@ -12362,7 +12362,10 @@ end)
 local LANES = '"swimlanes":[{"id":"lane-parity","name":"Parity"},'
     .. '{"id":"lane-fixes","name":"Fixes"}]'
 
-local function laned(lane_fields)
+local ARCHIVED_LANES = '"swimlanes":[{"id":"lane-parity","name":"Parity"},'
+    .. '{"id":"lane-fixes","name":"Fixes","archived":true}]'
+
+local function laned(lane_fields, lanes)
     local tasks = {}
     for _, task in ipairs(lane_fields) do
         local column_id = task.column or READY_COLUMN
@@ -12376,7 +12379,7 @@ local function laned(lane_fields)
         })
     end
     return sandbox({
-        detail = (DETAIL:gsub('"swimlanes":%[%]', LANES, 1)),
+        detail = (DETAIL:gsub('"swimlanes":%[%]', lanes or LANES, 1)),
         export = '{"tasks":[' .. table.concat(tasks, ",") .. "]}",
     })
 end
@@ -12558,6 +12561,40 @@ testing.test("pomb next on a one lane board sends no lane filter", function()
     local _, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0)
     testing.eq(read(root, "calls"):find("swimlane_id", 1, true), nil)
+end)
+
+testing.test("board-ls-archived-lane", function()
+    local root, home = laned(LANED_TASKS, ARCHIVED_LANES)
+    local out, code = dev(root, home, { "board", "ls", "--column", support.Column.READY })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Charlie", 1, true) and out:find("Bravo", 1, true), out)
+    testing.ok(not out:find("Alpha", 1, true), out)
+    out, code =
+        dev(root, home, { "board", "ls", "--column", support.Column.READY, "--lane", "Fixes" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Alpha", 1, true), out)
+    testing.ok(not out:find("Bravo", 1, true), out)
+    out, code = dev(root, home, { "board", "show", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Alpha", 1, true), out)
+end)
+
+testing.test("board-next-archived-lane", function()
+    local only_archived = {
+        { id = ID_A, name = "Alpha", lane = "lane-fixes", position = 1 },
+    }
+    local root, home = laned(only_archived, ARCHIVED_LANES)
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.ok(not out:find(ID_A:sub(1, 8), 1, true), out)
+    testing.ok(
+        not read(root, "calls"):find("&swimlane_id=lane-fixes", 1, true),
+        read(root, "calls")
+    )
+    root, home = laned(LANED_TASKS, ARCHIVED_LANES)
+    out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.ok(not out:find(ID_A:sub(1, 8), 1, true), out)
 end)
 
 testing.test("pomb next falls through to the next lane when one has no card", function()

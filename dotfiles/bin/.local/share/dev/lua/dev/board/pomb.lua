@@ -726,6 +726,19 @@ function Backend:__lane_id(name)
     end
 end
 
+---Report whether a lane is archived.
+---@private
+---@param id string? the lane's id
+---@return boolean archived whether the board's lane list marks the lane archived
+function Backend:__archived(id)
+    for _, lane in ipairs(self.__detail.swimlanes) do
+        if lane.id == id then
+            return lane.archived == true
+        end
+    end
+    return false
+end
+
 function Backend:lanes()
     local ok, message = self:__load()
     if not ok then
@@ -968,7 +981,9 @@ function Backend:cards(opts)
     end
     local tasks = {}
     for _, task in ipairs(source) do
-        tasks[#tasks + 1] = task
+        if not (opts and opts.skip_archived) or not self:__archived(present(task.swimlane_id)) then
+            tasks[#tasks + 1] = task
+        end
     end
     table.sort(tasks, function(a, b)
         local oa, ob = order[a.column_id] or math.huge, order[b.column_id] or math.huge
@@ -1050,7 +1065,9 @@ function Backend:next(column, opts)
     elseif #self.__detail.swimlanes > 1 then
         filters = {}
         for _, lane in ipairs(self.__detail.swimlanes) do
-            filters[#filters + 1] = "&swimlane_id=" .. lane.id
+            if not lane.archived then
+                filters[#filters + 1] = "&swimlane_id=" .. lane.id
+            end
         end
         filters[#filters + 1] = ""
     end
@@ -1107,7 +1124,8 @@ function Backend:__next_in(id, filter, opts)
                 return nil, message
             end
             if
-                not card.claimant
+                not self:__archived(present(task.swimlane_id))
+                and not card.claimant
                 and not blocked
                 and board.open_children(card.epic) == 0
                 and not board.labelled(card, board.NEEDS_HUMAN)

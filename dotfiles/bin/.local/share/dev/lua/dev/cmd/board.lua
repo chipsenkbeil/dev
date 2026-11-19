@@ -413,7 +413,7 @@ function commands.ls(backend, args, _, screen)
         end
         want = column
     end
-    local cards, message = backend:cards()
+    local cards, message = backend:cards({ skip_archived = lane == nil })
     if not cards then
         return failure(message)
     end

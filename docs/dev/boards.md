@@ -1788,6 +1788,8 @@ the cards.
 - `--lane L` keeps the cards of one swimlane. A lane the board lacks is a usage
   error (exit 2) that names the lanes it has, and a board with fewer than two
   lanes has none to name.
+- On a Pomb board `ls` skips the cards of archived lanes, except that
+  `--lane L` naming an archived lane still lists its cards.
 
 - It prints one line per card: id prefix (8 characters), column, size, labels
   (`-` for none) and name, in column then board order, aligned.
@@ -1830,6 +1832,8 @@ prints the top Ready card that is unclaimed, not blocked and not labelled
   the first card it may take. Pomb numbers positions within one lane, so its own
   column order would not put the earlier lane first. A board of one lane sends
   no lane filter. A local board sorts by lane already.
+- `next` skips archived lanes: it asks no archived lane and never offers one of
+  their cards in the last pass.
 
 - The card is in the `ls` format, followed by `N comments, M the owner's`
   (`1 comment` for one). On a Pomb board a `link: <url>/t/<card id>` line
