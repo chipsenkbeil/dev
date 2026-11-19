@@ -989,7 +989,7 @@ function Backend:cards(opts)
     return cards
 end
 
-function Backend:card(id, opts)
+function Backend:card(id)
     local ok, message = self:__load()
     if not ok then
         return nil, message
@@ -998,10 +998,6 @@ function Backend:card(id, opts)
     task, message = self:__request("GET", "/api/tasks/" .. id)
     if not task then
         return nil, message
-    end
-    if opts and opts.listed and board.children_closed(epic_counts(task)) then
-        task.children_total = nil
-        task.children_done = nil
     end
     return self:__card(task)
 end

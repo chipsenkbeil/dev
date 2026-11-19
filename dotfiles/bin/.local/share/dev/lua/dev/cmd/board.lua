@@ -320,7 +320,7 @@ end
 
 local function find_card(backend, word)
     if word:find(FULL_ID) then
-        local card = backend:card(word:lower(), { listed = true })
+        local card = backend:card(word:lower())
         if card and card.column ~= UNKNOWN_COLUMN then
             return card
         end
@@ -334,7 +334,7 @@ local function find_card(backend, word)
         return nil, failure(why)
     end
     local card
-    card, message = backend:card(found.id, { listed = true })
+    card, message = backend:card(found.id)
     if not card then
         return nil, failure(message)
     end

@@ -6905,7 +6905,7 @@ testing.test("a worker's move of an epic into Done is refused before the move", 
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)
 end)
 
-testing.test("the lead's close of an epic names the open children and unticked outcomes", function()
+testing.test("the lead's close of an epic names the open children", function()
     local root, home = epic_sandbox(1, true)
     local out, code = dev(
         root,
@@ -6915,16 +6915,6 @@ testing.test("the lead's close of an epic names the open children and unticked o
     )
     testing.eq(code, 1, out)
     testing.ok(out:find("1 of 2 children are open", 1, true), out)
-    testing.eq(read(root, "move_stdin"), "")
-    root, home = epic_sandbox(2, false)
-    out, code = dev(
-        root,
-        home,
-        { "board", "move", "11111111", support.Column.DONE },
-        { agent = LEAD }
-    )
-    testing.eq(code, 1, out)
-    testing.ok(out:find("2 of 2 outcomes are unticked (1. A works, 2. B works)", 1, true), out)
     testing.eq(read(root, "move_stdin"), "")
 end)
 
@@ -6938,10 +6928,22 @@ testing.test(
             { "board", "move", ID_A, support.Column.DONE },
             { agent = LEAD }
         )
-        testing.eq(code, 1, out)
-        testing.ok(out:find("2 of 2 outcomes are unticked (1. A works, 2. B works)", 1, true), out)
+        testing.eq(code, 0, out)
+        testing.eq(out, "moved 11111111 to Done\n")
     end
 )
+
+testing.test("closed epic moves to Done with its outcomes unticked on Pomb", function()
+    local root, home = epic_sandbox(2, false)
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111", support.Column.DONE },
+        { agent = LEAD }
+    )
+    testing.eq(code, 0, out)
+    testing.ok(read(root, "move_stdin") ~= "", "the move was not sent")
+end)
 
 testing.test("the lead's close of an epic with no lead token set names epics.manage", function()
     local root, home = epic_sandbox(2, true)
