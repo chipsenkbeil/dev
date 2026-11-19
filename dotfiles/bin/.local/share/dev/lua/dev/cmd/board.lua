@@ -67,52 +67,6 @@ local function not_lead_message(action)
         .. "."
 end
 
----Write why the move to Verify was refused.
----@param reason dev.board.MoveReason? the reason the backend named
----@param why string the backend's message
----@param column string the column of the move
----@return string message the text
-local function verify_refusal(reason, why, column)
-    if reason == board.MoveReason.NO_COLUMN then
-        return "The board has no " .. column .. " column. Run `dev board init`."
-    end
-    return sentence(why)
-end
-
----Write why Pomb refused the seat verdict.
----@param reason dev.board.SeatReason? the reason the backend named
----@param why string the backend's message
----@param seat string the seat of the verdict
----@return string message the text
-local function seat_refusal(reason, why, seat)
-    if reason == board.SeatReason.NO_SEAT then
-        return string.format(
-            "The card has no %s seat and this token cannot add one (%s). The claim adds the seats, so take the card with dev board take first.",
-            seat,
-            why
-        )
-    end
-    return sentence(why)
-end
-
----Write why a claim was not released.
----@param reason dev.board.ReleaseReason? the reason the backend named
----@param why string the backend's message
----@param detail string? the holder or the card id the backend named
----@param fence integer? the fence of the release
----@return string message the text
-local function release_refusal(reason, why, detail, fence)
-    local Reason = board.ReleaseReason
-    if reason == Reason.HELD_BY_MEMBER then
-        return "The card is held by " .. detail .. ". Only that member can release it in Pomb."
-    elseif reason == Reason.NO_CARD then
-        return "The board has no card " .. detail .. "."
-    elseif reason == Reason.NOT_HELD then
-        return "The claim on " .. detail .. " is not held with fence " .. tostring(fence) .. "."
-    end
-    return sentence(why)
-end
-
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
 local index_of = runner.index_of
@@ -931,7 +885,7 @@ local function add_card(backend, args, held)
         end
     end
     if position then
-        local ok, why = backend:move(card.id, card.column, { position = position })
+        local ok, why, reason = backend:move(card.id, card.column, { position = position })
         if not ok then
             return {
                 message = "Card "
@@ -939,7 +893,7 @@ local function add_card(backend, args, held)
                     .. " was added to "
                     .. card.column
                     .. " but not placed. "
-                    .. why,
+                    .. board.move_refusal(reason, why, card.column),
                 code = 1,
                 unqueued = true,
             }
@@ -1901,7 +1855,8 @@ local function move_once(backend, args, opts)
         if refusal == board.MoveReason.FULL then
             return runner.full(runner.limits.REFUSED .. message)
         end
-        return to_done and unqueued(failure(message)) or failure(message)
+        local refused = board.move_refusal(refusal, message, column, lane)
+        return to_done and unqueued(failure(refused)) or failure(refused)
     end
     if own_claim then
         local unclocked =
@@ -1917,7 +1872,7 @@ local function move_once(backend, args, opts)
         if not released then
             verb.note(
                 "Moved, but the claim was not released. "
-                    .. release_refusal(why_reason, why, why_detail, release_fence)
+                    .. board.release_refusal(why_reason, why, why_detail, release_fence)
             )
         end
     end
@@ -2084,10 +2039,10 @@ function commands.order(backend, args)
     end
     for position, card in ipairs(named) do
         local held = claims.read(card.id)
-        local ok, why =
+        local ok, why, reason =
             backend:move(card.id, column, { fence = held and held.fence, position = position - 1 })
         if not ok then
-            return failure(why)
+            return failure(board.move_refusal(reason, why, column))
         end
     end
     local after
@@ -2441,7 +2396,7 @@ function commands.ask(backend, args)
         if not released then
             verb.note(
                 "Asked, but the claim was not released. "
-                    .. release_refusal(why_reason, why, why_detail, held.fence)
+                    .. board.release_refusal(why_reason, why, why_detail, held.fence)
             )
         end
     end
@@ -3000,7 +2955,7 @@ function commands.outcome(backend, args)
                 return failure(
                     result.output
                         .. ", but the move to Verify failed. "
-                        .. verify_refusal(refusal, why, stages.verify)
+                        .. board.move_refusal(refusal, why, stages.verify)
                 )
             end
             result.output = result.output .. "\nmoved " .. prefix .. " to " .. stages.verify
@@ -3355,7 +3310,7 @@ function commands.review(backend, args)
         then
             seat_note = "\nThe recheck seat is already held, so only the card records this review."
         elseif not ok then
-            local detail = seat_refusal(refusal, message, kind)
+            local detail = board.seat_refusal(refusal, message, kind)
             warnings = {
                 string.format(
                     "The %s seat of card %s was NOT set, so Pomb holds no seat verdict for this review. %s The review is still recorded on the card.",
@@ -4734,9 +4689,10 @@ function commands.take(backend, args)
     end
     if from then
         local held = claims.read(card.id)
-        local released, stuck = backend:release(card.id, held and held.fence)
+        local fence = held and held.fence
+        local released, stuck, reason, detail = backend:release(card.id, fence)
         if not released then
-            return failure(stuck)
+            return failure(board.release_refusal(reason, stuck, detail, fence))
         end
         claims.stop(card.id)
     end
@@ -4745,14 +4701,14 @@ function commands.take(backend, args)
         return result
     end
     if card.column == stages.ready then
-        local moved, stuck = backend:move(card.id, stages.progress, {
+        local moved, stuck, refusal = backend:move(card.id, stages.progress, {
             fence = fence,
             force = board.labelled(card, board.TRUNK_BLOCKER) or nil,
         })
         if not moved then
             claims.stop(card.id)
             backend:release(card.id, fence)
-            return failure(stuck)
+            return failure(board.move_refusal(refusal, stuck, stages.progress))
         end
         card.column = stages.progress
     end
@@ -4793,9 +4749,9 @@ function commands.release(backend, args)
     if not held then
         return failure("No claim was taken for " .. args[1] .. " with `dev board take`.")
     end
-    local ok, message = backend:release(card.id, held.fence)
+    local ok, message, reason, detail = backend:release(card.id, held.fence)
     if not ok then
-        return failure(message)
+        return failure(board.release_refusal(reason, message, detail, held.fence))
     end
     claims.stop(card.id)
     local unclocked = require("dev.board.clock").follow(backend, card, nil, "")

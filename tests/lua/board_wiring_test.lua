@@ -265,6 +265,26 @@ testing.test("a land with a local claim sends the release with its fence", funct
     testing.eq(stub.released, 1)
 end)
 
+testing.test("a land whose release is refused with a reason prints the sentence", function()
+    local verb = require("dev.verb")
+    local stub = {
+        release = function()
+            return nil, nil, board.ReleaseReason.NOT_HELD, "dddd4444"
+        end,
+    }
+    local notes = {}
+    local original = verb.note
+    verb.note = function(text)
+        notes[#notes + 1] = text
+    end
+    wiring.release_landed(stub, { id = "dddd4444" }, { card = "dddd4444", fence = 3 })
+    verb.note = original
+    testing.eq(notes, {
+        "Landed, but the claim was not released. "
+            .. "The claim on dddd4444 is not held with fence 3.",
+    })
+end)
+
 testing.test("take releases a first claim when the note or the comments fail", function()
     backend_at(board_home())
     for _, fails in ipairs({ "note", "comments" }) do

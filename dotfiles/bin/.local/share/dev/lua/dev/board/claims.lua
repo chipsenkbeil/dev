@@ -110,14 +110,16 @@ end
 ---@param card string the card's full id
 ---@param held dev.board.claims.State? the claim state read before the landing
 ---@return boolean? sent true when the release went, false when it failed, nil when no fence exists
----@return string? stuck why the release failed
+---@return string? stuck why the release failed, nil when the backend named a reason
+---@return dev.board.ReleaseReason? reason the reason the backend named
+---@return string? detail the holder or the card id the backend named
 function M.finish(backend, card, held)
     M.stop(card)
     if not held then
         return nil
     end
-    local released, stuck = backend:release(card, held.fence)
-    return released and true or false, stuck
+    local released, stuck, reason, detail = backend:release(card, held.fence)
+    return released and true or false, stuck, reason, detail
 end
 
 ---Stop a card's loop and forget its claim state.

@@ -3644,7 +3644,7 @@ testing.test("a refused move to Verify writes the missing column from its reason
     card.outcomes = outcomes(2, 1)
     local backend = fake({ card })
     function backend:move()
-        return nil, "board unavailable: the board has no Verify column", board.MoveReason.NO_COLUMN
+        return nil, nil, board.MoveReason.NO_COLUMN
     end
     local result = cmd_board.run("outcome", { "cccccccc", "--tick", "2" }, backend)
     testing.eq(
@@ -9688,6 +9688,38 @@ testing.test("a release of an owner with no claim sends the owner fence", functi
     testing.ok(released:find("If-Owner-Fence: 9", 1, true), released)
     assert(fs.write(root .. "/task.json", TASK))
     dev(root, home, { "board", "release", "11111111-a" }, { agent = "r/one" })
+end)
+
+testing.test("take --from prints the sentence for a card a person holds", function()
+    local export = export_with_first_card({
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = READY_FIELDS,
+        holder = "r/old",
+        lease_expires_at = LIVE_LEASE,
+    })
+    local root, home = sandbox({ export = export })
+    local person = (
+        TASK:gsub(
+            '"labels":%["docs"%]',
+            '"labels":["docs"],"owner":{"holder":{"kind":"human","id":7},'
+                .. '"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}',
+            1
+        )
+    )
+    assert(fs.write(root .. "/task.json", person))
+    local out, code = dev(
+        root,
+        home,
+        { "board", "take", "11111111-a", "--from", "member 7" },
+        { agent = "r/one" }
+    )
+    assert(fs.write(root .. "/task.json", TASK))
+    testing.eq(code, 1, out)
+    testing.ok(
+        out:find("The card is held by member 7. Only that member can release it in Pomb.", 1, true),
+        out
+    )
 end)
 
 testing.test("a refused move into progress frees the owner", function()

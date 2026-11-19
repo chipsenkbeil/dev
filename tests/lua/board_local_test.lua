@@ -3385,6 +3385,25 @@ testing.test("a release names the reason a missing card or an unheld claim is re
     testing.eq({ ok, reason, detail }, { nil, board.ReleaseReason.NOT_HELD, card.id })
 end)
 
+testing.test("release returns a reason and no message", function()
+    local _, home = local_board()
+    local backend = localboard.new({ name = "mine", path = file_of(home), private = true })
+    local card = assert(backend:add("held", support.COLUMN_NAME.ICEBOX, {}))
+    testing.eq(
+        { backend:release("no-such-card", 1) },
+        { nil, nil, board.ReleaseReason.NO_CARD, "no-such-card" }
+    )
+    testing.eq({ backend:release(card.id, 1) }, { nil, nil, board.ReleaseReason.NOT_HELD, card.id })
+    testing.eq(
+        { backend:move(card.id, "No such column") },
+        { nil, nil, board.MoveReason.NO_COLUMN }
+    )
+    testing.eq(
+        { backend:move(card.id, support.COLUMN_NAME.ICEBOX, { lane = "No such lane" }) },
+        { nil, nil, board.MoveReason.NO_LANE }
+    )
+end)
+
 testing.test("an add with once returns the open card of that name and adds none", function()
     -- Open the board file as a backend
     local _, home = local_board()

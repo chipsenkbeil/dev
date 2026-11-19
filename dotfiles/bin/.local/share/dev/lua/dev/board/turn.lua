@@ -323,7 +323,8 @@ local function rotate(backend, card, comments)
     if not current or current.claimant then
         return card
     end
-    local moved, message = backend:move(card.id, backend.stages:done_column())
+    local done = backend.stages:done_column()
+    local moved, message, reason = backend:move(card.id, done)
     if not moved and (message or ""):find("limit reached", 1, true) then
         return nil,
             string.format(
@@ -333,7 +334,10 @@ local function rotate(backend, card, comments)
             )
     end
     if not moved then
-        return nil, "The full landing turn card could not be retired." .. sentence_after(message)
+        return nil,
+            "The full landing turn card could not be retired." .. sentence_after(
+                message or board.move_refusal(reason, nil, done)
+            )
     end
     local fresh_card
     fresh_card, message = turn_card(backend)
@@ -700,12 +704,13 @@ end
 ---@return true? ok true when the claim was released
 ---@return string? message why the claim was not released
 function M.release(backend, turn)
-    local released, message = backend:release(turn.card, turn.fence)
+    local released, message, reason, detail = backend:release(turn.card, turn.fence)
     if released and turn.hold then
         M.leave(backend, turn.holder, turn.for_card)
     end
     if not released then
-        return nil, "The landing turn could not be released." .. sentence_after(message)
+        local why = message or board.release_refusal(reason, nil, detail, turn.fence)
+        return nil, "The landing turn could not be released." .. sentence_after(why)
     end
     return released
 end

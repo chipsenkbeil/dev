@@ -1663,18 +1663,14 @@ function Backend:move(id, column, opts)
     end
     local target = self:__column_id(column)
     if not target then
-        return nil,
-            unavailable("the board has no " .. column .. " column"),
-            board.MoveReason.NO_COLUMN
+        return nil, nil, board.MoveReason.NO_COLUMN
     end
     opts = opts or {}
     local body = { column_id = target, position = opts.position or TOP }
     if opts.lane then
         body.swimlane_id = self:__lane_id(opts.lane)
         if not body.swimlane_id then
-            return nil,
-                unavailable("the board has no " .. opts.lane .. " lane"),
-                board.MoveReason.NO_LANE
+            return nil, nil, board.MoveReason.NO_LANE
         end
     end
     local moved, status, doc
@@ -2430,10 +2426,7 @@ function Backend:release(id, fence)
         return true
     end
     if task.owner.holder.kind == board.ACTOR.HUMAN then
-        return nil,
-            "The card is held by " .. name .. ". Only that member can release it in Pomb.",
-            board.ReleaseReason.HELD_BY_MEMBER,
-            name
+        return nil, nil, board.ReleaseReason.HELD_BY_MEMBER, name
     end
     local done
     done, message = self:__request(

@@ -574,7 +574,7 @@ end
 ---@param card dev.board.Card the landed card, read after its move
 ---@param held dev.board.claims.State? the local claim file of the card
 local function release_landed(backend, card, held)
-    local sent, stuck = claims.finish(backend, card.id, held)
+    local sent, stuck, reason, detail = claims.finish(backend, card.id, held)
     if sent == nil then
         verb.note(
             string.format(
@@ -584,7 +584,10 @@ local function release_landed(backend, card, held)
             )
         )
     elseif not sent then
-        verb.note("Landed, but the claim was not released. " .. dev_text.sentence(stuck))
+        verb.note(
+            "Landed, but the claim was not released. "
+                .. board.release_refusal(reason, stuck, detail, held.fence)
+        )
     end
 end
 
@@ -1137,5 +1140,6 @@ M.land_prepare = land_prepare
 M.land_held = land_held
 M.settle = settle
 M.kept_note = kept_note
+M.release_landed = release_landed
 
 return M

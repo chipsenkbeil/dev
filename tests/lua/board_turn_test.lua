@@ -263,7 +263,18 @@ testing.test("only the holder's fence releases the turn", function()
     restore()
     turn.release(backend, first)
     testing.eq(assert(turn.holder(backend)).name, "beta")
-    turn.release(backend, { card = first.card, fence = first.fence + 100, holder = "gamma" })
+    local stale = first.fence + 100
+    local released, message =
+        turn.release(backend, { card = first.card, fence = stale, holder = "gamma" })
+    testing.eq(released, nil)
+    testing.eq(
+        message,
+        string.format(
+            "The landing turn could not be released. The claim on %s is not held with fence %d.",
+            first.card,
+            stale
+        )
+    )
     testing.eq(assert(turn.holder(backend)).name, "beta")
 end)
 

@@ -239,7 +239,8 @@ end
 ---   returns nil, a message, nil and true, and on any other failure nil and a message
 ---@field move fun(self: dev.board.Backend, id: string, column: string, opts: dev.board.move.Opts?):
 ---   boolean?, string?, dev.board.MoveReason? the card moved to a column, or nil, a message and
----   `full` when Pomb refuses it at a limit, `no_column` or `no_lane` when the board lacks it
+---   `full` when Pomb refuses it at a limit, or nil, no message and `no_column` or `no_lane` when
+---   the board lacks it, which `move_refusal` writes
 ---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the
 ---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
 ---   board with none, or nil and a message
@@ -247,8 +248,9 @@ end
 ---   opts: dev.board.claim.Opts): integer?, string? the fence of the owner grab, renewed when the
 ---   caller's live fence is given
 ---@field release fun(self: dev.board.Backend, id: string, fence: integer): boolean?, string?,
----   dev.board.ReleaseReason?, string? the owner lease ended, or nil, a message, and for a fixed
----   refusal its reason and the detail the message names (the holder, or the card id)
+---   dev.board.ReleaseReason?, string? the owner lease ended, or nil, a message, or for a fixed
+---   refusal nil, no message, its reason and the detail the sentence names (the holder, or the
+---   card id), which `release_refusal` writes
 ---@field keepalive fun(self: dev.board.Backend, id: string, fence: integer, ticks: integer,
 ---   state: string, name: string): integer?, string? the pid of a detached loop that renews the
 ---   owner lease every tick until the state file loses the fence or the ticks run out
@@ -457,6 +459,55 @@ M.SeatReason = { NO_SEAT = "no_seat" }
 ---The reasons a claim release names beside its message when the refusal is a fixed one.
 ---@enum dev.board.ReleaseReason
 M.ReleaseReason = { HELD_BY_MEMBER = "held_by_member", NO_CARD = "no_card", NOT_HELD = "not_held" }
+
+---Write why a move was refused, from the reason the backend named.
+---@param reason dev.board.MoveReason? the reason the backend named
+---@param why string? the backend's message, which a reason code leaves out
+---@param column string the column of the move
+---@param lane string? the lane of the move
+---@return string message the text
+function M.move_refusal(reason, why, column, lane)
+    if reason == M.MoveReason.NO_COLUMN then
+        return "The board has no " .. column .. " column. Run `dev board init`."
+    elseif reason == M.MoveReason.NO_LANE then
+        return "The board has no " .. lane .. " lane."
+    end
+    return text.sentence(why)
+end
+
+---Write why Pomb refused the seat verdict.
+---@param reason dev.board.SeatReason? the reason the backend named
+---@param why string the backend's message
+---@param seat string the seat of the verdict
+---@return string message the text
+function M.seat_refusal(reason, why, seat)
+    if reason == M.SeatReason.NO_SEAT then
+        return string.format(
+            "The card has no %s seat and this token cannot add one (%s). The claim adds the seats, so take the card with dev board take first.",
+            seat,
+            why
+        )
+    end
+    return text.sentence(why)
+end
+
+---Write why a claim was not released, from the reason the backend named.
+---@param reason dev.board.ReleaseReason? the reason the backend named
+---@param why string? the backend's message, which a reason code leaves out
+---@param detail string? the holder or the card id the backend named
+---@param fence integer? the fence of the release
+---@return string message the text
+function M.release_refusal(reason, why, detail, fence)
+    local Reason = M.ReleaseReason
+    if reason == Reason.HELD_BY_MEMBER then
+        return "The card is held by " .. detail .. ". Only that member can release it in Pomb."
+    elseif reason == Reason.NO_CARD then
+        return "The board has no card " .. detail .. "."
+    elseif reason == Reason.NOT_HELD then
+        return "The claim on " .. detail .. " is not held with fence " .. tostring(fence) .. "."
+    end
+    return text.sentence(why)
+end
 
 ---The label of a card that waits on the owner, which `stale` lists apart at any age.
 M.NEEDS_HUMAN = "needs:human"

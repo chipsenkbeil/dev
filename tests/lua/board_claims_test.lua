@@ -270,3 +270,15 @@ testing.test("a clock on a card of another board stays and logs nothing", functi
     testing.eq(backend.logged, {})
     testing.eq(kept ~= nil, true)
 end)
+
+testing.test("finish passes on the reason and the detail of a refused release", function()
+    local backend = {
+        release = function()
+            return nil, nil, board.ReleaseReason.NOT_HELD, CARD
+        end,
+    }
+    testing.eq(
+        { claims.finish(backend, CARD, { fence = 3 }) },
+        { false, nil, board.ReleaseReason.NOT_HELD, CARD }
+    )
+end)

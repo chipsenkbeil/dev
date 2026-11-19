@@ -951,14 +951,14 @@ function Backend:move(id, column, opts)
         local target = column_named(doc, column)
         if not target then
             reason = board.MoveReason.NO_COLUMN
-            return nil, "The board has no " .. column .. " column. Run `dev board init`."
+            return nil
         end
         local lane
         if opts.lane then
             lane = lane_named(doc, opts.lane)
             if not lane then
                 reason = board.MoveReason.NO_LANE
-                return nil, "The board has no " .. opts.lane .. " lane."
+                return nil
             end
         end
         local _, index = find_by_id(doc.cards, id)
@@ -1171,12 +1171,11 @@ function Backend:release(id, fence)
         local card = find_by_id(doc.cards, id)
         if not card then
             reason = board.ReleaseReason.NO_CARD
-            return nil, "The board has no card " .. id .. "."
+            return nil
         end
         if not card.claim or (fence and card.claim.fence ~= fence) then
             reason = board.ReleaseReason.NOT_HELD
-            return nil,
-                "The claim on " .. id .. " is not held with fence " .. tostring(fence) .. "."
+            return nil
         end
         card.claim = nil
         return true
