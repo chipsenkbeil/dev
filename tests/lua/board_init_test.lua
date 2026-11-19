@@ -1376,15 +1376,19 @@ end)
 
 testing.test("agent-roles-create: a first init posts the board id and prints names", function()
     local root, home, tmp = sandbox({
-        roles = '200|{"created":["planner","implementer","reviewer","verifier","release","lead"],'
-            .. '"roles":[]}\n',
+        roles = '200|{"created":["'
+            .. table.concat(pomb.STANDARD_ROLE_KEYS, '","')
+            .. '"],"roles":[]}\n',
     })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
     testing.eq(
         out,
-        "created agent roles planner, implementer, reviewer, verifier, release, lead\n"
-            .. "board demo: 1 change\n"
+        table.concat({
+            "created agent roles " .. table.concat(pomb.STANDARD_ROLE_KEYS, ", "),
+            "board demo: 1 change",
+            "",
+        }, "\n")
     )
     testing.ok(
         calls_of(root):find(
@@ -1411,7 +1415,11 @@ testing.test("agent-roles-create: the step runs once through a layout", function
         lines[#lines + 1] = line
     end)
     testing.ok(changes >= 1)
-    testing.ok(table.concat(lines, "\n"):find("created agent roles planner, implementer", 1, true))
+    testing.ok(
+        table
+            .concat(lines, "\n")
+            :find("created agent roles " .. table.concat(pomb.STANDARD_ROLE_KEYS, ", "), 1, true)
+    )
     lines = {}
     testing.eq(
         init.run(layout, "demo", function(line)
