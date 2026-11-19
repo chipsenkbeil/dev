@@ -8947,6 +8947,18 @@ local function refusing_moves(root)
     curl_with(root, REFUSED_MOVE)
 end
 
+testing.test("epic prints Pomb's already an epic refusal", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    assert(fs.write(root .. "/label_fail", "1"))
+    executable(
+        root .. "/bin/curl",
+        (CURL:gsub('{"message":"nope"}', '{"message":"the card is already an epic"}', 1))
+    )
+    local out, code = dev(root, home, { "board", "epic", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("the card is already an epic", 1, true), out)
+end)
+
 testing.test("a move into progress that Pomb refuses releases the claim it just took", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     refusing_moves(root)
