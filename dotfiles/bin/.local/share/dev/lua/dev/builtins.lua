@@ -469,6 +469,12 @@ return {
         desc = "List who moved a card and with which token",
     },
     {
+        words = { "board", "flow" },
+        handler = "lua",
+        usage = "dev board flow",
+        desc = "Print the median and p90 minutes cards wait from Verify to Done",
+    },
+    {
         words = { "board", "show" },
         handler = "lua",
         flags = "--board",

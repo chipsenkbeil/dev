@@ -8393,6 +8393,64 @@ testing.test(
     end
 )
 
+local function moved_event(at, to)
+    return ('{"id":"m","kind":"moved","detail":"Moved","actor":"admin","created_at":"%s","to":"%s"}'):format(
+        at,
+        to
+    )
+end
+
+testing.test("flow prints the landed count and the median and p90 minutes", function()
+    local done = support.column_id(support.Column.DONE)
+    local function card(id, column, events, labels)
+        return support.pomb_export_task({
+            id = id,
+            name = "Card",
+            column_id = column,
+            labels = labels,
+            history = "[" .. table.concat(events, ",") .. "]",
+        })
+    end
+    local verify, landed = support.COLUMN_NAME.VERIFY, support.COLUMN_NAME.DONE
+    local export = '{"tasks":['
+        .. table.concat({
+            card(ID_A, done, {
+                moved_event("2026-11-18T08:00:00Z", verify),
+                moved_event("2026-11-18T10:00:00Z", verify),
+                moved_event("2026-11-18T10:30:00Z", landed),
+            }),
+            card(ID_B, done, {
+                moved_event("2026-11-18T09:00:00Z", verify),
+                moved_event("2026-11-18T11:00:00Z", landed),
+            }),
+            card(ID_C, READY_COLUMN, { moved_event("2026-11-18T09:00:00Z", verify) }),
+            card("dddddddd-4444-4444-8444-444444444444", done, {
+                moved_event("2026-11-18T09:00:00Z", verify),
+                moved_event("2026-11-18T23:00:00Z", landed),
+            }, { "discarded" }),
+            card("eeeeeeee-5555-4555-8555-555555555555", done, {
+                moved_event("2026-11-18T09:00:00Z", support.COLUMN_NAME.READY),
+                moved_event("2026-11-18T09:05:00Z", landed),
+            }),
+        }, ",")
+        .. "]}"
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "flow" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "landed 2\nmedian 30 min\np90 120 min\n")
+    out, code = dev(root, home, { "board", "flow", "extra" })
+    testing.eq(code, 2, out)
+end)
+
+testing.test("flow exits 1 on a local board", function()
+    local root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "mine"\n' })
+    local out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "flow" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("keeps no history", 1, true), out)
+end)
+
 testing.test("a 403 on a comment says it is not yours and exits 1", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "dddddddd", "x" })

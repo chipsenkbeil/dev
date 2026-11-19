@@ -1105,6 +1105,35 @@ function commands.history(backend, args)
     return { output = render.history(events) }
 end
 
+---The value at a percentile of a sorted list, by the nearest-rank rule.
+---@param sorted number[] the values, ascending and not empty
+---@param percent number the percentile from 1 to 100
+---@return number
+local function percentile(sorted, percent)
+    return sorted[math.max(1, math.ceil(#sorted * percent / 100))]
+end
+
+function commands.flow(backend, args)
+    if #args ~= 0 then
+        return usage("Takes no arguments.")
+    end
+    local landed, message = backend:dwell()
+    if not landed then
+        return failure(message)
+    end
+    local minutes = {}
+    for _, card in ipairs(landed) do
+        minutes[#minutes + 1] = math.floor((card.done - card.verify) / 60)
+    end
+    table.sort(minutes)
+    local lines = { "landed " .. #minutes }
+    if #minutes > 0 then
+        lines[#lines + 1] = "median " .. percentile(minutes, 50) .. " min"
+        lines[#lines + 1] = "p90 " .. percentile(minutes, 90) .. " min"
+    end
+    return { output = table.concat(lines, "\n") }
+end
+
 ---@param family dev.board.Family
 ---@return string
 local function kin_lines(family)

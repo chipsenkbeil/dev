@@ -2483,6 +2483,18 @@ the `history` of the card in `GET /api/boards/{id}/export-data`.
 - It prints `no history` when there are no events.
 - A local board keeps no history, so the verb exits 1 there.
 
+### flow
+
+`dev board flow` measures how long cards wait between Verify and Done. It reads
+the board's `export-data` once and takes, for each Done card, the time of its
+last move into Verify and its last move into Done from the `moved` events of
+its `history`.
+
+- It prints `landed N`, then `median M min` and `p90 P min`, in whole minutes
+  by the nearest-rank rule. With no landed card it prints only `landed 0`.
+- A Done card with no move into Verify is not counted.
+- A local board keeps no history, so the verb exits 1 there.
+
 ### show
 
 `dev board show CARD [--board B]` prints a whole card, so an agent reads it

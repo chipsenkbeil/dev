@@ -857,6 +857,10 @@ function Backend:history()
     return nil, "A local board keeps no history."
 end
 
+function Backend:dwell()
+    return nil, "A local board keeps no history."
+end
+
 function Backend:comments(id)
     local doc, message = self:__read()
     if not doc then

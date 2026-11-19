@@ -180,6 +180,8 @@ end
 ---   card's comments, oldest first
 ---@field history fun(self: dev.board.Backend, id: string): dev.board.HistoryEvent[]?, string? the
 ---   card's history events, newest first
+---@field dwell fun(self: dev.board.Backend): dev.board.Dwell[]?, string? the last move into Verify
+---   and into Done of each Done card, read from one export, or nil and a message
 ---@field edit_note fun(self: dev.board.Backend, id: string, comment: string, body: string):
 ---   boolean?, string? the body of one of the caller's own comments replaced, or nil and a message
 ---@field delete_note fun(self: dev.board.Backend, id: string, comment: string): boolean?, string?
@@ -287,6 +289,11 @@ end
 ---@field position integer? the zero-based place in the column and lane, the top when nil
 ---@field lane string? the name of the lane to move the card to, its own lane when nil
 ---@field force boolean? whether Pomb skips the column and group limits, true for a trunk-blocker
+
+---@class dev.board.Dwell
+---@field id string the card's full id
+---@field verify integer seconds since the epoch of the card's last move into Verify
+---@field done integer seconds since the epoch of the card's last move into Done
 
 ---@class dev.board.HistoryEvent
 ---@field at string when it happened, as an RFC 3339 stamp

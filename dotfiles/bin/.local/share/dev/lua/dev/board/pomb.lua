@@ -1519,6 +1519,38 @@ function Backend:history(id)
     return nil, "The board has no card " .. id .. "."
 end
 
+function Backend:dwell()
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local doc
+    doc, message = self:__export(self.__detail.id)
+    if not doc then
+        return nil, message
+    end
+    local verify = self:__stages().verify
+    local found = {}
+    for _, task in ipairs(doc.tasks) do
+        if self:__column_done(task.column_id) and not board.labelled(task, board.DISCARDED) then
+            local landed = self:__column_name(task.column_id)
+            local entered, finished
+            for _, event in ipairs(task.history or {}) do
+                local at = event.kind == "moved" and box.parse_time(present(event.created_at))
+                if at and present(event.to) == verify and (not entered or at > entered) then
+                    entered = at
+                elseif at and present(event.to) == landed and (not finished or at > finished) then
+                    finished = at
+                end
+            end
+            if entered and finished and finished >= entered then
+                found[#found + 1] = { id = task.id, verify = entered, done = finished }
+            end
+        end
+    end
+    return found
+end
+
 function Backend:comments(id)
     local list, message = self:__request("GET", "/api/tasks/" .. id .. "/comments")
     if not list then
