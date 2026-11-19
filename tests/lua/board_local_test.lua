@@ -71,6 +71,18 @@ local function prefix_of(out)
     return assert(out:match("added (%x+)"), out)
 end
 
+local function hold_for_owner(home, id)
+    local doc = document(file_of(home))
+    for _, card in ipairs(doc.cards) do
+        if card.id:sub(1, #id) == id then
+            card.labels = { board.NEEDS_HUMAN }
+            assert(fs.write(file_of(home), assert(json.encode(doc))))
+            return
+        end
+    end
+    error("no card " .. id)
+end
+
 local function tick_first(root, home, id)
     local out, code =
         dev(root, home, { "board", "outcome", id, "--tick", "1", "--as", "r/reviewer" })
@@ -393,9 +405,8 @@ testing.test(
         local root, home = local_board()
         local a =
             prefix_of((dev(root, home, { "board", "add", "First", "--column", Column.ICEBOX })))
-        local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-        testing.eq(code, 0, out)
-        out, code = dev(root, home, { "board", "note", a, "still open" })
+        hold_for_owner(home, a)
+        local out, code = dev(root, home, { "board", "note", a, "still open" })
         testing.eq(code, 0, out)
         out = dev(root, home, { "board", "stale" })
         testing.ok(out:find("for the owner (needs:human):", 1, true), out)
@@ -406,9 +417,8 @@ testing.test(
 testing.test("stale marks a local needs:human card whose newest comment is the owner's", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", Column.ICEBOX })))
-    local out, code = dev(root, home, { "board", "label", a, board.NEEDS_HUMAN })
-    testing.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "note", a, "which way" })
+    hold_for_owner(home, a)
+    local out, code = dev(root, home, { "board", "note", a, "which way" })
     testing.eq(code, 0, out)
     local doc = document(file_of(home))
     doc.cards[1].comments[1].who = "human"
@@ -450,9 +460,9 @@ end)
 testing.test("answer posts the quote and frees a local needs:human card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", Column.ICEBOX })))
-    local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-    testing.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "answer", a, "--choice", "2", "--quote", "go ahead" })
+    hold_for_owner(home, a)
+    local out, code =
+        dev(root, home, { "board", "answer", a, "--choice", "2", "--quote", "go ahead" })
     testing.eq(code, 0, out)
     testing.eq(out, "answered " .. a .. " with choice 2\n")
     out = dev(root, home, { "board", "show", a })
@@ -469,9 +479,8 @@ testing.test("next --column backlog skips a needs:human card", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, { "board", "add", "First", "--column", Column.ICEBOX })))
     local b = prefix_of((dev(root, home, { "board", "add", "Second", "--column", Column.ICEBOX })))
-    local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-    testing.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "next", "--column", Column.ICEBOX })
+    hold_for_owner(home, a)
+    local out, code = dev(root, home, { "board", "next", "--column", Column.ICEBOX })
     testing.eq(code, 0, out)
     testing.ok(out:find(b, 1, true) and not out:find(a, 1, true), out)
     out = dev(root, home, { "board", "next", "--column", Column.BACKLOG })
@@ -523,8 +532,7 @@ testing.test("next --column blocked returns the top unclaimed needs:lead card on
     out, code = dev(root, home, { "board", "next", "--column", Column.BLOCKED })
     testing.eq(code, 0, out)
     testing.ok(out:find(free, 1, true) and out:find("Free", 1, true), out)
-    out, code = dev(root, home, { "board", "label", free, "needs:human" })
-    testing.eq(code, 0, out)
+    hold_for_owner(home, free)
     out = dev(root, home, { "board", "next", "--column", Column.BLOCKED })
     testing.eq(out, "No cards in Blocked.\n")
 end)
@@ -683,9 +691,8 @@ testing.test("discard refuses a needs:human card and writes nothing", function()
         "--done-when",
         "a",
     })))
-    local out, code = dev(root, home, { "board", "label", a, "needs:human" })
-    testing.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "discard", a, "--reason", "Dropped" })
+    hold_for_owner(home, a)
+    local out, code = dev(root, home, { "board", "discard", a, "--reason", "Dropped" })
     testing.eq(code, 1, out)
     testing.ok(out:find("needs:human", 1, true), out)
     local card = document(file_of(home)).cards[1]
@@ -1327,13 +1334,9 @@ testing.test("a local board refuses what the needs:human and epic rules forbid",
     })))
     local out, code = dev(root, home, { "board", "label", card, "needs:human" })
     testing.eq(code, 1, out)
-    testing.ok(
-        out:find(support.COLUMN_NAME.BLOCKED .. " or " .. support.COLUMN_NAME.ICEBOX, 1, true),
-        out
-    )
+    testing.ok(out:find("dev board ask", 1, true), out)
     dev(root, home, { "board", "move", card, Column.BLOCKED })
-    out, code = dev(root, home, { "board", "label", card, "needs:human" })
-    testing.eq(code, 0, out)
+    hold_for_owner(home, card)
     out, code = dev(root, home, { "board", "move", card, Column.BACKLOG })
     testing.eq(code, 1, out)
     testing.ok(out:find("needs:human", 1, true), out)
@@ -3750,7 +3753,7 @@ testing.test(
         testing.eq(code, 1, out)
         testing.ok(out:find("one column", 1, true), out)
         testing.eq(dev(root, home, { "board", "ls" }), before)
-        dev(root, home, { "board", "label", two, "needs:human" })
+        hold_for_owner(home, two)
         out, code = dev(root, home, { "board", "order", two })
         testing.eq(code, 0, out)
         out, code = dev(root, home, { "board", "move", two, Column.ICEBOX })

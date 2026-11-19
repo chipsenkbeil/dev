@@ -2784,7 +2784,13 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local project = jj_project()
         local id = new_card(project)
         must(dev(project, { "board", "move", id, support.Column.BLOCKED }))
-        must(dev(project, { "board", "label", id, "needs:human" }))
+        local doc = board_doc(project.home)
+        for _, card in ipairs(doc.cards) do
+            if card.id:sub(1, #id) == id then
+                card.labels = { board.NEEDS_HUMAN }
+            end
+        end
+        assert(fs.write(support.board_file(project.home, "mine"), assert(json.encode(doc))))
         refused(project, id, { "is labelled needs:human", "waits on the owner" })
     end)
 
