@@ -10,6 +10,7 @@ local LAUNCHER = REPO .. "/dotfiles/bin/.local/bin/dev"
 local WAIT_TICKS = 100
 local VERB_WAIT_TICKS = 300
 local VERB_POLL_SECS = 0.1
+local WAIT_POLL_SECS = "0.1"
 local CLEANUP_VERB = "-- Register a cleanup.\n"
     .. [[
 local dev_os = require("dev.os")
@@ -434,7 +435,6 @@ testing.test("capture_timed passes hostile words through unchanged", function()
 end)
 
 local LEFT_RUNNING_TRIES = 20
-local LEFT_RUNNING_POLL_SECS = "0.1"
 
 local function left_running(pattern)
     local left = ""
@@ -443,7 +443,7 @@ local function left_running(pattern)
         if left == "" then
             break
         end
-        dev_os.run({ "sleep", LEFT_RUNNING_POLL_SECS })
+        dev_os.run({ "sleep", WAIT_POLL_SECS })
     end
     return left
 end
@@ -522,8 +522,6 @@ local function process_listed(needle)
     local out = dev_os.capture({ "sh", "-c", "ps -axo args=" })
     return ("\n" .. out):find("\n" .. needle .. "\n", 1, true) ~= nil
 end
-
-local WAIT_POLL_SECS = "0.1"
 
 local function wait_until(predicate)
     local WAIT_POLLS = 50

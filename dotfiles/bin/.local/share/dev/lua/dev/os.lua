@@ -93,6 +93,8 @@ local TIMED_WRAPPER = table.concat({
     'trap - INT TERM HUP; exec 2>/dev/null; echo $pid $watcher >"$3/pids.tmp"; mv "$3/pids.tmp" "$3/pids"; wait $watcher',
 }, " ")
 
+local state = { cleanups = {}, term_installed = false, exit_wrapped = false }
+
 ---@alias dev.os.Kind "file"|"dir"|"link"|"other"
 
 ---@class dev.os
@@ -338,10 +340,6 @@ function M.capture(argv, opts)
     return text:sub(1, split - 1), tonumber(text:sub(split + 1))
 end
 
-local cleanups = {}
-local term_installed = false
-local exit_wrapped = false
-
 local function address(handler)
     return tonumber(ffi.cast("intptr_t", handler))
 end
@@ -352,14 +350,14 @@ function M.catch_term()
     ffi.C.signal(SIGINT, handler)
     if address(handler) > SIG_IGN then
         ffi.C.signal(SIGTERM, handler)
-        term_installed = true
+        state.term_installed = true
     end
 end
 
 ---Name the exit status of an interrupt error that was just caught.
 ---@return integer code 128 plus SIGTERM when `catch_term` caught SIGTERM, 128 plus SIGINT otherwise
 function M.interrupt_code()
-    if term_installed then
+    if state.term_installed then
         local current = ffi.C.signal(SIGTERM, ffi.cast("void (*)(int)", SIG_DFL))
         if address(current) == SIG_DFL then
             return M.SIGNAL_EXIT_BASE + SIGTERM
@@ -373,8 +371,8 @@ end
 ---
 ---A cleanup that raises is reported on standard error and the rest still run.
 function M.run_cleanups()
-    while #cleanups > 0 do
-        local cleanup = table.remove(cleanups)
+    while #state.cleanups > 0 do
+        local cleanup = table.remove(state.cleanups)
         local ok, err = pcall(cleanup)
         if not ok then
             local stderr = io.stderr
@@ -390,9 +388,9 @@ end
 ---`os.exit` runs the cleanups first from the first registration on.
 ---@param fn fun() cleanup to run
 function M.on_exit(fn)
-    cleanups[#cleanups + 1] = fn
-    if not exit_wrapped then
-        exit_wrapped = true
+    state.cleanups[#state.cleanups + 1] = fn
+    if not state.exit_wrapped then
+        state.exit_wrapped = true
         local real_exit = os.exit
         rawset(os, "exit", function(code, close)
             M.run_cleanups()
