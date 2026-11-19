@@ -810,9 +810,10 @@ local function sandbox(opts)
     return root, home, tmp
 end
 
-local function dev(root, home, tmp, args)
+local function dev(root, home, tmp, args, agent)
     return support.dev(root, args, {
         env = {
+            DEV_AGENT = agent or "dotfiles/lead",
             HOME = home,
             ROOT = root,
             TMPDIR = tmp,
@@ -826,6 +827,7 @@ local function dev_split(root, home, tmp, args)
     return support.dev(root, args, {
         split = true,
         env = {
+            DEV_AGENT = "dotfiles/lead",
             HOME = home,
             ROOT = root,
             TMPDIR = tmp,
@@ -870,6 +872,14 @@ testing.test("init on a board already at the standard says so and writes nothing
     testing.eq(writes(root), 0)
     testing.ok(read(root, "calls"):find("pass show secrets/lead/token/pomb", 1, true))
     testing.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
+end)
+
+testing.test("init refuses a name that is not a lead", function()
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init" }, "dotfiles/implementer/abc12345")
+    testing.eq(code, 1)
+    testing.ok(out:find("Only the lead initializes a board.", 1, true), out)
+    testing.eq(read(root, "calls"), "")
 end)
 
 testing.test("init --admin pairs through pending, slow_down and success", function()

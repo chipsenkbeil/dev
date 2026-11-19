@@ -179,7 +179,8 @@ environment or prompt. NAME is the claimant name, so it follows
 The verb runs only for a lead, and so does `delete`. Both read one helper,
 which counts a `DEV_AGENT` as the lead when its role segment (the second) is
 `lead`, as in `dotfiles/lead`, or when it holds no slash and stdin is a
-terminal. Any other role is refused.
+terminal. Any other role is refused. On a Pomb board init runs only for a lead
+too, and `--admin` is not held to that guard.
 
 Pomb refuses a name that a live token holds with a 409, and a name frees once
 its token expires. dev shows that, an `unknown_role` and an `exceeds_grant`

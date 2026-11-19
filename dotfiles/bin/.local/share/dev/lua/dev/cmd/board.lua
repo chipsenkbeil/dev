@@ -4846,6 +4846,9 @@ M.handlers["board init"] = function(ctx)
     if config.get(ctx.root, "board.backend") == board.Backend.LOCAL then
         return init_local(ctx, flags, admin)
     end
+    if not admin and guards.delete_refusal() == guards.Refusal.NOT_LEAD then
+        verb.die(not_lead_message("initializes a board"))
+    end
     local name, missing = board_setup.board_name(ctx, flags)
     local opts = {
         url = config.user("board.pomb.url"),
