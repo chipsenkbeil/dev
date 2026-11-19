@@ -1751,6 +1751,13 @@ local function move_once(backend, args, opts)
         end
         return to_done and unqueued(failure(message)) or failure(message)
     end
+    if own_claim then
+        local unclocked =
+            require("dev.board.clock").follow(backend, card, column, claimant((agent_name())))
+        if unclocked then
+            verb.note("Moved, but its clock did not follow. " .. sentence(unclocked))
+        end
+    end
     if own_claim and column ~= stages.progress and column ~= stages.blocked then
         claims.stop(card.id)
         local released, why = backend:release(card.id, held and held.fence)
@@ -5280,6 +5287,12 @@ function commands.take(backend, args)
     if not fence then
         return result
     end
+    local unclocked = require("dev.board.clock").follow(backend, card, card.column, claimant(name))
+    if unclocked then
+        verb.note(
+            "Took card " .. short .. ", but its clock did not follow. " .. sentence(unclocked)
+        )
+    end
     if from then
         local ok, message = backend:note(
             card.id,
@@ -5316,6 +5329,10 @@ function commands.release(backend, args)
         return failure(message)
     end
     claims.stop(card.id)
+    local unclocked = require("dev.board.clock").follow(backend, card, nil, "")
+    if unclocked then
+        verb.note("Released, but the clock did not stop. " .. sentence(unclocked))
+    end
     return {
         output = string.format(
             "released %s, fence %d",

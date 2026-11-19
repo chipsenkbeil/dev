@@ -3,6 +3,7 @@ local ffi = require("ffi")
 local testing = require("dev.testing")
 local board = require("dev.board")
 local check = require("dev.board.check")
+local role_clock = require("dev.board.clock")
 local review = require("dev.board.review")
 local box = require("dev.cmd.box")
 local cmd_board = require("dev.cmd.board")
@@ -5485,6 +5486,40 @@ testing.test("time start refuses a needs:human card and a second clock on one ca
     testing.eq(stopped.output, "logged 1 minutes as planner on 11111111")
     testing.eq(again.code, 1)
 end)
+
+testing.test(
+    "a move from In Progress to Review logs the implementer and starts a reviewer",
+    function()
+        local previous = os.getenv("XDG_STATE_HOME") or ""
+        ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+        local name = "dotfiles/implementer/11111111"
+        local card = colored("green")
+        card.outcomes = outcomes(2)
+        card.column = PROGRESS_NAME
+        card.claimant = name
+        local backend = fake({ card })
+        local now = role_clock.now
+        role_clock.now = function()
+            return 5000
+        end
+        local started = role_clock.start(card, "implementer")
+        role_clock.now = function()
+            return 5000 + 40 * 60
+        end
+        local result
+        as_agent(name, function()
+            result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
+        end)
+        local ticking = role_clock.read(ID_C)
+        role_clock.now = now
+        ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+        testing.eq(started.code, nil, started.message)
+        testing.eq(result.message, nil)
+        testing.eq(backend.calls[#backend.calls], { "log_time", ID_C, 40, "implementer", nil })
+        testing.eq(ticking.role, "reviewer")
+        testing.eq(ticking.start, 5000 + 40 * 60)
+    end
+)
 
 testing.test("time prints the refusal of the backend", function()
     local backend = fake(sample())

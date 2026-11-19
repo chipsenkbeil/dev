@@ -7,6 +7,14 @@ local SUFFIX = ".clock"
 local SECONDS_PER_MINUTE = 60
 local START = "start"
 local STOP = "stop"
+---The role of a column's holder, by stage name, in board order.
+local COLUMN_ROLES = {
+    { stage = "icebox", role = "scoper" },
+    { stage = "backlog", role = "planner" },
+    { stage = "progress", role = "implementer" },
+    { stage = "review", role = "reviewer" },
+    { stage = "blocked", role = "lead" },
+}
 
 ---The role clock `dev board time start` runs: one state file per card beside
 ---the claim state, holding the role and the start time on this machine.
@@ -119,6 +127,61 @@ function M.stop(backend, card, note)
     end
     fs.remove(M.path(card.id))
     return { output = "logged " .. minutes .. " minutes as " .. running.role .. " on " .. prefix }
+end
+
+---Name the role a card's holder works in while it sits in a column.
+---
+---Icebox is the scoper's, Backlog the planner's, In Progress the implementer's, Review the
+---reviewer's and Blocked the lead's. Ready and Verify take the role from the claimant's name,
+---`repo/role/card`, and any other column counts no time.
+---@param stages dev.board.Stages the board's stages
+---@param column string the column the card sits in
+---@param claimant string the name the claim is held under
+---@return string? role the role, nil when the column counts no time
+function M.column_role(stages, column, claimant)
+    for _, pair in ipairs(COLUMN_ROLES) do
+        if stages[pair.stage] == column then
+            return pair.role
+        end
+    end
+    if column == stages.ready or column == stages.verify then
+        return claimant:match("^[^/]+/([^/]+)")
+    end
+    return nil
+end
+
+---Move a card's clock to a column: log the running stretch and start the column's role.
+---
+---A stop the board refuses drops the clock with a warning, so a card never keeps a stale clock.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param column string? the column the card is in now, nil to only stop
+---@param claimant string the name the claim is held under
+---@return string? warning why the clock could not follow, nil when it did
+function M.follow(backend, card, column, claimant)
+    if backend.timed == false then
+        return nil
+    end
+    local role = column and M.column_role(backend.stages, column, claimant)
+    local running = M.read(card.id)
+    if running and running.role == role then
+        return nil
+    end
+    local warning
+    if running then
+        local stopped = M.stop(backend, card)
+        if stopped.code then
+            fs.remove(M.path(card.id))
+            warning = stopped.message .. " The clock was dropped."
+        end
+    end
+    if role and not board.labelled(card, board.NEEDS_HUMAN) then
+        local started = M.start(card, role)
+        if started.code and not warning then
+            warning = started.message
+        end
+    end
+    return warning
 end
 
 ---Run `time start` or `time stop` from its parsed words and flags.

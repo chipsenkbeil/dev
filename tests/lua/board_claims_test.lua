@@ -2,7 +2,9 @@ local ffi = require("ffi")
 
 local testing = require("dev.testing")
 local claims = require("dev.board.claims")
+local board = require("dev.board")
 local clock = require("dev.board.clock")
+local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
@@ -100,6 +102,86 @@ testing.test("time start keeps a running clock and time stop logs it and removes
     testing.eq(logged, { { CARD, 25, "reviewer", "looked" } })
     testing.eq(stopped.output, "logged 25 minutes as reviewer on 11111111")
     testing.eq(left, nil)
+end)
+
+local function take_stub(card)
+    local stub = { logged = {} }
+    function stub:done_columns()
+        return { "Done" }
+    end
+    function stub:cards()
+        return { card }
+    end
+    function stub:claim(_, _, opts)
+        return (opts.fence or 0) + 1
+    end
+    function stub:comments()
+        return {}
+    end
+    function stub:family()
+        return {}
+    end
+    function stub:limits()
+        return { columns = {}, units = {}, groups = {} }
+    end
+    function stub:note()
+        return true
+    end
+    function stub:release()
+        return true
+    end
+    function stub:keepalive()
+        return 0
+    end
+    function stub:log_time(id, minutes, role)
+        self.logged[#self.logged + 1] = { id, minutes, role }
+        return true
+    end
+    return stub
+end
+
+testing.test("a take starts a clock under the role of the card's column", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local name = "dotfiles/implementer/11111111"
+    local roles = {}
+    local columns = {
+        support.COLUMN_NAME.PROGRESS,
+        support.COLUMN_NAME.REVIEW,
+        support.COLUMN_NAME.BLOCKED,
+    }
+    for _, column in ipairs(columns) do
+        local card = {
+            id = CARD,
+            name = "x",
+            column = column,
+            size = "1 Pomodoro",
+            labels = {},
+            outcomes = {},
+            checks = {},
+        }
+        local stub = take_stub(card)
+        local result = cmd_board.run("take", { "11111111", "--as", name }, stub)
+        local ticking = clock.read(CARD)
+        roles[#roles + 1] = result.code == nil and ticking and ticking.role or result.message
+        claims.stop(CARD)
+        fs.remove(clock.path(CARD))
+    end
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(roles, { "implementer", "reviewer", "lead" })
+end)
+
+testing.test("column_role names every column's role and takes the claimant's for Ready", function()
+    local stages = board.stages({}, { "Done" })
+    local who = "dotfiles/verifier/11111111"
+    testing.eq(clock.column_role(stages, stages.icebox, who), "scoper")
+    testing.eq(clock.column_role(stages, stages.backlog, who), "planner")
+    testing.eq(clock.column_role(stages, stages.progress, who), "implementer")
+    testing.eq(clock.column_role(stages, stages.review, who), "reviewer")
+    testing.eq(clock.column_role(stages, stages.blocked, who), "lead")
+    testing.eq(clock.column_role(stages, stages.ready, who), "verifier")
+    testing.eq(clock.column_role(stages, stages.verify, who), "verifier")
+    testing.eq(clock.column_role(stages, "Done", who), nil)
 end)
 
 testing.test("time stop refuses a card with no running clock", function()

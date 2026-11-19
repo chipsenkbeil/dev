@@ -49,6 +49,9 @@ local M = {}
 local Backend = {}
 Backend.__index = Backend
 
+---A local board holds no time entries, so no role clock follows its cards.
+Backend.timed = false
+
 ---Build a local backend.
 ---@param opts dev.board.localboard.Opts the board's name and file
 ---@return dev.board.Backend backend the backend

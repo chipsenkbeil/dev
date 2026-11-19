@@ -107,6 +107,7 @@ end
 ---@field stages dev.board.Stages? the column set of this run, which the runner sets before a
 ---   command
 ---@field roles dev.board.Stages? the temporary alias of `stages`
+---@field timed boolean? whether the board keeps time entries, false on a local board
 ---@field card fun(self: dev.board.Backend, id: string): dev.board.Card?, string? the card with that
 ---   id, or nil and a message
 ---@field cards fun(self: dev.board.Backend): dev.board.Card[]?, string? every card in column order,

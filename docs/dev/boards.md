@@ -3549,6 +3549,21 @@ The refusals, all exit 1 unless stated:
 - `stop` on a card with no running clock.
 - A refused log keeps the clock running.
 
+The claim drives the clock by column, so an agent never calls `time start` for
+it. A take and a move or a release by the claim's holder follow one rule:
+
+- The running clock is logged and removed, and the new column starts the next
+  one. A release of the claim, or a move into Release or Done, only logs.
+  A move that releases the claim, such as the move into Review, still starts
+  the new column's clock, since the runner keeps working the card there. A
+  take or a move into the column whose role already runs keeps that clock.
+- The role comes from the column: Icebox `scoper`, Backlog `planner`, In
+  Progress `implementer`, Review `reviewer` and Blocked `lead`. Ready and
+  Verify take the middle word of the claimant's name `repo/role/card`, and
+  every other column counts no time.
+- A log the board refuses drops the clock and prints a warning, so no card keeps
+  a stale clock. A local board holds no time entries and runs no clock.
+
 ### note
 
 `dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT` adds a comment
