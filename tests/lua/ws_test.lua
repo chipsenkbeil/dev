@@ -2332,6 +2332,53 @@ if dev_os.which("jj") then
         testing.eq(fs.exists(old .. "/.jj"), true)
     end)
 
+    testing.test("adopt names the forgotten workspace when the add fails", function()
+        -- Put a jj on PATH that fails only for workspace add
+        local root, old, _, env = adopt_jj_project()
+        local bin = support.tempdir()
+        local script = table.concat({
+            "#!/bin/sh",
+            'prev=""',
+            'for word in "$@"; do',
+            '    if [ "$prev" = workspace ] && [ "$word" = add ]; then',
+            '        echo "add refused" >&2',
+            "        exit 1",
+            "    fi",
+            '    prev="$word"',
+            "done",
+            "exec " .. assert(dev_os.which("jj")) .. ' "$@"',
+            "",
+        }, "\n")
+        assert(fs.write(bin .. "/jj", script))
+        assert(dev_os.run({ "chmod", "755", bin .. "/jj" }) == 0, "chmod failed")
+        env.env.PATH = bin .. ":" .. os.getenv("PATH")
+
+        -- Adopt the workspace folder
+        local out, code = support.dev(root, { "ws", "adopt", old }, env)
+
+        -- Expect the refusal naming the forgotten workspace and the old folder in place
+        testing.eq(code, 1, out)
+        testing.ok(out:find("workspace feat is forgotten", 1, true) ~= nil, out)
+        testing.eq(fs.exists(old .. "/.jj"), true)
+    end)
+
+    testing.test("adopt says where the workspace is when the trash move fails", function()
+        -- Make the trash folder of the repo a regular file
+        local root, old, target, env = adopt_jj_project()
+        assert(fs.mkdir(env.env.DEV_WS_ROOT .. "/.trash", { parents = true }))
+        assert(fs.write(trash_dir(env, root), "not a folder"))
+
+        -- Adopt the workspace folder
+        local out, code = support.dev(root, { "ws", "adopt", old }, env)
+
+        -- Expect the new workspace at the target and the old folder kept
+        testing.eq(code, 1, out)
+        testing.ok(out:find("is now at " .. target, 1, true) ~= nil, out)
+        testing.ok(out:find("its old folder stays at " .. old, 1, true) ~= nil, out)
+        testing.eq(fs.exists(old .. "/.jj"), true)
+        testing.eq(workspace_root(root, "feat"), target)
+    end)
+
     testing.test("adopt refuses a workspace already under the root", function()
         -- Adopt the workspace once so it sits under the root
         local root, old, target, env = adopt_jj_project()
