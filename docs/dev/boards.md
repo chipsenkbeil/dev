@@ -2646,6 +2646,7 @@ Its facts:
 
 `dev board edit CARD [--board B] [--file PATH]` replaces the card's
 description and prints `edited <id prefix>`.
+edit takes BOARD:PREFIX in place of --board.
 
 - The text comes from `--file PATH`, else from standard input (a terminal with
   no `--file` is exit 2), with trailing whitespace removed.
@@ -4060,6 +4061,7 @@ An epic with an open child:
 
 `dev board discard CARD [--board B] [--reason TEXT]` drops a card and prints
 `discarded <id prefix>`. The card is kept, never deleted.
+discard takes BOARD:PREFIX in place of --board.
 
 The steps, in order:
 
