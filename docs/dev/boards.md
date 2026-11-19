@@ -2794,8 +2794,10 @@ The result and the exit code:
   characters>: N of M rows passed`.
 - It exits 0 when every row passed and 1 otherwise.
 - `--expect-fail` is for filing a card. It records `mode=expect-fail`, exits 0
-  when every row failed, and reports a row that passed as one that proves
-  nothing (exit 1, still recorded). A row that ends as `error` fails the run
+  when at least one row failed and no row passed but the plain
+  `dev --remote lint` and `dev --remote test` rows. Any other passing row
+  proves nothing (exit 1, still recorded), and so does a run where no row
+  failed. A row that ends as `error` fails the run
   the same way (its failure shows nothing about the code). A row that
   exits 1 or any other code after it started is still the expected failure.
 

@@ -89,6 +89,7 @@ local DOUBLE_DASH = "--"
 local STATE_SECONDS = 20
 local STANDARD_TEST = "test"
 local STANDARD_JOBS = { lint = true, [STANDARD_TEST] = true }
+local STANDARD_ROWS = { ["dev --remote lint"] = true, ["dev --remote test"] = true }
 local LOGS_SECONDS = 60
 
 ---How a checks row ended.
@@ -848,21 +849,28 @@ end
 ---@param rows dev.board.check.Row[] the finished rows
 ---@param expect_fail boolean whether every row was meant to fail
 ---@return integer passed how many rows passed
----@return boolean good true when every row passed, or with `expect_fail` when none passed or never started
+---@return boolean good true when every row passed, or with `expect_fail` when no row but a plain lint or test row passed, none never started and one failed
 ---@return integer errors how many rows never started under `expect_fail`
+---@return integer proves_nothing how many passing rows other than the plain lint and test rows
 function M.summarize(rows, expect_fail)
-    local passed, errors = 0, 0
+    local passed, errors, proves_nothing = 0, 0, 0
     for _, row in ipairs(rows) do
         if row.result == M.Result.PASS then
             passed = passed + 1
+            if not STANDARD_ROWS[row.run] then
+                proves_nothing = proves_nothing + 1
+            end
         elseif row.result == M.Result.ERROR then
             errors = errors + 1
         end
     end
     if expect_fail then
-        return passed, passed == 0 and errors == 0, errors
+        return passed,
+            proves_nothing == 0 and errors == 0 and passed < #rows,
+            errors,
+            proves_nothing
     end
-    return passed, passed == #rows, errors
+    return passed, passed == #rows, errors, proves_nothing
 end
 
 ---Sum a list of checks rows into a value that differs when a row changes.

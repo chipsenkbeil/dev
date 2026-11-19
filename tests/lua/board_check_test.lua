@@ -912,6 +912,32 @@ testing.test("an expect-fail row that exits 1 still counts as the expected failu
     testing.eq({ passed, good, errors }, { 0, true, 0 })
 end)
 
+testing.test(
+    "an expect-fail run passes the plain lint and test rows beside a failing row",
+    function()
+        local rows = {
+            { result = check.Result.PASS, run = "dev --remote lint" },
+            { result = check.Result.PASS, run = "dev --remote test" },
+            { result = check.Result.FAIL, run = "dev --remote test -- tests/lua/new_test.lua" },
+        }
+        local passed, good, errors, proves_nothing = check.summarize(rows, true)
+        testing.eq({ passed, good, errors, proves_nothing }, { 2, true, 0, 0 })
+        rows[3] =
+            { result = check.Result.PASS, run = "dev --remote test -- tests/lua/new_test.lua" }
+        passed, good, errors, proves_nothing = check.summarize(rows, true)
+        testing.eq({ passed, good, errors, proves_nothing }, { 3, false, 0, 1 })
+    end
+)
+
+testing.test("an expect-fail run where no row fails is bad", function()
+    local rows = {
+        { result = check.Result.PASS, run = "dev --remote lint" },
+        { result = check.Result.PASS, run = "dev --remote test" },
+    }
+    local passed, good, errors, proves_nothing = check.summarize(rows, true)
+    testing.eq({ passed, good, errors, proves_nothing }, { 2, false, 0, 0 })
+end)
+
 testing.test("an expect-fail remote row that printed no run id never ran", function()
     testing.ok(check.never_started({ "dev", "--remote", "test" }, 1, nil))
     testing.ok(check.never_started({ "ci", "run" }, 2, nil))
