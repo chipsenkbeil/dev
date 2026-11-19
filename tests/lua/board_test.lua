@@ -5577,6 +5577,28 @@ testing.test("escalate refuses a card without needs:planner and an empty reason"
     testing.eq(#backend.calls, 0)
 end)
 
+testing.test("escalate refuses outside Blocked for a needs:planner card", function()
+    local cards = sample()
+    cards[1].labels = { "needs:planner" }
+    cards[1].column = support.COLUMN_NAME.BACKLOG
+    local backend = fake(cards)
+    local result = cmd_board.run("escalate", { "11111111-a", "why" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("waits in Blocked", 1, true), result.message)
+    testing.ok(result.message:find(support.COLUMN_NAME.BACKLOG, 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("escalate refuses lead on a Blocked card that already carries needs:lead", function()
+    local cards = blocked_cards()
+    cards[1].labels = { "needs:lead" }
+    local backend = fake(cards)
+    local result = cmd_board.run("escalate", { "11111111-a", "why" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("is not needs:planner", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
 testing.test("escalate refuses the ask flags and points to dev board ask", function()
     local cards = blocked_cards()
     cards[1].labels = { "needs:planner" }
@@ -7622,7 +7644,10 @@ testing.test("pomb time posts the minutes, role and note to the time route", fun
 end)
 
 testing.test("pomb escalate posts the tier and reason with the fence", function()
-    local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:planner"]', 1)
+    local export = export_with_first_card({
+        labels = { "needs:planner" },
+        column_id = support.column_id(support.Column.BLOCKED),
+    })
     local root, home = sandbox({ export = export })
     dev(root, home, { "board", "take", "11111111-a" })
     local out, code = dev(root, home, { "board", "escalate", "11111111-a", "pick", "one" })

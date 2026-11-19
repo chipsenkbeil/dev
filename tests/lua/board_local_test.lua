@@ -877,6 +877,7 @@ testing.test("local escalate swaps the label in one write", function()
         "--done-when",
         "a",
     })))
+    dev(root, home, { "board", "move", a, Column.BLOCKED })
     dev(root, home, { "board", "label", a, "+docs", "+needs:planner" })
     local out, code = dev(root, home, { "board", "escalate", a, "pick", "one" })
     testing.eq(code, 0, out)

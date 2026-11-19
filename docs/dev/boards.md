@@ -2098,7 +2098,9 @@ Checks:
 - The claim's fence goes along when this machine holds one.
 - A local board appends the blocked note and swaps the label in one update.
 - A card without `needs:planner` is refused before anything is written
-  (exit 1), and so is an empty TEXT (exit 2).
+  (exit 1), and so is a card outside Blocked. A `needs:planner` card waits in
+  Blocked, and next, wait and stale read the lead label only there. An empty
+  TEXT is refused with exit 2.
 - A refusal from Pomb (a locked card, a stale fence, a missing permission) is
   exit 1 with Pomb's message, and nothing is written.
 - It refuses `--question`, `--choice`, `--recommend` and `--why` (exit 2) and

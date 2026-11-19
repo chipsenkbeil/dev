@@ -2315,6 +2315,17 @@ function commands.escalate(backend, args)
                 .. ". There is nothing to escalate."
         )
     end
+    if card.column ~= backend.stages.blocked then
+        return failure(
+            "Card "
+                .. prefix
+                .. " is in "
+                .. tostring(card.column)
+                .. ". A "
+                .. board.NEEDS_PLANNER
+                .. " card waits in Blocked, so move it there first."
+        )
+    end
     if board.reserved(why) then
         return failure(RESERVED_NOTE)
     end
