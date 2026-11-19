@@ -24,6 +24,10 @@ local STANDARD = {
 
 local UNCHANGED_LINE = "agent roles unchanged"
 local UNCHANGED = UNCHANGED_LINE .. "\n"
+local FOLLOWS_STANDARD = "Board demo already follows the standard. Nothing changed."
+local WROTE_CONFIG = "wrote [board] to .dev/config.toml"
+local STANDARD_OUT = table.concat({ UNCHANGED_LINE, FOLLOWS_STANDARD, "" }, "\n")
+local WROTE_CONFIG_OUT = table.concat({ UNCHANGED_LINE, WROTE_CONFIG, FOLLOWS_STANDARD, "" }, "\n")
 
 local function turn_row(column)
     return support.pomb_export_task({
@@ -611,10 +615,12 @@ testing.test(
 )
 
 local PERMISSIONS = '[{"name":"cards.read","presets":["read","work","lead","admin"]},'
-    .. '{"name":"boards.write","presets":["lead","admin"]},{"name":"templates.write","presets":["admin"]}]'
+    .. '{"name":"boards.write","presets":["lead","admin"]},'
+    .. '{"name":"templates.write","presets":["admin"]}]'
 local BOARDS = '[{"id":"board-1","name":"demo","archived":false}]'
 local DETAIL = '{"id":"board-1","name":"demo","swimlanes":[],"columns":['
-local GROUPS = '"limit_groups":[{"id":"g1","column_ids":["col-InProgress","col-Review","col-Verify"],'
+local GROUPS = '"limit_groups":[{"id":"g1",'
+    .. '"column_ids":["col-InProgress","col-Review","col-Verify"],'
     .. '"limit":4,"limit_unit":"count","count":0}]'
 local STAGE_OF = {
     [support.COLUMN_NAME.READY] = "ready",
@@ -660,7 +666,8 @@ local function colors_json()
     local parts = {}
     for _, value in ipairs({ "yellow", "green", "blue", "red", "white" }) do
         parts[#parts + 1] = string.format(
-            '{"id":"%s-id","value":"%s","label":"%s","description":"%s","is_default":%s,"enabled":true}',
+            '{"id":"%s-id","value":"%s","label":"%s","description":"%s",'
+                .. '"is_default":%s,"enabled":true}',
             value,
             value,
             labels[value],
@@ -675,8 +682,8 @@ local STANDARD_LABELS = '{"highlights":[{"label":"needs:human","color":"#b8461f"
     .. '{"label":"needs:lead","color":"#2f6fab"},{"label":"needs:planner","color":"#7a5ab0"}],'
     .. '"show_all":false,"added":[]}'
 
-local FIELDS =
-    '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table","options":[],"columns":[],"required":true}]'
+local FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
+    .. '"options":[],"columns":[],"required":true}]'
 
 local EXPORT = '{"tasks":['
     .. support.pomb_export_task({
@@ -697,7 +704,9 @@ for a; do case "$a" in @*) cat "${a#@}" >>"$ROOT/bodies"; echo >>"$ROOT/bodies" 
 for last; do :; done
 status=200
 case "$last" in
-*/api/v1/auth/device) body='{"device_code":"]] .. DEVICE_CODE .. [[","user_code":"ABCD-EFGH","verification_url":"https://pomb.example/device","expires_in_seconds":600,"interval_seconds":1}' ;;
+*/api/v1/auth/device) body='{"device_code":"]] .. DEVICE_CODE .. [[","user_code":"ABCD-EFGH",'\
+'"verification_url":"https://pomb.example/device",'\
+'"expires_in_seconds":600,"interval_seconds":1}' ;;
 */api/v1/auth/device/token)
     n=$(cat "$ROOT/polls" 2>/dev/null || echo 0)
     n=$((n + 1))
@@ -771,7 +780,8 @@ local function sandbox(opts)
         fs.write(
             home .. "/.config/dev/config.toml",
             opts.user
-                or '[board.pomb]\nurl = "https://pomb.example"\nlead_token = "pass:secrets/lead/token/pomb"\n'
+                or '[board.pomb]\nurl = "https://pomb.example"\n'
+                    .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
         )
     )
     for name, body in pairs({
@@ -856,7 +866,7 @@ testing.test("init on a board already at the standard says so and writes nothing
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0)
-    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
+    testing.eq(out, STANDARD_OUT)
     testing.eq(writes(root), 0)
     testing.ok(read(root, "calls"):find("pass show secrets/lead/token/pomb", 1, true))
     testing.eq(read(root, "stdin"), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
@@ -877,8 +887,7 @@ testing.test("init --admin pairs through pending, slow_down and success", functi
         out,
         "approve the admin sign-in at https://pomb.example/device\n"
             .. "code: ABCD-EFGH\n"
-            .. UNCHANGED
-            .. "Board demo already follows the standard. Nothing changed.\n"
+            .. STANDARD_OUT
     )
     testing.eq(read(root, "polls"), "4\n")
     local calls = read(root, "calls")
@@ -956,12 +965,7 @@ testing.test("a project with no [board] section needs --name and then gets one",
     testing.eq(read(root, ".dev/config.toml"), "")
     out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
     testing.eq(code, 0)
-    testing.eq(
-        out,
-        UNCHANGED
-            .. "wrote [board] to .dev/config.toml\n"
-            .. "Board demo already follows the standard. Nothing changed.\n"
-    )
+    testing.eq(out, WROTE_CONFIG_OUT)
     testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
     out, code = dev(root, home, tmp, { "board", "status" })
     testing.eq(out, "backend: pomb\nboard: demo\n")
@@ -974,12 +978,7 @@ testing.test("a project with no .dev/config.toml takes --name and gets the file"
     testing.ok(out:find("Pass `--name N`", 1, true), out)
     out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
     testing.eq(code, 0)
-    testing.eq(
-        out,
-        UNCHANGED
-            .. "wrote [board] to .dev/config.toml\n"
-            .. "Board demo already follows the standard. Nothing changed.\n"
-    )
+    testing.eq(out, WROTE_CONFIG_OUT)
     testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
 end)
 
@@ -988,12 +987,7 @@ testing.test("a project with no .dev directory gets it and the file", function()
     assert(fs.remove(root .. "/.dev", { recursive = true }))
     local out, code = dev(root, home, tmp, { "board", "init", "--name", "demo" })
     testing.eq(code, 0, out)
-    testing.eq(
-        out,
-        UNCHANGED
-            .. "wrote [board] to .dev/config.toml\n"
-            .. "Board demo already follows the standard. Nothing changed.\n"
-    )
+    testing.eq(out, WROTE_CONFIG_OUT)
     testing.ok(fs.is_dir(root .. "/.dev"))
     testing.eq(read(root, ".dev/config.toml"), '[board]\nbackend = "pomb"\nname = "demo"\n')
 end)
@@ -1052,7 +1046,8 @@ testing.test("init defines the checks field once with the dev definition", funct
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
     testing.eq(out, UNCHANGED .. "added the checks field dev.checks\nboard demo: 1 change\n")
-    local body = '{"columns":[{"key":"run","kind":"text","label":"Run","options":[],"required":true},'
+    local body = '{"columns":[{"key":"run","kind":"text","label":"Run",'
+        .. '"options":[],"required":true},'
         .. '{"key":"on","kind":"multiselect","label":"On","options":["local"],"required":false}],'
         .. '"key":"dev.checks","kind":"table","label":"Checks","required":true}'
     testing.ok(
@@ -1066,7 +1061,7 @@ testing.test("init defines the checks field once with the dev definition", funct
     testing.eq(writes(root), 1)
     root, home, tmp = sandbox()
     out = dev(root, home, tmp, { "board", "init" })
-    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
+    testing.eq(out, STANDARD_OUT)
     testing.eq(writes(root), 0)
 end)
 
@@ -1121,7 +1116,8 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     testing.ok(calls:find("-X PATCH", 1, true), calls)
     testing.ok(
         calls:find(
-            '--data-raw {"description":"One pomodoro or less","label":"1 Pomodoro"} https://pomb.example/api/boards/board-1/colors/yellow-id',
+            '--data-raw {"description":"One pomodoro or less","label":"1 Pomodoro"} '
+                .. "https://pomb.example/api/boards/board-1/colors/yellow-id",
             1,
             true
         ),
@@ -1129,7 +1125,8 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     )
     testing.ok(
         calls:find(
-            '--data-raw {"is_default":true} https://pomb.example/api/boards/board-1/colors/white-id',
+            '--data-raw {"is_default":true} '
+                .. "https://pomb.example/api/boards/board-1/colors/white-id",
             1,
             true
         ),
@@ -1137,7 +1134,8 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     )
     testing.ok(
         calls:find(
-            '--data-raw {"color_id":"blue-id","name":"Keep it"} https://pomb.example/api/tasks/11111111-aaaa',
+            '--data-raw {"color_id":"blue-id","name":"Keep it"} '
+                .. "https://pomb.example/api/tasks/11111111-aaaa",
             1,
             true
         ),
@@ -1248,7 +1246,8 @@ testing.test("init adds a column with the done flag where it belongs", function(
     assert(
         fs.write(
             root .. "/detail.json",
-            '{"id":"board-1","name":"demo","swimlanes":[],"columns":[{"id":"col-Backlog","name":"Backlog","is_done":false}]}'
+            '{"id":"board-1","name":"demo","swimlanes":[],'
+                .. '"columns":[{"id":"col-Backlog","name":"Backlog","is_done":false}]}'
         )
     )
     local out, code = dev(root, home, tmp, { "board", "init" })
@@ -1256,7 +1255,8 @@ testing.test("init adds a column with the done flag where it belongs", function(
     local calls = calls_of(root)
     testing.ok(
         calls:find(
-            '--data-raw {"board_id":"board-1","is_done":true,"name":"Done"} https://pomb.example/api/columns',
+            '--data-raw {"board_id":"board-1","is_done":true,"name":"Done"} '
+                .. "https://pomb.example/api/columns",
             1,
             true
         ),
@@ -1400,7 +1400,7 @@ testing.test("agent-roles-unchanged: a rerun prints unchanged and counts no chan
     local root, home, tmp = sandbox()
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
-    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
+    testing.eq(out, STANDARD_OUT)
     testing.ok(calls_of(root):find("/api/v1/agent-roles/standard", 1, true), calls_of(root))
 end)
 
@@ -1435,7 +1435,8 @@ end)
 
 testing.test("agent-roles-exceeds-grant: a board the init token does not hold is named", function()
     local root, home, tmp = sandbox({
-        roles = '403|{"code":"exceeds_grant","message":"the calling token does not hold board board-1"}\n',
+        roles = '403|{"code":"exceeds_grant",'
+            .. '"message":"the calling token does not hold board board-1"}\n',
     })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 1)
@@ -1540,7 +1541,8 @@ testing.test(
         local layout = fake_layout({ columns = template_columns() })
         function layout:set_color()
             return nil,
-                "board unavailable: pomb answered 403: this token lacks the boards.write permission "
+                "board unavailable: pomb answered 403: "
+                    .. "this token lacks the boards.write permission "
                     .. "on every board; use a token that has it"
         end
         local _, message = run(layout)
@@ -1622,7 +1624,8 @@ testing.test("init sends is blocked through the column update", function()
     testing.eq(code, 0, out)
     testing.ok(
         calls_of(root):find(
-            '%-X PATCH[^\n]*%-%-data%-raw {"is_blocked":true} https://pomb%.example/api/columns/col%-Blocked'
+            '%-X PATCH[^\n]*%-%-data%-raw {"is_blocked":true} '
+                .. "https://pomb%.example/api/columns/col%-Blocked"
         ),
         calls_of(root)
     )
@@ -1766,7 +1769,8 @@ testing.test("init creates the limit group of 4 on a board that has none", funct
     testing.eq(limit_posts(root), 1)
     testing.ok(
         calls_of(root):find(
-            '--data-raw {"column_ids":["col-InProgress","col-Review","col-Verify"],"limit":4} https://pomb.example/api/boards/board-1/limit-groups',
+            '--data-raw {"column_ids":["col-InProgress","col-Review","col-Verify"],"limit":4} '
+                .. "https://pomb.example/api/boards/board-1/limit-groups",
             1,
             true
         ),
@@ -1803,7 +1807,7 @@ testing.test(
         local out, code = dev(root, home, tmp, { "board", "init" })
         testing.eq(code, 0, out)
         testing.eq(roles_posts(root), nil, calls_of(root))
-        testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
+        testing.eq(out, STANDARD_OUT)
     end
 )
 
@@ -1935,7 +1939,7 @@ testing.test("init leaves the lanes that exist alone", function()
         '[{"id":"l1","name":"Parity"},{"id":"l2","name":"Fixes"},{"id":"l3","name":"Features"}]'
     )
     out = dev(root, home, tmp, { "board", "init" })
-    testing.eq(out, UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n")
+    testing.eq(out, STANDARD_OUT)
     testing.eq(writes(root), 0)
 end)
 
@@ -1981,10 +1985,7 @@ testing.test("init warns when the first lane is not in the lanes list", function
     with_lanes(plain_root, '[{"id":"l1","name":"Default"}]')
     local plain_out, plain_code = dev(plain_root, plain_home, plain_tmp, { "board", "init" })
     testing.eq(plain_code, 0, plain_out)
-    testing.eq(
-        plain_out,
-        UNCHANGED .. "Board demo already follows the standard. Nothing changed.\n"
-    )
+    testing.eq(plain_out, STANDARD_OUT)
 end)
 
 testing.test("init stays silent when the first lane is listed", function()
