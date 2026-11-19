@@ -62,6 +62,7 @@ local SEAT_ROLE = "reviewer"
 local REVIEW_SEATS = { "code", "style", "recheck" }
 local PERMISSION_DENIED = "permission_denied"
 local EXCEEDS_GRANT = "exceeds_grant"
+local QUOTA_EXCEEDED = "quota_exceeded"
 local TOKEN_EXPIRED = "token_expired"
 local WHOAMI_PATH = "/api/v1/auth/whoami"
 local PERMISSIONS_PATH = "/api/v1/auth/permissions"
@@ -2795,6 +2796,23 @@ function Backend:add_roles()
                         .. " ("
                         .. id
                         .. "), so it cannot be granted the standard roles; add the board to the token"
+                )
+        end
+        local detail = type(doc) == "table" and present(doc.message) or "no message"
+        if status == NOT_FOUND then
+            return nil,
+                unavailable(
+                    "Board "
+                        .. self.__opts.name
+                        .. " does not exist on Pomb. It cannot be granted the standard roles. "
+                        .. tostring(detail)
+                )
+        end
+        if status == CONFLICT and type(doc) == "table" and doc.code == QUOTA_EXCEEDED then
+            return nil,
+                unavailable(
+                    "The account is over its quota. The standard roles cannot be created. "
+                        .. tostring(detail)
                 )
         end
         local no_grant = status == FORBIDDEN

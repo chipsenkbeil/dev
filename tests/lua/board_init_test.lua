@@ -1441,6 +1441,39 @@ testing.test("agent-roles-exceeds-grant: a board the init token does not hold is
     testing.ok(out:find("the token does not hold board demo (board-1)", 1, true), out)
     testing.ok(out:find("add the board to the token", 1, true), out)
     testing.eq(out:find("--admin", 1, true), nil)
+    local after = {}
+    local seen = false
+    for line in calls_of(root):gmatch("[^\n]+") do
+        if seen then
+            after[#after + 1] = line
+        end
+        seen = seen or line:find("/api/v1/agent-roles/standard", 1, true) ~= nil
+    end
+    testing.ok(seen)
+    for _, line in ipairs(after) do
+        testing.ok(line:find("-X GET", 1, true) and line:find("/api/v1/auth/whoami", 1, true), line)
+    end
+    testing.eq(writes(root), 0)
+end)
+
+testing.test("agent-roles-missing-board: a 404 names the board missing on Pomb", function()
+    local root, home, tmp = sandbox({
+        roles = '404|{"code":"not_found","message":"no such board"}\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 1)
+    testing.ok(out:find("Board demo does not exist on Pomb", 1, true), out)
+    testing.ok(out:find("no such board", 1, true), out)
+end)
+
+testing.test("agent-roles-quota: a 409 quota_exceeded names the account over its quota", function()
+    local root, home, tmp = sandbox({
+        roles = '409|{"code":"quota_exceeded","message":"roles limit is 20"}\n',
+    })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 1)
+    testing.ok(out:find("The account is over its quota", 1, true), out)
+    testing.ok(out:find("roles limit is 20", 1, true), out)
 end)
 
 testing.test("agent-roles-denied: a permission_denied names the missing permission", function()
