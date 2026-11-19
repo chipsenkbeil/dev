@@ -719,7 +719,8 @@ when it settles every open choice. A partial answer keeps the label. A
 for your move.
 
 Pomb 0.5.59 locks a card labelled `needs:human`. It answers 403 `card_locked`
-to a token for these, and only a label change passes:
+to a token for these, and a label change passes only when it unlocks the card
+(one that leaves the card locked is refused too):
 
 - a comment (create, and edit or delete of its own)
 - a move

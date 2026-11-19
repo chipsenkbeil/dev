@@ -6714,7 +6714,7 @@ testing.test(
             },
             {
                 body = '{"code":"card_locked","message":"this task carries a locking label, so only the owner can change it"}',
-                want = "pomb locked this card while it is labelled needs:human",
+                want = "pomb locked this card: this task carries a locking label",
             },
         }
         for _, case in ipairs(cases) do
@@ -8474,10 +8474,37 @@ testing.test("a card_locked 403 on a comment says the card is locked and exits 1
     }) do
         local out, code = dev(root, home, args)
         testing.eq(code, 1)
-        testing.ok(out:find("labelled needs:human", 1, true), out)
-        testing.ok(out:find("Reordering and resizing", 1, true), out)
+        testing.ok(out:find("pomb locked this card: locked", 1, true), out)
         testing.eq(out:find("not yours", 1, true), nil)
     end
+end)
+
+local function locked_curl(root, pattern)
+    executable(
+        root .. "/bin/curl",
+        '#!/bin/sh\ncase "$*" in '
+            .. pattern
+            .. ") cat >/dev/null; printf '%s\\n403' "
+            .. '\'{"code":"card_locked","message":"this task carries a locking label"}\'; '
+            .. "exit 0 ;; esac\n"
+            .. CURL:gsub("^#!/bin/sh\n", "")
+    )
+end
+
+testing.test("a card_locked 403 on size prints Pomb's reason and exits 1", function()
+    local root, home = sandbox()
+    locked_curl(root, '*"-X PATCH"*')
+    local out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("pomb locked this card: this task carries a locking label", 1, true), out)
+end)
+
+testing.test("a card_locked 403 on order prints Pomb's reason and exits 1", function()
+    local root, home = sandbox()
+    locked_curl(root, "*/move*")
+    local out, code = dev(root, home, { "board", "order", "11111111-b", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("pomb locked this card: this task carries a locking label", 1, true), out)
 end)
 
 testing.test("prose warnings reach standard error and the write still happens", function()
@@ -11573,7 +11600,7 @@ testing.test("delete shows Pomb's permission_denied and card_locked as they come
         { agent = LEAD }
     )
     testing.eq(code, 1, out)
-    testing.ok(out:find("labelled needs:human", 1, true), out)
+    testing.ok(out:find("pomb locked this card: locked", 1, true), out)
     testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil)
 end)
 

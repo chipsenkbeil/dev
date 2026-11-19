@@ -82,10 +82,8 @@ local NEEDS_LEAD_LANE = "Making a lane needs swimlanes.create, which only the le
     .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml, "
     .. "then run `dev board init` without `--admin`."
 local NOT_YOURS = "that comment is not yours to change"
-local LOCKED = "pomb locked this card while it is labelled "
-    .. board.NEEDS_HUMAN
-    .. ": comments, moves and edits are refused until the owner answers and the label is removed."
-    .. " Reordering and resizing stay refused on it until pomb ships fff0e011"
+local LOCKED = "pomb locked this card: comments, moves, edits, reorders and resizes are refused"
+    .. " until the owner answers and the label that locks it is removed"
 local CHECKS_DEFINITION = {
     key = board.CHECKS_FIELD,
     label = "Checks",
@@ -500,7 +498,8 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
         end
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == CARD_LOCKED then
-        return nil, LOCKED, status, doc
+        local reason = present(doc.message)
+        return nil, reason and ("pomb locked this card: " .. reason) or LOCKED, status, doc
     end
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
