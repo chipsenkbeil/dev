@@ -3800,6 +3800,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         must(dev(project, { "board", "checks", other, "sh " .. slow }))
         local elsewhere = support.tempdir() .. "/other"
         jj(project.root, "workspace", "add", "--name", other, elsewhere)
+        assert(fs.write(elsewhere .. "/edited", "x"), "write failed")
         local running = support.dev_async(elsewhere, { "board", "check", other }, {
             env = {
                 HOME = project.home,
@@ -3974,6 +3975,32 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.eq(jj(project.root, "workspace", "list"):find(id .. ":", 1, true), nil)
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
     end)
+
+    testing.test(
+        "clean up refreshes a stale jj workspace and removes it with its bookmark",
+        function()
+            local project, id, path, base = central_project()
+            jj(path, "bookmark", "set", "master", "-r", "@")
+            jj(path, "git", "push", "--remote", "origin", "--bookmark", "master")
+            jj(path, "new")
+            jj(project.root, "--ignore-working-copy", "rebase", "-r", id .. "@", "-d", "root()")
+            local _, status = dev_os.capture(
+                { "jj", "--no-pager", "-R", path, "status" },
+                { stderr = "null", env = IDENT }
+            )
+            testing.ok(status ~= 0, "the workspace is not stale")
+            ffi.C.setenv("DEV_WS_ROOT", base, 1)
+            local lines = cmd_board.clean_up(path, id)
+            ffi.C.setenv("DEV_WS_ROOT", "", 1)
+            testing.ok(lines:find("Deleted bookmark " .. id, 1, true), lines)
+            testing.ok(not lines:find("Kept", 1, true), lines)
+            testing.eq(fs.exists(path), false)
+            testing.eq(
+                jj(project.root, "bookmark", "list", "-T", 'name ++ "\\n"'):find(id, 1, true),
+                nil
+            )
+        end
+    )
 
     testing.test("clean up names the workspace path and the jj message when it keeps it", function()
         local _, id, path, base = central_project()

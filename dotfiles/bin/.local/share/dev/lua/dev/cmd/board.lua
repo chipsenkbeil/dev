@@ -3418,6 +3418,10 @@ function M.clean_up(root, short)
             main = out:gsub("\n$", ""):gsub("/%.git$", "")
         end
     else
+        dev_os.capture(
+            vcs.with(vcs.base(root, kind, { quiet = true }), "workspace", "update-stale"),
+            { stderr = "null" }
+        )
         delete_branch_from(root)
     end
     local result = ws.remove(root, short, { inside = true })
