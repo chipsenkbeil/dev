@@ -200,6 +200,29 @@ testing.test("lint holds an epic to 1 to 3 outcomes and to its children", functi
     })
 end)
 
+testing.test(
+    "lint refuses a childless epic with 4 outcomes through a fake that sets epic",
+    function()
+        local cards = {
+            card(1, NAME.BACKLOG, {
+                outcomes = {
+                    { id = "o1", name = "a" },
+                    { id = "o2", name = "b" },
+                    { id = "o3", name = "c" },
+                    { id = "o4", name = "d" },
+                },
+            }),
+        }
+        local fake = backend(cards)
+        function fake:family()
+            return { epic = true }
+        end
+        testing.eq(findings(cmd_board.run("lint", {}, fake).output), {
+            "00000001 Backlog lacks 1 to 3 Done when outcomes for an epic, not 4",
+        })
+    end
+)
+
 testing.test("lint lets a Done epic with every child Done close without outcomes", function()
     local cards = { card(1, NAME.DONE, { outcomes = {} }) }
     local held = { children = { [cards[1].id] = 2 } }

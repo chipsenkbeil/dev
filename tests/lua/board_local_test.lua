@@ -4664,6 +4664,40 @@ testing.test("a childless epic enters Ready with 1 to 3 outcomes like any epic",
     testing.eq(out:find("lacks 3 to 7", 1, true), nil, out)
 end)
 
+testing.test("a childless epic with 4 outcomes is refused entering Ready", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Big",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--done-when",
+        "b",
+        "--done-when",
+        "c",
+        "--done-when",
+        "d",
+        "--checks",
+        "dev test",
+    })
+    testing.eq(code, 0, out)
+    local epic = prefix_of(out)
+    out, code = dev(root, home, { "board", "epic", epic })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", epic, Column.READY })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("lacks 1 to 3 Done when outcomes for an epic, not 4", 1, true), out)
+end)
+
 testing.test("attach, attachments and detach refuse plainly on a local board", function()
     local root, home = local_board()
     local a = prefix_of((dev(root, home, {
