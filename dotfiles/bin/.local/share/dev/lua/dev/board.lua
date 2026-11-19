@@ -1152,7 +1152,7 @@ function M.unplanned(card)
     end
     if card.need_outcomes then
         if card.outcomes == 0 and not card.closing then
-            if missing[1] ~= "a size" or card.children == 0 then
+            if card.children == 0 then
                 missing[#missing + 1] = "Done when outcomes"
             end
         elseif (card.children > 0 or card.epic) and card.outcomes > M.MAX_EPIC_OUTCOMES then
@@ -1264,10 +1264,12 @@ function M.missing(description, outcomes, children, epic)
     end
     if children > 0 or epic then
         if outcomes == 0 then
-            missing[#missing + 1] = M.MIN_EPIC_OUTCOMES
-                .. " to "
-                .. M.MAX_EPIC_OUTCOMES
-                .. " Done when outcomes for an epic"
+            if children == 0 then
+                missing[#missing + 1] = M.MIN_EPIC_OUTCOMES
+                    .. " to "
+                    .. M.MAX_EPIC_OUTCOMES
+                    .. " Done when outcomes for an epic"
+            end
         elseif outcomes > M.MAX_EPIC_OUTCOMES then
             missing[#missing + 1] = epic_outcomes(outcomes)
         end

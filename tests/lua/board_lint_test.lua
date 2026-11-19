@@ -176,8 +176,6 @@ testing.test("lint holds an epic to 1 to 3 outcomes and to its children", functi
     end
     local result = cmd_board.run("lint", {}, fake)
     testing.eq(findings(result.output), {
-        "00000001 Backlog lacks Done when outcomes",
-        "00000002 Done lacks Done when outcomes",
         "00000002 Done 1 of 2 children open",
         "00000003 Done lacks Done when outcomes",
         "00000004 Backlog lacks Done when outcomes",

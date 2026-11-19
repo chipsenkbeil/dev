@@ -1478,7 +1478,7 @@ testing.test("an epic with no outcomes and an open child is refused", function()
     backend.kin = { children = card.epic }
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
+    testing.ok(result.message:find("2 of 3 children are open", 1, true), result.message)
     card.outcomes = { { id = "s1", name = "a", done = true } }
     result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
@@ -1538,13 +1538,13 @@ testing.test("discard closes an epic whose children are open", function()
 end)
 
 testing.test(
-    "an epic needs an outcome to enter a working column like a card without children",
+    "an epic with children needs no outcome to enter a working column, unlike a card without children",
     function()
         local card = planned()
         card.epic = { done = 0, total = 2 }
         local backend = fake({ card })
         backend.kin = { children = card.epic }
-        testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, 1)
+        testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, nil)
         card.outcomes = { { id = "s1", name = "a", done = false } }
         testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, nil)
         card.column = support.COLUMN_NAME.VERIFY
@@ -4216,7 +4216,7 @@ testing.test("move to Ready takes a sized card, and other columns take a planned
         end
         local backend = fake({ card })
         testing.eq(cmd_board.run("move", { "cccccccc", column }, backend).code, nil)
-        testing.eq(#backend.calls, 1)
+        testing.eq(#backend.calls, column == support.Column.DONE and 2 or 1)
     end
     local backend = fake({ colored("white") })
     testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)

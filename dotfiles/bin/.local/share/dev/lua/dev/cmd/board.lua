@@ -1736,6 +1736,15 @@ local function move_once(backend, args, opts)
         local name, bad = agent_name()
         own_claim = not bad and runner.claimant(name) == card.claimant
     end
+    local closes
+    if to_done and card.column ~= column then
+        local own = backend:family(card.id)
+        local parent = own and own.parent
+        local siblings = parent and backend:family(parent.id)
+        if siblings and siblings.children and board.open_children(siblings.children) == 1 then
+            closes = parent.id
+        end
+    end
     local ok, message, at_limit = backend:move(card.id, column, {
         fence = held and held.fence,
         lane = lane,
@@ -1766,6 +1775,12 @@ local function move_once(backend, args, opts)
         end
     end
     local result = { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
+    if closes then
+        result.output = result.output
+            .. "\nEpic "
+            .. closes:sub(1, board.MIN_PREFIX)
+            .. " has every child Done and can close now."
+    end
     if started then
         card.column = column
         return claimed_view(backend, card, result)
@@ -5135,6 +5150,26 @@ function commands.stale(backend, args, now)
     if #umbrella_warnings > 0 then
         lines[#lines + 1] = ""
         append(lines, umbrella_warnings)
+    end
+    local closable = {}
+    for _, card in ipairs(cards) do
+        if not card.done and board.children_closed(card.epic) then
+            local at = entered[card.id] and box.parse_time(entered[card.id]) or now
+            closable[#closable + 1] = {
+                id = card.id,
+                column = card.column,
+                size = card.size,
+                name = card.name,
+                days = math.floor((now - at) / box.SECONDS_PER_DAY),
+                at = at,
+            }
+        end
+    end
+    table.sort(closable, oldest)
+    if #closable > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "epic with every child Done, ready to close:"
+        append(lines, stale_rows(closable))
     end
     local iced, iced_undated = icebox_rows(backend, cards, entered, icebox_limit, now)
     if #iced > 0 then

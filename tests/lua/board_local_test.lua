@@ -4526,3 +4526,65 @@ testing.test("local init says nothing about an unlisted first lane", function()
     testing.ok(out:find('created lane "Parity"', 1, true), out)
     testing.ok(not out:find("first lane", 1, true), out)
 end)
+
+local function epic_with_child(root, home)
+    local child = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Child",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })))
+    local epic = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Epic",
+        "--column",
+        Column.ICEBOX,
+        "--size",
+        "2",
+        "--description",
+        PLANNED,
+    })))
+    dev(root, home, { "board", "epic", epic })
+    dev(root, home, { "board", "link", child, "parent", epic })
+    return epic, child
+end
+
+testing.test("epic_children_need_no_outcomes", function()
+    local root, home = local_board()
+    local epic = epic_with_child(root, home)
+    local out, code = dev(root, home, { "board", "move", epic, Column.BACKLOG })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", epic, Column.READY })
+    testing.eq(code, 0, out)
+end)
+
+testing.test("epic_closes_with_open_outcomes", function()
+    local root, home = local_board()
+    local epic, child = epic_with_child(root, home)
+    dev(root, home, { "board", "outcome", epic, JUDGED })
+    dev(root, home, { "board", "move", epic, Column.BACKLOG })
+    dev(root, home, { "board", "move", epic, Column.READY })
+    local out, code = support.to_review(function(args)
+        return dev(root, home, args)
+    end, epic)
+    testing.eq(code, 0, out)
+    tick_first(root, home, child)
+    out, code = dev(root, home, { "board", "move", child, Column.DONE })
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find("Epic " .. epic .. " has every child Done and can close now.", 1, true),
+        out
+    )
+    out, code = dev(root, home, { "board", "move", epic, Column.DONE })
+    testing.eq(code, 0, out)
+end)

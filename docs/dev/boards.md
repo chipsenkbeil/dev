@@ -881,7 +881,9 @@ The refusals for a card that lacks these:
 - A move into Icebox always works.
 
 An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7, except
-that an epic with every child Done closes with none.
+that a card with children needs none. An epic with every child Done closes with
+its own outcomes open, and `move CHILD done` prints the epic's id and that it
+can close now when it moves the last open child.
 
 Sizing is part of planning, so a card also cannot enter Ready as red. `move CARD
 ready` refuses a card that is unsized (white or no colour) or red, more than 3
@@ -1298,6 +1300,8 @@ These sections follow, each listed apart from the stale cards:
   when its first child starts, and `stale` lists the ones that did not. A
   started card whose epic `stale` cannot read becomes a `Could not read the
   epic` line and the rest still prints.
+- `epic with every child Done, ready to close:`: an epic that is not Done and
+  has every child Done, with its days in column beside its name.
 - `for the owner (needs:human):`: every card with the `needs:human` label in
   Blocked or Icebox, at any age, with its column and days in column. It never
   appears among the stale ones (it waits on the owner, not on an agent).
@@ -1369,9 +1373,9 @@ The rules:
   them too, and lint reports each once. `dev board discard` skips the shapes.
 - A Done card gets the size and outcome checks only, and a Done card labelled
   `discarded` needs no outcome.
-- An epic, a card with children, needs 1 to 3 outcomes. A Done epic with every
-  child Done may have none, and 1 to 3 if it has any. Lint reads the children of
-  every card it checks for outcomes.
+- An epic with no children needs 1 to 3 outcomes. A card with children needs
+  none, and 1 to 3 if it has any. Lint reads the children of every card it
+  checks for outcomes.
 - With `--strict`, a Done card also needs the three v4 headings with text under
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.

@@ -256,6 +256,9 @@ local function done_refusal(card, column)
     if unreadable then
         return unqueued(unreadable)
     end
+    if board.children_closed(card.epic) then
+        return nil
+    end
     local open = {}
     for i, outcome in ipairs(card.outcomes) do
         if not outcome.done then
