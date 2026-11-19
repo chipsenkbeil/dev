@@ -1465,6 +1465,29 @@ function M.holds(root, commit, rev)
     return out ~= nil and out:match("^%x+\n") ~= nil
 end
 
+---Say whether a revision holds a revert of a landed commit, found by the line `This reverts commit`.
+---@param root string the project root
+---@param landed string the landed commit, full or shortened
+---@param rev string the jj revset naming one revision, or in git a revision
+---@return boolean held true when a commit in the revision's history names the landed commit
+function M.reverts(root, landed, rev)
+    local text = "This reverts commit " .. landed
+    if vcs.backend(root) == vcs.GIT then
+        local out = git_out(root, "log", rev, "-F", "--grep=" .. text, "--format=%H", "-n1")
+        return out ~= nil and out:match("^%x+\n") ~= nil
+    end
+    local out = jj_out(
+        root,
+        "log",
+        "-r",
+        "::(" .. rev .. ') & description(substring:"' .. text .. '")',
+        "--no-graph",
+        "-T",
+        COMMIT_TEMPLATE
+    )
+    return out ~= nil and out:match("^%x+\n") ~= nil
+end
+
 ---Read the commit on the remote trunk that a check record's change landed as.
 ---@param root string the project root
 ---@param record dev.board.check.Record the card's newest run record

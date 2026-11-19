@@ -4,6 +4,7 @@ local config = require("dev.config")
 local follow = require("dev.cmd.follow")
 local guards = require("dev.board.guards")
 local land = require("dev.board.land")
+local revert = require("dev.board.revert")
 local runner = require("dev.board.runner")
 local templates = require("dev.templates")
 local verb = require("dev.verb")
@@ -137,6 +138,7 @@ end
 ---@param name string what to call that revision
 ---@return string? reason why it stays, nil when it may move
 ---@return string? landed the card's landed commit when it may move
+---@return boolean? reverted true when the card's revert is in the revision, so it goes back to Ready
 function Ship.reason(backend, card, commit, name)
     if guards.done_refusal(card, backend.stages:done_column()) then
         return "an outcome is not ticked"
@@ -149,7 +151,40 @@ function Ship.reason(backend, card, commit, name)
     if not land.holds(backend.root, landed, commit) then
         return "landed commit " .. land.short(landed) .. " is not in " .. name
     end
+    local pending = revert.reverted(comments)
+    if pending then
+        if land.reverts(backend.root, pending, commit) then
+            return nil, landed, true
+        end
+        return "its revert of " .. pending .. " has not landed in " .. name, landed
+    end
     return nil, landed
+end
+
+---Untick a reverted card's outcomes and send it back to Ready, once its revert is on trunk.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the Release card
+---@param deps dev.board.ship.Deps the board verbs the move calls
+---@return string? refusal why the card stays in Release, nil when it moved
+function Ship.reopen(backend, card, deps)
+    for number, outcome in ipairs(card.outcomes) do
+        if outcome.done then
+            local untick = deps.outcome(backend, { card.id, "--untick", tostring(number) })
+            if untick.code then
+                return string.format("outcome %d stays ticked. %s", number, untick.message)
+            end
+        end
+    end
+    backend:note(
+        card.id,
+        "The revert of this card landed on trunk. Plan the change again, then take it.",
+        nil,
+        { kind = board.NoteKind.DECISION }
+    )
+    local moved = deps.move_card(backend, { card.id, backend.stages.ready })
+    if moved.code then
+        return "the move to " .. backend.stages.ready .. " was refused. " .. moved.message
+    end
 end
 
 ---Name the dev sync templates the landed commits of a batch changed.
@@ -189,16 +224,24 @@ end
 local function ship_batch(backend, cards, rev, commit, deps)
     local name = rev == Ship.DEFAULT_REV and "trunk" or rev
     local text = string.format("Shipped in %s, commit %s.", name, land.short(commit))
-    local moved, kept, stranded, ok = {}, {}, {}, true
+    local moved, kept, stranded, reopened, ok = {}, {}, {}, {}, true
     local landed_commits = {}
     for _, card in ipairs(cards) do
         local short = card.id:sub(1, board.MIN_PREFIX)
-        local reason, landed = Ship.reason(backend, card, commit, name)
+        local reason, landed, reverted = Ship.reason(backend, card, commit, name)
         if landed then
             landed_commits[#landed_commits + 1] = landed
         end
         if reason then
             kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. reason .. ")"
+        elseif reverted then
+            local refusal = Ship.reopen(backend, card, deps)
+            if refusal then
+                ok = false
+                kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. refusal .. ")"
+            else
+                reopened[#reopened + 1] = "  " .. short .. " " .. card.name
+            end
         else
             local result = deps.move_card(backend, { card.id, backend.stages:done_column() })
             local moved_ok = result ~= nil and not result.code
@@ -240,6 +283,12 @@ local function ship_batch(backend, cards, rev, commit, deps)
     for _, line in ipairs(moved) do
         lines[#lines + 1] = line
     end
+    if #reopened > 0 then
+        lines[#lines + 1] = "reverted, back in " .. backend.stages.ready .. ":"
+        for _, line in ipairs(reopened) do
+            lines[#lines + 1] = line
+        end
+    end
     if #kept > 0 then
         lines[#lines + 1] = "left in " .. backend.stages.release .. ":"
         for _, line in ipairs(kept) do
@@ -260,14 +309,12 @@ local function ship_batch(backend, cards, rev, commit, deps)
     return lines, ok
 end
 
----Revert a suspect's landed commit, unmark its outcomes and send its card back to Ready.
+---Revert a suspect's landed commit and note it, leaving the card in Release until the revert lands.
 ---@param backend dev.board.Backend the board
 ---@param entry dev.board.suspects.Entry the suspect
 ---@param seconds integer how long it has been red
----@param deps dev.board.ship.Deps the board verbs the revert calls
 ---@return string said what happened, as sentences
-function Ship.requeue(backend, entry, seconds, deps)
-    local revert = require("dev.board.revert")
+function Ship.requeue(backend, entry, seconds)
     local short = land.short(entry.landed)
     local ok, reason, detail = revert.apply(backend.root, entry.landed)
     if not ok then
@@ -275,20 +322,6 @@ function Ship.requeue(backend, entry, seconds, deps)
             return "The revert of " .. short .. " conflicts with later changes, so it is left."
         end
         return "The revert of " .. short .. " failed. " .. tostring(detail)
-    end
-    for number, outcome in ipairs(entry.card.outcomes) do
-        if outcome.done then
-            local untick = deps.outcome(backend, { entry.card.id, "--untick", tostring(number) })
-            if untick.code then
-                return string.format(
-                    "Reverted %s, but outcome %d stays ticked. The card stays in %s. %s",
-                    short,
-                    number,
-                    backend.stages.release,
-                    untick.message
-                )
-            end
-        end
     end
     backend:note(
         entry.card.id,
@@ -301,27 +334,20 @@ function Ship.requeue(backend, entry, seconds, deps)
         nil,
         { kind = board.NoteKind.DECISION }
     )
-    local moved = deps.move_card(backend, { entry.card.id, backend.stages.ready })
-    if moved.code then
-        return string.format(
-            "Reverted %s, but the move to Ready was refused. The card stays in %s. %s",
-            short,
-            backend.stages.release,
-            moved.message
-        )
-    end
-    return "Reverted " .. short .. ". The card is back in Ready."
+    return "Reverted "
+        .. short
+        .. ". The card stays in "
+        .. backend.stages.release
+        .. " until it lands."
 end
 
 ---Note each red suspect, and revert the landed commit of one that stayed red past `revert_after`.
 ---@param backend dev.board.Backend the board
 ---@param named dev.board.suspects.Entry[] the suspect cards the failed ship named
 ---@param commit string the full commit the ship tested
----@param deps dev.board.ship.Deps the board verbs a revert calls
 ---@param cases string[] the failing cases of the ship
 ---@return string[] lines what happened to each suspect
-function Ship.settle(backend, named, commit, deps, cases)
-    local revert = require("dev.board.revert")
+function Ship.settle(backend, named, commit, cases)
     local after = tonumber(config.get(backend.root, "board.release.revert_after"))
         or revert.AFTER_SECONDS
     local now = os.time()
@@ -341,7 +367,7 @@ function Ship.settle(backend, named, commit, deps, cases)
         elseif now - since < after then
             said = string.format("Red for %d seconds. Reverted after %d.", now - since, after)
         else
-            said = Ship.requeue(backend, entry, now - since, deps)
+            said = Ship.requeue(backend, entry, now - since)
         end
         lines[#lines + 1] = "  " .. entry.label .. ": " .. said
     end
@@ -352,17 +378,16 @@ end
 ---@param backend dev.board.Backend the board
 ---@param opts { files: string[], cases: string[], rev: string, commit: string } the failing test
 ---files and cases the command printed, the revset the ship covers and the full commit it names
----@param deps dev.board.ship.Deps the board verbs a revert calls
 ---@return string[] lines the suspect list
-function Ship.suspects(backend, opts, deps)
+function Ship.suspects(backend, opts)
     local files, commit = opts.files, opts.commit
     local name = opts.rev == Ship.DEFAULT_REV and "trunk" or opts.rev
     local cards = backend:cards() or {}
     local entries = {}
     for _, card in ipairs(cards) do
         if card.column == backend.stages.release then
-            local reason, landed = Ship.reason(backend, card, commit, name)
-            if not reason and landed then
+            local reason, landed, reverted = Ship.reason(backend, card, commit, name)
+            if not reason and landed and not reverted then
                 entries[#entries + 1] = {
                     label = card.id:sub(1, board.MIN_PREFIX) .. " " .. card.name,
                     landed = landed,
@@ -372,7 +397,7 @@ function Ship.suspects(backend, opts, deps)
         end
     end
     local lines, named = require("dev.board.suspects").lines(backend.root, files, entries)
-    for _, line in ipairs(Ship.settle(backend, named, commit, deps, opts.cases or {})) do
+    for _, line in ipairs(Ship.settle(backend, named, commit, opts.cases or {})) do
         lines[#lines + 1] = line
     end
     return lines
@@ -410,7 +435,7 @@ function M.ship(backend, args, deps)
     end
     local failed = ship_ran(backend, runs, function(row)
         local opts = { files = row.failed or {}, cases = row.cases, rev = rev, commit = commit }
-        return Ship.suspects(backend, opts, deps)
+        return Ship.suspects(backend, opts)
     end)
     if failed then
         return failed

@@ -86,6 +86,21 @@ function M.red_since(comments, cases)
     return since
 end
 
+---Read the landed commit of the newest revert note that no later land note follows.
+---@param comments {body: string}[] the card's comments, oldest first
+---@return string? commit the short landed commit that was reverted, nil when none is pending
+function M.reverted(comments)
+    local commit
+    for _, comment in ipairs(comments) do
+        if landed(comment.body) then
+            commit = nil
+        else
+            commit = comment.body:match("^Reverted landed commit (%x+) after ") or commit
+        end
+    end
+    return commit
+end
+
 local function last_line(text)
     local last = ""
     for line in text:gmatch("[^\n]+") do

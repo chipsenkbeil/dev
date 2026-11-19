@@ -3509,13 +3509,15 @@ A failed command:
   defaults to 3600. A red on other cases is noted afresh and reverts nothing.
   The lead runs it again from a workspace at trunk. `jj revert` or `git revert`
   puts the landed commit's reverse on trunk's side of the working copy, and the
-  card goes to Ready with its outcomes unticked and a note.
+  card stays in Release with its outcomes ticked and a note.
 - Suspects revert newest landed first. A revert that conflicts with a later
-  change stays out, and the line for that card says so. A card whose outcomes
-  cannot be unticked, or whose move to Ready is refused, stays in Release and
-  the line says that.
+  change stays out, and the line for that card says so.
 - The lead lands the revert commit before the next ship, with
   `jj land --no-card` in a jj project and `dev push` in a git project.
+- A later ship keeps a reverted card in Release while the shipped revision holds
+  no commit whose description reads `This reverts commit` and the landed commit.
+  Once it does, that ship unticks the outcomes and moves the card to Ready, never
+  to Done. A card that lands again starts over.
 
 The move:
 
