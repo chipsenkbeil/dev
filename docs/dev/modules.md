@@ -28,11 +28,14 @@ The luajit modules of `dev`, one per item.
 - `dev.cmd.sync`: the lint-template `sync` with `--check`, `--yes` and `-y`.
   It prints the `missing:` and `differs:` lines, `up to date` and the diffs,
   asks for confirmation through `dev.ui`, and ends with `synced` or `aborted`.
-  `--check` and `--yes` together are a usage error. It also rewrites the
-  head of `.dev/README.md` above `## Commands in this repo` for every project
-  type, in the same diff and confirm flow, and leaves a file with no marker
-  line alone. A project's own lint checks below the marker are scanned too,
-  and `undefined: .dev/lint.lua:LINE: NAME` names a table name they use that
+  `--check` and `--yes` together are a usage error. The skip setting of sync,
+  `sync.skip` in `.dev/config.toml`, is a list of dest paths that `--check`
+  and `sync` leave alone, and a value that is not a list of strings exits 1.
+  It also rewrites the head of `.dev/README.md` above
+  `## Commands in this repo` for every project type, in the same diff and
+  confirm flow, and leaves a file with no marker line alone. A project's own
+  lint checks below the marker are scanned too, and
+  `undefined: .dev/lint.lua:LINE: NAME` names a table name they use that
   nothing in the file defines, which exits 1.
 
 ### Board

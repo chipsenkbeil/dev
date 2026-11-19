@@ -1,3 +1,4 @@
+local config = require("dev.config")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
@@ -34,6 +35,41 @@ end
 
 local function die(message)
     verb.die(message)
+end
+
+local function skipped_dests(root)
+    local value = config.get(root, "sync.skip")
+    if value == nil then
+        return {}
+    end
+    local dests = {}
+    local ok = type(value) == "table"
+    local count = 0
+    if ok then
+        for _ in pairs(value) do
+            count = count + 1
+        end
+        ok = count == #value
+    end
+    for i = 1, ok and #value or 0 do
+        ok = ok and type(value[i]) == "string"
+        dests[value[i]] = true
+    end
+    if not ok then
+        die("The `sync.skip` setting must be a list of strings. Check it in `.dev/config.toml`.")
+    end
+    return dests
+end
+
+local function drop_skipped(root, entries)
+    local skipped = skipped_dests(root)
+    local kept = {}
+    for _, entry in ipairs(entries) do
+        if not skipped[entry.dest] then
+            kept[#kept + 1] = entry
+        end
+    end
+    return kept
 end
 
 local function has_marker(text, marker)
@@ -153,6 +189,7 @@ function M.run(ctx)
     local unbound = false
 
     local entries, pending = templates.skip_pending(root, templates.manifest(dir, kind))
+    entries = drop_skipped(root, entries)
     local rendered = {}
     for i, entry in ipairs(entries) do
         local text, err = templates.render(root, entry_opts(kind, entry, channel))
