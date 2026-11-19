@@ -1,7 +1,7 @@
 local fs = require("dev.fs")
 local land = require("dev.board.land")
 
----Name the landed cards of a red ship batch that touched a failing test's files.
+---The landed cards of a red ship batch that touched a failing test's files.
 ---@class dev.board.suspects
 local M = {}
 

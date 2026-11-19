@@ -1,7 +1,7 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
----Pick the test suites a change touches, so a card's check runs those and not the whole suite.
+---The test suites a change touches, which a card's check runs in place of the whole suite.
 ---@class dev.board.select
 local M = {}
 
