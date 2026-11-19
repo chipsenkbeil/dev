@@ -188,9 +188,9 @@ function M.sweep(backend, cards, now)
     end
     for _, entry in ipairs(fs.list(claims.dir()) or {}) do
         local id = entry:match("^(.+)" .. SUFFIX:gsub("%.", "%%.") .. "$")
-        local clock = id and M.read(id)
+        local card = id and by_id[id]
+        local clock = card and M.read(id)
         if clock then
-            local card = by_id[id] or { id = id }
             local ended = M.ended(card, clock, now)
             if ended < now then
                 local stopped = M.stop(backend, card, nil, ended)

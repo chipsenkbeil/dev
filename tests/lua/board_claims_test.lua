@@ -254,3 +254,24 @@ testing.test("a clock with no claim stops at twice the card's size", function()
     testing.eq(late, {})
     testing.eq(backend.logged, { { CARD, 50, "reviewer" } })
 end)
+
+testing.test("a clock on a card of another board stays and logs nothing", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local started = os.time()
+    local original = clock.now
+    clock.now = function()
+        return started
+    end
+    local began = clock.start({ id = CARD, labels = {} }, "reviewer")
+    local backend = logging_backend()
+    local ticking, warnings = clock.sweep(backend, {}, started + 3 * 60 * 60)
+    local kept = clock.read(CARD)
+    clock.now = original
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(began.code, nil, began.message)
+    testing.eq(ticking, {})
+    testing.eq(warnings, {})
+    testing.eq(backend.logged, {})
+    testing.eq(kept ~= nil, true)
+end)
