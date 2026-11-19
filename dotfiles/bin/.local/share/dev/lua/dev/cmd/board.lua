@@ -147,7 +147,7 @@ end
 ---@field name string the board's name
 ---@field path string? the file of a local board, in the state directory when nil
 ---@field root string? the project's root, which a tracked path is under
----@field columns table<string, string>? the `[board.columns]` map, keyed by role
+---@field columns table<string, string>? the `[board.columns]` map, keyed by stage
 
 ---@class dev.cmd.board.open.Opts
 ---@field token_key string? the `[board.pomb]` key that names the token, `token` when nil
@@ -199,10 +199,10 @@ local function parse(args, takes, many)
 end
 
 local function named_column(backend, word)
-    local column = backend.roles:column(word)
+    local column = backend.stages:column(word)
     if not column then
         return nil,
-            usage("Unknown column " .. word .. ". The columns are " .. backend.roles:help() .. ".")
+            usage("Unknown column " .. word .. ". The columns are " .. backend.stages:help() .. ".")
     end
     return column
 end
@@ -399,7 +399,7 @@ function commands.ls(backend, args, _, screen)
             lanes = lanes,
             grouped = grouped,
             want = want,
-            stages = backend.roles,
+            stages = backend.stages,
         })
         return { output = table.concat(lines, "\n"), page = true }
     end
@@ -436,20 +436,20 @@ function commands.next(backend, args)
     if bad then
         return bad
     end
-    local roles = backend.roles
-    local column = roles.ready
+    local stages = backend.stages
+    local column = stages.ready
     if flags["--column"] then
         local named, err = named_column(backend, flags["--column"])
         if not named then
             return err
         end
-        local takes = named == roles.ready
-            or named == roles.backlog
-            or named == roles.icebox
-            or named == roles.blocked
-            or named == roles.review
-            or named == roles.verify
-            or named == roles.release
+        local takes = named == stages.ready
+            or named == stages.backlog
+            or named == stages.icebox
+            or named == stages.blocked
+            or named == stages.review
+            or named == stages.verify
+            or named == stages.release
         if not takes then
             return usage(
                 "Next --column takes Ready, Backlog, Icebox, Review, Verify, Release or Blocked."
@@ -458,11 +458,11 @@ function commands.next(backend, args)
         column = named
     end
     local asked = flags["--for"] and flags["--for"]:lower()
-    if asked and (column ~= roles.blocked or not board.BLOCKED_LABELS[asked]) then
+    if asked and (column ~= stages.blocked or not board.BLOCKED_LABELS[asked]) then
         return usage("Next --for takes planner or lead, with --column Blocked.")
     end
     local card, message = backend:next(column, {
-        label = column == roles.blocked and board.BLOCKED_LABELS[asked or "lead"] or nil,
+        label = column == stages.blocked and board.BLOCKED_LABELS[asked or "lead"] or nil,
         max_size = limit,
         lane = lane,
     })
@@ -470,7 +470,7 @@ function commands.next(backend, args)
         if message then
             return failure(message)
         end
-        if column == roles.ready then
+        if column == stages.ready then
             return { output = "No ready cards." }
         end
         return { output = "No cards in " .. column .. "." }
@@ -637,8 +637,8 @@ local function add_card(backend, args, held)
         end
         color = named
     end
-    local roles = backend.roles
-    local column = roles.backlog
+    local stages = backend.stages
+    local column = stages.backlog
     if flags["--column"] then
         local named, err = named_column(backend, flags["--column"])
         if not named then
@@ -656,8 +656,8 @@ local function add_card(backend, args, held)
     end
     if
         index_of(labels or {}, board.NEEDS_HUMAN)
-        and column ~= roles.blocked
-        and column ~= roles.icebox
+        and column ~= stages.blocked
+        and column ~= stages.icebox
     then
         return usage(
             "The "
@@ -665,7 +665,7 @@ local function add_card(backend, args, held)
                 .. " label lives only in Blocked or Icebox, so add the card there with --column."
         )
     end
-    if column == roles.ready and unready(color) then
+    if column == stages.ready and unready(color) then
         return usage(
             "A card must be sized 1, 2 or 3 before it enters Ready, "
                 .. "so add it with --size or to Backlog."
@@ -674,10 +674,10 @@ local function add_card(backend, args, held)
     local description = flags["--description"]
     if sectioned then
         description = board.compose(problem, change, out_of_scope, source)
-    elseif column ~= roles.icebox then
+    elseif column ~= stages.icebox then
         description = board.scaffold(description)
     end
-    if column ~= roles.icebox and column ~= roles.ready then
+    if column ~= stages.icebox and column ~= stages.ready then
         local missing = board.unplanned({
             color = color,
             description = description,
@@ -689,16 +689,16 @@ local function add_card(backend, args, held)
         if #missing > 0 then
             return usage(
                 "A card outside "
-                    .. roles.icebox
+                    .. stages.icebox
                     .. " needs a size, card format v3 and Done when outcomes, and this one lacks "
                     .. table.concat(missing, ", ")
                     .. ". Pass --size, --problem and --done-when, or add it to "
-                    .. roles.icebox
+                    .. stages.icebox
                     .. "."
             )
         end
     end
-    if column == roles.ready then
+    if column == stages.ready then
         local missing = board.missing(description, #outcomes, 0, flags["--epic"])
         if #missing > 0 then
             return usage(
@@ -709,7 +709,7 @@ local function add_card(backend, args, held)
             )
         end
     end
-    if #checks > 0 or column == roles.ready then
+    if #checks > 0 or column == stages.ready then
         local why, err = named_field_problem(backend, board.CHECKS_FIELD)
         if err then
             return err
@@ -721,7 +721,7 @@ local function add_card(backend, args, held)
             return usage("A card needs a checks row before it enters Ready. Pass --checks CMD.")
         end
     end
-    if column == roles.ready and not flags["--epic"] then
+    if column == stages.ready and not flags["--epic"] then
         local named = {}
         for i, item in ipairs(outcomes) do
             named[i] = { name = item }
@@ -1302,9 +1302,9 @@ end
 ---@param column string the column it moves to
 ---@return dev.cmd.board.Result? refused the failure, nil when the move may go on
 local function unnoted(backend, card, column)
-    local roles = backend.roles
-    local leaving = card.column == roles.progress
-        and (column == roles.review or column == roles.ready or column == roles.blocked)
+    local stages = backend.stages
+    local leaving = card.column == stages.progress
+        and (column == stages.review or column == stages.ready or column == stages.blocked)
     if not (leaving and card.claimant) then
         return nil
     end
@@ -1337,8 +1337,8 @@ end
 ---@param column string the column the card moves to
 ---@return dev.cmd.board.Result? refused the failure, nil when nothing applied or the claim was taken
 local function retake_lapsed(backend, card, column)
-    local roles = backend.roles
-    if card.column ~= roles.progress or column == roles.progress or card.claimant then
+    local stages = backend.stages
+    if card.column ~= stages.progress or column == stages.progress or card.claimant then
         return nil
     end
     local name, bad = agent_name()
@@ -1402,11 +1402,13 @@ local function family_shape(backend, card)
 end
 
 ---Say whether a card sits in a column where work has not started.
----@param roles dev.board.Roles the board's columns
+---@param stages dev.board.Stages the board's columns
 ---@param card dev.board.Card the card
 ---@return boolean before true in Icebox, Backlog or Ready
-local function before_work(roles, card)
-    return card.column == roles.icebox or card.column == roles.backlog or card.column == roles.ready
+local function before_work(stages, card)
+    return card.column == stages.icebox
+        or card.column == stages.backlog
+        or card.column == stages.ready
 end
 
 ---Refuse a card with no checks row and no children.
@@ -1485,8 +1487,8 @@ end
 ---@return dev.cmd.board.Result? refused the failure, nil when the card meets them
 local function ready_refusal(backend, card, shape)
     local children, epic = shape.children, shape.epic
-    local roles = backend.roles
-    local unreadable = guards.unreadable_refusal(card, roles.ready)
+    local stages = backend.stages
+    local unreadable = guards.unreadable_refusal(card, stages.ready)
     if unreadable then
         return unreadable
     end
@@ -1558,13 +1560,13 @@ local function move_once(backend, args, opts)
             return bad
         end
     end
-    local roles = backend.roles
+    local stages = backend.stages
     local column, err = named_column(backend, table.concat(words, " ", 2))
     if
         not column
-        or column == roles.review
-        or column == roles.verify
-        or column == roles.release
+        or column == stages.review
+        or column == stages.verify
+        or column == stages.release
     then
         local refused = guards.stage_refusal(backend)
         if refused then
@@ -1574,7 +1576,7 @@ local function move_once(backend, args, opts)
     if not column then
         return err
     end
-    local to_done = column == roles:done_column() and not (opts and opts.drop)
+    local to_done = column == stages:done_column() and not (opts and opts.drop)
     local card
     card, err = find_card(backend, words[1])
     if not card then
@@ -1587,13 +1589,13 @@ local function move_once(backend, args, opts)
         end
     end
     if to_done then
-        local refused = guards.done_refusal(card, roles:done_column())
+        local refused = guards.done_refusal(card, stages:done_column())
         if refused then
             return refused
         end
     end
-    local proving = (column == roles.release or to_done)
-        and card.column ~= roles.release
+    local proving = (column == stages.release or to_done)
+        and card.column ~= stages.release
         and card.kind ~= board.Kind.EPIC
         and not (opts and (opts.landed or opts.drop))
         and not board.labelled(card, board.TRUNK_BLOCKER)
@@ -1622,14 +1624,14 @@ local function move_once(backend, args, opts)
     end
     local children = kids and kids.total or 0
     local closing = to_done and board.children_closed(kids)
-    if column == roles.ready then
+    if column == stages.ready then
         local refused = size_refusal(card)
         if refused then
             return refused
         end
     end
-    local dropping_icebox = opts and opts.drop and card.column == roles.icebox
-    if column ~= roles.icebox and column ~= roles.ready and not dropping_icebox then
+    local dropping_icebox = opts and opts.drop and card.column == stages.icebox
+    if column ~= stages.icebox and column ~= stages.ready and not dropping_icebox then
         local facts = {
             color = card.color,
             description = card.description,
@@ -1659,8 +1661,8 @@ local function move_once(backend, args, opts)
             return refused
         end
     end
-    local starting = column == roles.progress and before_work(roles, card)
-    if column == roles.ready then
+    local starting = column == stages.progress and before_work(stages, card)
+    if column == stages.ready then
         local refused = ready_refusal(backend, card, { children = children, epic = epic })
         if refused then
             return refused
@@ -1671,7 +1673,7 @@ local function move_once(backend, args, opts)
             return refused
         end
     end
-    if column == roles.progress then
+    if column == stages.progress then
         local limit, bad = runner.limit(flags[runner.FLAG])
         if bad then
             return bad
@@ -1680,7 +1682,7 @@ local function move_once(backend, args, opts)
         if refused then
             return refused
         end
-        if card.column ~= roles.progress and not claims.read(card.id) then
+        if card.column ~= stages.progress and not claims.read(card.id) then
             local _, wrong = agent_name()
             if wrong then
                 return wrong
@@ -1700,7 +1702,7 @@ local function move_once(backend, args, opts)
     if lapsed then
         return lapsed
     end
-    local skipped = guards.skipped_refusal(roles, card, column)
+    local skipped = guards.skipped_refusal(stages, card, column)
     if skipped then
         return skipped
     end
@@ -1710,7 +1712,7 @@ local function move_once(backend, args, opts)
     end
     local held = claims.read(card.id)
     local started
-    if column == roles.progress and not held and not card.claimant then
+    if column == stages.progress and not held and not card.claimant then
         local name, bad = agent_name()
         if bad then
             return bad
@@ -1749,7 +1751,7 @@ local function move_once(backend, args, opts)
         end
         return to_done and unqueued(failure(message)) or failure(message)
     end
-    if own_claim and column ~= roles.progress and column ~= roles.blocked then
+    if own_claim and column ~= stages.progress and column ~= stages.blocked then
         claims.stop(card.id)
         local released, why = backend:release(card.id, held and held.fence)
         if not released then
@@ -1822,9 +1824,7 @@ end
 ---@return dev.cmd.board.Result result the result of the last try
 function M.move(backend, args, opts)
     backend.stages = backend.stages
-        or backend.roles
         or board.stages(backend.column_map, backend:done_columns() or {})
-    backend.roles = backend.stages
     return move_card(backend, args, opts)
 end
 
@@ -1838,11 +1838,9 @@ local function closes_epic(backend, args)
         return false
     end
     backend.stages = backend.stages
-        or backend.roles
         or board.stages(backend.column_map, backend:done_columns() or {})
-    backend.roles = backend.stages
     local column = named_column(backend, table.concat(words, " ", 2))
-    if not column or column ~= backend.roles:done_column() then
+    if not column or column ~= backend.stages:done_column() then
         return false
     end
     local card = find_card(backend, words[1])
@@ -1953,7 +1951,7 @@ function commands.discard(backend, args)
         return held_back
     end
     local missing = {}
-    if not (reason and card.column == backend.roles.icebox) then
+    if not (reason and card.column == backend.stages.icebox) then
         missing = board.unplanned({
             color = card.color,
             description = card.description,
@@ -1978,7 +1976,7 @@ function commands.discard(backend, args)
             { sub = "note", args = { words[1], KIND_FLAG, board.NoteKind.DECISION, reason } }
     end
     steps[#steps + 1] = { sub = "label", args = { words[1], DISCARD_LABEL } }
-    steps[#steps + 1] = { sub = "discard_move", args = { words[1], backend.roles:done_column() } }
+    steps[#steps + 1] = { sub = "discard_move", args = { words[1], backend.stages:done_column() } }
     local warnings = {}
     for i, step in ipairs(steps) do
         local result = M.run(step.sub, step.args, backend)
@@ -2025,14 +2023,14 @@ function commands.size(backend, args)
     if not card then
         return err
     end
-    if color == board.SIZES.unsized and card.column ~= backend.roles.icebox then
+    if color == board.SIZES.unsized and card.column ~= backend.stages.icebox then
         return failure(
             "Card "
                 .. card.id:sub(1, board.MIN_PREFIX)
                 .. " is outside "
-                .. backend.roles.icebox
+                .. backend.stages.icebox
                 .. " and keeps a size. Move it to "
-                .. backend.roles.icebox
+                .. backend.stages.icebox
                 .. " first."
         )
     end
@@ -2128,8 +2126,8 @@ function commands.label(backend, args)
             change.add
             and change.word == board.NEEDS_HUMAN
             and not index_of(labels, change.word)
-            and card.column ~= backend.roles.blocked
-            and card.column ~= backend.roles.icebox
+            and card.column ~= backend.stages.blocked
+            and card.column ~= backend.stages.icebox
         then
             return failure(
                 "Card "
@@ -2778,20 +2776,20 @@ function commands.outcome(backend, args)
     if mode == OutcomeMode.TICK and ticker then
         result.output = result.output .. " by " .. ticker
     end
-    local roles = backend.roles or board.roles()
-    if mode == OutcomeMode.TICK and card.column == roles.review then
+    local stages = backend.stages or board.stages()
+    if mode == OutcomeMode.TICK and card.column == stages.review then
         local open = false
         for i, outcome in ipairs(card.outcomes) do
             open = open or (i ~= number and not outcome.done)
         end
         if not open then
-            local moved, why = backend:move(card.id, roles.verify, { fence = fence })
+            local moved, why = backend:move(card.id, stages.verify, { fence = fence })
             if not moved then
                 return failure(
                     result.output .. ", but the move to Verify failed. " .. sentence(why)
                 )
             end
-            result.output = result.output .. "\nmoved " .. prefix .. " to " .. roles.verify
+            result.output = result.output .. "\nmoved " .. prefix .. " to " .. stages.verify
         end
     end
     if text then
@@ -2817,14 +2815,14 @@ function commands.edit(backend, args)
     if held_back then
         return held_back
     end
-    if card.column ~= backend.roles.icebox then
+    if card.column ~= backend.stages.icebox then
         local missing = board.backlog_missing(args[2])
         if #missing > 0 then
             return failure(
                 "Card "
                     .. card.id:sub(1, board.MIN_PREFIX)
                     .. " is outside "
-                    .. backend.roles.icebox
+                    .. backend.stages.icebox
                     .. " and keeps card format v3. That text lacks "
                     .. table.concat(missing, ", ")
                     .. "."
@@ -3526,7 +3524,7 @@ end
 ---@return string? reason why it stays, nil when it may move
 ---@return string? landed the card's landed commit when it may move
 function Ship.reason(backend, card, commit, name)
-    if guards.done_refusal(card, backend.roles:done_column()) then
+    if guards.done_refusal(card, backend.stages:done_column()) then
         return "an outcome is not ticked"
     end
     local comments = backend:comments(card.id)
@@ -3587,7 +3585,7 @@ local function ship_batch(backend, cards, rev, commit)
         if reason then
             kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. reason .. ")"
         else
-            local result = move_card(backend, { card.id, backend.roles:done_column() })
+            local result = move_card(backend, { card.id, backend.stages:done_column() })
             local moved_ok = result ~= nil and not result.code
             local noted, why = moved_ok, nil
             if moved_ok then
@@ -3628,14 +3626,14 @@ local function ship_batch(backend, cards, rev, commit)
         lines[#lines + 1] = line
     end
     if #kept > 0 then
-        lines[#lines + 1] = "left in " .. backend.roles.release .. ":"
+        lines[#lines + 1] = "left in " .. backend.stages.release .. ":"
         for _, line in ipairs(kept) do
             lines[#lines + 1] = line
         end
     end
     if #stranded > 0 then
         lines[#lines + 1] = "moved to "
-            .. backend.roles:done_column()
+            .. backend.stages:done_column()
             .. " with no done note, write it by hand:"
         for _, line in ipairs(stranded) do
             lines[#lines + 1] = line
@@ -3704,7 +3702,7 @@ function Ship.requeue(backend, entry, seconds)
                     "Reverted %s, but outcome %d stays ticked. The card stays in %s. %s",
                     short,
                     number,
-                    backend.roles.release,
+                    backend.stages.release,
                     untick.message
                 )
             end
@@ -3721,12 +3719,12 @@ function Ship.requeue(backend, entry, seconds)
         nil,
         { kind = board.NoteKind.DECISION }
     )
-    local moved = move_card(backend, { entry.card.id, backend.roles.ready })
+    local moved = move_card(backend, { entry.card.id, backend.stages.ready })
     if moved.code then
         return string.format(
             "Reverted %s, but the move to Ready was refused. The card stays in %s. %s",
             short,
-            backend.roles.release,
+            backend.stages.release,
             moved.message
         )
     end
@@ -3744,7 +3742,7 @@ function Ship.suspects(backend, opts)
     local cards = backend:cards() or {}
     local entries = {}
     for _, card in ipairs(cards) do
-        if card.column == backend.roles.release then
+        if card.column == backend.stages.release then
             local reason, landed = Ship.reason(backend, card, commit, name)
             if not reason and landed then
                 entries[#entries + 1] = {
@@ -3799,7 +3797,7 @@ function commands.ship(backend, args)
     end
     local waiting = {}
     for _, card in ipairs(cards) do
-        if card.column == backend.roles.release then
+        if card.column == backend.stages.release then
             waiting[#waiting + 1] = card
         end
     end
@@ -4476,8 +4474,8 @@ local function set_limit(backend, value, words)
     if #words > 0 then
         return usage("The --set flag changes only this project's board.")
     end
-    local roles = backend.roles
-    local columns = { roles.progress, roles.review, roles.verify }
+    local stages = backend.stages
+    local columns = { stages.progress, stages.review, stages.verify }
     local done, message = backend:set_limit_group(columns, limit)
     if not done then
         if message:find("pomb answered 403", 1, true) then
@@ -4491,9 +4489,9 @@ local function set_limit(backend, value, words)
     return {
         output = string.format(
             "Set the limit of %s, %s and %s to %d.",
-            roles.progress,
-            roles.review,
-            roles.verify,
+            stages.progress,
+            stages.review,
+            stages.verify,
             limit
         ),
     }
@@ -4638,7 +4636,7 @@ local function icebox_rows(backend, cards, entered, limit, now)
     local found, undated = {}, {}
     for _, card in ipairs(cards) do
         if
-            card.column == backend.roles.icebox
+            card.column == backend.stages.icebox
             and index_of(card.labels, board.NEEDS_HUMAN) == nil
             and not board.is_turn_card(card)
         then
@@ -4671,8 +4669,8 @@ local function icebox_rows(backend, cards, entered, limit, now)
 end
 
 local function flight_rows(backend, cards, entered, limit, now)
-    local roles = backend.roles
-    local flying = { [roles.progress] = true, [roles.review] = true, [roles.verify] = true }
+    local stages = backend.stages
+    local flying = { [stages.progress] = true, [stages.review] = true, [stages.verify] = true }
     local days = limit * box.SECONDS_PER_HOUR / box.SECONDS_PER_DAY
     local found = {}
     for _, card in ipairs(cards) do
@@ -4703,9 +4701,9 @@ local function flight_rows(backend, cards, entered, limit, now)
 end
 
 local function started_rows(backend, cards, entered, now)
-    local roles = backend.roles
-    local started = { [roles.progress] = true, [roles.review] = true }
-    local waiting = { [roles.backlog] = true, [roles.ready] = true }
+    local stages = backend.stages
+    local started = { [stages.progress] = true, [stages.review] = true }
+    local waiting = { [stages.backlog] = true, [stages.ready] = true }
     local found, warnings, others = {}, {}, {}
     for _, card in ipairs(cards) do
         local list
@@ -4824,13 +4822,13 @@ function commands.stale(backend, args, now)
         return failure(message)
     end
     now = now or store.now()
-    local roles = backend.roles
+    local stages = backend.stages
     local found, owner, moved, undated, unsized, commented = {}, {}, {}, {}, {}, {}
     local lead, planner, nobody = {}, {}, {}
     local candidates = {}
     for _, card in ipairs(cards) do
         if
-            card.column == roles.blocked
+            card.column == stages.blocked
             and not card.done
             and not index_of(card.labels, board.NEEDS_HUMAN)
             and not index_of(card.labels, board.NEEDS_LEAD)
@@ -4853,7 +4851,7 @@ function commands.stale(backend, args, now)
         local asks = index_of(card.labels, board.NEEDS_LEAD) and lead
             or index_of(card.labels, board.NEEDS_PLANNER) and planner
         if
-            card.column == roles.blocked
+            card.column == stages.blocked
             and not card.done
             and asks
             and not index_of(card.labels, board.NEEDS_HUMAN)
@@ -4885,15 +4883,15 @@ function commands.stale(backend, args, now)
                 end
             end
         end
-        if card.column ~= roles.icebox and board.has_color(card, board.SIZES.unsized) then
+        if card.column ~= stages.icebox and board.has_color(card, board.SIZES.unsized) then
             unsized[#unsized + 1] = card
         end
         local mine = index_of(card.labels, board.NEEDS_HUMAN) ~= nil
-        local held = mine and (card.column == roles.blocked or card.column == roles.icebox)
+        local held = mine and (card.column == stages.blocked or card.column == stages.icebox)
         if not held then
             candidates[#candidates + 1] = card
         end
-        if mine or (not card.done and roles.stale[card.column]) then
+        if mine or (not card.done and stages.stale[card.column]) then
             local stamp = entered[card.id]
             if not stamp then
                 undated[#undated + 1] = warning("could not date " .. card.id .. " " .. card.name)
@@ -4953,7 +4951,7 @@ function commands.stale(backend, args, now)
         if not listed[card.id] then
             local spoke, why = Owner.commented(backend, card)
             if spoke == nil then
-                if card.column ~= roles.icebox then
+                if card.column ~= stages.icebox then
                     undated[#undated + 1] = warning(why)
                 end
             elseif spoke then
@@ -5013,7 +5011,7 @@ function commands.stale(backend, args, now)
             rows[#rows + 1] = { card.id:sub(1, board.MIN_PREFIX), card.column, card.name }
         end
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "unsized outside " .. roles.icebox .. ":"
+        lines[#lines + 1] = "unsized outside " .. stages.icebox .. ":"
         append(lines, board.table_lines(rows))
     end
     local todo = {}
@@ -5055,10 +5053,10 @@ function commands.stale(backend, args, now)
         append(lines, begun_warnings)
     end
     local function umbrella_rows()
-        local running = { [roles.progress] = true, [roles.review] = true, [roles.verify] = true }
+        local running = { [stages.progress] = true, [stages.review] = true, [stages.verify] = true }
         local backlog, why_started = {}, {}
         for _, card in ipairs(cards) do
-            if card.column == roles.backlog and not card.done then
+            if card.column == stages.backlog and not card.done then
                 backlog[card.id] = card
                 if card.epic and card.epic.done > 0 then
                     why_started[card.id] = card.epic.done
@@ -5180,7 +5178,7 @@ function commands.lint(backend, args)
         }
         local rules, why, owned = lint.card(
             card,
-            { stages = backend.roles, facts = facts, strict = strict, required = required }
+            { stages = backend.stages, facts = facts, strict = strict, required = required }
         )
         if not rules then
             return failure(why)
@@ -5245,7 +5243,7 @@ function commands.take(backend, args)
     if refused then
         return refused
     end
-    local roles = backend.roles
+    local stages = backend.stages
     local rival = not from and card.claimant ~= nil and card.claimant ~= (name or claimant())
     if card.claimant == nil or from then
         local shaped = runner.shape_refusal(name)
@@ -5253,7 +5251,7 @@ function commands.take(backend, args)
             return shaped
         end
     end
-    if card.claimant == nil and before_work(roles, card) then
+    if card.claimant == nil and before_work(stages, card) then
         local shape, why_family = family_shape(backend, card)
         if not shape then
             return failure(why_family)
@@ -5263,9 +5261,9 @@ function commands.take(backend, args)
             return refused
         end
     end
-    local limited = card.column ~= roles.progress and not claims.read(card.id) and not rival
+    local limited = card.column ~= stages.progress and not claims.read(card.id) and not rival
     if limited then
-        refused = runner.limited(backend, card, roles.progress)
+        refused = runner.limited(backend, card, stages.progress)
         if refused then
             return refused
         end
@@ -5364,7 +5362,7 @@ local function start_run(backend, name, orders)
     local args = {
         RUN_NAME .. name,
         "--column",
-        backend.roles.progress,
+        backend.stages.progress,
         "--size",
         RUN_SIZE,
         "--label",
@@ -5429,7 +5427,7 @@ local function resume_run(backend, opts)
         end
     end
     local limit = runner.limit()
-    local upcoming, message = backend:next(backend.roles.ready, { max_size = limit })
+    local upcoming, message = backend:next(backend.stages.ready, { max_size = limit })
     if not upcoming and message then
         return failure(message)
     end
@@ -5577,8 +5575,8 @@ end
 
 local function column_map(root)
     local columns = {}
-    for _, role in ipairs(board.ROLES) do
-        columns[role] = config.get(root, "board.columns." .. role)
+    for _, stage in ipairs(board.STAGES) do
+        columns[stage] = config.get(root, "board.columns." .. stage)
     end
     columns.done = config.get(root, "board.columns.done")
     return columns
@@ -5798,7 +5796,6 @@ M.handlers["board init"] = function(ctx)
         verb.die(sentence(message))
     end
     backend.stages = board.stages(column_map(ctx.root))
-    backend.roles = backend.stages
     if admin then
         local secret
         secret, message = device.pair({
@@ -6141,7 +6138,7 @@ local function read_cursor(path)
     return text ~= "" and text or nil
 end
 
-local function lead_cards(backend, roles, label)
+local function lead_cards(backend, stages, label)
     local cards, message = backend:cards()
     if not cards then
         return nil, message
@@ -6149,7 +6146,7 @@ local function lead_cards(backend, roles, label)
     local waiting = {}
     for _, card in ipairs(cards) do
         if
-            card.column == roles.blocked
+            card.column == stages.blocked
             and not card.claimant
             and index_of(card.labels, label)
             and not index_of(card.labels, board.NEEDS_HUMAN)
@@ -6234,17 +6231,17 @@ end
 
 ---Collect the cards that sit in Blocked or Icebox.
 ---@param backend dev.board.Backend the board
----@param roles dev.board.Roles the column names
+---@param stages dev.board.Stages the column names
 ---@return table<string, string>? sat the column of each card in Blocked or Icebox
 ---@return string? why the reason the board could not be read
-function Owner.sitting(backend, roles)
+function Owner.sitting(backend, stages)
     local cards, message = backend:cards()
     if not cards then
         return nil, message
     end
     local sat = {}
     for _, card in ipairs(cards) do
-        if card.column == roles.blocked or card.column == roles.icebox then
+        if card.column == stages.blocked or card.column == stages.icebox then
             sat[card.id] = card.column
         end
     end
@@ -6272,24 +6269,24 @@ function Owner.stage_cards(backend, column)
 end
 
 local function wait_line(event, opts)
-    local only, roles, leads = opts.only, opts.roles, opts.leads
+    local only, stages, leads = opts.only, opts.stages, opts.leads
     local spoke = opts.spoke
     local id = event.task_id:sub(1, board.MIN_PREFIX)
     local added = event.kind == EventKind.ADDED
     if only == WaitFor.LEAD or only == WaitFor.PLANNER then
         if leads[event.task_id] then
             leads[event.task_id] = nil
-            return id .. " is labelled " .. board.BLOCKED_LABELS[only] .. " in " .. roles.blocked
+            return id .. " is labelled " .. board.BLOCKED_LABELS[only] .. " in " .. stages.blocked
         end
     elseif only == WaitFor.HUMAN then
         if
             event.kind == EventKind.MOVED
-            and event.from_column == roles.blocked
+            and event.from_column == stages.blocked
             and event.actor == HUMAN_ACTOR
             and event.at
             and event.at >= opts.started
         then
-            return "moved " .. id .. " out of " .. roles.blocked
+            return "moved " .. id .. " out of " .. stages.blocked
         end
         if event.kind == EventKind.COMMENTED and spoke[event.task_id] then
             spoke[event.task_id] = nil
@@ -6297,11 +6294,11 @@ local function wait_line(event, opts)
         end
     elseif WaitFor.STAGES[only] then
         if
-            event.column == roles[only]
+            event.column == stages[only]
             and (added or event.kind == EventKind.MOVED)
             and opts.stage[event.task_id]
         then
-            return (added and "added " or "moved ") .. id .. " to " .. roles[only]
+            return (added and "added " or "moved ") .. id .. " to " .. stages[only]
         end
     elseif added then
         return "added " .. id .. " to " .. tostring(event.column)
@@ -6354,7 +6351,7 @@ function M.wait(backend, args, opts)
                 .. ". The choices are ready, review, verify, release, human, lead and planner."
         )
     end
-    local roles = backend.roles or board.roles()
+    local stages = backend.stages or board.stages()
     local legacy = guards.stage_refusal(backend)
     if legacy then
         return legacy
@@ -6370,7 +6367,7 @@ function M.wait(backend, args, opts)
     local sat
     if only == WaitFor.HUMAN then
         local why
-        sat, why = Owner.sitting(backend, roles)
+        sat, why = Owner.sitting(backend, stages)
         if not sat then
             return failure(why)
         end
@@ -6406,7 +6403,7 @@ function M.wait(backend, args, opts)
         local leads
         if reply and board.BLOCKED_LABELS[only] and #reply.events > 0 then
             local why
-            leads, why = lead_cards(backend, roles, board.BLOCKED_LABELS[only])
+            leads, why = lead_cards(backend, stages, board.BLOCKED_LABELS[only])
             if not leads then
                 if not pomb.unreachable(why, true) then
                     return failure(why)
@@ -6432,7 +6429,7 @@ function M.wait(backend, args, opts)
             local stage
             if WaitFor.STAGES[only] and #reply.events > 0 then
                 local why
-                stage, why = Owner.stage_cards(backend, roles[only])
+                stage, why = Owner.stage_cards(backend, stages[only])
                 if not stage then
                     return failure(why)
                 end
@@ -6450,7 +6447,7 @@ function M.wait(backend, args, opts)
                 local line = type(event.task_id) == "string"
                     and wait_line(event, {
                         only = only,
-                        roles = roles,
+                        stages = stages,
                         leads = leads,
                         spoke = spoke,
                         stage = stage,
