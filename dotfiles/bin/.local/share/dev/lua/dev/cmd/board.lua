@@ -1030,11 +1030,15 @@ function commands.notes(backend, args)
     if #args ~= 1 then
         return usage("Needs a card.")
     end
-    local card, err = find_card(backend, args[1])
+    local home, rest, refused = guards.on_board(backend, args)
+    if not home then
+        return refused
+    end
+    local card, err = find_card(home, rest[1])
     if not card then
         return err
     end
-    local list, message = backend:comments(card.id)
+    local list, message = home:comments(card.id)
     if not list then
         return failure(message)
     end
@@ -1776,6 +1780,10 @@ end
 ---@param opts dev.cmd.board.move.Opts? the options of `move_once` and the clock
 ---@return dev.cmd.board.Result result the result of the last try
 local function move_card(backend, args, opts)
+    local foreign = guards.foreign_refusal(args[1], "move")
+    if foreign then
+        return foreign
+    end
     local flags = parse(args, MOVE_FLAGS)
     local wait = 0
     if flags and flags[WAIT_FLAG] then
@@ -2564,6 +2572,10 @@ function commands.outcome(backend, args)
     args, ticker_flag, bad = split_ticker(args)
     if not args then
         return bad
+    end
+    local foreign = guards.foreign_refusal(args[1], "outcome")
+    if foreign then
+        return foreign
     end
     if #args < 2 then
         return usage(

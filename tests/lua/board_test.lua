@@ -1148,6 +1148,46 @@ testing.test("edit --board changes the description on the named board", function
     testing.eq(sibling.calls[#sibling.calls], { "set_description", ID_A, text, nil })
 end)
 
+testing.test("note BOARD:ID writes the note on the named board's card", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    local result = cmd_board.run("note", { "ci:11111111-a", "Seen" }, backend)
+    testing.eq(result.output, "noted 11111111")
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+    testing.eq(sibling.calls[#sibling.calls][1], "note")
+    testing.eq(sibling.calls[#sibling.calls][2], ID_A)
+end)
+
+testing.test("show BOARD:ID prints the named board's card", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    local result = cmd_board.run("show", { "ci:11111111-a" }, backend)
+    testing.ok(result.output:find("11111111", 1, true), result.output)
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+end)
+
+testing.test("notes BOARD:ID lists the named board's card notes", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    backend.sibling = sibling
+    local result = cmd_board.run("notes", { "ci:11111111-a" }, backend)
+    testing.eq(result.code, nil)
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+end)
+
+testing.test("move and outcome refuse a card on another board and name the board", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("move", { "ci:11111111-a", support.Column.DONE }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("the board ci", 1, true), result.message)
+    result = cmd_board.run("outcome", { "ci:11111111-a", "--tick", "1" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("the board ci", 1, true), result.message)
+    testing.eq(backend.calls, {})
+end)
+
 testing.test("edit --board refuses a board that is not there", function()
     local backend = fake(sample())
     local result = cmd_board.run("edit", { "11111111-a", "--board", "nope", "text" }, backend)

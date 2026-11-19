@@ -137,13 +137,31 @@ local function other_home(backend, name)
     return home
 end
 
----Move to the board named by a `--board NAME` right after the card, else keep this one.
+---Split a card word into the board it names and the card prefix.
+---@param word string? the card word
+---@return string? board the board name, nil when the word names no board
+---@return string? prefix the card prefix after the board name
+local function split_board(word)
+    return (word or ""):match("^(.+):([^:]*)$")
+end
+
+---Move to the board named by a `BOARD:PREFIX` card word or a `--board NAME` right after the card.
+---
+---The card word in `rest` is the bare prefix. Without either, this board stays.
 ---@param backend dev.board.Backend the board the command runs on
 ---@param args string[] the command's words, the card first
 ---@return dev.board.Backend? home the board to act on, nil when refused
----@return string[]? rest the words with `--board NAME` removed, nil when refused
+---@return string[]? rest the words with the board named off, nil when refused
 ---@return dev.cmd.board.Result? refused the usage error or failure, set when home is nil
 local function on_board(backend, args)
+    local named, prefix = split_board(args[1])
+    if named then
+        local home, why = other_home(backend, named)
+        if not home then
+            return nil, nil, failure(why)
+        end
+        return home, { prefix, unpack(args, 2) }
+    end
     if args[2] ~= "--board" then
         return backend, args
     end
@@ -155,6 +173,26 @@ local function on_board(backend, args)
         return nil, nil, failure(why)
     end
     return home, { args[1], unpack(args, 4) }
+end
+
+---Refuse a card given as BOARD:PREFIX to a verb that only works on this board.
+---@param word string? the card word
+---@param verb string the verb's name
+---@return dev.cmd.board.Result? refused the failure naming the board, nil when the card is on this board
+local function foreign_refusal(word, verb)
+    local named = split_board(word)
+    if not named then
+        return nil
+    end
+    return failure(
+        "The verb "
+            .. verb
+            .. " works only on this board's cards, and "
+            .. word
+            .. " is on the board "
+            .. named
+            .. ". Run it from that board."
+    )
 end
 
 ---Refuse a move of an epic with an open child into a WIP-limited or done column.
@@ -465,6 +503,7 @@ M.landed_on_trunk = landed_on_trunk
 M.workspace_refusal = workspace_refusal
 M.other_home = other_home
 M.on_board = on_board
+M.foreign_refusal = foreign_refusal
 M.children_refusal = children_refusal
 M.unreadable_refusal = unreadable_refusal
 M.done_refusal = done_refusal

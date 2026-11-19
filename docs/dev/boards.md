@@ -2430,7 +2430,8 @@ How it reads outcomes:
 ### notes
 
 `dev board notes CARD` lists the card's comments (`GET
-/api/tasks/{id}/comments`), oldest first.
+/api/tasks/{id}/comments`), oldest first. CARD may be `BOARD:PREFIX` for a card
+on another board of the same Pomb server.
 
 - Each line holds, aligned, the comment id prefix (8 characters), the token's
   name (else the actor kind), the comment's kind (`-` for none), its role label
@@ -2453,7 +2454,7 @@ the `history` of the card in `GET /api/boards/{id}/export-data`.
 ### show
 
 `dev board show CARD [--board B]` prints a whole card, so an agent reads it
-without the API or the token.
+without the API or the token. CARD may be `BOARD:PREFIX` in place of `--board`.
 
 The layout, top to bottom:
 
@@ -3551,7 +3552,9 @@ The refusals, all exit 1 unless stated:
 ### note
 
 `dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT` adds a comment
-and prints `noted <id prefix>`.
+and prints `noted <id prefix>`. CARD may be `BOARD:PREFIX` in place of
+`--board`. `move` and `outcome` refuse a `BOARD:PREFIX` card with a message that
+names the board.
 
 The text:
 
