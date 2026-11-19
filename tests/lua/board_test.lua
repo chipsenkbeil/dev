@@ -1591,6 +1591,21 @@ testing.test(
     end
 )
 
+testing.test("discard with a reason drops an unplanned Icebox card", function()
+    local card = planned()
+    card.color = nil
+    card.description = "loose"
+    card.outcomes = {}
+    card.column = support.COLUMN_NAME.ICEBOX
+    local backend = fake({ card })
+    testing.eq(cmd_board.run("discard", { "cccccccc" }, backend).code, 1)
+    testing.eq(#backend.calls, 0)
+    local result = cmd_board.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
+    testing.eq(result.output, "discarded cccccccc")
+    testing.eq(backend.calls[#backend.calls][1], "move")
+    testing.eq(backend.calls[#backend.calls][3], support.COLUMN_NAME.DONE)
+end)
+
 testing.test("move to Done refuses outcomes dev cannot read", function()
     local cards = sample()
     cards[1].outcomes_unreadable = true
