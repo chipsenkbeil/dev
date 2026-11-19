@@ -338,6 +338,13 @@ local function skipped_refusal(stages, card, column)
         first = stages.progress .. " under a claim"
     elseif column == stages.verify then
         if card.column == stages.review then
+            local ticked = #card.outcomes > 0
+            for _, outcome in ipairs(card.outcomes) do
+                ticked = ticked and outcome.done == true
+            end
+            if ticked then
+                return nil
+            end
             return failure(
                 string.format(
                     "Card %s cannot move to %s from %s. "

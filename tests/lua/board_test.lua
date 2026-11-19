@@ -3484,6 +3484,26 @@ testing.test("a plain move from Review to Verify is refused", function()
     testing.eq(#backend.calls, 0)
 end)
 
+testing.test("move from Review to Verify is allowed when every outcome is ticked", function()
+    local card = colored("green")
+    card.column = support.COLUMN_NAME.REVIEW
+    card.outcomes = outcomes(2, 2)
+    local backend = fake({ card })
+    local result = cmd_board.run("move", { "cccccccc", support.Column.VERIFY }, backend)
+    testing.eq(result.message, nil)
+    testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.VERIFY, nil })
+end)
+
+testing.test("move to Verify is refused when a card has no outcomes", function()
+    local card = colored("green")
+    card.column = support.COLUMN_NAME.REVIEW
+    card.outcomes = {}
+    local backend = fake({ card })
+    local result = cmd_board.run("move", { "cccccccc", support.Column.VERIFY }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("lacks Done when outcomes", 1, true), result.message)
+end)
+
 testing.test("ticking the last open outcome moves the card to Verify", function()
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW

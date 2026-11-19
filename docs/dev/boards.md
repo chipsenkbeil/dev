@@ -596,7 +596,8 @@ Every card in every column is fair game for an agent unless it is labelled
     outcomes from the ci logs while the card sits here.
 - Verify: the verifier's tick of the last open outcome moves the card here, so
   Review holds only ci and reviews and Verify only verified work. A plain move
-  from Review to Verify is refused. Then `dev land` lands it and moves
+  from Review to Verify is refused
+  unless every outcome is ticked already. Then `dev land` lands it and moves
   the card to Release, or to Done when `[board.land] deploys` is not true.
   - dev board land merges a card once Verify passes.
     A card's change stays unmerged until land merges it.
