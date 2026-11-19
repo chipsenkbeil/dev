@@ -72,7 +72,7 @@ function M.commented(backend, card, since)
     end
     local list = backend:comments(card.id)
     if not list then
-        return nil, "could not read the comments of " .. card.id .. " " .. card.name
+        return nil, "Could not read the comments of " .. card.id .. " " .. card.name .. "."
     end
     local newest = list[#list]
     if newest == nil or newest.actor ~= HUMAN_ACTOR then

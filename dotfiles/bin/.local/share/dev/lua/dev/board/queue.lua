@@ -40,7 +40,7 @@ local function load(path)
     end
     local text, err = fs.read(path)
     if not text then
-        return nil, "cannot read " .. path .. ": " .. tostring(err)
+        return nil, "Cannot read " .. path .. ": " .. tostring(err) .. "."
     end
     local doc, message = json.decode(text)
     if doc == nil then

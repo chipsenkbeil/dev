@@ -1,6 +1,7 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
+local dev_text = require("dev.text")
 
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = "30"
@@ -59,13 +60,13 @@ local function post(url, body_arg)
     argv[#argv + 1] = url
     local out, code = dev_os.capture(argv, { unset = CHILD_UNSET, stderr = "null" })
     if code ~= 0 then
-        return nil, "cannot reach " .. url .. " (curl exit " .. tostring(code) .. ")"
+        return nil, "Cannot reach " .. url .. " (curl exit " .. tostring(code) .. ")."
     end
     local text, status = out:match("^(.*)\n(%d+)$")
     local doc = text and json.decode(text)
     status = tonumber(status)
     if not status or type(doc) ~= "table" then
-        return nil, "pomb sent an answer dev cannot read"
+        return nil, "Pomb sent an answer dev cannot read."
     end
     return doc, status
 end
@@ -95,18 +96,21 @@ function M.pair(opts)
     end
     if status >= HTTP_ERROR then
         return nil,
-            "pomb answered " .. status .. ": " .. tostring(
-                json.present(start.message) or "no message"
+            dev_text.sentence(
+                "Pomb answered "
+                    .. status
+                    .. ": "
+                    .. tostring(json.present(start.message) or "no message")
             )
     end
     if type(start.device_code) ~= "string" or type(start.user_code) ~= "string" then
-        return nil, "pomb sent a sign-in with no code"
+        return nil, "Pomb sent a sign-in with no code."
     end
     opts.say("approve the " .. opts.scope .. " sign-in at " .. tostring(start.verification_url))
     opts.say("code: " .. start.user_code)
     local body = fs.mktemp({ prefix = "dev-device" })
     if not body then
-        return nil, "cannot make a temporary file for the sign-in"
+        return nil, "Cannot make a temporary file for the sign-in."
     end
     local interval = tonumber(start.interval_seconds) or DEFAULT_INTERVAL
     local budget = tonumber(start.expires_in_seconds) or 0
@@ -152,7 +156,7 @@ function M.pair(opts)
     end
     fs.remove(body)
     if not written then
-        return nil, "cannot write the temporary file for the sign-in"
+        return nil, "Cannot write the temporary file for the sign-in."
     end
     return token, message
 end

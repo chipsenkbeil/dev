@@ -43,12 +43,12 @@ end
 function M.path(name)
     local argv = checksum_command()
     if not argv then
-        return nil, "neither shasum nor sha256sum is on PATH"
+        return nil, "Neither shasum nor sha256sum is on PATH."
     end
     local out, code = dev_os.capture_input(argv, name, { stderr = "null" })
     local sum = code == 0 and out:match("^(%x+)")
     if not sum or #sum ~= HASH_LENGTH then
-        return nil, "could not hash the agent name"
+        return nil, "Could not hash the agent name."
     end
     return M.dir() .. "/" .. sum:lower()
 end
@@ -76,11 +76,11 @@ function M.write(name, token, expires)
         dev_os.run({ "sh", "-c", 'umask 077 && mkdir -p -- "$1" && chmod 700 "$1"', "sh", dir })
         ~= 0
     then
-        return nil, "cannot make " .. dir
+        return nil, "Cannot make " .. dir .. "."
     end
     local pending = path .. ".new"
     if dev_os.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending }) ~= 0 then
-        return nil, "cannot write " .. path
+        return nil, "Cannot write " .. path .. "."
     end
     local ok
     ok, message = fs.write(pending, string.format("%s\n%d\n", token, expires))
@@ -90,7 +90,7 @@ function M.write(name, token, expires)
     end
     if dev_os.run({ "mv", "-f", pending, path }) ~= 0 then
         fs.remove(pending)
-        return nil, "cannot write " .. path
+        return nil, "Cannot write " .. path .. "."
     end
     return true
 end
@@ -108,7 +108,7 @@ function M.read(name)
     local text = fs.read(path)
     local found = text and parse(text)
     if not found then
-        return nil, "the token file " .. path .. " is not a token file"
+        return nil, "The token file " .. path .. " is not a token file."
     end
     return found
 end

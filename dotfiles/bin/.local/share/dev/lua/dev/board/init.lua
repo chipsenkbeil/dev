@@ -131,7 +131,7 @@ local function columns_step(layout, state, say)
     end
     for _, name in ipairs(standard) do
         if not present[name:lower()] then
-            return nil, "the board still has no " .. name .. " column after adding it"
+            return nil, "The board still has no " .. name .. " column after adding it."
         end
     end
     local done = present[done_name:lower()]
@@ -282,7 +282,7 @@ local function palette_step(layout, state, say)
         local color = by_value[swatch.value]
         if not color then
             return nil,
-                "the board has no " .. swatch.value .. " colour, which only an admin can add"
+                "The board has no " .. swatch.value .. " colour, which only an admin can add."
         end
         local fields = {}
         if color.label ~= swatch.label then

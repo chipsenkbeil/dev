@@ -2565,16 +2565,14 @@ function Backend:mint(role, name, opts)
     ok, message = tokenfile.write(name, raw, expires)
     if not ok then
         local undone, why = self:revoke(name)
+        local kept = "Cannot keep the token: " .. (message:gsub("%.$", ""))
         if not undone then
-            return nil,
-                "Cannot keep the token: " .. message .. ". It stays issued: " .. dev_text.sentence(
-                    why
-                )
+            return nil, kept .. ". It stays issued: " .. dev_text.sentence(why)
         end
         if not undone.revoked then
-            return nil, "Cannot keep the token: " .. message .. ". Pomb listed no token to revoke."
+            return nil, kept .. ". Pomb listed no token to revoke."
         end
-        return nil, "Cannot keep the token: " .. message .. ". It was revoked."
+        return nil, kept .. ". It was revoked."
     end
     return {
         role = present(reply.role_name) or role,

@@ -1,6 +1,8 @@
 local bit = require("bit")
+local ffi = require("ffi")
 
 local testing = require("dev.testing")
+local tokenfile = require("dev.board.tokenfile")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
@@ -268,6 +270,7 @@ testing.test("token-mint-write-failure revokes the token it just issued", functi
     testing.ok(code == 1, out)
     testing.ok(out:find("annot keep the token", 1, true), out)
     testing.ok(out:find("It was revoked.", 1, true), out)
+    testing.eq(out:find("..", 1, true), nil, out)
     local calls = read(root, "calls")
     testing.ok(calls:find("-X DELETE", 1, true), calls)
     testing.ok(calls:find("/api/v1/auth/tokens/children/tok-child-9\n", 1, true), calls)
@@ -301,6 +304,21 @@ testing.test("token-mint-write-stays says the token stays issued when the revoke
     testing.eq(out:find("It was revoked.", 1, true), nil, out)
     testing.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
     testing.eq(out:find(RAW, 1, true), nil, out)
+end)
+
+testing.test("token-read-junk names the file in a sentence", function()
+    local previous_state = os.getenv("XDG_STATE_HOME") or ""
+    local previous_runtime = os.getenv("XDG_RUNTIME_DIR") or ""
+    ffi.C.setenv("XDG_RUNTIME_DIR", "", 1)
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    assert(fs.mkdir(tokenfile.dir(), { parents = true }))
+    local path = assert(tokenfile.path(NAME))
+    assert(fs.write(path, "junk\n"))
+    local found, message = tokenfile.read(NAME)
+    ffi.C.setenv("XDG_STATE_HOME", previous_state, 1)
+    ffi.C.setenv("XDG_RUNTIME_DIR", previous_runtime, 1)
+    testing.eq(found, nil)
+    testing.eq(message, "The token file " .. path .. " is not a token file.")
 end)
 
 testing.test("token-mint-sweep deletes expired token files and keeps live ones", function()

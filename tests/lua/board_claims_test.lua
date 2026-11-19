@@ -143,6 +143,20 @@ local function take_stub(card)
     return stub
 end
 
+testing.test(
+    "a state write that cannot make its pending file names the path in a sentence",
+    function()
+        local previous = os.getenv("XDG_STATE_HOME") or ""
+        ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+        local path = claims.path(CARD)
+        assert(fs.mkdir(path .. ".new", { parents = true }))
+        local ok, message = claims.write({ card = CARD, fence = 1, pid = 1 })
+        ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+        testing.eq(ok, nil)
+        testing.eq(message, "Cannot write " .. path .. ".")
+    end
+)
+
 testing.test("a take starts a clock under the role of the card's column", function()
     local previous = os.getenv("XDG_STATE_HOME") or ""
     ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)

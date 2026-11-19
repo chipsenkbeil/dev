@@ -72,7 +72,7 @@ local function prepare(dir, private)
         return nil, message
     end
     if private and dev_os.run({ "chmod", "700", dir }) ~= 0 then
-        return nil, "cannot protect " .. dir
+        return nil, "Cannot protect " .. dir .. "."
     end
     return true
 end
@@ -107,12 +107,12 @@ function M.locked(path, opts, fn)
     local file, err = io.open(lock, "a")
     ffi.C.umask(previous)
     if not file then
-        return nil, "cannot lock " .. path .. ": " .. tostring(err)
+        return nil, "Cannot lock " .. path .. ": " .. tostring(err) .. "."
     end
     local fd = ffi.C.fileno(file)
     if ffi.C.flock(fd, LOCK_EX) ~= 0 then
         file:close()
-        return nil, "cannot lock " .. path
+        return nil, "Cannot lock " .. path .. "."
     end
     local ran, first, second = pcall(fn)
     ffi.C.flock(fd, LOCK_UN)
@@ -133,7 +133,7 @@ function M.read(path)
     end
     local text, err = fs.read(path)
     if not text then
-        return nil, "cannot read " .. path .. ": " .. tostring(err)
+        return nil, "Cannot read " .. path .. ": " .. tostring(err) .. "."
     end
     local doc = json.decode(text)
     if doc == nil then
@@ -159,12 +159,12 @@ function M.write(path, text, opts)
     ok, message = fs.write(pending, text)
     ffi.C.umask(previous)
     if not ok then
-        return nil, "cannot write " .. path .. ": " .. tostring(message)
+        return nil, "Cannot write " .. path .. ": " .. tostring(message) .. "."
     end
     local renamed, err = os.rename(pending, path)
     if not renamed then
         fs.remove(pending)
-        return nil, "cannot write " .. path .. ": " .. tostring(err)
+        return nil, "Cannot write " .. path .. ": " .. tostring(err) .. "."
     end
     return true
 end

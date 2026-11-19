@@ -82,11 +82,11 @@ function M.write(state)
     local path = M.path(state.card)
     local pending = path .. ".new"
     if dev_os.run({ "chmod", "700", dir }) ~= 0 then
-        return nil, "cannot protect " .. dir
+        return nil, "Cannot protect " .. dir .. "."
     end
     local made = dev_os.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending })
     if made ~= 0 then
-        return nil, "cannot write " .. path
+        return nil, "Cannot write " .. path .. "."
     end
     local body =
         string.format("card=%s\nfence=%d\npid=%d\n", state.card, state.fence, state.pid or 0)
@@ -95,7 +95,7 @@ function M.write(state)
         return nil, message
     end
     if dev_os.run({ "mv", "-f", pending, path }) ~= 0 then
-        return nil, "cannot write " .. path
+        return nil, "Cannot write " .. path .. "."
     end
     return true
 end
