@@ -1448,6 +1448,18 @@ no list keeps the rules above:
 required = ["dev --remote lint", "dev --remote test"]
 ```
 
+A `[board.check]` table sets the check timeout setting, the seconds one checks
+row may take, ci queue included. `dev board check`, the land recheck and
+`dev board ship` use it, and `--timeout` still overrides it for
+`dev board check`. With no setting the wait is 7200 seconds. A `seconds` that
+is not a whole number from 1 to 86400 makes them exit 1 and name
+`board.check.seconds`:
+
+```toml
+[board.check]
+seconds = 14400
+```
+
 ### landing before starting
 
 A runner lands what passed before it takes a new card. `take` and `move CARD

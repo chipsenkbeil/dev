@@ -1350,7 +1350,7 @@ function M.recheck_problem(opts)
             root = opts.root,
             run = rows[i],
             argv = narrowed,
-            seconds = check.DEFAULT_SECONDS,
+            seconds = check.row_seconds(opts.root),
             env = {
                 [dev_remote.VERB_ENV] = dev_remote.Verb.CHECK,
                 [dev_remote.CARD_ENV] = opts.card,

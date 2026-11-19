@@ -29,11 +29,12 @@ local RUN_FLAG = "--run"
 local MIN_RUN_COMMIT = 7
 
 ---Parse the flags and the card word of `board check`.
+---@param root string the project root, whose config sets the default row wait
 ---@param args string[] the arguments
 ---@return dev.board.wiring.CheckFlags? opts the parsed flags, nil on a usage error
 ---@return dev.cmd.board.Result? err the usage error
-local function check_options(args)
-    local opts = { expect_fail = false, seconds = check.DEFAULT_SECONDS, words = {} }
+local function check_options(root, args)
+    local opts = { expect_fail = false, words = {} }
     local i = 1
     while i <= #args do
         local arg = args[i]
@@ -74,6 +75,7 @@ local function check_options(args)
         return nil,
             usage("The " .. RUN_FLAG .. " flag cannot be used with " .. EXPECT_FAIL_FLAG .. ".")
     end
+    opts.seconds = opts.seconds or check.row_seconds(root)
     return opts
 end
 

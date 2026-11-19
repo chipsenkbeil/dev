@@ -1,10 +1,12 @@
 local bit = require("bit")
 local board = require("dev.board")
+local config = require("dev.config")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local registry = require("dev.registry")
 local vcs = require("dev.vcs")
+local verb = require("dev.verb")
 
 ---@class dev.board.check
 local M = {}
@@ -15,6 +17,31 @@ M.DEFAULT_SECONDS = 7200
 
 ---The most seconds `--timeout` accepts.
 M.MAX_SECONDS = 86400
+
+---Read the seconds a checks row may take when `--timeout` is not given.
+---
+---A `[board.check]` table with a `seconds` key in the config sets it, and a value that is not
+---a whole number from 1 to `MAX_SECONDS` ends the process with exit 1.
+---@param root string the project root
+---@return integer seconds the configured wait, `DEFAULT_SECONDS` when none is set
+function M.row_seconds(root)
+    local key = "board.check.seconds"
+    local value = config.get(root, key)
+    if value == nil then
+        return M.DEFAULT_SECONDS
+    end
+    if
+        type(value) ~= "number"
+        or value ~= math.floor(value)
+        or value < 1
+        or value > M.MAX_SECONDS
+    then
+        verb.die(
+            "The `" .. key .. "` setting must be a whole number from 1 to " .. M.MAX_SECONDS .. "."
+        )
+    end
+    return value
+end
 
 local SHELL_CHARS = "[|&;<>()$`\\\"'*?!\n]"
 local NEGATED = "^%s*!%s+(.*)$"

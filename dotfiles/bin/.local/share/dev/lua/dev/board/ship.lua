@@ -86,7 +86,7 @@ local function ship_ran(backend, runs, name_suspects)
             root = backend.root,
             run = one.run,
             argv = one.argv,
-            seconds = check.DEFAULT_SECONDS,
+            seconds = check.row_seconds(backend.root),
             env = { [remote.VERB_ENV] = remote.Verb.RELEASE, [remote.PRIORITY_ENV] = "1" },
         })
         if rows[i].result ~= check.Result.PASS then

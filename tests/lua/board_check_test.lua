@@ -589,6 +589,43 @@ testing.test("check ends a row at the time limit and records a timeout", functio
     testing.eq(code, 2, out)
 end)
 
+local CONFIG = '[board]\nbackend = "local"\nname = "mine"\n\n[board.check]\nseconds = '
+
+testing.test("check setting sets the default wait", function()
+    local root, home = git_root({ [".dev/config.toml"] = CONFIG .. "1\n" })
+    local id = card_with(root, home, { "sleep 3" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.eq(comments(home)[1].body:match("\n(.*)$"), "1 timeout -")
+    out, code = dev(root, home, { "board", "check", id, "--timeout", "30" })
+    testing.eq(code, 0, out)
+end)
+
+testing.test("check setting refuses a bad value", function()
+    local root, home = git_root({ [".dev/config.toml"] = CONFIG .. "1\n" })
+    local id = card_with(root, home, { "true" })
+    for _, value in ipairs({ "0", "86401", '"60"', "true" }) do
+        assert(fs.write(root .. "/.dev/config.toml", CONFIG .. value .. "\n"))
+        local out, code = dev(root, home, { "board", "check", id })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("board.check.seconds", 1, true), out)
+    end
+    must(dev_os.run({
+        "git",
+        "-C",
+        root,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.com",
+        "commit",
+        "-qam",
+        "bad setting",
+    }, { stdout = "null" }))
+    local out, code = dev(root, home, { "board", "check", id, "--timeout", "30" })
+    testing.eq(code, 0, out)
+end)
+
 local function fake_ci(body)
     local bin = support.tempdir() .. "/bin"
     assert(fs.mkdir(bin, { parents = true }), "mkdir failed")

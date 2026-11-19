@@ -3151,7 +3151,7 @@ function commands.checks(backend, args)
 end
 
 function commands.check(backend, args)
-    local opts, err = wiring.check_options(args)
+    local opts, err = wiring.check_options(backend.root, args)
     if not opts then
         return err
     end
