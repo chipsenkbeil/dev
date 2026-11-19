@@ -55,6 +55,7 @@ local function backend_at(home)
         private = true,
     })
     backend.roles = board.roles(nil, {})
+    backend.stages = backend.roles
     return backend
 end
 

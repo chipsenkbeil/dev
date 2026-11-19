@@ -713,6 +713,7 @@ if has_jj then
             private = true,
         })
         backend.roles = { icebox = support.COLUMN_NAME.ICEBOX }
+        backend.stages = backend.roles
         return backend,
             function()
                 ffi.C.setenv("XDG_STATE_HOME", previous, 1)

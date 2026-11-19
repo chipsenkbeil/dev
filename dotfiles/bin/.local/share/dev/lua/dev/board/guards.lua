@@ -73,8 +73,8 @@ local function stage_refusal(backend)
     if not has["in review"] then
         return nil
     end
-    local roles = backend.roles or board.roles()
-    for _, name in ipairs({ roles.review, roles.verify, roles.release }) do
+    local stages = backend.stages or board.stages()
+    for _, name in ipairs({ stages.review, stages.verify, stages.release }) do
         if not has[name:lower()] then
             return failure(
                 "The board has an In Review column and no "
@@ -116,7 +116,7 @@ local function workspace_refusal(backend, short)
     return nil
 end
 
----Open the Pomb board named `name` with this board's column map, root and roles.
+---Open the Pomb board named `name` with this board's column map, root and stages.
 ---@param backend dev.board.Backend the board the command runs on
 ---@param name string the other board's name
 ---@return dev.board.Backend? home the named board, nil when it cannot be opened
@@ -244,23 +244,23 @@ local function done_refusal(card, column)
 end
 
 ---Refuse a move into Review or Verify by a card that skipped the stage before it.
----@param roles dev.board.Roles the board's columns
+---@param stages dev.board.Stages the board's columns
 ---@param card dev.board.Card the card being moved
 ---@param column string the column it moves to
 ---@return dev.cmd.board.Result? err the refusal, nil when the move keeps the stage order
-local function skipped_refusal(roles, card, column)
+local function skipped_refusal(stages, card, column)
     if card.column == column then
         return nil
     end
     local first
-    if column == roles.review then
-        local claimed = card.column == roles.progress and card.claimant
-        if claimed or card.column == roles.verify then
+    if column == stages.review then
+        local claimed = card.column == stages.progress and card.claimant
+        if claimed or card.column == stages.verify then
             return nil
         end
-        first = roles.progress .. " under a claim"
-    elseif column == roles.verify then
-        if card.column == roles.review then
+        first = stages.progress .. " under a claim"
+    elseif column == stages.verify then
+        if card.column == stages.review then
             return failure(
                 string.format(
                     "Card %s cannot move to %s from %s. "
@@ -271,7 +271,7 @@ local function skipped_refusal(roles, card, column)
                 )
             )
         end
-        first = roles.review
+        first = stages.review
     else
         return nil
     end

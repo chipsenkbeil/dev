@@ -9,7 +9,7 @@ local M = {}
 M.MAX_WORDS = 400
 
 ---@class dev.board.lint.Opts
----@field roles dev.board.Roles the board's columns
+---@field stages dev.board.Stages the board's columns
 ---@field facts dev.board.lint.Facts lazy readers of the card's comments, links and children
 ---@field strict boolean? whether a Done card is held to the v3 sections too
 ---@field required string[]? the checks rows every open card must hold, none when nil
@@ -123,7 +123,7 @@ function M.card(card, opts)
     if board.is_turn_card(card) then
         return {}, nil, {}
     end
-    local roles, facts = opts.roles, opts.facts
+    local stages, facts = opts.stages, opts.facts
     local rules = {}
     local owned = {}
     local human = board.labelled(card, board.NEEDS_HUMAN)
@@ -135,7 +135,7 @@ function M.card(card, opts)
     end
     local column = card.column
     local discarded = board.labelled(card, board.DISCARDED)
-    local open = not card.done and column ~= roles.icebox
+    local open = not card.done and column ~= stages.icebox
     local need_outcomes = not (discarded and card.done) and not card.outcomes_unreadable
     local kids, kids_why
     local function children()
@@ -144,7 +144,7 @@ function M.card(card, opts)
         end
         return kids, kids_why
     end
-    if column ~= roles.icebox then
+    if column ~= stages.icebox then
         local child_total, child_epic, child_closing = 0, false, false
         if need_outcomes then
             local found, why = children()
@@ -175,9 +175,11 @@ function M.card(card, opts)
         end
     end
     if open then
-        local worked = column == roles.ready or column == roles.progress or column == roles.review
+        local worked = column == stages.ready
+            or column == stages.progress
+            or column == stages.review
         local lacks_checks = worked and #card.checks == 0
-        local names_checks = (column == roles.ready or column == roles.progress)
+        local names_checks = (column == stages.ready or column == stages.progress)
             and #card.checks > 0
             and not card.outcomes_unreadable
             and card.kind ~= board.Kind.EPIC
@@ -204,7 +206,7 @@ function M.card(card, opts)
                 end
             end
         end
-        if column == roles.ready and card.color == board.SIZES["3+"] then
+        if column == stages.ready and card.color == board.SIZES["3+"] then
             add("red card in " .. column)
         end
         local words = word_count(card.description)
@@ -212,11 +214,11 @@ function M.card(card, opts)
             add("over " .. M.MAX_WORDS .. " words (" .. words .. ")")
         end
     end
-    if human and column ~= roles.blocked and column ~= roles.icebox then
-        add(board.NEEDS_HUMAN .. " outside " .. roles.blocked .. " and " .. roles.icebox, true)
+    if human and column ~= stages.blocked and column ~= stages.icebox then
+        add(board.NEEDS_HUMAN .. " outside " .. stages.blocked .. " and " .. stages.icebox, true)
     end
     local unsized = board.has_color(card, board.SIZES.unsized)
-    if human and (unsized or column ~= roles.blocked) then
+    if human and (unsized or column ~= stages.blocked) then
         local list, why = facts.comments()
         if not list then
             return nil, why
@@ -225,12 +227,12 @@ function M.card(card, opts)
             if unsized then
                 add("agent question on an unsized card", true)
             end
-            if column ~= roles.blocked then
-                add("agent question outside " .. roles.blocked, true)
+            if column ~= stages.blocked then
+                add("agent question outside " .. stages.blocked, true)
             end
         end
     end
-    if column == roles.blocked then
+    if column == stages.blocked then
         local rule, why = blocked_rule(facts)
         if why then
             return nil, why
@@ -239,7 +241,7 @@ function M.card(card, opts)
             add(rule)
         end
     end
-    if column == roles.progress and not card.claimant and not board.labelled(card, board.RUN) then
+    if column == stages.progress and not card.claimant and not board.labelled(card, board.RUN) then
         add("in progress with no claimant")
     end
     if card.done and not discarded then

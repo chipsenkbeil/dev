@@ -141,7 +141,7 @@ local function turn_card(backend)
         return nil, "The landing turn card could not be read." .. sentence_after(message)
     end
     local added
-    added, message = backend:add(M.NAME, backend.roles.icebox, { once = true })
+    added, message = backend:add(M.NAME, backend.stages.icebox, { once = true })
     if not added then
         return nil, "The landing turn card could not be added." .. sentence_after(message)
     end
@@ -323,7 +323,7 @@ local function rotate(backend, card, comments)
     if not current or current.claimant then
         return card
     end
-    local moved, message = backend:move(card.id, backend.roles:done_column())
+    local moved, message = backend:move(card.id, backend.stages:done_column())
     if not moved and (message or ""):find("limit reached", 1, true) then
         return nil,
             string.format(

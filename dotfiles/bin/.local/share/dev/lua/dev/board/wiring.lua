@@ -176,7 +176,7 @@ local function trunk_proof(backend)
     local base = land.base_commit(backend.root)
     local cards = base and backend:cards()
     for _, card in ipairs(cards or {}) do
-        local comments = card.column == backend.roles.release and backend:comments(card.id)
+        local comments = card.column == backend.stages.release and backend:comments(card.id)
         local landed = comments and land.landed_commit(comments)
         if landed and (base:sub(1, #landed) == landed or landed:sub(1, #base) == base) then
             return card.id:sub(1, board.MIN_PREFIX) .. "@" .. land.short(base)
@@ -370,12 +370,12 @@ end
 ---@return string[] problems the reasons, empty when none apply
 local function card_problems(backend, card, who)
     local problems = {}
-    local roles = backend.roles
-    if card.column ~= roles.verify then
+    local stages = backend.stages
+    if card.column ~= stages.verify then
         problems[#problems + 1] = "It is in "
             .. card.column
             .. ", and only a card in "
-            .. roles.verify
+            .. stages.verify
             .. " lands."
     end
     if card.claimant and card.claimant ~= who.name then
@@ -385,7 +385,7 @@ local function card_problems(backend, card, who)
             .. who.name
             .. "."
     end
-    local open = guards.done_refusal(card, roles:done_column())
+    local open = guards.done_refusal(card, stages:done_column())
     if open then
         problems[#problems + 1] = open.message
     end
@@ -834,7 +834,7 @@ local function land_held(opts)
     if deploys and type(deployed) == "table" and #deployed > 0 then
         deploys = land.deploys(land.touched(backend.root, state.commit), deployed)
     end
-    local target = deploys and backend.roles.release or backend.roles:done_column()
+    local target = deploys and backend.stages.release or backend.stages:done_column()
     if deploys then
         text = text .. " It waits in " .. target .. " for the deploy."
     end

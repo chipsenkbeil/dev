@@ -30,10 +30,10 @@ local function count_text(count, noun)
     return count .. " " .. noun .. (count == 1 and "" or "s")
 end
 
-local function column_style(roles, column)
-    if column == roles.progress then
+local function column_style(stages, column)
+    if column == stages.progress then
         return ui.Style.GREEN
-    elseif column == roles.blocked then
+    elseif column == stages.blocked then
         return ui.Style.YELLOW
     end
     return ui.Style.DIM
@@ -79,13 +79,13 @@ end
 ---@field holders boolean whether a claimant column is drawn
 ---@field with_column boolean whether each row names its column
 ---@field lanes boolean whether each row names its lane
----@field roles dev.board.Roles the board's column roles
+---@field stages dev.board.Stages the board's stages
 
 local function terminal_cells(screen, card, view)
     local labels = #card.labels > 0 and table.concat(card.labels, ",") or "-"
     local cells = { card.id:sub(1, board.MIN_PREFIX) }
     if view.with_column then
-        local style = column_style(view.roles, card.column)
+        local style = column_style(view.stages, card.column)
         cells[#cells + 1] = ui.paint(screen, card.column, style)
     end
     if view.lanes then
@@ -119,17 +119,17 @@ local function terminal_table(screen, cards, view)
     return ui.table(screen, headers, rows)
 end
 
-local function summary_lines(screen, cards, roles)
+local function summary_lines(screen, cards, stages)
     local counts = {}
     for _, card in ipairs(cards) do
         counts[card.column] = (counts[card.column] or 0) + 1
     end
     local parts = { ui.paint(screen, count_text(#cards, "card"), ui.Style.BOLD) }
     local shown = {}
-    for _, column in ipairs(roles.list) do
+    for _, column in ipairs(stages.list) do
         shown[#shown + 1] = column
     end
-    for _, column in ipairs(roles.finished) do
+    for _, column in ipairs(stages.finished) do
         shown[#shown + 1] = column
     end
     local seen = {}
@@ -154,7 +154,7 @@ local function terminal_flat(screen, cards, opts)
     return terminal_table(
         screen,
         cards,
-        { holders = opts.holders, with_column = true, lanes = opts.lanes, roles = opts.roles }
+        { holders = opts.holders, with_column = true, lanes = opts.lanes, stages = opts.stages }
     )
 end
 
@@ -164,7 +164,7 @@ local function terminal_grouped(screen, cards, opts)
     local lines = terminal_table(
         inner,
         cards,
-        { holders = opts.holders, with_column = false, lanes = opts.lanes, roles = opts.roles }
+        { holders = opts.holders, with_column = false, lanes = opts.lanes, stages = opts.stages }
     )
     local groups, order = {}, {}
     for at, card in ipairs(cards) do
@@ -190,9 +190,9 @@ local function terminal_grouped(screen, cards, opts)
         out[#out + 1] = ""
         out[#out + 1] = ui.paint(
             screen,
-            opts.roles:done_column()
+            opts.stages:done_column()
                 .. " is left out unless --column "
-                .. opts.roles:done_column():lower(),
+                .. opts.stages:done_column():lower(),
             ui.Style.DIM
         )
     end
@@ -204,7 +204,7 @@ end
 ---@field lanes boolean whether a lane column is drawn
 ---@field grouped boolean whether the rows sit under a heading per column
 ---@field want string? the column the listing was asked for
----@field roles dev.board.Roles the board's column roles
+---@field stages dev.board.Stages the board's stages
 
 ---Draw the summary lines and the card table for a color terminal.
 ---@param screen dev.ui.Context the terminal to draw for
@@ -212,9 +212,9 @@ end
 ---@param opts dev.board.render.Options how to draw them
 ---@return string[] lines the lines to print
 function M.ls(screen, cards, opts)
-    local lines = summary_lines(screen, cards, opts.roles)
+    local lines = summary_lines(screen, cards, opts.stages)
     local finished = {}
-    for _, name in ipairs(opts.roles.finished) do
+    for _, name in ipairs(opts.stages.finished) do
         finished[name] = true
     end
     lines[#lines + 1] = ""
@@ -224,13 +224,13 @@ function M.ls(screen, cards, opts)
             holders = opts.holders,
             lanes = opts.lanes,
             shows_done = opts.want ~= nil and finished[opts.want],
-            roles = opts.roles,
+            stages = opts.stages,
         })
     else
         body = terminal_flat(
             screen,
             cards,
-            { holders = opts.holders, lanes = opts.lanes, roles = opts.roles }
+            { holders = opts.holders, lanes = opts.lanes, stages = opts.stages }
         )
     end
     for _, line in ipairs(body) do

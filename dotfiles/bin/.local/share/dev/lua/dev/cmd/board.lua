@@ -399,7 +399,7 @@ function commands.ls(backend, args, _, screen)
             lanes = lanes,
             grouped = grouped,
             want = want,
-            roles = backend.roles,
+            stages = backend.roles,
         })
         return { output = table.concat(lines, "\n"), page = true }
     end
@@ -5168,7 +5168,7 @@ function commands.lint(backend, args)
         }
         local rules, why, owned = lint.card(
             card,
-            { roles = backend.roles, facts = facts, strict = strict, required = required }
+            { stages = backend.roles, facts = facts, strict = strict, required = required }
         )
         if not rules then
             return failure(why)
