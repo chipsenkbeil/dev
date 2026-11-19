@@ -654,7 +654,15 @@ local function add_card(backend, args, held)
     end
     local problem = flags["--problem"] and flags["--problem"][1]
     local out_of_scope = flags["--out-of-scope"] and flags["--out-of-scope"][1]
-    local change = flags["--change"] and table.concat(flags["--change"], "\n")
+    local change
+    if flags["--change"] then
+        local lines = {}
+        for i, line in ipairs(flags["--change"]) do
+            local text = line:match("^%s*(.-)%s*$")
+            lines[i] = text:find("^%- ") and text or "- " .. text
+        end
+        change = table.concat(lines, "\n")
+    end
     local source = flags["--source"] and flags["--source"][1]
     local sectioned = problem or change or out_of_scope or source
     if sectioned and flags["--description"] then

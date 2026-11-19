@@ -37,7 +37,7 @@ local LIVE_LEASE = "2999-01-01T00:00:00Z"
 local PROGRESS_NAME = support.COLUMN_NAME.PROGRESS
 local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
-local COMPOSED = "## Problem\nx\n\n## Change\nx\n\n## Out of scope\ny\n"
+local COMPOSED = "## Problem\nx\n\n## Change\n- x\n\n## Out of scope\ny\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
 local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
     .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
@@ -949,6 +949,58 @@ testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD",
     testing.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_A })
     testing.eq(backend.calls[4], { "link", ID_C, "blocked_by", far })
     testing.eq(#backend.calls, 4)
+end)
+
+testing.test("add --change prefixes each line with a dash", function()
+    local backend = fake(sample())
+    cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "first",
+        "--change",
+        "second",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
+    testing.eq(backend.calls[#backend.calls], {
+        "add",
+        "X",
+        support.COLUMN_NAME.BACKLOG,
+        "## Problem\nx\n\n## Change\n- first\n- second\n\n## Out of scope\ny\n",
+        "yellow",
+    })
+end)
+
+testing.test("add --change keeps a line that already starts with a dash", function()
+    local backend = fake(sample())
+    cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "- first",
+        "--change",
+        "second",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
+    testing.eq(backend.calls[#backend.calls], {
+        "add",
+        "X",
+        support.COLUMN_NAME.BACKLOG,
+        "## Problem\nx\n\n## Change\n- first\n- second\n\n## Out of scope\ny\n",
+        "yellow",
+    })
 end)
 
 testing.test("add --size passes the colour its size word names", function()
@@ -2668,7 +2720,10 @@ testing.test(
             "--done-when",
             "a",
         }, backend)
-        testing.eq(backend.calls[2][4], "## Problem\nonly\n\n## Change\nx\n\n## Out of scope\ny\n")
+        testing.eq(
+            backend.calls[2][4],
+            "## Problem\nonly\n\n## Change\n- x\n\n## Out of scope\ny\n"
+        )
     end
 )
 
@@ -2724,7 +2779,7 @@ testing.test("add leaves the Source section out when --source is blank", functio
         "a",
     }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
-    testing.eq(backend.calls[1][4], "## Problem\np\n\n## Change\nc\n\n## Out of scope\nn\n")
+    testing.eq(backend.calls[1][4], "## Problem\np\n\n## Change\n- c\n\n## Out of scope\nn\n")
 end)
 
 testing.test("add refuses a repeated --source by name", function()

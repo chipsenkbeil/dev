@@ -926,7 +926,7 @@ items (exit 2).
 Icebox cards are free-form, so adding to or moving into Icebox is never
 checked. `add` fills the sections from `--problem`, `--change`,
 `--out-of-scope` and `--source`, and `--description` cannot go with them. A
-repeated `--change` adds a line each, and a repeated `--problem`,
+repeated `--change` adds a bullet line each, and a repeated `--problem`,
 `--out-of-scope` or `--source` is refused.
 
 A card needs a checks row to enter Ready too. The checks live in the board's
@@ -2023,7 +2023,7 @@ Progress, Review and Verify columns on this project's board.
   is never required to enter Backlog or Ready.
   The text under it raises no hex id or path warning, as with Change.
 - Each `--change TEXT` (repeatable) is one line of the Change section, in the
-  order given.
+  order given. A line gets a `- ` bullet unless it already starts with `- `.
 - A repeated `--problem`, `--out-of-scope` or `--source` is a usage error
   naming the flag (exit 2) to avoid dropping text silently.
 - A text that already holds one of those headings or the v1 `## Done when` is
