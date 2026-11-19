@@ -540,8 +540,8 @@ them:
 - `stale` never lists their cards.
 - A blocker in one no longer blocks.
 
-The other roles come from a `[board.columns]` table, read with the project file
-over the user file. Each role defaults to its standard name, which
+The other stages come from a `[board.columns]` table, read with the project file
+over the user file. Each stage defaults to its standard name, which
 `dotfiles/bin/.config/dev/config.toml` ships:
 
 ```toml
@@ -556,17 +556,17 @@ release = "Release"
 blocked = "Blocked"
 ```
 
-A project whose board renames a column sets the role to the new name. It may
+A project whose board renames a column sets the stage to the new name. It may
 add `done = "Shipped"` to name the finished column `discard` moves a card to.
 Without it, `discard` uses the first finished column in board order.
 
 A column argument is a column's name in any case, a finished column's name or a
-role word: `icebox`, `backlog`, `ready`, `progress`, `review`, `verify`,
+stage word: `icebox`, `backlog`, `ready`, `progress`, `review`, `verify`,
 `release`, `blocked` or `done`.
 
 `dev board init` lays out the mapped names, with the mapped `done` (else Done)
 marked finished. The rules in this guide say Ready, Blocked and the rest for the
-roles, whatever the board calls them.
+stages, whatever the board calls them.
 
 Every card in every column is fair game for an agent unless it is labelled
 `needs:human`. What each column means, in the order a card travels:
