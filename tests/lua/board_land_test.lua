@@ -712,8 +712,7 @@ if has_jj then
             path = support.board_file(home, "mine"),
             private = true,
         })
-        backend.roles = { icebox = support.COLUMN_NAME.ICEBOX }
-        backend.stages = backend.roles
+        backend.stages = { icebox = support.COLUMN_NAME.ICEBOX }
         return backend,
             function()
                 ffi.C.setenv("XDG_STATE_HOME", previous, 1)

@@ -51,8 +51,7 @@ local function backend_at(home)
         path = support.board_file(home, "mine"),
         private = true,
     })
-    backend.roles = board.roles(nil, {})
-    backend.stages = backend.roles
+    backend.stages = board.stages(nil, {})
     return backend
 end
 
@@ -198,8 +197,8 @@ end)
 
 testing.test("two turn cards made by a race leave one turn on the lowest id", function()
     local backend = backend_at(board_home())
-    local first = assert(backend:add(turn.NAME, backend.roles.icebox, {}))
-    local second = assert(backend:add(turn.NAME, backend.roles.icebox, {}))
+    local first = assert(backend:add(turn.NAME, backend.stages.icebox, {}))
+    local second = assert(backend:add(turn.NAME, backend.stages.icebox, {}))
     local lowest = first.id < second.id and first.id or second.id
     local held = assert(turn.take(backend, "alpha", "aaaa1111"))
     testing.eq(held.card, lowest)
@@ -211,7 +210,7 @@ testing.test("holder and claimed read the lowest turn card, not the cached one",
     local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
     local lower
     repeat
-        lower = assert(backend:add(turn.NAME, backend.roles.icebox, {}))
+        lower = assert(backend:add(turn.NAME, backend.stages.icebox, {}))
     until lower.id < taken.card
     testing.eq(turn.holder(backend), nil)
     testing.eq(turn.claimed(backend, "alpha", "aaaa1111"), nil)

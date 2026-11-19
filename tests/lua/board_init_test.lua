@@ -1267,7 +1267,7 @@ testing.test("init adds a column with the done flag where it belongs", function(
 end)
 
 testing.test("board names the columns init lays out", function()
-    testing.eq(board.roles().list, STANDARD)
+    testing.eq(board.stages().list, STANDARD)
 end)
 
 testing.test("a run that stops while stripping can be repeated without losing a size", function()

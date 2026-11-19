@@ -106,7 +106,6 @@ end
 ---   `stages`
 ---@field stages dev.board.Stages? the column set of this run, which the runner sets before a
 ---   command
----@field roles dev.board.Stages? the temporary alias of `stages`
 ---@field timed boolean? whether the board keeps time entries, false on a local board
 ---@field card fun(self: dev.board.Backend, id: string): dev.board.Card?, string? the card with that
 ---   id, or nil and a message
@@ -695,7 +694,6 @@ end
 
 ---The stages a column map names, in board order.
 M.STAGES = { "icebox", "backlog", "ready", "progress", "review", "verify", "release", "blocked" }
-M.ROLES = M.STAGES
 
 ---The name each stage has when the config map does not rename it.
 M.DEFAULT_NAMES = {
@@ -754,7 +752,6 @@ function M.stages(map, finished)
     }
     return stages
 end
-M.roles = M.stages
 
 ---Point `backend` at a `columns` map, a `root` and its stages.
 ---@param backend dev.board.Backend the backend to retarget
@@ -764,7 +761,6 @@ M.roles = M.stages
 function M.retarget(backend, columns, root, finished)
     backend.column_map = columns
     backend.stages = M.stages(columns, finished)
-    backend.roles = backend.stages
     backend.root = root
 end
 

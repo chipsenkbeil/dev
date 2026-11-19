@@ -48,14 +48,13 @@ local function backend_at(home)
         return clock
     end
 
-    -- The local board with the default roles
+    -- The local board with the default stages
     local backend = localboard.new({
         name = "mine",
         path = support.board_file(home, "mine"),
         private = true,
     })
-    backend.roles = board.roles(nil, {})
-    backend.stages = backend.roles
+    backend.stages = board.stages(nil, {})
     return backend
 end
 

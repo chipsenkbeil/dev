@@ -330,32 +330,32 @@ local function planned()
 end
 
 testing.test("column takes the names and the short forms in any case", function()
-    local roles = board.roles()
-    testing.eq(roles:column(support.Column.READY), support.COLUMN_NAME.READY)
-    testing.eq(roles:column("PROGRESS"), support.COLUMN_NAME.PROGRESS)
-    testing.eq(roles:column(support.Column.REVIEW), support.COLUMN_NAME.REVIEW)
+    local stages = board.stages()
+    testing.eq(stages:column(support.Column.READY), support.COLUMN_NAME.READY)
+    testing.eq(stages:column("PROGRESS"), support.COLUMN_NAME.PROGRESS)
+    testing.eq(stages:column(support.Column.REVIEW), support.COLUMN_NAME.REVIEW)
     for _, short in ipairs({
         support.Column.BLOCKED,
         support.Column.DONE,
         support.Column.BACKLOG,
         support.Column.ICEBOX,
     }) do
-        testing.eq(roles:column(short):lower(), short)
+        testing.eq(stages:column(short):lower(), short)
     end
-    testing.eq(roles:column("doing"), nil)
+    testing.eq(stages:column("doing"), nil)
 end)
 
-testing.test("roles take the mapped names, the role words and the finished columns", function()
-    local roles = board.roles(
+testing.test("stages take the mapped names, the stage words and the finished columns", function()
+    local stages = board.stages(
         { ready = "Next", progress = "Doing", done = "Shipped" },
         { "Old", "Shipped" }
     )
-    testing.eq(roles:column(support.Column.READY), "Next")
-    testing.eq(roles:column("PROGRESS"), "Doing")
-    testing.eq(roles:column("in progress"), nil)
-    testing.eq(roles:column(support.Column.DONE), "Shipped")
-    testing.eq(roles:column("old"), "Old")
-    testing.eq(roles.list, {
+    testing.eq(stages:column(support.Column.READY), "Next")
+    testing.eq(stages:column("PROGRESS"), "Doing")
+    testing.eq(stages:column("in progress"), nil)
+    testing.eq(stages:column(support.Column.DONE), "Shipped")
+    testing.eq(stages:column("old"), "Old")
+    testing.eq(stages.list, {
         support.COLUMN_NAME.ICEBOX,
         support.COLUMN_NAME.BACKLOG,
         "Next",
@@ -366,8 +366,8 @@ testing.test("roles take the mapped names, the role words and the finished colum
         support.COLUMN_NAME.BLOCKED,
         "Shipped",
     })
-    testing.eq(board.roles(nil, { "Old", "Shipped" }):done_column(), "Old")
-    testing.eq(board.roles():done_column(), support.COLUMN_NAME.DONE)
+    testing.eq(board.stages(nil, { "Old", "Shipped" }):done_column(), "Old")
+    testing.eq(board.stages():done_column(), support.COLUMN_NAME.DONE)
 end)
 
 testing.test("a renamed board runs through the column map", function()
