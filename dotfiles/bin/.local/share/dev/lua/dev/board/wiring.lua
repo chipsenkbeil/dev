@@ -370,6 +370,24 @@ end
 ---@field name string the caller's agent name
 ---@field comments {body: string}[] the card's comments, oldest first
 ---@field untaken boolean? true when no turn is held, so the turn's own trunk compare decides
+---@field ignore_change_run string? the reason to land past a failed gerrit change run
+---@field change_run_read boolean? true when the change run was read before the rebase
+
+---Name why a failed gerrit change run of the commit stops the landing.
+---@param root string the project root
+---@param commit string the commit whose run is read
+---@param ignore string? the reason to land past the run
+---@return string? problem the refusal, nil when the landing may go on
+local function failed_change_run(root, commit, ignore)
+    if ignore then
+        return nil
+    end
+    local problem, seen = land.change_run_problem(root, commit)
+    if seen then
+        verb.note(seen)
+    end
+    return problem
+end
 
 ---List what keeps the card from landing under the caller.
 ---@param backend dev.board.Backend the board backend
@@ -481,6 +499,11 @@ local function land_problems(backend, card, who)
             problems[#problems + 1] = moved
         end
     end
+    local unfinished = not who.change_run_read
+        and failed_change_run(backend.root, state.commit, who.ignore_change_run)
+    if unfinished then
+        problems[#problems + 1] = unfinished
+    end
     return problems, state, carried, check_only
 end
 
@@ -536,6 +559,7 @@ end
 ---@field carried string? the commit whose check and reviews carry over
 ---@field check_only boolean? true when only the check carries over
 ---@field companions dev.board.Card[] the other cards that land with it, each read after the rebase
+---@field ignore_change_run string? the reason the failed change run was ignored
 
 ---@class dev.board.wiring.land_prepare.Opts
 ---@field backend dev.board.Backend the board backend
@@ -543,6 +567,7 @@ end
 ---@field companions dev.board.Card[] the other cards the same change carries, empty when none
 ---@field name string the caller's agent name
 ---@field hold dev.board.turn.Turn? a hold the caller already has, stretched for the recheck
+---@field ignore_change_run string? the reason to land past a failed gerrit change run
 
 ---End a landed card's claim, or say that it stays when no local claim holds a fence to send.
 ---@param backend dev.board.Backend the board backend
@@ -647,6 +672,10 @@ local function land_prepare(opts)
     if not state_ok then
         return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
     end
+    local uploaded = failed_change_run(backend.root, state_ok.commit, opts.ignore_change_run)
+    if uploaded then
+        return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. uploaded)
+    end
     local refused, rebased = land_rebase(backend, card, name)
     if refused then
         return refused
@@ -657,8 +686,13 @@ local function land_prepare(opts)
         return failure(message)
     end
     local rebase_note = rebased and "\nThe change was rebased onto trunk." or ""
-    local problems, state, carried, check_only =
-        land_problems(backend, card, { name = name, comments = fresh, untaken = not hold })
+    local problems, state, carried, check_only = land_problems(backend, card, {
+        name = name,
+        comments = fresh,
+        untaken = not hold,
+        ignore_change_run = opts.ignore_change_run,
+        change_run_read = true,
+    })
     if #problems > 0 then
         return failure(
             "Card "
@@ -682,7 +716,13 @@ local function land_prepare(opts)
         if not other_comments then
             return failure(other_message)
         end
-        local who = { name = name, comments = other_comments, untaken = not hold }
+        local who = {
+            name = name,
+            comments = other_comments,
+            untaken = not hold,
+            ignore_change_run = opts.ignore_change_run,
+            change_run_read = true,
+        }
         local other_problems = card_problems(backend, other, who)
         local other_carried, other_check_only
         if #other_problems == 0 then
@@ -740,7 +780,14 @@ local function land_prepare(opts)
             "Card " .. short .. " cannot land for these reasons.\n  - " .. unchecked .. rebase_note
         )
     end
-    return nil, { state = state, carried = carried, check_only = check_only, companions = others }
+    return nil,
+        {
+            state = state,
+            carried = carried,
+            check_only = check_only,
+            companions = others,
+            ignore_change_run = opts.ignore_change_run,
+        }
 end
 
 ---@class dev.board.wiring.land_held.Opts
@@ -862,6 +909,7 @@ local function land_held(opts)
             land.short(carried)
         )
     end
+    text = land.ignored_run_note(text, opts.prepared.ignore_change_run)
     local deploys = config.get(backend.root, "board.land.deploys") == true
     local deployed = config.get(backend.root, "board.land.deployed")
     if deploys and type(deployed) == "table" and #deployed > 0 then

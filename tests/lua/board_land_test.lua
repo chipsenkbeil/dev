@@ -57,6 +57,9 @@ for word in "$@"; do
         if [ -n "$FETCH_LOG" ]; then
             echo fetch >>"$FETCH_LOG"
         fi
+        if [ -n "$FETCH_SKIP" ]; then
+            exit 0
+        fi
         if [ -n "$FETCH_REFUSALS" ]; then
             count=$(cat "$FETCH_COUNT" 2>/dev/null || echo 0)
             if [ "$count" -lt "$FETCH_REFUSALS" ]; then
@@ -880,6 +883,90 @@ if has_jj then
             testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
+
+    local CI_STUB = [[#!/bin/sh
+dir=$(dirname "$0")
+case "$*" in
+*"ps -a"*) cat "$dir/runs.json" ;;
+*) echo '{"jobs":[{"job":"test:windows:1","state":"failed"}]}' ;;
+esac
+]]
+
+    local function gerrit_project()
+        local project = jj_project()
+        jj(project.root, "git", "remote", "add", "gerrit", "ssh://c@g:29418/dotfiles")
+        local id = verified_card(project)
+        local commit = head(project.root)
+        local stubs = support.tempdir()
+        assert(fs.write(stubs .. "/ci", CI_STUB), "write failed")
+        must(dev_os.run({ "chmod", "755", stubs .. "/ci" }))
+        assert(
+            fs.write(
+                stubs .. "/runs.json",
+                '{"runs":[{"run":"r9","source":"pushed@'
+                    .. commit:sub(1, 12)
+                    .. '","status":"failed","created_at":5}]}'
+            ),
+            "write failed"
+        )
+        project.env = {
+            FETCH_SKIP = "1",
+            PATH = stubs .. ":" .. project.root .. "/bin:" .. os.getenv("PATH"),
+        }
+        return project, id, commit
+    end
+
+    testing.test("land refuses a card whose gerrit change run failed and names the run", function()
+        local project, id, commit = gerrit_project()
+        trunk_moves(project, { ["moved.txt"] = "moved\n" })
+        local wanted = {
+            "The change run r9 of commit " .. commit:sub(1, 12) .. " failed in test:windows:1",
+            "--ignore-change-run REASON",
+        }
+        refused(project, id, wanted, project.env)
+        testing.eq(head(project.root), commit)
+        refused(project, id, wanted, project.env)
+        testing.eq(head(project.root), commit)
+    end)
+
+    local function lands_with_reason(argv)
+        local project, id = gerrit_project()
+        local words = {}
+        for _, word in ipairs(argv(id)) do
+            words[#words + 1] = word
+        end
+        words[#words + 1] = "--ignore-change-run"
+        words[#words + 1] = "windows runner is down"
+        local out, code = dev(
+            project,
+            words,
+            { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_SKIP = "1", PATH = project.env.PATH }
+        )
+        testing.eq(code, 0, out)
+        local list = comments(project.home)
+        local last = list[#list]
+        testing.eq(last.kind, KIND_DONE)
+        testing.ok(
+            last.body:find("The change run check was skipped: windows runner is down.", 1, true),
+            last.body
+        )
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+    end
+
+    testing.test(
+        "board land with --ignore-change-run lands and puts the reason in the done note",
+        function()
+            lands_with_reason(function(id)
+                return { "board", "land", id }
+            end)
+        end
+    )
+
+    testing.test("dev land passes --ignore-change-run on to the board land", function()
+        lands_with_reason(function(id)
+            return { "land", "--card", id }
+        end)
+    end)
 
     local function second_card(project)
         local out = dev(project, {

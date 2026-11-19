@@ -83,8 +83,8 @@ return {
     {
         words = { "land" },
         handler = "lua",
-        flags = "--card --wait",
-        usage = "dev land [--card CARD] [--wait SECONDS]",
+        flags = "--card --wait --ignore-change-run",
+        usage = "dev land [--card CARD] [--wait SECONDS] [--ignore-change-run REASON]",
         desc = "Land the workspace's card, or its change with no board",
         group = "Share it",
     },
@@ -530,8 +530,8 @@ return {
     {
         words = { "board", "land" },
         handler = "lua",
-        flags = "--wait",
-        usage = "dev board land CARD [CARD...] [--wait SECONDS]",
+        flags = "--wait --ignore-change-run",
+        usage = "dev board land CARD [CARD...] [--wait SECONDS] [--ignore-change-run REASON]",
         desc = "Land a card's change on trunk under the landing turn",
     },
     {

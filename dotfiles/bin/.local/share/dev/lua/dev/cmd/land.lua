@@ -8,6 +8,7 @@ local verb = require("dev.verb")
 
 local CARD_FLAG = "--card"
 local WAIT_FLAG = "--wait"
+local IGNORE_CHANGE_RUN_FLAG = "--ignore-change-run"
 
 ---@class dev.cmd.land
 local M = {}
@@ -17,7 +18,7 @@ local function parse(ctx)
     local i = 1
     while i <= #ctx.args do
         local word = ctx.args[i]
-        if word ~= CARD_FLAG and word ~= WAIT_FLAG then
+        if word ~= CARD_FLAG and word ~= WAIT_FLAG and word ~= IGNORE_CHANGE_RUN_FLAG then
             verb.usage_error(ctx, "Unknown argument " .. word .. ".")
         end
         local value = ctx.args[i + 1]
@@ -31,10 +32,16 @@ local function parse(ctx)
 end
 
 local function land_plain(ctx, workspace, flags)
-    if flags[CARD_FLAG] or flags[WAIT_FLAG] then
+    if flags[CARD_FLAG] or flags[WAIT_FLAG] or flags[IGNORE_CHANGE_RUN_FLAG] then
         verb.usage_error(
             ctx,
-            "The " .. CARD_FLAG .. " and " .. WAIT_FLAG .. " flags need a project with a board."
+            "The "
+                .. CARD_FLAG
+                .. ", "
+                .. WAIT_FLAG
+                .. " and "
+                .. IGNORE_CHANGE_RUN_FLAG
+                .. " flags need a project with a board."
         )
     end
     local _, problem = workspace:rebase()
@@ -78,7 +85,7 @@ function M.run(ctx)
         verb.note(bad and bad.message or "Needs DEV_AGENT, the name that lands the card.")
         return 1
     end
-    local problem = card:land_problem()
+    local problem = card:land_problem(flags[IGNORE_CHANGE_RUN_FLAG])
     if problem then
         verb.note("Card " .. card.card.id:sub(1, board.MIN_PREFIX) .. " cannot land. " .. problem)
         return 1
@@ -92,6 +99,10 @@ function M.run(ctx)
     if flags[WAIT_FLAG] then
         landing.args[#landing.args + 1] = WAIT_FLAG
         landing.args[#landing.args + 1] = flags[WAIT_FLAG]
+    end
+    if flags[IGNORE_CHANGE_RUN_FLAG] then
+        landing.args[#landing.args + 1] = IGNORE_CHANGE_RUN_FLAG
+        landing.args[#landing.args + 1] = flags[IGNORE_CHANGE_RUN_FLAG]
     end
     return cmd_board.handlers["board land"](landing)
 end

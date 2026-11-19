@@ -42,7 +42,7 @@ end
 ---@return string? port the ssh port, 22 when the URL has none
 ---@return string? host the host, with its user
 ---@return string? project the project name
-local function parse_url(url)
+function M.parse_url(url)
     local authority, project = url:match("^ssh://([^/]+)/(.*)$")
     if not authority then
         return nil
@@ -103,7 +103,7 @@ function M.run(ctx)
         verb.die("The forge is " .. found.kind .. ", and only a gerrit change can be abandoned.")
     end
     local url = vcs.config(ctx.root, backend, "remote." .. found.remote .. ".url")
-    local port, host, project = parse_url(url)
+    local port, host, project = M.parse_url(url)
     if not port then
         verb.die(
             "The remote "

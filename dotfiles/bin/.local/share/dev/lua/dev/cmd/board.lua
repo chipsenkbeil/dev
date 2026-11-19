@@ -129,6 +129,7 @@ local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local SEAT_HELD_CODE = "seat_held"
 local WAIT_FLAG = "--wait"
+local IGNORE_CHANGE_RUN_FLAG = "--ignore-change-run"
 local SET_FLAG = "--set"
 local CLEARS_BLOCKERS_FLAG = "--clears-blockers"
 local BLOCKED_FLAG = "--blocked"
@@ -3499,7 +3500,7 @@ local function companion_cards(opts)
 end
 
 function commands.land(backend, args)
-    local flags, words = parse(args, { [WAIT_FLAG] = true })
+    local flags, words = parse(args, { [WAIT_FLAG] = true, [IGNORE_CHANGE_RUN_FLAG] = true })
     if not flags then
         return words
     end
@@ -3509,6 +3510,10 @@ function commands.land(backend, args)
     local wait, bad_wait = wait_seconds(flags)
     if not wait then
         return bad_wait
+    end
+    local ignore = flags[IGNORE_CHANGE_RUN_FLAG]
+    if ignore and not ignore:find("%S") then
+        return usage("The " .. IGNORE_CHANGE_RUN_FLAG .. " flag needs a reason.")
     end
     local name, why = agent_name()
     if why then
@@ -3555,7 +3560,11 @@ function commands.land(backend, args)
     end
     local early = wiring.card_problems(backend, card, { name = name, comments = list })
     if #early > 0 then
-        local all = wiring.land_problems(backend, card, { name = name, comments = list })
+        local all = wiring.land_problems(
+            backend,
+            card,
+            { name = name, comments = list, ignore_change_run = ignore }
+        )
         local kept = turn.held(backend, name, short)
         return failure(
             "Card "
@@ -3623,6 +3632,7 @@ function commands.land(backend, args)
             companions = companions,
             name = name,
             hold = held_early,
+            ignore_change_run = ignore,
         })
         if refused then
             if held_early and refused.code and not refused.lost then

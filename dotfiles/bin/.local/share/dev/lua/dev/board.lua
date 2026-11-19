@@ -1549,8 +1549,9 @@ end
 ---The reasons are its column, its claimant, its open outcomes, its check, its reviews and the files
 ---its commit touches. The agent is the one `DEV_AGENT` names, and a moved trunk is no reason, since
 ---landing rebases.
+---@param ignore_change_run string? the reason to land past a failed gerrit change run
 ---@return string? problem every reason in one text, nil when the card may land
-function CardHandle:land_problem()
+function CardHandle:land_problem(ignore_change_run)
     local backend = self.board.backend
     local comments, message = backend:comments(self.card.id)
     if not comments then
@@ -1560,6 +1561,7 @@ function CardHandle:land_problem()
         name = os.getenv("DEV_AGENT") or "",
         comments = comments,
         untaken = true,
+        ignore_change_run = ignore_change_run,
     })
     if #problems == 0 then
         return nil

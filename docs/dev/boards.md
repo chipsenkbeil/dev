@@ -2968,14 +2968,15 @@ The result:
 
 ### land
 
-`dev land [--card CARD] [--wait SECONDS]` is the one land verb, and runners use
-nothing else. Run in the workspace `dev ws new` made, it reads the card id from
-the workspace's directory name and hands the card to `dev board land`, which
-does the landing below. A workspace whose name is no card on the board is
-refused and nothing lands. In a project with no board it rebases the change
-onto trunk and lands it, with none of the board steps. A project's
-`.dev/land.lua` replaces `dev land` whole, as any `.dev` script replaces a
-built-in, and owns its own turn, `done` note and move.
+`dev land [--card CARD] [--wait SECONDS] [--ignore-change-run REASON]` is the
+one land verb, and runners use nothing else. Run in the workspace
+`dev ws new` made, it reads the card id from the workspace's directory name
+and hands the card to `dev board land`, which does the landing below. A
+workspace whose name is no card on the board is refused and nothing lands. In
+a project with no board it rebases the change onto trunk and lands it, with
+none of the board steps. A project's `.dev/land.lua` replaces `dev land`
+whole, as any `.dev` script replaces a built-in, and owns its own turn, `done`
+note and move.
 
 An override that rebases before it pushes changes the commit id, so the
 guard on its move into Release or Done finds no check or review record at
@@ -2991,8 +2992,8 @@ passes it to `move_to_release` or `move_to_done`. The guard is unchanged, so
 a commit whose patch differs from the checked one still gets no record and
 the move is refused.
 
-`dev board land CARD [CARD...] [--wait SECONDS]` takes the landing turn and
-lands the card's change on trunk.
+`dev board land CARD [CARD...] [--wait SECONDS] [--ignore-change-run REASON]`
+takes the landing turn and lands the card's change on trunk.
 
 When one change carries several cards, name them all. The first names the
 workspace and runs the landing, and each other card is held to the same rules:
@@ -3075,6 +3076,14 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   functions that `.dev/baked.txt` lists. The refusal says to land the dev change
   first, have infra rebake the ci images, then land the template change with
   the entries added.
+- In a Gerrit project the ci change run of the landing commit has not failed.
+  `land` reads `ci ps -a --json --repo PROJECT`, with PROJECT the name in the
+  remote's `ssh://host/project` URL, and takes the newest run whose source
+  ends in the commit's first 12 digits. A failed run refuses and names the run
+  and its failed jobs from `ci ps RUN --json`. A run still going, a passed
+  run or none at all passes, and a line says which was seen, so `land` never
+  waits. `--ignore-change-run REASON` skips the check and writes the reason in
+  the `done` note. Other forges skip it.
 - A `code` and a `style` review of the working-copy change are recorded. A
   review of an earlier commit of the change counts when `jj interdiff` between
   that commit and the landing one is empty, so a clean rebase keeps its reviews

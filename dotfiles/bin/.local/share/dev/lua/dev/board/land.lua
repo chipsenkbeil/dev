@@ -1,7 +1,9 @@
+local abandon = require("dev.cmd.abandon")
 local check = require("dev.board.check")
 local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
+local json = require("dev.json")
 local dev_remote = require("dev.remote")
 local push = require("dev.cmd.push")
 local review = require("dev.board.review")
@@ -18,6 +20,7 @@ local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local TRUNK_REVSET = "trunk()"
 local BARE_LINK = 'empty() & description(exact:"") & ~merges()'
 local COMMIT_CHARS = 12
+local RUN_HISTORY = "1000"
 local FETCH_SECONDS = 120
 local FETCH_ATTEMPTS = 2
 local FETCH_TIMEOUT_CODE = 124
@@ -509,6 +512,108 @@ function M.trunk_problem(root)
         return "Trunk has moved since the change was built. "
             .. "Rebase it onto `trunk()`, then record the reviews and run `dev board check` again."
     end
+end
+
+local function ci_ps(root, ...)
+    local argv = { "ci", "-C", root, "ps", ... }
+    argv[#argv + 1] = "--json"
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    local doc = code == 0 and json.decode(out)
+    return type(doc) == "table" and doc or nil
+end
+
+local function started_at(run)
+    if type(run.created_at) == "number" then
+        return run.created_at
+    end
+    return 0
+end
+
+local function newest_run(runs, digits)
+    local newest
+    for _, run in ipairs(runs) do
+        local source = type(run) == "table" and run.source
+        if type(source) == "string" and source:sub(-COMMIT_CHARS) == digits then
+            if not newest or started_at(run) > started_at(newest) then
+                newest = run
+            end
+        end
+    end
+    return newest
+end
+
+local function failed_jobs(root, run)
+    local doc = ci_ps(root, run)
+    local names = {}
+    for _, job in ipairs(doc and type(doc.jobs) == "table" and doc.jobs or {}) do
+        if type(job) == "table" and job.state == "failed" and type(job.job) == "string" then
+            names[#names + 1] = job.job
+        end
+    end
+    return names
+end
+
+---Say whether the gerrit change run of the commit failed.
+---
+---Outside gerrit it finds nothing to refuse. A run still going or none at all never refuses a
+---landing, and the second value says which was seen.
+---@param root string the project root
+---@param commit string the commit to land
+---@return string? problem the refusal, nil when the run did not fail or none was found
+---@return string? seen the line that says what was found instead, nil outside gerrit
+function M.change_run_problem(root, commit)
+    local found = forge.resolve(root)
+    if not found or found.kind ~= forge.Kind.GERRIT then
+        return nil
+    end
+    local backend = vcs.backend(root)
+    local url = backend and vcs.config(root, backend, "remote." .. found.remote .. ".url") or ""
+    local _, _, project = abandon.parse_url(url)
+    if not project then
+        return nil,
+            "No change run was looked up. The remote "
+                .. found.remote
+                .. " is not ssh://host/project."
+    end
+    local doc = ci_ps(root, "-a", "--repo", project, "-n", RUN_HISTORY)
+    if not doc or type(doc.runs) ~= "table" then
+        return nil, "No change run was looked up. `ci ps -a` failed."
+    end
+    local digits = commit:sub(1, COMMIT_CHARS)
+    local newest = newest_run(doc.runs, digits)
+    if not newest then
+        return nil, "No change run of commit " .. digits .. " was found, so nothing was waited on."
+    end
+    if newest.status ~= "failed" then
+        return nil,
+            string.format(
+                "The change run %s of commit %s is %s, so it does not stop the landing.",
+                newest.run,
+                digits,
+                tostring(newest.status)
+            )
+    end
+    local jobs = failed_jobs(root, newest.run)
+    return string.format(
+        "The change run %s of commit %s failed%s. Read it with `ci logs %s`, fix it and upload "
+            .. "again, or land with `--ignore-change-run REASON`.",
+        newest.run,
+        digits,
+        #jobs > 0 and (" in " .. table.concat(jobs, ", ")) or "",
+        newest.run
+    )
+end
+
+---Add the reason a failed change run was ignored to a done note.
+---@param note string the done note
+---@param ignore string? the reason given with `--ignore-change-run`
+---@return string note the note, with the reason when one was given
+function M.ignored_run_note(note, ignore)
+    if not ignore then
+        return note
+    end
+    local reason = ignore:gsub("%.$", "")
+    return string.format("%s The change run check was skipped: %s.", note, reason)
 end
 
 local function git_rebase(root, remote)
