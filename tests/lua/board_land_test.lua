@@ -484,21 +484,35 @@ local function new_card(project)
     return id
 end
 
+local function record_review(project, id, opts)
+    opts = opts or {}
+    local kind = opts.kind or "code"
+    local by = opts.by or "rev"
+    local args = {
+        "board",
+        "review",
+        id,
+        "--kind",
+        kind,
+        "--by",
+        by,
+        "--rev",
+        opts.rev or "@",
+        "--verdict",
+        opts.verdict or "clean",
+    }
+    if opts.of then
+        args[#args + 1] = "--of"
+        args[#args + 1] = opts.of
+    else
+        support.with_of(kind, args)
+    end
+    return (opts.run or dev)(project, args, { DEV_AGENT = opts.env or by })
+end
+
 local function approve_reviews(project, id)
     for _, kind in ipairs({ "code", "style" }) do
-        must(dev(project, {
-            "board",
-            "review",
-            id,
-            "--kind",
-            kind,
-            "--by",
-            "rev",
-            "--rev",
-            "@",
-            "--verdict",
-            "clean",
-        }, { DEV_AGENT = "rev" }))
+        must(record_review(project, id, { kind = kind }))
     end
 end
 
@@ -1091,19 +1105,7 @@ if has_jj then
             local project = jj_project()
             local id = verified_card(project)
             local function judge(by, verdict)
-                must(dev(project, {
-                    "board",
-                    "review",
-                    id,
-                    "--kind",
-                    "code",
-                    "--by",
-                    by,
-                    "--rev",
-                    "@",
-                    "--verdict",
-                    verdict,
-                }, { DEV_AGENT = by }))
+                must(record_review(project, id, { by = by, verdict = verdict }))
             end
             judge("picky", "needs-work")
             refused(project, id, { "code review by picky", "needs-work" })
@@ -1169,23 +1171,7 @@ if has_jj then
         must(dev(project, { "board", "take", id, "--as", "dotfiles/builder" }))
         local before = #comments(project.home, id)
         for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local out, code = dev(
-                project,
-                support.with_of(kind, {
-                    "board",
-                    "review",
-                    id,
-                    "--kind",
-                    kind,
-                    "--by",
-                    "dotfiles/builder",
-                    "--rev",
-                    "@",
-                    "--verdict",
-                    "clean",
-                }),
-                { DEV_AGENT = "dotfiles/builder" }
-            )
+            local out, code = record_review(project, id, { kind = kind, by = "dotfiles/builder" })
             testing.eq(code, 1, out)
             testing.ok(
                 out:find("A reviewer other than dotfiles/builder must record it", 1, true),
@@ -1193,40 +1179,12 @@ if has_jj then
             )
         end
         for _, kind in ipairs({ "code", "style", "recheck" }) do
-            local out, code = dev(
-                project,
-                support.with_of(kind, {
-                    "board",
-                    "review",
-                    id,
-                    "--kind",
-                    kind,
-                    "--by",
-                    "rev",
-                    "--rev",
-                    "@",
-                    "--verdict",
-                    "clean",
-                }),
-                { DEV_AGENT = "dotfiles/builder" }
-            )
+            local out, code = record_review(project, id, { kind = kind, env = "dotfiles/builder" })
             testing.eq(code, 1, out)
             testing.ok(out:find("dotfiles/builder cannot record a review by rev", 1, true), out)
         end
         testing.eq(#comments(project.home, id), before)
-        must(dev(project, {
-            "board",
-            "review",
-            id,
-            "--kind",
-            "code",
-            "--by",
-            "rev",
-            "--rev",
-            "@",
-            "--verdict",
-            "clean",
-        }, { DEV_AGENT = "rev" }))
+        must(record_review(project, id))
         local list = comments(project.home, id)
         testing.eq(#list, before + 1)
         testing.ok(list[#list].body:find("dev-review: kind=code by=rev", 1, true), list[#list].body)
@@ -1274,21 +1232,7 @@ if has_jj then
         must(dev(project, { "board", "check", id }))
         refused(project, id, { "earlier commit than", "dev board review --kind recheck" })
         for _, of in ipairs({ "code", "style" }) do
-            must(dev(project, {
-                "board",
-                "review",
-                id,
-                "--kind",
-                "recheck",
-                "--of",
-                of,
-                "--by",
-                "rev",
-                "--rev",
-                "@",
-                "--verdict",
-                "clean",
-            }, { DEV_AGENT = "rev" }))
+            must(record_review(project, id, { kind = "recheck", of = of }))
             local out, code = dev(project, { "board", "land", id })
             testing.eq(code == 0, of == "style", out)
         end
@@ -2537,19 +2481,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             rebase_onto_trunk(project.root)
             local id = new_card(project)
             to_verify(project, id)
-            must(dev(project, {
-                "board",
-                "review",
-                id,
-                "--kind",
-                "code",
-                "--by",
-                "rev",
-                "--rev",
-                "@",
-                "--verdict",
-                "clean",
-            }, { DEV_AGENT = "rev" }))
+            must(record_review(project, id))
             must(dev(project, { "board", "check", id }))
             local at_check = head(project.root)
             must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
@@ -3196,19 +3128,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         must(dev(project, { "board", "move", id, support.Column.PROGRESS }, builder))
         local short = shortened_claim(project, id)
         local fence = claim_of(project.home, id).fence
-        local out, code = dev(project, {
-            "board",
-            "review",
-            id,
-            "--kind",
-            "code",
-            "--by",
-            "dotfiles/code-examiner/x",
-            "--rev",
-            "@",
-            "--verdict",
-            "clean",
-        }, { DEV_AGENT = "dotfiles/code-examiner/x" })
+        local out, code = record_review(project, id, { by = "dotfiles/code-examiner/x" })
         testing.eq(code, 0, out)
         local claim = claim_of(project.home, id)
         testing.eq(claim.fence, fence)
@@ -3570,19 +3490,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     testing.test("a needs-work review of the same patch still refuses", function()
         local project = jj_project()
         local id = review_ready(project)
-        must(dev(project, {
-            "board",
-            "review",
-            id,
-            "--kind",
-            "code",
-            "--by",
-            "rev2",
-            "--rev",
-            "@",
-            "--verdict",
-            "needs-work",
-        }, { DEV_AGENT = "rev2" }))
+        must(record_review(project, id, { by = "rev2", verdict = "needs-work" }))
         trunk_moves(project, { ["lib/extra.txt"] = "extra\n" })
         rebased_and_checked(project, id)
         refused(project, id, { "The code review by rev2", "says needs-work" })
@@ -3845,19 +3753,7 @@ local function git_approve(project)
     end, id))
     must(git_dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
     for _, kind in ipairs({ "code", "style" }) do
-        must(git_dev(project, {
-            "board",
-            "review",
-            id,
-            "--kind",
-            kind,
-            "--by",
-            "rev",
-            "--rev",
-            "HEAD",
-            "--verdict",
-            "clean",
-        }, { DEV_AGENT = "rev" }))
+        must(record_review(project, id, { kind = kind, rev = "HEAD", run = git_dev }))
     end
     must(git_dev(project, { "board", "check", id }))
     must(git_dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
