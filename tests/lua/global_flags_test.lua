@@ -52,7 +52,10 @@ end)
 
 testing.test("the Lua dispatcher parses each bare flag the registry lists", function()
     local text = source(DEV_DIR .. "/lua/dev/cli.lua")
-    local bare = without(registry.GLOBAL_FLAGS, { ["-v"] = true, ["-vv"] = true, ["-C"] = true })
+    local bare = without(
+        registry.GLOBAL_FLAGS,
+        { ["-v"] = true, ["-vv"] = true, ["--verbose"] = true, ["-C"] = true }
+    )
     bare = without(bare, { ["--agent"] = true })
     testing.eq(missing(text, wrapped(bare, 'word == "', '"')), {})
 end)
