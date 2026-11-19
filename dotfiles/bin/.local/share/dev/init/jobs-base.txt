@@ -6,18 +6,18 @@
 local LINUX = { target = "linux-x86-dev" }
 
 return {
-  jobs = {
-    lint = {
-      matrix = { LINUX },
-      run = function()
-        ci.sh("if [ -f .dev/lint.lua ]; then dev lint </dev/null; fi")
-      end,
+    jobs = {
+        lint = {
+            matrix = { LINUX },
+            run = function()
+                ci.sh("if [ -f .dev/lint.lua ]; then dev lint </dev/null; fi")
+            end,
+        },
+        test = {
+            matrix = { LINUX },
+            run = function()
+                ci.sh("if [ -f .dev/test.lua ]; then dev test </dev/null; fi")
+            end,
+        },
     },
-    test = {
-      matrix = { LINUX },
-      run = function()
-        ci.sh("if [ -f .dev/test.lua ]; then dev test </dev/null; fi")
-      end,
-    },
-  },
 }
