@@ -4324,3 +4324,30 @@ testing.test("land.git.worktree.keeps.one.beside.a.prunable sibling and says why
         .. ", which git marks prunable. Run git worktree prune first."
     testing.ok(out:find("Kept the workspace. " .. reason, 1, true), out)
 end)
+
+testing.test("land.template.drift names drift the commit does not touch", function()
+    local output = table.concat({
+        "lint failed",
+        "differs: .dev/lint.lua",
+        "  missing: .dev/lintset.lua",
+        "differs: mine.lua",
+        "",
+    }, "\n")
+    local advice = land.template_drift(output, { "mine.lua" })
+    testing.ok(advice:find(".dev/lint.lua, .dev/lintset.lua", 1, true), advice)
+    testing.ok(advice:find("run `dev sync`", 1, true), advice)
+    testing.eq(advice:find("mine.lua", 1, true), nil, advice)
+end)
+
+testing.test("land.template.drift says nothing when the commit caused the drift", function()
+    testing.eq(land.template_drift("differs: a.lua\n", { "a.lua" }), nil)
+    testing.eq(land.template_drift("push rejected\n", {}), nil)
+end)
+
+testing.test("land.template.drift matches the path before a sync line's suffix", function()
+    local readme = 'differs: .dev/README.md above "marker"\n'
+    testing.eq(land.template_drift(readme, { ".dev/README.md" }), nil)
+    local advice = land.template_drift(readme .. "differs: [workspace.lints] block in x\n", {})
+    testing.ok(advice:find(".dev/README.md, [workspace.lints]", 1, true), advice)
+    testing.eq(advice:find("above", 1, true), nil, advice)
+end)

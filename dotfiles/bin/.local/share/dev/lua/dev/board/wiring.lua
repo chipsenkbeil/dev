@@ -805,6 +805,9 @@ local function land_held(opts)
     local in_git = vcs.backend(backend.root) == vcs.GIT
     local landed, output = scm.workspace(backend.root):merge_into_trunk()
     if not landed then
+        local text = output:gsub("\n$", "")
+        local touched = land.touched(backend.root, state.commit)
+        local drift = touched and land.template_drift(text, touched)
         return failure(
             "Card "
                 .. short
@@ -813,7 +816,8 @@ local function land_held(opts)
                 .. ". `"
                 .. (in_git and "git push" or "jj land")
                 .. "` failed with this output.\n"
-                .. output:gsub("\n$", "")
+                .. text
+                .. (drift and ("\n" .. drift) or "")
         )
     end
     local on_trunk = land.trunk_commit(backend.root, state.change)

@@ -1563,6 +1563,37 @@ local function git_run(root)
     return code == 0, out
 end
 
+---Name the sync drift a failed land printed that the landing commit did not cause.
+---
+---`dev sync --check` prints `differs: PATH` or `missing: PATH` for each drifted file. A path the
+---commit does not touch drifted because a dotfiles template changed, so the advice says to sync.
+---@param output string what the failed land printed
+---@param touched string[] the paths the landing commit touches
+---@return string? advice the sentence to append, nil when no printed drift is the template's
+function M.template_drift(output, touched)
+    local mine = {}
+    for _, path in ipairs(touched) do
+        mine[path] = true
+    end
+    local found = {}
+    for line in output:gmatch("[^\n]+") do
+        local path = line:match("^%s*differs: (%S+)") or line:match("^%s*missing: (%S+)")
+        if path and not mine[path] then
+            found[#found + 1] = path
+        end
+    end
+    if #found == 0 then
+        return nil
+    end
+    table.sort(found)
+    return string.format(
+        "This drift is not from the card, which does not touch %s. "
+            .. "A dotfiles template changed, so run `dev sync`, land that as its own card, "
+            .. "and land this card again.",
+        table.concat(found, ", ")
+    )
+end
+
 ---Land the working-copy change with `jj land`, or push the HEAD commit to trunk in git.
 ---@param root string the project root
 ---@return boolean ok true when the land exited 0
