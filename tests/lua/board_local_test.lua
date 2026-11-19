@@ -4166,6 +4166,44 @@ testing.test("epic_local_next", function()
     testing.eq(card_named(document(file_of(home)), "Epic").claim.claimant, "r/one")
 end)
 
+testing.test("next skips an epic whose child is in progress", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            Column.READY,
+            "--size",
+            "1",
+            "--description",
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--checks",
+            "dev test",
+        })))
+    end
+    local epic, child = add("Epic"), add("Child")
+    dev(root, home, { "board", "epic", epic })
+    dev(root, home, { "board", "link", child, "parent", epic })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", child, Column.PROGRESS },
+        { DEV_AGENT = "r/one" }
+    )
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.ok(not out:find(epic, 1, true) and not out:find(child, 1, true), out)
+end)
+
 testing.test("a local board has no blocked setting", function()
     local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
     local out, code = dev(root, home, { "board", "init" })
