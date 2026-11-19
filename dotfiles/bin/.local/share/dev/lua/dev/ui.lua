@@ -412,8 +412,17 @@ local function launched_pid(dir, opts)
     end
 end
 
+---Run a command and raise the interrupt when a signal killed it, which `run` reports as a status.
+local function run_unless_killed(argv)
+    local code = dev_os.run(argv)
+    if code and code > dev_os.SIGNAL_EXIT_BASE then
+        error("interrupted!", 0)
+    end
+    return code
+end
+
 local function stop_job(pid)
-    dev_os.run({ "sh", "-c", STOP, "sh", tostring(pid) })
+    run_unless_killed({ "sh", "-c", STOP, "sh", tostring(pid) })
 end
 
 local function finished_code(rc_path)
@@ -464,17 +473,58 @@ local function watch(job)
     end
 end
 
-local function make_workdir(ctx)
+local function make_workdir(ctx, claim)
     local base = (ctx.getenv("TMPDIR") or ""):gsub("/+$", "")
     if base == "" then
         base = "/tmp"
     end
-    local dir, made = dev_os.capture({ "mktemp", "-d", base .. "/dev-spin.XXXXXX" })
+    local dir, named = dev_os.capture({ "mktemp", "-u", base .. "/dev-spin.XXXXXX" })
     dir = dir:gsub("\n$", "")
-    if made ~= 0 or dir == "" then
+    if named ~= 0 or dir == "" then
         error("spin could not create a temp directory", 0)
     end
-    return dir
+    claim(dir)
+    local made = dev_os.run({ "mkdir", "-m", "700", "--", dir })
+    if made and made > dev_os.SIGNAL_EXIT_BASE then
+        error("interrupted!", 0)
+    end
+    if made ~= 0 then
+        claim(nil)
+        error("spin could not create a temp directory", 0)
+    end
+end
+
+local CLEANUP_TRIES = 3
+
+local function attempt(fn, ...)
+    for _ = 1, CLEANUP_TRIES do
+        local ok, result = pcall(fn, ...)
+        if ok then
+            return result
+        end
+    end
+end
+
+---@class dev.ui.release.Opts
+---@field pid integer? process group leader of the job, when the launcher printed it
+---@field stopping boolean whether the job has to be stopped
+---@field waiting boolean whether to wait for a launcher that may not have written its pid yet
+
+local function release(dir, opts)
+    local pid = opts.pid
+    if opts.stopping then
+        pid = pid or attempt(launched_pid, dir, { wait = opts.waiting })
+        if pid then
+            attempt(stop_job, pid)
+        end
+    end
+    attempt(run_unless_killed, { "rm", "-rf", "--", dir })
+end
+
+local function was_interrupted(reason)
+    reason = tostring(reason)
+    return reason:find("interrupted!", 1, true) ~= nil
+        or reason:find("capture lost the exit status", 1, true) ~= nil
 end
 
 local function report(err, label, code, captured)
@@ -514,16 +564,20 @@ function M.spin(ctx, label, argv, opts)
         return dev_os.run(argv)
     end
     local err = ctx:stderr()
-    local dir, pid, exited
+    local dir, pid, exited, launching, failed
     stderr:write(HIDE_CURSOR)
     local ok, code = pcall(function()
-        dir = make_workdir(ctx)
+        make_workdir(ctx, function(made)
+            dir = made
+        end)
         local launched
+        launching = true
         pid, launched, exited = start_job(argv, dir, capture and '2>"$dir/err"' or "2>&1")
         if launched == INTERRUPTED then
             return INTERRUPTED
         end
         if launched ~= 0 or not pid then
+            failed = true
             return 1
         end
         return watch({ err = err, label = label, pid = pid, rc_path = dir .. "/rc" })
@@ -533,15 +587,11 @@ function M.spin(ctx, label, argv, opts)
     if dir then
         captured = read_all(dir .. (capture and "/err" or "/out"))
         output = capture and read_all(dir .. "/out") or ""
-        local stopping = not ok or code == INTERRUPTED
-        pid = pid or launched_pid(dir, { wait = stopping and not exited })
-        if pid and stopping then
-            stop_job(pid)
-        end
-        dev_os.run({ "rm", "-rf", "--", dir })
+        local stopping = not ok or code == INTERRUPTED or failed == true
+        release(dir, { pid = pid, stopping = stopping, waiting = launching and not exited })
     end
     if not ok then
-        if tostring(code):find("interrupted!", 1, true) then
+        if was_interrupted(code) then
             return INTERRUPTED, ""
         end
         error(code, 0)
