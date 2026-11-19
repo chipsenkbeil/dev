@@ -163,6 +163,15 @@ testing.test("files rg fallback matches a literal name, a dot and a question mar
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("an unreadable file fails the comment checks instead of reading as empty", function()
+    local root = support.tempdir()
+    local lint = lint_for(root)
+    lint:comment_spacing("gone.lua", "--")
+    lint:comment_runs("gone.lua", "--")
+    testing.eq(lint.failed, { "comment spacing", "comment runs" })
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("finish names the failed checks and returns 1", function()
     local lint = lint_for("/")
     testing.eq(lint:finish(), 0)
