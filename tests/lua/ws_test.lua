@@ -36,6 +36,9 @@ echo "git $*" >> "$LOG"
 mkdir -p "$(eval echo \$$#)"
 ]]
 local NO_GIT = "#!/bin/sh\nexit 1\n"
+local NO_REMOTE_MESSAGE = "Trunk cannot be compared: the remote of record origin "
+    .. "is not a remote of this project (detected: no gerrit remote "
+    .. "and origin is not on github.com).\n"
 
 local function stub(root, name, body)
     assert(fs.write(root .. "/bin/" .. name, body))
@@ -207,10 +210,7 @@ testing.test("new in a jj project refuses a missing remote of record", function(
 
     -- Expect a refusal before jj runs or any folder appears
     testing.eq(code, 1)
-    testing.eq(
-        out,
-        "Trunk cannot be compared: the remote of record origin is not a remote of this project (detected: no gerrit remote and origin is not on github.com).\n"
-    )
+    testing.eq(out, NO_REMOTE_MESSAGE)
     testing.eq(fs.exists(log), false)
     testing.eq(fs.exists(path), false)
 end)
@@ -278,10 +278,7 @@ testing.test("new in a git project refuses a missing remote of record", function
 
     -- Expect a refusal before git runs or any folder appears
     testing.eq(code, 1)
-    testing.eq(
-        out,
-        "Trunk cannot be compared: the remote of record origin is not a remote of this project (detected: no gerrit remote and origin is not on github.com).\n"
-    )
+    testing.eq(out, NO_REMOTE_MESSAGE)
     testing.eq(fs.exists(log), false)
     testing.eq(fs.exists(path), false)
 end)
