@@ -2626,14 +2626,14 @@ local function colored(color)
         column = support.COLUMN_NAME.BACKLOG,
         size = "x",
         labels = {},
-        description = V2,
-        outcomes = {
-            { id = "s1", name = "a " .. board.JUDGEMENT, done = false },
-            { id = "s2", name = "b " .. board.JUDGEMENT, done = false },
-            { id = "s3", name = "c " .. board.JUDGEMENT, done = false },
-        },
-        checks = { "dev test" },
+        description = support.READY_DESCRIPTION,
+        outcomes = {},
+        checks = { unpack(support.READY_CHECKS) },
     }
+    for _, outcome in ipairs(support.READY_OUTCOMES) do
+        card.outcomes[#card.outcomes + 1] =
+            { id = outcome.id, name = outcome.name, done = outcome.done }
+    end
     card.color = color
     return card
 end
@@ -3231,9 +3231,9 @@ testing.test("move to Ready refuses a card missing a required row", function()
 end)
 
 testing.test("a repo with no required list keeps today's behaviour", function()
-    local result = ready_with("[board.lint]\nstrict = true\n", { "dev test" })
+    local result = ready_with("[board.lint]\nstrict = true\n", support.READY_CHECKS)
     testing.eq(result.code, nil)
-    result = ready_with("", { "dev test" })
+    result = ready_with("", support.READY_CHECKS)
     testing.eq(result.code, nil)
 end)
 
@@ -6125,28 +6125,24 @@ local function export_with_first_card(first)
         .. "]}"
 end
 local EXPORT = export_with_first_card()
-local PLANNED_TEXT = "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone"
-local SUBTASK = '{"id":"sub-%s","name":"%s (reviewer judgement)","done":%s}'
-local SUBTASKS = "["
-    .. SUBTASK:format("a", "a", "false")
-    .. ","
-    .. SUBTASK:format("b", "b", "false")
-    .. ","
-    .. SUBTASK:format("c", "c", "false")
-    .. "]"
-local SUBTASKS_DONE = "["
-    .. SUBTASK:format("a", "a", "true")
-    .. ","
-    .. SUBTASK:format("b", "b", "true")
-    .. ","
-    .. SUBTASK:format("c", "c", "true")
-    .. "]"
-local PLANNED_EXPORT = export_with_first_card({ description = PLANNED_TEXT, subtasks = SUBTASKS })
-local PLANNED_DONE_EXPORT =
-    export_with_first_card({ description = PLANNED_TEXT, subtasks = SUBTASKS_DONE })
+local PLANNED_TEXT = support.READY_DESCRIPTION_JSON
+local READY_FIELDS = support.ready_fields()
+local SUBTASKS = support.subtasks(support.READY_OUTCOMES)
+local SUBTASKS_DONE = support.subtasks(support.READY_OUTCOMES, true)
+local PLANNED_EXPORT = export_with_first_card({
+    description = PLANNED_TEXT,
+    subtasks = SUBTASKS,
+    fields = READY_FIELDS,
+})
+local PLANNED_DONE_EXPORT = export_with_first_card({
+    description = PLANNED_TEXT,
+    subtasks = SUBTASKS_DONE,
+    fields = READY_FIELDS,
+})
 local WORKING_EXPORT = export_with_first_card({
     description = PLANNED_TEXT,
     subtasks = SUBTASKS,
+    fields = READY_FIELDS,
     column_id = PROGRESS_COLUMN,
     holder = "project-run/a",
     lease_expires_at = LIVE_LEASE,
@@ -7371,24 +7367,25 @@ testing.test("move to Done on a Pomb board refuses subtasks dev cannot read", fu
 end)
 
 testing.test("outcome sends the claim's fence on the subtask call", function()
-    local root, home = sandbox({ export = SUBTASKS_EXPORT })
-    local out, code = dev(root, home, { "board", "take", "11111111" })
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     out, code =
-        dev(root, home, { "board", "outcome", "11111111", "--tick", "1", "--as", "reviewer" })
+        dev(root, home, { "board", "outcome", "11111111-a", "--tick", "1", "--as", "reviewer" })
     testing.eq(code, 0, out)
     local calls = read(root, "calls")
     testing.ok(
         calls:find(
             'If-Owner-Fence: 7 --data-raw {"done":true} https://pomb.example/api/tasks/'
                 .. ID_A
-                .. "/subtasks/sub-a",
+                .. "/subtasks/"
+                .. support.READY_OUTCOMES[1].id,
             1,
             true
         ),
         calls
     )
-    dev(root, home, { "board", "release", "11111111" })
+    dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("a renamed Pomb board is read through the column map and is_done", function()
@@ -8024,7 +8021,7 @@ testing.test("pomb responsible sends the session object and null to clear", func
 end)
 
 testing.test("label sends the fence of a claim this machine holds", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     local _, code = dev(root, home, { "board", "label", "11111111-a", "+x" })
     testing.eq(code, 0)
@@ -8070,7 +8067,7 @@ testing.test("pomb escalate posts the tier and reason with the fence", function(
 end)
 
 testing.test("checks patches the task's checks field whole, with the claim's fence", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint", "dev test" })
     testing.eq(code, 0, out)
@@ -8103,7 +8100,7 @@ testing.test(
 testing.test(
     "allow, tests and files patch the task's fields whole, with the claim's fence",
     function()
-        local root, home = sandbox()
+        local root, home = sandbox({ export = PLANNED_EXPORT })
         dev(root, home, { "board", "take", "11111111-a" })
         local out, code =
             dev(root, home, { "board", "allow", "11111111-a", "test-edits", "ci-edits" })
@@ -8933,7 +8930,7 @@ end
 testing.test(
     "take grabs the owner with the agent name and renews the lease while the loop runs",
     function()
-        local root, home = sandbox()
+        local root, home = sandbox({ export = PLANNED_EXPORT })
         local out, code = dev(root, home, { "board", "take", "11111111-a" })
         testing.eq(code, 0)
         testing.ok(
@@ -8957,7 +8954,7 @@ testing.test(
 )
 
 testing.test("take under DEV_AGENT sends the role part of the name with the grab", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(
         root,
         home,
@@ -8972,7 +8969,7 @@ testing.test("take under DEV_AGENT sends the role part of the name with the grab
 end)
 
 testing.test("a claim renew sends the role part of the name under DEV_AGENT", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     local agent = { agent = "pomb/runner/abc" }
     dev(root, home, { "board", "take", "11111111-a" }, agent)
     local pid = loop_pid(home)
@@ -8989,7 +8986,7 @@ testing.test("a claim renew sends the role part of the name under DEV_AGENT", fu
 end)
 
 testing.test("take without DEV_AGENT sends no role with the grab", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     local calls = read(root, "calls")
@@ -9000,7 +8997,7 @@ testing.test("take without DEV_AGENT sends no role with the grab", function()
 end)
 
 testing.test("the state file holds the card, the fence and the pid at mode 600", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     local state = read(home, "state/dev/board/" .. ID_A)
     testing.ok(state:find("card=" .. ID_A .. "\nfence=7\npid=", 1, true), state)
@@ -9014,7 +9011,7 @@ testing.test("the state file holds the card, the fence and the pid at mode 600",
 end)
 
 testing.test("release ends the owner lease and stops the loop", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 2
@@ -9034,7 +9031,7 @@ testing.test("release ends the owner lease and stops the loop", function()
 end)
 
 testing.test("take loses to another live owner and leaves no loop running", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/owner_held", ""))
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 1, out)
@@ -9045,7 +9042,7 @@ testing.test("take loses to another live owner and leaves no loop running", func
 end)
 
 testing.test("take refuses an epic with an open child and grabs nothing", function()
-    local export = EXPORT:gsub(
+    local export = PLANNED_EXPORT:gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
         1
@@ -9058,7 +9055,7 @@ testing.test("take refuses an epic with an open child and grabs nothing", functi
 end)
 
 testing.test("a retake renews its fence and grabs again when Pomb answers stale_fence", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     local pid = loop_pid(home)
     dev_os.run({ "kill", pid })
@@ -9075,7 +9072,7 @@ testing.test("a retake renews its fence and grabs again when Pomb answers stale_
 end)
 
 testing.test("a retake against another live owner shows the owner held message", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     assert(fs.write(root .. "/hb_status", "409"))
     assert(fs.write(root .. "/owner_held", ""))
@@ -9093,7 +9090,7 @@ testing.test("release without a taken claim is a plain error", function()
 end)
 
 testing.test("release refuses a card a person owns", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     local person = (
         TASK:gsub(
@@ -9210,7 +9207,7 @@ testing.test("move into progress does not release the claim", function()
 end)
 
 testing.test("take prints the card with every comment in full after the claim", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111, fence 7"), out)
@@ -9257,7 +9254,7 @@ testing.test("move into progress posts the claim then the move to In Progress", 
 end)
 
 testing.test("take keeps the claim and warns when the card cannot be read after it", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     executable(
         root .. "/bin/curl",
         '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/'
@@ -9275,7 +9272,7 @@ testing.test("take keeps the claim and warns when the card cannot be read after 
 end)
 
 testing.test("take names the claimant from --as, then DEV_AGENT, else dev@host", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", "project-alt/x" })
     testing.eq(code, 0, out)
     testing.ok(read(root, "calls"):find('"name":"project-alt/x"', 1, true), read(root, "calls"))
@@ -9287,7 +9284,7 @@ testing.test("take names the claimant from --as, then DEV_AGENT, else dev@host",
 end)
 
 testing.test("take refuses a name that is not one word of the allowed characters", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     for _, name in ipairs({ "two words", "semi;colon", "a:b" }) do
         local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
         testing.eq(code, 2, out)
@@ -9300,7 +9297,7 @@ end)
 
 testing.test("DEV_AGENT shape accepts repo/role and repo/role/card", function()
     for _, name in ipairs({ "dotfiles/lead", "infra/runner/39f0e015", "a.b_c/d-e/1" }) do
-        local root, home = sandbox()
+        local root, home = sandbox({ export = PLANNED_EXPORT })
         local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
         testing.eq(code, 0, out)
         testing.ok(
@@ -9317,7 +9314,7 @@ testing.test(
         local names =
             { "lander", "dotfiles/implementer/38f0e013/1", "a b/c", "a//b", "/a", "a/b/", "a/b c" }
         for _, name in ipairs(names) do
-            local root, home = sandbox()
+            local root, home = sandbox({ export = PLANNED_EXPORT })
             local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
             testing.eq(code, 2, out)
             if not name:find(" ", 1, true) then
@@ -9443,6 +9440,7 @@ testing.test("a move into progress of a card claimed elsewhere takes no claim", 
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
+        fields = READY_FIELDS,
         holder = "dev@box:42",
         lease_expires_at = LIVE_LEASE,
     })
@@ -9494,6 +9492,7 @@ testing.test("a release with no claim file sends the owner fence pomb reports", 
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
+        fields = READY_FIELDS,
         holder = "r/old",
         lease_expires_at = LIVE_LEASE,
     })
@@ -9516,6 +9515,7 @@ testing.test("a release of an owner with no claim sends the owner fence", functi
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
+        fields = READY_FIELDS,
         holder = "r/old",
         lease_expires_at = LIVE_LEASE,
     })
@@ -9693,7 +9693,11 @@ testing.test("take of a card a live owner holds names the owner and the lease en
 end)
 
 testing.test("move to ready takes an epic like any card", function()
-    local export = export_with_first_card({ description = PLANNED_TEXT, subtasks = SUBTASKS })
+    local export = export_with_first_card({
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = READY_FIELDS,
+    })
     local root, home = sandbox({
         export = export,
         task = EPIC_TASK:format(3),
@@ -9776,7 +9780,7 @@ testing.test("move into progress keeps the loop and the state", function()
 end)
 
 testing.test("the loop ends by itself after twice the card's size", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return not fs.exists(state_file(home))
@@ -9785,7 +9789,7 @@ testing.test("the loop ends by itself after twice the card's size", function()
 end)
 
 testing.test("a renewal the server refuses ends the loop", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/hb_status", "409"))
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
@@ -9795,7 +9799,7 @@ testing.test("a renewal the server refuses ends the loop", function()
 end)
 
 testing.test("a renewal that cannot reach the server keeps trying", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/hb_status", "503"))
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
@@ -9806,7 +9810,7 @@ testing.test("a renewal that cannot reach the server keeps trying", function()
 end)
 
 testing.test("a second take renews with the stored fence", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(
@@ -9831,7 +9835,7 @@ testing.test("take and release want exactly one card", function()
 end)
 
 testing.test("the token never reaches argv, the environment, the state or the output", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     executable(
         root .. "/bin/curl",
         (CURL:gsub('cat >"$ROOT/stdin"', 'env >>"$ROOT/env"\ncat >"$ROOT/stdin.$$"', 1))
@@ -10181,7 +10185,7 @@ testing.test("ls adds no holder column while nobody holds a claim", function()
 end)
 
 testing.test("a release the server refuses keeps the state so it can be retried", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/owner/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
@@ -12293,8 +12297,25 @@ local function local_cards()
     testing.eq(code, 0, out)
     local ids = {}
     for _, name in ipairs({ "One", "Two", "Three" }) do
-        local extra = { "--id-only", "--checks", "dev test" }
-        ids[name] = dev(root, home, add_args(name, extra)):gsub("%s+$", "")
+        local args = {
+            "board",
+            "add",
+            name,
+            "--size",
+            "1",
+            "--description",
+            support.READY_DESCRIPTION,
+            "--id-only",
+        }
+        for _, outcome in ipairs(support.READY_OUTCOMES) do
+            args[#args + 1] = "--done-when"
+            args[#args + 1] = outcome.name
+        end
+        for _, row in ipairs(support.READY_CHECKS) do
+            args[#args + 1] = "--checks"
+            args[#args + 1] = row
+        end
+        ids[name] = dev(root, home, args):gsub("%s+$", "")
     end
     return root, home, ids
 end
@@ -12825,7 +12846,7 @@ testing.test("pomb move to Ready refuses a card with an unanswered question", fu
         column_id = BACKLOG_COLUMN,
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
-        fields = '{"dev.checks":[{"run":"dev test"}]}',
+        fields = READY_FIELDS,
     })
     local root, home = sandbox({ export = export })
     assert(fs.write(root .. "/comments.json", QUESTION_COMMENT:format("null")))
@@ -12868,7 +12889,9 @@ local function proof_backend(parts)
         backend.listed[#backend.listed + 1] = { body = "Landed commit abcdef1234 on trunk." }
     end
     if parts.check then
-        local rows = { { run = "dev test", result = check.Result.PASS, run_id = "ab12" } }
+        local rows = {
+            { run = support.READY_CHECKS[1], result = check.Result.PASS, run_id = "ab12" },
+        }
         backend.listed[#backend.listed + 1] = { body = check.record(PROOF, rows, false) }
     end
     for _, kind in ipairs(parts.reviews or {}) do

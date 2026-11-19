@@ -314,6 +314,51 @@ function M.pomb_export_task(task)
         .. "}"
 end
 
+---Three outcomes that each name a deciding check, the shape a card needs to be taken.
+---@type { id: string, name: string, done: boolean }[]
+M.READY_OUTCOMES = {
+    { id = "r1", name = "a works (check: dev --remote lint)", done = false },
+    { id = "r2", name = "b works (check: dev --remote lint)", done = false },
+    { id = "r3", name = "c works (check: dev --remote lint)", done = false },
+}
+
+---The checks rows that decide `M.READY_OUTCOMES`.
+---@type string[]
+M.READY_CHECKS = { "dev --remote lint" }
+
+---A v4 description with its Problem, Change and Out of scope.
+M.READY_DESCRIPTION = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
+
+---`M.READY_DESCRIPTION` as the content of a JSON string.
+M.READY_DESCRIPTION_JSON = M.READY_DESCRIPTION:gsub("\n", "\\n")
+
+---Render outcomes as the raw JSON of an export's subtasks value.
+---@param outcomes { id: string, name: string }[] the outcomes
+---@param done? boolean whether every subtask is ticked
+---@return string json the subtasks array
+function M.subtasks(outcomes, done)
+    local parts = {}
+    for _, outcome in ipairs(outcomes) do
+        parts[#parts + 1] = string.format(
+            '{"id":"%s","name":"%s","done":%s}',
+            outcome.id,
+            outcome.name,
+            tostring(done == true)
+        )
+    end
+    return "[" .. table.concat(parts, ",") .. "]"
+end
+
+---Build the checks field of an export card from `M.READY_CHECKS`.
+---@return string json the fields object
+function M.ready_fields()
+    local runs = {}
+    for _, row in ipairs(M.READY_CHECKS) do
+        runs[#runs + 1] = '{"run":"' .. row .. '"}'
+    end
+    return '{"dev.checks":[' .. table.concat(runs, ",") .. "]}"
+end
+
 ---The fields JSON of a Pomb board that defines the four card fields.
 M.FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
     .. '"options":[],"columns":[],"required":true},'

@@ -10,8 +10,6 @@ local LEAD_SECRET = "pomb_LEADtoken9876543210"
 local Column = support.Column
 local POMB = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'
 local NEW = "dotfiles/implementer"
-local LOCAL_PLAN = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
-local JUDGED = "done (reviewer judgement)"
 local NAME = support.COLUMN_NAME
 local ID = {
     DONE = "col-done",
@@ -46,10 +44,8 @@ local GROUP = '[{"id":"g1","column_ids":["'
     .. '","'
     .. ID.VERIFY
     .. '"],'
-local PLANNED = "## Problem\\nwhy\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone"
-local SUBTASKS = '[{"id":"s1","name":"a (reviewer judgement)","done":false},'
-    .. '{"id":"s2","name":"b (reviewer judgement)","done":false},'
-    .. '{"id":"s3","name":"c (reviewer judgement)","done":false}]'
+local PLANNED = support.READY_DESCRIPTION_JSON
+local SUBTASKS = support.subtasks(support.READY_OUTCOMES)
 local BOARDS =
     '[{"id":"board-1","name":"dotfiles","archived":false},{"id":"board-2","name":"other","archived":false}]'
 local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"}]'
@@ -164,7 +160,7 @@ local function export(placed)
             labels = place[4],
             description = PLANNED,
             subtasks = SUBTASKS,
-            fields = '{"dev.checks":[{"run":"dev test"}]}',
+            fields = support.ready_fields(),
         })
     end
     return '{"tasks":[' .. table.concat(parts, ",") .. "]}"
@@ -451,7 +447,7 @@ testing.test("a local board is uncapped", function()
     local out, code = dev(box, { "board", "init" }, "")
     testing.eq(code, 0, out)
     for index = 1, 6 do
-        out, code = dev(box, {
+        local args = {
             "board",
             "add",
             "Card" .. index,
@@ -460,16 +456,17 @@ testing.test("a local board is uncapped", function()
             "--size",
             "1",
             "--description",
-            LOCAL_PLAN,
-            "--done-when",
-            JUDGED,
-            "--done-when",
-            JUDGED,
-            "--done-when",
-            JUDGED,
-            "--checks",
-            "dev test",
-        }, "")
+            support.READY_DESCRIPTION,
+        }
+        for _, outcome in ipairs(support.READY_OUTCOMES) do
+            args[#args + 1] = "--done-when"
+            args[#args + 1] = outcome.name
+        end
+        for _, row in ipairs(support.READY_CHECKS) do
+            args[#args + 1] = "--checks"
+            args[#args + 1] = row
+        end
+        out, code = dev(box, args, "")
         testing.eq(code, 0, out)
         local id = assert(out:match("added (%x+)"), out)
         out, code = dev(box, { "board", "move", id, Column.PROGRESS }, NEW .. "/" .. index)
