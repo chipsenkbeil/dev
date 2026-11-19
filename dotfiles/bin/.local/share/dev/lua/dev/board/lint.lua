@@ -204,6 +204,8 @@ function M.card(card, opts)
         local worked = column == stages.ready
             or column == stages.progress
             or column == stages.review
+            or column == stages.verify
+            or column == stages.release
         local lacks_checks = worked and #card.checks == 0
         local names_checks = (column == stages.ready or column == stages.progress)
             and #card.checks > 0

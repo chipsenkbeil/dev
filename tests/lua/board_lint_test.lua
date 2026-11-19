@@ -287,6 +287,19 @@ testing.test("lint asks a card without children for a checks row and an epic for
     )
 end)
 
+testing.test("lint asks a Verify card and a Release card for a checks row", function()
+    local cards = {
+        card(1, NAME.VERIFY, { outcomes = outcomes(3), checks = {} }),
+        card(2, NAME.RELEASE, { outcomes = outcomes(3), checks = {} }),
+        card(3, NAME.VERIFY, { outcomes = outcomes(3) }),
+    }
+    local fake = backend(cards)
+    testing.eq(
+        findings(cmd_board.run("lint", {}, fake).output),
+        { "00000001 Verify no checks row", "00000002 Release no checks row" }
+    )
+end)
+
 local REQUIRED_CONFIG = '[board.lint]\nrequired = ["dev --remote lint", "dev --remote test"]\n'
 
 local function required_board(cards, config)

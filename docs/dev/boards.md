@@ -1399,8 +1399,8 @@ The rules:
   Problem. A discarded card is held to the rule `discard` applies. Older Done
   cards are v1 and fail it until their descriptions are rewritten.
 - Outside Icebox and Done: a description of at most 400 words. In Ready, In
-  Progress and Review, a checks row, unless the card has children. In Ready, no
-  red size.
+  Progress, Review, Verify and Release, a checks row, unless the card has
+  children. In Ready, no red size.
 - `needs:human` sits only in Blocked or Icebox.
 - A Blocked card holds a `question` or `blocked` note or a `blocked_by` link.
 - An In Progress card holds a claimant, an epic too.
@@ -2495,10 +2495,11 @@ The rules live in `dev.board.lint`, which calls `dev.board.unplanned` for the
 size, the v4 sections and the outcomes. It adds these:
 
 - Outside Icebox and Done: `over 400 words (N)`.
-- In Ready, In Progress and In Review, for a card with no children:
-  `no checks row`.
-- In Ready, In Progress and In Review, for a card with a checks row, no
-  children and no epic kind, when `board.lint.required` lists rows:
+- In Ready, In Progress, In Review, Verify and Release, for a card with no
+  children: `no checks row`.
+- In Ready, In Progress, In Review, Verify and Release, for a card with a
+  checks row, no children and no epic kind, when `board.lint.required` lists
+  rows:
   `checks lack the required row: ROW`, once per listed row that
   `dev.board.missing_rows` finds no checks row satisfying.
 - In Ready and In Progress, for a card with a checks row that is not an epic:
