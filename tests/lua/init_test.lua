@@ -1,6 +1,7 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
+local header = require("dev.header")
 local pipelines = require("dev.pipelines")
 local support = require("support")
 local templates = require("dev.templates")
@@ -124,6 +125,19 @@ testing.test("the base pipeline runs on the image that ships dev", function()
     local text = pipelines.jobs(false)
     testing.ok(text:find('target = "linux-x86-dev"', 1, true), text)
     testing.ok(not text:find("linux-x86-base", 1, true), text)
+end)
+
+testing.test("the Rust pipeline has a fmt job that keeps the patch", function()
+    local text = pipelines.jobs(true)
+    local jobs = assert(loadstring(text))().jobs
+    testing.ok(jobs.fmt ~= nil, text)
+    testing.ok(text:find("fmt.patch", 1, true), text)
+    testing.ok(text:find("git diff", 1, true), text)
+end)
+
+testing.test("the Rust fmt template names the fmt job and its patch", function()
+    local text = assert(fs.read("dotfiles/claude/.claude/skills/style/lint/rust/fmt.lua"))
+    testing.eq(header.parse(text, "lua").patch, { job = "fmt", file = "fmt.patch" })
 end)
 
 local function stub(root, name, text)

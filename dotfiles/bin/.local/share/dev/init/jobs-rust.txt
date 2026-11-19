@@ -44,5 +44,17 @@ return {
         run("dev test </dev/null")
       end,
     },
+    fmt = {
+      matrix = { LINUX },
+      run = function()
+        install_rust()
+        run(
+          "git init -q && git add -A"
+            .. " && git -c user.name=ci -c user.email=ci@localhost commit -q -m tree"
+            .. " && dev fmt </dev/null && git diff > fmt.patch"
+        )
+        ci.artifact(ci.capture("pwd") .. "/fmt.patch")
+      end,
+    },
   },
 }
