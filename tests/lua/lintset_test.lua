@@ -1,6 +1,7 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
+local verb = require("dev.verb")
 local support = require("support")
 
 local STYLE = "dotfiles/claude/.claude/skills/style/lint"
@@ -176,7 +177,16 @@ testing.test("finish names the failed checks and returns 1", function()
     local lint = lint_for("/")
     testing.eq(lint:finish(), 0)
     lint.failed = { "a", "b" }
-    testing.eq(lint:finish(), 1)
+    local original = verb.note
+    local notes = {}
+    verb.note = function(text)
+        notes[#notes + 1] = text
+    end
+    local ok, code = pcall(lint.finish, lint)
+    verb.note = original
+    assert(ok, code)
+    testing.eq(code, 1)
+    testing.eq(notes, { "These checks failed: a, b." })
 end)
 
 testing.test("a check that fails twice is recorded once, in the order it first failed", function()
