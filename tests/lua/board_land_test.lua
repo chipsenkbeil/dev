@@ -1709,6 +1709,27 @@ if has_jj then
         end
     )
 
+    testing.test("a recheck keeps its of kind across a rebase carry-over", function()
+        local function rechecked(ofs)
+            local project = jj_project()
+            local id = verified_card(project)
+            assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
+            must(dev(project, { "board", "check", id }))
+            for _, of in ipairs(ofs) do
+                must(record_review(project, id, { kind = "recheck", of = of }))
+            end
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            rebase_onto_trunk(project.root)
+            return project, id
+        end
+        local project, id = rechecked({ "code", "style" })
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+        project, id = rechecked({ "code" })
+        refused(project, id, { "--kind recheck --of style" }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+    end)
+
     testing.test(
         "land carries over a rebase with no interdiff that targets the working copy",
         function()
