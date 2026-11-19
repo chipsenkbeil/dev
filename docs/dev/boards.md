@@ -3762,8 +3762,12 @@ The refusals run in this order:
   So does a move into Release or Done of a card whose newest land note names a
   commit that trunk holds, from a workspace with any working copy, though it
   still needs every outcome ticked. That rule trusts the land note, so a card
-  reopened with new work needs a newer land note or a fresh proof. The board
-  API's `move_to` proves the card too. A jj project's land has an empty working
+  reopened with new work needs a newer land note or a fresh proof. A card the
+  rules above do not skip and whose change trunk does not hold is refused
+  with ``Its change is not on trunk. Run `dev board land <id prefix>` first.``
+  even when its check and reviews are recorded. The board API's `move_to`
+  proves the card too, and a `move_to` given a state skips that sentence. It
+  runs inside the land. A jj project's land has an empty working
   copy after its merge, so it reads `workspace:state()` before the merge and
   passes it to `move_to`, `move_to_release` or `move_to_done`.
 - A move into Review is refused unless the card is in In Progress under a claim

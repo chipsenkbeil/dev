@@ -394,6 +394,12 @@ local function proof_refusal(backend, card, column, opts)
         if unproven then
             problems[#problems + 1] = unproven
         end
+        if not (opts and opts.state) then
+            problems[#problems + 1] = string.format(
+                "Its change is not on trunk. Run `dev board land %s` first.",
+                card.id:sub(1, board.MIN_PREFIX)
+            )
+        end
     else
         problems[1] = why
     end
