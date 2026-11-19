@@ -1766,6 +1766,28 @@ end
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
 
+---Read the `--wait` flag, 0 when it is absent.
+---@param flags table<string, string>? the parsed flags, nil when parsing failed
+---@return integer? seconds the wait, nil when the value is not a whole number up to the bound
+---@return dev.cmd.board.Result? refusal the usage result when the value is refused
+local function wait_seconds(flags)
+    if not (flags and flags[WAIT_FLAG]) then
+        return 0
+    end
+    local seconds = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
+    if not seconds or seconds > MAX_WAIT_SECONDS then
+        return nil,
+            usage(
+                "The "
+                    .. WAIT_FLAG
+                    .. " flag needs a whole number of seconds up to "
+                    .. MAX_WAIT_SECONDS
+                    .. "."
+            )
+    end
+    return seconds
+end
+
 ---Move a card, and with `--wait SECONDS` try again while its column is full.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card, the column and the flags
@@ -1777,18 +1799,9 @@ local function move_card(backend, args, opts)
         return foreign
     end
     local flags = parse(args, MOVE_FLAGS)
-    local wait = 0
-    if flags and flags[WAIT_FLAG] then
-        wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
-        if not wait or wait > MAX_WAIT_SECONDS then
-            return usage(
-                "The "
-                    .. WAIT_FLAG
-                    .. " flag needs a whole number of seconds up to "
-                    .. MAX_WAIT_SECONDS
-                    .. "."
-            )
-        end
+    local wait, bad_wait = wait_seconds(flags)
+    if not wait then
+        return bad_wait
     end
     local nap = opts and opts.nap or dev_os.nap
     local clock = opts and opts.now or store.now
@@ -3249,18 +3262,9 @@ function commands.land(backend, args)
     if #words < 1 then
         return usage("Needs a card.")
     end
-    local wait = 0
-    if flags[WAIT_FLAG] then
-        wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
-        if not wait or wait > MAX_WAIT_SECONDS then
-            return usage(
-                "The "
-                    .. WAIT_FLAG
-                    .. " flag needs a whole number of seconds up to "
-                    .. MAX_WAIT_SECONDS
-                    .. "."
-            )
-        end
+    local wait, bad_wait = wait_seconds(flags)
+    if not wait then
+        return bad_wait
     end
     local name, why = agent_name()
     if why then
@@ -3441,7 +3445,7 @@ function commands.turn(backend, args)
     if #words ~= 1 then
         return usage("Name the one card to take the landing turn for.")
     end
-    local seconds, wait = turn.HOLD_SECONDS, 0
+    local seconds = turn.HOLD_SECONDS
     if flags[HOLD_FLAG] then
         seconds = flags[HOLD_FLAG]:match("^%d+$") and tonumber(flags[HOLD_FLAG])
         if not seconds or seconds < 1 or seconds > turn.MAX_HOLD_SECONDS then
@@ -3454,17 +3458,9 @@ function commands.turn(backend, args)
             )
         end
     end
-    if flags[WAIT_FLAG] then
-        wait = flags[WAIT_FLAG]:match("^%d+$") and tonumber(flags[WAIT_FLAG])
-        if not wait or wait > MAX_WAIT_SECONDS then
-            return usage(
-                "The "
-                    .. WAIT_FLAG
-                    .. " flag needs a whole number of seconds up to "
-                    .. MAX_WAIT_SECONDS
-                    .. "."
-            )
-        end
+    local wait, bad_wait = wait_seconds(flags)
+    if not wait then
+        return bad_wait
     end
     local name, why = agent_name()
     if why then

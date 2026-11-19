@@ -800,6 +800,24 @@ testing.test("a waiter whose card is done is not handed a turn that frees meanwh
     testing.eq(turn.holder(backend), nil)
 end)
 
+testing.test("move and turn refuse a bad wait with the same message", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local expected = "The --wait flag needs a whole number of seconds"
+    for _, bad in ipairs({ "abc", "86401" }) do
+        local moved =
+            cmd_board.run("move", { short, board.DEFAULT_NAMES.done, "--wait", bad }, backend)
+        testing.eq(moved.code, 2)
+        testing.ok(moved.message:find(expected, 1, true), moved.message)
+        local turned
+        as_agent("beta", function()
+            turned = cmd_board.run("turn", { short, "--wait", bad }, backend)
+        end)
+        testing.eq(turned.code, 2)
+        testing.eq(turned.message, moved.message)
+    end
+end)
+
 testing.test("release drops the queued ask of a caller that holds no turn", function()
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
