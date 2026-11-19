@@ -4,6 +4,7 @@ local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 
 local SUFFIX = ".clock"
+local BEAT_SUFFIX = ".beat"
 local SECONDS_PER_MINUTE = 60
 local START = "start"
 local STOP = "stop"
@@ -42,6 +43,12 @@ end
 ---@field card string the card's full id
 ---@field role string the role the stretch counts for
 ---@field start integer the epoch seconds the clock started
+
+---@class dev.board.clock.Running
+---@field id string the card's full id
+---@field role string the role the clock counts for
+---@field minutes integer the whole minutes it has run
+---@field name string the card's name
 
 ---Read the seconds since the epoch. Tests replace it.
 ---@return integer seconds the current time
@@ -109,24 +116,101 @@ function M.start(card, role)
     return { output = "started the " .. role .. " clock on " .. prefix }
 end
 
+---Name the file where the keep-alive loop leaves the time of its last renewal.
+---@param card string the card's full id
+---@return string path the file
+function M.beat_path(card)
+    return claims.path(card) .. BEAT_SUFFIX
+end
+
+---Find the second a running clock stopped counting.
+---
+---A live claim keeps the clock counting up to now. A claim that went quiet for longer than its
+---lease stops it at the last renewal, or at its start when none came. A clock with no claim
+---stops at twice the card's size.
+---@param card dev.board.Card the card, whose size sets the cap
+---@param running dev.board.clock.State the clock
+---@param now integer the epoch seconds the caller counts to
+---@return integer ended the epoch seconds the clock stopped counting
+function M.ended(card, running, now)
+    local text = fs.read(M.beat_path(card.id))
+    local beat = text and tonumber(text:match("^%d+"))
+    if beat and beat < running.start then
+        beat = nil
+    end
+    if claims.read(card.id) then
+        local last = beat or running.start
+        return now - last <= claims.TTL_SECONDS and now or last
+    end
+    if beat then
+        return math.min(beat, now)
+    end
+    local _, minutes = claims.cap(card.size or "")
+    return math.min(now, running.start + minutes * SECONDS_PER_MINUTE)
+end
+
 ---Stop a card's clock and log its stretch on the card.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@param note string? the note stored with the entry
+---@param at integer? the epoch seconds to count to, now when nil
 ---@return dev.cmd.board.Result result the refusal, or the line naming the logged minutes
-function M.stop(backend, card, note)
+function M.stop(backend, card, note, at)
     local prefix = card.id:sub(1, board.MIN_PREFIX)
     local running = M.read(card.id)
     if not running then
         return guards.failure("Card " .. prefix .. " has no running clock.")
     end
-    local minutes = M.minutes(M.now() - running.start)
+    local minutes = M.minutes((at or M.now()) - running.start)
     local ok, message = backend:log_time(card.id, minutes, running.role, note)
     if not ok then
         return guards.failure(message)
     end
     fs.remove(M.path(card.id))
+    fs.remove(M.beat_path(card.id))
     return { output = "logged " .. minutes .. " minutes as " .. running.role .. " on " .. prefix }
+end
+
+---Stop every clock whose claim lapsed or whose cap passed, and name the ones still running.
+---@param backend dev.board.Backend the board
+---@param cards dev.board.Card[] the board's cards
+---@param now integer the epoch seconds to count to
+---@return dev.board.clock.Running[] running the clocks still counting
+---@return string[] warnings why a clock could not be stopped
+function M.sweep(backend, cards, now)
+    local running, warnings = {}, {}
+    if backend.timed == false then
+        return running, warnings
+    end
+    local by_id = {}
+    for _, card in ipairs(cards) do
+        by_id[card.id] = card
+    end
+    for _, entry in ipairs(fs.list(claims.dir()) or {}) do
+        local id = entry:match("^(.+)" .. SUFFIX:gsub("%.", "%%.") .. "$")
+        local clock = id and M.read(id)
+        if clock then
+            local card = by_id[id] or { id = id }
+            local ended = M.ended(card, clock, now)
+            if ended < now then
+                local stopped = M.stop(backend, card, nil, ended)
+                if stopped.code then
+                    warnings[#warnings + 1] = "Could not stop the clock on "
+                        .. id:sub(1, board.MIN_PREFIX)
+                        .. ". "
+                        .. stopped.message
+                end
+            else
+                running[#running + 1] = {
+                    id = id,
+                    role = clock.role,
+                    minutes = math.floor((now - clock.start) / SECONDS_PER_MINUTE),
+                    name = card.name or "",
+                }
+            end
+        end
+    end
+    return running, warnings
 end
 
 ---Name the role a card's holder works in while it sits in a column.

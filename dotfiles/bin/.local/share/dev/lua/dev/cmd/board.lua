@@ -5059,6 +5059,23 @@ function commands.stale(backend, args, now)
         lines[#lines + 1] = ""
         append(lines, begun_warnings)
     end
+    local ticking, clock_warnings = require("dev.board.clock").sweep(backend, cards, now)
+    if #ticking > 0 then
+        local rows = {}
+        for _, item in ipairs(ticking) do
+            rows[#rows + 1] =
+                { item.id:sub(1, board.MIN_PREFIX), item.role, item.minutes .. " min", item.name }
+        end
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "clocks running:"
+        append(lines, board.table_lines(rows))
+    end
+    if #clock_warnings > 0 then
+        lines[#lines + 1] = ""
+        for _, text in ipairs(clock_warnings) do
+            lines[#lines + 1] = warning(text)
+        end
+    end
     local function umbrella_rows()
         local running = { [stages.progress] = true, [stages.review] = true, [stages.verify] = true }
         local backlog, why_started = {}, {}

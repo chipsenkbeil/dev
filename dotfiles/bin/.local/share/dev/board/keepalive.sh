@@ -52,7 +52,10 @@ while [ "$n" -lt "$ticks" ]; do
     token=
     code=${out##*[!0-9]}
     case $code in
-    2??) healed=0 ;;
+    2??)
+        healed=0
+        date +%s >"$state.beat" 2>/dev/null
+        ;;
     401)
         if [ "$origin" = keychain ] && [ "$healed" = 0 ]; then
             healed=1

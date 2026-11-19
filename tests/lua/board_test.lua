@@ -11955,3 +11955,23 @@ testing.test("a card in Release moves to Done without a new proof", function()
     local result = proof_move(backend, support.COLUMN_NAME.DONE)
     testing.eq(result.code, nil)
 end)
+
+testing.test("stale lists a running clock", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local cards, times = aged({ support.COLUMN_NAME.PROGRESS }, { 0 })
+    cards[1].size = "3 Pomodori"
+    local original = role_clock.now
+    role_clock.now = function()
+        return NOW - 30 * 60
+    end
+    local started = role_clock.start(cards[1], "implementer")
+    role_clock.now = original
+    local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(started.code, nil, started.message)
+    testing.eq(
+        result.output:find("clocks running:\n00000001  implementer  30 min", 1, true) ~= nil,
+        true
+    )
+end)

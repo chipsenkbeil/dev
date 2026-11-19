@@ -191,3 +191,58 @@ testing.test("time stop refuses a card with no running clock", function()
     ffi.C.setenv("XDG_STATE_HOME", previous, 1)
     testing.eq(result.code, 1)
 end)
+
+local function logging_backend()
+    local backend = { logged = {}, stages = board.stages({}, { support.COLUMN_NAME.DONE }) }
+    function backend:log_time(id, minutes, role)
+        self.logged[#self.logged + 1] = { id, minutes, role }
+        return true
+    end
+    return backend
+end
+
+testing.test("a lapsed claim logs time only up to its last heartbeat", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local started = os.time()
+    local original = clock.now
+    clock.now = function()
+        return started
+    end
+    local began = clock.start({ id = CARD, labels = {} }, "implementer")
+    local saved = claims.write({ card = CARD, fence = 1, pid = 0 })
+    local beat = fs.write(clock.beat_path(CARD), string.format("%d\n", started + 10 * 60))
+    local backend = logging_backend()
+    local card = { id = CARD, name = "x", size = "3 Pomodori", labels = {} }
+    local ticking = clock.sweep(backend, { card }, started + 60 * 60)
+    local left = clock.read(CARD)
+    clock.now = original
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(began.code, nil, began.message)
+    testing.eq(saved, true)
+    testing.eq(beat, true)
+    testing.eq(backend.logged, { { CARD, 10, "implementer" } })
+    testing.eq(ticking, {})
+    testing.eq(left, nil)
+end)
+
+testing.test("a clock with no claim stops at twice the card's size", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local started = os.time()
+    local original = clock.now
+    clock.now = function()
+        return started
+    end
+    local began = clock.start({ id = CARD, labels = {} }, "reviewer")
+    local backend = logging_backend()
+    local card = { id = CARD, name = "x", size = "1 Pomodoro", labels = {} }
+    local early = clock.sweep(backend, { card }, started + 30 * 60)
+    local late = clock.sweep(backend, { card }, started + 3 * 60 * 60)
+    clock.now = original
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(began.code, nil, began.message)
+    testing.eq(#early, 1)
+    testing.eq(late, {})
+    testing.eq(backend.logged, { { CARD, 50, "reviewer" } })
+end)

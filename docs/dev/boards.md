@@ -3564,6 +3564,19 @@ it. A take and a move or a release by the claim's holder follow one rule:
 - A log the board refuses drops the clock and prints a warning, so no card keeps
   a stale clock. A local board holds no time entries and runs no clock.
 
+A clock never outlives its work. The keep-alive loop writes the time of each
+renewal beside the claim in `<card>.beat`, and `dev board stale` stops every
+clock that outlived its work:
+
+- A claim that went quiet for longer than its lease, or that is gone, stops the
+  clock at its last renewal, or at the clock's start when none came.
+- A clock with no claim stops at twice the card's size: 50 minutes for 1
+  Pomodoro, 100 for 2 and 150 for anything else.
+
+The stop logs the stretch under the clock's role. `dev board stale` then lists
+each clock still running under `clocks running:`, with its card, role and
+minutes.
+
 ### note
 
 `dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT` adds a comment
