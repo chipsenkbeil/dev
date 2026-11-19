@@ -10,6 +10,9 @@ local M = {}
 ---The environment variable that holds the path of the file a verb's `fetch` header pulled.
 M.ENV = "DEV_FETCHED"
 
+---@class dev.fetch.Opts
+---@field patch boolean? whether the job is a patch job
+
 local ARCHES = { arm64 = "aarch64", aarch64 = "aarch64", x86_64 = "x86_64", amd64 = "x86_64" }
 local KERNELS = { macos = "Darwin", freebsd = "FreeBSD", windows = "Windows" }
 local LOCAL_HINT = "Pass `--local` to build it here."
@@ -55,6 +58,23 @@ function M.pick(listing, job, kernel)
     return nil
 end
 
+---Find the pipeline and first target that run a job, whatever the target's OS.
+---@param listing string the lines of `ci run --list --all --json`, one document per pipeline
+---@param job string the job name
+---@return string? pipeline the name of the pipeline file without its `.lua`
+---@return string? target the first target the job lists
+function M.first(listing, job)
+    for line in listing:gmatch("[^\n]+") do
+        local doc = json.decode(line)
+        for _, entry in ipairs(type(doc) == "table" and doc.jobs or {}) do
+            if entry.name == job and entry.targets and entry.targets[1] then
+                return fs.basename(doc.pipeline):gsub("%.lua$", ""), entry.targets[1]
+            end
+        end
+    end
+    return nil
+end
+
 local function ci_env(root)
     local name = remote.run_label(root, {
         DEV_AGENT = os.getenv("DEV_AGENT"),
@@ -64,14 +84,16 @@ local function ci_env(root)
     return name and { DEV_AGENT = name } or nil
 end
 
----Start the job on the target that matches this host and return its run.
+---Start the job and return its run.
+---
+---A fetch job runs on the first target that matches this host's OS and at its architecture. A
+---patch job runs on its first listed target with no architecture.
 ---@param root string the project root
 ---@param spec dev.header.Fetch the job and file the verb's header names
+---@param opts dev.fetch.Opts which kind of job it is
 ---@return string run the ci run id
 ---@return string target the target the job runs on
-local function start(root, spec)
-    local kernel, machine = M.platform()
-    local arch = ARCHES[machine]
+local function start(root, spec, opts)
     local listing, listed = dev_os.capture(
         { "ci", "-C", root, "run", "--list", "--all", "--json" },
         { stderr = "null" }
@@ -79,9 +101,17 @@ local function start(root, spec)
     if listed ~= 0 then
         verb.die("The command `ci run --list --all` failed. " .. LOCAL_HINT)
     end
-    local pipeline, target = M.pick(listing, spec.job, kernel)
-    local platform = kernel .. " " .. machine
-    if not pipeline or not arch then
+    local pipeline, target, arch, platform
+    if opts.patch then
+        pipeline, target = M.first(listing, spec.job)
+        platform = "ci"
+    else
+        local kernel, machine = M.platform()
+        arch = ARCHES[machine]
+        pipeline, target = M.pick(listing, spec.job, kernel)
+        platform = kernel .. " " .. machine
+    end
+    if not pipeline or (not opts.patch and not arch) then
         verb.die(
             "The ci job "
                 .. spec.job
@@ -91,7 +121,7 @@ local function start(root, spec)
                 .. LOCAL_HINT
         )
     end
-    local started, code = dev_os.capture({
+    local argv = {
         "ci",
         "-C",
         root,
@@ -101,9 +131,12 @@ local function start(root, spec)
         "--detach",
         "--job",
         spec.job .. ":" .. target,
-        "--arch",
-        arch,
-    }, { env = ci_env(root), stderr = "stdout" })
+    }
+    if arch then
+        argv[#argv + 1] = "--arch"
+        argv[#argv + 1] = arch
+    end
+    local started, code = dev_os.capture(argv, { env = ci_env(root), stderr = "stdout" })
     local run = started:match("(%w+)%s*$")
     if code ~= 0 or not run then
         verb.die(
@@ -148,6 +181,26 @@ local function await(root, spec, run, target)
     )
 end
 
+---@param root string the project root
+---@param spec dev.header.Fetch the job and file the verb's header names
+---@param opts dev.fetch.Opts which kind of job it is
+---@return string path the pulled file, in a new temporary directory
+---@return string run the ci run id
+local function download(root, spec, opts)
+    if not dev_os.which("ci") then
+        verb.die("The ci client is not found. Install it with `dev install` from the ci repo.")
+    end
+    local run, target = start(root, spec, opts)
+    local index = await(root, spec, run, target)
+    local dest = assert(fs.mktemp({ prefix = "dev-fetch", dir = true }))
+    local artifact = table.concat({ spec.job, index, target }, ".") .. "/" .. spec.file
+    local pulled = dev_os.run({ "ci", "-C", root, "cp", run .. ":" .. artifact, dest, "--force" })
+    if pulled ~= 0 then
+        verb.die("The command `ci cp " .. run .. ":" .. artifact .. "` failed.")
+    end
+    return dest .. "/" .. fs.basename(spec.file), run
+end
+
 ---Run a verb's `fetch` job on ci for this host's platform and pull the file it keeps.
 ---
 ---The job runs on the first target of its pipeline whose OS matches this host and at this host's
@@ -157,18 +210,50 @@ end
 ---@param spec dev.header.Fetch the job and file the verb's header names
 ---@return string path the pulled file
 function M.pull(root, spec)
-    if not dev_os.which("ci") then
-        verb.die("The ci client is not found. Install it with `dev install` from the ci repo.")
+    return (download(root, spec, {}))
+end
+
+---Run a verb's `patch` job on ci and apply the patch it keeps to the project root.
+---
+---The job runs on its first listed target with no architecture. An empty patch changes nothing.
+---A patch that does not apply changes nothing either, because `git apply` is all or nothing. The
+---process then ends naming the run and the kept patch. The temporary directory of a patch that
+---applied or was empty is removed.
+---@param root string the project root
+---@param spec dev.header.Fetch the job and file the verb's header names
+---@return integer code the exit code, 0 once the patch applied or was empty
+function M.apply(root, spec)
+    local path, run = download(root, spec, { patch = true })
+    local dir = fs.dirname(path)
+    local text = fs.read(path)
+    if not text or not text:find("%S") then
+        fs.remove(dir, { recursive = true })
+        verb.say("No file changed.")
+        return 0
     end
-    local run, target = start(root, spec)
-    local index = await(root, spec, run, target)
-    local dest = assert(fs.mktemp({ prefix = "dev-fetch", dir = true }))
-    local artifact = table.concat({ spec.job, index, target }, ".") .. "/" .. spec.file
-    local pulled = dev_os.run({ "ci", "-C", root, "cp", run .. ":" .. artifact, dest, "--force" })
-    if pulled ~= 0 then
-        verb.die("The command `ci cp " .. run .. ":" .. artifact .. "` failed.")
+    local opts = {
+        cwd = root,
+        stderr = "stdout",
+        env = { GIT_CEILING_DIRECTORIES = fs.dirname(root) },
+    }
+    local numstat, code = dev_os.capture({ "git", "apply", "--numstat", path }, opts)
+    local failure = numstat
+    if code == 0 then
+        failure, code = dev_os.capture({ "git", "apply", path }, opts)
     end
-    return dest .. "/" .. fs.basename(spec.file)
+    if code ~= 0 then
+        verb.die(
+            "The patch of ci run "
+                .. run
+                .. " does not apply and no file changed. It is kept at "
+                .. path
+                .. ".\n"
+                .. failure:gsub("%s+$", "")
+        )
+    end
+    fs.remove(dir, { recursive = true })
+    verb.relay(numstat)
+    return 0
 end
 
 return M

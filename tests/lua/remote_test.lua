@@ -61,7 +61,11 @@ run*)
     ;;
 "cp 123abc:"*)
     printf 'ci -C %s [cp] [%s] [%s]\n' "$root" "$2" "${4:+--force}" >>"$STUB_LOG"
-    printf 'binary\n' >"$3/${2##*/}"
+    if [ -n "${CI_STUB_PATCH:-}" ]; then
+        cp "$CI_STUB_PATCH" "$3/${2##*/}"
+    else
+        printf 'binary\n' >"$3/${2##*/}"
+    fi
     ;;
 esac
 ]]
@@ -775,6 +779,108 @@ testing.test("a fetch verb fails and names the run when the job does not pass", 
     local out, code = dev(root, base, { "show" }, { CI_STUB_STATUS = "failed" })
     testing.eq(code, 1)
     testing.ok(out:find("The ci run 123abc of job client did not pass.", 1, true), out)
+end)
+
+local PATCH_VERB = [[#!/usr/bin/env bash
+# Format the tree.
+# patch client fmt.patch
+echo "ran-here"
+]]
+
+local PATCH_LOG = "ci -C %s [run] [client] [--local] [--detach] [--job] [client:macos-vm-rust]\n"
+    .. "ci -C %s [ps] [-w]\n"
+    .. "ci -C %s [ps] [--json]\n"
+    .. "ci -C %s [cp] [123abc:client.2.macos-vm-rust/fmt.patch] [--force]\n"
+
+local PATCH_TEXT = "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n"
+
+local function patch_setup(patch)
+    local root, base = setup({ ["fmt.sh"] = PATCH_VERB })
+    assert(fs.write(root .. "/a.txt", "old\n"))
+    assert(fs.write(base .. "/patch", patch))
+    return root, base, { CI_STUB_PATCH = base .. "/patch" }
+end
+
+testing.test(
+    "a patch verb run remote applies the pulled patch and never runs the script",
+    function()
+        local root, base, env = patch_setup(PATCH_TEXT)
+        local expected = PATCH_LOG:format(root, root, root, root)
+        for _, args in ipairs({ { "fmt" }, { "--remote", "fmt" } }) do
+            assert(fs.write(root .. "/a.txt", "old\n"))
+            local out, code, log = dev(root, base, args, env)
+            testing.eq(code, 0, out)
+            testing.ok(not out:find("ran-here", 1, true), out)
+            testing.eq(fs.read(root .. "/a.txt"), "new\n")
+            testing.eq(log, expected)
+        end
+    end
+)
+
+testing.test("a patch verb leaves every file untouched on an empty patch", function()
+    local root, base, env = patch_setup("")
+    local out, code = dev(root, base, { "fmt" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("No file changed.", 1, true), out)
+    testing.eq(fs.read(root .. "/a.txt"), "old\n")
+end)
+
+testing.test(
+    "a patch verb that does not apply changes nothing and names the run and patch",
+    function()
+        local first = "--- a/b.txt\n+++ b/b.txt\n@@ -1 +1 @@\n-old\n+new\n"
+        local root, base, env = patch_setup(first .. PATCH_TEXT)
+        assert(fs.write(root .. "/b.txt", "old\n"))
+        assert(fs.write(root .. "/a.txt", "other\n"))
+        local out, code = dev(root, base, { "fmt" }, env)
+        testing.eq(code, 1)
+        testing.ok(out:find("ci run 123abc does not apply", 1, true), out)
+        testing.ok(out:find("fmt.patch", 1, true), out)
+        testing.eq(fs.read(root .. "/a.txt"), "other\n")
+        testing.eq(fs.read(root .. "/b.txt"), "old\n")
+    end
+)
+
+testing.test("a patch verb on a ci job or in a box runs here with no ci call", function()
+    local root, base, env = patch_setup(PATCH_TEXT)
+    assert(fs.write(base .. "/box", "name=x\n"))
+    local marker = { DEV_BOX_MARKER = base .. "/box" }
+    for _, extra in ipairs({ { CI = "true" }, marker }) do
+        extra.CI_STUB_PATCH = env.CI_STUB_PATCH
+        local out, code, log = dev(root, base, { "fmt" }, extra)
+        testing.eq(code, 0, out)
+        testing.eq(out, "ran-here\n")
+        testing.eq(log, "")
+    end
+end)
+
+testing.test("a patch verb shows its help under --remote and applies nothing", function()
+    local root, base, env = patch_setup(PATCH_TEXT)
+    local out, code, log = dev(root, base, { "--remote", "fmt", "-h" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Format the tree.", 1, true), out)
+    testing.eq(log, "")
+    testing.eq(fs.read(root .. "/a.txt"), "old\n")
+end)
+
+testing.test("a patch verb under --local or default local runs here with no ci call", function()
+    local root, base, env = patch_setup(PATCH_TEXT)
+    local runs = {
+        { args = { "--local", "fmt" }, env = env },
+        { args = { "fmt" }, env = { DEV_REMOTE = "0", CI_STUB_PATCH = env.CI_STUB_PATCH } },
+    }
+    for _, case in ipairs(runs) do
+        local out, code, log = dev(root, base, case.args, case.env)
+        testing.eq(code, 0, out)
+        testing.eq(out, "ran-here\n")
+        testing.eq(log, "")
+    end
+    write_config(base, 'default = "local"')
+    local out, code, log = dev(root, base, { "fmt" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(out, "ran-here\n")
+    testing.eq(log, "")
+    testing.eq(fs.read(root .. "/a.txt"), "old\n")
 end)
 
 testing.test("--remote ci run label keeps a caller's DEV_AGENT", function()

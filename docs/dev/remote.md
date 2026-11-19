@@ -105,6 +105,25 @@ start for it, fails with exit 1. The message names the platform, such as
 with its run id and the `ci logs` command that reads it. An agent's `DEV_AGENT`
 label rides on every ci run the fetch starts, as for `--remote`.
 
+### Verbs that apply a patch from ci
+
+A verb script whose header has a `# patch JOB FILE` line never runs here under
+the remote mode. It suits a verb that rewrites files, such as a formatter that
+must not run on the laptop. `JOB` is a job of a pipeline in `.ci/`, and `FILE`
+is the patch that job keeps with `ci.artifact`.
+
+In the remote mode dev starts `JOB` on the first target ci lists for it,
+whatever its OS and with no `--arch`, waits with `ci ps RUN -w`, and pulls
+`FILE` with `ci cp`. It lists the files the patch touches with
+`git apply --numstat` and applies it with `git apply` at the project root,
+never to the index. An empty patch prints `No file changed.` and exits 0.
+
+A patch that does not apply changes no file, because `git apply` is all or
+nothing. dev exits 1 and names the run id and the path where it kept the patch.
+A patch that applied, or was empty, leaves no temporary file.
+`--local`, `DEV_REMOTE=0` and `[remote] default = "local"` run the script here
+with no ci call, and so does a ci job or a dev box.
+
 ### When ci cannot be asked
 
 The default fails instead of running here, to keep a ci deploy from moving
@@ -261,3 +280,6 @@ only, so --remote does not apply`, whatever the runner.
 - install, uninstall, restow, sync, setup, fmt, fetch, help, init, push, pull,
   follow, land, guide, connect, clean, purge, list, skills and stow
 - every subcommand of tools, box, board, ws, pi and antinote
+
+A machine-local verb whose script has a `# patch JOB FILE` line runs its job on
+ci and applies the patch here instead of exiting 2.

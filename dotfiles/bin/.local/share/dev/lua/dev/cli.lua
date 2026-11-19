@@ -159,12 +159,17 @@ end
 
 local function runs_local(reg, row)
     local header = row and reg:header(row)
-    return header ~= nil and (header.runs_local or header.fetch ~= nil)
+    return header ~= nil and (header.runs_local or header.fetch ~= nil or header.patch ~= nil)
 end
 
 local function fetch_spec(reg, row)
     local header = row and reg:header(row)
     return header and header.fetch
+end
+
+local function patch_spec(reg, row)
+    local header = row and reg:header(row)
+    return header and header.patch
 end
 
 local function fetches(parsed, project_root)
@@ -475,14 +480,15 @@ function M.main(argv)
         interpreter = INTERPRETER,
     }
     local flag = name ~= "help" and help_flag(rest, parsed.after)
-    if flag and not parsed.remote then
+    local fetch_job = fetch_spec(reg, row)
+    local patch_job = patch_spec(reg, row)
+    if flag and (not parsed.remote or patch_job) then
         os.exit(help.verb(ctx, reg, { words = words, short = flag == "-h" }))
     end
     if name == "help" and not parsed.remote and not (row and row.script) then
         os.exit(help.run(ctx, reg))
     end
-    local fetch_job = fetch_spec(reg, row)
-    if parsed.remote and not fetch_job then
+    if parsed.remote and not fetch_job and not patch_job then
         os.exit(
             remote.run(
                 ctx,
@@ -503,6 +509,9 @@ function M.main(argv)
     end
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)
+        if patch_job and not on_remote_host and fetches(parsed, project_root) then
+            os.exit(fetch.apply(project_root, patch_job))
+        end
         if fetch_job and not on_remote_host and fetches(parsed, project_root) then
             dev_os.setenv(fetch.ENV, fetch.pull(project_root, fetch_job))
         end

@@ -135,6 +135,9 @@ prints the script's header. A header can carry these lines.
 - `# fetch JOB FILE`: runs the verb here, and under the remote mode first
   builds `FILE` with the ci job `JOB` on this host's platform and hands the
   pulled path to the verb in `DEV_FETCHED`. `dev help remote` has the rule.
+- `# patch JOB FILE`: under the remote mode runs the ci job `JOB` and applies
+  the patch `FILE` it keeps at the project root, in place of running the verb.
+  `dev help remote` has the rule.
 - `# positional`: marks a `.lua` verb that takes positional words. A word
   shaped `KEY=value` stays in `ctx.args` for it and `ctx.vars` is empty.
 
