@@ -2389,8 +2389,8 @@ the lead.
 - A local board has no bin and exits 1.
 - Pomb's refusals print as they come. A `permission_denied` 403 names the
   permission and board, and `card_locked` says the card is locked.
-- A locked card refuses the comment first and keeps nothing. A delete Pomb
-  refuses after the comment leaves the comment on the card.
+- A locked card refuses the comment first and keeps nothing. When Pomb refuses
+  the delete after the comment was posted, the comment stays on the card.
 - The change is not queued while Pomb is unreachable.
 - Emptying the bin and deleting from it stay with the owner.
 

@@ -4788,7 +4788,7 @@ end
 
 local LEAD_TOKEN_KEY = "lead_token"
 
-local function open_backend(settings, token)
+local function open_backend(settings, token_key)
     if settings.backend == board.Backend.LOCAL then
         if settings.path then
             return localboard.new({ name = settings.name, path = settings.path })
@@ -4808,9 +4808,9 @@ local function open_backend(settings, token)
     end
     local backend, reason = pomb.new({
         url = config.user("board.pomb.url"),
-        token = config.user("board.pomb." .. token),
+        token = config.user("board.pomb." .. token_key),
         name = settings.name,
-        lead = token == LEAD_TOKEN_KEY,
+        lead = token_key == LEAD_TOKEN_KEY,
     })
     if not backend then
         return nil, POMB_REFUSALS[reason]
@@ -4825,8 +4825,8 @@ end
 ---@return string? message why there is none
 function M.open(settings, opts)
     local TOKEN_KEY = "token"
-    local token = opts and opts.token_key or TOKEN_KEY
-    local backend, message = open_backend(settings, token)
+    local token_key = opts and opts.token_key or TOKEN_KEY
+    local backend, message = open_backend(settings, token_key)
     if backend then
         board.retarget(backend, settings.columns, settings.root)
     end
