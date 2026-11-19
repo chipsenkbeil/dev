@@ -344,9 +344,16 @@ local function address(handler)
     return tonumber(ffi.cast("intptr_t", handler))
 end
 
+---Set a signal to its default handler and return the handler it replaced.
+---@param signum integer the signal number
+---@return ffi.cdata* handler
+local function peek_handler(signum)
+    return ffi.C.signal(signum, ffi.cast("void (*)(int)", SIG_DFL))
+end
+
 ---Make SIGTERM raise the same interrupt error as SIGINT.
 function M.catch_term()
-    local handler = ffi.C.signal(SIGINT, ffi.cast("void (*)(int)", SIG_DFL))
+    local handler = peek_handler(SIGINT)
     ffi.C.signal(SIGINT, handler)
     if address(handler) > SIG_IGN then
         ffi.C.signal(SIGTERM, handler)
@@ -358,7 +365,7 @@ end
 ---@return integer code 128 plus SIGTERM when `catch_term` caught SIGTERM, 128 plus SIGINT otherwise
 function M.interrupt_code()
     if state.term_installed then
-        local current = ffi.C.signal(SIGTERM, ffi.cast("void (*)(int)", SIG_DFL))
+        local current = peek_handler(SIGTERM)
         if address(current) == SIG_DFL then
             return M.SIGNAL_EXIT_BASE + SIGTERM
         end
