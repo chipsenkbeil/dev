@@ -5309,6 +5309,14 @@ for sub in pairs(commands) do
             and index_of(ctx.args, runcard.ORDERS_FLAG)
             and not index_of(ctx.args, runcard.END_FLAG)
         then
+            local _, refused = runcard.precheck(ctx.args, board_setup.NAME_CHARS)
+            if refused then
+                if refused.code == USAGE then
+                    verb.usage_error(ctx, refused.message)
+                end
+                verb.note(refused.message)
+                return refused.code or FAILURE
+            end
             board_setup.ensure_board(ctx, function(making)
                 return M.handlers["board init"](making)
             end)

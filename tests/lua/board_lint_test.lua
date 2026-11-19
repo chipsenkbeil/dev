@@ -243,6 +243,15 @@ testing.test("lint gives an epic no claimant exemption", function()
     })
 end)
 
+testing.test("lint passes an In Progress run card with no claimant", function()
+    local cards = {
+        card(1, NAME.PROGRESS, { claimant = false, labels = { board.RUN } }),
+        card(2, NAME.PROGRESS, { claimant = false }),
+    }
+    local result = cmd_board.run("lint", {}, backend(cards))
+    testing.eq(findings(result.output), { "00000002 In Progress in progress with no claimant" })
+end)
+
 testing.test("lint asks a card without children for a checks row and an epic for none", function()
     local cards = {
         card(1, NAME.PROGRESS, { outcomes = outcomes(2), checks = {} }),

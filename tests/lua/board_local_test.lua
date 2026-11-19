@@ -3770,10 +3770,193 @@ end)
 
 testing.test("run on a private project with no board starts making one", function()
     local root, home = setup("")
-    local out, code = dev(root, home, { "board", "run", "--orders", "x" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "run", "--orders", "x" },
+        { DEV_AGENT = "dotfiles/lead" }
+    )
     testing.eq(code, 1, out)
     testing.ok(out:find("This project is private and has no board.", 1, true), out)
     testing.ok(out:find("lead_token", 1, true), out)
+end)
+
+testing.test("run with orders over the limit makes no board", function()
+    local root, home = setup("")
+    local agent = { DEV_AGENT = "dotfiles/one" }
+    local long = string.rep("word ", 300)
+    local refused = {
+        { "--orders", long },
+        { "--orders", "a", "--orders", "b" },
+        { "--orders", "" },
+    }
+    for _, flags in ipairs(refused) do
+        local args = { "board", "run", unpack(flags) }
+        local out, code = dev(root, home, args, agent)
+        testing.eq(code, 2, out)
+        testing.ok(not out:find("Making", 1, true), out)
+    end
+    local out, code = dev(
+        root,
+        home,
+        { "board", "run", "--orders", "x" },
+        { DEV_AGENT = "dotfiles/" .. string.rep("x", 100) }
+    )
+    testing.eq(code, 2, out)
+    testing.ok(out:find("too long", 1, true), out)
+    testing.ok(not out:find("Making", 1, true), out)
+    testing.eq(fs.exists(root .. "/.dev/board.json"), false)
+    testing.eq(fs.read(root .. "/.dev/config.toml"):find("backend", 1, true), nil)
+end)
+
+local function unboarded(origin, private)
+    local root, home = setup("")
+    if origin then
+        assert(dev_os.run({ "git", "-C", root, "init", "-q" }) == 0, "git init failed")
+        assert(
+            dev_os.run({ "git", "-C", root, "remote", "add", "origin", origin }) == 0,
+            "git remote failed"
+        )
+    end
+    assert(fs.write(root .. "/bin/gh", "#!/bin/sh\necho " .. tostring(private) .. "\n"))
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/gh" }) == 0, "chmod failed")
+    return root, home
+end
+
+testing.test(
+    "run makes a board for a private project and refuses a public or non-GitHub one",
+    function()
+        local agent = { DEV_AGENT = "dotfiles/one" }
+        local root, home = unboarded("https://github.com/o/r.git", true)
+        local out, code = dev(root, home, { "board", "run", "--orders", "x" }, agent)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("This project is private and has no board.", 1, true), out)
+        root, home = unboarded("https://gitlab.example.com/o/r.git", true)
+        out, code = dev(root, home, { "board", "run", "--orders", "x" }, agent)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("public or not known to be private", 1, true), out)
+        testing.ok(not out:find("Making", 1, true), out)
+        root, home = unboarded("https://github.com/o/r.git", false)
+        out, code = dev(root, home, { "board", "run", "--orders", "x" }, agent)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("public or not known to be private", 1, true), out)
+        testing.ok(not out:find("Making", 1, true), out)
+    end
+)
+
+testing.test("run prints the cards the session holds and the ready card that is next", function()
+    local root, home = local_board()
+    local agent = { DEV_AGENT = "dotfiles/one" }
+    local function add(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            Column.READY,
+            "--size",
+            "1",
+            "--description",
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--checks",
+            "dev test",
+        })))
+    end
+    local held = add("Held card")
+    add("Next card")
+    local out, code = dev(root, home, { "board", "take", held }, agent)
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "run", "--orders", "Clear the board" }, agent)
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "run" }, agent)
+    testing.eq(code, 0, out)
+    local from_held = out:find("held by dotfiles/one:", 1, true)
+    local from_next = out:find("\nnext:\n", 1, true)
+    testing.ok(from_held and from_next and from_held < from_next, out)
+    local holding = out:sub(from_held, from_next)
+    testing.ok(holding:find("Held card", 1, true) and not holding:find("Next card", 1, true), out)
+    testing.ok(out:sub(from_next):find("Next card", 1, true), out)
+end)
+
+local RUN_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+local RUN_AGENT = { DEV_AGENT = "dotfiles/one" }
+local RUN_JUDGED = '[{"id":"r1","name":"a (reviewer judgement)","done":false},'
+    .. '{"id":"r2","name":"b (reviewer judgement)","done":false},'
+    .. '{"id":"r3","name":"c (reviewer judgement)","done":false}]'
+local RUN_COPY = 'if [ "$method" = POST ] && [ -f "$ROOT/after_post.json" ]; then '
+    .. 'cp "$ROOT/after_post.json" "$ROOT/export.json"; fi\n'
+local RUN_OWNER = '*/owner|*/owner/renew) body=\'{"holder":{"kind":"agent","name":"dotfiles/one"},'
+    .. '"fence":1}\' ;;\n'
+
+---Make the fake Pomb answer owner requests and swap in the export that follows a task add.
+local function run_curl(root)
+    local text = CURL:gsub('status=200\ncase "%$last" in\n', function(head)
+        return RUN_COPY .. head .. RUN_OWNER
+    end, 1)
+    assert(fs.write(root .. "/bin/curl", text))
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+end
+
+---Build an export that holds a run card in front of the board's two Ready cards.
+local function export_with_run(task)
+    local run = support.pomb_export_task({
+        id = RUN_ID,
+        name = "run dotfiles/one",
+        color_id = BLUE_ID,
+        labels = { board.RUN },
+        description = "## Problem\\nx\\n\\n## Change\\n- > orders\\n\\n## Out of scope\\nnone",
+        subtasks = RUN_JUDGED,
+        column_id = task.column_id,
+        holder = task.holder,
+        claim_fence = task.holder and 1 or 0,
+        position = 0,
+    })
+    return (EXPORT:gsub('^{"tasks":%[', function(head)
+        return head .. run .. ","
+    end))
+end
+
+testing.test("run on a Pomb board starts, resumes and ends a run card", function()
+    local root, home = pomb()
+    run_curl(root)
+    assert(fs.write(
+        root .. "/after_post.json",
+        export_with_run({
+            column_id = support.column_id(Column.PROGRESS),
+            holder = "dotfiles/one",
+        })
+    ))
+    local env = { ROOT = root, DEV_AGENT = RUN_AGENT.DEV_AGENT }
+    local out, code = dev(root, home, { "board", "run", "--orders", "Clear the board" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("started cccccccc", 1, true), out)
+    testing.ok(out:find("run dotfiles/one", 1, true), out)
+    testing.ok(calls(root):find("/api/tasks/" .. RUN_ID .. "/owner", 1, true), calls(root))
+    testing.ok(fs.read(root .. "/bodies"):find("Clear the board", 1, true), "orders were not sent")
+    out, code = dev(root, home, { "board", "run" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("run dotfiles/one", 1, true), out)
+    testing.ok(out:find("held by dotfiles/one:\nnothing\nnext:\n", 1, true), out)
+    testing.ok(out:find("\nnext:\n%x+  Ready"), out)
+    out, code = dev(root, home, { "board", "run", "--end" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("ended cccccccc", 1, true), out)
+    testing.ok(calls(root):find("/api/tasks/" .. RUN_ID .. "/owner/release", 1, true), calls(root))
+end)
+
+testing.test("next on a Pomb board skips a run card", function()
+    local root, home = pomb()
+    assert(fs.write(root .. "/export.json", export_with_run({ column_id = READY_COLUMN })))
+    local out, code = dev(root, home, { "board", "next" }, { ROOT = root, DEV_MAX_SIZE = "" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("bbbbbbbb", 1, true), out)
+    testing.ok(not out:find("cccccccc", 1, true) and not out:find("run dotfiles", 1, true), out)
 end)
 
 testing.test(

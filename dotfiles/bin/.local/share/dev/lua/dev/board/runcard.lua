@@ -33,10 +33,12 @@ local function run_card_for(cards, name)
     end
 end
 
-local function start_run(backend, name, orders, deps)
+---Quote each line of the orders and refuse orders that are empty or over the word limit.
+---@param orders string the orders text
+---@return string[]? quoted the quoted lines, nil when refused
+---@return dev.cmd.board.Result? refused the usage error, set when quoted is nil
+local function quote_orders(orders)
     local RUN_ORDERS_WORDS = 250
-    local RUN_SIZE = "3"
-    local RUN_CHECK = "dev board lint"
     local quoted, words = {}, 0
     for line in orders:gmatch("[^\r\n]+") do
         if line:find("%S") then
@@ -47,18 +49,25 @@ local function start_run(backend, name, orders, deps)
         words = words + 1
     end
     if #quoted == 0 then
-        return usage("The " .. M.ORDERS_FLAG .. " flag needs the orders.")
+        return nil, usage("The " .. M.ORDERS_FLAG .. " flag needs the orders.")
     end
     if words > RUN_ORDERS_WORDS then
-        return usage(
-            string.format(
-                "The orders are %d words and a run card holds at most %d. "
-                    .. "Keep the rest in a file and name it in the orders.",
-                words,
-                RUN_ORDERS_WORDS
+        return nil,
+            usage(
+                string.format(
+                    "The orders are %d words and a run card holds at most %d. "
+                        .. "Keep the rest in a file and name it in the orders.",
+                    words,
+                    RUN_ORDERS_WORDS
+                )
             )
-        )
     end
+    return quoted
+end
+
+local function start_run(backend, name, quoted, deps)
+    local RUN_SIZE = "3"
+    local RUN_CHECK = "dev board lint"
     local args = {
         RUN_NAME .. name,
         "--column",
@@ -144,13 +153,20 @@ local function resume_run(backend, opts, deps)
     }
 end
 
----Start, resume or end the session's run card.
----@param backend dev.board.Backend the board
+---@class dev.board.runcard.Plan
+---@field ending boolean whether the run ends
+---@field quoted string[]? the quoted lines of the orders, nil unless the run starts
+---@field name string the session's claimant name
+
+---Check what a run needs before it reads or makes anything on a board.
+---
+---It refuses a flag mix, orders that are empty or over the word limit, a missing or too long
+---session name.
 ---@param args string[] the run arguments
----@param deps dev.board.runcard.Deps the board verbs and helpers the run calls
----@return dev.cmd.board.Result result the run's outcome
-function M.run(backend, args, deps)
-    local RUN_USAGE = "Start one with `dev board run --orders TEXT`."
+---@param name_chars integer the longest card name
+---@return dev.board.runcard.Plan? plan the parsed run, nil when refused
+---@return dev.cmd.board.Result? refused the usage error, set when plan is nil
+function M.precheck(args, name_chars)
     local ending, rest = false, {}
     for _, arg in ipairs(args) do
         if arg == M.END_FLAG then
@@ -161,38 +177,62 @@ function M.run(backend, args, deps)
     end
     local flags, words = parse(rest, { [M.ORDERS_FLAG] = true }, { [M.ORDERS_FLAG] = true })
     if not flags then
-        return words
+        return nil, words
     end
     if flags[M.ORDERS_FLAG] and #flags[M.ORDERS_FLAG] > 1 then
-        return usage("The " .. M.ORDERS_FLAG .. " flag takes one value, so give the orders once.")
+        return nil,
+            usage("The " .. M.ORDERS_FLAG .. " flag takes one value, so give the orders once.")
     end
-    flags[M.ORDERS_FLAG] = flags[M.ORDERS_FLAG] and flags[M.ORDERS_FLAG][1]
+    local orders = flags[M.ORDERS_FLAG] and flags[M.ORDERS_FLAG][1]
     if #words > 0 then
-        return usage("Unknown argument " .. words[1] .. ".")
+        return nil, usage("Unknown argument " .. words[1] .. ".")
     end
-    if ending and flags[M.ORDERS_FLAG] then
-        return usage(
-            "The " .. M.END_FLAG .. " and " .. M.ORDERS_FLAG .. " flags do not go together."
-        )
+    if ending and orders then
+        return nil,
+            usage("The " .. M.END_FLAG .. " and " .. M.ORDERS_FLAG .. " flags do not go together.")
     end
     local name, why = agent_name()
     if why then
-        return why
+        return nil, why
     end
     local session = os.getenv("CLAUDE_SESSION_ID")
     if not name and (not session or session == "") then
-        return usage("Run needs DEV_AGENT or CLAUDE_SESSION_ID, so the session keeps one name.")
+        return nil,
+            usage("Run needs DEV_AGENT or CLAUDE_SESSION_ID, so the session keeps one name.")
     end
     name = claimant(name)
-    if #RUN_NAME + #name > deps.name_chars then
-        return usage("The session name is too long for a card name.")
+    if #RUN_NAME + #name > name_chars then
+        return nil, usage("The session name is too long for a card name.")
     end
+    local quoted
+    if orders then
+        local refused
+        quoted, refused = quote_orders(orders)
+        if not quoted then
+            return nil, refused
+        end
+    end
+    return { ending = ending, quoted = quoted, name = name }
+end
+
+---Start, resume or end the session's run card.
+---@param backend dev.board.Backend the board
+---@param args string[] the run arguments
+---@param deps dev.board.runcard.Deps the board verbs and helpers the run calls
+---@return dev.cmd.board.Result result the run's outcome
+function M.run(backend, args, deps)
+    local RUN_USAGE = "Start one with `dev board run --orders TEXT`."
+    local plan, refused = M.precheck(args, deps.name_chars)
+    if not plan then
+        return refused
+    end
+    local name, ending = plan.name, plan.ending
     local cards, message = backend:cards()
     if not cards then
         return failure(message)
     end
     local run = run_card_for(cards, name)
-    if flags[M.ORDERS_FLAG] then
+    if plan.quoted then
         if run then
             return failure(
                 name
@@ -203,7 +243,7 @@ function M.run(backend, args, deps)
                     .. "` first."
             )
         end
-        return start_run(backend, name, flags[M.ORDERS_FLAG], deps)
+        return start_run(backend, name, plan.quoted, deps)
     end
     if not run then
         return failure("There is no open run card for " .. name .. ". " .. RUN_USAGE)

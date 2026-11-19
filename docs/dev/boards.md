@@ -4061,6 +4061,8 @@ With `--orders TEXT`:
 - It prints `started <id prefix>`, then the card as `show` does.
 - Orders over 250 words, counting each line's quote mark, are exit 2.
 - A session that already has an open run card is exit 1.
+- The flag mix, the word limit and the session name are checked before any
+  board is made, so a refused run leaves no new board behind.
 - In a project with no `[board]` section, it makes the board as
   `init --name <directory>` does when the project is private. That means no
   origin, or an origin on github.com that `gh repo view` says is private.
