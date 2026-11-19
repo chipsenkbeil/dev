@@ -1785,10 +1785,11 @@ prints the top Ready card that is unclaimed, not blocked and not labelled
 - `--lane L` takes the top such card of one swimlane, with the same usage error
   as `ls` for a lane the board lacks.
 - With no `--lane` on a Pomb board of two or more lanes, `next` asks each lane
-  in lane order and then the cards of no known lane, and prints the first card
-  it may take. Pomb numbers positions within one lane, so its own column order
-  would not put the earlier lane first. A board of one lane sends no lane
-  filter. A local board sorts by lane already.
+  in lane order, then lists the whole column once more with no lane filter.
+  That last pass is also how it reaches cards in no known lane, and it prints
+  the first card it may take. Pomb numbers positions within one lane, so its own
+  column order would not put the earlier lane first. A board of one lane sends
+  no lane filter. A local board sorts by lane already.
 
 - The card is in the `ls` format, followed by `N comments, M the owner's`
   (`1 comment` for one). On a Pomb board a `link: <url>/t/<card id>` line

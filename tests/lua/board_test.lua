@@ -11779,6 +11779,34 @@ testing.test("pomb next asks each lane in lane order", function()
     testing.ok(fixes == nil or parity < fixes, calls)
 end)
 
+testing.test("pomb next-last-pass asks each lane, then once with no lane filter", function()
+    local root, home = laned(LANED_TASKS)
+    testing.eq(dev_os.run({ "mv", root .. "/bin/curl", root .. "/bin/curl_real" }), 0)
+    executable(
+        root .. "/bin/curl",
+        "#!/bin/sh\n"
+            .. 'cat >"$ROOT/in"\n'
+            .. 'case " $* " in *swimlane_id=*)\n'
+            .. 'printf \'curl %s\\n\' "$*" >>"$ROOT/calls"\n'
+            .. "printf '%s\\n%s' '{\"items\":[],\"next_cursor\":null}' 200 ;;\n"
+            .. '*) exec "$ROOT/bin/curl_real" "$@" <"$ROOT/in" ;; esac\n'
+    )
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    local parity = calls:find("&swimlane_id=lane-parity", 1, true)
+    local fixes = calls:find("&swimlane_id=lane-fixes", 1, true)
+    testing.ok(parity and fixes and parity < fixes, calls)
+    local last_ready
+    for line in calls:gmatch("[^\n]+") do
+        if line:find("ready=true", 1, true) then
+            last_ready = line
+        end
+    end
+    testing.ok(last_ready and not last_ready:find("swimlane_id", 1, true), calls)
+    testing.ok(calls:find(last_ready, 1, true) > fixes, calls)
+end)
+
 testing.test("pomb next on a one lane board sends no lane filter", function()
     local root, home = sandbox()
     local _, code = dev(root, home, { "board", "next" })
