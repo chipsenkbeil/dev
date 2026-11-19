@@ -137,10 +137,36 @@ end)
 testing.test("a flat script takes the whole name from a directory of the same name", function()
     local root = make_project()
     scripted(root, ".dev/n.sh", "#!/usr/bin/env bash\n# Flat n.\n")
-    local reg = registry.load(root)
+    local warned = {}
+    local reg = registry.load(root, {
+        warn = function(message)
+            warned[#warned + 1] = message
+        end,
+    })
     testing.eq(reg:is_noun("n"), false)
     testing.eq(reg:find({ "n" }).desc, "Flat n.")
     testing.eq(reg:find({ "n", "x" }), nil)
+    testing.eq(reg:find({ "n" }).desc, "Flat n.")
+    testing.eq(warned, {
+        "The script "
+            .. root
+            .. "/.dev/n.sh shadows the directory "
+            .. root
+            .. "/.dev/n. Its subcommands never run.",
+    })
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a directory with no flat script of the same name gives no warning", function()
+    local root = make_project()
+    local warned = {}
+    local reg = registry.load(root, {
+        warn = function(message)
+            warned[#warned + 1] = message
+        end,
+    })
+    testing.eq(reg:is_noun("n"), true)
+    testing.eq(warned, {})
     fs.remove(root, { recursive = true })
 end)
 

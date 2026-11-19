@@ -24,7 +24,7 @@ dev help lint
 
 `dev <noun> <sub>` runs `.dev/<noun>/<sub>.sh` (or `.lua`). A directory of
 executable scripts is a noun, unless a flat `.dev/<noun>.sh` takes the whole
-name.
+name, and dev then warns once that the script shadows the directory.
 
 A built-in noun (`dev tools`) keeps its subcommands. A project script never
 replaces them, but it can add new ones. A noun with no subcommand, or an

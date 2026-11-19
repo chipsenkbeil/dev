@@ -316,6 +316,15 @@ function Registry:__verb(name)
     elseif script then
         row = { words = { name }, kind = "local", script = script.path, lang = script.lang }
         row.desc = self:__header(script.path, script.lang).desc
+        if self:__has_subs(name) then
+            self.warn(
+                "The script "
+                    .. script.path
+                    .. " shadows the directory "
+                    .. fs.join(self.root, ".dev", (name:gsub(" ", "/")))
+                    .. ". Its subcommands never run."
+            )
+        end
     elseif self:__has_subs(name) then
         row = { words = { name }, kind = "local", noun = true }
         row.desc = self:__noun_desc(name)
