@@ -2160,6 +2160,48 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test(
+        "land carries a child's check after its checked parent landed rewritten",
+        function()
+            local project = jj_project()
+            stack_on_parent(project, { args = { "-m", "feat: parent" }, body = "mid\n" })
+            local id = verified_card(project)
+            local before = head(project.root)
+            trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            jj(project.root, "rebase", "-s", "@-", "-d", "master")
+            jj(project.root, "bookmark", "set", "master", "-r", "@-")
+            jj(project.root, "git", "push", "--remote", "origin", "--bookmark", "master")
+            testing.ok(head(project.root) ~= before, "the rebase must rewrite the child")
+            local out, code = dev(
+                project,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
+            testing.eq(code, 0, out)
+            local list = comments(project.home)
+            testing.ok(
+                list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
+                list[#list].body
+            )
+            testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+        end
+    )
+
+    testing.test(
+        "land refuses a rebase that changes the patch and names the checked commit",
+        function()
+            local project = jj_project()
+            local id = review_ready(project)
+            local before = head(project.root)
+            assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
+            trunk_moves(project, { ["shared.txt"] = "A\nb\nc\nd\ne\nf\ng\n" })
+            rebase_onto_trunk(project.root)
+            refused(project, id, {
+                "This commit differs from the checked commit " .. before:sub(1, 12),
+            })
+        end
+    )
+
+    testing.test(
         "land refuses the carry when the checked commit sat off trunk's ancestry",
         function()
             local project = jj_project()

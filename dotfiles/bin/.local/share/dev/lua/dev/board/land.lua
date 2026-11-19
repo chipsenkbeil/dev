@@ -697,6 +697,27 @@ local function git_carry_problem(root, state, commit)
     end
 end
 
+local function parent_landed(root, base_rev)
+    local change = jj_out(root, "log", "-r", base_rev, "--no-graph", "-T", 'change_id ++ "\\n"')
+    local id = change and change:match("%S+")
+    if not id then
+        return nil
+    end
+    local landed = jj_out(
+        root,
+        "log",
+        "-r",
+        string.format("change_id(%s) & ::@-", id),
+        "--no-graph",
+        "-T",
+        COMMIT_TEMPLATE
+    )
+    if landed == nil then
+        return nil
+    end
+    return landed ~= ""
+end
+
 local function carry_problem(root, state, commit)
     if vcs.backend(root) == vcs.GIT then
         return git_carry_problem(root, state, commit)
@@ -724,6 +745,14 @@ local function carry_problem(root, state, commit)
     end
     local ancestor = count_lines(base) == 1
         and jj_out(root, "log", "-r", base_rev .. " & ::@-", "--no-graph", "-T", COMMIT_TEMPLATE)
+    if ancestor ~= nil and ancestor ~= base and count_lines(base) == 1 then
+        local landed = parent_landed(root, base_rev)
+        if landed == nil then
+            ancestor = nil
+        elseif landed then
+            ancestor = base
+        end
+    end
     if ancestor == nil then
         return string.format(
             "The `jj` command could not read the ancestor of the checked commit %s.",
@@ -1022,7 +1051,8 @@ end
 ---The rule holds when all of these are true:
 ---
 ---1. The change id is the same as the checked commit's.
----2. The checked commit sits on one ancestor of trunk, and the landing commit's parent is trunk.
+---2. The checked commit sits on one ancestor of trunk, or on a parent that trunk now holds as a
+---   rewrite of the same change, and the landing commit's parent is trunk.
 ---3. The interdiff against the checked commit is empty.
 ---4. The rebase left no conflict, which `land.state` checks before this runs.
 ---
