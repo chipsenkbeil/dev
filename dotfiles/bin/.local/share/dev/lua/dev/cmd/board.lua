@@ -31,6 +31,8 @@ local board_wait = require("dev.board.wait")
 local wiring = require("dev.board.wiring")
 
 local NO_BOARD = "This project has no board."
+local FULL_ID = "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$"
+local UNKNOWN_COLUMN = "?"
 local USAGE = guards.USAGE
 local FAILURE = guards.FAILURE
 local usage = guards.usage
@@ -314,13 +316,24 @@ local function link_suffix(backend, card)
 end
 
 local function find_card(backend, word)
-    local cards, message = backend:cards()
+    if word:find(FULL_ID) then
+        local card = backend:card(word:lower(), { listed = true })
+        if card and card.column ~= UNKNOWN_COLUMN then
+            return card
+        end
+    end
+    local cards, message = backend:cards({ summary = true })
     if not cards then
         return nil, failure(message)
     end
-    local card, why = board.resolve(cards, word)
-    if not card then
+    local found, why = board.resolve(cards, word)
+    if not found then
         return nil, failure(why)
+    end
+    local card
+    card, message = backend:card(found.id, { listed = true })
+    if not card then
+        return nil, failure(message)
     end
     return card
 end

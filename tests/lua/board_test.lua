@@ -892,17 +892,19 @@ end)
 testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", function()
     local backend = fake(sample())
     local far = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    local far_card = {
+        id = far,
+        name = "Far",
+        column = support.COLUMN_NAME.READY,
+        labels = {},
+        checks = {},
+    }
     backend.sibling = {
         cards = function()
-            return {
-                {
-                    id = far,
-                    name = "Far",
-                    column = support.COLUMN_NAME.READY,
-                    labels = {},
-                    checks = {},
-                },
-            }
+            return { far_card }
+        end,
+        card = function()
+            return far_card
         end,
     }
     cmd_board.run("add", {
@@ -1873,18 +1875,20 @@ end)
 
 testing.test("link to BOARD:CARD resolves the card on the other board", function()
     local backend = fake(sample())
+    local far_card = {
+        id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        name = "Far",
+        column = support.COLUMN_NAME.READY,
+        size = "unsized",
+        labels = {},
+        checks = {},
+    }
     local elsewhere = {
         cards = function()
-            return {
-                {
-                    id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-                    name = "Far",
-                    column = support.COLUMN_NAME.READY,
-                    size = "unsized",
-                    labels = {},
-                    checks = {},
-                },
-            }
+            return { far_card }
+        end,
+        card = function()
+            return far_card
         end,
     }
     backend.sibling = elsewhere
@@ -2319,6 +2323,14 @@ testing.test("show prints the card line, its description and its comments", func
     local backend = with_comments()
     backend.cards = function()
         return cards
+    end
+    backend.card = function(_, id)
+        for _, card in ipairs(cards) do
+            if card.id == id then
+                return card
+            end
+        end
+        return nil, "no card " .. id
     end
     local result = cmd_board.run("show", { "11111111-a" }, backend)
     testing.eq(
@@ -5925,13 +5937,14 @@ local function sandbox(opts)
                 or '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
         )
     )
+    local export = opts.export or EXPORT
     for name, body in pairs({
         ["boards.json"] = BOARDS,
         ["detail.json"] = opts.detail or DETAIL,
         ["colors.json"] = COLORS,
         ["fields.json"] = opts.fields or support.FIELDS,
-        ["export.json"] = opts.export or EXPORT,
-        ["task.json"] = opts.task or TASK,
+        ["export.json"] = export,
+        ["task.json"] = opts.task or (not export:find(ID_A, 1, true) and TASK or nil),
         ["comments.json"] = COMMENTS,
         ["links.json"] = opts.links or "[]",
         ["holder_links.json"] = opts.holder_links or "[]",
@@ -6873,6 +6886,21 @@ testing.test("the lead's close of an epic names the open children and unticked o
     testing.eq(read(root, "move_stdin"), "")
 end)
 
+testing.test(
+    "a full id resolves an epic whose children are closed with its outcomes unticked",
+    function()
+        local root, home = epic_sandbox(2, false)
+        local out, code = dev(
+            root,
+            home,
+            { "board", "move", ID_A, support.Column.DONE },
+            { agent = LEAD }
+        )
+        testing.eq(code, 1, out)
+        testing.ok(out:find("2 of 2 outcomes are unticked (1. A works, 2. B works)", 1, true), out)
+    end
+)
+
 testing.test("the lead's close of an epic with no lead token set names epics.manage", function()
     local root, home = epic_sandbox(2, true)
     assert(
@@ -6999,7 +7027,9 @@ testing.test("discard queues each step it could not take, in order, once", funct
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     executable(
         root .. "/bin/curl",
-        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/*) cat >/dev/null; exit 7 ;; esac\n'
+        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/*)\n'
+            .. 'if [ -f "$ROOT/detail_read" ]; then cat >/dev/null; exit 7; fi\n'
+            .. ': >"$ROOT/detail_read" ;; esac\n'
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
@@ -7016,7 +7046,8 @@ testing.test("discard does not queue the note again once it has been posted", fu
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     executable(
         root .. "/bin/curl",
-        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */comments) ;; */api/tasks/*) cat >/dev/null; exit 7 ;; esac\n'
+        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */comments) : >"$ROOT/noted" ;; */api/tasks/*)\n'
+            .. 'if [ -f "$ROOT/noted" ]; then cat >/dev/null; exit 7; fi ;; esac\n'
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
@@ -7064,7 +7095,8 @@ testing.test("outcome sends the claim's fence on the subtask call", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "take", "11111111" })
     testing.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
+    out, code =
+        dev(root, home, { "board", "outcome", "11111111", "--tick", "1", "--as", "reviewer" })
     testing.eq(code, 0, out)
     local calls = read(root, "calls")
     testing.ok(
@@ -7137,11 +7169,7 @@ testing.test("next asks for the unclaimed unblocked top of Ready", function()
     )
 end)
 
-local EPIC_TASK = '{"id":"'
-    .. ID_A
-    .. '","name":"First","column_id":"'
-    .. READY_COLUMN
-    .. '","color_id":"yellow-id","labels":["docs"],"kind":"epic","children_total":3,"children_done":%d}'
+local EPIC_TASK = '{"id":"' .. ID_A .. '","kind":"epic","children_total":3,"children_done":%d}'
 
 testing.test("epic_next_skips_open_child", function()
     local root, home = sandbox({ task = EPIC_TASK:format(1) })
@@ -8847,7 +8875,8 @@ testing.test("take keeps the claim and warns when the card cannot be read after 
         root .. "/bin/curl",
         '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/'
             .. ID_A
-            .. ") cat >/dev/null; exit 7 ;; esac\n"
+            .. ')\nif [ -f "$ROOT/detail_read" ]; then cat >/dev/null; exit 7; fi\n'
+            .. ': >"$ROOT/detail_read" ;; esac\n'
             .. CURL:gsub("^#!/bin/sh\n", "")
     )
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
@@ -9559,6 +9588,37 @@ testing.test("the pomb card read of a missing task returns nil and names the tas
     testing.ok(card.message:find("404", 1, true), card.message)
     testing.ok(card.message:find(ID_D, 1, true), card.message)
     testing.eq(read(root, "calls"):find("export-data", 1, true), nil)
+end)
+
+testing.test("find card skips the export and reads the list and one task for a prefix", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "note", "11111111-a", "hello" })
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    testing.eq(calls:find("export-data", 1, true), nil)
+    testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
+end)
+
+testing.test("a full id skips the list and reads the task detail", function()
+    local root, home = sandbox({ export = '{"tasks":[]}' })
+    local out, code = dev(root, home, { "board", "note", ID_A, "hello" })
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    testing.eq(calls:find("export-data", 1, true), nil)
+    testing.eq(calls:find("/tasks?limit=1000", 1, true), nil)
+    testing.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
+end)
+
+testing.test("a full id of a card on another board is refused like an unknown prefix", function()
+    local root, home = far_sandbox("far-ready")
+    local out, code = dev(root, home, { "board", "note", ID_D, "hello" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("No card starts with " .. ID_D, 1, true), out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/tasks/" .. ID_D, 1, true), calls)
+    testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
+    testing.eq(calls:find("/comments", 1, true), nil)
 end)
 
 local function export_fetches(root, home, steps)

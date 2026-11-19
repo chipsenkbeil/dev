@@ -310,6 +310,20 @@ M.FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
     .. '{"id":"f4","key":"dev.files","label":"Files","kind":"multiline",'
     .. '"options":[],"columns":[],"required":false}]'
 
+---Shell functions for a fake curl that read tasks from the export fixture.
+M.EXPORT_ROUTES = [[
+export_lines() {
+    sed 's/},{"id":"\([0-9a-z]\{8\}-[0-9a-z]\{4\}-\)/}\n{"id":"\1/g' "$ROOT/export.json" \
+        | sed 's/^{"tasks":\[//; s/\]}$//'
+}
+task_of() {
+    export_lines | grep "^{\"id\":\"$1\"" | head -1
+}
+tasks_page() {
+    printf '{"items":[%s],"next_cursor":null}' "$(export_lines | paste -sd, -)"
+}
+]]
+
 ---The board column names, by constant.
 ---@enum support.Column
 M.Column = {
@@ -381,39 +395,17 @@ function M.column_id(column)
     return "col-" .. column
 end
 
----Build one row of Pomb's paged task list as the endpoint sends it.
----@param id string the task's id
----@param name string the task's name
----@param column string the column constant the task sits in
----@param position integer the task's position in its column
----@return string json the row object
-local function summary_row(id, name, column, position)
-    return '{"id":"'
-        .. id
-        .. '","name":"'
-        .. name
-        .. '","column_id":"'
-        .. M.column_id(column)
-        .. '","swimlane_id":null,"position":'
-        .. position
-        .. ',"labels":["docs"],"claim":null}'
-end
-
 ---Build the fake `curl` script that answers Pomb's routes from the files in `$ROOT`.
 ---@param first_id string id of the card the task routes answer for
 ---@param second_id string id of the card the second page of the card list holds
 ---@param links_id string id of the card the link routes answer for
 ---@return string script the shell script
 function M.pomb_curl(first_id, second_id, links_id)
-    local summary_rows = table.concat({
-        summary_row(first_id, "First", M.Column.READY, 1),
-        summary_row(second_id, "Second", M.Column.READY, 2),
-        summary_row(links_id, "Early", M.Column.BACKLOG, 1),
-    }, ",")
     return [[#!/bin/sh
 printf 'curl %s\n' "$*" >>"$ROOT/calls"
 cat >"$ROOT/stdin"
 for last; do :; done
+]] .. M.EXPORT_ROUTES .. [[
 status=${HTTP_STATUS:-200}
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
@@ -426,7 +418,7 @@ case "$last" in
 '"column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
 */tasks\?limit=500) body='{"items":[{"id":"]] .. first_id .. [[",'\
 '"column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
-*/tasks\?limit=1000*) body='{"items":[]] .. summary_rows .. [[],"next_cursor":null}' ;;
+*/tasks\?limit=1000*) body=$(tasks_page) ;;
 */tasks\?*) body='{"items":[{"id":"]] .. first_id .. [["}],"next_cursor":null}' ;;
 */attachments)
     body=$(cat "$ROOT/attachments.json")
@@ -469,10 +461,20 @@ case "$last" in
     fi
     ;;
 */api/tasks/]] .. first_id .. [[)
-    body=$(cat "$ROOT/task.json")
+    body=$(task_of "]] .. first_id .. [[")
+    if [ -f "$ROOT/owner_name" ]; then
+        body=$(printf '%s' "$body" | sed 's|,"owner":.*,"claim_fence":[0-9]*}$|}|')
+    fi
+    if [ -f "$ROOT/task.json" ]; then
+        if [ -n "$body" ]; then
+            body="$(printf '%s' "$body" | sed 's|}$|,|')$(sed 's|^{||' "$ROOT/task.json")"
+        else
+            body=$(cat "$ROOT/task.json")
+        fi
+    fi
     if [ -f "$ROOT/owner_name" ]; then
         body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\
-\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true},\
+\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true,\"fence\":7},\
 \"claim\":{\"fence\":7},|")
     fi
     case "$*" in
@@ -490,10 +492,20 @@ case "$last" in
         ;;
     esac
     ;;
-*/api/tasks) body=$(cat "$ROOT/task.json") ;;
+*/api/tasks)
+    if [ -f "$ROOT/task.json" ]; then
+        body=$(cat "$ROOT/task.json")
+    else
+        body=$(task_of "]] .. first_id .. [[")
+    fi
+    ;;
 */api/tasks/dddddddd-dddd-4ddd-8ddd-dddddddddddd)
     body=$(cat "$ROOT/far.json")
     if [ -f "$ROOT/far_gone" ]; then status=404; fi
+    ;;
+*/api/tasks/????????-????-????-????-????????????)
+    body=$(task_of "${last##*/}")
+    if [ -z "$body" ]; then body='{"ok":true}'; fi
     ;;
 */api/tasks/]] .. links_id .. [[/links) body=$(cat "$ROOT/holder_links.json") ;;
 */links) body=$(cat "$ROOT/links.json") ;;

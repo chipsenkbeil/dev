@@ -65,6 +65,7 @@ local CURL = [[#!/bin/sh
 printf 'curl %s\n' "$*" >>"$ROOT/calls"
 cat >"$ROOT/stdin"
 for last; do :; done
+]] .. support.EXPORT_ROUTES .. [[
 status=200
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
@@ -73,6 +74,7 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/tasks\?limit=1000*) body=$(tasks_page) ;;
 */limit-groups/*)
     body='{"ok":true}'
     if [ -f "$ROOT/limit_refusal" ]; then
@@ -95,9 +97,10 @@ case "$last" in
     body='{"live":true,"fence":7}'
     ;;
 */api/tasks/????????-????-????-????-????????????)
-    body='{"ok":true}'
+    body=$(task_of "${last##*/}")
+    if [ -z "$body" ]; then body='{"ok":true}'; fi
     if [ -f "$ROOT/owner_name" ]; then
-        body=$(printf '{"owner":{"holder":{"kind":"agent","name":"%s"},"lease_expires_at":null,"live":true,"fence":7}}' "$(cat "$ROOT/owner_name")")
+        body=$(printf '%s' "$body" | sed 's|,"owner":.*,"claim_fence":[0-9]*}$|}|' | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true,\"fence\":7},|")
     fi
     ;;
 *) body='{"ok":true}' ;;

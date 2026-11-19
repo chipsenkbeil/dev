@@ -2494,6 +2494,7 @@ for arg; do
     prev=$arg
 done
 for last; do :; done
+]] .. support.EXPORT_ROUTES .. [[
 printf '%s %s\n' "$method" "$last" >>"$ROOT/calls"
 if [ "$method" = PATCH ] && [ -f "$ROOT/held" ]; then printf '{"code":"claim_held","message":"the card holds a live claim"}\n409'; exit 0; fi
 status=200
@@ -2503,10 +2504,19 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
-*/api/tasks/aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa) body='{"id":"aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa","parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Epic"},"children_done":1,"children_total":3}' ;;
-*/tasks\?*) body=$(cat "$ROOT/page.json") ;;
+*/api/tasks/aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa)
+    body=$(task_of aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa | sed 's|}$|,"parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Epic"},"children_done":1,"children_total":3}|')
+    if [ -z "$body" ]; then body='{"id":"aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa","parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Epic"},"children_done":1,"children_total":3}'; fi
+    ;;
+*/tasks\?*)
+    if [ -f "$ROOT/page.json" ]; then body=$(cat "$ROOT/page.json"); else body=$(tasks_page); fi
+    ;;
 */api/tasks/cccccccc-2222-4ccc-8ccc-cccccccccccc) body=$(cat "$ROOT/big.json") ;;
 */api/tasks/dddddddd-2222-4ddd-8ddd-dddddddddddd) body=$(cat "$ROOT/small.json") ;;
+*/api/tasks/????????-????-????-????-????????????)
+    body=$(task_of "${last##*/}")
+    if [ -z "$body" ]; then body='{"ok":true}'; fi
+    ;;
 */api/tasks) body='{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"x","column_id":"col-backlog"}' ;;
 *) body='{"ok":true}' ;;
 esac
@@ -2614,7 +2624,9 @@ testing.test("a queued discard replays its move without the outcome check", func
     assert(
         fs.write(
             root .. "/bin/curl",
-            '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/*) cat >/dev/null; exit 7 ;; esac\n'
+            '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/*)\n'
+                .. 'if [ -f "$ROOT/detail_read" ]; then cat >/dev/null; exit 7; fi\n'
+                .. ': >"$ROOT/detail_read" ;; esac\n'
                 .. CURL:gsub("^#!/bin/sh\n", "")
         )
     )

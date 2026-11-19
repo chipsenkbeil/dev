@@ -27,6 +27,7 @@ local CURL = [[#!/bin/sh
 printf 'curl %s\n' "$*" >>"$ROOT/calls"
 cat >"$ROOT/stdin"
 for last; do :; done
+]] .. support.EXPORT_ROUTES .. [[
 status=200
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
@@ -34,6 +35,7 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/tasks\?limit=1000*) body=$(tasks_page) ;;
 */comments) body='[]' ;;
 */links) body='[]' ;;
 */api/search*cursor=c2*) body=$(cat "$ROOT/search2.json") ;;
@@ -214,7 +216,9 @@ testing.test("show on an epic names the board of a child on another board", func
         }) .. "]}",
         ["task_" .. epic .. ".json"] = '{"id":"'
             .. epic
-            .. '","name":"Big epic","kind":"epic","children_total":2,"children_done":1,"children":'
+            .. '","name":"Big epic","column_id":"'
+            .. READY
+            .. '","color_id":"yellow-id","labels":[],"kind":"epic","children_total":2,"children_done":1,"children":'
             .. children
             .. "}",
     })

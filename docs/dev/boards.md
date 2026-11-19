@@ -4458,6 +4458,13 @@ Reads:
   claimant. The turn lookup and the claimed filters of the wait verbs keep the
   cached `/export-data`, as does every other read. A local board ignores the
   opts.
+- A single-card verb resolves its card word against that list, then reads the
+  one card from `/api/tasks/ID`. A full-length id skips the list when the card
+  sits in a column of this board, and the id of a card on another board falls
+  through to the list. The resolved card of an epic whose children are all
+  Done carries no child counts, as a card of the export did, so the Done guard
+  asks for its outcomes as before. A word that matches nothing keeps the same
+  refusal texts.
 - `next` asks `/tasks?limit=1&ready=true&claimed=false&column_id=<Ready>` and
   reads the card for its colour.
 
