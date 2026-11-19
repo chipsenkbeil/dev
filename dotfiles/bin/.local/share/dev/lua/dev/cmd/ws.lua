@@ -339,6 +339,18 @@ local function plan(root, name, path, opts)
     return nil
 end
 
+---Build the sentence that says a folder could not be made.
+---@param folder string the folder that failed
+---@param reason string what mkdir said
+---@return string sentence the message
+local function mkdir_failure(folder, reason)
+    return string.format(
+        'Could not make the folder %s. The mkdir command said: "%s".',
+        folder,
+        reason
+    )
+end
+
 ---Make a workspace for the current project under the central root.
 ---
 ---The path is `DEV_WS_ROOT`, else `~/.local/share/workspaces`, then the
@@ -368,13 +380,7 @@ M.handlers["ws new"] = function(ctx)
     end
     local made, why = fs.mkdir(fs.dirname(path), { parents = true })
     if not made then
-        verb.die(
-            string.format(
-                'Could not make the folder %s. The mkdir command said: "%s".',
-                fs.dirname(path),
-                why
-            )
-        )
+        verb.die(mkdir_failure(fs.dirname(path), why))
     end
     if vcs.backend(ctx.root) == vcs.JJ then
         local refresh = vcs.with(vcs.base(ctx.root, vcs.JJ), "workspace", "update-stale")
@@ -394,13 +400,7 @@ M.handlers["ws new"] = function(ctx)
     if argv == nil then
         made, why = fs.mkdir(path)
         if not made then
-            verb.die(
-                string.format(
-                    'Could not make the folder %s. The mkdir command said: "%s".',
-                    path,
-                    why
-                )
-            )
+            verb.die(mkdir_failure(path, why))
         end
     else
         verb.show(ctx, argv)
