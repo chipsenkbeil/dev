@@ -14,6 +14,7 @@ local store = require("dev.board.store")
 local support = require("support")
 local turn = require("dev.board.turn")
 local vcs = require("dev.vcs")
+local wiring = require("dev.board.wiring")
 local ws = require("dev.cmd.ws")
 
 local has_jj = dev_os.which("jj") ~= nil
@@ -3081,7 +3082,15 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.eq(backend.notes, {})
     end)
 
-    local function land_through_stub(project, id, wrap)
+    ffi.cdef([[
+        int chdir(const char *path);
+        char *getcwd(char *buffer, size_t size);
+    ]])
+
+    local CWD_BYTES = 4096
+
+    local function land_through_stub(project, id, wrap, opts)
+        opts = opts or {}
         local backend, restore = board_at(project.home)
         backend.root = project.root
         wrap(backend)
@@ -3091,13 +3100,33 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             LAND_MSG = "stub land",
             REAL_JJ = dev_os.which("jj"),
             DEV_AGENT = "dotfiles/lander",
+            JJ_USER = IDENT.JJ_USER,
+            JJ_EMAIL = IDENT.JJ_EMAIL,
         }
+        if opts.env then
+            for name, value in pairs(opts.env) do
+                set[name] = value
+            end
+        end
         local saved = {}
         for name, value in pairs(set) do
             saved[name] = os.getenv(name) or ""
             ffi.C.setenv(name, value, 1)
         end
-        local ok, result = pcall(cmd_board.run, "land", { id }, backend)
+        local ids = type(id) == "table" and id or { id }
+        local ok, result = pcall(function()
+            if not opts.in_root then
+                return cmd_board.run("land", ids, backend)
+            end
+            local buffer = ffi.new("char[?]", CWD_BYTES)
+            assert(ffi.C.getcwd(buffer, CWD_BYTES) ~= nil, "getcwd failed")
+            local origin = ffi.string(buffer)
+            assert(ffi.C.chdir(project.root) == 0, "chdir failed")
+            local landed, outcome = pcall(cmd_board.run, "land", ids, backend)
+            ffi.C.chdir(origin)
+            assert(landed, outcome)
+            return outcome
+        end)
         for name, value in pairs(saved) do
             ffi.C.setenv(name, value, 1)
         end
@@ -3175,6 +3204,74 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             )
         end
     )
+
+    local function two_cards(project)
+        local first = verified_card(project)
+        local second = second_card(project)
+        to_verify(project, second)
+        jj(project.root, "workspace", "rename", second)
+        approve(project, second)
+        jj(project.root, "workspace", "rename", first)
+        return first, second
+    end
+
+    testing.test("land retries after trunk moved and closes both cards", function()
+        local project = jj_project()
+        local first, second = two_cards(project)
+        local held = wiring.land_held
+        local attempts = 0
+        wiring.land_held = function(opts)
+            attempts = attempts + 1
+            if attempts == 1 then
+                trunk_moves(project, { ["docs.txt"] = "docs\n" })
+            end
+            return held(opts)
+        end
+        local ok, result = pcall(land_through_stub, project, { first, second }, function() end, {
+            env = { LAND_TRUNK = LAND_TRUNK_KEEP },
+            in_root = true,
+        })
+        wiring.land_held = held
+        assert(ok, result)
+        testing.ok(result.code == nil, result.message)
+        testing.eq(attempts, 2)
+        for _, id in ipairs({ first, second }) do
+            local list = comments(project.home, id)
+            testing.eq(list[#list].kind, KIND_DONE)
+            testing.ok(list[#list].body:find("Landed commit", 1, true), list[#list].body)
+            testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+        end
+    end)
+
+    testing.test("land reports a companion whose done note fails and the push stands", function()
+        local project = jj_project()
+        local first, second = two_cards(project)
+        local result = land_through_stub(project, { first, second }, function(backend)
+            local note = backend.note
+            function backend:note(id, ...)
+                if has_landed(project) and id:sub(1, #second) == second then
+                    return nil, "board unavailable: note timed out"
+                end
+                return note(self, id, ...)
+            end
+        end, { env = { LAND_TRUNK = LAND_TRUNK_KEEP } })
+        testing.eq(result.code, 1, result.message)
+        testing.ok(
+            result.message:find(
+                "The done note was NOT written on card " .. second:sub(1, board.MIN_PREFIX),
+                1,
+                true
+            ),
+            result.message
+        )
+        testing.ok(
+            result.message:find("Board unavailable: note timed out.", 1, true),
+            result.message
+        )
+        testing.ok(has_landed(project), "the land never ran")
+        testing.eq(column_of(project.home, first), support.COLUMN_NAME.DONE)
+        testing.eq(column_of(project.home, second), board.DEFAULT_NAMES.verify)
+    end)
 
     testing.test(
         "a landed commit whose done note was not written is named and exits non-zero",
