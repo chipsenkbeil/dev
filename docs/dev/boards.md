@@ -861,6 +861,13 @@ section only. One line names each word.
 - Text under `## Change` is not scanned, a note is all prose, an outcome is
   prose, and `--checks` is never scanned.
 
+`note` refuses a comment, with exit 2, when more than half of its words are ids
+and it has at least 4 words. A word is an id when it is a hex id of 7 or more
+characters, a uuid, or holds a `/` or a file extension. A comment of 3 words or
+fewer is never refused, and `--edit`, `--delete` and a `dev-check:` or
+`dev-review:` line are not checked here. The refusal says to write two or three
+sentences for a person.
+
 Only Icebox holds a card that is unsized or free-form. Every other column takes
 a card with a size of `1`, `2`, `3` or `3+`, all three v4 headings with text
 under Problem, and, for `add` and `move`, at least one Done when outcome.

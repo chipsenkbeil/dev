@@ -2067,6 +2067,34 @@ testing.test("note and move resolve the card by prefix", function()
     testing.eq(backend.calls[3], { "move", ID_C, support.COLUMN_NAME.REVIEW })
 end)
 
+testing.test("note_mostly_ids_refused", function()
+    local backend = fake(sample())
+    local result = cmd_board.run(
+        "note",
+        { "cccccccc", "see", "a/b.lua", "2af0e003", "0ef0e008", "and", "c/d.md" },
+        backend
+    )
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("two or three sentences for a person", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("note_one_id_accepted", function()
+    local backend = fake(sample())
+    local result = cmd_board.run(
+        "note",
+        { "cccccccc", "Card", "2af0e003", "is", "blocked", "on", "the", "hub." },
+        backend
+    )
+    testing.eq(result.output, "noted cccccccc")
+end)
+
+testing.test("note_short_accepted", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("note", { "cccccccc", "a/b.lua", "2af0e003", "c/d.md" }, backend)
+    testing.eq(result.output, "noted cccccccc")
+end)
+
 local COMMENT_1 = "aaaaaaaa-1111-4111-8111-111111111111"
 local COMMENT_2 = "bbbbbbbb-2222-4222-8222-222222222222"
 local BODY_COLUMN = 56

@@ -950,6 +950,31 @@ local function is_hex_id(run)
         and run:find("^%d+[eE]%d+$") == nil
 end
 
+local UUID_PATTERN = "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$"
+
+local MOSTLY_IDS_MIN_WORDS = 4
+
+---Say whether a comment is mostly ids: at least 4 words, more than half of them a hex id of 7 or
+---more digits, a uuid, or a word holding a slash or a file extension.
+---@param comment string the comment
+---@return boolean mostly true when the comment should be refused
+function M.mostly_ids(comment)
+    local words, ids = 0, 0
+    for raw in comment:gmatch("%S+") do
+        words = words + 1
+        local word = raw:gsub("^[%(%[<\"'`]+", ""):gsub("[%)%]>\"'`,;:!?.]+$", "")
+        if
+            word:find(UUID_PATTERN)
+            or is_hex_id(word)
+            or word:find("/", 1, true)
+            or word:find("%.%a[%w]*$")
+        then
+            ids = ids + 1
+        end
+    end
+    return words >= MOSTLY_IDS_MIN_WORDS and ids * 2 > words
+end
+
 ---Warn about the hex ids, hashes and paths in prose. Text under a `## Change` or `## Source`
 ---heading is left out, and so is a URL.
 ---@param prose string? the description or note

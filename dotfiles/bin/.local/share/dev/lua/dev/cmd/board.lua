@@ -1285,6 +1285,11 @@ function commands.note(backend, args)
     if board.reserved(text) then
         return failure(RESERVED_NOTE)
     end
+    if board.mostly_ids(text) then
+        return usage(
+            "That note is mostly ids, hashes and paths. Write two or three sentences for a person."
+        )
+    end
     local held = claims.read(card.id)
     local ok, message = home:note(card.id, text, held and held.fence, opts)
     if not ok then
