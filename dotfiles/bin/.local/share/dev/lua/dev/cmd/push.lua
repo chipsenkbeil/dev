@@ -251,7 +251,9 @@ function M.run(ctx)
             if not ctx.args[i + 1] then
                 verb.usage_error(ctx, "--tag needs a tag name")
             end
-            tags[#tags + 1] = ctx.args[i + 1]
+            if not text.contains(tags, ctx.args[i + 1]) then
+                tags[#tags + 1] = ctx.args[i + 1]
+            end
             i = i + 2
         else
             names[#names + 1] = ctx.args[i]

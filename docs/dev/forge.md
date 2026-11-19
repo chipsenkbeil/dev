@@ -9,8 +9,8 @@ remote, or when it is the remote of record. Any other name exits 2.
 `dev help push` shows the exact commands for this repo.
 
 `dev push --tag NAME` pushes an existing tag instead of the trunk, and the flag
-repeats for several tags. It goes to the remote of record, or to the remote
-named.
+repeats for several tags. A tag named twice is pushed once. It goes to the
+remote of record, or to the remote named.
 
 Before anything is pushed, dev refuses a tag that does not exist locally
 (`There is no local tag NAME. No tag was pushed.`) and a tag the remote
