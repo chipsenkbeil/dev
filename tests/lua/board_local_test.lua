@@ -153,6 +153,46 @@ testing.test("init lays out the nine columns and the palette and is idempotent",
     testing.eq(out, "Board mine already follows the standard. Nothing changed.\n")
 end)
 
+testing.test("init renames a local In Review column to Review and keeps its card", function()
+    -- Park a card in a column named In Review
+    local root, home = local_board()
+    local out, code = dev(root, home, { "board", "add", "Held", "--column", Column.ICEBOX })
+    testing.eq(code, 0, out)
+    local doc = document(file_of(home))
+    local review
+    for _, column in ipairs(doc.columns) do
+        if column.name == support.COLUMN_NAME.REVIEW then
+            review = column
+        end
+    end
+    local id = review.id
+    review.name = "In Review"
+    doc.cards[1].column_id = id
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+
+    -- Run init to rename the column
+    out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+
+    -- Check the column keeps its id and the card stays in it
+    doc = document(file_of(home))
+    local renamed
+    for _, column in ipairs(doc.columns) do
+        if column.id == id then
+            renamed = column
+        end
+    end
+    testing.eq(renamed.name, support.COLUMN_NAME.REVIEW)
+    testing.eq(doc.cards[1].column_id, id)
+
+    -- Run init again and expect no change
+    local first = assert(fs.read(file_of(home)))
+    out, code = dev(root, home, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(out, "Board mine already follows the standard. Nothing changed.\n")
+    testing.eq(assert(fs.read(file_of(home))), first)
+end)
+
 testing.test("a local init makes one landing turn card and a second init adds none", function()
     -- Run init on a new local board
     local root, home = setup('[board]\nbackend = "local"\nname = "mine"\n')
