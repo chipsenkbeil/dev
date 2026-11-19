@@ -71,10 +71,6 @@ local function check_options(root, args)
     if #opts.words ~= 1 then
         return nil, usage("Needs a card.")
     end
-    if opts.run and opts.expect_fail then
-        return nil,
-            usage("The " .. RUN_FLAG .. " flag cannot be used with " .. EXPECT_FAIL_FLAG .. ".")
-    end
     opts.seconds = opts.seconds or check.row_seconds(root)
     return opts
 end
@@ -206,7 +202,7 @@ local function check_rows(opts)
     local message
     local rows = {}
     local commands, skipped = card.checks, 0
-    local proof = flags.expect_fail and trunk_proof(backend) or nil
+    local proof = flags.expect_fail and not flags.run and trunk_proof(backend) or nil
     if proof then
         local baseline = check.baseline(card.checks, argvs)
         commands, argvs, skipped = baseline.commands, baseline.argvs, baseline.skipped
@@ -221,7 +217,7 @@ local function check_rows(opts)
         [remote.CARD_ENV] = short,
     }
     local plan
-    if not flags.expect_fail then
+    if not flags.expect_fail or flags.run then
         plan = check.plan(commands, argvs, function()
             return remote.default_jobs(backend.root)
         end)

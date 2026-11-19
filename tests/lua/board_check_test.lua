@@ -700,6 +700,7 @@ end
 ---@field rows string[]? the card's checks, a lint row and a test row when nil
 ---@field timeout string? the `--timeout` seconds
 ---@field attach string? the run id passed to `--run`
+---@field expect_fail boolean? whether the check passes `--expect-fail`
 ---@field source string? the commit the fake run reports, the working copy's commit when nil
 ---@field watch string? the shell the fake `ci ps --watch` runs
 
@@ -714,6 +715,9 @@ local function group_check(opts)
     if opts.attach then
         args[#args + 1] = "--run"
         args[#args + 1] = opts.attach
+    end
+    if opts.expect_fail then
+        args[#args + 1] = "--expect-fail"
     end
     if opts.timeout then
         args[#args + 1] = "--timeout"
@@ -829,17 +833,42 @@ testing.test("check --run refuses a run of another commit and records nothing", 
     testing.ok(not log:find("watch", 1, true), log)
 end)
 
-testing.test("check --run refuses --expect-fail and a card with no shared run", function()
+testing.test("check --run refuses a bad run id and a card with no shared run", function()
     local root, home = git_root()
     local id = card_with(root, home, { "true" })
-    local _, code = dev(root, home, { "board", "check", id, "--run", "8cb600", "--expect-fail" })
-    testing.eq(code, 2)
-    _, code = dev(root, home, { "board", "check", id, "--run", "xyz" })
+    local _, code = dev(root, home, { "board", "check", id, "--run", "xyz" })
     testing.eq(code, 2)
     local out
     out, code = dev(root, home, { "board", "check", id, "--run", "8cb600" })
     testing.eq(code, 1, out)
     testing.ok(out:find("--run has nothing to record", 1, true), out)
+    out, code = dev(root, home, { "board", "check", id, "--run", "8cb600", "--expect-fail" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("--run has nothing to record", 1, true), out)
+end)
+
+testing.test("check --run --expect-fail records the run rows as expect-fail", function()
+    local out, code, body = group_check({
+        jobs = TEST_FAILED,
+        attach = "8cb600",
+        expect_fail = true,
+        rows = { "dev --remote lint", "dev --remote test -- tests/a_test.lua" },
+    })
+    testing.eq(code, 0, out)
+    testing.ok(body:find("mode=expect-fail", 1, true), body)
+    testing.ok(body:find("2 fail 8cb600", 1, true), body)
+end)
+
+testing.test("check --run --expect-fail exits 1 when the run rows passed", function()
+    local out, code, body = group_check({
+        jobs = PASSED,
+        attach = "8cb600",
+        expect_fail = true,
+        rows = { "dev --remote lint", "dev --remote test -- tests/a_test.lua" },
+    })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("the passing ones prove nothing", 1, true), out)
+    testing.ok(body:find("mode=expect-fail", 1, true), body)
 end)
 
 testing.test("check --run records a one-row card from a run that has ended", function()

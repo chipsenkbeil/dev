@@ -2761,9 +2761,11 @@ Rows that share one ci run:
   `ci ps ID --watch`, bounded by `--timeout`, and records each row from the
   run's jobs as above. A run that has ended is read at once.
 - `--run` needs a card whose rows share one ci run, or a card with one plain
-  `dev --remote lint` row, which runs one ci job. It takes a hex run id and
-  refuses `--expect-fail`. It refuses, with nothing recorded, a run whose
-  commit differs from the working copy's commit.
+  `dev --remote lint` row, which runs one ci job. The flag takes a hex run id.
+  With a run, `--run` takes `--expect-fail too`: the run's rows are recorded
+  as `mode=expect-fail`, and every row counts, with no trunk-proof baseline.
+  The flag refuses, with nothing recorded, a run whose commit differs from
+  the working copy's commit.
 
 The result belongs to one commit:
 
