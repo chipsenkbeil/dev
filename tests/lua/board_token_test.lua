@@ -314,6 +314,32 @@ testing.test("token-mint-sweep deletes expired token files and keeps live ones",
 end)
 
 testing.test(
+    "token-status-counts counts files near expiry and expired, and names no token",
+    function()
+        local root, home = sandbox()
+        local dir = home .. "/state/dev/tokens"
+        assert(fs.mkdir(dir, { parents = true }))
+        assert(fs.write(dir .. "/expired", "pomb_OLD0123456789\n1\n"))
+        assert(fs.write(dir .. "/soon", "pomb_SOON0123456789\n" .. os.time() + 600 .. "\n"))
+        assert(fs.write(dir .. "/live", "pomb_LIVE0123456789\n" .. EXPIRES .. "\n"))
+        local out, code = dev(root, home, { "board", "status" })
+        testing.ok(code == 0, out)
+        testing.ok(out:find("tokens: 1 expire within an hour, 1 expired", 1, true), out)
+        testing.eq(out:find("pomb_", 1, true), nil, out)
+    end
+)
+
+testing.test("token-status-quiet prints no tokens line when every file is live", function()
+    local root, home = sandbox()
+    local dir = home .. "/state/dev/tokens"
+    assert(fs.mkdir(dir, { parents = true }))
+    assert(fs.write(dir .. "/live", "pomb_LIVE0123456789\n" .. EXPIRES .. "\n"))
+    local out, code = dev(root, home, { "board", "status" })
+    testing.ok(code == 0, out)
+    testing.eq(out:find("tokens:", 1, true), nil, out)
+end)
+
+testing.test(
     "token-mint-refused shows an unknown role, exceeds_grant and a taken name in words",
     function()
         local root, home = sandbox()

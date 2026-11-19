@@ -217,6 +217,12 @@ A token from `DEV_BOARD_TOKEN` or from `pass` is never retried this way, and
 an expired one fails with the expired message as before. A runner cannot mint
 for itself, and dispatch's own re-mint is a separate matter.
 
+`dev board status` warns a lead who mints by hand. When a token file expires
+within the hour or has expired, it prints a tokens: line with both counts, and
+prints nothing when both are zero. A file holds no agent name, so the line
+gives counts and never a name or a token. A runner reminting the tokens of the
+runs it spawns is a separate matter that the line does not cover.
+
 ### Closing an epic
 
 `dev board move EPIC done` on a Pomb board reads the card with the worker

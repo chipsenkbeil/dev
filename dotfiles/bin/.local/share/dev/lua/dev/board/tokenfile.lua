@@ -4,6 +4,7 @@ local xdg = require("dev.xdg")
 
 local TOKENS_DIR = "dev/tokens"
 local HASH_LENGTH = 64
+local SOON_SECONDS = 3600
 
 ---The role tokens `dev board token mint` keeps for runners: one file per
 ---agent name, named by a hash of the name, in a directory only the owner can
@@ -148,6 +149,27 @@ function M.sweep(now)
         end
     end
     return removed
+end
+
+---Count the token files that expire within an hour and those already expired.
+---@param now integer the time in Unix seconds
+---@return integer soon files that expire within the next hour
+---@return integer expired files whose expiry has passed
+function M.expiring(now)
+    local dir = M.dir()
+    local soon, expired = 0, 0
+    for _, entry in ipairs(fs.list(dir) or {}) do
+        local text = fs.read(dir .. "/" .. entry)
+        local found = text and parse(text)
+        if found and found.expires > 0 then
+            if found.expires <= now then
+                expired = expired + 1
+            elseif found.expires <= now + SOON_SECONDS then
+                soon = soon + 1
+            end
+        end
+    end
+    return soon, expired
 end
 
 return M

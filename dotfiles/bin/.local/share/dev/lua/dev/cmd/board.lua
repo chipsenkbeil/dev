@@ -22,6 +22,7 @@ local runner = require("dev.board.runner")
 local ship = require("dev.board.ship")
 local stale = require("dev.board.stale")
 local store = require("dev.board.store")
+local tokenfile = require("dev.board.tokenfile")
 local text_width = require("dev.text").width
 local turn = require("dev.board.turn")
 local ui = require("dev.ui")
@@ -5022,6 +5023,10 @@ M.handlers["board status"] = function(ctx)
                 print("queued: " .. left)
             end
         end
+    end
+    local soon, expired = tokenfile.expiring(os.time())
+    if soon > 0 or expired > 0 then
+        verb.say(string.format("tokens: %d expire within an hour, %d expired", soon, expired))
     end
     if flags["--all"] then
         Owner.print_needs_human(found)
