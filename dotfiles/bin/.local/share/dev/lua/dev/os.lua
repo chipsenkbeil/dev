@@ -291,7 +291,7 @@ local function decode(status)
     if status == true then
         return 0
     end
-    if type(status) ~= "number" then
+    if type(status) ~= "number" or status < 0 then
         return nil
     end
     local signal = bit.band(status, WAIT_SIGNAL_MASK)

@@ -86,6 +86,17 @@ testing.test("run reports a signal death as 128 plus the signal", function()
     testing.eq(dev_os.run({ "sh", "-c", "kill -TERM $$" }), 143)
 end)
 
+testing.test("run returns nil when the shell cannot start", function()
+    local execute = os.execute
+    rawset(os, "execute", function()
+        return -1
+    end)
+    local ok, code = pcall(dev_os.run, { "true" })
+    rawset(os, "execute", execute)
+    testing.ok(ok, code)
+    testing.eq(code, nil)
+end)
+
 testing.test("which finds a tool or returns nil", function()
     local path = dev_os.which("sh")
     testing.ok(path and path:sub(1, 1) == "/", "sh should resolve to an absolute path")
