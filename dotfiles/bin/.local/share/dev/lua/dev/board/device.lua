@@ -107,9 +107,6 @@ local function answered(status, doc)
     local message = json.present(doc.message)
     if message ~= nil then
         message = tostring(message)
-        if not message:find("%.$") then
-            message = message .. "."
-        end
     end
     return { status = status, message = message }
 end

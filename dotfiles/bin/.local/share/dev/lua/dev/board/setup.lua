@@ -1,7 +1,6 @@
 local board = require("dev.board")
 local config = require("dev.config")
 local dev_os = require("dev.os")
-local dev_text = require("dev.text")
 local fs = require("dev.fs")
 local toml = require("dev.toml")
 local vcs = require("dev.vcs")
@@ -65,7 +64,7 @@ end
 ---@param root string the project root
 ---@param name string the board's name
 ---@return true? ok true when the section was written
----@return string? message the system's text as a sentence when the write failed
+---@return string? message the system's text when the write failed
 function M.write_section(root, name)
     local path = root .. "/.dev/config.toml"
     local existing = fs.exists(path) and fs.read(path) or ""
@@ -80,7 +79,7 @@ function M.write_section(root, name)
         ok, message = fs.write(path, existing .. gap .. section)
     end
     if not ok then
-        return nil, dev_text.sentence(tostring(message))
+        return nil, tostring(message)
     end
     return true
 end

@@ -1,5 +1,4 @@
 local board = require("dev.board")
-local dev_text = require("dev.text")
 local verb = require("dev.verb")
 
 ---The standard board: the nine columns, the size palette and names without
@@ -83,7 +82,6 @@ local function needs_admin(message)
 end
 
 local function stop(message)
-    message = dev_text.sentence(message)
     if needs_admin(message) then
         return nil, message, M.Reason.NEEDS_ADMIN
     end

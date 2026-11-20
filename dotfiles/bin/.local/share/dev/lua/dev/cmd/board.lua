@@ -54,9 +54,9 @@ end
 
 local function queue_unreadable(path, reason, message)
     if reason == queue.Reason.READ then
-        return "Cannot read the queue at " .. path .. ". " .. message
+        return "Cannot read the queue at " .. path .. ". " .. dev_text.sentence(message)
     end
-    return message
+    return dev_text.sentence(message)
 end
 
 ---The sentence for each reason `pomb.new` refuses with
@@ -5174,10 +5174,10 @@ end
 ---@return string message the sentence
 local function init_refusal(message, reason)
     if reason == init.Reason.NEEDS_ADMIN then
-        return (message:gsub("%.$", ""))
+        return (dev_text.sentence(message):gsub("%.$", ""))
             .. ". This token may not change this board, so run `dev board init --admin`."
     end
-    return message
+    return dev_text.sentence(message)
 end
 
 ---Print one warning from the layout change, with the hint when the token may not change the board.
@@ -5241,7 +5241,10 @@ local function sign_in_refusal(reason, detail)
     elseif reason == Reason.UNREADABLE then
         return "Pomb sent an answer dev cannot read."
     elseif reason == Reason.REFUSED then
-        return "Pomb answered " .. detail.status .. ": " .. (detail.message or "no message.")
+        return "Pomb answered "
+            .. detail.status
+            .. ": "
+            .. (detail.message and (detail.message:gsub("%.$", "")) .. "." or "no message.")
     elseif reason == Reason.NO_CODE then
         return "Pomb sent a sign-in with no code."
     elseif reason == Reason.NO_TEMP then
@@ -5332,7 +5335,9 @@ M.handlers["board init"] = function(ctx)
     if missing then
         local written, failed = board_setup.write_section(ctx.root, name)
         if not written then
-            verb.die("Cannot write " .. ctx.root .. "/.dev/config.toml. " .. failed)
+            verb.die(
+                "Cannot write " .. ctx.root .. "/.dev/config.toml. " .. dev_text.sentence(failed)
+            )
         end
         print("wrote [board] to .dev/config.toml")
     end
