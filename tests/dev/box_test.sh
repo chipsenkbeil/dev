@@ -503,7 +503,7 @@ if PATH="$TMP/noet" command -v et >/dev/null 2>&1; then
     fails=$((fails + 1))
 fi
 out="$(cd "$NOPROJ" && PATH="$TMP/noet" "$DEV" connect myproject-k3x 2>&1)"
-assert_contains "a missing et warns once" "$out" "et not found, using ssh"
+assert_contains "a missing et warns once" "$out" "The et command was not found. Using ssh."
 assert_eq "a missing et falls back to ssh" "$(calls)" "ci box ls --json
 ci ssh myproject-k3x -- tmux new -A -s myproject -c $PROJECTS_DIR/myproject"
 reset
@@ -521,7 +521,7 @@ reset
 fx ls "$(lsdoc)"
 out="$(box connect 2>&1)"
 assert_eq "connect with no boxes outside a project exits 1" "$?" "1"
-assert_eq "connect with no boxes says how to create one" "$out" "no boxes; create one with dev box create"
+assert_eq "connect with no boxes says how to create one" "$out" "There are no boxes. Create one with dev box create."
 
 reset
 fx ls "$(lsdoc "$KEPT" "$STOPPED" "$RUNNING")"
@@ -666,14 +666,14 @@ reset
 fx ls "$(lsdoc "$(jq -c '.tailnet_name = null' <<<"$RUNNING")")"
 out="$(box connect myproject-k3x 2>&1)"
 assert_eq "connect to a box with no tailnet name exits 6" "$?" "6"
-assert_eq "connect names the missing tailnet name" "$out" "dev box connect: myproject-k3x has no tailnet name yet (state running)"
+assert_eq "connect names the missing tailnet name" "$out" "The box myproject-k3x has no tailnet name yet (state running)."
 assert_eq "no et or ssh for a box with no tailnet name" "$(calls)" "ci box ls --json"
 reset
 fx ls "$(lsdoc "$STOPPED")"
 fx resume "$(doc "$(jq -c '.tailnet_name = null | .state = "running"' <<<"$STOPPED")")"
 out="$(box connect ci-abc --ssh 2>&1)"
 assert_eq "a resumed box with no tailnet name exits 6" "$?" "6"
-assert_contains "the resumed box is named" "$out" "ci-abc has no tailnet name yet (state running)"
+assert_contains "the resumed box is named" "$out" "The box ci-abc has no tailnet name yet (state running)."
 assert_not_contains "no ssh after a resume without a tailnet name" "$(calls)" "ssh"
 reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/dotfiles"' <<<"$RUNNING")")"
@@ -692,14 +692,14 @@ for bad in '/srv/projects/x; rm -rf ~' '/srv' '/home/user/projects' '/home/user/
     fx ls "$(lsdoc "$(jq -c --arg p "$bad" '.projects[0].path = $p' <<<"$RUNNING")")"
     out="$(box connect myproject-k3x 2>&1)"
     assert_eq "connect refuses the project path $bad" "$?" "1"
-    assert_contains "the refused path is named" "$out" "refusing the project path"
+    assert_contains "the refused path is named" "$out" "Refusing the project path"
     assert_eq "nothing is run for the path $bad" "$(calls)" "ci box ls --json"
 done
 reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = null' <<<"$RUNNING")")"
 out="$(box connect myproject-k3x 2>&1)"
 assert_eq "connect to a box with a null project path exits 6" "$?" "6"
-assert_eq "connect names the missing project path" "$out" "dev box connect: myproject-k3x has no project path yet (state running)"
+assert_eq "connect names the missing project path" "$out" "The box myproject-k3x has no project path yet (state running)."
 assert_eq "no et or ssh for a null project path" "$(calls)" "ci box ls --json"
 reset
 fx ls "$(lsdoc "$(jq -c '.projects[0].path = "/srv/projects/MyProject"' <<<"$RUNNING")")"

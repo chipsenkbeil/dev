@@ -27,10 +27,10 @@ local M = { handlers = {} }
 ---@class dev.cmd.connect.attach.Opts
 ---@field ssh boolean whether to go through `ci ssh` instead of `et`
 
----Say why connecting stops, in the voice of `dev box connect`.
----@param message string what is wrong
+---Say why connecting stops.
+---@param message string what is wrong, as a sentence
 local function say(message)
-    verb.note("dev box connect: " .. message)
+    verb.note(message)
 end
 
 ---Say why a box cannot be connected to yet and exit.
@@ -110,10 +110,10 @@ end
 local function checked(name, field, value, valid)
     value = present(value)
     if type(value) ~= "string" or value == "" then
-        not_ready(name .. " has no " .. field .. " yet")
+        not_ready("The box " .. name .. " has no " .. field .. " yet.")
     end
     if not valid(value) then
-        not_ready(name .. " has an invalid " .. field)
+        not_ready("The box " .. name .. " has an invalid " .. field .. ".")
     end
     return value
 end
@@ -127,23 +127,23 @@ local function attach(found, opts)
     local state = tostring(present(found.state))
     local host = present(found.tailnet_name)
     if type(host) ~= "string" or host == "" then
-        not_ready(name .. " has no tailnet name yet (state " .. state .. ")")
+        not_ready("The box " .. name .. " has no tailnet name yet (state " .. state .. ").")
     end
     checked(name, "tailnet_name", host, safe_host)
     local projects = found.projects or {}
     local first = projects[1]
     if first and present(first.path) == nil then
-        not_ready(name .. " has no project path yet (state " .. state .. ")")
+        not_ready("The box " .. name .. " has no project path yet (state " .. state .. ").")
     end
     local dir = first and present(first.path) or PROJECTS_DIR
     if not safe_dir(dir) then
-        say("refusing the project path '" .. printable(dir) .. "' of " .. name)
+        say("Refusing the project path '" .. printable(dir) .. "' of " .. name .. ".")
         os.exit(Exit.FAILED)
     end
     local session = tostring((first and present(first.name)) or name):gsub("[^A-Za-z0-9_-]", "_")
     local over_ssh = opts.ssh
     if not over_ssh and not dev_os.which("et") then
-        say("et not found, using ssh")
+        say("The et command was not found. Using ssh.")
         over_ssh = true
     end
     if over_ssh then
@@ -174,10 +174,11 @@ local function attach(found, opts)
         or shown_user == ""
     then
         not_ready(
-            name
+            "The box "
+                .. name
                 .. " has no tailnet name or ssh user (state "
                 .. tostring(present(shown.state))
-                .. ")"
+                .. ")."
         )
     end
     shown_host = checked(name, "tailnet_name", shown_host, safe_host)
@@ -403,7 +404,7 @@ end
 local function choose(boxes, others, project)
     local items = items_for(boxes, others, project)
     if #items == 0 then
-        verb.note("no boxes; create one with dev box create")
+        verb.note("There are no boxes. Create one with dev box create.")
         os.exit(Exit.FAILED)
     end
     if not box.interactive() then
@@ -485,7 +486,7 @@ local function run(ctx)
             end
         end
         if not found then
-            say("no box named " .. choice)
+            say("No box is named " .. choice .. ".")
             os.exit(Exit.NOT_FOUND)
         end
         local state = present(found.state)
@@ -494,7 +495,11 @@ local function run(ctx)
             print(box.summary("resumed", found))
         elseif state ~= State.RUNNING then
             not_ready(
-                choice .. " is " .. tostring(state) .. ", it must be running or stopped to connect"
+                "The box "
+                    .. choice
+                    .. " is "
+                    .. tostring(state)
+                    .. ". It must be running or stopped to connect."
             )
         end
     end

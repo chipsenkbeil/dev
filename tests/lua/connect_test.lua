@@ -149,7 +149,7 @@ testing.test("a name that is neither a box nor a connectable exits 3", function(
     local root = sandbox()
     local out, code = support.dev(root, { "connect", "nope" }, env())
     testing.eq(code, 3)
-    testing.ok(out:find("no box named nope", 1, true), out)
+    testing.ok(out:find("No box is named nope.", 1, true), out)
     testing.eq(calls(root):find("ssh ci-", 1, true), nil)
     fs.remove(root, { recursive = true })
 end)

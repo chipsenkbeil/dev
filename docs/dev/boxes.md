@@ -427,7 +427,7 @@ attaches.
 
 With no name and no terminal, once boxes exist, it is a usage error like the
 other box verbs (exit 2). With no boxes outside a project it prints
-`no boxes; create one with dev box create` and exits 1.
+`There are no boxes. Create one with dev box create.` and exits 1.
 
 A stopped box is resumed first. Any state other than running or stopped exits
 6, as does a box whose `tailnet_name` is still null.

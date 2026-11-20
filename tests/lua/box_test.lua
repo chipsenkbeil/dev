@@ -93,7 +93,7 @@ testing.test("a project path with a quote is refused and nothing is run", functi
     local root = sandbox(listing)
     local out, code = support.dev(root, { "connect", "b1", "--ssh" })
     testing.eq(code, 1)
-    testing.eq(out:find("refusing the project path", 1, true) ~= nil, true)
+    testing.eq(out:find("Refusing the project path", 1, true) ~= nil, true)
     testing.eq(calls(root), "ci box ls --json\n")
     fs.remove(root, { recursive = true })
 end)
