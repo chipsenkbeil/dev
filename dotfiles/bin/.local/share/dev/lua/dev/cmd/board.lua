@@ -188,6 +188,8 @@ end
 ---@field lost boolean? true when the landing turn was lost before the landing
 ---@field moved boolean? true when trunk moved under the turn and nothing was pushed
 ---@field landed boolean? true when the change is on trunk although the result is a failure
+---@field unresolved boolean? true when a card word named no one card, as opposed to a board that
+---   failed to answer
 
 ---@class dev.cmd.board
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `board` subcommands
@@ -295,7 +297,9 @@ local function find_card(backend, word)
     end
     local found, why = board.resolve(cards, word)
     if not found then
-        return nil, failure(why)
+        local unresolved = failure(why)
+        unresolved.unresolved = true
+        return nil, unresolved
     end
     local card
     card, message = backend:card(found.id)
@@ -3043,21 +3047,16 @@ function commands.rename(backend, args)
                 .. " characters, with no quotes or backslashes."
         )
     end
-    local cards, message = backend:cards()
-    if not cards then
-        return failure(message)
-    end
-    local card, why = board.resolve(cards, args[1])
+    local card, err = find_card(backend, args[1])
     if not card then
-        return usage(why)
+        return err.unresolved and usage(err.message) or err
     end
     local held_back = owner_holds(card)
     if held_back then
         return held_back
     end
     local held = claims.read(card.id)
-    local ok
-    ok, message = backend:set_name(card.id, name, held and held.fence)
+    local ok, message = backend:set_name(card.id, name, held and held.fence)
     if not ok then
         return failure(message)
     end
