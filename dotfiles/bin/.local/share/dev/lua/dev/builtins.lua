@@ -371,8 +371,8 @@ return {
     {
         words = { "board", "ask" },
         handler = "lua",
-        flags = "--question --choice --recommend --why",
-        usage = "dev board ask CARD --question TEXT --choice COLUMN=LABEL... --recommend N --why TEXT",
+        flags = "--question --choice --recommend --why --list --searched",
+        usage = "dev board ask CARD --question TEXT --choice COLUMN=LABEL... --recommend N --why TEXT (--list KEY | --searched TEXT)",
         desc = "Ask the owner a structured question through Pomb",
     },
     {

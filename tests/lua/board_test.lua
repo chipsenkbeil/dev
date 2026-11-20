@@ -4980,6 +4980,8 @@ testing.test(
             "Ready=Ship it",
             "--choice",
             "Icebox = Park it",
+            "--list",
+            "taste",
             "--recommend",
             "1",
         }, backend)
@@ -4997,6 +4999,55 @@ testing.test(
             },
             nil,
         })
+    end
+)
+
+testing.test(
+    "ask refuses a question with neither --list nor --searched, or an unknown key",
+    function()
+        local cards = sample()
+        cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
+        local backend = fake(cards)
+        for _, extra in ipairs({
+            {},
+            { "--list", "mood" },
+            { "--list" },
+            { "--searched", "   " },
+        }) do
+            local args = { "11111111-a", "--question", "Which?", "--choice", "Ready=Ship it" }
+            for _, word in ipairs(extra) do
+                args[#args + 1] = word
+            end
+            testing.eq(cmd_board.run("ask", args, backend).code, 2, table.concat(extra, " "))
+        end
+        testing.eq(#backend.calls, 0)
+    end
+)
+
+testing.test(
+    "ask sends the question when --list names a key or --searched names a search",
+    function()
+        for _, extra in ipairs({
+            { "--list", "secrets" },
+            { "--list", "destroy" },
+            { "--list", "spend" },
+            { "--list", "restart" },
+            { "--list", "taste" },
+            { "--searched", "the decision notes and the transcripts" },
+        }) do
+            local cards = sample()
+            cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
+            local backend = fake(cards)
+            local args = { "11111111-a", "--question", "Which?", "--choice", "Ready=Ship it" }
+            for _, word in ipairs(extra) do
+                args[#args + 1] = word
+            end
+            local result = cmd_board.run("ask", args, backend)
+            testing.eq(result.output, "asked 11111111", table.concat(extra, " "))
+            testing.eq(backend.calls[1][3].text, "Which?")
+            testing.eq(backend.calls[1][3].list, nil)
+            testing.eq(backend.calls[1][3].searched, nil)
+        end
     end
 )
 
@@ -5021,6 +5072,8 @@ testing.test(
 do
     local ASK_ARGS = {
         "11111111-a",
+        "--searched",
+        "the decision notes",
         "--question",
         "Which?",
         "--choice",
@@ -5089,6 +5142,8 @@ testing.test("ask posts the question on a planned Backlog card", function()
     local backend = fake(cards)
     local result = cmd_board.run("ask", {
         "11111111-b",
+        "--list",
+        "taste",
         "--question",
         "Which?",
         "--choice",
@@ -5111,6 +5166,8 @@ testing.test("ask refuses an unplanned card, naming what it lacks, and posts not
         local backend = fake(sample())
         local result = cmd_board.run("ask", {
             case.id,
+            "--list",
+            "taste",
             "--question",
             "Which?",
             "--choice",
@@ -5295,6 +5352,8 @@ testing.test("ask sends one ask call and no label call", function()
         "Ready=Ship it",
         "--choice",
         "Icebox=Park it",
+        "--list",
+        "taste",
         "--recommend",
         "1",
     }, backend)
@@ -8720,6 +8779,8 @@ testing.test("ask posts a structured question", function()
         "Icebox=Park it",
         "--recommend",
         "2",
+        "--list",
+        "taste",
         "--why",
         "Only he can choose",
     })
@@ -8752,6 +8813,8 @@ testing.test("ask prints the refusal as worded", function()
         "Icebox=Park it",
         "--recommend",
         "1",
+        "--list",
+        "taste",
     })
     testing.eq(code, 1)
     testing.ok(out:find("question.why is required", 1, true), out)
@@ -8765,6 +8828,8 @@ testing.test("ask names a choice whose column the board lacks and posts nothing"
         "11111111-a",
         "--choice",
         "Nowhere=Lost",
+        "--list",
+        "taste",
     })
     testing.eq(code, 1)
     testing.ok(out:find("Choice 1 names Nowhere, which is no column.", 1, true), out)
@@ -10281,6 +10346,8 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
         "Icebox=Park it",
         "--recommend",
         "1",
+        "--list",
+        "taste",
         "--why",
         "Only he can choose",
     })
@@ -10331,6 +10398,8 @@ testing.test("ask keeps the owner lease when Pomb refuses the question", functio
         "Icebox=Park it",
         "--recommend",
         "1",
+        "--list",
+        "taste",
     })
     testing.eq(code, 1, out)
     testing.ok(out:find("question.why is required", 1, true), out)

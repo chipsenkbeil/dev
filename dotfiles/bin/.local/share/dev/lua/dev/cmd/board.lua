@@ -2408,13 +2408,18 @@ end
 
 local Owner = {}
 
+---The closed list of what only the owner decides, by the key `ask --list` takes
+local ASK_LISTS = { "secrets", "destroy", "spend", "restart", "taste" }
+
 function commands.ask(backend, args)
     if #args < 1 then
         return usage(
-            "Needs a card, --question TEXT, --choice COLUMN=LABEL, --recommend N and --why TEXT."
+            "Needs a card, --question TEXT, --choice COLUMN=LABEL, --recommend N, --why TEXT"
+                .. " and --list KEY or --searched TEXT."
         )
     end
     local question = { choices = {} }
+    local listed, searched
     local i = 2
     while i <= #args do
         local flag, value = args[i], args[i + 1]
@@ -2436,10 +2441,29 @@ function commands.ask(backend, args)
             question.text = value
         elseif flag == "--why" then
             question.why = value
+        elseif flag == "--list" then
+            if index_of(ASK_LISTS, value) == nil then
+                return usage(
+                    "The --list flag takes one of "
+                        .. table.concat(ASK_LISTS, ", ")
+                        .. ", not "
+                        .. value
+                        .. "."
+                )
+            end
+            listed = value
+        elseif flag == "--searched" then
+            searched = value:match("%S") and value or nil
         else
             return usage("Unknown flag " .. flag .. ".")
         end
         i = i + 2
+    end
+    if not listed and not searched then
+        return usage(
+            "A question names the owner's list item with --list KEY"
+                .. " or the precedent search it ran with --searched TEXT."
+        )
     end
     local card, err = find_card(backend, args[1])
     if not card then

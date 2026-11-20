@@ -14,7 +14,7 @@ dev board size 8af0e001 1
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --label needs:lead --label docs
 dev board add "Name" --size 1 --problem "why" --done-when "it works" --checks "dev lint" --checks "dev test"
 dev board label 8af0e001 --remove needs:lead
-dev board ask 8af0e001 --question "Which way?" --choice "Ready=Take the first" --choice "Icebox=Park it" --recommend 1 --why "Only you can choose"
+dev board ask 8af0e001 --question "Which way?" --choice "Ready=Take the first" --choice "Icebox=Park it" --recommend 1 --why "Only you can choose" --list taste
 dev board answer 8af0e001 --choice 2 --quote "Take the second one."
 dev board stale --days 7
 dev board lint
@@ -671,8 +671,12 @@ A steering comment of yours (one that gives direction) is followed. The agent
 folds it into the description and notes the decision.
 
 When a steering comment lists options, the agent picks the one you favour and
-says why in the decision note. A list with no favoured option is a choice only
-you can make.
+says why in the decision note. Options you do not rank park the card only when
+their choice is on this closed list of what only you decide: secrets, keys and
+permissions; destroying another live session's data or work; spend, a public
+launch or a force push; restarting shared services or rebooting a host; taste
+or scope with no ruling yet. The agent makes any other technical choice itself
+and notes why.
 
 A card is parked only in two cases:
 
@@ -736,7 +740,11 @@ to a token for these, and a label change passes only when it unlocks the card
 dev prints that reason instead of a generic failure.
 
 An agent asks you with `dev board ask CARD --question TEXT --choice
-COLUMN=LABEL... --recommend N --why TEXT`. It sends Pomb's structured question:
+COLUMN=LABEL... --recommend N --why TEXT`, plus `--list KEY` (`secrets`,
+`destroy`, `spend`, `restart` or `taste`) to name the list item or `--searched
+TEXT` to name the precedent search it ran. dev refuses a question with neither
+flag and a `--list` key it does not know (exit 2), and sends neither flag to
+Pomb. It sends Pomb's structured question:
 
 - the question
 - two to ten numbered choices that each name the column the card moves to
