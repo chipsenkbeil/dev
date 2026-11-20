@@ -739,6 +739,16 @@ to a token for these, and a label change passes only when it unlocks the card
 
 dev prints that reason instead of a generic failure.
 
+A reversible technical choice with a clear recommendation takes the
+decided-by-agent path instead of a `needs:human` question, when the planner
+recorded the recommendation and the undo path in a decision note. An agent from
+a different session than the planner's decides, notes which option it took and
+why, and labels the card `decided-by-agent`. The card never gets `needs:human`.
+A choice that is on the closed list of what only you decide, or that touches
+goldens, formats, secrets or ratified docs, never takes this path and goes to
+`dev board ask`. Any other technical choice stays with the agent that holds the
+card, as above.
+
 An agent asks you with `dev board ask CARD --question TEXT --choice
 COLUMN=LABEL... --recommend N --why TEXT`, plus `--list KEY` (`secrets`,
 `destroy`, `spend`, `restart` or `taste`) to name the list item or `--searched
