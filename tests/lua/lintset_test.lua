@@ -81,6 +81,17 @@ testing.test("runs flags three comment lines and passes lists and doc comments",
     testing.eq(lintset.runs("// one\n// two\n// three", "//"), { { line = 1, count = 3 } })
 end)
 
+testing.test("runs skips a heredoc body and counts real hash comments around it", function()
+    testing.eq(lintset.runs("cat <<EOF\n# a\n# b\n# c\nEOF\n", "#"), {})
+    testing.eq(lintset.runs("cat <<-EOF\n\t# a\n\t# b\n\t# c\n\tEOF\n", "#"), {})
+    testing.eq(
+        lintset.runs("cat <<EOF\nx\nEOF\n# one\n# two\n# three\nb\n", "#"),
+        { { line = 4, count = 3 } }
+    )
+    testing.eq(lintset.runs("a\n# one\n# two\n# three\nb\n", "#"), { { line = 2, count = 3 } })
+    testing.eq(lintset.runs("echo 'cmd <<EOF'\n# a\n# b\n# c\n", "#"), { { line = 2, count = 3 } })
+end)
+
 testing.test("periods finds a lone one-liner ending in a period and fix drops only that", function()
     local text =
         "fn a() {\n    // Drop it.\n    f();\n\n    // Keep.\n    // This.\n    f();\n    // Wait...\n    f();\n}\n\n/// Doc.\nfn b() {}\n"
