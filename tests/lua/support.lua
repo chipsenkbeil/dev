@@ -42,7 +42,11 @@ end
 ---@return table<string, any>? card the card with that id
 ---@return string? message why no card was found
 function M.listed_card(backend, id)
-    for _, listed in ipairs(backend:cards()) do
+    local cards, message = backend:cards()
+    if not cards then
+        return nil, message
+    end
+    for _, listed in ipairs(cards) do
         if listed.id == id then
             return listed
         end
