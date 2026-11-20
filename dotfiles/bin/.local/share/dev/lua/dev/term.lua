@@ -123,7 +123,13 @@ local function with_read_limits(fd, limits, fn)
     local ok, result = pcall(fn)
     local restored, restore_err = pcall(set_attr, fd, saved)
     if not ok and not restored then
-        error(tostring(result) .. " The terminal restore also failed: " .. tostring(restore_err), 0)
+        error(
+            tostring(result)
+                .. " The terminal restore also failed: "
+                .. tostring(restore_err)
+                .. ".",
+            0
+        )
     end
     if not ok then
         error(result, 0)
