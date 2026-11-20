@@ -112,8 +112,11 @@ function M.context(opts)
     end
     local width = opts.width
     if width == nil then
-        local _, cols = size()
-        width = cols
+        width = term.DEFAULT_COLS
+        if isatty(1) then
+            local _, cols = size()
+            width = cols
+        end
     end
     return setmetatable({
         color = color,

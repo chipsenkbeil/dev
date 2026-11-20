@@ -71,9 +71,11 @@ int close(int fd);
 
 ---@class dev.term
 ---@field TTY_PATH string path of the controlling terminal
+---@field DEFAULT_COLS integer columns size reports when the terminal gives none
 ---@field Key dev.term.Key names read_key and decode return for the keys they know
 local M = {
     TTY_PATH = "/dev/tty",
+    DEFAULT_COLS = DEFAULT_COLS,
     Key = {
         UP = "up",
         DOWN = "down",

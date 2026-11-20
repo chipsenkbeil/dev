@@ -1,6 +1,7 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
+local term = require("dev.term")
 local text = require("dev.text")
 local ui = require("dev.ui")
 
@@ -101,6 +102,14 @@ end)
 
 testing.test("context takes width from the terminal", function()
     testing.eq(ui.context({ getenv = env_of({}), isatty = tty(0, 1), size = size }).width, 100)
+end)
+
+testing.test("headless context uses the default width without reading the size", function()
+    local function size_raises()
+        error("size was read")
+    end
+    local ctx = ui.context({ getenv = env_of({}), isatty = tty(), size = size_raises })
+    testing.eq(ctx.width, term.DEFAULT_COLS)
 end)
 
 testing.test("context is not interactive unless stdin and stdout are terminals", function()
