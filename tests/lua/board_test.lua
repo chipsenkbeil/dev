@@ -2165,8 +2165,11 @@ testing.test("link to BOARD:CARD resolves the card on the other board", function
         cards = function()
             return { far_card }
         end,
-        card = function()
-            return far_card
+        card = function(_, id)
+            if id == far_card.id then
+                return far_card
+            end
+            return nil, "The board has no card " .. id .. "."
         end,
     }
     backend.sibling = elsewhere
@@ -10240,7 +10243,7 @@ testing.test("take keeps the claim and warns when the card cannot be read after 
     local root, home = sandbox({ export = PLANNED_EXPORT })
     executable(
         root .. "/bin/curl",
-        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/'
+        '#!/bin/sh\nfor last; do :; done\ncase "$last" in */api/tasks/11111111-a|*/api/tasks/'
             .. ID_A
             .. ')\nif [ -f "$ROOT/detail_read" ]; then cat >/dev/null; exit 7; fi\n'
             .. ': >"$ROOT/detail_read" ;; esac\n'
@@ -11093,14 +11096,29 @@ do
     end)
 end
 
-testing.test("find card skips the export and reads the list and one task for a prefix", function()
+testing.test("a prefix skips the list and writes with the full id", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111-a", "hello" })
     testing.eq(code, 0, out)
     local calls = read(root, "calls")
     testing.eq(calls:find("export-data", 1, true), nil)
+    testing.eq(calls:find("/tasks?limit=1000", 1, true), nil)
+    testing.ok(calls:find("/api/tasks/11111111-a\n", 1, true), calls)
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
+end)
+
+testing.test("a prefix 404 falls back to the list and keeps the refusal texts", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "note", "11111111", "hello" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("More than one card starts with 11111111.", 1, true), out)
+    out, code = dev(root, home, { "board", "note", "99999999", "hello" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("No card starts with 99999999.", 1, true), out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/tasks/99999999\n", 1, true), calls)
     testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
-    testing.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
+    testing.eq(calls:find("/comments", 1, true), nil)
 end)
 
 testing.test("a full id skips the list and reads the task detail", function()
@@ -11122,6 +11140,29 @@ testing.test("a full id of a card on another board is refused like an unknown pr
     testing.ok(calls:find("/api/tasks/" .. ID_D, 1, true), calls)
     testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
     testing.eq(calls:find("/comments", 1, true), nil)
+end)
+
+testing.test("a prefix of a card on another board is refused like an unknown prefix", function()
+    local root, home = far_sandbox("far-ready")
+    local out, code = dev(root, home, { "board", "note", "dddddddd-d", "hello" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("No card starts with dddddddd-d.", 1, true), out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/tasks/dddddddd-d\n", 1, true), calls)
+    testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
+    testing.eq(calls:find("/comments", 1, true), nil)
+end)
+
+testing.test("a short word makes no task request", function()
+    local root, home = sandbox()
+    for _, word in ipairs({ "1111111", "11111111-z" }) do
+        local out, code = dev(root, home, { "board", "note", word, "hello" })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("A card id needs at least 8 hex characters: " .. word, 1, true), out)
+    end
+    local calls = read(root, "calls")
+    testing.eq(calls:find("/api/tasks/1111111", 1, true), nil)
+    testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
 end)
 
 local function export_fetches(root, home, steps)

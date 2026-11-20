@@ -4776,13 +4776,16 @@ Reads:
   picks the list. Each list row carries the card's `owner`, whose `fence` is the
   claim fence, and its `children_total` and `children_done`. Every other read
   keeps the cached `/export-data`. A local board ignores the opts.
-- A single-card verb resolves its card word against that list, then reads the
-  one card from `/api/tasks/ID`. A full-length id skips the list when the card
-  sits in a column of this board, and the id of a card on another board falls
-  through to the list. The resolved card of an epic whose children are all
-  Done carries no child counts, as a card of the export did, so the Done guard
-  asks for its outcomes as before. A word that matches nothing keeps the same
-  refusal texts.
+- A single-card verb reads `/api/tasks/WORD` first for a word of at least 8
+  characters that holds only hex digits and dashes. Pomb takes a unique id
+  prefix on that one route and returns the full task, so the verb needs no list
+  and writes with the full id the read returns. A 404 (an unknown or ambiguous
+  prefix, which Pomb does not tell apart), a card on another board or a failed
+  read falls through to the list, which resolves the word and names the
+  refusal. A shorter word or one with another character reads only the list.
+  The resolved card of an epic whose children are all Done carries no child
+  counts, as a card of the export did, so the Done guard asks for its outcomes
+  as before. A word that matches nothing keeps the same refusal texts.
 - `next` asks `/tasks?limit=1&ready=true&claimed=false&column_id=<Ready>` and
   reads the card for its colour.
 

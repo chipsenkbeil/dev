@@ -2803,6 +2803,8 @@ for arg; do
 done
 for last; do :; done
 ]] .. support.EXPORT_ROUTES .. [[
+extra_id=
+]] .. support.PREFIX_RESOLVE .. [[
 printf '%s %s\n' "$method" "$last" >>"$ROOT/calls"
 if [ "$method" = PATCH ] && [ -f "$ROOT/held" ]; then printf '{"code":"claim_held","message":"the card holds a live claim"}\n409'; exit 0; fi
 status=200
@@ -2832,6 +2834,7 @@ case "$last" in
 */api/tasks) body='{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"x","column_id":"col-backlog"}' ;;
 *) body='{"ok":true}' ;;
 esac
+]] .. support.PREFIX_MISS .. [[
 printf '%s\n%s' "$body" "$status"
 ]]
 

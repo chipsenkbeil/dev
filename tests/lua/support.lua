@@ -404,6 +404,31 @@ tasks_page() {
 }
 ]]
 
+---Shell that makes a fake curl answer a task read by id prefix like Pomb: a unique prefix reads
+---that task, and any other prefix answers 404. It needs `export_lines` and may use `$extra_id`.
+M.PREFIX_RESOLVE = [[
+prefix_miss=
+tail=${last##*/api/tasks/}
+if [ "$tail" != "$last" ] && [ "${#tail}" -ge 6 ] && [ "${#tail}" -lt 36 ] \
+    && [ -z "$(printf '%s' "$tail" | tr -d '0-9a-f-')" ]; then
+    ids=$( { export_lines | sed -n 's/^{"id":"\([^"]*\)".*/\1/p'
+        echo; echo "$extra_id"; } | grep "^$tail")
+    if [ "$(printf '%s\n' "$ids" | grep -c .)" = 1 ]; then
+        last=${last%"$tail"}$ids
+    else
+        prefix_miss=1
+    fi
+fi
+]]
+
+---Shell that turns the answer of a missed prefix read into Pomb's 404.
+M.PREFIX_MISS = [[
+if [ -n "$prefix_miss" ]; then
+    body='{"code":"not_found","message":"task not found"}'
+    status=404
+fi
+]]
+
 ---The board column names, by constant.
 ---@enum support.Column
 M.Column = {
@@ -487,6 +512,8 @@ cat >"$ROOT/stdin"
 for last; do :; done
 ]] .. M.EXPORT_ROUTES .. [[
 status=${HTTP_STATUS:-200}
+extra_id=dddddddd-dddd-4ddd-8ddd-dddddddddddd
+]] .. M.PREFIX_RESOLVE .. [[
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
@@ -654,6 +681,7 @@ case "$last" in
     ;;
 *) body='{"ok":true}' ;;
 esac
+]] .. M.PREFIX_MISS .. [[
 printf '%s\n%s' "$body" "$status"
 ]]
 end
