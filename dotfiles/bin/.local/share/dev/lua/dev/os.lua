@@ -89,7 +89,7 @@ local TIMED_WRAPPER = table.concat({
     'trap "" INT TERM HUP; set -m; exec 3<&0;',
     '{ trap - INT TERM HUP; eval "$1"; echo $? >"$2.tmp"; mv "$2.tmp" "$2"; } 3<&- & pid=$!;',
     '( trap - INT TERM HUP; read -r _ <&3; [ -e "$2" ] || kill -KILL -- "-$pid" 2>/dev/null;',
-    'rm -rf -- "$3" ) >/dev/null 2>&1 & watcher=$!;',
+    'n=0; while rm -rf -- "$3"; [ -e "$3" ] && [ $n -lt 50 ]; do n=$((n+1)); sleep 0.1; done ) >/dev/null 2>&1 & watcher=$!;',
     'trap - INT TERM HUP; exec 2>/dev/null; echo $pid $watcher >"$3/pids.tmp"; mv "$3/pids.tmp" "$3/pids"; wait $watcher',
 }, " ")
 
