@@ -105,7 +105,6 @@ testing.test("lint reports one line per rule a card breaks and exits 1", functio
         "00000007 Ready needs:human outside Blocked and Icebox",
         "00000008 Blocked blocked with no question or blocked note and no blocker",
         "00000009 In Progress in progress with no claimant",
-        "00000010 Done 1 of 3 outcomes unticked",
         "00000011 Done outcomes unreadable",
         "00000012 Backlog lacks Done when outcomes",
     })
@@ -119,13 +118,14 @@ testing.test("lint open skips done cards and a named card", function()
     testing.eq(findings(cmd_board.run("lint", { "--open" }, backend(cards)).output), {
         "00000001 Backlog lacks a size",
     })
-    testing.eq(findings(cmd_board.run("lint", {}, backend(cards)).output), {
+    testing.eq(findings(cmd_board.run("lint", { "--strict" }, backend(cards)).output), {
         "00000001 Backlog lacks a size",
         "00000002 Done 1 of 3 outcomes unticked",
     })
-    testing.eq(findings(cmd_board.run("lint", { "--open", "00000002" }, backend(cards)).output), {
-        "00000002 Done 1 of 3 outcomes unticked",
-    })
+    testing.eq(
+        findings(cmd_board.run("lint", { "--open", "--strict", "00000002" }, backend(cards)).output),
+        { "00000002 Done 1 of 3 outcomes unticked" }
+    )
 end)
 
 testing.test(
@@ -191,7 +191,7 @@ testing.test("lint holds an epic to 1 to 3 outcomes and to its children", functi
         end
         return { children = total and total > 0 and { done = total, total = total } or nil }
     end
-    local result = cmd_board.run("lint", {}, fake)
+    local result = cmd_board.run("lint", { "--strict" }, fake)
     testing.eq(findings(result.output), {
         "00000002 Done 1 of 2 children open",
         "00000003 Done lacks Done when outcomes",
@@ -397,7 +397,7 @@ testing.test(
         local open = { { id = "o1", name = "The change is on main", done = false } }
         local cards = { card(1, NAME.DONE, { outcomes = open }) }
         testing.eq(
-            findings(cmd_board.run("lint", {}, backend(cards)).output),
+            findings(cmd_board.run("lint", { "--strict" }, backend(cards)).output),
             { "00000001 Done 1 of 1 outcomes unticked" }
         )
     end
@@ -605,6 +605,23 @@ testing.test("strict holds a Done card to the v3 sections, by flag and by the co
     out, code = dev({ "board", "lint" })
     testing.eq(code, 1, out)
     testing.ok(out:find("Done +lacks ## Change"), out)
+end)
+
+testing.test("lint holds a Done card to its outcomes only under strict", function()
+    local cards = {
+        card(1, NAME.DONE, { outcomes = outcomes(1) }),
+        card(2, NAME.DONE, { outcomes = {} }),
+        card(3, NAME.DONE, { labels = { "discarded" }, outcomes = outcomes(0) }),
+    }
+    local result = cmd_board.run("lint", {}, backend(cards))
+    testing.eq(result.output, "No findings.")
+    testing.eq(result.code, nil)
+    result = cmd_board.run("lint", { "--strict" }, backend(cards))
+    testing.eq(result.code, 1)
+    testing.eq(findings(result.output), {
+        "00000001 Done 2 of 3 outcomes unticked",
+        "00000002 Done lacks Done when outcomes",
+    })
 end)
 
 testing.test("a strict setting that is not a boolean is refused", function()

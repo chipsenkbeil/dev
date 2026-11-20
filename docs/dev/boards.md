@@ -1430,15 +1430,17 @@ The rules:
   Out of scope, and no `Change:` or `Out of scope:` line under Problem. So a
   move into In Progress, Review, Blocked or Done and an add to Backlog refuse
   them too, and lint reports each once. `dev board discard` skips the shapes.
-- A Done card gets the size and outcome checks only, and a Done card labelled
-  `discarded` needs no outcome.
+- A Done card gets the size check only, and a Done card labelled `discarded`
+  needs no outcome. A move into Done already refuses a missing or unticked
+  outcome, so lint holds a Done card to the outcome rules only under `--strict`.
 - An epic with no children needs 1 to 3 outcomes. A card with children needs
   none, and 1 to 3 if it has any, except a Done epic with every child Done,
   which has no count limit. Lint reads the children of every card it checks for
   outcomes.
-- With `--strict`, a Done card also needs the three v4 headings with text under
-  Problem. A discarded card is held to the rule `discard` applies. Older Done
-  cards are v1 and fail it until their descriptions are rewritten.
+- With `--strict`, a Done card also needs the outcome count above, with every
+  outcome ticked, and the three v4 headings with text under Problem. A discarded
+  card is held to the rule `discard` applies. Older Done cards are v1 and fail
+  it until their descriptions are rewritten.
 - Outside Icebox and Done: a description of at most 400 words. In Ready, In
   Progress, Review, Verify and Release, a checks row, unless the card has
   children. In Ready, no red size.
@@ -1447,7 +1449,8 @@ The rules:
 - An In Progress card holds a claimant, an epic too.
 - A Done epic that was not discarded has every child Done: `N of M children
   open`.
-- A Done card that was not discarded has every outcome ticked.
+- Under `--strict`, a Done card that was not discarded has every outcome
+  ticked.
 - A Done card that was not discarded names no one as both its builder and a
   reviewer: `built and reviewed by the same name: NAME`. The builders are the
   names in the card's claim records, and the reviewers are the `by` names in its
@@ -2595,7 +2598,7 @@ size, the v4 sections and the outcomes. It adds these:
 
 How it reads outcomes:
 
-- A Done card passes `sections = false` unless strict.
+- A Done card passes `sections = false` and no outcome check unless strict.
 - A `discarded` card passes no outcome check, which is what `discard`'s guard
   does.
 - Every card asked for outcomes reads `backend:family` for its child count,

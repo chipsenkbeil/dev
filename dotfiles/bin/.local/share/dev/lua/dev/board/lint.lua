@@ -11,7 +11,7 @@ M.MAX_WORDS = 400
 ---@class dev.board.lint.Opts
 ---@field stages dev.board.Stages the board's columns
 ---@field facts dev.board.lint.Facts lazy readers of the card's comments, links and children
----@field strict boolean? whether a Done card is held to the v3 sections too
+---@field strict boolean? whether a Done card is held to the v3 sections and its outcomes too
 ---@field required string[]? the checks rows every open card must hold, none when nil
 
 ---@class dev.board.lint.Facts
@@ -162,7 +162,9 @@ function M.card(card, opts)
     local dropped = card.done and discarded
     local landed = card.done and not discarded
     local open = not card.done and column ~= stages.icebox
-    local need_outcomes = not dropped and not card.outcomes_unreadable
+    local need_outcomes = not dropped
+        and not card.outcomes_unreadable
+        and (not card.done or opts.strict == true)
     local kids, kids_why
     local function children()
         if not kids then
@@ -287,7 +289,7 @@ function M.card(card, opts)
             add(unfinished .. " of " .. found.total .. " children open")
         end
     end
-    if landed and not card.outcomes_unreadable then
+    if landed and opts.strict == true and not card.outcomes_unreadable then
         local unticked_rule = unticked(card)
         if unticked_rule then
             add(unticked_rule)
