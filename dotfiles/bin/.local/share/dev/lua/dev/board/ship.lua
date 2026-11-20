@@ -104,7 +104,7 @@ local function ship_ran(backend, runs, name_suspects)
     end
 end
 
-local Ship = { DEFAULT_REV = "trunk()" }
+local Ship = { DEFAULT_REV = land.TRUNK_REVSET }
 
 ---Split `--rev REV` off the words before `--`.
 ---@param args string[] the ship arguments

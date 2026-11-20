@@ -18,6 +18,8 @@ local SHAPE_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ if(description == "
 local COMMIT_TEMPLATE = 'commit_id ++ "\\n"'
 local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local TRUNK_REVSET = "trunk()"
+---The revset that names the trunk commit.
+M.TRUNK_REVSET = TRUNK_REVSET
 local BARE_LINK = 'empty() & description(exact:"") & ~merges()'
 local COMMIT_CHARS = 12
 local RUN_HISTORY = "1000"
