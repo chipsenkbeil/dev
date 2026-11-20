@@ -1877,6 +1877,85 @@ esac
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
+    testing.test("land carries across a trunk merge commit", function()
+        local project = jj_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+
+        -- Push a merge commit to trunk through a second clone
+        local other = support.tempdir() .. "/clone"
+        must(
+            dev_os.run(
+                { "git", "clone", "-q", "--branch", "master", project.bare, other },
+                { stdout = "null", stderr = "null" }
+            )
+        )
+        support.git(other, "checkout", "-q", "-b", "side")
+        assert(fs.write(other .. "/side.txt", "side\n"), "write failed")
+        support.git(other, "add", "side.txt")
+        support.git(other, "commit", "-q", "-m", "side")
+        support.git(other, "checkout", "-q", "master")
+        assert(fs.write(other .. "/main.txt", "main\n"), "write failed")
+        support.git(other, "add", "main.txt")
+        support.git(other, "commit", "-q", "-m", "main")
+        support.git(other, "merge", "-q", "--no-ff", "-m", "merge side", "side")
+        support.git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+
+        -- Rebase the reviewed change onto the merged trunk
+        jj(project.root, "git", "fetch", "--remote", "origin")
+        rebase_onto_trunk(project.root)
+        testing.ok(head(project.root) ~= before, "the rebase must rewrite the commit")
+
+        -- Land it and check the carried note
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        local list = comments(project.home)
+        testing.ok(
+            list[#list].body:find(
+                "The check and reviews were carried over from commit " .. before:sub(1, 12),
+                1,
+                true
+            ),
+            list[#list].body
+        )
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("land carries after a refusal between two rebases", function()
+        local project = jj_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+
+        -- Rebase once, then hold the turn so the first land refuses
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local held = hold_turn(project.home, "other", "cccc3333")
+        local first, first_code = dev(project, { "board", "land", id, "--wait", "0" })
+        testing.eq(first_code, 1, first)
+        testing.ok(first:find("held by other since", 1, true), first)
+
+        -- Rebase again after the refusal
+        local middle = head(project.root)
+        trunk_moves(project, { ["notes.txt"] = "notes\n" })
+        rebase_onto_trunk(project.root)
+        testing.ok(head(project.root) ~= middle, "the second rebase must rewrite the commit")
+
+        -- Release the turn and land
+        release_turn(project.home, held)
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        local list = comments(project.home)
+        testing.ok(
+            list[#list].body:find(
+                "The check and reviews were carried over from commit " .. before:sub(1, 12),
+                1,
+                true
+            ),
+            list[#list].body
+        )
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+    end)
+
     testing.test("land carries past three rebases through nested directories", function()
         local project = jj_project()
         local id = review_ready(project, "rg -n G shared.txt")
