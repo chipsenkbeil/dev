@@ -208,7 +208,8 @@ The file is checked when it is read:
 A mismatch deletes the download and fails with
 `The sha256 of <url> does not match the pin. Expected <sum>, got <sum>.`
 A binary that is not a regular file inside the unpacked directory (a symlink
-out of it included) is refused. A failure therefore leaves nothing in the bin directory.
+out of it included) is refused. A failure therefore leaves nothing in the bin
+directory.
 
 The binary is installed with `install -m 755` to a staging name and `mv`d into
 `~/.local/bin` (`DEV_TOOLS_BIN` overrides). It is named by the row's binary
