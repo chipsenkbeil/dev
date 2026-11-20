@@ -2736,6 +2736,7 @@ status=200
 case "$last" in
 */api/boards) body=$(cat "$ROOT/boards.json") ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
+*/api/boards/board-3) body=$(cat "$ROOT/ci.json") ;;
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
@@ -2988,6 +2989,59 @@ testing.test("reads, usage errors and refusals are not queued", function()
     out, code = pomb_dev(root, home, { "board", "take", ID_A:sub(1, 8) })
     testing.eq(code, 1, out)
     testing.eq(fs.exists(queue_path(home)), false)
+end)
+
+testing.test("queued add --board replays on the named board with its flags as typed", function()
+    local root, home = pomb()
+    assert(
+        fs.write(
+            root .. "/boards.json",
+            '[{"id":"board-1","name":"dotfiles","archived":false},'
+                .. '{"id":"board-3","name":"ci","archived":false}]'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/ci.json",
+            '{"id":"board-3","name":"ci","columns":[{"id":"col-ci-backlog","name":"Backlog"}]}'
+        )
+    )
+    assert(fs.write(root .. "/down", ""))
+    local args = {
+        "Later",
+        "--board",
+        "ci",
+        "--blocked-by",
+        ID_B:sub(1, 8),
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }
+    local words = { "board", "add" }
+    for _, word in ipairs(args) do
+        words[#words + 1] = word
+    end
+    local out, code = pomb_dev(root, home, words)
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
+    local entries = document(queue_path(home))
+    testing.eq(#entries, 1)
+    testing.eq(entries[1].sub, "add")
+    testing.eq(entries[1].args, args)
+    assert(fs.remove(root .. "/down"))
+    out, code = pomb_dev(root, home, { "board", "sync" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("synced add", 1, true), out)
+    local bodies = fs.read(root .. "/bodies")
+    testing.ok(bodies:find("col-ci-backlog", 1, true), bodies)
+    testing.ok(calls(root):find("/api/boards/board-3", 1, true), calls(root))
 end)
 
 testing.test("link posts to the task and queues while Pomb is unreachable", function()

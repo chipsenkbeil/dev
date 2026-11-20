@@ -723,6 +723,35 @@ testing.test("add --board files on the named board and leaves this one alone", f
     testing.eq(sibling.calls[1], { "add", "Far", support.COLUMN_NAME.BACKLOG, COMPOSED, "yellow" })
 end)
 
+testing.test("add --board reports a target with no Backlog column and files nothing", function()
+    local backend = fake(sample())
+    local sibling = fake(sample())
+    function sibling:add(name)
+        sibling.calls[#sibling.calls + 1] = { "refused", name }
+        return nil, "the board has no Backlog column"
+    end
+    backend.sibling = sibling
+    local result = cmd_board.run("add", {
+        "Far",
+        "--board",
+        "ci",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("The board has no Backlog column", 1, true), result.message)
+    testing.eq(sibling.calls, { { "refused", "Far" } })
+    testing.eq(#backend.calls, 1)
+end)
+
 testing.test("add --board refuses a board that is not there", function()
     local backend = fake(sample())
     local result = cmd_board.run("add", { "Far", "--board", "nope", "--size", "1" }, backend)
