@@ -895,8 +895,8 @@ testing.test("init --admin pairs through pending, slow_down and success", functi
     testing.eq(code, 0)
     testing.eq(
         out,
-        "approve the admin sign-in at https://pomb.example/device\n"
-            .. "code: ABCD-EFGH\n"
+        "Open https://pomb.example/device to approve the admin sign-in.\n"
+            .. "The code is ABCD-EFGH.\n"
             .. STANDARD_OUT
     )
     testing.eq(read(root, "polls"), "4\n")

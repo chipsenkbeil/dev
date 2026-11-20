@@ -526,8 +526,8 @@ a file, put in an argument or an environment variable, or printed. If you
 approve a lower scope than `admin`, `init` stops before changing anything.
 
 ```
-approve the admin sign-in at https://pomb.example.com/device
-code: ABCD-EFGH
+Open https://pomb.example.com/device to approve the admin sign-in.
+The code is ABCD-EFGH.
 ```
 
 Run it once on each existing board, from that board's repository. The four
@@ -4806,8 +4806,8 @@ read like `token`, else exit 1 saying to set it or pass `--admin`.
 
 1. `POST /api/v1/auth/device` with `client_name` `dev-board-init@<host>` and
    `scopes` `["admin"]`.
-2. It prints `approve the admin sign-in at <verification_url>` and
-   `code: <user_code>`.
+2. It prints `Open <verification_url> to approve the admin sign-in.` and
+   `The code is <user_code>.`
 3. `POST /api/v1/auth/device/token` every `interval_seconds` (5 more after
    `slow_down`).
 4. The poll ends on `access_denied`, `device_code_expired`, `invalid_grant`,

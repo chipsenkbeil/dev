@@ -127,8 +127,14 @@ function M.pair(opts)
     if type(start.device_code) ~= "string" or type(start.user_code) ~= "string" then
         return nil, Reason.NO_CODE
     end
-    opts.say("approve the " .. opts.scope .. " sign-in at " .. tostring(start.verification_url))
-    opts.say("code: " .. start.user_code)
+    opts.say(
+        "Open "
+            .. tostring(start.verification_url)
+            .. " to approve the "
+            .. opts.scope
+            .. " sign-in."
+    )
+    opts.say("The code is " .. start.user_code .. ".")
     local body = fs.mktemp({ prefix = "dev-device" })
     if not body then
         return nil, Reason.NO_TEMP
