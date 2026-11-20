@@ -136,6 +136,16 @@ local function state(home, id)
     end
 end
 
+local function red_notes(home, id)
+    local count = 0
+    for _, comment in ipairs(select(2, state(home, id))) do
+        if comment.body:find("^Ship went red") then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 local function label_owner_hold(home, id)
     local file = support.board_file(home, BOARD)
     local doc = assert(json.decode(assert(fs.read(file), "read failed")), "decode failed")
@@ -506,16 +516,6 @@ if dev_os.which("jj") then
             end
         end
         return bodies
-    end
-
-    local function red_notes(home, id)
-        local count = 0
-        for _, comment in ipairs(select(2, state(home, id))) do
-            if comment.body:find("^Ship went red") then
-                count = count + 1
-            end
-        end
-        return count
     end
 
     testing.test("ship.notes.each.suspect.once.when.red", function()
@@ -1018,16 +1018,6 @@ testing.test("ship.reverts.suspects.newest.landed.first.by.short.commit.id", fun
     testing.eq(out:find("conflicts with later changes", 1, true), nil)
 end)
 
-local function red_count(home, id)
-    local count = 0
-    for _, comment in ipairs(select(2, state(home, id))) do
-        if comment.body:find("^Ship went red") then
-            count = count + 1
-        end
-    end
-    return count
-end
-
 testing.test("ship.names.no.suspect.when.every.card.matches", function()
     local root, home = git_project(0)
     must(dev(root, home, { "board", "init" }))
@@ -1046,8 +1036,8 @@ testing.test("ship.names.no.suspect.when.every.card.matches", function()
     dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
     testing.eq((state(home, a_id)), support.COLUMN_NAME.RELEASE)
     testing.eq((state(home, b_id)), support.COLUMN_NAME.RELEASE)
-    testing.eq(red_count(home, a_id), 0)
-    testing.eq(red_count(home, b_id), 0)
+    testing.eq(red_notes(home, a_id), 0)
+    testing.eq(red_notes(home, b_id), 0)
 end)
 
 testing.test("ship.in.a.git.project.refuses.a.head.off.the.rev", function()
