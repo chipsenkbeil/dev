@@ -115,6 +115,18 @@ function M.sentence(s)
     return s
 end
 
+---Find a word in a list.
+---@param list any[] the list
+---@param word any the item to find
+---@return integer? index the first index of the item, nil when it is absent
+function M.index_of(list, word)
+    for i, item in ipairs(list) do
+        if item == word then
+            return i
+        end
+    end
+end
+
 ---Tell whether a list holds a value.
 ---@param list any[] the list
 ---@param want any the value to look for

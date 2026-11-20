@@ -14,24 +14,13 @@ local M = { FLAG = "--max-size", FULL = 3, limits = limits }
 local usage = guards.usage
 local failure = guards.failure
 local CLAIMANT_CHARS = guards.CLAIMANT_CHARS
+local index_of = require("dev.text").index_of
 
 ---Build the result of a move into a full column.
 ---@param message string the refusal
 ---@return dev.cmd.board.Result result the refusal with the full-column code
 local function full(message)
     return { message = message, code = M.FULL }
-end
-
----Find a word in a list.
----@param list any[] the list
----@param word any the item to find
----@return integer? index the first index of the item, nil when it is absent
-local function index_of(list, word)
-    for i, item in ipairs(list) do
-        if item == word then
-            return i
-        end
-    end
 end
 
 ---Refuse a card that carries `needs:human`, which waits on the owner.
@@ -275,7 +264,6 @@ local function renew_claim(backend, card, name, seconds)
 end
 
 M.full = full
-M.index_of = index_of
 M.owner_holds = owner_holds
 M.shape_refusal = shape_refusal
 M.limit = limit

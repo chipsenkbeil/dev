@@ -10,7 +10,7 @@ local store = require("dev.board.store")
 local usage = guards.usage
 local failure = guards.failure
 local parse = guards.parse
-local index_of = runner.index_of
+local index_of = require("dev.text").index_of
 
 ---The stale verb, which lists the cards that sat too long where they are.
 ---@class dev.board.stale

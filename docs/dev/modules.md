@@ -337,9 +337,10 @@ card's bookmark.
   A `die` prints `  ! install-<tool>: <message>` and exits 1.
 - `dev.term`: raw mode that is always restored, and key decoding including
   pgup, pgdn, home and end.
-- `dev.text`: display width, `fit`, `trim`, `words` and `wrap`. `wrap` is the
-  one greedy word wrap that confirm and `dev.ui.markdown` share, and it leaves
-  a word wider than the width on a line of its own.
+- `dev.text`: display width, `fit`, `trim`, `words`, `index_of`, `contains`
+  and `wrap`. `wrap` is the one greedy word wrap that confirm and
+  `dev.ui.markdown` share, and it leaves a word wider than the width on a line
+  of its own.
 
 ### Terminal UI
 

@@ -69,7 +69,7 @@ end
 
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
-local index_of = runner.index_of
+local index_of = require("dev.text").index_of
 local owner_holds = runner.owner_holds
 local claimant = runner.claimant
 local claim_card = runner.claim_card

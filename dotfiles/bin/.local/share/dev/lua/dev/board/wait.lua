@@ -4,13 +4,13 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 local pomb = require("dev.board.pomb")
-local runner = require("dev.board.runner")
 local store = require("dev.board.store")
 local turn = require("dev.board.turn")
 local verb = require("dev.verb")
 
 local usage = guards.usage
 local failure = guards.failure
+local index_of = require("dev.text").index_of
 local HUMAN_ACTOR = "human"
 
 ---The wait verb and the owner reads the other board verbs share.
@@ -120,8 +120,8 @@ local function lead_cards(backend, stages, label)
         if
             card.column == stages.blocked
             and not card.claimant
-            and runner.index_of(card.labels, label)
-            and not runner.index_of(card.labels, board.NEEDS_HUMAN)
+            and index_of(card.labels, label)
+            and not index_of(card.labels, board.NEEDS_HUMAN)
         then
             local skipped, why = M.skipped_by_next(backend, card)
             if skipped == nil then

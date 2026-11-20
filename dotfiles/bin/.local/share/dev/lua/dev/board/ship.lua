@@ -5,14 +5,13 @@ local follow = require("dev.cmd.follow")
 local guards = require("dev.board.guards")
 local land = require("dev.board.land")
 local revert = require("dev.board.revert")
-local runner = require("dev.board.runner")
 local templates = require("dev.templates")
 local verb = require("dev.verb")
 local wiring = require("dev.board.wiring")
 
 local usage = guards.usage
 local failure = guards.failure
-local index_of = runner.index_of
+local index_of = require("dev.text").index_of
 
 ---The ship verb, which moves every Release card a tested revision holds to Done.
 ---@class dev.board.ship
