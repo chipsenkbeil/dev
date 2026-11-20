@@ -60,7 +60,7 @@ return {
         if #root_files == 0 then
           return
         end
-        ci.group("real root", function()
+        ci.group("Real root", function()
           ci.sh("sudo rm -rf " .. ROOT_CLONE .. " && sudo cp -a \"$PWD\" " .. ROOT_CLONE, { name = "copy clone" })
           ci.sh("sudo chown -R root:root " .. ROOT_CLONE .. " && sudo chmod -R go-w " .. ROOT_CLONE, { name = "chown clone" })
           for _, entry in ipairs(root_files) do
