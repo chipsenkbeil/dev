@@ -1739,7 +1739,9 @@ An unset or empty `DEV_AGENT` is accepted.
 `move CARD progress` takes the claim itself, under the same name and with the
 same keep-alive loop, when nobody holds the card. A card with children stays
 unclaimed. A claim this machine already holds is kept, and one held by someone
-else leaves the move to fail as the backend answers.
+else leaves the move to fail as the backend answers. A card in Icebox, Backlog
+or Ready that has not started meets the checks a move into Ready makes first, so
+the move refuses with that message before any claim is taken.
 
 After a claim it takes, `take` prints the card as `show` does, with every
 comment in full, so the owner's comments are read before any work. A `move` into

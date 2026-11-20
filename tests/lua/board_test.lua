@@ -9966,6 +9966,30 @@ testing.test("move into progress refuses a card with no checks row as Ready does
     testing.eq(#backend.calls, 0)
 end)
 
+testing.test("move into progress refuses a Backlog card as Ready does", function()
+    for _, origin in ipairs({
+        support.COLUMN_NAME.ICEBOX,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.READY,
+    }) do
+        local card = colored("green")
+        card.column = origin
+        card.outcomes[1].name = "an outcome that names no deciding check"
+        local toward_ready =
+            cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
+        testing.eq(toward_ready.code, 1)
+        testing.ok(
+            toward_ready.message:find("names no deciding check", 1, true),
+            toward_ready.message
+        )
+        local backend = fake({ card })
+        local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
+        testing.eq(result.code, 1)
+        testing.eq(result.message, toward_ready.message)
+        testing.eq(#backend.calls, 0)
+    end
+end)
+
 testing.test("move into progress does not release the claim", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })

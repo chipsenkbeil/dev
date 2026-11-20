@@ -1828,13 +1828,9 @@ local function move_once(backend, args, opts)
         end
     end
     local starting = column == stages.progress and before_work(stages, card)
-    if column == stages.ready then
-        local refused = ready_refusal(backend, card, { children = children, epic = epic })
-        if refused then
-            return refused
-        end
-    elseif starting then
-        local refused = checks_refusal(backend, card, children)
+    if column == stages.ready or starting then
+        local refused = (starting and size_refusal(card))
+            or ready_refusal(backend, card, { children = children, epic = epic })
         if refused then
             return refused
         end
