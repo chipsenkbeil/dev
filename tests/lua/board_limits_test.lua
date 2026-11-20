@@ -221,7 +221,7 @@ testing.test("take refuses at the group limit and names the cards", function()
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(out, IN_FLIGHT)
     testing.eq(read(box, "calls"):find("/owner", 1, true), nil)
 end)
@@ -233,7 +233,7 @@ testing.test("take refuses at a column limit with room in its group", function()
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(
         out,
         NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
@@ -248,7 +248,7 @@ testing.test("a count limit still refuses at its limit", function()
         export = export(FLIGHT),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(
         out,
         NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
@@ -361,7 +361,7 @@ testing.test("a second trunk-blocker card at the group limit is refused", functi
         }),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(out, IN_FLIGHT)
     out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 3, out)
@@ -375,7 +375,7 @@ testing.test("a card with another label is still refused at the group limit", fu
         export = export(flight_with({ "docs" })),
     })
     local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
-    testing.eq(code, 1, out)
+    testing.eq(code, 3, out)
     testing.eq(out, IN_FLIGHT)
     out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
     testing.eq(code, 3, out)
