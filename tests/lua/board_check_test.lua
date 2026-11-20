@@ -1442,6 +1442,16 @@ if has_jj then
         testing.eq(#comments(home), 0)
     end)
 
+    testing.test("check records a no-change card on an empty jj working-copy commit", function()
+        local root, home, ws = workspace()
+        local id = card_with(root, home, { "true" })
+        jj(ws, "workspace", "rename", id)
+        must(dev(root, home, { "board", "label", id, "+" .. board.NO_CHANGE }))
+        local out, code = dev(root, home, { "board", "check", id }, ws)
+        testing.eq(code, 0, out)
+        testing.eq(#comments(home), 1)
+    end)
+
     testing.test("check --expect-fail still runs on an empty jj working-copy commit", function()
         local root, home, ws = workspace()
         local id = card_with(root, home, { "false" })

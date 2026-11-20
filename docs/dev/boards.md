@@ -2891,7 +2891,8 @@ The result belongs to one commit:
 - A `check` refuses an empty working-copy commit in a jj project, with exit 1,
   and names `jj edit` with the parent change (`land` refuses that commit).
   `--expect-fail` is not refused (a card is filed with a baseline run from a
-  fresh workspace).
+  fresh workspace). A check on a card labelled `no-change` is not refused
+  either, and the record names the empty commit.
 - dev names the commit before the first row and again after the last. A result
   whose two commits differ was run on a tree that moved, so it is not recorded
   (exit 1).
