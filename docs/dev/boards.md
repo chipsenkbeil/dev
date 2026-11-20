@@ -3481,8 +3481,11 @@ Landing under a hold:
   fixes the cause and lands again.
 - When the hold ran out or another card took the turn, `land` writes nothing,
   lands nothing and refuses with
-  `The landing turn held for <id prefix> ran out or was taken by another. Take
-  it again with dev board turn <id prefix>.`, and `turn CARD` takes it again.
+  `The landing turn held for <id prefix> ran out or was taken by another.
+  <what it saw> Take it again with dev board turn <id prefix>.`, and `turn
+  CARD` takes it again. What it saw is one of three sentences: the turn card
+  has no live claim, the turn card is claimed by another name, or the note
+  holds one fence and the claim fence is another.
 
 ### allow
 

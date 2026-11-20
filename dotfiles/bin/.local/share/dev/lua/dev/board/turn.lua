@@ -603,12 +603,25 @@ function M.held(backend, name, card)
     if not newest or not newest.hold then
         return nil
     end
-    if holding.claimant ~= name or holding.claim_fence ~= newest.fence then
+    local seen
+    if not holding.claimant then
+        seen = "The landing turn card has no live claim."
+    elseif holding.claimant ~= name then
+        seen = string.format("The landing turn card is claimed by %s.", holding.claimant)
+    elseif holding.claim_fence ~= newest.fence then
+        seen = string.format(
+            "The note holds fence %d, and the claim fence is %s.",
+            newest.fence,
+            tostring(holding.claim_fence)
+        )
+    end
+    if seen then
         return nil,
             string.format(
-                "The landing turn held for %s ran out or was taken by another. "
+                "The landing turn held for %s ran out or was taken by another. %s "
                     .. "Take it again with dev board turn %s.",
                 card,
+                seen,
                 card
             ),
             true

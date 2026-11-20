@@ -334,6 +334,40 @@ testing.test("a stale hold record for another claim is treated as lost", functio
     local found, message, lost = turn.held(backend, "alpha", "aaaa1111")
     testing.eq(found, nil)
     testing.ok(message:find("ran out or was taken", 1, true), message)
+    testing.ok(message:find("the claim fence is", 1, true), message)
+    testing.eq(lost, true)
+end)
+
+testing.test("a hold survives the command that took it and a later process finds it", function()
+    -- Take a hold, then drop the backend and open the same board again
+    local home = board_home()
+    local first = assert(turn.take(backend_at(home), "alpha", "aaaa1111", { hold = true }))
+    local later = backend_at(home)
+
+    -- Find the hold from the new backend and land under it
+    local found = assert(turn.held(later, "alpha", "aaaa1111"))
+    testing.eq(found.fence, first.fence)
+    testing.eq(found.hold, true)
+    testing.eq(turn.renew(later, found), true)
+    testing.eq(turn.release(later, found), true)
+    testing.eq(turn.held(backend_at(home), "alpha", "aaaa1111"), nil)
+end)
+
+testing.test("a lost hold names a missing claim and a claim of another name", function()
+    -- Let the claim of a hold lapse and expect the missing claim named
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = LEASE_SECONDS }))
+    advance(PAST_LEASE_SECONDS)
+    local _, message, lost = turn.held(backend, "alpha", "aaaa1111")
+    testing.ok(message:find("The landing turn card has no live claim.", 1, true), message)
+    testing.eq(lost, true)
+
+    -- Let another name take the turn and expect that name in the refusal
+    assert(turn.take(backend, "beta", "bbbb2222"))
+    restore()
+    _, message, lost = turn.held(backend, "alpha", "aaaa1111")
+    testing.ok(message:find("The landing turn card is claimed by beta.", 1, true), message)
     testing.eq(lost, true)
 end)
 
