@@ -141,10 +141,6 @@ M.Reason = { BAD_URL = "bad_url" }
 local Backend = {}
 Backend.__index = Backend
 
-local function unavailable(reason)
-    return UNAVAILABLE .. dev_text.sentence(reason)
-end
-
 local function listed(list, word)
     for _, item in ipairs(list) do
         if item == word then
@@ -1063,14 +1059,14 @@ function Backend:next(column, opts)
     end
     local id = self:__column_id(column)
     if not id then
-        return nil, unavailable("the board has no " .. column .. " column")
+        return nil, board.transport_refusal(board.TransportReason.NO_COLUMN, { name = column })
     end
     local ready_filter = column == self:__stages().ready and "&ready=true" or ""
     local filters = { "" }
     if opts and opts.lane then
         local lane_id = self:__lane_id(opts.lane)
         if not lane_id then
-            return nil, unavailable("the board has no " .. opts.lane .. " lane")
+            return nil, board.transport_refusal(board.TransportReason.NO_LANE, { name = opts.lane })
         end
         filters[1] = "&swimlane_id=" .. lane_id
     elseif #self.__detail.swimlanes > 1 then
@@ -1209,7 +1205,7 @@ end
 function Backend:__color_id(color)
     local id = self.__ids[color]
     if not id then
-        return nil, unavailable("the board has no " .. color .. " colour")
+        return nil, board.transport_refusal(board.TransportReason.NO_COLOUR, { name = color })
     end
     return id
 end
@@ -1248,7 +1244,7 @@ function Backend:add(name, column, opts)
     end
     local id = self:__column_id(column)
     if not id then
-        return nil, unavailable("the board has no " .. column .. " column")
+        return nil, board.transport_refusal(board.TransportReason.NO_COLUMN, { name = column })
     end
     local outcomes = opts and opts.outcomes or {}
     local final = id
@@ -1256,14 +1252,15 @@ function Backend:add(name, column, opts)
     if #outcomes > 0 and column == stages.ready then
         id = self:__column_id(stages.backlog)
         if not id then
-            return nil, unavailable("the board has no " .. stages.backlog .. " column")
+            return nil,
+                board.transport_refusal(board.TransportReason.NO_COLUMN, { name = stages.backlog })
         end
     end
     local body = { name = name, column_id = id }
     if opts and opts.lane then
         body.swimlane_id = self:__lane_id(opts.lane)
         if not body.swimlane_id then
-            return nil, unavailable("the board has no " .. opts.lane .. " lane")
+            return nil, board.transport_refusal(board.TransportReason.NO_LANE, { name = opts.lane })
         end
     end
     if opts and opts.epic then
@@ -2410,7 +2407,7 @@ function Backend:claim(id, claimant, opts)
     end
     local taken = present(owner.fence)
     if type(taken) ~= "number" then
-        return nil, unavailable("pomb sent an owner with no fence")
+        return nil, board.transport_refusal(board.TransportReason.NO_FENCE)
     end
     if fresh and not opts.lease then
         for _, seat in ipairs(REVIEW_SEATS) do
@@ -2565,7 +2562,7 @@ function Backend:mint(role, name, opts)
     end
     local raw = type(reply) == "table" and present(reply.raw_token)
     if not raw or not raw:find(TOKEN_PATTERN) then
-        return nil, unavailable("pomb sent no usable token")
+        return nil, board.transport_refusal(board.TransportReason.NO_TOKEN)
     end
     local expires = tonumber(reply.expires_at) or 0
     tokenfile.sweep(os.time())
@@ -2717,15 +2714,12 @@ function Backend:__missing()
         for _, entry in ipairs(who.boards) do
             names[#names + 1] = tostring(present(entry.name) or present(entry.id))
         end
-        return unavailable(
-            "pomb lists no board named "
-                .. name
-                .. " for this token, which is assigned only to "
-                .. (#names > 0 and table.concat(names, ", ") or "no boards")
-                .. ". If the board exists, add it to the token"
+        return board.transport_refusal(
+            board.TransportReason.UNLISTED_BOARD,
+            { name = name, names = names }
         )
     end
-    return unavailable("pomb has no board named " .. name)
+    return board.transport_refusal(board.TransportReason.NO_BOARD, { name = name })
 end
 ---Find the board's id by name, asking once.
 ---@private
@@ -2973,31 +2967,24 @@ function Backend:add_roles()
         if status == FORBIDDEN and type(doc) == "table" and doc.code == EXCEEDS_GRANT then
             local role = self:__role()
             return nil,
-                unavailable(
-                    "the token"
-                        .. (role and (" (role " .. role .. ")") or "")
-                        .. " does not hold board "
-                        .. self.__opts.name
-                        .. " ("
-                        .. id
-                        .. "), so it cannot be granted the standard roles. Add the board to the token"
+                board.transport_refusal(
+                    board.TransportReason.ROLES_NOT_HELD,
+                    { role = role, name = self.__opts.name, id = id }
                 )
         end
         local detail = type(doc) == "table" and present(doc.message) or "no message"
         if status == NOT_FOUND then
             return nil,
-                unavailable(
-                    "Board "
-                        .. self.__opts.name
-                        .. " does not exist on Pomb. It cannot be granted the standard roles. "
-                        .. tostring(detail)
+                board.transport_refusal(
+                    board.TransportReason.ROLES_NO_BOARD,
+                    { name = self.__opts.name, message = tostring(detail) }
                 )
         end
         if status == CONFLICT and type(doc) == "table" and doc.code == QUOTA_EXCEEDED then
             return nil,
-                unavailable(
-                    "The account is over its quota. The standard roles cannot be created. "
-                        .. tostring(detail)
+                board.transport_refusal(
+                    board.TransportReason.ROLES_QUOTA,
+                    { message = tostring(detail) }
                 )
         end
         local no_grant = status == FORBIDDEN

@@ -562,6 +562,16 @@ M.TransportReason = {
     PASS_TIMEOUT = "pass_timeout",
     PASS_ENTRY = "pass_entry",
     PASS_EMPTY = "pass_empty",
+    NO_COLUMN = "no_column",
+    NO_LANE = "no_lane",
+    NO_COLOUR = "no_colour",
+    NO_BOARD = "no_board",
+    UNLISTED_BOARD = "unlisted_board",
+    NO_FENCE = "no_fence",
+    NO_TOKEN = "no_token",
+    ROLES_NOT_HELD = "roles_not_held",
+    ROLES_NO_BOARD = "roles_no_board",
+    ROLES_QUOTA = "roles_quota",
 }
 
 local UNAVAILABLE = "Board unavailable: "
@@ -574,8 +584,8 @@ end
 
 ---Write why Pomb or its token could not be used, from the reason.
 ---@param reason dev.board.TransportReason the fixed reason
----@param detail table<string, any>? what the reason names: url and code, status and message, permission,
----   board_id, role, action or entry
+---@param detail table<string, any>? what the reason names: url and code, status and message,
+---   permission, board_id, role, action, entry, name, names, id or message
 ---@return string message the text
 function M.transport_refusal(reason, detail)
     local Reason = M.TransportReason
@@ -617,6 +627,48 @@ function M.transport_refusal(reason, detail)
         return UNAVAILABLE .. "Pass is locked or has no entry " .. detail.entry .. "."
     elseif reason == Reason.PASS_EMPTY then
         return UNAVAILABLE .. "Pass gave a token that is empty or not plain text."
+    elseif reason == Reason.NO_COLUMN then
+        return UNAVAILABLE .. "The board has no " .. detail.name .. " column."
+    elseif reason == Reason.NO_LANE then
+        return UNAVAILABLE .. "The board has no " .. detail.name .. " lane."
+    elseif reason == Reason.NO_COLOUR then
+        return UNAVAILABLE .. "The board has no " .. detail.name .. " colour."
+    elseif reason == Reason.NO_BOARD then
+        return UNAVAILABLE .. "Pomb has no board named " .. detail.name .. "."
+    elseif reason == Reason.UNLISTED_BOARD then
+        return UNAVAILABLE
+            .. "Pomb lists no board named "
+            .. detail.name
+            .. " for this token, which is assigned only to "
+            .. (#detail.names > 0 and table.concat(detail.names, ", ") or "no boards")
+            .. ". If the board exists, add it to the token."
+    elseif reason == Reason.NO_FENCE then
+        return UNAVAILABLE .. "Pomb sent an owner with no fence."
+    elseif reason == Reason.NO_TOKEN then
+        return UNAVAILABLE .. "Pomb sent no usable token."
+    elseif reason == Reason.ROLES_NOT_HELD then
+        return UNAVAILABLE
+            .. "The token"
+            .. (detail.role and (" (role " .. detail.role .. ")") or "")
+            .. " does not hold board "
+            .. detail.name
+            .. " ("
+            .. detail.id
+            .. "), so it cannot be granted the standard roles. Add the board to the token."
+    elseif reason == Reason.ROLES_NO_BOARD then
+        return UNAVAILABLE
+            .. text.sentence(
+                "Board "
+                    .. detail.name
+                    .. " does not exist on Pomb. It cannot be granted the standard roles. "
+                    .. detail.message
+            )
+    elseif reason == Reason.ROLES_QUOTA then
+        return UNAVAILABLE
+            .. text.sentence(
+                "The account is over its quota. The standard roles cannot be created. "
+                    .. detail.message
+            )
     end
     error("unknown transport reason " .. tostring(reason))
 end

@@ -13761,3 +13761,62 @@ testing.test("transport_refusal writes one sentence per transport reason", funct
         prefix .. "Pass gave a token that is empty or not plain text."
     )
 end)
+
+testing.test("transport_refusal writes the layout lookup sentences", function()
+    local Reason = board.TransportReason
+    local prefix = "Board unavailable: "
+    testing.eq(
+        board.transport_refusal(Reason.NO_COLUMN, { name = "Verify" }),
+        prefix .. "The board has no Verify column."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.NO_LANE, { name = "Fast" }),
+        prefix .. "The board has no Fast lane."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.NO_COLOUR, { name = "blue" }),
+        prefix .. "The board has no blue colour."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.NO_BOARD, { name = "dotfiles" }),
+        prefix .. "Pomb has no board named dotfiles."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.UNLISTED_BOARD, { name = "dotfiles", names = { "A", "B" } }),
+        prefix
+            .. "Pomb lists no board named dotfiles for this token, which is assigned only to "
+            .. "A, B. If the board exists, add it to the token."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.UNLISTED_BOARD, { name = "dotfiles", names = {} }),
+        prefix
+            .. "Pomb lists no board named dotfiles for this token, which is assigned only to "
+            .. "no boards. If the board exists, add it to the token."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.NO_FENCE),
+        prefix .. "Pomb sent an owner with no fence."
+    )
+    testing.eq(board.transport_refusal(Reason.NO_TOKEN), prefix .. "Pomb sent no usable token.")
+    testing.eq(
+        board.transport_refusal(Reason.ROLES_NOT_HELD, { role = "lead", name = "demo", id = "b1" }),
+        prefix
+            .. "The token (role lead) does not hold board demo (b1), so it cannot be granted "
+            .. "the standard roles. Add the board to the token."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.ROLES_NOT_HELD, { name = "demo", id = "b1" }),
+        prefix
+            .. "The token does not hold board demo (b1), so it cannot be granted "
+            .. "the standard roles. Add the board to the token."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.ROLES_NO_BOARD, { name = "demo", message = "gone" }),
+        prefix
+            .. "Board demo does not exist on Pomb. It cannot be granted the standard roles. gone."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.ROLES_QUOTA, { message = "Over." }),
+        prefix .. "The account is over its quota. The standard roles cannot be created. Over."
+    )
+end)
