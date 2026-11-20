@@ -581,6 +581,9 @@ local function failed_jobs(root, run)
     return names
 end
 
+---@class dev.board.land.change_run_problem.Opts
+---@field require_run boolean? true to refuse a run still going
+
 ---Say whether the gerrit change run of the commit failed, or is still going when the project
 ---requires finished runs.
 ---
@@ -589,11 +592,11 @@ end
 ---none, and nil when nothing was looked up.
 ---@param root string the project root
 ---@param commit string the commit to land
----@param require_run boolean? true to refuse a run still going
+---@param opts dev.board.land.change_run_problem.Opts? the optional refusals
 ---@return string? problem the refusal, nil when the run passed or none was found
 ---@return string? seen the line that says what was found instead, nil outside gerrit
 ---@return boolean? found whether a run of the commit exists, nil when nothing was looked up
-function M.change_run_problem(root, commit, require_run)
+function M.change_run_problem(root, commit, opts)
     local found = forge.resolve(root)
     if not found or found.kind ~= forge.Kind.GERRIT then
         return nil
@@ -617,7 +620,7 @@ function M.change_run_problem(root, commit, require_run)
         return nil, "No change run of commit " .. digits .. " was found.", false
     end
     local going = newest.status == "running" or newest.status == "queued"
-    if going and require_run then
+    if going and opts and opts.require_run then
         return string.format(
             "The change run %s of commit %s is still going. Wait for it to finish, or land with "
                 .. "`--ignore-change-run REASON`.",
@@ -659,7 +662,7 @@ end
 ---@return string? problem the refusal, nil when the run passed or nothing was looked up
 ---@return string? seen the line that says what was found instead, nil outside gerrit
 function M.rebased_run_problem(root, commit)
-    local problem, seen, found = M.change_run_problem(root, commit, true)
+    local problem, seen, found = M.change_run_problem(root, commit, { require_run = true })
     if problem or found ~= false then
         return problem, seen
     end

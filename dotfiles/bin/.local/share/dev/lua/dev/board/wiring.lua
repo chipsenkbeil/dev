@@ -26,6 +26,7 @@ local EXPECT_FAIL_FLAG = "--expect-fail"
 local TIMEOUT_FLAG = "--timeout"
 local RUN_FLAG = "--run"
 local MIN_RUN_COMMIT = 7
+local REQUIRE_CHANGE_RUN = "board.land.require_change_run"
 
 ---Parse the flags and the card word of `board check`.
 ---@param root string the project root, whose config sets the default row wait
@@ -586,7 +587,16 @@ end
 ---@field ignore_change_run string? the reason to land past a failed gerrit change run
 ---@field change_run_read boolean? true when the change run was read before the rebase
 
-local REQUIRE_CHANGE_RUN = "board.land.require_change_run"
+---Print the line that says what a change run lookup found instead, and pass its refusal on.
+---@param problem string? the refusal
+---@param seen string? the line that says what was found instead
+---@return string? problem the refusal
+local function noted_run_problem(problem, seen)
+    if seen then
+        verb.note(seen)
+    end
+    return problem
+end
 
 ---Name why a failed gerrit change run of the commit stops the landing.
 ---@param root string the project root
@@ -597,12 +607,9 @@ local function failed_change_run(root, commit, ignore)
     if ignore then
         return nil
     end
-    local problem, seen =
-        land.change_run_problem(root, commit, config.get(root, REQUIRE_CHANGE_RUN) == true)
-    if seen then
-        verb.note(seen)
-    end
-    return problem
+    return noted_run_problem(land.change_run_problem(root, commit, {
+        require_run = config.get(root, REQUIRE_CHANGE_RUN) == true,
+    }))
 end
 
 ---Name why the change run of a commit the rebase rewrote stops the landing, when the project
@@ -618,11 +625,7 @@ local function rebased_change_run(root, ignore)
     if not state then
         return bad
     end
-    local problem, seen = land.rebased_run_problem(root, state.commit)
-    if seen then
-        verb.note(seen)
-    end
-    return problem
+    return noted_run_problem(land.rebased_run_problem(root, state.commit))
 end
 
 ---List what keeps the card from landing under the caller.
@@ -919,13 +922,13 @@ local function land_prepare(opts)
     if refused then
         return refused
     end
-    local unlisted = rebased and rebased_change_run(backend.root, opts.ignore_change_run)
-    if unlisted then
+    local problem = rebased and rebased_change_run(backend.root, opts.ignore_change_run)
+    if problem then
         return failure(
             "Card "
                 .. short
                 .. " cannot land for these reasons.\n  - "
-                .. unlisted
+                .. problem
                 .. "\nThe change was rebased onto trunk."
         )
     end

@@ -108,7 +108,7 @@ end)
 
 testing.test("with the opt-in a run still going refuses and names the run", function()
     local root = project(GERRIT, listing(run("r2", "pushed@" .. COMMIT:sub(1, 12), "running", 5)))
-    local problem, seen = land.change_run_problem(root, COMMIT, true)
+    local problem, seen = land.change_run_problem(root, COMMIT, { require_run = true })
     testing.ok(problem:find("change run r2", 1, true), problem)
     testing.ok(problem:find("still going", 1, true), problem)
     testing.ok(problem:find("--ignore-change-run REASON", 1, true), problem)
