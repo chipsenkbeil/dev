@@ -1086,6 +1086,30 @@ function M.stages(map, finished)
     return stages
 end
 
+---Name the first two stages a column map sends to one column, compared without case.
+---@param map table<string, any>? the `[board.columns]` table, keyed by stage
+---@return string? message the sentence naming both stages and the column, nil when none collide
+function M.column_collision(map)
+    map = map or {}
+    local owner = {}
+    for _, stage in ipairs(M.STAGES) do
+        local name = map[stage]
+        name = type(name) == "string" and name ~= "" and name or M.DEFAULT_NAMES[stage]
+        local key = name:lower()
+        if owner[key] then
+            return "The stages `"
+                .. owner[key]
+                .. "` and `"
+                .. stage
+                .. "` both map to the column `"
+                .. name
+                .. "` in `[board.columns]` of `.dev/config.toml`."
+        end
+        owner[key] = stage
+    end
+    return nil
+end
+
 ---Point `backend` at a `columns` map, a `root` and its stages.
 ---@param backend dev.board.Backend the backend to retarget
 ---@param columns table<string, string>? the `[board.columns]` map the runner resolves into

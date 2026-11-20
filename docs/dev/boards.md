@@ -567,6 +567,10 @@ A project whose board renames a column sets the stage to the new name. It may
 add `done = "Shipped"` to name the finished column `discard` moves a card to.
 Without it, `discard` uses the first finished column in board order.
 
+Two stages may not share a column name, compared without case. Every `dev board`
+command refuses such a config and names both stages and the column. The `done`
+name is left out of the comparison.
+
 A column argument is a column's name in any case, a finished column's name or a
 stage word: `icebox`, `backlog`, `ready`, `progress`, `review`, `verify`,
 `release`, `blocked` or `done`.

@@ -7848,6 +7848,34 @@ testing.test("a renamed Pomb board is read through the column map and is_done", 
     testing.eq(code, 0, out)
 end)
 
+testing.test(
+    "board-columns-collision refuses two stages on one column and loads the rest",
+    function()
+        local root, home = sandbox({
+            project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "Review"\n',
+        })
+        local out, code = dev(root, home, { "board", "next" })
+        testing.ok(code ~= 0, out)
+        testing.ok(out:find("`ready`", 1, true), out)
+        testing.ok(out:find("`review`", 1, true), out)
+        testing.ok(out:find("`Review`", 1, true), out)
+        root, home = sandbox({
+            project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "review"\n',
+        })
+        out, code = dev(root, home, { "board", "next" })
+        testing.ok(code ~= 0, out)
+        testing.ok(out:find("both map", 1, true), out)
+        root, home = sandbox({
+            project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "Next"\n',
+        })
+        out, code = dev(root, home, { "board", "ls" })
+        testing.ok(not out:find("both map", 1, true), out)
+        root, home = sandbox()
+        out, code = dev(root, home, { "board", "ls" })
+        testing.eq(code, 0, out)
+    end
+)
+
 testing.test("next never offers the landing turn card on a pomb board", function()
     local root, home = sandbox({ task = TASK:gsub('"First"', '"landing turn"') })
     local out, code = dev(root, home, { "board", "next" })

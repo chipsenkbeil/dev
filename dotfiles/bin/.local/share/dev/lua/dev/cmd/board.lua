@@ -4967,12 +4967,17 @@ local function settings(ctx)
         end
         path = ctx.root .. "/" .. path
     end
+    local columns = column_map(ctx.root)
+    local collision = board.column_collision(columns)
+    if collision then
+        verb.die(collision)
+    end
     return {
         backend = backend,
         name = name,
         path = path,
         root = ctx.root,
-        columns = column_map(ctx.root),
+        columns = columns,
     }
 end
 
