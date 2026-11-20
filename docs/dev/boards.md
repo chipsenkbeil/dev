@@ -855,6 +855,11 @@ It prints the column's cards after the change, one row each as `ls` does. A
 queued `order` replays like a `move`. Planners keep Icebox and Backlog in
 priority order with it.
 
+After the moves, `order` reads the column again and checks that the named cards
+hold its first places in the order named. When they do not, it repeats the moves
+once. When they still do not, it exits 1 and names the first card that sits in
+the wrong place.
+
 These fail with exit 1 before any move, and no card is touched:
 
 - a card that is unknown

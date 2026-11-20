@@ -2082,18 +2082,45 @@ function commands.order(backend, args)
         seen[card.id] = true
         named[#named + 1] = card
     end
-    for position, card in ipairs(named) do
-        local held = claims.read(card.id)
-        local ok, why, reason =
-            backend:move(card.id, column, { fence = held and held.fence, position = position - 1 })
-        if not ok then
-            return failure(board.move_refusal(reason, why, column))
+    local after, top
+    for _ = 1, 2 do
+        for position, card in ipairs(named) do
+            local held = claims.read(card.id)
+            local ok, why, reason = backend:move(
+                card.id,
+                column,
+                { fence = held and held.fence, position = position - 1 }
+            )
+            if not ok then
+                return failure(board.move_refusal(reason, why, column))
+            end
+        end
+        after, message = backend:cards()
+        if not after then
+            return failure(message)
+        end
+        top = nil
+        local place = 0
+        for _, card in ipairs(after) do
+            if card.column == column and card.lane == named[1].lane then
+                place = place + 1
+                if place <= #named and card.id ~= named[place].id then
+                    top = top or card
+                end
+            end
+        end
+        if not top then
+            break
         end
     end
-    local after
-    after, message = backend:cards()
-    if not after then
-        return failure(message)
+    if top then
+        return failure(
+            "Order left card "
+                .. top.id:sub(1, board.MIN_PREFIX)
+                .. " above the named cards in "
+                .. column
+                .. " after a second pass of moves."
+        )
     end
     local rows = {}
     for _, card in ipairs(after) do

@@ -268,7 +268,11 @@ local function fake(cards, times, finished)
     function backend:move(id, column, opts)
         local position = opts and opts.position
         calls[#calls + 1] = { "move", id, column, position }
-        if position then
+        local ignored = position and (backend.ignore_moves or 0) > 0
+        if ignored then
+            backend.ignore_moves = backend.ignore_moves - 1
+        end
+        if position and not ignored then
             local moved
             for at, card in ipairs(cards) do
                 if card.id == id then
@@ -5162,6 +5166,54 @@ testing.test("order moves the named cards to positions 0, 1, 2 and prints the co
 end)
 
 testing.test(
+    "order repeats the moves once when the first pass leaves an unnamed card on top",
+    function()
+        local backend = fake(column_of_three())
+        backend.ignore_moves = 2
+        local result = cmd_board.run("order", { "cccccccc", "11111111-b" }, backend)
+        testing.eq(result.code, nil)
+        testing.eq(#backend.calls, 4)
+        testing.eq(
+            result.output,
+            table.concat({
+                "cccccccc  Ready  unsized  needs:human  Old thing",
+                "11111111  Ready  unsized  -  Fix lint",
+                "11111111  Ready  1 Pomodoro  docs  Write docs",
+            }, "\n")
+        )
+    end
+)
+
+testing.test("order fails when an unnamed card stays on top after the repeat", function()
+    local backend = fake(column_of_three())
+    backend.ignore_moves = 4
+    local result = cmd_board.run("order", { "cccccccc", "11111111-b" }, backend)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("11111111", 1, true), result.message)
+    testing.ok(result.message:find("Ready", 1, true), result.message)
+    testing.eq(#backend.calls, 4)
+end)
+
+testing.test("order checks the top of the named cards' lane and not of the column", function()
+    local cards = column_of_three()
+    cards[1].lane = "lane-one"
+    cards[2].lane = "lane-two"
+    cards[3].lane = "lane-two"
+    local backend = fake(cards)
+    backend.ignore_moves = 2
+    local result = cmd_board.run("order", { "11111111-b", "cccccccc" }, backend)
+    testing.eq(result.code, nil)
+    testing.eq(#backend.calls, 2)
+end)
+
+testing.test("order makes no second pass when the first is right", function()
+    local backend = fake(column_of_three())
+    local result = cmd_board.run("order", { "11111111-a", "11111111-b" }, backend)
+    testing.eq(result.code, nil)
+    testing.eq(#backend.calls, 2)
+end)
+
+testing.test(
     "order refuses cards of two columns, an unknown card and a card named twice",
     function()
         local cards = sample()
@@ -8813,7 +8865,7 @@ testing.test("answer refuses an empty quote before calling Pomb", function()
 end)
 
 testing.test("order sends each position to Pomb and refuses two columns first", function()
-    local root, home = sandbox()
+    local root, home = sandbox({ export = export_with_first_card({ position = 3 }) })
     local out, code = dev(root, home, { "board", "order", "11111111-b", "11111111-a" })
     testing.eq(code, 0, out)
     local calls = read(root, "calls")
