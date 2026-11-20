@@ -93,6 +93,8 @@ local M = {
 
 local Key = M.Key
 
+local pending = {}
+
 local function get_attr(fd)
     local attr = ffi.new("struct termios[1]")
     if ffi.C.tcgetattr(fd, attr) ~= 0 then
@@ -174,6 +176,7 @@ end
 ---Close a descriptor from `open_tty`.
 ---@param fd integer descriptor to close
 function M.close(fd)
+    pending[fd] = nil
     ffi.C.close(fd)
 end
 
@@ -316,6 +319,14 @@ end
 ---@return string key key name, or `Key.EOF` when the terminal closed or failed
 function M.read_key(fd)
     while true do
+        local queued = pending[fd]
+        if queued then
+            local key = table.remove(queued, 1)
+            if not queued[1] then
+                pending[fd] = nil
+            end
+            return key
+        end
         local first = read_byte(fd)
         if not first then
             return Key.EOF
@@ -325,6 +336,9 @@ function M.read_key(fd)
             bytes = first .. read_escape_tail(fd)
         end
         local keys = M.decode(bytes)
+        if keys[2] then
+            pending[fd] = { unpack(keys, 2) }
+        end
         if keys[1] then
             return keys[1]
         end

@@ -14,7 +14,7 @@ if test -t 1; then kind=tty; fi
 echo "\$kind" >"$OUT.tty"
 stty min 4 time 3
 stty -a >"$OUT.before"
-luajit "$FIXTURE" >"$OUT.key"
+luajit "$FIXTURE" \${KEYS:-1} >"$OUT.key"
 stty -a >"$OUT.after"
 INNER
 }
@@ -42,6 +42,11 @@ in_pty() {
 @test "a lone escape is esc" {
     in_pty '\033'
     [ "$(tr -d '\r' <"$OUT.key")" = esc ]
+}
+
+@test "an escape followed by a letter gives esc then the letter" {
+    KEYS=2 in_pty '\033x'
+    [ "$(tr -d '\r' <"$OUT.key")" = $'esc\nx' ]
 }
 
 @test "an arrow sequence is up" {
