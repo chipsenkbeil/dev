@@ -778,6 +778,9 @@ local function land_prepare(opts)
         })
     renew_claim(backend, card, name)
     if unchecked then
+        if hold then
+            turn.renew(backend, hold)
+        end
         return failure(
             "Card " .. short .. " cannot land for these reasons.\n  - " .. unchecked .. rebase_note
         )

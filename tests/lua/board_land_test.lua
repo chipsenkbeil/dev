@@ -2319,6 +2319,34 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.eq(column_of(project.home), board.DEFAULT_NAMES.verify)
     end)
 
+    testing.test("a failed recheck puts a hold back to its own lease", function()
+        -- Hold the turn, then land onto a moved trunk with a failing recheck row
+        local project = recheck_project("false")
+        local id = review_ready(project)
+        trunk_moves(project, { ["shared.txt"] = NEAR_EDIT })
+        rebase_onto_trunk(project.root)
+        must(dev(project, { "board", "turn", id }))
+        local out, code = dev(project, { "board", "land", id })
+        testing.eq(code, 1, out)
+
+        -- Check the kept hold expires within its own lease plus a minute
+        local doc = assert(
+            json.decode(assert(fs.read(support.board_file(project.home, "mine")))),
+            "decode failed"
+        )
+        local claim
+        for _, card in ipairs(doc.cards) do
+            if card.name == turn.NAME then
+                claim = card.claim
+            end
+        end
+        testing.ok(type(claim) == "table", "the hold was not kept")
+        testing.ok(
+            claim.expires_at <= store.stamp(os.time() + turn.HOLD_SECONDS + 60),
+            claim.expires_at
+        )
+    end)
+
     testing.test("land skips the recheck rows over unrelated trunk files", function()
         -- Set up a recheck row that leaves a marker and move trunk far from the patch
         local marker = support.tempdir() .. "/rechecked"
