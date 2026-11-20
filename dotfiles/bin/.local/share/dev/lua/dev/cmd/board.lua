@@ -1727,6 +1727,12 @@ local function move_once(backend, args, opts)
             return refused
         end
     end
+    if not (opts and opts.drop) then
+        local refused = guards.children_refusal(backend, card, column, kids)
+        if refused then
+            return refused
+        end
+    end
     local dropping_icebox = opts and opts.drop and card.column == stages.icebox
     if column ~= stages.icebox and column ~= stages.ready and not dropping_icebox then
         local facts = {
@@ -1750,12 +1756,6 @@ local function move_once(backend, args, opts)
                     .. table.concat(missing, ", ")
                     .. ". Fix it with `dev board size`, `dev board edit` and `dev board outcome`."
             )
-        end
-    end
-    if not (opts and opts.drop) then
-        local refused = guards.children_refusal(backend, card, column, kids)
-        if refused then
-            return refused
         end
     end
     local starting = column == stages.progress and before_work(stages, card)

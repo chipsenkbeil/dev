@@ -909,6 +909,9 @@ An epic follows the same rule with 1 to 3 outcomes in place of 3 to 7, except
 that a card with children needs none. An epic with every child Done closes with
 its own outcomes open, whatever their count, and `move CHILD done` prints the
 epic's id and that it can close now when it moves the last open child.
+An epic is told about its open children before the outcome count, so a move
+to Done of an epic with an open child and four outcomes hears about the
+children first.
 
 Sizing is part of planning, so a card also cannot enter Ready as red. `move CARD
 ready` refuses a card that is unsized (white or no colour) or red, more than 3

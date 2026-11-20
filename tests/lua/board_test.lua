@@ -1640,7 +1640,7 @@ testing.test("an epic with every child Done and four unticked outcomes closes", 
     testing.eq(result.output, "moved cccccccc to Done")
 end)
 
-testing.test("an epic with an open child and four outcomes is refused", function()
+testing.test("an epic with four outcomes hears about the children first", function()
     local card = planned()
     card.epic = { done = 1, total = 3 }
     card.outcomes = four_outcomes(true)
@@ -1648,13 +1648,26 @@ testing.test("an epic with an open child and four outcomes is refused", function
     backend.kin = { children = card.epic }
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
+    testing.ok(result.message:find("2 of 3 children are open.", 1, true), result.message)
+    testing.eq(result.message:find("1 to 3 Done when outcomes", 1, true), nil)
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the refused move was sent")
+    end
+end)
+
+testing.test("a move to Backlog with four epic outcomes still names the count", function()
+    local card = planned()
+    card.column = support.COLUMN_NAME.ICEBOX
+    card.epic = { done = 1, total = 3 }
+    card.outcomes = four_outcomes(true)
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    local result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend)
+    testing.eq(result.code, 1)
     testing.ok(
         result.message:find("1 to 3 Done when outcomes for an epic, not 4", 1, true),
         result.message
     )
-    for _, call in ipairs(backend.calls) do
-        testing.ok(call[1] ~= "move", "the refused move was sent")
-    end
 end)
 
 testing.test("discard closes an epic whose children are open", function()
