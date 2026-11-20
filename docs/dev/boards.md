@@ -333,11 +333,6 @@ naming `tasks.bin`. A restore from the bin needs only `tasks.edit`.
 The calls come from `board/pomb.lua`, a runner's Pomb contract notes and
 Pomb's permission catalog.
 
-For the deletes, the list above follows the Pomb 0.5.60 report. A `work` token
-deletes its own comments, links and outcomes, which the older passages and
-the contract still call admin-only, though dev lets only the lead delete an
-outcome. Two cards track that, one for this file and one for the contract.
-
 The review found no preset to change. The outcome delete is a Pomb right with
 no dev call yet, and dev needs no token change for it.
 
@@ -489,14 +484,11 @@ default colour and reorder columns only on boards that token created.
 
 On any other board Pomb answers 403 and `init` says to run it with `--admin`.
 
-Pomb is moving to fine-grained tokens, and dev reads both servers:
+Pomb tokens carry fine-grained permissions. A refusal is `permission_denied`
+with the `permission` and a `board_id`, and `whoami` returns `permissions` and
+`boards` (`all`, or a list of ids and names).
 
-- today: a refusal is `insufficient_scope` and `whoami` returns a `scope`.
-- after the change: a refusal is `permission_denied` with the `permission`
-  and a `board_id`, and `whoami` returns `permissions` and `boards` (`all`,
-  or a list of ids and names).
-
-dev prints two messages for the new refusal:
+dev prints two messages for a refusal:
 
 - `board_id` null: the token lacks the permission on every board, so use a
   token that has it. `init` adds the `--admin` hint to this one.
@@ -844,10 +836,10 @@ creates the card, then appends one Pomb subtask per item. If an append fails,
 `add` exits 1 and names the card and the outcome it stopped at, for example
 `11111111 was added to Backlog but outcome 2 of 3 was not: ...`.
 
-Nothing is rolled back (an agent token cannot delete a card, and deletes a
-subtask only if that token made it). The failure is never queued, so a replay
-cannot add the card twice. A queued add that never reached Pomb replays with all
-its items.
+Nothing is rolled back (`add` calls no delete, and only a lead token deletes a
+card into the bin or an outcome). The failure is
+never queued, so a replay cannot add the card twice. A queued add that never
+reached Pomb replays with all its items.
 
 With `--column ready`, Pomb gets the card in Backlog first and the move to Ready
 comes after the subtasks. `note` adds a comment, of kind agent unless `--kind`
@@ -1141,7 +1133,8 @@ ticker.
 
 `outcome CARD --delete N --reason TEXT [--as NAME]` removes the Nth outcome
 (`DELETE /api/tasks/{id}/subtasks/{sub_id}` on Pomb) from a card in a column
-the board leaves unlocked.
+the board leaves unlocked. It needs `subtasks.delete`, which only the lead
+token holds.
 
 The outcome lock is a per-column board setting, `outcomes_locked` on Pomb. It
 refuses an add, `--convert`, `--rename` and `--delete` on a card in a locked
@@ -2110,12 +2103,12 @@ Outcomes:
 - Each `--done-when TEXT` (repeatable, at most 7, a blank one is exit 2) is one
   Done when outcome.
 - `add` creates the card first and then appends each item as a subtask
-  (`POST /api/tasks/{id}/subtasks` with `name`, in order, a work-scope call).
-  A local card keeps them in `outcomes` with `id`, `name` and `done`.
+  (`POST /api/tasks/{id}/subtasks` with `name`, in order, which needs the
+  `work` preset). A local card keeps them in `outcomes` with `id`, `name` and
+  `done`.
 - A queued add replays with its items, as the queue holds the command as typed.
-- Pomb has no card delete or subtask delete or reorder for an agent token, so
-  nothing is rolled back and nothing is retried when an append fails after the
-  card exists.
+- `add` never deletes, so nothing is rolled back and nothing is retried when
+  an append fails after the card exists.
 - In that case `add` exits 1 with
   `<id prefix> was added to <column> but outcome N of M was not: <reason>`.
   It names the card and never reads as unreachable, so it is not queued and a
