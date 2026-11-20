@@ -12,11 +12,11 @@ local function project(...)
     return root
 end
 
-local function with_jj(present, body)
+local function with_jj(opts, body)
     local which = dev_os.which
     dev_os.which = function(tool)
         if tool == "jj" then
-            return present and "/bin/jj" or nil
+            return opts.installed and "/bin/jj" or nil
         end
         return which(tool)
     end
@@ -27,7 +27,7 @@ end
 
 testing.test("a colocated repo without jj uses git", function()
     local root = project(".jj", ".git")
-    with_jj(false, function()
+    with_jj({ installed = false }, function()
         testing.eq(vcs.backend(root), vcs.GIT)
         testing.eq(vcs.require(root), vcs.GIT)
     end)
@@ -36,7 +36,7 @@ end)
 
 testing.test("a colocated repo with jj uses jj", function()
     local root = project(".jj", ".git")
-    with_jj(true, function()
+    with_jj({ installed = true }, function()
         testing.eq(vcs.backend(root), vcs.JJ)
         testing.eq(vcs.require(root), vcs.JJ)
     end)
@@ -45,7 +45,7 @@ end)
 
 testing.test("a jj only repo without jj needs jj", function()
     local root = project(".jj")
-    with_jj(false, function()
+    with_jj({ installed = false }, function()
         local backend, err = vcs.require(root)
         testing.eq(backend, nil)
         testing.eq(err, "Tool jj not found. Install it with brew install jj.")
@@ -97,7 +97,7 @@ end)
 testing.test("vcs.files lists a colocated repo with git when jj is absent", function()
     local root = git_repo()
     assert(fs.mkdir(root .. "/.jj"))
-    with_jj(false, function()
+    with_jj({ installed = false }, function()
         local backend = vcs.require(root)
         testing.eq(backend, vcs.GIT)
         testing.eq(vcs.files(root, backend), "a.txt\0")
