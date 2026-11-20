@@ -9,6 +9,9 @@ setup() {
     INNER="$BATS_TEST_TMPDIR/inner.sh"
     OUT="$BATS_TEST_TMPDIR/out"
     cat >"$INNER" <<INNER
+kind=pipe
+if test -t 1; then kind=tty; fi
+echo "\$kind" >"$OUT.tty"
 stty min 4 time 3
 stty -a >"$OUT.before"
 luajit "$FIXTURE" >"$OUT.key"
@@ -23,6 +26,7 @@ mode() {
 
 in_pty() {
     pty_run "$1" 1 1 "$INNER" >/dev/null
+    [ "$(cat "$OUT.tty")" = tty ]
 }
 
 @test "raw mode reads one key and prints it" {
