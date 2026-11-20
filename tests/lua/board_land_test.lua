@@ -4428,6 +4428,35 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
     end)
 
+    testing.test("no-change move to Done removes a real jj workspace", function()
+        local project = jj_project()
+        local id = new_card(project)
+        jj(project.root, "workspace", "rename", "default")
+        local base = assert(fs.realpath(support.tempdir()))
+        local path = base .. "/proj/" .. id
+        assert(fs.mkdir(base .. "/proj", { parents = true }), "mkdir failed")
+        jj(project.root, "workspace", "add", "--name", id, "-r", "master", path)
+        jj(path, "bookmark", "create", id, "-r", "@")
+        local inside = at_root(project, path)
+        to_review(inside, id, { DEV_WS_ROOT = base })
+        tick_all(inside, id, { extra = { DEV_WS_ROOT = base } })
+        must(dev(inside, { "board", "label", id, "+" .. board.NO_CHANGE }, { DEV_AGENT = "" }))
+        local out, code = dev(
+            inside,
+            { "board", "move", id, support.COLUMN_NAME.DONE },
+            { DEV_WS_ROOT = base }
+        )
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Moved " .. path, 1, true), out)
+        testing.eq(fs.exists(path), false)
+        testing.eq(
+            jj(project.root, "bookmark", "list", "-T", 'name ++ "\\n"'):find(id, 1, true),
+            nil
+        )
+        testing.eq(jj(project.root, "workspace", "list"):find(id .. ":", 1, true), nil)
+        testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+    end)
+
     local function follow_script(project)
         local script = project.root .. "/.dev/follow.sh"
         assert(fs.write(script, '#!/bin/sh\necho "followed $PWD"\n'), "write failed")
@@ -4836,6 +4865,35 @@ testing.test("land.git.worktree lands a linked worktree and removes it", functio
     testing.ok(out:find("Deleted branch " .. id, 1, true), out)
     testing.eq(fs.exists(path), false)
     testing.eq(git_remote_master(project), landed)
+    testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
+end)
+
+testing.test("no-change move to Done removes a real git worktree", function()
+    local project = git_project()
+    local id = project.id
+    local main = project.root
+    support.git(main, "checkout", "-q", "master")
+    local base = assert(fs.realpath(support.tempdir()))
+    local folder = base .. "/" .. fs.basename(main)
+    local path = folder .. "/" .. id
+    assert(fs.mkdir(folder, { parents = true }), "mkdir failed")
+    support.git(main, "worktree", "add", "-q", "-b", id, path, "master")
+    local tree = at_root(project, path)
+    must(support.to_review(function(args)
+        return git_dev(tree, args, { DEV_AGENT = "dotfiles/builder", DEV_WS_ROOT = base })
+    end, id))
+    tick_all(tree, id, { run = git_dev, extra = { DEV_WS_ROOT = base } })
+    must(git_dev(tree, { "board", "label", id, "+" .. board.NO_CHANGE }, { DEV_AGENT = "" }))
+    local out, code = git_dev(
+        tree,
+        { "board", "move", id, support.COLUMN_NAME.DONE },
+        { DEV_WS_ROOT = base }
+    )
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Moved " .. path, 1, true), out)
+    testing.eq(fs.exists(path), false)
+    local branches = dev_os.capture({ "git", "-C", main, "branch", "--list", id })
+    testing.eq(branches:find(id, 1, true), nil, branches)
     testing.eq(column_of(project.home, id), board.DEFAULT_NAMES.done)
 end)
 
