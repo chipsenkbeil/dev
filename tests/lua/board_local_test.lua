@@ -3549,6 +3549,31 @@ testing.test("an add with once returns the open card of that name and adds none"
     testing.eq(count(), 2)
 end)
 
+testing.test("the local add refuses a second run card of the same name", function()
+    -- Open the board file as a backend
+    local _, home = local_board()
+    local icebox = support.COLUMN_NAME.ICEBOX
+    local backend = localboard.new({
+        name = "mine",
+        path = file_of(home),
+        private = true,
+    })
+
+    -- A second run card of the same name is refused
+    local first = assert(backend:add("run session", icebox, { labels = { board.RUN } }))
+    local second, message = backend:add("run session", icebox, { labels = { board.RUN } })
+    testing.eq(second, nil)
+    testing.ok(message:find("already has the run card", 1, true), message)
+    testing.ok(message:find(first.id:sub(1, board.MIN_PREFIX), 1, true), message)
+
+    -- A run card of another name is accepted
+    assert(backend:add("run other", icebox, { labels = { board.RUN } }))
+
+    -- The name is free again once the first card is Done
+    assert(backend:move(first.id, support.COLUMN_NAME.DONE))
+    assert(backend:add("run session", icebox, { labels = { board.RUN } }))
+end)
+
 testing.test("wait on a local board answers at once that there is nothing to wait on", function()
     local backend = require("dev.board.localboard").new({ name = "mine" })
     local got, message = backend:wait("1", { "task_added" }, 5)
