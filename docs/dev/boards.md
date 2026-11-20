@@ -1058,7 +1058,7 @@ least 8 characters from `notes`.
 
 Pomb lets a token change only the comments it wrote. A comment from a person,
 from another token or from before Pomb 0.5.7 answers 403, and dev says
-`that comment is not yours to change` (exit 1).
+`That comment is not yours to change.` (exit 1).
 
 A deleted comment is gone for good (Pomb keeps no recycle bin for comments).
 
@@ -3858,7 +3858,7 @@ Whose comment:
 - Pomb lets a work or provision token change only a comment that same token
   wrote.
 - It answers 403 for any other comment and for one written before Pomb 0.5.7.
-- dev prints that as `that comment is not yours to change` (exit 1).
+- dev prints that as `That comment is not yours to change.` (exit 1).
 
 ### move
 

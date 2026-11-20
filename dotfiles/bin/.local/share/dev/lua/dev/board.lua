@@ -572,6 +572,8 @@ M.TransportReason = {
     ROLES_NOT_HELD = "roles_not_held",
     ROLES_NO_BOARD = "roles_no_board",
     ROLES_QUOTA = "roles_quota",
+    NOT_YOURS = "not_yours",
+    NEEDS_LEAD = "needs_lead",
 }
 
 local UNAVAILABLE = "Board unavailable: "
@@ -669,6 +671,11 @@ function M.transport_refusal(reason, detail)
                 "The account is over its quota. The standard roles cannot be created. "
                     .. detail.message
             )
+    elseif reason == Reason.NOT_YOURS then
+        return "That comment is not yours to change."
+    elseif reason == Reason.NEEDS_LEAD then
+        return "Pomb refused the delete. It needs subtasks.delete, which only the lead token holds. "
+            .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml."
     end
     error("unknown transport reason " .. tostring(reason))
 end

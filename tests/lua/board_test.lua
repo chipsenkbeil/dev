@@ -13827,6 +13827,16 @@ testing.test("transport_refusal writes one sentence per transport reason", funct
     )
 end)
 
+testing.test("transport_refusal words the comment and delete refusals", function()
+    local Reason = board.TransportReason
+    testing.eq(board.transport_refusal(Reason.NOT_YOURS), "That comment is not yours to change.")
+    testing.eq(
+        board.transport_refusal(Reason.NEEDS_LEAD),
+        "Pomb refused the delete. It needs subtasks.delete, which only the lead token holds. "
+            .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml."
+    )
+end)
+
 testing.test("transport_refusal writes the layout lookup sentences", function()
     local Reason = board.TransportReason
     local prefix = "Board unavailable: "

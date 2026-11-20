@@ -76,12 +76,9 @@ local ROLES_GRANT = "roles.grant"
 local ROLES_UNREADABLE = "roles.unreadable"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
-local NEEDS_LEAD =
-    "pomb refused the delete: it needs subtasks.delete, which only the lead token holds. Set [board.pomb] lead_token in ~/.config/dev/config.toml"
 local NEEDS_LEAD_LANE = "Making a lane needs swimlanes.create, which only the lead token holds. "
     .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml, "
     .. "then run `dev board init` without `--admin`."
-local NOT_YOURS = "that comment is not yours to change"
 local CHECKS_DEFINITION = {
     key = board.CHECKS_FIELD,
     label = "Checks",
@@ -1637,7 +1634,7 @@ end
 
 local function refused_comment(message, status, doc)
     if status == FORBIDDEN and not (type(doc) == "table" and doc.code == CARD_LOCKED) then
-        return NOT_YOURS
+        return board.transport_refusal(board.TransportReason.NOT_YOURS)
     end
     return message
 end
@@ -1823,7 +1820,7 @@ function Backend:delete_outcome(id, outcome, fence)
             and doc.code == PERMISSION_DENIED
             and doc.permission == SUBTASKS_DELETE
         if needs_lead then
-            return nil, NEEDS_LEAD
+            return nil, board.transport_refusal(board.TransportReason.NEEDS_LEAD)
         end
         return nil, message
     end
