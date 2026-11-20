@@ -515,6 +515,42 @@ testing.test("token-lookup-refused never retries a refused file token with pass"
     testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
 end)
 
+testing.test(
+    "token-read-nohash refuses a runner on a PATH with no hasher and reads no pass",
+    function()
+        local root, home = sandbox()
+        local tools = root .. "/tools"
+        assert(fs.mkdir(tools, { parents = true }))
+        local linked = dev_os.run({
+            "sh",
+            "-c",
+            'for f in /usr/bin/* /bin/* "$2" "$3"/*; do case "${f##*/}" in'
+                .. " shasum|sha256sum) ;;"
+                .. ' *) ln -sf "$f" "$1/${f##*/}" 2>/dev/null ;; esac; done',
+            "sh",
+            tools,
+            assert(dev_os.which("luajit")),
+            root .. "/bin",
+        })
+        testing.eq(linked, 0)
+        local out, code = dev(root, home, { "board", "boards" }, {
+            agent = NAME,
+            env = { PATH = tools },
+        })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Neither shasum nor sha256sum is on PATH.", 1, true), out)
+        testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+    end
+)
+
+testing.test("token-dir-relative writes the token file under the state home", function()
+    local root, home = sandbox()
+    local out, code = mint(root, home, { runtime = "relative/run" })
+    testing.ok(code == 0, out)
+    testing.eq(#token_files(home .. "/state/dev/tokens"), 1)
+    testing.eq(fs.exists(root .. "/relative"), false)
+end)
+
 local CHILD_ID = "tok-child-7"
 
 local function revoke(root, home, opts)

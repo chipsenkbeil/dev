@@ -103,12 +103,16 @@ end
 ---@param name string the agent's name
 ---@return dev.board.tokenfile.Token? found the token, nil when there is no file or it cannot be
 ---   read
----@return nil message always nil, the reason names the refusal
----@return dev.board.FileReason? reason why a file that exists cannot be used
+---@return string? message the lower layer's message, nil when the reason names the refusal
+---@return dev.board.FileReason? reason why the name could not be hashed, or why a file that exists
+---   cannot be used
 ---@return string? detail the path of that file
 function M.read(name)
-    local path = M.path(name)
-    if not path or not fs.exists(path) then
+    local path, message, reason = M.path(name)
+    if not path then
+        return nil, message, reason
+    end
+    if not fs.exists(path) then
         return nil
     end
     local text = fs.read(path)
