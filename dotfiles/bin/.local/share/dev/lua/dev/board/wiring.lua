@@ -401,6 +401,25 @@ local function check_rows(opts)
         end
     end
     local posted = #rows
+
+    -- Tell a reader of the card that the rows have started
+    if not flags.run then
+        local held = claims.read(card.id)
+        local ok, why = backend:note(
+            card.id,
+            string.format(
+                "Check started at commit %s on %d rows, by %s.",
+                land.short(before.commit),
+                #argvs,
+                opts.name or "an unnamed caller"
+            ),
+            held and held.fence,
+            { kind = board.NoteKind.STATUS }
+        )
+        if not ok then
+            verb.note("The start of the check was not noted. " .. dev_text.sentence(why))
+        end
+    end
     local pending = start_rows({
         check = opts,
         commands = commands,

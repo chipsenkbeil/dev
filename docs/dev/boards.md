@@ -2806,6 +2806,13 @@ runs every checks row of the card and records the result as one comment
 on the card. A rerun at the same commit skips the leading rows an earlier run
 recorded as passed (see the partial record below).
 
+Before its rows start, `check` posts a plain status note, `Check started at
+commit C on N rows, by NAME.`, so a card whose rows still wait in ci shows a
+check in progress. A reader takes a start note newer than the last
+`dev-check:` record as a running check. The note never starts with
+`dev-check:`. A `--run` check starts no rows and posts none. When the
+note cannot be written, `check` says so and runs on.
+
 The landing turn:
 
 - A check never holds the landing turn. When `DEV_AGENT` is set and the caller

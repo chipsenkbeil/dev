@@ -81,9 +81,30 @@ local function git_root(files)
     return root, home, head
 end
 
-local function all_comments(home)
+local START_NOTE = "Check started at commit "
+
+local function raw_comments(home)
     local doc = assert(json.decode(assert(fs.read(support.board_file(home, "mine")))))
     return doc.cards[1].comments or {}
+end
+
+local function split_comments(home)
+    local started, rest = {}, {}
+    for _, comment in ipairs(raw_comments(home)) do
+        local into = comment.body:sub(1, #START_NOTE) == START_NOTE and started or rest
+        into[#into + 1] = comment
+    end
+    return started, rest
+end
+
+local function all_comments(home)
+    local _, rest = split_comments(home)
+    return rest
+end
+
+local function start_notes(home)
+    local started = split_comments(home)
+    return started
 end
 
 local function comments(home)
@@ -1012,7 +1033,7 @@ local function group_check(opts)
     end
     local out, status = dev(root, home, args, nil, env)
     local first = comments(home)[1]
-    return out, status, first and first.body, fs.read(log) or ""
+    return out, status, first and first.body, fs.read(log) or "", #start_notes(home)
 end
 
 testing.test("a card with a lint row and a test row makes one ci run", function()
@@ -1319,13 +1340,15 @@ testing.test(
         )
         testing.eq(#comments(home), 0)
         must(dev(root, home, { "board", "check", id }))
-        local first = assert(dev(root, home, { "board", "notes", id }):match("^(%x+)"))
+        local listed = "\n" .. dev(root, home, { "board", "notes", id })
+        local first = assert(listed:match("\n(%x+)[^\n]*dev%-check:"))
         out, code = dev(root, home, { "board", "note", id, "--edit", first, "fine" })
         testing.eq(code, 1, out)
         out, code = dev(root, home, { "board", "note", id, "--delete", first })
         testing.eq(code, 1, out)
         must(dev(root, home, { "board", "note", id, "plain" }))
-        local second = assert(dev(root, home, { "board", "notes", id }):match("\n(%x+)"))
+        listed = "\n" .. dev(root, home, { "board", "notes", id })
+        local second = assert(listed:match("\n(%x+)[^\n]*plain"))
         out, code = dev(root, home, { "board", "note", id, "--edit", second, "dev-check: forged" })
         testing.eq(code, 1, out)
         testing.eq(#comments(home), 2)
@@ -1398,9 +1421,66 @@ testing.test("a partial record that cannot be written does not stop the check", 
         return nil, "curl exit 28"
     end
     local result = cmd_board.run("check", { "11111111" }, backend)
-    testing.eq(tries, 2)
+    testing.eq(tries, 3)
     testing.ok(result.message:find("1 pass - true", 1, true), result.message)
     testing.ok(result.message:find("2 pass 8cb600 echo run 8cb600", 1, true), result.message)
+end)
+
+testing.test("check posts a status note when it starts its rows", function()
+    local root, home, head = git_root()
+    local id = card_with(root, home, { "true", "echo run 8cb600" })
+    local out, code = dev(root, home, { "board", "check", id }, nil, { DEV_AGENT = "t/runner/a" })
+    testing.eq(code, 0, out)
+    local started = start_notes(home)
+    testing.eq(#started, 1)
+    testing.eq(
+        started[1].body,
+        "Check started at commit " .. head:sub(1, 12) .. " on 2 rows, by t/runner/a."
+    )
+end)
+
+testing.test("a check start note that cannot be written is told and the check goes on", function()
+    local root = git_root()
+    local card = {
+        id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name = "Card",
+        column = support.COLUMN_NAME.PROGRESS,
+        size = "unsized",
+        labels = {},
+        checks = { "true" },
+        outcomes = {},
+    }
+    local backend = { root = root }
+    local bodies = {}
+    function backend:done_columns()
+        return { support.COLUMN_NAME.DONE }
+    end
+    function backend:cards()
+        return { card }
+    end
+    function backend:card(id)
+        return support.listed_card(self, id)
+    end
+    function backend:comments()
+        return {}
+    end
+    function backend:note(_, body)
+        bodies[#bodies + 1] = body
+        if body:sub(1, #START_NOTE) == START_NOTE then
+            return nil, "curl exit 28"
+        end
+        return true
+    end
+    local result = cmd_board.run("check", { "11111111" }, backend)
+    testing.ok(result.code == nil or result.code == 0, result.message)
+    testing.eq(#bodies, 2)
+    testing.ok(bodies[2]:find("dev-check:", 1, true), bodies[2])
+end)
+
+testing.test("a check with run posts no start note", function()
+    local out, code, _, _, started = group_check({ jobs = PASSED, attach = "8cb600" })
+    testing.eq(code, 0, out)
+    testing.eq(started, 0)
 end)
 
 if has_jj then
