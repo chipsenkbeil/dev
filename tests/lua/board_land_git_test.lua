@@ -154,6 +154,41 @@ testing.test("git reviews do not carry across an edit moved to repeated text", f
     testing.eq(#land.missing_reviews(comments, state, root), 2)
 end)
 
+testing.test("git reviews carry a root commit with the same patch", function()
+    local root = repo({})
+    git(root, "checkout", "-q", "--orphan", "first")
+    git(root, "rm", "-rq", "--cached", ".")
+    write(root, "f.txt", "same\n")
+    git(root, "add", "f.txt")
+    git(root, "commit", "-q", "-m", "feat: f")
+    local reviewed = head(root)
+    git(root, "checkout", "-q", "--orphan", "second")
+    git(root, "rm", "-rq", "--cached", ".")
+    git(root, "add", "f.txt")
+    git(root, "commit", "-q", "-m", "feat: f")
+    local state = { commit = head(root), change = "-" }
+    local comments = { review_of("code", reviewed), review_of("style", reviewed) }
+    testing.eq(land.missing_reviews(comments, state, root), {})
+end)
+
+testing.test("git reviews do not carry across a conflicting trunk edit", function()
+    local body = "1\n2\n3\n4\n5\n"
+    local root = repo({ ["f.txt"] = body })
+    git(root, "checkout", "-q", "-b", "work")
+    write(root, "f.txt", "1\n2\nA\n4\n5\n")
+    git(root, "commit", "-q", "-a", "-m", "feat: f")
+    local reviewed = head(root)
+    git(root, "checkout", "-q", "main")
+    write(root, "f.txt", "1\n2\nB\n4\n5\n")
+    git(root, "commit", "-q", "-a", "-m", "trunk edits line three")
+    git(root, "checkout", "-q", "-b", "moved")
+    write(root, "f.txt", "1\n2\nA\n4\n5\n")
+    git(root, "commit", "-q", "-a", "-m", "feat: f")
+    local state = { commit = head(root), change = "-" }
+    local comments = { review_of("code", reviewed), review_of("style", reviewed) }
+    testing.eq(#land.missing_reviews(comments, state, root), 2)
+end)
+
 testing.test("git template problem reads the template listing", function()
     local root = repo({})
     write(root, templates.BASE .. "/lint.lua", 'local fs = require("dev.fs")\n')

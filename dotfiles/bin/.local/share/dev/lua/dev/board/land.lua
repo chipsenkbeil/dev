@@ -73,15 +73,28 @@ local function interdiff(root, commit, target)
     return jj_out(root, "interdiff", "--from", commit, "--to", target, "--name-only")
 end
 
+local function parent_tree(root, commit)
+    local tree = git_out(root, "rev-parse", "--verify", "--quiet", commit .. "^^{tree}")
+    if tree == nil then
+        tree = git_out(root, "hash-object", "-t", "tree", "/dev/null")
+    end
+    return tree and tree:match("^%x+")
+end
+
 local function identical(root, commit, state)
     if vcs.backend(root) == vcs.GIT then
+        local base = parent_tree(root, commit)
+        local theirs = parent_tree(root, state.commit)
+        if base == nil or theirs == nil then
+            return false
+        end
         local merged = git_out(
             root,
             "merge-tree",
             "--write-tree",
-            "--merge-base=" .. commit .. "^",
-            state.commit .. "^",
-            commit
+            "--merge-base=" .. base,
+            theirs,
+            commit .. "^{tree}"
         )
         local tree = git_out(root, "rev-parse", state.commit .. "^{tree}")
         return merged ~= nil and tree ~= nil and merged:match("^%x+") == tree:match("^%x+")

@@ -3276,7 +3276,10 @@ Carrying a check and reviews across a rebase:
   - the rebase left no conflict
 - In a git project no change id is read. The checked commit carries when it has
   a single parent, that parent is an ancestor of the landing commit's parent,
-  and its patch is identical to the landing commit's patch.
+  and its patch is identical to the landing commit's patch. The patch
+  comparison runs `git merge-tree --write-tree --merge-base`, which needs
+  git 2.40 or newer, and an older git falls back to a recheck. A root commit
+  compares against the empty tree.
 - A trunk commit that touched the same files does not stop the carry. The
   release run tests the whole batch and catches a clash the rebase cannot see.
 - The carry is tried whenever reviews or the check are lacking, even when
