@@ -177,7 +177,7 @@ testing.test("files says why when jj file list fails and still lists the files",
     fs.remove(root, { recursive = true })
     assert(ok, files)
     testing.eq(notes, {
-        "jj file list failed with exit 1. A bad glob in .dev/lint-ignore is the usual cause."
+        "The jj file list command failed with exit 1. A bad glob in .dev/lint-ignore is the usual cause."
             .. " Lint falls back to git or rg.",
     })
     testing.eq(files, { "src/new.rs" })
