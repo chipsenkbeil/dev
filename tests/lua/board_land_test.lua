@@ -405,6 +405,11 @@ local function at_root(project, root)
     return { root = root, home = project.home, log = project.log, bare = project.bare }
 end
 
+local function carried_note(body, from, lead)
+    local short = from:sub(1, 12)
+    testing.ok(body:find((lead or "") .. "carried over from commit " .. short, 1, true), body)
+end
+
 local function dev(project, args, extra)
     local env = {
         HOME = project.home,
@@ -1591,10 +1596,7 @@ esac
             local list = comments(project.home)
             local last = list[#list]
             testing.eq(last.kind, KIND_DONE)
-            testing.ok(
-                last.body:find("carried over from commit " .. before:sub(1, 12), 1, true),
-                last.body
-            )
+            carried_note(last.body, before)
         end
     )
 
@@ -1896,10 +1898,7 @@ esac
             local list = comments(project.home)
             local last = list[#list]
             testing.eq(last.kind, KIND_DONE)
-            testing.ok(
-                last.body:find("carried over from commit " .. before:sub(1, 12), 1, true),
-                last.body
-            )
+            carried_note(last.body, before)
             testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
@@ -1918,14 +1917,7 @@ esac
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(
-            list[#list].body:find(
-                "The check and reviews were carried over from commit " .. before:sub(1, 12),
-                1,
-                true
-            ),
-            list[#list].body
-        )
+        carried_note(list[#list].body, before, "The check and reviews were ")
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
@@ -1962,14 +1954,7 @@ esac
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(
-            list[#list].body:find(
-                "The check and reviews were carried over from commit " .. before:sub(1, 12),
-                1,
-                true
-            ),
-            list[#list].body
-        )
+        carried_note(list[#list].body, before, "The check and reviews were ")
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
@@ -1997,14 +1982,7 @@ esac
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(
-            list[#list].body:find(
-                "The check and reviews were carried over from commit " .. before:sub(1, 12),
-                1,
-                true
-            ),
-            list[#list].body
-        )
+        carried_note(list[#list].body, before, "The check and reviews were ")
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
@@ -2024,14 +2002,7 @@ esac
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(
-            list[#list].body:find(
-                "The check and reviews were carried over from commit " .. before:sub(1, 12),
-                1,
-                true
-            ),
-            list[#list].body
-        )
+        carried_note(list[#list].body, before, "The check and reviews were ")
     end)
 
     testing.test("land refuses a carry past two rebases when the checks rows changed", function()
@@ -2081,10 +2052,7 @@ esac
             )
             testing.eq(code, 0, out)
             local list = comments(project.home)
-            testing.ok(
-                list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
-                list[#list].body
-            )
+            carried_note(list[#list].body, before)
             testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
@@ -2097,10 +2065,7 @@ esac
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(
-            list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
-            list[#list].body
-        )
+        carried_note(list[#list].body, before)
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
@@ -2252,8 +2217,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local landed, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, landed)
         local list = comments(project.home)
-        local carried = "The check was carried over from commit " .. checked_at:sub(1, 12)
-        testing.ok(list[#list].body:find(carried, 1, true), list[#list].body)
+        carried_note(list[#list].body, checked_at, "The check was ")
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
@@ -2696,10 +2660,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(
-            list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
-            list[#list].body
-        )
+        carried_note(list[#list].body, before)
         testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
     end)
 
@@ -2821,10 +2782,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             )
             testing.eq(code, 0, out)
             local list = comments(project.home)
-            testing.ok(
-                list[#list].body:find("carried over from commit " .. before:sub(1, 12), 1, true),
-                list[#list].body
-            )
+            carried_note(list[#list].body, before)
             testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
         end
     )
@@ -2928,7 +2886,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
+        carried_note(list[#list].body, older)
     end)
 
     testing.test("a commit with two passing runs still carries", function()
@@ -2949,7 +2907,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
-        testing.ok(list[#list].body:find("carried over from commit " .. older:sub(1, 12), 1, true))
+        carried_note(list[#list].body, older)
     end)
 
     testing.test(
@@ -2972,9 +2930,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             )
             testing.eq(code, 0, out)
             local list = comments(project.home)
-            testing.ok(
-                list[#list].body:find("carried over from commit " .. at_check:sub(1, 12), 1, true)
-            )
+            carried_note(list[#list].body, at_check)
         end
     )
 
@@ -3014,8 +2970,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.ok(code == 0, out)
         local list = comments(project.home)
-        local carried = "carried over from commit " .. at_check:sub(1, 12)
-        testing.ok(list[#list].body:find(carried, 1, true), list[#list].body)
+        carried_note(list[#list].body, at_check)
     end)
 
     testing.test("land refuses a check with no reviews across a changed patch", function()
