@@ -4892,6 +4892,26 @@ testing.test("outcome warns about a path in the text and still writes", function
     testing.eq(#backend.calls, 1)
 end)
 
+testing.test("outcome warns about a step after the land and still writes", function()
+    local card = colored("green")
+    local backend = fake({ card })
+    local result = cmd_board.run("outcome", { "cccccccc", "Holds Once The Lead rolls it" }, backend)
+    testing.eq(result.warnings, {
+        "Outcome names a step after the land: once the lead."
+            .. " A verifier ticks before the land, so describe the change itself.",
+    })
+    testing.eq(result.output, "outcome cccccccc 4 added")
+    testing.eq(#backend.calls, 1)
+end)
+
+testing.test("outcome prints no after-the-land warning for a plain outcome", function()
+    local card = colored("green")
+    local backend = fake({ card })
+    local result = cmd_board.run("outcome", { "cccccccc", "The verb prints its help." }, backend)
+    testing.eq(result.warnings, {})
+    testing.eq(board.outcome_warning("The verb lands cleanly."), nil)
+end)
+
 testing.test("move into Icebox never checks the description", function()
     local card = colored("white")
     card.description = nil

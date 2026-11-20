@@ -1388,6 +1388,23 @@ function M.prose_warnings(prose)
     return warnings
 end
 
+local AFTER_LAND_PHRASES = { "after landing", "after the land", "once landed", "once the lead" }
+
+---Warn about an outcome that names a step after the land, which no verifier can tick before it.
+---@param outcome string? the outcome text
+---@return string? warning one line, nil when the text names no such step
+function M.outcome_warning(outcome)
+    local lower = (outcome or ""):lower()
+    for _, phrase in ipairs(AFTER_LAND_PHRASES) do
+        if lower:find(phrase, 1, true) then
+            return "Outcome names a step after the land: "
+                .. phrase
+                .. ". A verifier ticks before the land, so describe the change itself."
+        end
+    end
+    return nil
+end
+
 ---Split a v1 `## Done when` checklist off a description: the `- [ ]` and `- [x]` items under that
 ---heading, and the description without the heading and those items.
 ---@param description string? the card's description

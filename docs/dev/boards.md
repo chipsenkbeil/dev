@@ -4480,6 +4480,11 @@ happens (exit 0, output unchanged).
 
 `dev.board.prose_warnings` implements the scan. A queued replay prints none.
 
+`dev board outcome` also warns, and still saves, when an added or renamed
+outcome holds `after landing`, `after the land`, `once landed` or `once the
+lead` in any case. A verifier ticks before the land.
+`dev.board.outcome_warning` implements it.
+
 ### The board section
 
 The board comes from the `[board]` section of `<root>/.dev/config.toml`.

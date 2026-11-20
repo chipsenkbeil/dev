@@ -3041,9 +3041,14 @@ function commands.outcome(backend, args)
         if not ok then
             return failure(message)
         end
+        local warnings = board.prose_warnings(text)
+        local after_land = board.outcome_warning(text)
+        if after_land then
+            warnings[#warnings + 1] = after_land
+        end
         return {
             output = "outcome " .. prefix .. " " .. (#card.outcomes + 1) .. " added",
-            warnings = board.prose_warnings(text),
+            warnings = warnings,
         }
     end
     local number
@@ -3160,6 +3165,10 @@ function commands.outcome(backend, args)
     end
     if text then
         result.warnings = board.prose_warnings(text)
+        local after_land = board.outcome_warning(text)
+        if after_land then
+            result.warnings[#result.warnings + 1] = after_land
+        end
     end
     return result
 end
