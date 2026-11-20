@@ -4912,6 +4912,15 @@ testing.test("outcome prints no after-the-land warning for a plain outcome", fun
     testing.eq(board.outcome_warning("The verb lands cleanly."), nil)
 end)
 
+testing.test("text_warnings appends the after-the-land warning to the prose warnings", function()
+    testing.eq(board.text_warnings("The verb lands cleanly."), {})
+    testing.eq(board.text_warnings("see 2af0e003 once landed"), {
+        "Card prose holds a hex id or hash: 2af0e003.",
+        "Outcome names a step after the land: once landed."
+            .. " A verifier ticks before the land, so describe the change itself.",
+    })
+end)
+
 testing.test("move into Icebox never checks the description", function()
     local card = colored("white")
     card.description = nil

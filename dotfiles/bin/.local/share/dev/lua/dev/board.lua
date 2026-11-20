@@ -1405,6 +1405,18 @@ function M.outcome_warning(outcome)
     return nil
 end
 
+---Collect every warning that applies to one outcome text: the prose warnings, then the after-the-land one.
+---@param outcome string? the outcome text
+---@return string[] warnings one line each, empty when the text is clean
+function M.text_warnings(outcome)
+    local warnings = M.prose_warnings(outcome)
+    local after_land = M.outcome_warning(outcome)
+    if after_land then
+        warnings[#warnings + 1] = after_land
+    end
+    return warnings
+end
+
 ---Split a v1 `## Done when` checklist off a description: the `- [ ]` and `- [x]` items under that
 ---heading, and the description without the heading and those items.
 ---@param description string? the card's description
