@@ -5,27 +5,32 @@ require_pty() {
     command -v luajit >/dev/null 2>&1 || skip "luajit not installed"
 }
 
+PTY_DEADLINE_SECS=30
+
+pty_timeout() {
+    local what=$1 started=$2
+    echo "$what after $((SECONDS - started)) seconds." >&2
+    ps -eo pid,ppid,pgid,stat,args | awk '/luajit/ && !/awk/' >&2
+    exit 1
+}
+
 pty_wait_for() {
-    local file=$1 tries=0
+    local file=$1 started=$SECONDS
     [ -n "$file" ] || return 0
     while [ ! -e "$file" ]; do
-        tries=$((tries + 1))
-        if [ "$tries" -gt 200 ]; then
-            echo "timed out waiting for $file" >&2
-            exit 1
+        if [ $((SECONDS - started)) -ge "$PTY_DEADLINE_SECS" ]; then
+            pty_timeout "Timed out waiting for $file" "$started"
         fi
         sleep 0.05
     done
 }
 
 pty_wait_for_text() {
-    local file=$1 text=$2 tries=0
+    local file=$1 text=$2 started=$SECONDS
     [ -n "$text" ] || return 0
     until grep -qF -- "$text" "$file" 2>/dev/null; do
-        tries=$((tries + 1))
-        if [ "$tries" -gt 200 ]; then
-            echo "Timed out waiting for $text in $file." >&2
-            exit 1
+        if [ $((SECONDS - started)) -ge "$PTY_DEADLINE_SECS" ]; then
+            pty_timeout "Timed out waiting for $text in $file" "$started"
         fi
         sleep 0.05
     done
