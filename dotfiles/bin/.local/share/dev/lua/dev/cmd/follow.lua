@@ -9,8 +9,13 @@ local MAIN_WORKSPACE = "default"
 local ROOT_MARK = "root"
 local REV_ENV = "DEV_FOLLOW_REV"
 
+---The reasons the main checkout lookup finds none
+---@enum dev.cmd.follow.Reason
+local Reason = { NO_WORKSPACE = "no_workspace", NO_MAIN = "no_main" }
+
 ---@class dev.cmd.follow
-local M = {}
+---@field Reason table<string, dev.cmd.follow.Reason> the reasons `main` names
+local M = { Reason = Reason }
 
 local function chomp(out)
     return (out:gsub("\n$", ""))
@@ -31,7 +36,7 @@ local function main_of_jj(root)
     )
     local out, code = dev_os.capture(argv, { stderr = "null" })
     if code ~= 0 or out == "" then
-        return nil, "jj lists no workspace named " .. MAIN_WORKSPACE .. " for " .. root
+        return nil, Reason.NO_WORKSPACE
     end
     return chomp(out)
 end
@@ -42,7 +47,7 @@ local function main_of_git(root)
     local out, code = dev_os.capture(argv, { stderr = "null" })
     local main = code == 0 and chomp(out):match("^(.*)/%.git$")
     if not main then
-        return nil, "git finds no main checkout for " .. root
+        return nil, Reason.NO_MAIN
     end
     return main
 end
@@ -53,7 +58,7 @@ end
 ---Any other folder with `.git` answers to git, whose main checkout holds the common git folder.
 ---@param root string absolute path of a checkout, a jj workspace or a git worktree
 ---@return string? main the main checkout's absolute path
----@return string? err why there is none
+---@return string? err a `Reason`, or the error `vcs.backend` gave
 function M.main(root)
     local backend, err = vcs.backend(root)
     if backend == vcs.JJ then
@@ -63,6 +68,19 @@ function M.main(root)
         return main_of_git(root)
     end
     return nil, err
+end
+
+local function main_refusal(root, err)
+    if err == Reason.NO_WORKSPACE then
+        return "The jj repository at "
+            .. root
+            .. " has no workspace named "
+            .. MAIN_WORKSPACE
+            .. "."
+    elseif err == Reason.NO_MAIN then
+        return "The git repository at " .. root .. " has no main checkout."
+    end
+    return text.sentence(err)
 end
 
 local function short(commit)
@@ -215,7 +233,7 @@ end
 function M.commands(root)
     local main, err = M.main(root)
     if not main then
-        return { text.sentence(err) }
+        return { main_refusal(root, err) }
     end
     if vcs.backend(main) == vcs.JJ then
         return { "jj -R " .. main .. " new trunk()" }
@@ -234,7 +252,7 @@ end
 function M.run(ctx)
     local main, err = M.main(ctx.root)
     if not main then
-        verb.note(text.sentence(err))
+        verb.note(main_refusal(ctx.root, err))
         return 1
     end
     local rev = os.getenv(REV_ENV)

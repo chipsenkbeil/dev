@@ -208,6 +208,28 @@ testing.test("follow.jj.moves.the.main.checkout.from.a.workspace", function()
     cleanup(root, remote, workspace)
 end)
 
+testing.test("follow.names.a.jj.repo.with.no.default.workspace", function()
+    local root, remote = jj_main()
+    jj(root, "workspace", "rename", "other")
+    local out, code = follow(root)
+    testing.eq(code, 1, out)
+    testing.ok(
+        out:find("The jj repository at " .. root .. " has no workspace named default.", 1, true),
+        out
+    )
+    cleanup(root, remote)
+end)
+
+testing.test("follow.names.a.git.checkout.with.no.main.folder", function()
+    local root = dir()
+    local store = dir()
+    git(root, "init", "-q", "--separate-git-dir", store .. "/store", root)
+    local out, code = follow(root)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The git repository at " .. root .. " has no main checkout.", 1, true), out)
+    cleanup(root, store)
+end)
+
 testing.test("follow.project.script.replaces.the.built.in", function()
     local root = support.sandbox({
         [".dev/follow.sh"] = "#!/bin/sh\necho mine\n",
