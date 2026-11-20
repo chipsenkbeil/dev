@@ -3856,8 +3856,8 @@ minutes.
 
 `dev board note CARD [--board B] [--kind K] [--as ROLE] TEXT` adds a comment
 and prints `noted <id prefix>`. CARD may be `BOARD:PREFIX` in place of
-`--board`. `move` and `outcome` refuse a `BOARD:PREFIX` card with a message that
-names the board.
+`--board`. `outcome` refuses a `BOARD:PREFIX` card with a message that names
+the board.
 
 The text:
 
@@ -3912,6 +3912,8 @@ Whose comment:
 
 `dev board move CARD COLUMN [--lane L] [--max-size N] [--wait SECONDS]` moves
 the card to the top of the column and prints `moved <id prefix> to <column>`.
+CARD may be `BOARD:PREFIX` for a card of another board of the same Pomb
+server, and the move acts on that board.
 
 - The card keeps its swimlane. `--lane L` moves it to that lane too, and puts it
   at the top of the column in that lane. Pomb counts a position within one

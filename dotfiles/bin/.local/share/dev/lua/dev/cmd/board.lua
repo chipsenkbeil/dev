@@ -2028,7 +2028,11 @@ local function move_card(backend, args, opts)
 end
 
 function commands.move(backend, args)
-    return move_card(backend, args)
+    local home, rest, refused = guards.on_board(backend, args)
+    if not home then
+        return refused
+    end
+    return move_card(home, rest)
 end
 
 ---Move a card, retrying a full column until room frees when `--wait` is given.

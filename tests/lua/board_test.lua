@@ -1372,12 +1372,9 @@ testing.test("notes BOARD:ID lists the named board's card notes", function()
     testing.eq(backend.calls, { { "other_board", "ci" } })
 end)
 
-testing.test("move and outcome refuse a card on another board and name the board", function()
+testing.test("outcome refuses a card on another board and names the board", function()
     local backend = fake(sample())
-    local result = cmd_board.run("move", { "ci:11111111-a", support.Column.DONE }, backend)
-    testing.eq(result.code, 1)
-    testing.ok(result.message:find("the board ci", 1, true), result.message)
-    result = cmd_board.run("outcome", { "ci:11111111-a", "--tick", "1" }, backend)
+    local result = cmd_board.run("outcome", { "ci:11111111-a", "--tick", "1" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("the board ci", 1, true), result.message)
     testing.eq(backend.calls, {})
@@ -1534,6 +1531,35 @@ testing.test("discard --board refuses a board that is not there", function()
     testing.eq(result.code, 2)
     testing.eq(#backend.calls, 1)
 end)
+
+testing.test("show and move take a board-qualified card id", function()
+    local backend = fake(sample())
+    local cards = sample()
+    cards[1].outcomes = { { id = "s1", name = "A works", done = true } }
+    local sibling = fake(cards)
+    backend.sibling = sibling
+    local shown = cmd_board.run("show", { "ci:11111111-a" }, backend)
+    testing.eq(shown.code, nil)
+    testing.ok(shown.output:find("11111111", 1, true), shown.output)
+    testing.eq(backend.calls, { { "other_board", "ci" } })
+    local moved = cmd_board.run("move", { "ci:11111111-a", support.Column.DONE }, backend)
+    testing.eq(moved.output, "moved 11111111 to Done")
+    testing.eq(sibling.calls[#sibling.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+    testing.eq(#backend.calls, 2)
+end)
+
+testing.test(
+    "show and move refuse a board-qualified card id for a board that is not there",
+    function()
+        local backend = fake(sample())
+        for _, verb in ipairs({ "show", "move" }) do
+            local result =
+                cmd_board.run(verb, { "nope:11111111-a", support.COLUMN_NAME.BACKLOG }, backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find("no board named nope", 1, true), result.message)
+        end
+    end
+)
 
 testing.test("move to Done refuses a card with unticked outcomes and names them", function()
     local cards = sample()
