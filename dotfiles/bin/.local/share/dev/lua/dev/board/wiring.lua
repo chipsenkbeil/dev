@@ -211,7 +211,50 @@ local function mac_only_files(root)
     return listed
 end
 
+---Record the leading rows that passed, when more passed than the last record holds.
+---
+---A record that cannot be written costs only the saving, so it is told and the check goes on. A
+---working copy that moved off the checked commit gets no record.
+---@param opts dev.board.wiring.check_rows.Opts the card, its commit and the flags
+---@param rows dev.board.check.Row[] the finished rows by their place in the card's checks
+---@param posted integer how many leading rows the newest record of this run holds
+---@return integer posted how many leading rows the newest record holds now
+local function post_partial(opts, rows, posted)
+    local backend, card, before = opts.backend, opts.card, opts.before
+
+    -- Count the leading rows that passed
+    local count = 0
+    while rows[count + 1] and rows[count + 1].result == check.Result.PASS do
+        count = count + 1
+    end
+
+    -- Leave the record alone when nothing new passed or the working copy moved
+    local now = check.state(backend.root)
+    if count <= posted or not now or now.commit ~= before.commit then
+        return posted
+    end
+
+    -- Write the leading rows as a partial record
+    local held = claims.read(card.id)
+    local leading = { unpack(rows, 1, count) }
+    local stamped = { commit = before.commit, change = before.change }
+    local ok, message = backend:note(
+        card.id,
+        check.record(stamped, leading, check.Mode.PARTIAL),
+        held and held.fence,
+        { kind = board.NoteKind.STATUS }
+    )
+    if not ok then
+        verb.note("The rows that passed were not saved. " .. dev_text.sentence(message))
+        return posted
+    end
+    return count
+end
+
 ---Run the card's rows and record the result.
+---
+---Each row that passes in a row from the first is saved in a partial record, and a rerun at the
+---same commit skips those rows.
 ---
 ---An `--expect-fail` run on a commit with a trunk proof runs the rows the card adds only. Without
 ---a proof it runs every row, which is then the only sign that trunk was green.
@@ -277,10 +320,30 @@ local function check_rows(opts)
             plan = nil
         end
     end
-    local shared = {}
+    local shared, places = {}, {}
     for _, entry in ipairs(plan and plan.rows or {}) do
         shared[entry.index] = true
+        places[#places + 1] = entry.index
     end
+
+    -- Keep the leading rows that already passed at this commit
+    if not flags.expect_fail and not flags.run then
+        local past = backend:comments(card.id)
+        local kept = check.resume(past or {}, before.commit, commands, places)
+        for i, row in ipairs(kept) do
+            rows[i] = { run = commands[i], run_id = row.run_id, result = row.result }
+            local where = row.run_id == "-" and "" or " in ci run " .. row.run_id
+            verb.note(
+                string.format(
+                    "Row %d of %d passed%s at this commit, so it is skipped.",
+                    i,
+                    #argvs,
+                    where
+                )
+            )
+        end
+    end
+    local posted = #rows
     for i, argv in ipairs(argvs) do
         if mac[i] then
             verb.note(
@@ -300,7 +363,7 @@ local function check_rows(opts)
                     rows[entry.index] = done[entry.index]
                 end
             end
-        else
+        elseif not rows[i] then
             renew_claim(backend, card, opts.name, flags.seconds)
             verb.note(string.format("running %d of %d: %s", i, #argvs, commands[i]))
             rows[i] = check.run({
@@ -325,6 +388,9 @@ local function check_rows(opts)
                     rows[i].refused
                 )
             )
+        end
+        if not flags.expect_fail and i < #argvs then
+            posted = post_partial(opts, rows, posted)
         end
     end
     local lines = check_lines(rows)

@@ -1321,9 +1321,11 @@ function M.carry(opts)
     local root, comments, state = opts.root, opts.comments, opts.state
     for _, comment in ipairs(comments) do
         local own = check.parse(comment.body)
+        local commit, mode = check.unreadable(comment.body)
+        local finished = own and own.mode ~= check.Mode.PARTIAL
         if
-            (own and own.commit == state.commit)
-            or check.unreadable(comment.body) == state.commit
+            (finished and own.commit == state.commit)
+            or (commit == state.commit and mode ~= check.Mode.PARTIAL)
         then
             return nil
         end

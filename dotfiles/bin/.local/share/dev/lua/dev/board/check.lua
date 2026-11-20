@@ -134,7 +134,7 @@ M.Result = {
 
 ---What a run was meant to show, as the record names it.
 ---@enum dev.board.check.Mode
-M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail" }
+M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail", PARTIAL = "partial" }
 
 ---@class dev.board.check.State
 ---@field commit string the full commit id the result belongs to
@@ -1046,9 +1046,14 @@ end
 ---A reason line is left out when it would push the comment past its 4800-byte budget.
 ---@param state dev.board.check.State the commit the rows ran on
 ---@param rows dev.board.check.Row[] the finished rows
----@param expect_fail boolean whether every row was meant to fail
+---@param mode (string|boolean)? one of `Mode`, or a boolean where true means
+---   `Mode.EXPECT_FAIL`, and nil or false means `Mode.RUN`
 ---@return string text the comment body, which begins with the reserved prefix
-function M.record(state, rows, expect_fail)
+function M.record(state, rows, mode)
+    if not mode or mode == true then
+        mode = mode and M.Mode.EXPECT_FAIL or M.Mode.RUN
+    end
+
     -- Build each row line and add up the bytes the lines take
     local commands = {}
     local lines = {}
@@ -1065,7 +1070,7 @@ function M.record(state, rows, expect_fail)
         board.CHECK_PREFIX,
         state.commit,
         state.change,
-        expect_fail and M.Mode.EXPECT_FAIL or M.Mode.RUN,
+        mode,
         #rows,
         M.fingerprint(commands)
     )
@@ -1140,6 +1145,46 @@ function M.parse(body)
         return nil
     end
     return { commit = commit, change = change, mode = mode, sum = sum, rows = rows, proof = proof }
+end
+
+---Find the leading rows that already passed at a commit.
+---
+---The newest partial or run record at the commit whose rows are a prefix of the card's rows
+---decides. Its leading run of passed rows is kept, cut back so that the rows of one shared ci run
+---are either all kept or all dropped.
+---@param comments {body: string}[] the card's comments, oldest first
+---@param commit string the full commit id the rows would run on
+---@param commands string[] the card's checks rows in order
+---@param shared integer[] the places of the rows that share one ci run, empty when none do
+---@return dev.board.check.RecordRow[] rows the passed rows by place, empty when none are kept
+function M.resume(comments, commit, commands, shared)
+    for i = #comments, 1, -1 do
+        local record = M.parse(comments[i].body)
+        if
+            record
+            and record.commit == commit
+            and (record.mode == M.Mode.RUN or record.mode == M.Mode.PARTIAL)
+            and #record.rows <= #commands
+            and record.sum == M.fingerprint({ unpack(commands, 1, #record.rows) })
+        then
+            local kept = {}
+            for _, row in ipairs(record.rows) do
+                if row.result ~= M.Result.PASS then
+                    break
+                end
+                kept[#kept + 1] = row
+            end
+            local first, last = math.huge, 0
+            for _, place in ipairs(shared) do
+                first, last = math.min(first, place), math.max(last, place)
+            end
+            if first <= #kept and last > #kept then
+                kept = { unpack(kept, 1, first - 1) }
+            end
+            return kept
+        end
+    end
+    return {}
 end
 
 ---Read the commit of a comment that carries a record's head but does not parse.

@@ -81,9 +81,19 @@ local function git_root(files)
     return root, home, head
 end
 
-local function comments(home)
+local function all_comments(home)
     local doc = assert(json.decode(assert(fs.read(support.board_file(home, "mine")))))
     return doc.cards[1].comments or {}
+end
+
+local function comments(home)
+    local kept = {}
+    for _, comment in ipairs(all_comments(home)) do
+        if not comment.body:find(" mode=" .. check.Mode.PARTIAL .. " ", 1, true) then
+            kept[#kept + 1] = comment
+        end
+    end
+    return kept
 end
 
 local function expected_head(commit, change, mode, commands)
@@ -361,6 +371,116 @@ testing.test("check records the ci run id each row printed", function()
         { result = "pass", run_id = "8cb600" },
         { result = "pass", run_id = "1f2e3d" },
     })
+end)
+
+testing.test("check records each passed row as a partial record before the next row", function()
+    local root, home, head = git_root()
+    local rows = { "true", "echo run 8cb600", "false" }
+    local id = card_with(root, home, rows)
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    local held = all_comments(home)
+    testing.eq(#held, 3)
+    testing.eq(held[1].body, expected_head(head, "-", "partial", { rows[1] }) .. "\n1 pass -")
+    testing.eq(
+        held[2].body,
+        expected_head(head, "-", "partial", { rows[1], rows[2] }) .. "\n1 pass -\n2 pass 8cb600"
+    )
+    testing.eq(
+        held[3].body,
+        expected_head(head, "-", "run", rows) .. "\n1 pass -\n2 pass 8cb600\n3 fail -"
+    )
+end)
+
+testing.test("a rerun at the same commit skips passed rows and names them", function()
+    local root, home, head = git_root()
+    local rows = { "echo run 8cb600", "echo run 1f2e3d", "printenv GATE_OPEN" }
+    local id = card_with(root, home, rows)
+    local _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    local out
+    out, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Row 1 of 3 passed in ci run 8cb600 at this commit", 1, true), out)
+    testing.ok(out:find("Row 2 of 3 passed in ci run 1f2e3d at this commit", 1, true), out)
+    testing.ok(not out:find("running 1 of 3", 1, true), out)
+    testing.ok(not out:find("running 2 of 3", 1, true), out)
+    testing.ok(out:find("running 3 of 3", 1, true), out)
+    local held = comments(home)
+    testing.eq(
+        held[#held].body,
+        expected_head(head, "-", "run", rows) .. "\n1 pass 8cb600\n2 pass 1f2e3d\n3 pass -"
+    )
+end)
+
+testing.test("a rerun at a new commit runs every row", function()
+    local root, home = git_root()
+    local rows = { "echo run 8cb600", "echo run 1f2e3d", "printenv GATE_OPEN" }
+    local id = card_with(root, home, rows)
+    local _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    must(dev_os.run({
+        "git",
+        "-C",
+        root,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.com",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "next",
+    }, { stdout = "null" }))
+    local out
+    out, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("running 1 of 3", 1, true), out)
+    testing.ok(out:find("running 2 of 3", 1, true), out)
+    testing.ok(out:find("running 3 of 3", 1, true), out)
+    testing.ok(not out:find("so it is skipped", 1, true), out)
+end)
+
+testing.test("a rerun skips no row once the card's rows changed", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "true", "false" })
+    local _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    must(dev(root, home, { "board", "checks", id, "echo run 8cb600", "true" }))
+    local out
+    out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 0, out)
+    testing.ok(not out:find("so it is skipped", 1, true), out)
+end)
+
+testing.test("resume keeps rows of one shared ci run all or none", function()
+    local state = { commit = string.rep("a", 40), change = "-" }
+    local commands = { "true", "dev --remote lint", "dev --remote test" }
+    local partial = {
+        body = check.record(state, {
+            { run = commands[1], run_id = "-", result = "pass" },
+            { run = commands[2], run_id = "8cb600", result = "pass" },
+        }, check.Mode.PARTIAL),
+    }
+    testing.eq(#check.resume({ partial }, state.commit, commands, {}), 2)
+    testing.eq(#check.resume({ partial }, state.commit, commands, { 2, 3 }), 1)
+    testing.eq(#check.resume({ partial }, string.rep("b", 40), commands, {}), 0)
+end)
+
+testing.test("a partial record never lets a card land or blocks a carry", function()
+    local land = require("dev.board.land")
+    local state = { commit = string.rep("a", 40), change = "chg" }
+    local rows = { "true", "false" }
+    local first = { run = rows[1], run_id = "-", result = check.Result.PASS }
+    local partial = { body = check.record(state, { first }, check.Mode.PARTIAL) }
+    testing.ok(land.checks_problem({ partial }, state, rows):find("No run", 1, true))
+    local done = { body = check.record(state, { first, first }, check.Mode.RUN) }
+    testing.eq(land.checks_problem({ done, partial }, state, { "true", "true" }), nil)
+    local opts = { root = "/nonexistent", comments = { partial }, state = state, rows = rows }
+    testing.ok(select("#", land.carry(opts)) > 1)
+    opts.comments = { partial, done }
+    testing.eq(select("#", land.carry(opts)), 1)
 end)
 
 testing.test("a 147 row check record stays under the pomb comment cap", function()
@@ -1233,6 +1353,9 @@ testing.test("a result that cannot be written is never reported as recorded", fu
     function backend:card(id)
         return support.listed_card(self, id)
     end
+    function backend:comments()
+        return {}
+    end
     function backend:note()
         return nil, "curl exit 28"
     end
@@ -1243,6 +1366,41 @@ testing.test("a result that cannot be written is never reported as recorded", fu
     testing.ok(result.message:find("Curl exit 28.", 1, true), result.message)
     testing.ok(result.message:find("1 pass - true", 1, true), result.message)
     testing.eq(result.unqueued, nil)
+end)
+
+testing.test("a partial record that cannot be written does not stop the check", function()
+    local root = git_root()
+    local card = {
+        id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name = "Card",
+        column = support.COLUMN_NAME.PROGRESS,
+        size = "unsized",
+        labels = {},
+        checks = { "true", "echo run 8cb600" },
+        outcomes = {},
+    }
+    local backend = { root = root }
+    local tries = 0
+    function backend:done_columns()
+        return { support.COLUMN_NAME.DONE }
+    end
+    function backend:cards()
+        return { card }
+    end
+    function backend:card(id)
+        return support.listed_card(self, id)
+    end
+    function backend:comments()
+        return {}
+    end
+    function backend:note()
+        tries = tries + 1
+        return nil, "curl exit 28"
+    end
+    local result = cmd_board.run("check", { "11111111" }, backend)
+    testing.eq(tries, 2)
+    testing.ok(result.message:find("1 pass - true", 1, true), result.message)
+    testing.ok(result.message:find("2 pass 8cb600 echo run 8cb600", 1, true), result.message)
 end)
 
 if has_jj then

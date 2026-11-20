@@ -2789,7 +2789,8 @@ command and prints `set checks <id prefix>, N rows`, or `1 row` for one.
 
 `dev board check CARD [--expect-fail] [--timeout SECONDS] [--run ID]`
 runs every checks row of the card and records the result as one comment
-on the card.
+on the card. A rerun at the same commit skips the leading rows an earlier run
+recorded as passed (see the partial record below).
 
 The workspace rule:
 
@@ -2934,6 +2935,19 @@ the newest check run at commit <12 characters>. Run `dev board check` again.``
 A reason line is cut to 120 bytes and dropped once the comment nears 4800 bytes.
 A record from before this form has no `rows` or `sum`, reads as unreadable and
 is refused the same way.
+
+A check with more than one row also posts a `dev-check:` record with
+`mode=partial` after each row that passes while every row before it passed, to
+keep the rows done so far when a check is cut off. The record has the same
+form as a run record, holds the leading rows only, and its `sum` is the hash of
+those rows' commands. The last row posts none, since the run record follows it.
+A rerun at the same commit finds the newest `mode=partial` or `mode=run` record
+there whose commands are the leading rows of the card's, skips the leading rows
+it holds as passed, and says so for each. The new run record holds every row,
+the skipped ones with the ci run id they passed under. Rows that share one ci
+run are skipped only when all of them passed. A rerun at another commit, with
+`--expect-fail` or with `--run` runs every row. Land and carry ignore a
+`mode=partial` record.
 
 The result and the exit code:
 
@@ -3200,7 +3214,8 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   with no verdict never refuses.
 - The newest `dev-check:` record with `mode=run` at the landing commit has a
   `pass` for every checks row, in the card's row order. A `mode=expect-fail`
-  record never counts, even when it does not parse.
+  record never counts, even when it does not parse, and neither does a
+  `mode=partial` one.
 - The commit's parent is the current trunk, compared after
   `jj git fetch --remote <remote of record>`, with the remote taken from the
   forge settings (see `forge`). A failed fetch refuses. The git reads
