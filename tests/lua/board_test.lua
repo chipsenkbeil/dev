@@ -6,6 +6,7 @@ local check = require("dev.board.check")
 local claims = require("dev.board.claims")
 local role_clock = require("dev.board.clock")
 local review = require("dev.board.review")
+local board_wait = require("dev.board.wait")
 local box = require("dev.cmd.box")
 local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
@@ -11576,6 +11577,9 @@ local function waited(replies, args, opts)
             if opts.comments_errors and table.remove(opts.comments_errors, 1) then
                 return nil, "Pomb refused the read."
             end
+            if opts.comments_gone and opts.comments_gone[id] then
+                return nil, "Board refused: Pomb answered 404: not found."
+            end
             if opts.reads then
                 opts.reads[#opts.reads + 1] = id
             end
@@ -12260,6 +12264,44 @@ do
             result.message
         )
         testing.eq(#seen.naps, 9)
+    end)
+
+    testing.test("a card whose comments answer 404 is not an owner comment", function()
+        local card = { id = ID_A, name = "Gone", done = false }
+        local gone = {
+            comments = function()
+                return nil, "Board refused: Pomb answered 404: not found."
+            end,
+        }
+        testing.eq(board_wait.commented(gone, card), false)
+        local down = {
+            comments = function()
+                return nil, "Board unavailable: Pomb answered 502: bad gateway."
+            end,
+        }
+        local found, why = board_wait.commented(down, card)
+        testing.eq(found, nil)
+        testing.eq(why, "Could not read the comments of " .. ID_A .. " Gone.")
+        local result = waited({
+            got("1"),
+            got(
+                "2",
+                { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY },
+                { kind = "comment_added", task_id = ID_B, column = support.COLUMN_NAME.READY }
+            ),
+            got("3"),
+        }, { "--for", "human" }, {
+            cards = {
+                { id = ID_A, name = "Gone", column = support.COLUMN_NAME.READY, labels = {} },
+                { id = ID_B, name = "Here", column = support.COLUMN_NAME.READY, labels = {} },
+            },
+            now = assert(box.parse_time("2026-11-02T09:00:00Z")),
+            comments_gone = { [ID_A] = true },
+            comments = {
+                [ID_B] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } },
+            },
+        })
+        testing.eq(result.output, "the owner commented on " .. ID_B:sub(1, 8))
     end)
 
     local function window_board()

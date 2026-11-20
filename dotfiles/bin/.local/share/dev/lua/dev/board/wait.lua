@@ -54,12 +54,14 @@ local WAIT_RETRY_SECONDS = 30
 local WAIT_LIMITED_MAX_SECONDS = 300
 local WAIT_JITTER = 0.25
 local WAIT_RETRIES = 10
+local GONE_CARD = "pomb answered 404"
 local WAIT_TRIMMED = "Events were trimmed. Check the board."
 local WAIT_LIMITED_NOTICE = "Pomb holds too many open waits for this token. Waiting for one to end."
 
 ---Check whether the newest comment on a card is the owner's.
 ---
----A card in Done never counts. Without `since`, a comment of any age counts.
+---A card in Done never counts, and neither does a card whose comments answer 404. Without
+---`since`, a comment of any age counts.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@param since integer? the time in seconds since the epoch, only a comment newer than it counts
@@ -70,8 +72,11 @@ function M.commented(backend, card, since)
     if card.done then
         return false
     end
-    local list = backend:comments(card.id)
+    local list, message = backend:comments(card.id)
     if not list then
+        if message and message:lower():find(GONE_CARD, 1, true) then
+            return false
+        end
         return nil, "Could not read the comments of " .. card.id .. " " .. card.name .. "."
     end
     local newest = list[#list]
