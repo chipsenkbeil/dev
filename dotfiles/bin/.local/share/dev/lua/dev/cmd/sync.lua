@@ -37,6 +37,24 @@ local function die(message)
     verb.die(message)
 end
 
+---Write why a template lookup or read failed.
+---@param reason dev.templates.Reason the reason `templates` named
+---@param detail string? the project type, the directory or the system error
+---@return string message the sentence
+function M.template_refusal(reason, detail)
+    local Reason = templates.Reason
+    if reason == Reason.NO_SET then
+        return "There are no lint templates for " .. tostring(detail) .. " projects."
+    elseif reason == Reason.NO_DIR then
+        return "There are no lint templates at "
+            .. tostring(detail)
+            .. ". Set DOTFILES to the dotfiles repo."
+    elseif reason == Reason.UNREADABLE then
+        return "Cannot read " .. tostring(detail) .. "."
+    end
+    return "The templates failed for a reason dev does not know."
+end
+
 local function skipped_dests(root)
     local value = config.get(root, "sync.skip")
     if value == nil then
@@ -106,9 +124,9 @@ local function readme_head(root)
     if not (own and has_marker(own, templates.README_MARKER) and fs.is_file(template)) then
         return nil
     end
-    local text, err = templates.render_readme(root, template)
+    local text, _, reason, detail = templates.render_readme(root, template)
     if not text then
-        die(err)
+        die(M.template_refusal(reason, detail))
     end
     if text ~= own then
         io.write('differs: .dev/README.md above "', templates.README_MARKER, '"\n')
@@ -176,9 +194,9 @@ function M.run(ctx)
     if not templates.set_for(kind) then
         return sync_readme(root, kind, readme, check, yes)
     end
-    local dir, dir_err = templates.dir(kind)
+    local dir, _, dir_reason, dir_detail = templates.dir(kind)
     if not dir then
-        die(dir_err)
+        die(M.template_refusal(dir_reason, dir_detail))
     end
     local has_cargo = fs.is_file(root .. "/Cargo.toml")
     if has_cargo then

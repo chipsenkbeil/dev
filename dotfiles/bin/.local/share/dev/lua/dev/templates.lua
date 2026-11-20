@@ -2,8 +2,13 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local project = require("dev.project")
 
+---The reasons a template lookup or read fails
+---@enum dev.templates.Reason
+local Reason = { NO_SET = "no_set", NO_DIR = "no_dir", UNREADABLE = "unreadable" }
+
 ---@class dev.templates
-local M = {}
+---@field Reason table<string, dev.templates.Reason> the reasons `dir` and `render_readme` name
+local M = { Reason = Reason }
 
 local BASE = "dotfiles/claude/.claude/skills/style/lint"
 local LINT_MARKER = "-- --- project-specific checks below ---"
@@ -84,7 +89,7 @@ end
 local function read(path)
     local text, err = fs.read(path)
     if not text then
-        return nil, "cannot read " .. tostring(err)
+        return nil, tostring(err)
     end
     return text
 end
@@ -99,16 +104,18 @@ end
 ---Find the lint template directory for a project type.
 ---@param kind string the project type
 ---@return string? dir the directory
----@return string? message why there is none
+---@return nil message always nil, which keeps the slot a lower layer's message would take
+---@return dev.templates.Reason? reason why there is none
+---@return string? detail the project type for `no_set`, the directory for `no_dir`
 function M.dir(kind)
     local set = SETS[kind]
     if not set then
-        return nil, "no lint templates for " .. kind .. " projects"
+        return nil, nil, Reason.NO_SET, kind
     end
     local repo = project.dotfiles_root()
     local dir = repo .. "/" .. BASE .. "/" .. set
     if not fs.is_dir(dir) then
-        return nil, "no lint templates at " .. dir .. " (set DOTFILES to the dotfiles repo)"
+        return nil, nil, Reason.NO_DIR, dir
     end
     return dir
 end
@@ -853,15 +860,17 @@ end
 ---@param root string the project root
 ---@param template string the template's path
 ---@return string? text the template's head, then the project's text from the marker to the end
----@return string? message why a file could not be read
+---@return nil message always nil, which keeps the slot a lower layer's message would take
+---@return dev.templates.Reason? reason why a file could not be read
+---@return string? detail the system error of the read
 function M.render_readme(root, template)
     local text, err = read(template)
     if not text then
-        return nil, err
+        return nil, nil, Reason.UNREADABLE, err
     end
     local own, own_err = read(root .. "/.dev/README.md")
     if not own then
-        return nil, own_err
+        return nil, nil, Reason.UNREADABLE, own_err
     end
     local from = marker_offset(own, M.README_MARKER)
     local top = marker_offset(text, M.README_MARKER)

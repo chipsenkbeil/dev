@@ -5,6 +5,7 @@ local help = require("dev.help")
 local json = require("dev.json")
 local pipelines = require("dev.pipelines")
 local project = require("dev.project")
+local sync = require("dev.cmd.sync")
 local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
@@ -249,12 +250,13 @@ end
 
 local function init_lints(run)
     local kind = run.kind
-    local dir, err
+    local dir
     if templates.set_for(kind) then
-        dir, err = templates.dir(kind)
-        if not dir then
-            die(err)
+        local found, _, reason, detail = templates.dir(kind)
+        if not found then
+            die(sync.template_refusal(reason, detail))
         end
+        dir = found
     end
     if kind == Kind.RUST then
         init_lint_files(run, dir, templates.channel(run.root))
