@@ -3618,6 +3618,22 @@ testing.test("the local add refuses a second run card of the same name", functio
     assert(backend:add("run session", icebox, { labels = { board.RUN } }))
 end)
 
+testing.test(
+    "the local add takes two hand-labelled run cards with a name outside the prefix",
+    function()
+        local _, home = local_board()
+        local icebox = support.COLUMN_NAME.ICEBOX
+        local backend = localboard.new({
+            name = "mine",
+            path = file_of(home),
+            private = true,
+        })
+
+        assert(backend:add("session", icebox, { labels = { board.RUN } }))
+        assert(backend:add("session", icebox, { labels = { board.RUN } }))
+    end
+)
+
 testing.test("wait on a local board answers at once that there is nothing to wait on", function()
     local backend = require("dev.board.localboard").new({ name = "mine" })
     local got, message = backend:wait("1", { "task_added" }, 5)

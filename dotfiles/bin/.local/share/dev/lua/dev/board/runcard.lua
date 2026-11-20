@@ -13,8 +13,6 @@ local claim_card = runner.claim_card
 ---@class dev.board.runcard
 local M = { END_FLAG = "--end", ORDERS_FLAG = "--orders" }
 
-local RUN_NAME = "run "
-
 ---@class dev.board.runcard.Deps
 ---@field dispatch fun(sub: string, args: string[], backend: dev.board.Backend): dev.cmd.board.Result
 ---   runs a board subcommand
@@ -27,7 +25,11 @@ local RUN_NAME = "run "
 
 local function run_card_for(cards, name)
     for _, card in ipairs(cards) do
-        if board.labelled(card, board.RUN) and not card.done and card.name == RUN_NAME .. name then
+        if
+            board.labelled(card, board.RUN)
+            and not card.done
+            and card.name == board.RUN_NAME .. name
+        then
             return card
         end
     end
@@ -69,7 +71,7 @@ local function start_run(backend, name, quoted, deps)
     local RUN_SIZE = "3"
     local RUN_CHECK = "dev board lint"
     local args = {
-        RUN_NAME .. name,
+        board.RUN_NAME .. name,
         "--column",
         backend.stages.progress,
         "--size",
@@ -201,7 +203,7 @@ function M.precheck(args, name_chars)
             usage("Run needs DEV_AGENT or CLAUDE_SESSION_ID, so the session keeps one name.")
     end
     name = claimant(name)
-    if #RUN_NAME + #name > name_chars then
+    if #board.RUN_NAME + #name > name_chars then
         return nil, usage("The session name is too long for a card name.")
     end
     local quoted

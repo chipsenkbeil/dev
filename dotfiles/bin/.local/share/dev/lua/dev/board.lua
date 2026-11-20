@@ -716,6 +716,9 @@ M.DISCARDED = "discarded"
 ---The label of a run card, which holds a session's orders and never comes up as the next card.
 M.RUN = "run"
 
+---The prefix of a run card's name, which `run --end` looks for.
+M.RUN_NAME = "run "
+
 ---The label of a card whose change unblocks every landing, which skips the in-flight limits.
 M.TRUNK_BLOCKER = "trunk-blocker"
 

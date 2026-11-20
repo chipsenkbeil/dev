@@ -756,7 +756,12 @@ function Backend:add(name, column, opts)
                 end
             end
         end
-        if opts and opts.labels and board.labelled({ labels = opts.labels }, board.RUN) then
+        if
+            opts
+            and opts.labels
+            and board.labelled({ labels = opts.labels }, board.RUN)
+            and name:sub(1, #board.RUN_NAME) == board.RUN_NAME
+        then
             for _, open in ipairs(doc.cards) do
                 local held = find_by_id(doc.columns, open.column_id)
                 if
