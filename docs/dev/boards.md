@@ -1728,9 +1728,11 @@ cannot leave In Progress. Note what you built, tried and learned first with
 
 dev finds the note by who posted it, never by its text or `--as` label. The note
 is any later comment posted by the same Pomb token as the latest such record for
-the claimant. A comment does not count when its body begins with a prefix a dev
-verb writes (`dev-check:`, `dev-review:`, `dev-turn:`, `dev-claim:`,
-`dev-tick:`) or its kind is decision.
+the claimant.
+
+A comment does not count when its body begins with a prefix a dev verb writes
+(`dev-check:`, `dev-review:`, `dev-turn:`, `dev-claim:`, `dev-tick:`). A comment
+whose kind is decision does not count either.
 
 A client that posts through the claim's token satisfies the
 check with any text. A card with no claim record for its claimant is not

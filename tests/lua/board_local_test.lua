@@ -673,7 +673,7 @@ testing.test("discard notes the reason, labels the card and moves it to Done", f
     testing.eq(code, 0, out)
     testing.eq(out, "discarded " .. a .. "\n")
     local card = document(file_of(home)).cards[1]
-    testing.eq(card.comments[1].kind, "decision")
+    testing.eq(card.comments[1].kind, board.NoteKind.DECISION)
     testing.eq(card.comments[1].body, "Not needed")
     testing.eq(card.labels[1], "discarded")
     out = dev(root, home, { "board", "ls", "--column", Column.DONE })
@@ -1028,7 +1028,7 @@ testing.test("local escalate swaps the label in one write", function()
     local card = document(file_of(home)).cards[1]
     testing.eq(card.labels, { "docs", "needs:lead" })
     testing.eq(#card.comments, 1)
-    testing.eq(card.comments[1].kind, "blocked")
+    testing.eq(card.comments[1].kind, board.NoteKind.BLOCKED)
     testing.eq(card.comments[1].body, "pick one")
 end)
 
@@ -1763,7 +1763,7 @@ testing.test(
         testing.eq(card.outcomes[1].name, "A works")
         testing.eq(card.outcomes[2].name, "C works")
         local note = card.comments[#card.comments]
-        testing.eq(note.kind, "decision")
+        testing.eq(note.kind, board.NoteKind.DECISION)
         testing.eq(note.body, "Deleted outcome 2: B works Reason: never possible")
     end
 )

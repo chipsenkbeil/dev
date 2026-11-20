@@ -974,16 +974,16 @@ end
 ---@return boolean? noted nil when no claim record names the claimant
 function M.noted_since_claim(comments, claimant)
     local record = M.claim_record(claimant)
-    local at
+    local claim_at
     for i, comment in ipairs(comments) do
         if comment.body == record then
-            at = i
+            claim_at = i
         end
     end
-    if not at then
+    if not claim_at then
         return nil
     end
-    return noted_after(comments, at, {})
+    return noted_after(comments, claim_at, {})
 end
 
 ---Say whether a name posted a note after one of its claim records, so it did work on the card.
