@@ -2,7 +2,7 @@
 
 ## Global flags
 
-Eight flags work anywhere before a `--` on the line, whatever the verb.
+Nine flags work anywhere before a `--` on the line, whatever the verb.
 
 - `-v` or `--verbose`: print each command before it runs, and export
   `VERBOSE=1` to it.
@@ -19,6 +19,9 @@ Eight flags work anywhere before a `--` on the line, whatever the verb.
 - `--priority`: with `--remote`, add `--priority` to the `ci run`, which starts
   the job ahead of every normal job waiting for room on the hub. Alone it is a
   usage error.
+- `--job-timeout DURATION`: with `--remote`, add `--timeout DURATION` to the
+  `ci run`, which bounds the run. Alone, with no duration, or with a duration
+  that starts with `-`, it is a usage error.
 - `-C DIR`: run as if dev started in `DIR`. The launcher enters `DIR` before
   `luajit` starts, so the project root, the config and a `--remote` run all
   come from `DIR`.
@@ -27,7 +30,8 @@ Eight flags work anywhere before a `--` on the line, whatever the verb.
   names its claimant with no `export` or env prefix in the call.
 
 A missing `DIR` or an empty word after `-C` is a usage error (exit 2), and so is
-a missing or empty `NAME` after `--agent`.
+a missing or empty `NAME` after `--agent`. The launcher passes the word after
+`--job-timeout` on with it, and the Lua parser refuses a missing duration.
 Repeated `-C` flags apply in turn, a relative one from the directory before.
 After the verb `guide` a `-C` or `--agent` is part of the question.
 
@@ -277,14 +281,15 @@ The flags `--local` and `--remote` cannot be used together.
 ## The remote runner
 
 `--remote` (or `DEV_REMOTE=1`) runs the command somewhere else. Dev strips
-`--remote`, `--detach` and `--priority`, hands the runner the command
-words and the arguments untouched, and returns the runner's exit code.
+`--remote`, `--detach`, `--priority` and `--job-timeout DURATION`, hands the
+runner the command words and the arguments untouched, and returns the
+runner's exit code.
 Arguments given with no `--` reach the job as well, and arguments on both
 sides of a `--` are a usage error.
 
 The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
 `.dev/__remote.lua` is a chunk returning `function(run) -> integer`, with
-`run = {words, args, detach, priority, root, verbose}`.
+`run = {words, args, detach, priority, job_timeout, root, verbose}`.
 
 The ci runner needs `ci` on PATH and checks `ci -C <root> run --list --json`
 for the job. The job is `<verb>`, or the words joined by a dot for a
@@ -293,8 +298,8 @@ then runs `ci -C <root> run --local --follow --job <job> -- <args>` on
 example-box, with `--detach` in place of `--follow`, and never falls back to a
 local run.
 
-Arguments on both sides of the `--` are a usage error, and so are `--detach`
-and `--priority` without `--remote`.
+Arguments on both sides of the `--` are a usage error, and so are `--detach`,
+`--priority` and `--job-timeout` without `--remote`.
 
 `bootstrap` is not on the refusal list below. This repo's
 `.dev/__remote.lua` sends `bootstrap` and `soak` to the job of the same name
@@ -374,8 +379,8 @@ At uid 0 (`$EUID` or `id -u`), the launcher then does the following.
   `BASH_ENV` by then, so this scrubs the children only.
 - Refuses `bootstrap` with the root refusal (exit 2).
 - Takes luajit only from `/usr/bin` or `/usr/local/bin`. When it is in
-  neither, the launcher refuses `--remote`, `--detach`, `--priority` and an
-  enabled `DEV_REMOTE` with the root refusal (exit 2).
+  neither, the launcher refuses `--remote`, `--detach`, `--priority`,
+  `--job-timeout` and an enabled `DEV_REMOTE` with the root refusal (exit 2).
 
 A root caller without luajit and without those flags gets the root refusal
 (exit 2) for every command but `tools install` and `tools check`. Those print
@@ -412,7 +417,8 @@ verb itself needs, run `DEV_FROM=checkout dev install bin`.
 with no luajit needed. Dev's own handling takes over when either of these
 holds.
 
-- `--remote`, `--detach`, `--priority` or an enabled `DEV_REMOTE` is present.
+- `--remote`, `--detach`, `--priority`, `--job-timeout` or an enabled
+  `DEV_REMOTE` is present.
 - Luajit is available and `--verbose`, `-v` (any number of v), `-h` or
   `--help` follows `bootstrap` before a `--`.
 
@@ -431,7 +437,8 @@ With no luajit, the launcher also turns `--verbose` and `-v` words before the
 With luajit, the launcher execs
 `luajit dotfiles/bin/.local/share/dev/main.lua`. Without it, a non-root caller
 exits 1 with one of the two messages below. The second applies with `--remote`,
-`--detach`, `--priority` or an enabled `DEV_REMOTE`, and nothing runs.
+`--detach`, `--priority`, `--job-timeout` or an enabled `DEV_REMOTE`, and
+nothing runs.
 
 ```
 Luajit is not found. Run `dev bootstrap`, or install it with `brew install luajit`, `pacman -S luajit`, `dnf install luajit` or `apt install luajit`.

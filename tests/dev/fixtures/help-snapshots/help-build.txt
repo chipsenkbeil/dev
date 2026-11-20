@@ -5,12 +5,13 @@ the built-in runs (rust project)
   cargo build --release
 
 Global flags:
-  -v            print each command before it runs
-  -vv           also trace every line of dev and of each bash script
-  --remote      run this command on a remote runner, see `dev help remote`
-  --local       run this command here, whatever the default is (refused for a ci verb under DEV_AGENT)
-  --detach      with --remote, start the job and return
-  --priority    with --remote, start the job ahead of normal ci jobs
-  -C DIR        run as if dev started in DIR
-  --agent NAME  export DEV_AGENT=NAME to the command
+  -v                      print each command before it runs
+  -vv                     also trace every line of dev and of each bash script
+  --remote                run this command on a remote runner, see `dev help remote`
+  --local                 run this command here, whatever the default is (refused for a ci verb under DEV_AGENT)
+  --detach                with --remote, start the job and return
+  --priority              with --remote, start the job ahead of normal ci jobs
+  --job-timeout DURATION  with --remote, give the ci run a time limit
+  -C DIR                  run as if dev started in DIR
+  --agent NAME            export DEV_AGENT=NAME to the command
 exit 0

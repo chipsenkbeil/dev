@@ -224,6 +224,15 @@ hub. `--priority` without `--remote` is a usage error.
 ship` sets it on the `[board.release] checks` rows. `dev board check` and a
 plain `dev --remote` run leave it unset, so they pass no `--priority`.
 
+## Job timeout
+
+To bound a remote run the way a `dev board check` row is, the ci runner adds
+`--timeout DURATION` to `ci run`, before the `--`, when
+`dev --remote --job-timeout 3600 test` is given. `--job-timeout` without
+`--remote`, with no duration, or with a duration that starts with `-`, such as
+`--`, is a usage error and runs nothing. A plain `dev --remote` run passes no
+`--timeout`.
+
 ## --detach
 
 `--detach` needs `--remote`, and alone it is a usage error. The ci runner then
@@ -252,6 +261,7 @@ end
 - `run.args`: the arguments for the job
 - `run.detach`: whether `--detach` was given
 - `run.priority`: whether `--priority` was given
+- `run.job_timeout`: the `--job-timeout` duration, or nil when it was not given
 - `run.root`: the project root as an absolute path
 - `run.verbose`: the level of `-v` (0, 1 or 2)
 

@@ -6,7 +6,8 @@ local support = require("support")
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
-local GLOBAL_TAIL = "-v\n--verbose\n-vv\n--remote\n--local\n--detach\n--priority\n-C\n--agent\n"
+local GLOBAL_TAIL =
+    "-v\n--verbose\n-vv\n--remote\n--local\n--detach\n--priority\n-C\n--agent\n--job-timeout\n"
 
 local function project(files)
     local root = support.tempdir()

@@ -8,7 +8,7 @@ local stderr = io.stderr
 local RESERVED_DIRS = { lua = true, topics = true, standalone = true }
 local HIDDEN_GROUP = "hidden"
 local BARE_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach", "--priority" }
-local VALUE_FLAGS = { "-C", "--agent" }
+local VALUE_FLAGS = { "-C", "--agent", "--job-timeout" }
 local GLOBAL_FLAGS = {}
 
 ---The global flags that take no value, keyed by flag

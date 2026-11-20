@@ -48,7 +48,10 @@ testing.test("the launcher consumes each value flag and reads each remote flag",
         end
     end
     testing.eq(missing(text, wrapped(value, "\n    ", ")\n")), {})
-    testing.eq(missing(text, { "--remote | --detach | --priority) remote_flag=1" }), {})
+    testing.eq(
+        missing(text, { "--remote | --detach | --priority | --job-timeout) remote_flag=1" }),
+        {}
+    )
 end)
 
 testing.test("--local exports DEV_LOCAL to a verb and no flag leaves it unset", function()

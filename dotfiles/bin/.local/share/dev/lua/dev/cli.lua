@@ -86,6 +86,7 @@ end
 ---@field remote boolean whether `--remote` or `DEV_REMOTE` asks for a remote run
 ---@field detach boolean whether `--detach` was given
 ---@field priority boolean whether `--priority` was given
+---@field job_timeout string|nil the `--job-timeout` value, "" when the flag had none
 ---@field local_flag boolean whether `--local` was given
 ---@field env_local boolean whether `DEV_REMOTE` says 0, no or false
 ---@field conflict boolean whether `--local` and `--remote` were both given
@@ -106,9 +107,16 @@ local function parse(argv)
     local count, flag_remote, flag_local = 0, false, false
     local env = os.getenv("DEV_REMOTE") or ""
     parsed.env_local = env == "0" or env == "no" or env == "false"
+    local awaiting = false
     for i, word in ipairs(argv) do
         local verbosity = registry.verbose_count(word)
-        if word == "--" then
+        if awaiting and word:sub(1, 1) == "-" then
+            awaiting = false
+        end
+        if awaiting then
+            parsed.job_timeout = word
+            awaiting = false
+        elseif word == "--" then
             parsed.after = #argv - i
             parsed.dashed = true
             for j = i + 1, #argv do
@@ -126,6 +134,9 @@ local function parse(argv)
             parsed.detach = true
         elseif word == "--priority" then
             parsed.priority = true
+        elseif word == "--job-timeout" then
+            parsed.job_timeout = ""
+            awaiting = true
         else
             parsed.args[#parsed.args + 1] = word
         end
@@ -395,14 +406,11 @@ local function run_as_root(parsed)
         interpreter = INTERPRETER,
     }
     if parsed.remote then
-        os.exit(
-            remote.run(
-                ctx,
-                words,
-                tail(rest, math.max(1, #rest - parsed.after + 1)),
-                { detach = parsed.detach, priority = parsed.priority }
-            )
-        )
+        os.exit(remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), {
+            detach = parsed.detach,
+            priority = parsed.priority,
+            job_timeout = parsed.job_timeout,
+        }))
     end
     prepare(ctx)
     os.exit(tools.handlers[ctx.name](ctx))
@@ -427,6 +435,14 @@ function M.main(argv)
     end
     if parsed.priority and not parsed.remote then
         stderr:write("The flag `--priority` needs `--remote`.\n")
+        os.exit(2)
+    end
+    if parsed.job_timeout and not parsed.remote then
+        stderr:write("The flag `--job-timeout` needs `--remote`.\n")
+        os.exit(2)
+    end
+    if parsed.job_timeout == "" then
+        stderr:write("The flag `--job-timeout` needs a duration.\n")
         os.exit(2)
     end
     if parsed.local_flag then
@@ -491,14 +507,11 @@ function M.main(argv)
         os.exit(help.run(ctx, reg))
     end
     if parsed.remote and not fetch_job and not patch_job then
-        os.exit(
-            remote.run(
-                ctx,
-                words,
-                tail(rest, math.max(1, #rest - parsed.after + 1)),
-                { detach = parsed.detach, priority = parsed.priority }
-            )
-        )
+        os.exit(remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), {
+            detach = parsed.detach,
+            priority = parsed.priority,
+            job_timeout = parsed.job_timeout,
+        }))
     end
     if
         not (parsed.local_flag or parsed.env_local or on_remote_host or runs_local(reg, row))

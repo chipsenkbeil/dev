@@ -330,6 +330,7 @@ local function verb_text(ctx, reg, c, opts)
         },
         { "--detach", "with --remote, start the job and return" },
         { "--priority", "with --remote, start the job ahead of normal ci jobs" },
+        { "--job-timeout DURATION", "with --remote, give the ci run a time limit" },
         { "-C DIR", "run as if dev started in DIR" },
         { "--agent NAME", "export DEV_AGENT=NAME to the command" },
     }

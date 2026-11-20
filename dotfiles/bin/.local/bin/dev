@@ -29,6 +29,14 @@ while [ "$#" -gt 0 ]; do
         chdirs+=("$2")
         shift 2
         ;;
+    --job-timeout)
+        args+=("$1")
+        shift
+        if [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then
+            args+=("$1")
+            shift
+        fi
+        ;;
     *)
         if [ -z "$verb" ] && [[ "$1" != -* ]]; then
             verb=$1
@@ -95,7 +103,7 @@ case "${DEV_REMOTE:-}" in
 esac
 for arg in "$@"; do
     case "$arg" in
-    --remote | --detach | --priority) remote_flag=1 ;;
+    --remote | --detach | --priority | --job-timeout) remote_flag=1 ;;
     --) break ;;
     esac
 done

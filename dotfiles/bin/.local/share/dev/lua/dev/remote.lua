@@ -41,6 +41,7 @@ local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."
 ---@field args string[] the arguments for the job, untouched
 ---@field detach boolean whether `--detach` was given
 ---@field priority boolean whether `--priority` was given
+---@field job_timeout string|nil the `--job-timeout` duration for `ci run --timeout`
 ---@field root string absolute path of the project root
 ---@field verbose integer 0, or 1 or 2 for `-v` or `-vv`
 
@@ -262,6 +263,10 @@ function M.ci_runner(run, opts)
     if run.priority or os.getenv(M.PRIORITY_ENV) == "1" then
         words[#words + 1] = "--priority"
     end
+    if run.job_timeout then
+        words[#words + 1] = "--timeout"
+        words[#words + 1] = run.job_timeout
+    end
     words[#words + 1] = "--"
     for _, word in ipairs(words) do
         argv[#argv + 1] = word
@@ -320,8 +325,8 @@ end
 ---@param ctx dev.Ctx the command's context, whose `args` are every argument after the command words
 ---@param words string[] the command words
 ---@param args string[] the arguments after `--`
----@param flags {detach: boolean, priority: boolean} whether to start the job and return, and
----   whether to start its ci jobs ahead of normal ones
+---@param flags {detach: boolean, priority: boolean, job_timeout: string|nil} whether to start the
+---   job and return, whether to start its ci jobs ahead of normal ones, and the run's time limit
 ---@return integer code the runner's exit code
 function M.run(ctx, words, args, flags)
     if M.machine_local(words) then
@@ -346,6 +351,7 @@ function M.run(ctx, words, args, flags)
         args = ctx.dashed and args or ctx.args,
         detach = flags.detach,
         priority = flags.priority,
+        job_timeout = flags.job_timeout,
         root = ctx.root,
         verbose = ctx.verbose,
     }

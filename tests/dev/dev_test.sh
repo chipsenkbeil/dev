@@ -337,7 +337,8 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 --detach
 --priority
 -C
---agent"
+--agent
+--job-timeout"
 out="$(run_dev "$rust" __flags sync)"
 assert_eq "__flags sync" "$out" "--check
 --yes
@@ -350,7 +351,8 @@ assert_eq "__flags sync" "$out" "--check
 --detach
 --priority
 -C
---agent"
+--agent
+--job-timeout"
 out="$(run_dev "$rust" help sync)"
 assert_contains "help sync lists --yes" "$out" "--yes"
 assert_contains "help <verb> mentions the global flags" "$out" "Global flags:"
@@ -881,7 +883,8 @@ assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
 --detach
 --priority
 -C
---agent"
+--agent
+--job-timeout"
 assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
 printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/widget.sh"
 chmod +x "$nn/.dev/widget.sh"
@@ -977,6 +980,20 @@ assert_contains "--priority passes --priority to ci run" "$(log)" "[--job] [test
 out="$(cirun "$cip" --priority test 2>&1)"
 assert_eq "--priority without --remote exits 2" "$?" "2"
 assert_eq "--priority without --remote runs nothing" "$(log)" ""
+cirun "$cip" --remote --job-timeout 3600 test >/dev/null 2>&1
+assert_contains "--job-timeout 3600 hands ci run --timeout 3600" "$(log)" "[--job] [test] [--timeout] [3600] [--]"
+out="$(cirun "$cip" --job-timeout 3600 test 2>&1)"
+assert_eq "--job-timeout without --remote exits 2" "$?" "2"
+assert_contains "--job-timeout without --remote says so" "$out" "The flag \`--job-timeout\` needs \`--remote\`."
+assert_eq "--job-timeout without --remote runs nothing" "$(log)" ""
+out="$(cirun "$cip" --remote test --job-timeout 2>&1)"
+assert_eq "--job-timeout duration missing exits 2" "$?" "2"
+assert_contains "--job-timeout duration missing says so" "$out" "The flag \`--job-timeout\` needs a duration."
+assert_eq "--job-timeout duration missing runs nothing" "$(log)" ""
+out="$(cirun "$cip" --remote --job-timeout -- test 2>&1)"
+assert_eq "--job-timeout dashes as the duration exits 2" "$?" "2"
+assert_contains "--job-timeout dashes as the duration says so" "$out" "The flag \`--job-timeout\` needs a duration."
+assert_eq "--job-timeout dashes as the duration runs nothing" "$(log)" ""
 
 out="$(cirun "$cip" --remote build 2>&1)"
 assert_eq "--remote with no such job exits 1" "$?" "1"
