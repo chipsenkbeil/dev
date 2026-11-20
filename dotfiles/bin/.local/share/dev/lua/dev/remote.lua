@@ -6,6 +6,8 @@ local verb = require("dev.verb")
 
 local stderr = io.stderr
 
+local UNSAFE_WORD = "[^%w_%-%./:=@%%%+,]"
+
 local MACHINE_VERBS = {
     install = true,
     uninstall = true,
@@ -326,12 +328,16 @@ function M.run(ctx, words, args, flags)
         verb.usage_error(ctx, "runs on this machine only, so --remote does not apply")
     end
     if ctx.dashed and #ctx.args > #args then
+        local shown = {}
+        for i, word in ipairs(ctx.args) do
+            shown[i] = (word == "" or word:find(UNSAFE_WORD)) and dev_os.quote(word) or word
+        end
         verb.usage_error(
             ctx,
             "--remote takes arguments on one side of -- only. Run `dev --remote "
                 .. table.concat(words, " ")
                 .. " -- "
-                .. table.concat(ctx.args, " ")
+                .. table.concat(shown, " ")
                 .. "` instead."
         )
     end

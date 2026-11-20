@@ -215,6 +215,21 @@ testing.test(
     end
 )
 
+testing.test(
+    "the both-sides refusal quotes a spaced argument and leaves a plain one bare",
+    function()
+        local root, base = setup()
+        local out, code, log = dev(root, base, { "--remote", "test", "a", "--", "b c", "it's" })
+        testing.eq(code, 2)
+        testing.eq(
+            out,
+            "dev test: --remote takes arguments on one side of -- only. "
+                .. "Run `dev --remote test -- a 'b c' 'it'\\''s'` instead.\n"
+        )
+        testing.eq(log, "")
+    end
+)
+
 testing.test("a verb with no job exits 1 and runs nothing", function()
     local root, base = setup()
     local out, code, log = dev(root, base, { "--remote", "build" })
