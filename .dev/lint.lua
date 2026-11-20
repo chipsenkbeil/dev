@@ -25,6 +25,7 @@ local LUA_TOOLS = {
 }
 
 local RULE_TEST_SETS = { "lua", "rust" }
+local DOC_COLUMNS = 80
 
 local function run_checked(argv, opts)
     opts = opts or {}
@@ -134,6 +135,14 @@ for _, file in ipairs(checks.bats_files(root)) do
         file,
         checks.bare_assertions(fs.read(fs.join(root, file)) or ""),
         "a bare [[ ]] assertion never fails a test under bash 3.2, append || false"
+    )
+end
+
+for _, file in ipairs(checks.doc_files(root)) do
+    report(
+        file,
+        checks.long_lines(fs.read(fs.join(root, file)) or "", DOC_COLUMNS),
+        "line wider than " .. DOC_COLUMNS .. " columns, wrap it"
     )
 end
 

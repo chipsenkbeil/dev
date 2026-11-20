@@ -1651,9 +1651,10 @@ that `--for human` ignores a move made, or an owner comment written, before it
 started. With no cursor file the first call starts from now.
 
 When Pomb has dropped the events after the stored cursor, `wait` stores the
-oldest one it still has, prints `Events were trimmed. Check the board.` and exits
-0. Look at the board and run it again. A stage wait (`--for ready`, `review`,
-`verify` or `release`) instead stores the oldest cursor and keeps waiting.
+oldest one it still has, prints `Events were trimmed. Check the board.` and
+exits 0. Look at the board and run it again. A stage wait (`--for ready`,
+`review`, `verify` or `release`) instead stores the oldest cursor and keeps
+waiting.
 `--for human` also keeps waiting on a trim, and exits only when a card that
 sat in Blocked or Icebox when it started has left it. It then prints
 `Events were trimmed. Check the board.` after the lines it holds.
@@ -3684,8 +3685,8 @@ A failed command:
   `jj land --no-card` in a jj project and `dev push` in a git project.
 - A later ship keeps a reverted card in Release while the shipped revision holds
   no commit whose description reads `This reverts commit` and the landed commit.
-  Once it does, that ship unticks the outcomes and moves the card to Ready, never
-  to Done. A card that lands again starts over.
+  Once it does, that ship unticks the outcomes and moves the card to Ready,
+  never to Done. A card that lands again starts over.
 
 The move:
 
@@ -4701,8 +4702,8 @@ A curl failure is `Board unavailable: Cannot reach <url> (curl exit N).` An
 HTTP error is `Board unavailable: Pomb answered <status>: <message>.`
 
 The Pomb backend writes every refusal as a full sentence itself, through
-`text.sentence`. The other backend messages quoted in this doc are the raw text a
-backend returns. `failure()` in `board/guards.lua` turns a single-line message
+`text.sentence`. The other backend messages quoted in this doc are the raw text
+a backend returns. `failure()` in `board/guards.lua` turns a single-line message
 into a sentence before `dev board` prints it, with a closing period. A message
 with a newline, or one that ends in `?` or `!`, is printed as written.
 
