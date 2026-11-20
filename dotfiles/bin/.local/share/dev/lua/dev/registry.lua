@@ -10,14 +10,19 @@ local HIDDEN_GROUP = "hidden"
 local BARE_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach", "--priority" }
 local VALUE_FLAGS = { "-C", "--agent" }
 local GLOBAL_FLAGS = {}
-local bare_set, value_set = {}, {}
+
+---The global flags that take no value, keyed by flag
+local BARE_SET = {}
+
+---The global flags that take a value, keyed by flag
+local VALUE_SET = {}
 for _, flag in ipairs(BARE_FLAGS) do
     GLOBAL_FLAGS[#GLOBAL_FLAGS + 1] = flag
-    bare_set[flag] = true
+    BARE_SET[flag] = true
 end
 for _, flag in ipairs(VALUE_FLAGS) do
     GLOBAL_FLAGS[#GLOBAL_FLAGS + 1] = flag
-    value_set[flag] = true
+    VALUE_SET[flag] = true
 end
 
 ---@class dev.Script
@@ -65,7 +70,7 @@ local M = {}
 M.GLOBAL_FLAGS = GLOBAL_FLAGS
 
 ---The global flags that take a value, the word after one of them being its value.
-M.VALUE_FLAGS = value_set
+M.VALUE_FLAGS = VALUE_SET
 
 ---Count the verbosity a word adds, one for `--verbose` and one per `v` of a run such as `-vv`.
 ---@param word string the word to check
@@ -84,7 +89,7 @@ end
 ---@param word string the word to check
 ---@return boolean
 function M.is_bare(word)
-    return bare_set[word] == true or M.verbose_count(word) ~= nil
+    return BARE_SET[word] == true or M.verbose_count(word) ~= nil
 end
 
 local function glob_names(dir)
