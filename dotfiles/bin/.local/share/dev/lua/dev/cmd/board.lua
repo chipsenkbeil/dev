@@ -3847,10 +3847,27 @@ local function parse_allow(args)
     return words, none
 end
 
+---Find a card and refuse the change when its claim bars the caller.
+---@param backend dev.board.Backend the board
+---@param ref string the card
+---@param what string the change refused, for the message
+---@return dev.cmd.board.Result? err the failure or refusal, nil when the caller may change the card
+local function claim_refused(backend, ref, what)
+    local found, err = find_card(backend, ref)
+    if not found then
+        return err
+    end
+    return guards.claimant_refused(backend, found, { what = what })
+end
+
 function commands.allow(backend, args)
     local words, none = parse_allow(args)
     if not words then
         return none
+    end
+    local refused = claim_refused(backend, args[1], "change its allow field")
+    if refused then
+        return refused
     end
     local card, short = write_field(backend, args[1], board.ALLOW_FIELD, function(id, fence)
         return backend:set_field(id, board.ALLOW_FIELD, none and json.null or words, fence)
@@ -3882,6 +3899,10 @@ local function set_names(backend, args, key, noun)
     local names = {}
     for pos = 2, #args do
         names[#names + 1] = args[pos]
+    end
+    local refused = claim_refused(backend, args[1], "change its " .. noun .. "s")
+    if refused then
+        return refused
     end
     local card, short = write_field(backend, args[1], key, function(id, fence)
         return backend:set_field(id, key, table.concat(names, "\n"), fence)

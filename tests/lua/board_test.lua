@@ -4319,6 +4319,55 @@ testing.test("planner checks on a claimed card is refused", function()
     end)
 end)
 
+---The allow, tests and files edits, each a verb with its card and one argument.
+local GUARD_EDITS = {
+    { "allow", { "cccccccc", "ci-edits" } },
+    { "tests", { "cccccccc", "one_test" } },
+    { "files", { "cccccccc", "src/a.rs" } },
+}
+
+testing.test("a claimed card refuses allow, tests and files from its claimant", function()
+    for _, edit in ipairs(GUARD_EDITS) do
+        local backend = fake({ claimed_card() })
+        as_agent("dotfiles/implementer/a", function()
+            local result = cmd_board.run(edit[1], edit[2], backend)
+            testing.eq(result.code, 1)
+            testing.ok(
+                result.message:find("claimed by dotfiles/implementer/a", 1, true),
+                result.message
+            )
+            for _, call in ipairs(backend.calls) do
+                testing.eq(call[1], "comments")
+            end
+        end)
+    end
+end)
+
+testing.test("a claimed card refuses allow, tests and files from a non-lead name", function()
+    for _, edit in ipairs(GUARD_EDITS) do
+        local backend = fake({ claimed_card() })
+        as_agent(PLANNER, function()
+            local result = cmd_board.run(edit[1], edit[2], backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find("Only the lead may", 1, true), result.message)
+            for _, call in ipairs(backend.calls) do
+                testing.eq(call[1], "comments")
+            end
+        end)
+    end
+end)
+
+testing.test("an unclaimed card still takes allow, tests and files edits", function()
+    for _, edit in ipairs(GUARD_EDITS) do
+        local backend = fake({ colored("green") })
+        as_agent(PLANNER, function()
+            local result = cmd_board.run(edit[1], edit[2], backend)
+            testing.eq(result.code, nil, result.message)
+            testing.eq(backend.calls[#backend.calls][1], "set_field")
+        end)
+    end
+end)
+
 testing.test("lead edits a claimed card", function()
     local backend = fake({ claimed_card() })
     as_agent(LEAD, function()
@@ -8266,15 +8315,29 @@ testing.test(
     function()
         local root, home = sandbox({ export = PLANNED_EXPORT })
         dev(root, home, { "board", "take", "11111111-a" })
-        local out, code =
-            dev(root, home, { "board", "allow", "11111111-a", "test-edits", "ci-edits" })
+        local out, code = dev(
+            root,
+            home,
+            { "board", "allow", "11111111-a", "test-edits", "ci-edits" },
+            { agent = LEAD }
+        )
         testing.eq(code, 0, out)
         testing.eq(out, "set allow 11111111, test-edits ci-edits\n")
-        out, code = dev(root, home, { "board", "tests", "11111111-a", "one", "tests::two" })
+        out, code = dev(
+            root,
+            home,
+            { "board", "tests", "11111111-a", "one", "tests::two" },
+            { agent = LEAD }
+        )
         testing.eq(code, 0, out)
-        out, code = dev(root, home, { "board", "files", "11111111-a", "src/a.rs", "src/b.rs" })
+        out, code = dev(
+            root,
+            home,
+            { "board", "files", "11111111-a", "src/a.rs", "src/b.rs" },
+            { agent = LEAD }
+        )
         testing.eq(code, 0, out)
-        out, code = dev(root, home, { "board", "allow", "11111111-a", "none" })
+        out, code = dev(root, home, { "board", "allow", "11111111-a", "none" }, { agent = LEAD })
         testing.eq(code, 0, out)
         testing.eq(out, "cleared allow 11111111\n")
         local calls = read(root, "calls")
