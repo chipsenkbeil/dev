@@ -2290,7 +2290,7 @@ testing.test("a move out of Blocked by another name keeps the last claimant", fu
     without_claim_state(home)
     local errors
     out, code, errors = support.dev(root, { "board", "move", a, Column.PROGRESS }, {
-        env = env_of(home, { CLAUDE_SESSION_ID = "other" }),
+        env = env_of(home, { DEV_AGENT = "dotfiles/other" }),
         split = true,
     })
     testing.eq(code, 0, out)
