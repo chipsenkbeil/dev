@@ -4674,6 +4674,21 @@ do
         only_comment_reads(backend)
     end)
 
+    testing.test("a failed comments read refuses a move out of Blocked with its message", function()
+        local card = colored("green")
+        card.column = support.COLUMN_NAME.BLOCKED
+        local backend = fake({ card })
+        backend.listed_error = "comments are unavailable"
+        as_agent("project-run/b", function()
+            local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
+            testing.eq(result.code, 1)
+            testing.eq(result.message, "Comments are unavailable.")
+        end)
+        only_comment_reads(backend)
+        testing.eq(card.column, support.COLUMN_NAME.BLOCKED)
+        testing.eq(card.claimant, nil)
+    end)
+
     testing.test("a name that never claimed the card and the lead can still change it", function()
         local backend = backend_with_released_claim("project-run/a")
         as_agent("project-run/b", function()
