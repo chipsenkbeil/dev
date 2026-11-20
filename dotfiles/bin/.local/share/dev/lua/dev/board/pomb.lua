@@ -122,6 +122,7 @@ M.Reason = { BAD_URL = "bad_url" }
 ---@field private __opts dev.board.pomb.Opts the server, token reference and board name
 ---@field private __secret string? the token, nil until the first request
 ---@field private __exports table<string, {at: integer, doc: table<string, any>}>? decoded export per board id, held 2 seconds and dropped by any write or wait
+---@field private __issued string? the refusal text a 401 shows, set when the token came from DEV_BOARD_TOKEN or the role token file
 ---@field private __healed boolean? nil until a refused Keychain token is replaced
 ---@field private __who string|false|nil the token's role name, false when it has none, nil until asked
 ---@field private __filed boolean? true when the token came from the role token file
@@ -2307,6 +2308,7 @@ function Backend:other_board(name)
     return setmetatable({
         __opts = opts,
         __secret = self.__secret,
+        __issued = self.__issued,
         __filed = self.__filed,
         __reread = self.__reread,
         __healed = self.__healed,

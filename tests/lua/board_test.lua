@@ -12629,6 +12629,28 @@ do
         end
     )
 
+    testing.test(
+        "DEV_BOARD_TOKEN refused with 401 on another board names the issued token",
+        function()
+            local root, home = sandbox()
+            with_security(root)
+            executable(
+                root .. "/bin/curl",
+                '#!/bin/sh\ncat >/dev/null\nprintf \'curl %s\\n\' "$*" >>"$ROOT/calls"\n'
+                    .. 'printf \'{"message":"bad"}\\n401\''
+            )
+            local out, code = dev(
+                root,
+                home,
+                { "board", "add", "Far", "--board", "General", "--size", "1" },
+                { env = { DEV_BOARD_TOKEN = ISSUED } }
+            )
+            testing.eq(code, 1)
+            testing.ok(out:find("issued token", 1, true), out)
+            testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+        end
+    )
+
     testing.test("DEV_BOARD_TOKEN never reaches the output, the arguments or the log", function()
         local root, home = sandbox()
         local out = issued_dev(root, home, ISSUED)
