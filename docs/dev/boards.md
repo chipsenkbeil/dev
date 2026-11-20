@@ -1198,7 +1198,9 @@ The card's claimant and every name in its claim history (the `dev-claim:` notes
 that `review` reads) are refused an outcome add, `--convert`, `--delete`,
 `--rename` and `dev board checks`. The refusal is exit 1 with nothing written.
 The builder passes a change back with a note instead, to stop a released runner
-from rewording the card and taking it back.
+from rewording the card and taking it back. A name whose role is `lead` or
+`planner` is refused only as the card's current claimant, never for a past
+claim. Those roles edit a card without building it.
 
 The refusal compares the names with `DEV_AGENT` and, after `--delete` and
 `--convert`, with the `--as` name. `checks` reads `DEV_AGENT` only.

@@ -458,6 +458,13 @@ local function tick_refused(card, flag)
     return nil, ticker
 end
 
+---Read the role segment of an agent name.
+---@param name string the agent name
+---@return string? role the segment after the first slash, nil when the name has none
+local function role_of(name)
+    return name:match("^[^/]*/([^/]*)")
+end
+
 ---Check whether a name is the lead or carries no role at a terminal.
 ---@param name string the agent name
 ---@param interactive boolean? whether stdin is a terminal, nil to read it
@@ -469,7 +476,15 @@ local function is_lead(name, interactive)
         end
         return interactive
     end
-    return name:match("^[^/]*/([^/]*)") == "lead"
+    return role_of(name) == "lead"
+end
+
+---Check whether a name has a role that edits a card without building it.
+---@param name string the agent name
+---@return boolean edits true for the lead and planner roles
+local function edits_without_building(name)
+    local role = role_of(name)
+    return role == "lead" or role == "planner"
 end
 
 ---Refuse a change to a claimed card by an agent that claimed it now or before, or is not the lead.
@@ -495,7 +510,10 @@ local function claimant_refused(backend, card, opts)
         return failure(why)
     end
     for _, name in ipairs(names) do
-        if name == card.claimant or board.worked(past, name) then
+        if
+            name == card.claimant
+            or (not edits_without_building(name) and board.worked(past, name))
+        then
             return failure(
                 "Card "
                     .. card.id:sub(1, board.MIN_PREFIX)

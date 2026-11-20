@@ -4593,6 +4593,22 @@ do
         only_comment_reads(backend)
     end)
 
+    testing.test("a former lead or planner claimant may still change the finish line", function()
+        for _, former in ipairs({ LEAD, PLANNER }) do
+            local backend = backend_with_released_claim(former)
+            as_agent(former, function()
+                local renamed = cmd_board.run(
+                    "outcome",
+                    { "cccccccc", "--rename", "1", "New", "--reason", "x" },
+                    backend
+                )
+                testing.eq(renamed.code, nil, renamed.message)
+                local set = cmd_board.run("checks", { "cccccccc", "dev test" }, backend)
+                testing.eq(set.code, nil, set.message)
+            end)
+        end
+    end)
+
     testing.test("an --as name of a former claimant cannot reclaim the finish line", function()
         local released = "project-run/a"
         local backend = backend_with_released_claim(released)
