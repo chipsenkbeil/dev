@@ -89,3 +89,9 @@ the mirror reaches origin. A repo's own `trunk()` alias still wins.
 `jj sync` only fast-forwards the local trunk bookmark to an origin bookmark on
 the `trunk()` commit. While gerrit is ahead of origin, it rebases onto the
 gerrit trunk and leaves the local bookmark where it is.
+
+`jj sync` rebases the whole branch of the working copy onto `trunk()`. It
+refuses first, naming the workspace, when another workspace's working copy
+sits in the set that rebase would move, so move that workspace off the branch
+or rebase the branch by hand first. A root already on `trunk()` moves nothing,
+and a working copy off a trunk ancestor keeps its commit id.
