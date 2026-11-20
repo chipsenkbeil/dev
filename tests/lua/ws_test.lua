@@ -497,7 +497,9 @@ case "$*" in
         rm -f "$STALE"; exit 0 ;;
     *" log "*)
         if [ -e "$STALE" ]; then echo "The working copy is stale" >&2; exit 1; fi
-        case "$*" in *"@ ~ ::trunk()"*) if [ -n "$LANDED" ]; then exit 0; fi ;; esac
+        case "$*" in *"@ ~ ::trunk()"*)
+            if [ -n "$TEMPLATE_LOG" ]; then echo "$*" >> "$TEMPLATE_LOG"; fi
+            if [ -n "$LANDED" ]; then exit 0; fi ;; esac
         printf '%s' "$DIRTY"; exit "${LOG_CODE:-0}" ;;
 esac
 echo "jj $*" >> "$LOG"
@@ -743,6 +745,21 @@ testing.test("rm removes a jj workspace whose commit is on trunk", function()
     -- Expect the removal done
     testing.eq(code, 0, out)
     testing.eq(fs.exists(path), false)
+end)
+
+testing.test("rm reads the description when it checks a jj workspace", function()
+    -- Record the log template and answer clean as jj does for a described commit
+    local root, path, env, log = rm_setup("jj")
+    env.env.TEMPLATE_LOG = log .. ".template"
+
+    -- Remove the workspace whose working-copy commit is described
+    local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
+
+    -- Expect the removal done and the template to test the description
+    testing.eq(code, 0, out)
+    testing.eq(fs.exists(path), false)
+    local template = fs.read(log .. ".template")
+    testing.ok(template:find('if(empty || description != "", "", "changes")', 1, true), template)
 end)
 
 testing.test("rm keeps a jj workspace whose update-stale fails", function()
@@ -2373,6 +2390,26 @@ if dev_os.which("jj") then
         testing.eq(fs.exists(target), false)
         testing.eq(workspace_root(root, "feat"), old)
     end)
+
+    testing.test(
+        "adopt refuses a jj workspace whose commit is described and moves nothing",
+        function()
+            -- Describe the working-copy commit that holds a file
+            local root, old, target, env = adopt_jj_project()
+            assert(fs.write(old .. "/draft", "x"))
+            local _, code = real_jj(old, "describe", "-m", "work")
+            testing.eq(code, 0)
+
+            -- Adopt the workspace folder
+            local out, adopt_code = support.dev(root, { "ws", "adopt", old }, env)
+
+            -- Expect the refusal, the folder in place and no workspace at the target
+            testing.eq(adopt_code, 1)
+            testing.eq(out, old .. " holds changes not in a commit.\n")
+            testing.eq(fs.read(old .. "/draft"), "x")
+            testing.eq(fs.exists(target), false)
+        end
+    )
 
     testing.test("adopt refuses a target that exists and moves nothing", function()
         -- Make the target folder before the adopt

@@ -434,10 +434,12 @@ end
 ---@class dev.cmd.ws.clean.Opts
 ---@field refresh boolean? false when unset, true to update a stale jj workspace before the check
 ---@field stale_ok boolean? false when unset, true to read a stale jj workspace without updating it
+---@field described_ok boolean? false when unset, true to count a described working-copy commit as committed
 
 ---Check that a workspace folder holds nothing outside a commit.
 ---
 ---A jj workspace whose working-copy commit is already on trunk holds nothing outside a commit.
+---With `described_ok`, a working-copy commit that carries a description counts as committed too.
 ---@private
 ---@param backend dev.vcs.Backend? the backend of the workspace folder
 ---@param path string the workspace folder
@@ -459,7 +461,11 @@ function M.__clean(backend, path, opts)
                     { reason = Refusal.UNREADABLE, path = path, detail = first_line(text) }
             end
         end
-        local log = { "log", "-r", "@ ~ ::trunk()", "--no-graph", "-T", 'if(empty, "", "changes")' }
+        local template = 'if(empty, "", "changes")'
+        if opts and opts.described_ok then
+            template = 'if(empty || description != "", "", "changes")'
+        end
+        local log = { "log", "-r", "@ ~ ::trunk()", "--no-graph", "-T", template }
         argv = vcs.with(base, unpack(log))
         if opts and opts.stale_ok then
             retry = vcs.with(base, "--ignore-working-copy", unpack(log))
@@ -882,7 +888,7 @@ function M.remove(root, name, opts)
         leave_landed(path)
     end
     if not gone then
-        local clean, why = M.__clean(backend, path, { refresh = true })
+        local clean, why = M.__clean(backend, path, { refresh = true, described_ok = true })
         if not clean then
             return refused(why)
         end
@@ -1089,7 +1095,8 @@ local function prune_workspaces(ctx, steps, opts)
             if step.kind == Step.DONE and fs.is_link(step.path) then
                 ok, why = false, { reason = Refusal.LINK, path = step.path }
             elseif step.kind == Step.DONE then
-                ok, why = M.__clean(opts.backend, step.path, { stale_ok = true })
+                ok, why =
+                    M.__clean(opts.backend, step.path, { stale_ok = true, described_ok = true })
                 if ok and opts.backend == vcs.GIT then
                     why = prune_blocker(
                         ctx.root,

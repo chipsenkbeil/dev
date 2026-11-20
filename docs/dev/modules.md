@@ -144,8 +144,10 @@ failed forget or prune keeps the folder, and the message names the command's
 `Error:` line or else its first line of output.
 
 It refuses a NAME that is missing, a link, outside the central root or the
-workspace dev runs in, and a folder whose jj `@` is not empty or whose `git
-status --porcelain` is not empty.
+workspace dev runs in, and a folder whose jj `@` is not empty and has no
+description or whose `git status --porcelain` is not empty. A described
+working-copy commit counts as committed here and in `ws prune`, but `ws adopt`
+still refuses it.
 
 It deletes nothing it can rename instead. It first moves the folder (ignored
 files included) to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the stamp reads
