@@ -1709,16 +1709,19 @@ testing.test(
         local layout = fake_layout({ columns = template_columns() })
         function layout:set_color()
             return nil,
-                "Board unavailable: Pomb answered 403: "
-                    .. "this token lacks the boards.write permission "
-                    .. "on every board; use a token that has it."
+                board.transport_refusal(
+                    board.TransportReason.DENIED,
+                    { permission = "boards.write" }
+                )
         end
         local _, _, _, _, reason = run(layout)
         testing.eq(reason, init.Reason.NEEDS_ADMIN)
         function layout:set_color()
             return nil,
-                "Board unavailable: this token has the boards.write permission but is not assigned "
-                    .. "to board b; add the board to the token"
+                board.transport_refusal(
+                    board.TransportReason.UNASSIGNED,
+                    { permission = "boards.write", board_id = "b" }
+                )
         end
         _, _, _, _, reason = run(layout)
         testing.eq(reason, nil)
@@ -2206,8 +2209,7 @@ testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
     local layout = fake_layout({ columns = template_columns() })
     function layout:add_roles()
         return nil,
-            "Board unavailable: pomb answered 403: this token lacks the roles.grant permission "
-                .. "on every board; use a token that has it",
+            board.transport_refusal(board.TransportReason.DENIED, { permission = "roles.grant" }),
             "roles.grant"
     end
     local changes, message, _, warnings = run(layout)
