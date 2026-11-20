@@ -634,8 +634,8 @@ return {
     {
         words = { "board", "take" },
         handler = "lua",
-        flags = "--as --from --max-size",
-        usage = "dev board take CARD [--as NAME] [--from NAME] [--max-size N]",
+        flags = "--as --from --max-size --wait",
+        usage = "dev board take CARD [--as NAME] [--from NAME] [--max-size N] [--wait SECONDS]",
         desc = "Claim a card and keep the claim renewed, or take over NAME's claim",
     },
     {

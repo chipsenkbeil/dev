@@ -13509,6 +13509,94 @@ do
         testing.eq(result.code, 2)
     end)
 
+    local function flight_group(rooms)
+        local taker = planned()
+        taker.column = support.COLUMN_NAME.BLOCKED
+        local held = {
+            id = ID_A,
+            name = "Held",
+            column = support.COLUMN_NAME.PROGRESS,
+            size = "1 Pomodoro",
+            color = "yellow",
+            description = V2,
+            labels = {},
+            checks = {},
+            outcomes = {},
+        }
+        local backend = fake({ taker, held })
+        local tries = 0
+        function backend:limits()
+            tries = tries + 1
+            local limit = tries <= rooms and 1 or 2
+            local group = { columns = { support.COLUMN_NAME.PROGRESS }, limit = limit }
+            return { columns = {}, units = {}, groups = { group } }
+        end
+        function backend:claim(id)
+            backend.calls[#backend.calls + 1] = { "claim", id }
+            return nil, "claim stubbed"
+        end
+        return backend
+    end
+
+    local function claim_calls(backend)
+        local count = 0
+        for _, call in ipairs(backend.calls) do
+            count = count + (call[1] == "claim" and 1 or 0)
+        end
+        return count
+    end
+
+    local TAKE_AS = { "cccccccc", "--as", "dotfiles/implementer/cccccccc" }
+
+    local function take_args(...)
+        local args = {}
+        for _, word in ipairs(TAKE_AS) do
+            args[#args + 1] = word
+        end
+        for _, word in ipairs({ ... }) do
+            args[#args + 1] = word
+        end
+        return args
+    end
+
+    testing.test("take.waits.for.room.under.the.in-flight.limit", function()
+        local backend = flight_group(2)
+        local naps = {}
+        local result = cmd_board.take(backend, take_args("--wait", "60"), ticking(naps))
+        testing.eq(naps, { 5, 7.5 })
+        testing.eq(result.message, "Claim stubbed.")
+        testing.eq(claim_calls(backend), 1)
+    end)
+
+    testing.test("take.wait.gives.up.at.the.bound.with.exit.3", function()
+        local backend = flight_group(100)
+        local naps = {}
+        local result = cmd_board.take(backend, take_args("--wait", "40"), ticking(naps))
+        testing.eq(result.code, 3)
+        testing.eq(naps, { 5, 7.5, 11.25, 16.25 })
+        testing.eq(claim_calls(backend), 0)
+        testing.ok(
+            result.message:find("at the limit of 1. Land one first.", 1, true),
+            result.message
+        )
+
+        backend = flight_group(100)
+        naps = {}
+        result = cmd_board.take(backend, take_args(), ticking(naps))
+        testing.eq(result.code, 3)
+        testing.eq(naps, {})
+        testing.eq(claim_calls(backend), 0)
+    end)
+
+    testing.test("take.wait.refuses.a.bad.number.of.seconds", function()
+        local backend = flight_group(0)
+        for _, seconds in ipairs({ "soon", "1.5", "86401" }) do
+            local result = cmd_board.take(backend, take_args("--wait", seconds))
+            testing.eq(result.code, 2)
+        end
+        testing.eq(claim_calls(backend), 0)
+    end)
+
     local function local_card_state(home, id)
         local doc = assert(json.decode(assert(fs.read(support.board_file(home, "mine")))))
         for _, card in ipairs(doc.cards) do

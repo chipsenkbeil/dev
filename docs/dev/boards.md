@@ -4190,8 +4190,17 @@ Elsewhere:
 
 ### take
 
-`dev board take CARD [--as NAME] [--from NAME] [--max-size N]` claims the card
-and starts the keep-alive loop.
+`dev board take CARD [--as NAME] [--from NAME] [--max-size N] [--wait SECONDS]`
+claims the card and starts the keep-alive loop.
+
+A full in-flight limit:
+
+- A take refused for the in-flight limit exits 3 and prints the refusal that
+  names the cards at the limit, as a refused move does.
+- `--wait` is a whole number of seconds up to 86400 and is off by default. With
+  it, the take repeats whole until room frees, after the same growing pause as
+  `move --wait`, and gives up at the bound with exit 3 and the last refusal. A
+  usage error is exit 2.
 
 The claim:
 

@@ -92,6 +92,7 @@ local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local SEAT_HELD_CODE = "seat_held"
 local WAIT_FLAG = "--wait"
+local FROM_FLAG = "--from"
 local IGNORE_CHANGE_RUN_FLAG = "--ignore-change-run"
 local SET_FLAG = "--set"
 local CLEARS_BLOCKERS_FLAG = "--clears-blockers"
@@ -1987,6 +1988,26 @@ local function wait_seconds(flags)
     return seconds
 end
 
+---Run `try` again after a growing pause while it answers a full column, until `wait` seconds pass.
+---@param wait integer the seconds to keep trying, 0 for one try
+---@param opts dev.cmd.board.move.Opts? how to sleep and tell time
+---@param try fun(): dev.cmd.board.Result one whole try
+---@return dev.cmd.board.Result result the result of the last try
+local function until_room(wait, opts, try)
+    local nap = opts and opts.nap or dev_os.nap
+    local clock = opts and opts.now or store.now
+    local poll = turn.poller({ random = opts and opts.random })
+    local deadline = clock() + wait
+    while true do
+        local result = try()
+        local left = deadline - clock()
+        if result.code ~= runner.FULL or left <= 0 then
+            return result
+        end
+        nap(math.min(poll:pace(runner.FULL), left))
+    end
+end
+
 ---Move a card, and with `--wait SECONDS` try again while its column is full.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card, the column and the flags
@@ -2002,18 +2023,9 @@ local function move_card(backend, args, opts)
     if not wait then
         return bad_wait
     end
-    local nap = opts and opts.nap or dev_os.nap
-    local clock = opts and opts.now or store.now
-    local poll = turn.poller({ random = opts and opts.random })
-    local deadline = clock() + wait
-    while true do
-        local result = move_once(backend, args, opts)
-        local left = deadline - clock()
-        if result.code ~= runner.FULL or left <= 0 then
-            return result
-        end
-        nap(math.min(poll:pace(runner.FULL), left))
-    end
+    return until_room(wait, opts, function()
+        return move_once(backend, args, opts)
+    end)
 end
 
 function commands.move(backend, args)
@@ -4752,9 +4764,19 @@ function commands.lint(backend, args)
     }
 end
 
-function commands.take(backend, args)
-    local FROM_FLAG = "--from"
-    local flags, words = parse(args, { [AS_FLAG] = true, [runner.FLAG] = true, [FROM_FLAG] = true })
+local TAKE_FLAGS = {
+    [AS_FLAG] = true,
+    [runner.FLAG] = true,
+    [FROM_FLAG] = true,
+    [WAIT_FLAG] = true,
+}
+
+---Claim a card once, refusing with the full-column code when the in-flight limit is full.
+---@param backend dev.board.Backend the board
+---@param args string[] the card and the flags
+---@return dev.cmd.board.Result result the output, or a message and the exit code
+local function take_once(backend, args)
+    local flags, words = parse(args, TAKE_FLAGS)
     if not flags then
         return words
     end
@@ -4826,7 +4848,7 @@ function commands.take(backend, args)
     if limited then
         refused = runner.limited(backend, card, stages.progress)
         if refused then
-            return refused
+            return runner.full(refused.message)
         end
     end
     if from then
@@ -4872,6 +4894,40 @@ function commands.take(backend, args)
         end
     end
     return claimed_view(backend, card, result)
+end
+
+---Claim a card, and with `--wait SECONDS` try again while the in-flight limit is full.
+---@param backend dev.board.Backend the board
+---@param args string[] the card and the flags
+---@param opts dev.cmd.board.move.Opts? how to sleep and tell time
+---@return dev.cmd.board.Result result the result of the last try
+local function take_card(backend, args, opts)
+    local flags, words = parse(args, TAKE_FLAGS)
+    if not flags then
+        return words
+    end
+    local wait, bad_wait = wait_seconds(flags)
+    if not wait then
+        return bad_wait
+    end
+    return until_room(wait, opts, function()
+        return take_once(backend, args)
+    end)
+end
+
+function commands.take(backend, args)
+    return take_card(backend, args)
+end
+
+---Claim a card, retrying a full in-flight limit until room frees when `--wait` is given.
+---@param backend dev.board.Backend the board
+---@param args string[] the arguments after `take`
+---@param opts dev.cmd.board.move.Opts? how to sleep and tell time
+---@return dev.cmd.board.Result result the result of the last try
+function M.take(backend, args, opts)
+    backend.stages = backend.stages
+        or board.stages(backend.column_map, backend:done_columns() or {})
+    return take_card(backend, args, opts)
 end
 
 function commands.release(backend, args)
