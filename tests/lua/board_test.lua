@@ -679,6 +679,25 @@ testing.test("add refuses a name word that reads as a checks row", function()
     end
 end)
 
+testing.test("add accepts a title that opens with dev board", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("add", {
+        "dev board ls shows a stray column",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, backend)
+    testing.ok(result.output:find("^added "), result.output)
+    testing.eq(backend.calls[1][2], "dev board ls shows a stray column")
+end)
+
 testing.test("add --board files on the named board and leaves this one alone", function()
     local backend = fake(sample())
     local sibling = fake(sample())

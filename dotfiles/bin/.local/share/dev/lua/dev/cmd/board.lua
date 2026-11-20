@@ -590,7 +590,8 @@ local function add_card(backend, args, held)
     if #words == 0 then
         return usage("Needs a card name.")
     end
-    for _, word in ipairs(words) do
+    for index = 2, #words do
+        local word = words[index]
         if looks_like_a_checks_row(word) then
             return usage(
                 "The name word "
