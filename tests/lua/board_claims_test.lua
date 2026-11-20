@@ -208,7 +208,7 @@ testing.test("a take starts a clock under the role of the card's column", functi
 end)
 
 testing.test("column_role names every column's role and takes the claimant's for Ready", function()
-    local stages = board.stages({}, { "Done" })
+    local stages = board.stages({}, { support.COLUMN_NAME.DONE })
     local who = "dotfiles/verifier/11111111"
     testing.eq(clock.column_role(stages, stages.icebox, who), "scoper")
     testing.eq(clock.column_role(stages, stages.backlog, who), "planner")
@@ -217,7 +217,7 @@ testing.test("column_role names every column's role and takes the claimant's for
     testing.eq(clock.column_role(stages, stages.blocked, who), "lead")
     testing.eq(clock.column_role(stages, stages.ready, who), "verifier")
     testing.eq(clock.column_role(stages, stages.verify, who), "verifier")
-    testing.eq(clock.column_role(stages, "Done", who), nil)
+    testing.eq(clock.column_role(stages, support.COLUMN_NAME.DONE, who), nil)
 end)
 
 testing.test("time stop refuses a card with no running clock", function()

@@ -100,7 +100,7 @@ testing.test("a Pomb card reads its due date as the day of due_at", function()
     backend.__colors = {}
     backend.__values = {}
     function backend:__column_name()
-        return "Ready"
+        return support.COLUMN_NAME.READY
     end
     function backend:__lane_name()
         return nil

@@ -6,8 +6,7 @@ local support = require("support")
 
 local CARD_ID = "5af0e005-0000-4000-8000-000000000005"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-local READY = "Ready"
-local BLOCKED = "Blocked"
+local COLUMN = support.COLUMN_NAME
 local REVIEW = board.REVIEW_PREFIX .. " by=x kind=code verdict=PASS"
 
 ---Make a backend that serves one card, whose state each read takes from `script`.
@@ -28,7 +27,7 @@ local function fake(script, listing_errors)
         if listing_errors and listing_errors[listed] then
             return nil, listing_errors[listed]
         end
-        return { { id = CARD_ID, column = "Review" } }
+        return { { id = CARD_ID, column = COLUMN.REVIEW } }
     end
     function backend:card()
         seen.reads = seen.reads + 1
@@ -40,7 +39,7 @@ local function fake(script, listing_errors)
         for i = 1, 3 do
             outcomes[i] = { id = "o" .. i, done = i <= (now.ticked or 0) }
         end
-        return { id = CARD_ID, column = now.column or "Review", outcomes = outcomes }
+        return { id = CARD_ID, column = now.column or COLUMN.REVIEW, outcomes = outcomes }
     end
     function backend:comments()
         local list = { { body = "a plain note" } }
@@ -67,9 +66,12 @@ local function wait_card(script, args, listing_errors)
 end
 
 testing.test("wait --card exits on a column move and names it", function()
-    local result, seen =
-        wait_card({ { column = "Review" }, { column = "Review" }, { column = "Verify" } })
-    testing.eq(result.output, "5af0e005 moved to Verify")
+    local result, seen = wait_card({
+        { column = COLUMN.REVIEW },
+        { column = COLUMN.REVIEW },
+        { column = COLUMN.VERIFY },
+    })
+    testing.eq(result.output, "5af0e005 moved to " .. COLUMN.VERIFY)
     testing.eq(seen.reads, 3)
 end)
 
@@ -84,8 +86,12 @@ testing.test("wait --card exits on a ticked outcome", function()
 end)
 
 testing.test("wait --card names every change that landed in one poll", function()
-    local result = wait_card({ { reviews = 0 }, { column = "Verify", reviews = 1, ticked = 3 } })
-    testing.eq(result.output, "5af0e005 moved to Verify, reviews 0 to 1, ticked outcomes 0 to 3")
+    local result =
+        wait_card({ { reviews = 0 }, { column = COLUMN.VERIFY, reviews = 1, ticked = 3 } })
+    testing.eq(
+        result.output,
+        "5af0e005 moved to " .. COLUMN.VERIFY .. ", reviews 0 to 1, ticked outcomes 0 to 3"
+    )
 end)
 
 testing.test("wait --card backs off while the card is unchanged and starts over", function()
@@ -99,19 +105,22 @@ testing.test("wait --card backs off while the card is unchanged and starts over"
 end)
 
 testing.test("wait --card retries an unreachable Pomb and then reads on", function()
-    local result, seen =
-        wait_card({ {}, { broken = "Board unavailable: pass timed out" }, { column = "Done" } })
-    testing.eq(result.output, "5af0e005 moved to Done")
+    local result, seen = wait_card({
+        {},
+        { broken = "Board unavailable: pass timed out" },
+        { column = COLUMN.DONE },
+    })
+    testing.eq(result.output, "5af0e005 moved to " .. COLUMN.DONE)
     testing.eq(#seen.naps, 2)
 end)
 
 testing.test("wait --card retries an unreachable Pomb on the first card listing", function()
     local result, seen = wait_card(
-        { {}, { column = "Done" } },
+        { {}, { column = COLUMN.DONE } },
         nil,
         { "Board unavailable: pass timed out" }
     )
-    testing.eq(result.output, "5af0e005 moved to Done")
+    testing.eq(result.output, "5af0e005 moved to " .. COLUMN.DONE)
     testing.eq(#seen.naps, 2)
 end)
 
@@ -170,8 +179,8 @@ local function wait_for(backend, mode)
 end
 
 testing.test("the cursor write prints the write sentence when it fails", function()
-    local backend = summary_only({ { id = CARD_ID, column = READY } }, {
-        { kind = "task_added", task_id = ID_B, column = READY },
+    local backend = summary_only({ { id = CARD_ID, column = COLUMN.READY } }, {
+        { kind = "task_added", task_id = ID_B, column = COLUMN.READY },
     })
     local stem = support.tempdir() .. "/wait"
     local path = stem .. ".ready.cursor"
@@ -188,14 +197,14 @@ end)
 
 testing.test("wait --for ready lists the unclaimed cards from the summary", function()
     local backend, seen = summary_only({
-        { id = CARD_ID, column = READY },
-        { id = ID_B, column = READY, claimant = "x" },
+        { id = CARD_ID, column = COLUMN.READY },
+        { id = ID_B, column = COLUMN.READY, claimant = "x" },
     }, {
-        { kind = "task_added", task_id = CARD_ID, column = READY },
-        { kind = "task_added", task_id = ID_B, column = READY },
+        { kind = "task_added", task_id = CARD_ID, column = COLUMN.READY },
+        { kind = "task_added", task_id = ID_B, column = COLUMN.READY },
     })
     local result = wait_for(backend, "ready")
-    testing.eq(result.output, "added 5af0e005 to Ready")
+    testing.eq(result.output, "added 5af0e005 to " .. COLUMN.READY)
     testing.eq(seen.export, 0)
     testing.ok(seen.summary > 0)
 end)
@@ -204,17 +213,22 @@ testing.test("wait --for lead skips an epic with open children by its summary co
     local backend, seen = summary_only({
         {
             id = CARD_ID,
-            column = BLOCKED,
+            column = COLUMN.BLOCKED,
             labels = { "needs:lead" },
             epic = { done = 1, total = 2 },
         },
-        { id = ID_B, column = BLOCKED, labels = { "needs:lead" }, epic = { done = 2, total = 2 } },
+        {
+            id = ID_B,
+            column = COLUMN.BLOCKED,
+            labels = { "needs:lead" },
+            epic = { done = 2, total = 2 },
+        },
     }, {
-        { kind = "task_updated", task_id = CARD_ID, column = BLOCKED },
-        { kind = "task_updated", task_id = ID_B, column = BLOCKED },
+        { kind = "task_updated", task_id = CARD_ID, column = COLUMN.BLOCKED },
+        { kind = "task_updated", task_id = ID_B, column = COLUMN.BLOCKED },
     })
     local result = wait_for(backend, "lead")
-    testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
+    testing.eq(result.output, "11111111 is labelled needs:lead in " .. COLUMN.BLOCKED)
     testing.eq(seen.export, 0)
     testing.ok(seen.summary > 0)
 end)

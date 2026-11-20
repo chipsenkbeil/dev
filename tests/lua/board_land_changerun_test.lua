@@ -132,10 +132,10 @@ end)
 local function land_backend(root)
     local backend = { root = root, notes = {} }
     backend.stages = {
-        verify = "Verify",
-        release = "Release",
+        verify = support.COLUMN_NAME.VERIFY,
+        release = support.COLUMN_NAME.RELEASE,
         done_column = function()
-            return "Done"
+            return support.COLUMN_NAME.DONE
         end,
     }
     return backend
@@ -156,7 +156,7 @@ end
 local function land_lines(root, who)
     local card = {
         id = "81f0e017-0000-4000-8000-000000000000",
-        column = "Verify",
+        column = support.COLUMN_NAME.VERIFY,
         labels = {},
         outcomes = {},
         checks = {},

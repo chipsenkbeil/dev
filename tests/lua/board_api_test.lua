@@ -250,7 +250,7 @@ local function column_backend(answer)
         return {}
     end
     function backend:columns()
-        return { { name = "Release" }, { name = "Blocked" } }
+        return { { name = support.COLUMN_NAME.RELEASE }, { name = support.COLUMN_NAME.BLOCKED } }
     end
     function backend:set_column(name, fields)
         self.patches[#self.patches + 1] = { name, fields }
@@ -266,23 +266,28 @@ testing.test("column sets the clears-blockers flag of the named column", functio
     local backend = column_backend()
     local result = cmd_board.run("column", { "release", "--clears-blockers", "on" }, backend)
     testing.eq(result.code, nil, result.output)
-    testing.eq(backend.patches, { { "Release", { clears_blockers = true } } })
-    result = cmd_board.run("column", { "Release", "--clears-blockers", "off" }, backend)
-    testing.eq(backend.patches[2], { "Release", { clears_blockers = false } })
+    testing.eq(backend.patches, { { support.COLUMN_NAME.RELEASE, { clears_blockers = true } } })
+    result = cmd_board.run(
+        "column",
+        { support.COLUMN_NAME.RELEASE, "--clears-blockers", "off" },
+        backend
+    )
+    testing.eq(backend.patches[2], { support.COLUMN_NAME.RELEASE, { clears_blockers = false } })
 end)
 
 testing.test("column sets the blocked flag of the named column", function()
     local backend = column_backend()
-    local result = cmd_board.run("column", { "Blocked", "--blocked", "on" }, backend)
+    local result =
+        cmd_board.run("column", { support.COLUMN_NAME.BLOCKED, "--blocked", "on" }, backend)
     testing.eq(result.code, nil, result.output)
-    testing.eq(backend.patches, { { "Blocked", { is_blocked = true } } })
+    testing.eq(backend.patches, { { support.COLUMN_NAME.BLOCKED, { is_blocked = true } } })
 end)
 
 testing.test("column sends the flags to Pomb as a PATCH of the column id", function()
     local backend = assert(pomb.new({ url = "https://pomb.example", name = "mine", token = "t" }))
     local sent = {}
     function backend:__load()
-        self.__detail = { columns = { { id = "col-9", name = "Release" } } }
+        self.__detail = { columns = { { id = "col-9", name = support.COLUMN_NAME.RELEASE } } }
         return true
     end
     function backend:__request(method, path, body)
@@ -298,7 +303,8 @@ end)
 
 testing.test("column prints the permission message for a Pomb 403", function()
     local backend = column_backend("Board unavailable: Pomb answered 403: nope.")
-    local result = cmd_board.run("column", { "Release", "--blocked", "on" }, backend)
+    local result =
+        cmd_board.run("column", { support.COLUMN_NAME.RELEASE, "--blocked", "on" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Pomb refused the change", 1, true), result.message)
     testing.ok(result.message:find("columns.edit", 1, true), result.message)
@@ -309,9 +315,9 @@ testing.test("column refuses an unknown name, a bad value and a missing flag", f
     local result = cmd_board.run("column", { "Nope", "--blocked", "on" }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.message, "The board has no column Nope.")
-    result = cmd_board.run("column", { "Release", "--blocked", "yes" }, backend)
+    result = cmd_board.run("column", { support.COLUMN_NAME.RELEASE, "--blocked", "yes" }, backend)
     testing.eq(result.code, 2)
-    result = cmd_board.run("column", { "Release" }, backend)
+    result = cmd_board.run("column", { support.COLUMN_NAME.RELEASE }, backend)
     testing.eq(result.code, 2)
     result = cmd_board.run("column", {}, backend)
     testing.eq(result.code, 2)
@@ -324,7 +330,8 @@ testing.test("column on a local board is refused with a sentence", function()
     function backend:set_column(...)
         return own:set_column(...)
     end
-    local result = cmd_board.run("column", { "Release", "--blocked", "on" }, backend)
+    local result =
+        cmd_board.run("column", { support.COLUMN_NAME.RELEASE, "--blocked", "on" }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.message, "A local board has no column flags to set.")
 end)
