@@ -82,7 +82,7 @@ end
 
 ---Check whether a word is a global flag that takes no value, any run of `v` included.
 ---@param word string the word to check
----@return boolean bare true for a bare global flag
+---@return boolean
 function M.is_bare(word)
     return bare_set[word] == true or M.verbose_count(word) ~= nil
 end
