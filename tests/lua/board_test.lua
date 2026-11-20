@@ -7536,6 +7536,21 @@ testing.test("outcome delete on a pomb board sends the DELETE with the lead toke
     testing.eq(sent:find(ISSUED_SECRET, 1, true), nil)
 end)
 
+testing.test("board init under DEV_BOARD_TOKEN sends the lead token, not the issued one", function()
+    local root, home = sandbox({ user = LEAD_USER })
+    two_tokens(root)
+    dev(
+        root,
+        home,
+        { "board", "init" },
+        { agent = LEAD, env = { DEV_BOARD_TOKEN = ISSUED_SECRET } }
+    )
+    local sent = read(root, "stdin")
+    testing.ok(sent:find("Bearer " .. LEAD_SECRET, 1, true), "init did not send the lead token")
+    testing.eq(sent:find(WORK_SECRET, 1, true), nil)
+    testing.eq(sent:find(ISSUED_SECRET, 1, true), nil)
+end)
+
 testing.test("outcome delete with no lead token exits 1 naming subtasks.delete", function()
     local root, home = sandbox({ export = BACKLOG_EXPORT })
     local out, code = dev(
