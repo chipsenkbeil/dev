@@ -2275,6 +2275,30 @@ local function without_claim_state(home)
     end
 end
 
+testing.test("a move out of Blocked by another name keeps the last claimant", function()
+    local root, home = local_board()
+    local a = lapsed_in_progress(root, home)
+    local out, code =
+        dev(root, home, { "board", "note", a, "waiting on an answer", "--kind", "blocked" })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "move", a, Column.BLOCKED })
+    testing.eq(code, 0, out)
+    local doc = document(file_of(home))
+    doc.cards[1].claim.expires_at = "2020-01-01T00:00:00Z"
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    without_claim_state(home)
+    local errors
+    out, code, errors = support.dev(root, { "board", "move", a, Column.PROGRESS }, {
+        env = env_of(home, { CLAUDE_SESSION_ID = "other" }),
+        split = true,
+    })
+    testing.eq(code, 0, out)
+    testing.ok(errors:find("Moved without a claim: the last claimant of " .. a, 1, true), errors)
+    testing.eq(document(file_of(home)).cards[1].claim.expires_at, "2020-01-01T00:00:00Z")
+    out = dev(root, home, { "board", "ls", "--column", Column.PROGRESS })
+    testing.ok(out:find(a, 1, true), out)
+end)
+
 testing.test(
     "a move by the claimant with no claim state on this machine releases the claim",
     function()

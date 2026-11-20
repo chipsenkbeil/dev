@@ -1410,6 +1410,30 @@ local function unnoted(backend, card, column)
     end
 end
 
+---Name the last claimant of a card that leaves Blocked for In Progress under another name.
+---
+---Nothing applies when the card does not sit in Blocked or its newest claim record names the
+---caller or no one.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card, which holds no live claim
+---@param name string the caller's agent name
+---@return string? last the other name, nil when the move claims the card as usual
+---@return dev.cmd.board.Result? refused the failure, nil when the comments were read
+local function blocked_holder(backend, card, name)
+    if card.column ~= backend.stages.blocked then
+        return nil
+    end
+    local past, why = backend:comments(card.id)
+    if not past then
+        return nil, failure(why)
+    end
+    local last = board.last_claimant(past)
+    if last and last ~= runner.claimant(name) then
+        return last
+    end
+    return nil
+end
+
 ---Take a lapsed claim again when the caller is the card's last claimant and leaves In Progress.
 ---
 ---A card whose claim lapsed during a long ci wait has no claimant, and the card's newest claim
@@ -1883,12 +1907,29 @@ local function move_once(backend, args, opts)
         if shaped then
             return shaped
         end
-        local result, fence = claim_card(backend, card, name)
-        if not fence then
-            return result
+        local last, refused = blocked_holder(backend, card, name)
+        if refused then
+            return refused
         end
-        started = true
-        held = { fence = fence }
+        if last then
+            local short = card.id:sub(1, board.MIN_PREFIX)
+            verb.note(
+                string.format(
+                    "Moved without a claim: the last claimant of %s is %s. "
+                        .. "Take it with `dev board take %s`.",
+                    short,
+                    last,
+                    short
+                )
+            )
+        else
+            local result, fence = claim_card(backend, card, name)
+            if not fence then
+                return result
+            end
+            started = true
+            held = { fence = fence }
+        end
     end
     local own_claim = held ~= nil
     if held and not started then

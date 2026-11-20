@@ -1808,6 +1808,11 @@ once Pomb has parked the card, and so does a move out of Blocked from the
 machine holding the claim. Otherwise the owner lease runs until it lapses, and a
 take from elsewhere is refused with `task owned by NAME until TIME`.
 
+A `move` out of Blocked into In Progress by a name other than the card's last
+claimant, while no claim is live, keeps the last claimant. It moves the card
+without claiming it for the mover and prints a note that names the last
+claimant, so the runner's own next `move` takes the claim again.
+
 The loop's state is a file named for the card in `$XDG_STATE_HOME/dev/board/`,
 or `~/.local/state/dev/board/`, with the card, the fence and the loop's pid at
 mode 600. It never holds the token.
